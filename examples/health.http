@@ -1,0 +1,5 @@
+### Start bun run dev, then use an HTTP client to send these requests.
+GET http://localhost:3000/healthz
+
+### Scaffold status
+GET http://localhost:3000/

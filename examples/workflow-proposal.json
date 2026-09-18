@@ -1,0 +1,21 @@
+{
+  "status": "design_example_not_executable",
+  "name": "Weekly team recap",
+  "task": "Summarize blockers, decisions, and next steps from authorized received messages.",
+  "source": { "kind": "connected_chat", "timeWindow": "previous_7_days" },
+  "destination": { "kind": "same_chat_and_topic" },
+  "schedule": {
+    "frequency": "weekly",
+    "weekday": "friday",
+    "localTime": "16:00",
+    "timezone": "Asia/Taipei"
+  },
+  "instructions": [
+    "Put blockers first.",
+    "Exclude completed items from blockers.",
+    "Link to evidence and disclose missing history."
+  ],
+  "approval": "required_before_activation",
+  "allowedExternalWrites": [],
+  "budget": "inherit_workspace_limit"
+}
