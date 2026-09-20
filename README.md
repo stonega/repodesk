@@ -1,81 +1,67 @@
 # DeepX Agent for Telegram
 
-A proposed team assistant that turns recurring work into reusable Telegram
-workflows. Inspired by [Every Agent](https://agent.every.to/), with independent
-branding and a Telegram-specific interaction and permission model.
+A team assistant with bounded Pi requests, source-aware recaps, approved recurring
+workflows, shared instructions, and a web admin panel.
 
-**Status:** initialized on 2026-09-18. Product research and requirements are in
-[`docs/`](docs/README.md). The code is a runnable HTTP backend scaffold with health
-checks. Telegram messaging, AI, memory, automations, integrations, and billing are
-planned, not implemented.
+**Status:** local P0 implementation, 2026-09-18. Automated tests use fake Telegram/model
+transports and real PostgreSQL. Live model evaluation and staging deployment remain
+release gates; no bot or paid account is connected by installation.
 
-## Read first
+## Start here
 
-- [Detailed Every Agent feature inventory](docs/research/every-agent-features.md)
-- [Telegram product requirements and acceptance criteria](docs/design/product-requirements.md)
-- [Telegram interaction design](docs/user/telegram-experience.md)
+- [Setup and Docker](docs/implementation/setup.md)
+- [Implementation evidence and limits](docs/implementation/implementation-status.md)
+- [Telegram commands and admin guide](docs/user/telegram-experience.md)
 - [Architecture](docs/design/architecture.md)
-- [Implementation roadmap](docs/implementation/roadmap.md)
-- [Pi + Docker implementation plan](docs/implementation/bot-plan.md)
-- [Setup](docs/implementation/setup.md)
-
-## Development
-
-Requires Bun 1.3.14+ and Node.js 22.19+ (Node 24 in Docker). Dependencies are locked in `bun.lock`.
+- [LLM plugins / Pi extensions](docs/design/llm-extensions.md)
+- [Release and recovery runbook](docs/implementation/release-runbook.md)
+- [Original implementation plan](docs/implementation/bot-plan.md)
+- [Product requirements and research](docs/README.md)
 
 ```sh
 bun install --frozen-lockfile
-bun run dev
+bun install --cwd services/code-truth --frozen-lockfile
+cp .env.example .env
+# Set a unique POSTGRES_PASSWORD in .env.
+mkdir -p secrets
+openssl rand -hex 32 > secrets/encryption-key
+docker compose up --build -d
+docker compose exec app node dist/operator.js claim
 ```
 
-In another terminal:
-
-```sh
-curl http://localhost:3000/healthz
-```
-
-Expected: `{"status":"ok"}`. No Telegram token or model key is
-needed for local development of this scaffold.
+Open `http://localhost:3000`, enter the one-use claim token, and create your admin.
+The resumable wizard accepts write-only encrypted bot/model credentials. Webhook
+registration and activation are explicit actions after HTTPS and staging credentials
+are ready. The database is private; Compose exposes only the API on loopback.
 
 ```sh
 bun run check
 bun run typecheck
 bun test
 bun run build
+bun run test:runtime
 ```
 
-`build` produces `dist/server.js`; `bun run start` runs it under Node.
-Use `bun run format` to format code. No bot webhook has been created.
+Set `TEST_DATABASE_URL` to run PostgreSQL integration tests and `bun run test:browser`.
+See Setup for prerequisites. Normal checks never call live Telegram or model APIs.
 
-## Docker
+## Stack
 
-```sh
-docker compose up --build -d
-curl http://localhost:3000/healthz
-docker compose down
-```
+TypeScript strict, Bun packages/build/tests, Biome, Hono on Node 24, React Router 7,
+Pi 0.85.1, PostgreSQL 17 and pg-boss. API and worker share one Docker image and durable
+configuration. The local pilot uses transactionally locked workspace aggregates;
+read the architecture's capacity limits before scaling.
 
-Compose binds to localhost. Configure an HTTPS reverse proxy when the webhook is
-implemented. The image runs as a non-root user, with health checks and graceful shutdown.
+Plugins are Pi extensions. Open **Workspace → Plugins** to register installed files,
+edit tools, and enable/disable or remove plugins for the selected workspace. Settings
+and revisions are independent per workspace and reach workers without restart; `PI_EXTENSIONS_FILE` remains an optional
+fallback. See the compatibility guide above; extensions are off by default.
 
-## Stack and layout
+No shell, arbitrary browsing, executable skills, app connectors, files, payments or
+external write tools are exposed. Group context collection requires separate consent.
+Inspired by Every Agent; independent branding and a Telegram-specific permission model.
 
-Bun manages dependencies and tests; TypeScript and Hono provide a small backend;
-Node.js in Docker is the runtime target; Biome handles code quality. Pi is the
-selected AI framework; PostgreSQL and pg-boss are planned for state and jobs.
-These AI/storage dependencies are not installed yet.
-Telegram is the team interface; a web admin panel is included in the first-release
-plan and will be served by the same Docker app. Storage, Pi and the panel remain planned.
+Predefined **Code Truth** adds read-only source queries and its companion skill. Configure each workspace’s repositories under **Workspace → Plugins**. See [local Code Truth setup](docs/implementation/code-truth.md).
 
-```text
-src/                  HTTP backend scaffold
-tests/                deterministic local tests
-docs/design/          requirements and architecture
-docs/research/        competitor features and evidence
-docs/reference/       platform constraints and sources
-docs/implementation/  setup and roadmap
-docs/user/            proposed Telegram experience
-examples/             runnable HTTP requests and workflow examples
-scripts/              future repeatable automation
-postmortem/           incident reports when needed
-```
+Connect private repositories through **Workspace → Plugins → GitHub** using a GitHub App.
+See [App registration and deployment setup](docs/implementation/github-app.md).

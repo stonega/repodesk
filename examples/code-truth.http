@@ -1,0 +1,37 @@
+@origin = http://localhost:3000
+@session = replace-with-authenticated-session
+@csrf = replace-with-csrf-token
+@workspace = 00000000-0000-4000-8000-000000000001
+
+### Read saved configuration and current revision
+GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/code-truth
+Cookie: deepx_session={{session}}
+
+### Replace revision 0 with the revision returned above
+PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/code-truth
+Cookie: deepx_session={{session}}
+Origin: {{origin}}
+x-csrf-token: {{csrf}}
+Content-Type: application/json
+
+{
+  "revision": 0,
+  "settings": {
+    "enabled": true,
+    "repositories": [{
+      "id": "deepx-web",
+      "repositoryUrl": "https://github.com/deepxfinance/web.git",
+      "networks": { "devnet": "devnet-develop", "testnet": "testnet-develop" },
+      "workspaces": ["{{workspace}}"]
+    }]
+  }
+}
+
+### Start or check the workspace's managed index (requires local service)
+POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/code-truth/status
+Cookie: deepx_session={{session}}
+Origin: {{origin}}
+x-csrf-token: {{csrf}}
+Content-Type: application/json
+
+{}

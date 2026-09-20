@@ -1,134 +1,100 @@
-# Proposed Telegram experience
+# Telegram experience
 
-**Design preview, not an available bot.** Commands, buttons and conversations below
-are the intended user experience. The current code only exposes HTTP health/status.
-The actual bot username has not been registered; `@DeepXAgentBot` is a placeholder.
+Implemented local pilot interface. A working deployment requires the operator to
+finish the web setup and activate a dedicated Telegram bot. No public bot is shipped.
 
-## Start with one useful workflow
+## Get started
 
-1. Open the bot privately and send `/start`.
-2. Create or select a workspace, confirm your timezone and read its data scope.
-3. Add the bot to a team group and have an authorized admin link that group.
-4. Choose directed interaction; optionally request broader observation after its
-   visibility requirements are explained.
-5. Ask for a recap of available messages. Review it and correct its format.
-6. Save the useful result as an approved recurring workflow.
+The operator first creates the local admin, configures the bot, registers the
+verification webhook and verifies the owner's Telegram identity. The owner confirms
+timezone and budgets, chooses skills, then activates processing. Setup can resume
+before those credentials exist.
 
-The bot states what it can see and the oldest available context. It does not claim
-to know conversations from before it received them. Setup left unfinished stays inactive.
+Send `/start` privately. Use `/timezone Asia/Taipei` (substitute your zone) to confirm
+workspace time. `/workspace <workspace UUID>` selects an enrolled workspace. People
+without workspace eligibility receive access-help only; ask an admin to enroll your
+numeric Telegram ID and add it to the whitelist.
 
-## Command design
+For a group, get `/linktoken` privately, then send `/link TOKEN` in the intended group
+within ten minutes. Both workspace-admin and Telegram-admin authority are required.
+One group may be linked per workspace. Anonymous admin identities cannot link it.
 
-| Command | Intended behavior | Phase |
-| --- | --- | --- |
-| `/start` | Private onboarding, workspace selection or resume | P0 |
-| `/help` | Current capabilities and usage examples | P0 |
-| `/ask <task>` | Start a bounded task; group form can include `@botname` | P0 |
-| `/workspace` | View/switch workspace in private chat | P0 |
-| `/automations` | List, inspect, run, pause and edit workflows | P0 |
-| `/status <run>` | Show task state and next action | P0 |
-| `/cancel <run>` | Stop future steps and report any completed effects | P0 |
-| `/memory` | List/edit/forget authorized instructions | P0 basic |
-| `/usage` | Show workspace usage to authorized users | P0 |
-| `/settings` | Admin access, timezone, retention and budgets | P0 basic |
-| `/privacy` | Explain scope, retention and deletion request flow | P0 |
-| `/connect` | Authorize or manage personal app connections | P1 |
-| `/files` | List authorized artifacts and attached inputs | P1 |
-| `/feedback <run>` | Submit an output correction or issue reference | P1 shortcut; replying works in P0 |
+The default source scope is directed messages. For whole-group recaps, an admin must
+verify bot visibility and explicitly enable `/capture on`. This includes received
+messages from group participants outside the whitelist. All group participants can
+see group replies. Telegram old history is unavailable.
 
-Natural language and reply buttons are the primary way to do work; commands provide
-discoverability and deterministic fallback. A group cannot change workspace merely
-because a member switches their private-chat selection.
+## Commands
 
-## Example: approved weekly recap
-
-**Member:** `/ask@DeepXAgentBot Summarize this week's decisions and blockers here.`
-
-**Agent:** “I have messages received since Tuesday at 10:00. I'll use that window.”
-
-**Agent:** “Here is the recap: decisions, unresolved blockers and next steps, with
-links to the source messages.” Buttons: **Revise**, **Make recurring**, **Details**.
-
-**Member:** “Make it weekly on Fridays at 4, and put blockers first.”
-
-**Agent:** “Draft workflow: Team recap. Fridays 16:00, Asia/Taipei. Source: this
-group. Destination: this topic. Format: blockers, decisions, next steps. Owner: you.
-It will publish a recap here each week within the workspace budget.” Show next runs
-and buttons: **Activate**, **Edit**, **Discard**.
-
-**Member activates. Agent:** “Scheduled. You can pause it from `/automations`.”
-
-If the timezone is not configured, the agent asks before displaying the final draft.
-The schedule is inactive until approved. Repeated taps do not create multiple schedules.
-
-## Example: a correction compounds
-
-**Member, replying to a recap:** “Don't include done items in the blockers section.”
-
-**Agent:** “I'll revise this output. Also save ‘exclude completed items from blockers’
-for this workflow's future runs?” Buttons: **Save to workflow**, **This run only**.
-
-**Member saves. Agent:** “Workflow updated to version 2. The next run will use it.”
-
-A colleague can run that workflow and receive the improved format. Personal
-preferences are not silently promoted to workspace instructions.
-
-## Example: safe follow-up drafting (P1)
-
-**Member:** “What follow-ups from yesterday are still open?”
-
-**Agent:** “I found three explicit commitments in the messages I can access. Two
-have no completion update; one is ambiguous.” Show owners, due dates and evidence.
-
-**Member:** “Draft reminders for the two.”
-
-**Agent:** Produces drafts for review. It does not DM recipients or send email merely
-because the user requested a draft. External delivery is a later approved action.
-
-## Example: monitoring suggestion (P1)
-
-After an admin explicitly enables monitoring, the bot posts a configured weekly
-digest privately to its owner: “Several discussions repeat a release-check task.
-Create a Friday release checklist?” Buttons: **Review workflow**, **Not useful**,
-**Stop suggestions**. A rejection is remembered; no workflow is activated by silence.
-
-## Failure and permission messages
-
-| Situation | Intended response |
+| Command | Implemented behavior |
 | --- | --- |
-| Insufficient history | State available date range and ask for a source or smaller scope. |
-| Connector not authorized | Explain the missing source and show the owner's connection flow. |
-| Wrong approver | Keep the operation pending and identify the required role without revealing private content. |
-| Budget exhausted | Pause new model work, show usage and notify an authorized admin. |
-| Schedule owner removed | Suspend dependent workflows and ask an admin to reassign/reapprove. |
-| Bot removed or topic unavailable | Stop retries after classification; record delivery failure and notify via an already authorized channel if available. |
-| User cancels | Confirm future steps stopped; separately list completed effects. |
-| Workspace deleted | Revoke execution immediately; show purge status and explain Telegram originals remain. |
+| `/start`, `/help` | Workspace onboarding, limitations and commands |
+| `/timezone <IANA zone>` | Admin timezone confirmation |
+| `/workspace <UUID>` | Select an enrolled workspace privately |
+| `/linktoken`, `/link TOKEN` | Expiring one-use group linking |
+| `/capture on` / `/capture off` | Admin consent to received group-message collection |
+| `/ask <request>` | Bounded Pi request; `/ask@botname` works in groups |
+| `/recap` | Recap permitted messages with coverage and source references |
+| Reply to the bot | Ask a follow-up or correction in the same chat/topic |
+| `/correct once <text>` | Reply to a delivered run to correct one new output |
+| `/correct save <text>` | Reply to a workflow output to propose a persistent correction |
+| `/status` | Latest five visible runs for this chat |
+| `/cancel <run UUID>` | Persist cancellation and block pending publication |
+| `/automations` | List visible workflows; use `run`, `pause`, `resume` or `delete` plus UUID |
+| `/remember <text>` | Propose personal memory privately or workspace memory in a group |
+| `/memory`, `/memory edit <UUID> <text>`, `/memory forget <UUID>` | List, propose replacement, forget instructions |
+| `/usage` | Recorded charges/reservations and workspace cap |
+| `/settings` | Current timezone, retention, access mode and version |
+| `/privacy` | Collection, retention and removal explanation |
+| `/privacy delete` | Private admin request for confirmed workspace removal |
 
-Do not expose stack traces, provider keys, internal database IDs or infrastructure
-terminology in ordinary product responses. A short run reference is enough for support.
+Unsupported media receives text-only guidance on directed requests. Commands addressed
+to other bots, bot-authored requests and unrelated group messages are ignored.
+Message edits update context and do not launch another request.
 
-## Planned admin web panel
+Model replies render Markdown bold, italic, strikethrough, headings, links and code
+using Telegram message entities. Lists remain readable text; unsupported markup and
+raw HTML remain literal. System notices stay plain text. Formatting applies to new
+replies; messages already delivered are not edited or resent.
 
-Authorized administrators can open the web panel to configure bot instructions,
-language/timezone, model selection, limits, connected groups, schedules and team
-permissions. The same settings apply in Telegram. The panel also shows run history,
-costs, audit events and privacy controls. See [the panel specification](../design/admin-panel.md).
-The panel is part of the first-release plan and is not implemented yet.
+## A recurring recap
 
-Admins can configure **Access → Allowed users** using Telegram user IDs. Whitelist-only
-mode allows only listed active members to use the bot; members mode allows all active
-workspace members. Adding someone does not grant admin rights. Removing an eligible
-user blocks new work and suspends their schedules. This controls bot access, not who
-can see replies already posted in a group.
+Ask: “Propose a weekly recap every Friday at 17:00 Asia/Taipei, covering the previous
+seven days in this group. Put blockers first.” The model can propose only supported
+daily/weekly recurrence. Ambiguous times need clarification.
 
-## Planned first web visit and skill configuration
+Review the proposal's owner, source/destination, topic, format, timezone, budget and
+next three instants. The owner-bound Approve/Reject buttons expire after 15 minutes.
+Another user cannot approve it, and repeat clicks do not activate it twice. You can
+also create, inspect, edit and approve a versioned proposal in the web panel.
 
-The first web visit opens a guided setup: claim the deployment, create the admin
-account, configure the bot and model, verify the Telegram owner, set allowed users,
-choose skills, then review and activate. Setup can be saved and resumed; the bot
-stays inactive until its required settings are complete.
+Reply to a scheduled output with `/correct save Use bullet lists and put blockers
+first`. Review and approve the persistent instruction. Future runs use that correction;
+already-running work retains its starting snapshot. `/correct once` creates only a
+single corrected output.
 
-The **Skills** page lets an admin create/import instructions, edit settings, test a
-draft, publish a version and enable it for the bot or a workflow. Skill permissions
-remain limited to the tools and data that user is already allowed to access.
+Pause under Workflows or with `/automations pause <UUID>`. Owner revocation and skill
+disablement suspend dependent work. Reapproval is required after suspension. Late
+occurrences over five minutes skip without a burst of catch-up messages.
+
+## Web panel
+
+Use the verified local login to manage Settings, Allowed users, Members, Group access,
+Workflows, Skills, Instructions, Runs, Usage, Audit and Privacy. Advanced workflows
+and skill definitions use schema-validated JSON editors. Stale saves fail with a
+reload/review instruction instead of overwriting another administrator's change.
+
+A skill is instruction Markdown, a requested subset of existing tools and validated
+settings. Publish an immutable version before enabling it. Runs/workflows pin versions;
+editing or rollback does not rewrite historical executions. Disable takes effect at
+subsequent policy boundaries. “Test draft policy” is a deterministic validation and
+prompt preview; it makes no paid model request.
+
+Run status and delivery status are separate. `delivery_unknown` means Telegram may
+have accepted the send; inspect the destination before resolving it. Unknown provider
+charges remain reserved until an authorized admin reconciles billing. A cancellation
+cannot undo a message already sent.
+
+Files, arbitrary browsing/shell, external app connectors, proactive monitoring and
+external writes are not supported. Source IDs establish an authorized citation set;
+the operator must still evaluate the chosen model's factual accuracy before a pilot.

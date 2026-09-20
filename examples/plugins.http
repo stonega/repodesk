@@ -1,0 +1,79 @@
+@base = http://localhost:3000
+@cookie = deepx_session=REPLACE_WITH_SESSION
+@csrf = REPLACE_WITH_CSRF
+@workspace = 00000000-0000-4000-8000-000000000001
+
+### List the selected workspace’s plugins (its deployment operator only)
+GET {{base}}/api/admin/workspaces/{{workspace}}/plugins
+Cookie: {{cookie}}
+
+### Register an installed file; replace the workspace ID and absolute path.
+# Use the current plugin revision returned by GET; other entries must be retained.
+# Saved settings replace only this workspace’s registry.
+PUT {{base}}/api/admin/workspaces/{{workspace}}/plugins
+Cookie: {{cookie}}
+Origin: {{base}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "revision": 0,
+  "entries": [{
+    "id": "word-count",
+    "version": "1",
+    "path": "/app/extensions/pi-extension.ts",
+    "workspaces": ["{{workspace}}"],
+    "tools": ["count_words"],
+    "execution": "read-only",
+    "enabled": true
+  }]
+}
+
+### Workspace GitHub App connection status (no secrets returned)
+GET {{base}}/api/admin/workspaces/{{workspace}}/github
+Cookie: {{cookie}}
+
+### Begin authorization; open the returned URL in this session's browser
+# The deployment must have GitHub App credentials configured first.
+POST {{base}}/api/admin/workspaces/{{workspace}}/github/connect
+Cookie: {{cookie}}
+Origin: {{base}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{}
+
+### After browser authorization, use an installation ID returned by GET /github
+@installation = 123456
+GET {{base}}/api/admin/workspaces/{{workspace}}/github/installations/{{installation}}/repositories
+Cookie: {{cookie}}
+
+### Connect selected repositories; replace IDs and current connection revision
+PUT {{base}}/api/admin/workspaces/{{workspace}}/github
+Cookie: {{cookie}}
+Origin: {{base}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"revision": 0, "installationId": {{installation}}, "repositoryIds": [123456789]}
+
+### Disconnect this workspace; also disables its legacy token fallback
+# Use the latest connection revision, independent of the plugin revision.
+DELETE {{base}}/api/admin/workspaces/{{workspace}}/github
+Cookie: {{cookie}}
+Origin: {{base}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"revision": 1}
+
+### Create a GitHub App through the guided flow (only if no App is configured)
+# POST the returned manifest as a JSON string in a form field named manifest to
+# the returned GitHub URL, in the same signed-in browser. Confirm on GitHub.
+POST {{base}}/api/admin/workspaces/{{workspace}}/github/register
+Cookie: {{cookie}}
+Origin: {{base}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"owner": "organization", "organization": "deepxfinance", "name": "DeepX Workspace Agent", "public": false}

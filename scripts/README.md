@@ -1,5 +1,13 @@
-# Scripts
+# Automation
 
-Current development commands live in `package.json`. Add repeatable setup,
-migration, or maintenance scripts here when those workflows exist. Keep them
-idempotent and avoid implicit remote changes.
+- `build.ts`: backend Node entry points and React Router assets.
+- `operator.ts`: one-use setup claim and host-only password recovery.
+- `register-webhook.ts`: explicit opt-in staging webhook reconciliation.
+- `evaluate.ts`: explicit, spend-capped live model evaluation; never run by normal checks.
+- `runtime-contract.ts`: fake-provider Pi contract under Node; no credentials required.
+- `backup.sh`: protected PostgreSQL custom dump through Compose.
+- `restore-rehearsal.sh`: restore into a disposable sibling DB, verify, remove it.
+
+`src/db/migrate.ts` is the one-shot schema/job migration entry point. No ordinary
+startup command registers webhooks, connects accounts or starts paid evaluations.
+See [setup](../docs/implementation/setup.md) and [runbook](../docs/implementation/release-runbook.md).

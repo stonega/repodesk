@@ -1,0 +1,50 @@
+name: Verify
+on: [push, pull_request]
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
+        env:
+          POSTGRES_PASSWORD: test-only
+        ports: [5432:5432]
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:test-only@localhost:5432/postgres
+      NO_PROXY: localhost,127.0.0.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: bun install --frozen-lockfile
+      - run: bun install --cwd services/code-truth --frozen-lockfile
+      - run: bun run --cwd services/code-truth typecheck
+      - run: bun run check
+      - run: bun run typecheck
+      - run: bun test
+      - run: bun run build
+      - run: bun run test:runtime
+      - run: bunx playwright install --with-deps chromium
+      - run: bun run test:browser
+      - run: docker build -t deepx-code-truth:ci services/code-truth
+      - run: docker run --rm --network none deepx-code-truth:ci bun scripts/smoke.ts
+      - run: docker build -t deepx-agent:ci .
+      - run: docker run --rm --entrypoint node deepx-agent:ci dist/runtime-contract.js
+      - name: Compose migration, smoke and restore
+        env:
+          POSTGRES_PASSWORD: ci-only
+          COMPOSE_PROJECT_NAME: deepx-ci
+          ENCRYPTION_KEY_FILE: /tmp/deepx-ci-key
+        run: |
+          node -e "require('fs').writeFileSync('/tmp/deepx-ci-key', require('crypto').randomBytes(32).toString('hex'))"
+          docker compose config --quiet
+          docker compose up --build -d --wait
+          curl --retry 10 --retry-connrefused --retry-delay 2 --fail http://localhost:3000/readyz
+          bash scripts/backup.sh
+          bash scripts/restore-rehearsal.sh "$(find backups -name '*.dump' -print -quit)"
+          docker compose down

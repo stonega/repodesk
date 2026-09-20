@@ -1,0 +1,19 @@
+# Direct MCP configuration. Install the companion skill from
+# https://code-truth-mcp.deepx.fi/skills/deepx-code-truth/SKILL.md at
+# ~/.agents/skills/deepx-code-truth/SKILL.md.
+[mcp_servers.deepx-code-truth]
+url = "https://code-truth-mcp.deepx.fi/mcp"
+auth = "oauth"
+enabled_tools = [
+  "list_code_targets",
+  "search_code",
+  "search_code_batch",
+  "get_code_context",
+  "get_symbol_source",
+  "get_file_excerpt",
+  "get_dependency_manifests",
+  "get_file_tree",
+]
+default_tools_approval_mode = "approve"
+startup_timeout_sec = 20
+tool_timeout_sec = 60

@@ -1,5 +1,13 @@
-### Start bun run dev, then use an HTTP client to send these requests.
-GET http://localhost:3000/healthz
+@baseUrl = http://localhost:3000
 
-### Scaffold status
-GET http://localhost:3000/
+### Process liveness
+GET {{baseUrl}}/healthz
+
+### Storage and worker readiness
+GET {{baseUrl}}/readyz
+
+### Public setup state (no credentials)
+GET {{baseUrl}}/api/setup/status
+
+### Admin deep link
+GET {{baseUrl}}/admin/workflows

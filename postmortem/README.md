@@ -1,4 +1,5 @@
 # Postmortems
 
-No incidents recorded. Future reports should include impact, timeline, cause,
-resolution, and concrete prevention work.
+- [2026-09-20: GitHub manifest rejected a localhost webhook](2026-09-20-github-manifest-localhost.md)
+
+Reports record impact, timeline, cause, resolution and prevention work.

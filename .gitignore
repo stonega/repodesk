@@ -10,3 +10,9 @@ coverage/
 *.log
 *.tsbuildinfo
 .DS_Store
+test-results/
+playwright-report/
+secrets/
+backups/
+
+services/code-truth/data/

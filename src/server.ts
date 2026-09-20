@@ -1,24 +1,59 @@
 import { serve } from "@hono/node-server";
-import app from "./index.ts";
+import { PluginService } from "./agent/plugin-service.ts";
+import { createApp } from "./app.ts";
+import { CodeTruthClient } from "./code-truth/client.ts";
+import { config } from "./config.ts";
+import { database } from "./db/pool.ts";
+import { Store } from "./db/repositories.ts";
+import { configuredGitHubApp } from "./github/app.ts";
+import { GitHubApps } from "./github/registry.ts";
+import { GitHubService } from "./github/service.ts";
+import { RuntimeLogger } from "./observability/logs.ts";
+import { SetupService } from "./setup/service.ts";
 
-const port = Number(process.env.PORT ?? "3000");
-if (!Number.isInteger(port) || port < 1 || port > 65535) {
-  throw new Error("PORT must be an integer between 1 and 65535");
-}
-
-const server = serve({ fetch: app.fetch, hostname: "0.0.0.0", port });
-
+const cfg = config();
+const pool = database(cfg.DATABASE_URL);
+const log = new RuntimeLogger(pool, "app");
+const store = new Store(pool, log);
+const githubApp = new GitHubApps(
+  store,
+  cfg.ENCRYPTION_KEY,
+  configuredGitHubApp(cfg),
+);
+const app = createApp(
+  store,
+  new SetupService(
+    store,
+    cfg.ENCRYPTION_KEY,
+    cfg.PUBLIC_ORIGIN,
+    undefined,
+    cfg.TELEGRAM_TRANSPORT,
+  ),
+  cfg.PUBLIC_ORIGIN,
+  new PluginService(
+    store,
+    cfg.PI_EXTENSIONS_FILE,
+    cfg.CODE_TRUTH_URL && cfg.CODE_TRUTH_TOKEN
+      ? new CodeTruthClient(cfg.CODE_TRUTH_URL, cfg.CODE_TRUTH_TOKEN)
+      : undefined,
+    githubApp,
+  ),
+  new GitHubService(store, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN, githubApp),
+);
+const server = serve({ fetch: app.fetch, hostname: "0.0.0.0", port: cfg.PORT });
+log.write("app_started");
 let stopping = false;
 function shutdown() {
   if (stopping) return;
   stopping = true;
-  const deadline = setTimeout(() => process.exit(1), 10_000);
+  log.write("app_stopping");
+  const deadline = setTimeout(() => process.exit(1), 15000);
   deadline.unref();
-  server.close((error) => {
+  server.close(async () => {
+    await log.close();
+    await pool.end();
     clearTimeout(deadline);
-    process.exit(error ? 1 : 0);
   });
 }
-
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);

@@ -1,8 +1,11 @@
 # Telegram bot implementation plan — Pi, Docker and admin panel
 
-Date: 2026-09-18. Status: **ready to implement**. This plan incorporates the user's
-choices of **Pi for AI**, **Docker for deployment**, and a **web admin panel**. Only the HTTP/Docker scaffold
-exists today; unchecked work below remains planned.
+Date: 2026-09-18. Status: **local implementation delivered; external release gates pending**.
+Pi, PostgreSQL/pg-boss, Telegram transport, Docker and the admin panel are implemented.
+Checked items below refer to local implementation and automated verification, not a live
+pilot. See [implementation evidence](implementation-status.md), including the JSONB
+aggregate storage choice, capacity limits and provisional model selection. No paid
+model calls, real messages, public deployment or webhook registration were performed.
 
 ## 1. First release and definition of done
 
@@ -82,7 +85,7 @@ webhook traffic. PostgreSQL is private to the Compose network. Multiple workers 
 eventually run, so database constraints and leases enforce correctness from day one.
 No process-local map is the authoritative store for conversations or pending work.
 
-Planned files, added only when each slice needs them:
+Original module sketch (the implementation consolidates small domain services; see architecture):
 
 ```text
 src/app.ts                      HTTP routes, dependency injection
@@ -115,11 +118,11 @@ tenant ID as authority. Validate SQL using real PostgreSQL integration tests.
 
 ### I01 — Pi compatibility and runtime contract
 
-- [ ] Pin Pi packages and register one provider explicitly; avoid bundling every provider.
-- [ ] Build a fake-stream Agent test: request → validated tool call → tool result → final output.
-- [ ] Prove event ordering, abort propagation, turn limits and transcript restoration
+- [x] Pin Pi packages and register one provider explicitly; avoid bundling every provider.
+- [x] Build a fake-stream Agent test: request → validated tool call → tool result → final output.
+- [x] Prove event ordering, abort propagation, turn limits and transcript restoration
   on the selected release in the Node Docker image.
-- [ ] Define an `AgentRunner` boundary receiving actor, run ID, context, tool policy,
+- [x] Define an `AgentRunner` boundary receiving actor, run ID, context, tool policy,
   budget and cancellation signal; returning result, usage and checkpoint events.
 - [ ] Choose the initial provider/model after an opt-in credentialed evaluation;
   keep the normal tests independent of paid APIs.
@@ -129,15 +132,16 @@ runtime. Record the tested package versions and Node image with the result.
 
 ### I02 — Database, jobs and service lifecycle
 
-- [ ] Add PostgreSQL, `pg` and pg-boss; use versioned SQL migrations initially.
-- [ ] Create workspace/member/chat-binding, incoming-event and audit tables plus
-  the job schema. Add runs/transcripts/delivery records in the following slices.
-- [ ] Implement atomic inbox insertion + enqueue using the selected pg-boss
+- [x] Add PostgreSQL, `pg` and pg-boss; use versioned SQL migrations initially.
+- [x] Create durable workspace/member/chat-binding, incoming-event and audit records plus
+  the job schema. The pilot stores tenant domain records in locked JSONB aggregates;
+  global identity, chat binding, inbox/outbox and session constraints use SQL tables.
+- [x] Implement atomic inbox insertion + enqueue using the selected pg-boss
   transaction adapter. If that cannot be demonstrated, use a transactional outbox
   and a retryable dispatcher; never perform unprotected DB-write-then-enqueue.
-- [ ] Add unique `(bot_id, update_id)` and active chat-binding constraints.
-- [ ] Add worker process, retry/dead-letter policy, job leases and graceful draining.
-- [ ] Add a one-shot migration command and Compose PostgreSQL volume. Run migrations
+- [x] Add unique `(bot_id, update_id)` and active chat-binding constraints.
+- [x] Add worker process, retry/dead-letter policy, job leases and graceful draining.
+- [x] Add a one-shot migration command and Compose PostgreSQL volume. Run migrations
   once before starting services; do not let every replica race schema upgrades.
 
 Gate: duplicate events dispatch one logical job; a crash after commit loses no work;
@@ -145,15 +149,15 @@ rollback leaves neither accepted event nor job. Container restart preserves stat
 
 ### I02A — First-run web shell and initial admin
 
-- [ ] Create the React Router SPA shell and `/setup` route; fresh deployments redirect
+- [x] Create the React Router SPA shell and `/setup` route; fresh deployments redirect
   there, initialized deployments redirect to admin login/dashboard.
-- [ ] Add deployment setup state, local admin account/password-hash records, sessions
+- [x] Add deployment setup state, local admin account/password-hash records, sessions
   and a host command issuing a one-use expiring bootstrap token.
-- [ ] Atomically consume the token and create one admin; protect against concurrent
+- [x] Atomically consume the token and create one admin; protect against concurrent
   claims, public reinitialization and last-admin lockout. Add operator recovery.
-- [ ] Add a resumable wizard and encrypted credential storage using a Docker runtime
+- [x] Add a resumable wizard and encrypted credential storage using a Docker runtime
   encryption key. Bot/model token fields are write-only; logs and responses are redacted.
-- [ ] Wire bot checks/owner linking with I03–I04, model checks with I05, and skill
+- [x] Wire bot checks/owner linking with I03–I04, model checks with I05, and skill
   selection with I07A. Until then, incomplete setup stays inactive.
 
 Gate: setup can create an admin before a bot is configured, resume after restart,
@@ -161,16 +165,16 @@ reject a second claim and save encrypted settings. See [first-run setup](../desi
 
 ### I03 — Real Telegram transport
 
-- [ ] Add validated bot identity, token and webhook-secret configuration.
-- [ ] Authenticate `POST /telegram/webhook`, cap body size, validate supported updates.
-- [ ] Accept messages, callback queries and membership changes; safely acknowledge
+- [x] Add validated bot identity, token and webhook-secret configuration.
+- [x] Authenticate `POST /telegram/webhook`, cap body size, validate supported updates.
+- [x] Accept messages, callback queries and membership changes; safely acknowledge
   irrelevant supported-platform events without launching model work.
-- [ ] Persist authorized event/job before 2xx; return failure on unavailable storage.
-- [ ] Route `/start`, `/help`, addressed commands and replies; ignore other bots and
+- [x] Persist authorized event/job before 2xx; return failure on unavailable storage.
+- [x] Route `/start`, `/help`, addressed commands and replies; ignore other bots and
   commands addressed elsewhere. Treat edited messages as edits, not new requests.
-- [ ] Implement Telegram client, formatting, topic-preserving replies and delivery
+- [x] Implement Telegram client, formatting, topic-preserving replies and delivery
   jobs with rate handling, error classification and tracked remote message IDs.
-- [ ] Add an idempotent webhook-registration script that inspects existing settings;
+- [x] Add an idempotent webhook-registration script that inspects existing settings;
   run it only against the configured staging bot when deployment is ready.
 
 Gate: a dedicated staging bot answers `/help`; forged requests are rejected; retrying
@@ -178,19 +182,20 @@ the update does not create another run; removed/blocked destinations stop retryi
 
 ### I04 — Onboarding, access and useful context
 
-- [ ] Private `/start` creates/selects workspace and confirms timezone.
-- [ ] Implement short-lived one-use group-link tokens, with Telegram group-admin
+- [x] Web setup creates the authorized workspace; private `/start` resumes onboarding,
+  `/workspace UUID` selects an enrolled workspace, and `/timezone` confirms its zone.
+- [x] Implement short-lived one-use group-link tokens, with Telegram group-admin
   verification and independent workspace-admin verification.
-- [ ] Add explicit member enrollment; linking a group does not make every Telegram
+- [x] Add explicit member enrollment; linking a group does not make every Telegram
   sender a workspace admin. Reject ambiguous anonymous-admin identity for sensitive actions.
-- [ ] Add a versioned workspace access policy and Telegram-ID whitelist, defaulting
+- [x] Add a versioned workspace access policy and Telegram-ID whitelist, defaulting
   to whitelist-only. Seed the owner, deny empty lists and use one shared policy check
   for bot requests, callbacks, admin APIs, queued jobs and schedules. Implement effective
   revocation and last-admin recovery as defined in [access control](../design/access-control.md).
-- [ ] Store chat/topic boundaries and available history coverage.
-- [ ] Default to directed-message context. Add opt-in collection of received group
+- [x] Store chat/topic boundaries and available history coverage.
+- [x] Default to directed-message context. Add opt-in collection of received group
   messages for recaps after verifying bot visibility and recording admin consent.
-- [ ] Apply basic retention from the first stored message; process membership changes,
+- [x] Apply basic retention from the first stored message; process membership changes,
   bot removal and group migration. Revalidate access for sensitive/queued operations.
 
 Gate: one group cannot be claimed twice; non-admin linking fails; private context
@@ -203,19 +208,19 @@ until P1 to resolve this data-availability dependency.
 
 ### I04A — Admin authentication and configuration foundation
 
-- [ ] Expand the I02A web shell into the admin panel with shared API schemas. Serve
+- [x] Expand the I02A web shell into the admin panel with shared API schemas. Serve
   `/admin`; keep `/api/admin` errors as JSON rather than SPA fallbacks.
-- [ ] Extend local admin sessions with verified Telegram identity linking and optional
-  Telegram web login after bot setup. Enforce separate operator/workspace privileges.
-- [ ] Add workspace roles, per-request authorization, CSRF controls and audit records.
-- [ ] Add overview, bot settings, model selection, group access and member screens.
+- [x] Extend local admin sessions with verified Telegram identity linking after bot setup.
+  Enforce separate operator/workspace privileges. Optional Telegram web login remains deferred.
+- [x] Add workspace roles, per-request authorization, CSRF controls and audit records.
+- [x] Add overview, bot settings, model selection, group access and member screens.
   Permit operator-only write-only credential updates; show status without secret values.
-- [ ] Add an Allowed users screen: mode selection, ID add/remove/search, bulk import
+- [x] Add an Allowed users screen: mode selection, ID add/remove/search, bulk import
   preview, affected-work preview, optimistic save and audit history. Test removed
   users with existing sessions, pending approvals and scheduled work across containers.
-- [ ] Add validated/versioned settings, stale-write conflict handling and effective
+- [x] Add validated/versioned settings, stale-write conflict handling and effective
   version display. API and workers use the same durable configuration.
-- [ ] Build frontend assets into the Docker app image and test deep-link routing.
+- [x] Build frontend assets into the Docker app image and test deep-link routing.
 
 Gate: unauthorized users cannot access configuration; admins cannot cross tenant
 boundaries; setting changes persist across restart and are audited. Browser tests
@@ -228,18 +233,18 @@ audit and operational controls with I08. Those screens are required for the P0 g
 
 ### I05 — Pi-powered requests and manual recaps
 
-- [ ] Persist run status, conversation identity and versioned Pi transcript envelopes.
+- [x] Persist run status, conversation identity and versioned Pi transcript envelopes.
   Key sessions by workspace + chat + topic/reply context, not by a shared global Agent.
-- [ ] Build context from permitted, retained messages and approved instructions;
+- [x] Build context from permitted, retained messages and approved instructions;
   include source IDs, date range and gaps. Enforce input size before model dispatch.
-- [ ] Supply initial tools: `read_chat_context`, `read_instructions`,
+- [x] Supply initial tools: `read_chat_context`, `read_instructions`,
   `propose_workflow` and `propose_instruction`. Proposal tools cannot activate changes.
-- [ ] Use server-bound actor context and policy checks within every tool executor;
+- [x] Use server-bound actor context and policy checks within every tool executor;
   configure sequential tool execution initially to simplify side-effect reasoning.
-- [ ] Map Pi events to durable message/tool checkpoints and restrained progress
+- [x] Map Pi events to durable message/tool checkpoints and restrained progress
   updates. Do not persist or display hidden reasoning streams.
-- [ ] Add `/ask`, `/status`, `/cancel`, manual recap rendering and source validation.
-- [ ] Reserve workspace budget before calls; record provider/model usage and reconcile
+- [x] Add `/ask`, `/status`, `/cancel`, manual recap rendering and source validation.
+- [x] Reserve workspace budget before calls; record provider/model usage and reconcile
   actual cost. Unknown/ambiguous charges remain reserved until reconciled.
 
 Gate: fixtures cover source-grounded recaps, missing history, invalid tool arguments,
@@ -248,18 +253,18 @@ cancellation. Any cited source must come from the authorized input set.
 
 ### I06 — Approvals and scheduled workflows
 
-- [ ] Add versioned workflow definitions, approval records and unique occurrences.
-- [ ] Parse natural language into a schema-validated proposal. P0 recurrence supports
+- [x] Add versioned workflow definitions, approval records and unique occurrences.
+- [x] Parse natural language into a schema-validated proposal. P0 recurrence supports
   daily and weekly schedules; ask for clarification for unsupported recurrence.
-- [ ] Preview timezone, next three runs, source/destination, owner, format and budget.
-- [ ] Implement expiring, actor-bound approval buttons with payload/version hashes.
+- [x] Preview timezone, next three runs, source/destination, owner, format and budget.
+- [x] Implement expiring, actor-bound approval buttons with payload/version hashes.
   Consume approval and activate the exact workflow version in one transaction.
-- [ ] Implement `/automations`: inspect, run now, edit, pause, resume and delete.
-- [ ] Scheduler tick claims `(workflow_id, scheduled_instant)` once, pins a version,
+- [x] Implement `/automations`: inspect, run now, edit, pause, resume and delete.
+- [x] Scheduler tick claims `(workflow_id, scheduled_instant)` once, pins a version,
   rechecks authorization and creates a run using the same Pi execution path.
-- [ ] Define DST: skip nonexistent local instants; run once at the earlier occurrence
+- [x] Define DST: skip nonexistent local instants; run once at the earlier occurrence
   of repeated local instants. Preview and execution use the same calculation.
-- [ ] Skip occurrences over five minutes late in the pilot and notify the owner;
+- [x] Skip occurrences over five minutes late in the pilot and notify the owner;
   store the threshold as policy. Never backfill a burst silently.
 
 Gate: two workers/two approval clicks create one logical occurrence; rejected and
@@ -267,25 +272,27 @@ paused workflows do not run; owner removal blocks execution; DST fixtures pass.
 
 ### I07 — Corrections and shared instructions
 
-- [ ] Reply to a run with a correction; offer this-run-only or save-to-workflow.
-- [ ] Save approved instructions with author, scope, provenance and version.
-- [ ] Add `/memory` list/edit/forget and admin-controlled workspace instructions.
-- [ ] Resolve conflicts explicitly; prevent personal instructions from being promoted
+- [x] Reply to a run with a correction; offer this-run-only or save-to-workflow.
+- [x] Save approved instructions with author, scope, provenance and version.
+- [x] Add `/memory` list/edit/forget and admin-controlled workspace instructions.
+- [x] Resolve conflicts explicitly; prevent personal instructions from being promoted
   to team scope without approval. Existing runs retain their starting instruction version.
-- [ ] Add history linking outputs to workflow and instruction versions.
+- [x] Add history linking outputs to workflow and instruction versions.
 
 Gate: next run uses the saved correction; a teammate can reuse shared conventions;
 forgetting an instruction removes it from future context; private memory stays private.
 
 ### I07A — Web-managed agent skills
 
-- [ ] Add versioned skill catalog/assignments, Markdown validation, settings schemas
+- [x] Add versioned skill catalog/assignments, Markdown validation, settings schemas
   and scoped runtime loading into Pi. Begin with the recap and follow-up draft templates.
-- [ ] Build catalog, editor/import, preview, test, publish, enable/disable and rollback UI.
-- [ ] Enforce declared-tool requirements against actual actor/workspace/tool permissions;
+- [x] Build catalog, editor/import, preview, deterministic policy test, publish,
+  enable/disable and rollback UI. Advanced definitions use validated JSON forms;
+  live model-quality evaluation is a separate explicit opt-in command.
+- [x] Enforce declared-tool requirements against actual actor/workspace/tool permissions;
   imported metadata cannot grant capabilities. P0 accepts instruction Markdown only.
-- [ ] Pin skill versions per workflow/run and display dependent schedules before changes.
-- [ ] Add wizard skill selection and dependency validation before activation.
+- [x] Pin skill versions per workflow/run and display dependent schedules before changes.
+- [x] Add wizard skill selection and dependency validation before activation.
 
 Gate: an admin can publish a skill, see it used by a Telegram run and disable dependent
 execution. Cross-tenant loading, unsafe tool requests and implicit writes fail tests.
@@ -293,13 +300,13 @@ See [agent skill requirements](../design/agent-skills.md).
 
 ### I08 — Pilot operations and removal
 
-- [ ] Add `/usage`, `/settings`, `/privacy` and admin controls required by P0.
-- [ ] Add cancellation checks between model/tool steps and before publication.
-- [ ] Implement deletion tombstones, queue cancellation, retention sweeps and purge
+- [x] Add `/usage`, `/settings`, `/privacy` and admin controls required by P0.
+- [x] Add cancellation checks between model/tool steps and before publication.
+- [x] Implement deletion tombstones, queue cancellation, retention sweeps and purge
   status across raw messages, transcripts, instructions and provider-held state.
-- [ ] Add readiness separate from liveness, worker heartbeat, queue-age/failure metrics,
+- [x] Add readiness separate from liveness, worker heartbeat, queue-age/failure metrics,
   structured redacted logs and operator pause/retry tools.
-- [ ] Add CI checks, image build/smoke test, migration tests, backup/restore rehearsal
+- [x] Add CI checks, image build/smoke test, migration tests, backup/restore rehearsal
   and a release runbook. Pin release images by digest.
 - [ ] Deploy to a Docker host behind HTTPS; configure runtime secrets, then register
   the staging webhook. Exercise the full demonstration before inviting pilot teams.
@@ -336,7 +343,22 @@ I01/I05. Retry attempts may incur additional provider cost and need their own re
 message. Record `delivery_unknown`, avoid blind resend, and expose recovery; neither
 PostgreSQL nor the queue can guarantee exactly-once remote effects.
 
-## 6. Order, effort and prerequisites
+## Local verification and remaining release gates
+
+The source and local checks now cover I01–I08 implementation. Live gates in the slice
+"Gate" paragraphs are still operator acceptance work: bot `/help`, provider usefulness,
+HTTPS behavior and the complete real Telegram scheduled-recap demonstration. See
+[the runbook](release-runbook.md); these are not checked by fake-provider tests.
+
+The local provider is explicitly OpenAI, with provisional `gpt-4.1-mini`. Packages
+`@earendil-works/pi-agent-core`, `@earendil-works/pi-ai` and the extension loader package
+`@earendil-works/pi-coding-agent` are pinned together at 0.85.1.
+Operator-installed [plugins are Pi extensions](../design/llm-extensions.md), with a
+documented headless subset and explicit workspace/tool grants.
+Node 24 image contract verification ran on v24.21.0. Application source uses no
+coding-agent CLI, arbitrary shell or external send tool.
+
+## 6. Original order, effort and prerequisites
 
 Critical path: I01 → I02 → I02A → I03 → I04 → I04A → I05 → I06 → I07 → I07A → I08. Domain fixtures may
 be prepared early, but every slice must end with a runnable, reviewable result.

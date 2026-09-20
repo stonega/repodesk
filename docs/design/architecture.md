@@ -1,148 +1,170 @@
 # Architecture
 
-Status: initial scaffold implemented; production design proposed, 2026-09-18.
+Status: local pilot implementation, 2026-09-18. Live staging validation is pending.
 
-## Current repository
+## Runtime
 
-The implemented scaffold exports a Hono app from `src/index.ts` and starts it through
-`src/server.ts` using the Node adapter. `GET /healthz` reports liveness, `GET /`
-identifies the scaffold and unknown routes return JSON 404. There is no authenticated
-webhook, database, Pi runtime or admin UI yet.
+One Docker image contains the Hono API, React Router admin assets, and Pi worker.
+Compose runs `app`, `worker`, a one-shot `migrate` service, and PostgreSQL 17.
+Only the API port is exposed, on loopback; production HTTPS terminates at the host proxy.
+Bun manages packages/builds/tests. Node 24 runs the application.
 
-Bun manages dependencies/builds/tests; Node 24 runs the Docker image. TypeScript is
-strict and Biome handles linting/formatting. The Dockerfile has separate dependency,
-build and non-root runtime stages. Compose currently starts only the HTTP app.
+Model delivery intents explicitly select Markdown formatting. The `marked` lexer
+parses model output; a bounded renderer produces plain text with Telegram UTF-16
+message entities, preserving code and literal HTML without using a parse mode.
+This dependency handles Markdown nesting and escapes instead of regex replacements.
+Control messages remain plain text. Formatting does not alter delivery retries or
+the handling of unknown send outcomes.
 
-The selected production design adds a React Router 7 admin SPA served by Hono under
-`/admin`, a same-origin admin API, Pi in a worker process, and PostgreSQL for state
-and durable jobs. A separate web server is unnecessary. Keep the standalone repo;
-add `web/` for the frontend and shared API contracts when implementation begins.
-See [the implementation plan](../implementation/bot-plan.md) for scope and order.
-
-## Proposed production flow
+`TELEGRAM_TRANSPORT` defaults to `webhook`. In opt-in `polling` mode the worker uses
+Telegram `getUpdates` and passes validated updates to the same `Ingress` service.
+The HTTP webhook endpoint and registration action are disabled in polling mode.
+A per-bot PostgreSQL session advisory lock spans each HTTP poll and acceptance batch;
+`telegram_polling` stores cursor, credential fingerprint, readiness and retry metadata.
+The cursor advances only after durable ingress commits, so crashes can replay safely.
+Polling runs before activation for owner verification, without enabling ordinary agent
+work. A recent polling success replaces webhook readiness in activation checks; owner,
+model, skills and access checks are unchanged. Existing webhooks are reported as a
+conflict, never silently deleted.
 
 ```mermaid
-flowchart TD
-    UI[Admin web panel] --> ADMIN[Session-authenticated admin API]
-    ADMIN --> DB
-    TG[Telegram updates] --> IN[Webhook authentication and validation]
-    IN --> DB[(PostgreSQL: tenant data and durable inbox)]
-    DB --> OUT[Transactional outbox dispatcher]
-    OUT --> Q[pg-boss jobs]
-    TIMER[Scheduler] --> DB
-    Q --> POLICY[Actor, scope, budget and approval checks]
-    POLICY --> RUN[Pi agent executor]
-    RUN --> LLM[Model provider adapter]
-    RUN --> TOOLS[Allowlisted connection tools]
-    RUN --> FILES[(Private artifacts)]
-    RUN --> DB
-    DB --> SEND[Outbound delivery queue]
-    SEND --> TG
-    APPROVE[Approval callback] --> IN
+flowchart LR
+  Web[Admin SPA] --> API[Hono API]
+  TG[Telegram webhook] --> API
+  API --> DB[(PostgreSQL)]
+  DB --> Outbox[Transactional dispatcher]
+  Outbox --> Jobs[pg-boss]
+  Jobs --> Worker[Worker / fenced runs]
+  Worker --> Pi[Pi Agent / OpenAI-compatible API]
+  Pi --> Tools[Scoped application tools]
+  Tools --> DB
+  Worker --> Intent[Recorded delivery intent]
+  Intent --> Send[Telegram delivery worker]
+  Send --> TG
 ```
 
-This diagram describes planned components, not provisioned resources.
+## Persistence and transaction boundaries
 
-### Runtime responsibilities
+`migrations/` owns versioned SQL. A migration advisory lock serializes upgrades.
+pg-boss schema creation runs only in the migration entry point; runtime clients
+set `migrate:false`. The app and worker never race schema installation.
 
-- **Ingress:** authenticate Telegram, enforce payload limits, normalize update
-  variants, authorize chat bindings and persist one accepted event.
-- **Domain:** workspaces, actors, permissions, workflow definitions, approvals,
-  instructions and budget decisions. Keep these independent of Telegram transport.
-- **Scheduler:** find due occurrences, claim each once, recheck active status and
-  dispatch through the same durable path as interactive work.
-- **Orchestrator:** execute bounded tasks with explicit state transitions; stop on
-  missing information/permission/budget; never infer tool authorization from prose.
-- **Tool adapters:** small typed operations with deterministic scope checks, secret
-  references and auditable outcomes. P0 has no external write operations.
-- **Delivery:** preserve chat/topic context, enforce rates, format results and track
-  message IDs independently from model completion.
-- **Retention:** revoke access immediately and delete raw/derived/provider-held
-  data through separately tracked jobs.
+Workspace records are typed JSONB **aggregates**, updated under `SELECT FOR UPDATE`.
+Membership, policy, runs, instructions, approvals, workflows, skill versions,
+occurrences, usage attempts, deliveries and audit events belong to that tenant row.
+This is an intentional pilot implementation choice instead of a table for each
+nested record. Short workspace mutations serialize; provider/Telegram calls execute
+outside these locks. API and worker use the same repository and policy services.
 
-## Proposed infrastructure choices
+Relational tables cover deployment/configuration, local admins/sessions, bootstrap
+claim, chat bindings, Telegram workspace selections, inbox, outbox, authentication
+limits, worker heartbeats, fixed access-help deliveries and operator audit.
+Database primary/unique constraints enforce one deployment, one account identity,
+one active group binding per workspace/chat and one `(bot_id, update_id)` receipt.
+Workflow occurrence uniqueness and conversation leases are enforced while holding
+the exclusive tenant row lock. The fencing counter prevents expired executors from
+writing after a new claim.
 
-Use PostgreSQL for application state and pg-boss for jobs. Enqueue jobs in the same
-transaction as accepted input where supported by the pinned adapter; otherwise use
-a transactional outbox. API and worker run as separate Docker Compose services from
-the same image. The worker owns model execution, job recovery and scheduler ticks.
+Inbox insertion, domain changes and outbox intents commit together. The dispatcher
+locks pending outbox rows and uses pg-boss's `db.executeSql` adapter with the **same
+PostgreSQL connection** to enqueue and acknowledge atomically. Jobs carry IDs only,
+not user messages. Integration tests verify duplicate acceptance, rollback and
+concurrent dispatch with real PostgreSQL.
 
-Pi supplies the agent loop and model-provider abstraction. Application services own
-persistence, permissions, approval state, costs, scheduling and Telegram delivery.
-Use one Agent per active conversation execution, restore valid persisted context,
-and checkpoint completed messages/tool results. No global shared Agent state.
+Pilot capacity: 2,000 retained source messages, 20 pending/running requests and
+1,000 retained run/accounting records per workspace. Source retention is 1–90 days;
+content is erased independently of the minimal 90-day usage ledger. Unknown charges
+remain reserved. This aggregate design is for small pilots; split runs/messages into
+indexed tenant tables before raising capacity or running large teams.
 
-The admin SPA calls `/api/admin/*` and uses the same domain services as bot commands.
-Use first-run local-admin creation, optional verified Telegram login/linking,
-server-side sessions, tenant roles, CSRF controls and
-optimistic version checks. Global bot credentials belong to deployment operators;
-workspace admins configure behavior without gaining access to other workspaces.
+## Identity and policy
 
-The HTTPS reverse proxy terminates TLS; only the app is exposed. PostgreSQL remains
-private with persistent storage and tested backups. Add file storage when file
-features ship. Cloudflare services are no longer part of our deployment architecture.
+The local operator configures the deployment, creates accounts and issues recovery
+links. It is not a Telegram actor. A one-use private bot interaction verifies the
+Telegram identity, consumes its token, enrolls the first owner, seeds the whitelist
+and invalidates old browser sessions.
 
-## Proposed domain records
+Workspace actions require active membership, allowed-user eligibility, role and
+source/destination checks. Group linking additionally calls Telegram `getChatMember`
+and requires attributable administrator identity. Anonymous admin senders are denied.
+Private sources/memory are excluded from group context. Queued runs, tool calls,
+model reservations and deliveries recheck current policy. No model input can change
+permissions. Fixed onboarding/access-help replies contain no workspace data.
 
-| Record | Essential fields / invariants |
-| --- | --- |
-| Workspace | ID, name, timezone, status, policy version; tenant boundary |
-| AdminAccount / AdminSession | Local password hash or verified Telegram identity linkage, role, hashed session ID, expiry, revocation state |
-| DeploymentSetup | Single deployment claim, bootstrap token hash/expiry, completed steps, activation status |
-| Credential | Encrypted bot/provider secret, key version, owner/scope and redacted status |
-| Skill / SkillVersion / SkillAssignment | Scoped catalog, immutable instructions/settings schema, pinned enablement and tool ceiling |
-| BotConfigVersion | Workspace, validated behavior/model settings, version, author, effective time |
-| Member | Workspace + Telegram user ID, role, membership status |
-| AccessPolicy / AllowedUser | Workspace access mode and version; unique workspace/user ID entries with audit provenance |
-| ChatBinding | Workspace, Telegram chat ID, topic policy, visibility mode, linked-by; unique active binding |
-| IncomingEvent | Bot identity + update ID, tenant, accepted time, processing status; unique delivery key |
-| MessageContext | Workspace/chat/topic/message ID, author, content reference, received time, expiry |
-| Workflow | Owner, task, version, source scope, destination, recurrence, timezone, budget, state |
-| ScheduleOccurrence | Workflow/version, scheduled instant, claim status; unique occurrence key |
-| Run | Actor, workflow version, status, source snapshot references, timestamps, usage, error code |
-| Approval | Exact action hash, authorized actor, expiry, decision, consumed status |
-| Instruction/Memory | Scope, content, author, provenance, version, expiry, deletion state |
-| Connection | Owner, provider, encrypted credential reference, scopes, sharing policy, revoked-at |
-| Artifact | Tenant, run, type, private storage key, audience, expiry |
-| UsageLedger | Run, provider, model, measured/estimated units, cost basis, reservation/reconciliation |
-| AuditEvent | Tenant, actor, action, target/version, timestamp, outcome; no raw chat payload |
-| Outbox/Delivery | Logical event key, destination, attempt count, next retry, remote message IDs |
+Admin sessions are hashed, server-side, eight-hour, revocable cookies with CSRF and
+exact-origin checks. Passwords use salted Node scrypt. AES-256-GCM uses name-bound
+associated data for write-only bot/model/webhook credentials. Responses and audit
+records never contain credential values. Optional Telegram web login is not enabled;
+verified linking plus local account login is the implemented path.
 
-These records are an implementation guide, not a migration schema. Choose transaction
-boundaries and indexing with the first persistent workflow rather than generating
-empty tables for every planned feature now.
+## Agent and recovery
 
-## Isolation and authorization
+`AgentRunner` receives bound actor/run identity, model, context, tools, budgets and
+cancellation; returns output/status and emits awaited durable checkpoints. Pi core, AI and coding-agent packages
+are pinned to 0.85.1. [Plugins are Pi extensions](llm-extensions.md), loaded from an
+operator registry for explicitly granted workspaces through the headless adapter.
+The Plugins panel stores per-operator revisions and file hashes in deployment JSONB;
+workers resolve that registry per run and check its revision at every guard. A local
+manifest remains the fallback until the operator saves panel settings. The OpenAI catalog supplies known model metadata; execution
+uses Pi's OpenAI-compatible Chat Completions adapter with operator-configured base
+URL, custom model ID, encrypted key, thinking level and estimated token prices.
+The worker pins endpoint/thinking/prices on first execution and stops an unfinished
+run if its endpoint changes. The coding-agent dependency supplies the extension loader; no built-in coding,
+shell, browser or arbitrary send tool is enabled.
 
-All retrieval begins with tenant and audience filters, before model context is built.
-The [allowed-user policy](access-control.md) is checked alongside membership and roles
-at entry, execution and delivery boundaries; workers must observe revocations.
-Scheduled execution has a recorded actor; leaving the workspace or revoking a
-connection suspends dependent work. A team-owned run does not impersonate an absent
-member. Bot visibility, requester visibility and destination audience are distinct.
+Every request uses a separate Agent. Run envelopes pin settings, workflow, skill and
+instruction versions and source IDs. Text output citations are checked against that
+source set. Semantic grounding still requires model evaluation; ID validation alone
+cannot prove a claim follows from its citation. Thinking blocks are never persisted.
 
-Approvals authorize an exact bounded operation or workflow version. A model can
-propose a change but cannot edit its policy, mark approval complete, grant tool
-access or silently promote private memory to team scope. External content cannot
-change the instruction hierarchy.
+Per-call reservations precede dispatch and reconcile completed usage. Provider retries
+are disabled. The worker checks cancellation every second and between tool/model
+steps, with 90-second run deadlines, configured turn/input/output caps and eight tool
+calls maximum. Skills request capabilities from the application registry; extension tools require
+separate explicit operator grants. Extension configurations are pinned on runs and
+extension tool outcomes use durable reservations without automatic unknown replay. Proposals cannot
+activate schedules or persistent instructions.
 
-## Reliability and idempotency
+Approvals hash canonical JSON so persistence key ordering cannot change their identity.
+They bind actor, version, payload and 15-minute expiry. Approval transactions activate
+the exact draft once. The worker pauses after a proposal without holding a human-waiting
+Promise. Incomplete batches are reconciled from atomic stored tool outcomes; missing
+outcomes stop with an explicit recovery error. Unknown model attempts remain reserved
+and are not replayed automatically. Completed transcript boundaries can resume.
 
-Deduplicate inbound events, workflow occurrences and external effects separately.
-At-least-once queues are acceptable if handlers claim/record logical work durably.
-Exactly-once external delivery is not assumed: a timeout after a remote send can be
-ambiguous. Record attempts, use provider idempotency keys where available, and expose
-uncertain outcomes instead of blindly repeating writes.
+Daily/weekly recurrence uses Temporal in IANA zones. Nonexistent local times skip;
+repeated local times use the earlier instant. Scheduler previews and execution share
+the same function. Occurrences more than five minutes late skip and notify the owner.
+Pause, owner removal, skill disable and deletion block dependent execution.
 
-Capture source coverage and workflow version for reproducibility. Cancellation
-blocks future steps but cannot undo completed external actions. Budget reservation
-must be atomic across concurrent runs. A cleanup job must respect deletion tombstones
-so retried work cannot recreate removed data.
+Delivery is independent of generation. An intent is marked `sending` before calling
+Telegram; a lost reply becomes `delivery_unknown`, never an automatic resend. 429
+responses record retry times, permanent errors stop, and remote IDs are saved.
+Operators/workspace admins can inspect failures; authorized workspace admins can
+record verified charges and resolve observed send outcomes. Revocation cannot undo
+an already in-flight remote operation.
 
-## Validation strategy
+## Operations
 
-Current tests cover local HTTP behavior and ensure an unimplemented webhook does not
-acknowledge events. Future domain tests use fixed times and fake adapters. Integration
-tests cover durable acceptance, retry/crash boundaries, schedule/DST behavior,
-permission revocation, stale callbacks, retention and ambiguous delivery. Before a
-pilot, validate in a dedicated Telegram test bot/group with authorized credentials.
+Runtime events use a fixed message/error-code catalog and an asynchronous bounded
+buffer. API and worker emit the same sanitized entries to container output and
+PostgreSQL `runtime_logs`. The operator-only `/api/admin/operator/logs` endpoint uses
+stable ID cursors, validated filters and workspace ownership checks. It omits deleted
+workspaces. No raw errors, request bodies, secrets or conversational content are logged.
+Worker maintenance prunes to seven days/latest 10,000 rows once a minute. Database
+logging is best-effort and does not change request, run or delivery outcomes.
+
+
+Liveness is `/healthz`; readiness requires a recent worker heartbeat. The panel exposes
+queue age, pending dispatch, worker count, run/delivery failures and redacted audit.
+Sweeps enforce retention and deletion tombstones; jobs cannot recreate erased content.
+No provider-hosted sessions are created (`store:false`); upstream abuse-monitoring
+retention follows provider account policy and cannot be purged through this app.
+
+[Implementation status](../implementation/implementation-status.md) records test
+coverage and outstanding external gates. [The runbook](../implementation/release-runbook.md)
+covers deployment, backup, key recovery and ambiguous outcomes.
+
+### Local source-query service
+
+An optional separately deployed Bun service reuses the DeepX Code Truth MCP/indexing core. The Node bot connects with an internal bearer token. Repository configurations live in each workspace’s plugin registry in PostgreSQL, while immutable source snapshots live in a separate Code Truth volume, partitioned by workspace and configuration digest. The service has no published Compose port and no public OAuth login. The predefined Pi extension captures only the current workspace’s configured targets and uses the same revocation guards and durable tool ledger as other extensions. See [setup, retention and trust boundaries](../implementation/code-truth.md).

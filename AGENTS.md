@@ -36,6 +36,21 @@ and runnable examples when workflows or interfaces change.
 For deployment changes, also build and smoke-test the Docker image and validate
 `docker compose config`. Bun manages dependencies/builds/tests; Node runs the service.
 
+## UI design preferences
+
+Before designing or modifying UI, read [UI rules](docs/design/ui-rules.md) and apply
+the preferences relevant to the task. When the user requests a UI design change
+that reflects a broadly applicable preference, update that file in the same task
+and apply the underlying principle consistently in subsequent UI work.
+
+Record each preference's source, intended scope, and any exceptions. A single clear
+request can establish a preference within its scope; do not turn a context-specific
+request or an illustrative example into a universal rule. New explicit user
+instructions take precedence over recorded preferences. Update the affected rule
+when a preference changes, or record an exception when the change is specific to
+one context. This keeps the interface consistent with the user's evolving design
+style.
+
 ## Product boundaries
 
 - Scope every future persisted record, retrieval, and tool action to its tenant.

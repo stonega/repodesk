@@ -1,7 +1,8 @@
 # Allowed-user whitelist
 
-Status: **proposed P0 requirement**. Applies to Telegram usage and workspace access
-in the [admin panel](admin-panel.md). This policy is not implemented in the scaffold.
+Status: **implemented local P0 policy**. Applies to Telegram usage and workspace access
+in the [admin panel](admin-panel.md). See [implementation evidence](../implementation/implementation-status.md)
+for deterministic and PostgreSQL revocation tests; live pilot verification remains pending.
 
 ## Configuration
 

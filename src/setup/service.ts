@@ -1,0 +1,320 @@
+import { z } from "zod";
+import { operator } from "../admin/auth.ts";
+import {
+  credentialsSchema,
+  DEFAULT_MODEL_BASE_URL,
+} from "../agent/model-settings.ts";
+import { selectedModel } from "../agent/runtime.ts";
+import { type Sql, transaction } from "../db/pool.ts";
+import type { Store } from "../db/repositories.ts";
+import {
+  type Admin,
+  type Deployment,
+  requireThat,
+  type Settings,
+} from "../domain.ts";
+import {
+  type BotIdentity,
+  registerWebhook,
+  type Telegram,
+  TelegramClient,
+} from "../telegram/client.ts";
+import {
+  pollingStatus,
+  type TelegramTransport,
+} from "../telegram/polling-state.ts";
+import { newWorkspace } from "../workspaces/service.ts";
+import { decrypt, encrypt, hash, token } from "./credentials.ts";
+export class SetupService {
+  constructor(
+    public store: Store,
+    private key: string,
+    private origin: string,
+    private transport: (token: string) => Telegram = (t) =>
+      new TelegramClient(t),
+    public readonly telegramTransport: TelegramTransport = "webhook",
+  ) {}
+  async client(d?: Deployment) {
+    d ??= await this.store.deployment();
+    requireThat(d.credentials.bot, "bot_not_configured", 409);
+    return this.transport(decrypt(this.key, "bot", d.credentials.bot));
+  }
+  async receiverStatus(d: Deployment, sql: Sql = this.store.pool) {
+    return this.telegramTransport === "polling"
+      ? pollingStatus(sql, d)
+      : { ready: d.webhookReady, error: undefined };
+  }
+  async progress(admin: Admin) {
+    operator(admin);
+    const d = await this.store.deployment();
+    const workspaces = (await this.store.all())
+      .filter((w) => w.operatorId === admin.id)
+      .map((w) => ({
+        id: w.id,
+        version: w.version,
+        settings: w.settings,
+        ownerVerified: w.members.some((m) => m.role === "owner"),
+        skills: w.skills.map((s) => ({
+          id: s.id,
+          name: s.draft.name,
+          enabled: s.enabled,
+        })),
+        deleted: !!w.deletion,
+        deletion: w.deletion,
+      }));
+    return {
+      version: d.version,
+      active: d.active,
+      bot: d.bot,
+      model: d.model,
+      modelBaseUrl: d.modelBaseUrl ?? DEFAULT_MODEL_BASE_URL,
+      thinkingLevel: d.thinkingLevel ?? "off",
+      modelPricing: d.modelPricing,
+      webhookReady: d.webhookReady,
+      telegramTransport: this.telegramTransport,
+      receiver: await this.receiverStatus(d),
+      paused: d.paused,
+      credentials: { bot: !!d.credentials.bot, model: !!d.credentials.model },
+      workspaces,
+    };
+  }
+  async createWorkspace(admin: Admin, settings: Settings) {
+    operator(admin);
+    const w = newWorkspace(admin.id, settings);
+    await transaction(this.store.pool, async (sql) => {
+      await sql.query(
+        "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",
+        [w.id, admin.id, JSON.stringify(w)],
+      );
+      await sql.query(
+        "INSERT INTO operator_audit(actor,action,target) VALUES($1,'workspace.created',$2)",
+        [admin.id, w.id],
+      );
+    });
+    return { id: w.id };
+  }
+  async saveCredentials(
+    admin: Admin,
+    input: z.infer<typeof credentialsSchema>,
+  ) {
+    operator(admin);
+    input = credentialsSchema.parse(input);
+    let identity: BotIdentity | undefined;
+    if (input.botToken) {
+      z.string()
+        .regex(/^\d+:[A-Za-z0-9_-]{20,}$/)
+        .parse(input.botToken);
+      identity = await this.transport(input.botToken).call<BotIdentity>(
+        "getMe",
+      );
+      requireThat(identity.is_bot && identity.username, "invalid_bot");
+    }
+    await transaction(this.store.pool, async (sql) => {
+      const d = await this.store.deployment(sql, true);
+      requireThat(d.version === input.version, "version_conflict", 409);
+      const baseUrl =
+        input.modelBaseUrl ?? d.modelBaseUrl ?? DEFAULT_MODEL_BASE_URL;
+      requireThat(
+        baseUrl === (d.modelBaseUrl ?? DEFAULT_MODEL_BASE_URL) ||
+          !d.credentials.model ||
+          input.modelKey,
+        "new_endpoint_requires_api_key",
+      );
+      selectedModel(input.model ?? d.model, {
+        modelBaseUrl: baseUrl,
+        thinkingLevel: input.thinkingLevel ?? d.thinkingLevel,
+        modelPricing: input.modelPricing ?? d.modelPricing,
+      });
+      if (identity && input.botToken) {
+        requireThat(
+          !d.bot || d.bot.id === String(identity.id),
+          "bot_identity_change_requires_new_deployment",
+          409,
+        );
+        d.bot = {
+          id: String(identity.id),
+          username: identity.username,
+          visibleAll: !!identity.can_read_all_group_messages,
+        };
+        d.credentials.bot = encrypt(this.key, "bot", input.botToken);
+        d.webhookReady = false;
+        d.active = false;
+        d.credentials.webhook ??= encrypt(this.key, "webhook", token());
+      }
+      if (input.modelKey)
+        d.credentials.model = encrypt(this.key, "model", input.modelKey);
+      if (input.model) d.model = input.model;
+      d.modelBaseUrl = baseUrl;
+      if (input.thinkingLevel !== undefined)
+        d.thinkingLevel = input.thinkingLevel;
+      if (input.modelPricing !== undefined) d.modelPricing = input.modelPricing;
+      d.version++;
+      await this.store.saveDeployment(sql, d);
+      await sql.query(
+        "INSERT INTO operator_audit(actor,action,target) VALUES($1,'credentials.updated','deployment')",
+        [admin.id],
+      );
+    });
+    return this.progress(admin);
+  }
+  async identityToken(admin: Admin, id: string) {
+    const raw = token();
+    await this.store.change(id, (w) => {
+      requireThat(
+        w.operatorId === admin.id ||
+          (admin.telegramId &&
+            w.members.some((m) => m.id === admin.telegramId && m.active)),
+        "access_denied",
+        403,
+      );
+      requireThat(!w.deletion, "workspace_deleted", 410);
+      w.tokens = w.tokens.filter(
+        (t) => !(t.kind === "identity" && t.adminId === admin.id),
+      );
+      w.tokens.push({
+        hash: hash(raw),
+        actor: "",
+        kind: "identity",
+        adminId: admin.id,
+        expiresAt: new Date(Date.now() + 900000).toISOString(),
+      });
+    });
+    const d = await this.store.deployment();
+    requireThat(d.bot, "bot_not_configured", 409);
+    return {
+      command: `/start verify_${raw}`,
+      url: `https://t.me/${d.bot.username}?start=verify_${raw}`,
+      expiresInMinutes: 15,
+    };
+  }
+  async accountIdentityToken(
+    operatorAdmin: Admin,
+    accountId: string,
+    workspaceId: string,
+  ) {
+    operator(operatorAdmin);
+    const raw = token();
+    await this.store.change(workspaceId, async (w, sql) => {
+      requireThat(
+        w.operatorId === operatorAdmin.id && !w.deletion,
+        "access_denied",
+        403,
+      );
+      const target = (
+        await sql.query("SELECT id FROM admins WHERE id=$1", [accountId])
+      ).rows[0];
+      requireThat(target, "account_not_found", 404);
+      w.tokens = w.tokens.filter(
+        (t) => !(t.kind === "identity" && t.adminId === accountId),
+      );
+      w.tokens.push({
+        hash: hash(raw),
+        actor: "",
+        kind: "identity",
+        adminId: accountId,
+        expiresAt: new Date(Date.now() + 900000).toISOString(),
+      });
+      await sql.query(
+        "INSERT INTO operator_audit(actor,action,target) VALUES($1,'identity.link_issued',$2)",
+        [operatorAdmin.id, accountId],
+      );
+    });
+    const d = await this.store.deployment();
+    requireThat(d.bot, "bot_not_configured", 409);
+    return {
+      url: `https://t.me/${d.bot.username}?start=verify_${raw}`,
+      command: `/start verify_${raw}`,
+    };
+  }
+  async register(admin: Admin) {
+    operator(admin);
+    requireThat(
+      this.telegramTransport === "webhook",
+      "webhook_disabled_in_polling_mode",
+      409,
+    );
+    requireThat(
+      new URL(this.origin).protocol === "https:",
+      "https_origin_required",
+    );
+    const d = await this.store.deployment();
+    requireThat(d.credentials.webhook, "bot_not_configured", 409);
+    const result = await registerWebhook(
+      await this.client(),
+      this.origin,
+      decrypt(this.key, "webhook", d.credentials.webhook),
+    );
+    await transaction(this.store.pool, async (sql) => {
+      const current = await this.store.deployment(sql, true);
+      requireThat(current.version === d.version, "version_conflict", 409);
+      current.webhookReady = true;
+      current.version++;
+      await this.store.saveDeployment(sql, current);
+    });
+    return result;
+  }
+  async activate(admin: Admin) {
+    operator(admin);
+    await transaction(this.store.pool, async (sql) => {
+      const d = await this.store.deployment(sql, true);
+      requireThat(
+        d.bot &&
+          d.credentials.bot &&
+          d.credentials.model &&
+          (await this.receiverStatus(d, sql)).ready,
+        "setup_incomplete",
+        409,
+      );
+      const rows = await sql.query(
+        "SELECT data FROM workspaces WHERE operator_id=$1 FOR UPDATE",
+        [admin.id],
+      );
+      requireThat(
+        rows.rows.some((r) => {
+          const w = r.data;
+          return (
+            !w.deletion &&
+            w.members.some(
+              (m: { id: string; role: string; active: boolean }) =>
+                m.role === "owner" &&
+                m.active &&
+                w.policy.allowed.includes(m.id),
+            ) &&
+            w.skills.some(
+              (s: { enabled: boolean; published: unknown[] }) =>
+                s.enabled && s.published.length,
+            )
+          );
+        }),
+        "verified_owner_and_skill_required",
+        409,
+      );
+      d.active = true;
+      d.ownerVerified = true;
+      d.version++;
+      await this.store.saveDeployment(sql, d);
+      await sql.query(
+        "INSERT INTO operator_audit(actor,action,target) VALUES($1,'deployment.activated','deployment')",
+        [admin.id],
+      );
+    });
+    return this.progress(admin);
+  }
+  async webhookSecret() {
+    const d = await this.store.deployment();
+    return d.credentials.webhook
+      ? decrypt(this.key, "webhook", d.credentials.webhook)
+      : undefined;
+  }
+  async modelKey(expectedBaseUrl?: string) {
+    const d = await this.store.deployment();
+    requireThat(d.credentials.model, "model_not_configured", 409);
+    requireThat(
+      !expectedBaseUrl ||
+        expectedBaseUrl === (d.modelBaseUrl ?? DEFAULT_MODEL_BASE_URL),
+      "model_endpoint_changed",
+      409,
+    );
+    return decrypt(this.key, "model", d.credentials.model);
+  }
+}

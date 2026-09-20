@@ -1,6 +1,8 @@
 # DeepX Agent: Telegram product requirements
 
-Status: **proposed**, 2026-09-18. None of the bot behavior below is implemented.
+Status: **product contract**, 2026-09-18. P0 has a local implementation; live release
+gates and deliberate limits are recorded in [implementation evidence](../implementation/implementation-status.md).
+P1/P2 remain proposed.
 Research baseline: [Every feature inventory](../research/every-agent-features.md).
 
 ## Product intent

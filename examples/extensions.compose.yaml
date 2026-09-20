@@ -1,0 +1,12 @@
+# Paths resolve relative to the main compose.yaml directory.
+services:
+  app:
+    environment:
+      PI_EXTENSIONS_FILE: /app/extensions/extensions.json
+    volumes:
+      - ./extensions:/app/extensions:ro
+  worker:
+    environment:
+      PI_EXTENSIONS_FILE: /app/extensions/extensions.json
+    volumes:
+      - ./extensions:/app/extensions:ro

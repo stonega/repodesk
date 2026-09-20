@@ -1,0 +1,23 @@
+@baseUrl = http://localhost:3000
+@csrf = REPLACE_WITH_SESSION_CSRF
+@session = REPLACE_WITH_SESSION_COOKIE
+
+### Read current version (requires an operator session)
+GET {{baseUrl}}/api/setup/progress
+Cookie: deepx_session={{session}}
+
+### Save model settings; replace version and placeholders, never commit real keys
+PUT {{baseUrl}}/api/admin/operator/credentials
+Origin: {{baseUrl}}
+Cookie: deepx_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "version": 1,
+  "modelBaseUrl": "https://models.example.com/v1",
+  "modelKey": "REPLACE_WITH_API_KEY",
+  "model": "team/custom-reasoner",
+  "thinkingLevel": "high",
+  "modelPricing": { "input": 1, "output": 3 }
+}

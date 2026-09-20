@@ -1,0 +1,10 @@
+[
+  {
+    "id": "word-count",
+    "version": "1",
+    "path": "./pi-extension.ts",
+    "workspaces": ["00000000-0000-4000-8000-000000000001"],
+    "tools": ["count_words"],
+    "execution": "read-only"
+  }
+]

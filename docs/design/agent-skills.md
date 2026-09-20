@@ -1,7 +1,12 @@
 # Agent skills managed in the web panel
 
-Status: **proposed P0 requirement**. Admins configure the bot's skills from the web
-panel and choose initial skills during [first-run setup](first-run-setup.md).
+Status: **P0 design contract with local implementation**. Admins manage Markdown
+skills, versions and settings through the web panel. The Test control validates policy
+and previews context without paid calls. See [implementation evidence](../implementation/implementation-status.md).
+
+Executable **plugins** are [Pi extensions](llm-extensions.md), a separate capability
+from instruction skills. Operators install reviewed extension tools and hooks and
+manage their registry through **Workspace → Plugins**.
 
 ## Pi integration boundary
 

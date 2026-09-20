@@ -1,0 +1,458 @@
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "bun:test";
+import { randomUUID } from "node:crypto";
+import { claim, issueClaim, login } from "../../src/admin/auth.ts";
+import { PluginService } from "../../src/agent/plugin-service.ts";
+import { createApp } from "../../src/app.ts";
+import { CodeTruthClient } from "../../src/code-truth/client.ts";
+import { migrate } from "../../src/db/migrate.ts";
+import { database } from "../../src/db/pool.ts";
+import { Store } from "../../src/db/repositories.ts";
+import type { Admin } from "../../src/domain.ts";
+import { GitHubApps } from "../../src/github/registry.ts";
+import { GitHubService } from "../../src/github/service.ts";
+import { hash } from "../../src/setup/credentials.ts";
+import { SetupService } from "../../src/setup/service.ts";
+import { workspace } from "../fixtures.ts";
+import {
+  githubFixture,
+  githubFixtureConfig,
+  githubTransport,
+} from "../github-fixture.ts";
+
+const url = process.env.TEST_DATABASE_URL;
+(url ? describe : describe.skip)("GitHub App manifest registration", () => {
+  const root = database(url ?? "postgres://unused@localhost/unused");
+  const name = `deepx_manifest_${randomUUID().replaceAll("-", "")}`;
+  const key = "cd".repeat(32),
+    origin = "http://localhost:3000";
+  const input = {
+    owner: "organization",
+    organization: "example",
+    name: "DeepX Test",
+    public: false,
+  };
+  let store: Store,
+    apps: GitHubApps,
+    service: GitHubService,
+    app: ReturnType<typeof createApp>;
+  let admin: Admin,
+    auth: { raw: string; csrf: string },
+    id: string,
+    sibling: string;
+  let conversions = 0;
+  beforeAll(async () => {
+    await root.query(`CREATE DATABASE ${name}`);
+    const parsed = new URL(url ?? "");
+    parsed.pathname = `/${name}`;
+    const pool = database(parsed.toString());
+    await migrate(pool);
+    store = new Store(pool);
+    auth = await claim(
+      pool,
+      await issueClaim(pool),
+      "manifestadmin",
+      "manifest test password",
+    );
+    admin = {
+      id: (
+        await pool.query("SELECT id FROM admins WHERE username='manifestadmin'")
+      ).rows[0].id,
+      username: "manifestadmin",
+      operator: true,
+    };
+    apps = new GitHubApps(
+      store,
+      key,
+      undefined,
+      githubTransport((u) => {
+        if (u.includes("/conversions")) conversions++;
+      }),
+    );
+    service = new GitHubService(store, key, origin, apps);
+    app = createApp(
+      store,
+      new SetupService(store, key, origin),
+      origin,
+      undefined,
+      service,
+    );
+  });
+  beforeEach(async () => {
+    await store.pool.query("DELETE FROM github_apps");
+    await store.pool.query("DELETE FROM github_app_flows");
+    await store.pool.query("DELETE FROM auth_limits");
+    conversions = 0;
+    for (let i = 0; i < 2; i++) {
+      const w = workspace();
+      w.operatorId = admin.id;
+      await store.pool.query(
+        "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",
+        [w.id, admin.id, JSON.stringify(w)],
+      );
+      if (i === 0) id = w.id;
+      else sibling = w.id;
+    }
+  });
+  afterAll(async () => {
+    await store?.pool.end();
+    await root.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+    await root.end();
+  });
+  const endpoint = () => `/api/admin/workspaces/${id}/github`;
+  const request = (
+    path: string,
+    method = "GET",
+    body?: unknown,
+    headers = {},
+  ) =>
+    app.request(path, {
+      method,
+      headers: {
+        cookie: `deepx_session=${auth.raw}`,
+        origin,
+        "x-csrf-token": auth.csrf,
+        "content-type": "application/json",
+        ...headers,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  const stateOf = (result: { url: string }) =>
+    new URL(result.url).searchParams.get("state") ?? "";
+  const start = () => service.register(admin, id, hash(auth.raw), input);
+
+  test("builds safe personal/organization manifests and enforces owner, Origin and CSRF", async () => {
+    expect((await service.view(admin, id, hash(auth.raw))).canRegister).toBe(
+      true,
+    );
+    expect(
+      (await request(`${endpoint()}/register`, "POST", input, { cookie: "" }))
+        .status,
+    ).toBe(401);
+    expect(
+      (
+        await request(`${endpoint()}/register`, "POST", input, {
+          origin: "https://evil.test",
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(`${endpoint()}/register`, "POST", input, {
+          "x-csrf-token": "bad",
+        })
+      ).status,
+    ).toBe(403);
+    await expect(
+      service.register(
+        { ...admin, operator: false },
+        id,
+        hash(auth.raw),
+        input,
+      ),
+    ).rejects.toMatchObject({ code: "operator_required" });
+    await expect(
+      service.register(
+        { ...admin, id: randomUUID() },
+        id,
+        hash(auth.raw),
+        input,
+      ),
+    ).rejects.toMatchObject({ code: "access_denied" });
+    expect(
+      (
+        await request(`${endpoint()}/register`, "POST", {
+          ...input,
+          organization: "../evil",
+        })
+      ).status,
+    ).toBe(400);
+    const response = await request(`${endpoint()}/register`, "POST", input);
+    expect(response.headers.get("set-cookie")).toContain("SameSite=Lax");
+    const result = await response.json();
+    expect(new URL(result.url).pathname).toBe(
+      "/organizations/example/settings/apps/new",
+    );
+    expect(result.manifest).toMatchObject({
+      public: false,
+      default_permissions: { contents: "read", metadata: "read" },
+      default_events: [],
+      hook_attributes: {
+        url: "https://example.com/github/webhook",
+        active: false,
+      },
+      callback_urls: [`${origin}/api/admin/github/callback`],
+      redirect_url: `${origin}/api/admin/github/app/callback`,
+    });
+    expect(JSON.stringify(result)).not.toContain("secret");
+    const personal = await service.register(admin, id, hash(auth.raw), {
+      owner: "personal",
+      name: "Personal App",
+      public: true,
+    });
+    expect(new URL(personal.url).pathname).toBe("/settings/apps/new");
+    expect(personal.manifest.public).toBe(true);
+    expect(personal.manifest.hook_attributes).toEqual({
+      url: "https://example.com/github/webhook",
+      active: false,
+    });
+    expect(personal.manifest.callback_urls).toEqual([
+      `${origin}/api/admin/github/callback`,
+    ]);
+    await expect(
+      service.registrationResult(
+        admin,
+        hash(auth.raw),
+        stateOf(result),
+        "fixture-manifest-code",
+      ),
+    ).rejects.toMatchObject({ code: "github_authorization_expired" });
+    expect(conversions).toBe(0);
+  });
+  test("callback is session-bound and one-use; credentials are encrypted and operator-scoped", async () => {
+    const pending = await start(),
+      state = stateOf(pending);
+    const second = await login(
+      store.pool,
+      "manifestadmin",
+      "manifest test password",
+    );
+    await expect(
+      service.registrationResult(
+        admin,
+        hash(second.raw),
+        state,
+        "fixture-manifest-code",
+      ),
+    ).rejects.toMatchObject({ code: "github_authorization_expired" });
+    const callback = await request(
+      `/api/admin/github/app/callback?state=${state}&code=fixture-manifest-code`,
+    );
+    expect(callback.headers.get("location")).toBe(
+      `/admin/plugins?workspace=${id}&github=app-created`,
+    );
+    expect(callback.headers.get("referrer-policy")).toBe("no-referrer");
+    await expect(
+      service.registrationResult(
+        admin,
+        hash(auth.raw),
+        state,
+        "fixture-manifest-code",
+      ),
+    ).rejects.toMatchObject({ code: "github_authorization_expired" });
+    expect(conversions).toBe(1);
+    const saved = (
+      await store.pool.query("SELECT credentials FROM github_apps")
+    ).rows[0].credentials;
+    expect(saved).not.toContain(githubFixtureConfig.clientSecret);
+    expect(saved).not.toContain("PRIVATE KEY");
+    const publicPage = await service.view(admin, id, hash(auth.raw));
+    expect(publicPage).toMatchObject({
+      configured: true,
+      canRegister: false,
+      appSlug: "deepx-fixture",
+    });
+    expect(JSON.stringify(publicPage)).not.toContain("secret");
+    expect(JSON.stringify((await store.read(id)).audit)).not.toContain(
+      "secret",
+    );
+    expect(
+      (await service.view(admin, sibling, hash(auth.raw))).configured,
+    ).toBe(true);
+    expect((await store.read(sibling)).github).toBeUndefined();
+    expect(await apps.get(randomUUID())).toBeUndefined();
+    const restarted = new GitHubApps(store, key, undefined, githubTransport());
+    expect((await restarted.get(admin.id))?.config.id).toBe(123);
+    await expect(start()).rejects.toMatchObject({
+      code: "github_app_already_configured",
+    });
+    expect(
+      (await store.pool.query("SELECT count(*) FROM github_app_flows")).rows[0]
+        .count,
+    ).toBe("0");
+  });
+  test("expired, cancelled, logged-out and deleted-workspace callbacks never exchange credentials", async () => {
+    let state = stateOf(await start());
+    await store.pool.query(
+      "UPDATE github_app_flows SET expires_at=now()-interval '1 second'",
+    );
+    await expect(
+      service.registrationResult(
+        admin,
+        hash(auth.raw),
+        state,
+        "fixture-manifest-code",
+      ),
+    ).rejects.toMatchObject({ code: "github_authorization_expired" });
+    state = stateOf(await start());
+    await expect(
+      service.registrationResult(admin, hash(auth.raw), state),
+    ).rejects.toMatchObject({ code: "github_registration_cancelled" });
+    const second = await login(
+      store.pool,
+      "manifestadmin",
+      "manifest test password",
+    );
+    state = stateOf(await service.register(admin, id, hash(second.raw), input));
+    await store.pool.query("DELETE FROM sessions WHERE token_hash=$1", [
+      hash(second.raw),
+    ]);
+    await expect(
+      service.registrationResult(
+        admin,
+        hash(second.raw),
+        state,
+        "fixture-manifest-code",
+      ),
+    ).rejects.toMatchObject({ code: "github_authorization_expired" });
+    state = stateOf(await start());
+    await store.change(id, (w) => {
+      w.deletion = {
+        requestedAt: new Date().toISOString(),
+        providerState: "pending",
+      };
+    });
+    await expect(
+      service.registrationResult(
+        admin,
+        hash(auth.raw),
+        state,
+        "fixture-manifest-code",
+      ),
+    ).rejects.toMatchObject({ code: "access_denied" });
+    expect(conversions).toBe(0);
+    expect(await apps.get(admin.id)).toBeUndefined();
+  });
+  test("conversion failures are redacted and concurrent registrations cannot overwrite an App", async () => {
+    const bad = await start();
+    const result = await request(
+      `/api/admin/github/app/callback?state=${stateOf(bad)}&code=invalid-code`,
+    );
+    expect(result.headers.get("location")).toBe(
+      "/admin/plugins?github=registration-failed",
+    );
+    expect(await apps.get(admin.id)).toBeUndefined();
+    const second = await login(
+      store.pool,
+      "manifestadmin",
+      "manifest test password",
+    );
+    const a = await start(),
+      b = await service.register(admin, sibling, hash(second.raw), input);
+    const completed = await Promise.allSettled([
+      service.registrationResult(
+        admin,
+        hash(auth.raw),
+        stateOf(a),
+        "fixture-manifest-code",
+      ),
+      service.registrationResult(
+        admin,
+        hash(second.raw),
+        stateOf(b),
+        "fixture-manifest-code",
+      ),
+    ]);
+    expect(completed.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(
+      (await store.pool.query("SELECT count(*) FROM github_apps")).rows[0]
+        .count,
+    ).toBe("1");
+    const fallback = new GitHubService(store, key, origin, githubFixture());
+    expect((await fallback.view(admin, id, hash(auth.raw))).canRegister).toBe(
+      false,
+    );
+  });
+  test("invalid permission/owner/key responses are rejected without persisting secrets", async () => {
+    const upstream = githubTransport();
+    for (const override of [
+      { permissions: { contents: "write" } },
+      { owner: { login: "wrong-org" } },
+      { pem: "not-a-private-key" },
+    ]) {
+      const registry = new GitHubApps(store, key, undefined, (async (
+        url,
+        init,
+      ) => {
+        const res = await upstream(url, init);
+        return Response.json({ ...(await res.json()), ...override });
+      }) as typeof fetch);
+      await expect(
+        registry.convert("fixture-manifest-code", "example"),
+      ).rejects.toMatchObject({ code: "github_registration_failed" });
+    }
+    expect(await apps.get(admin.id)).toBeUndefined();
+  });
+  test("registered credentials power subsequent OAuth and worker Code Truth without restart", async () => {
+    await service.registrationResult(
+      admin,
+      hash(auth.raw),
+      stateOf(await start()),
+      "fixture-manifest-code",
+    );
+    const authStart = await service.begin(admin, id, hash(auth.raw));
+    await service.callbackResult(
+      admin,
+      hash(auth.raw),
+      stateOf(authStart),
+      "fixture-code",
+    );
+    await service.connect(admin, id, hash(auth.raw), {
+      revision: 0,
+      installationId: 501,
+      repositoryIds: [7001],
+    });
+    await store.change(id, (w) => {
+      w.plugins = {
+        revision: 1,
+        entries: [],
+        codeTruth: {
+          enabled: true,
+          repositories: [
+            {
+              id: "web",
+              repositoryUrl: "https://github.com/example/workspace",
+              networks: { devnet: "main" },
+              workspaces: [id],
+            },
+          ],
+        },
+      };
+    });
+    let tokenReceived = "";
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        tokenReceived = (await req.json()).github.token;
+        return Response.json({
+          namespace: "a".repeat(64),
+          syncing: false,
+          targets: [],
+        });
+      },
+    });
+    try {
+      const plugins = new PluginService(
+        store,
+        undefined,
+        new CodeTruthClient(
+          `http://127.0.0.1:${server.port}`,
+          "service-secret",
+        ),
+        new GitHubApps(store, key, undefined, githubTransport()),
+      );
+      await plugins.codeTruthStatus(admin, id);
+      expect(tokenReceived).toBe("ghs_fixture_installation_secret");
+      expect((await store.read(sibling)).github).toBeUndefined();
+    } finally {
+      await server.stop(true);
+    }
+  });
+});

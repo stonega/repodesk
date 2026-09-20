@@ -1,47 +1,35 @@
 # Implementation roadmap
 
-Status as of 2026-09-18. Only milestone 0 is implemented.
+Status: 2026-09-18. The local P0 implementation is present and checked. A live pilot
+has not been deployed or validated. See [implementation evidence](implementation-status.md).
 
-Use [the Pi + Docker implementation plan](bot-plan.md) for concrete work slices.
-Pi is selected for AI; Docker replaces the original Cloudflare deployment proposal.
-The admin web panel, first-run admin/bot setup and skill management are required
-for P0 and share services with Telegram commands.
+| Slices | Local result | Remaining external gate |
+| --- | --- | --- |
+| I01 | Pi 0.85.1, explicit OpenAI provider, fake tool flow, Node 24 contract checks | Credentialed model comparison and billing review |
+| I02 | PostgreSQL migrations, atomic inbox/outbox, pg-boss adapter, worker/leases | Production capacity/load review |
+| I02A/I04A | Claimed setup, sessions, encrypted settings, verified Telegram linking, admin SPA | Staging HTTPS and browser session review on actual domain |
+| I03/I04 | Webhook/router, scoped onboarding/linking/collection, delivery state machine | Dedicated bot `/help`, visibility and group-admin checks |
+| I05 | Bounded Pi requests, source IDs, budgets, cancellation and checkpoints | Live recap usefulness and groundedness evaluation |
+| I06 | Approved daily/weekly workflows, DST, unique occurrences, pause/resume | Friday recap across a staging restart |
+| I07/I07A | Corrections, instruction approval, skill catalog/version/import/rollback and policy test | Team acceptance of skill output conventions |
+| I08 | Retention/deletion, diagnostics/recovery, CI, image checks, backup/restore tools | Host deployment, protected backups, operator ownership and launch drill |
+| Extensions | Pi-format plugins, operator panel, scoped tools/hooks, live configuration revisions and durable outcomes | Review each installed extension against the [headless contract](../design/llm-extensions.md) |
 
-| Milestone | Deliverable | Dependencies | Exit criteria |
-| --- | --- | --- | --- |
-| 0 — Foundation | Git repo, Bun/Hono/Node scaffold, Docker image and Compose, code quality commands, source-linked docs | None | Local checks and Docker smoke test pass; implemented scope stated accurately. |
-| 1 — Telegram transport | Webhook authentication, validated updates, durable inbox/outbox, private `/start` and `/help`, chat binding | Bot credentials and persistent storage design | Unauthorized updates rejected; duplicate updates create one job; crashes do not lose acknowledged events; group claiming verifies admin. |
-| 1A — Admin foundation | First-run local admin, resumable setup, optional Telegram login, roles, configuration API and panel | Workspace identity and database | Config changes persist and are audited; cross-tenant access and stale writes are rejected. |
-| 2 — First useful task | Pi runtime with bounded tools, received-message context, manual recap, source links, usage ledger | Model choice, workspace isolation, permitted test data | Repeatable evaluation cases pass; coverage gaps visible; budgets enforced; right chat/topic delivery. |
-| 3 — Recurring recap | Workflow drafts, approval callbacks, schedule preview, pause/edit/resume, durable occurrence execution | Milestones 1–2 | Timezone/DST tests pass; duplicate triggers do not duplicate logical runs; revoked access blocks work. |
-| 4 — Compound behavior | Explicit shared instructions, correction proposals, versions, run history, deletion | Stable workflow model | Next run adopts approved correction; private memory remains private; deletion survives retries. |
-| 4A — Agent skills | Web catalog/editor/import, validated settings, versioned publication, runtime loading, enable/disable | Pi and workflow model | Skill changes work through the UI; permissions hold; runs pin versions and disabled skills block dependent work. |
-| 5 — Team pilot readiness | Retention jobs, operator controls, diagnostics, failure recovery, review of permissions and costs | Milestones 1–4 | F01–F06 and F10–F13 P0 criteria pass; Telegram and admin-panel end-to-end pilot succeeds. |
-| 6 — Connected team beta | One read-only connector, multi-chat workspace, file intake, blocker/follow-up templates | Pilot demand and OAuth design | Delegation and source/destination checks pass; connection revocation interrupts dependent jobs. |
-| 7 — Proactive assistance | Explicit monitoring, suggestion digest, remembered rejection, noise controls | Measured context quality | Useful suggestions without automatic activation; no monitoring after revocation; notification budget enforced. |
-| 8 — Expansion | Executable skill extensions, Mini App if needed, additional connectors, controlled writes, billing | Usage evidence and commercial decisions | Separate design/evaluation for each addition; payment policy verified before charging. |
+The repository uses workspace JSONB aggregates under row locks for the pilot, with
+relational inbox/outbox/binding/session constraints. Read the architecture's capacity
+limits before raising budgets or inviting large groups.
 
-## First implementation slice
+## Release sequence
 
-Implement one private command end-to-end before introducing model orchestration:
-authenticated update → durable acceptance → deduplicated dispatch → command result
-→ rate-aware delivery → persisted outcome. Use a fake Telegram adapter in local
-tests. A real bot token is needed only for the authorized integration check.
+1. Follow [setup](setup.md) on a staging HTTPS host and connect a dedicated test bot.
+2. Run the explicitly paid model evaluation with a chosen cap; select a model.
+3. Complete the [release runbook](release-runbook.md) demonstration and failure drills.
+4. Record retention policy, provider data-handling terms and responsible operator.
+5. Invite pilot teams only after those gates pass.
 
-Then add one group recap path and measure whether it is useful. Avoid shipping a
-generic tool marketplace, CRM outreach, browser automation and billing in the same slice.
+## After the pilot
 
-## Pilot release checklist
-
-- Enforce tenant/actor/source/destination authorization in code outside the model.
-- Verify webhook secret handling and reject malformed/oversized input.
-- Exercise retries, restart recovery, stale callbacks and scheduler duplication.
-- Confirm messages and artifacts go to the intended chat and topic.
-- Enforce per-run and workspace cost limits with concurrent-run tests.
-- Validate history coverage, source links and honest partial-result behavior.
-- Confirm monitoring consent, retention sweeps, unlink and deletion cancellation.
-- Record provider/model data handling and operational support access.
-- Make pending limitations visible in `/help` and the user guide.
-
-No calendar estimates are assigned yet; connector selection and pilot group needs
-will materially affect the later milestones.
+Read-only connectors, multiple group sources, files, proactive suggestions, executable
+skill bundles, Telegram web login, Mini App, voice, payments and arbitrary external
+writes remain outside the implemented release. Reassess from pilot evidence before
+building them. Competitor research remains source-linked research, not a shipping claim.

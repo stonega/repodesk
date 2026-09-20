@@ -1,0 +1,23 @@
+# Add after compose.yaml and examples/code-truth.compose.yaml.
+x-github-environment: &github-environment
+  GITHUB_APP_ID: ${GITHUB_APP_ID:?Set GITHUB_APP_ID}
+  GITHUB_APP_CLIENT_ID: ${GITHUB_APP_CLIENT_ID:?Set GITHUB_APP_CLIENT_ID}
+  GITHUB_APP_SLUG: ${GITHUB_APP_SLUG:?Set GITHUB_APP_SLUG}
+  GITHUB_APP_PRIVATE_KEY_FILE: /run/secrets/github_app_private_key
+  GITHUB_APP_CLIENT_SECRET_FILE: /run/secrets/github_app_client_secret
+services:
+  app:
+    environment: *github-environment
+    secrets:
+      - github_app_private_key
+      - github_app_client_secret
+  worker:
+    environment: *github-environment
+    secrets:
+      - github_app_private_key
+      - github_app_client_secret
+secrets:
+  github_app_private_key:
+    file: ${GITHUB_APP_PRIVATE_KEY_FILE:-./secrets/github-app-private-key.pem}
+  github_app_client_secret:
+    file: ${GITHUB_APP_CLIENT_SECRET_FILE:-./secrets/github-app-client-secret}

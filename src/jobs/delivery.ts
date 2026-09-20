@@ -1,0 +1,115 @@
+import type { Store } from "../db/repositories.ts";
+import { type Delivery, requireThat } from "../domain.ts";
+import type { SetupService } from "../setup/service.ts";
+import { TelegramError } from "../telegram/client.ts";
+import { telegramMarkdown } from "../telegram/format.ts";
+import { eligible, runAllowed } from "../workspaces/policy.ts";
+export class DeliveryWorker {
+  constructor(
+    private store: Store,
+    private setup: SetupService,
+  ) {}
+  async send(workspaceId: string, id: string) {
+    const deployment = await this.store.deployment();
+    if (deployment.paused) return;
+    const intent = await this.store.change(workspaceId, (w) => {
+      const d = w.deliveries.find((d) => d.id === id);
+      if (!d || !["pending", "sending"].includes(d.state)) return;
+      if (d.state === "sending") {
+        if (Date.parse(d.startedAt ?? "") + 30000 < Date.now())
+          d.state = "delivery_unknown";
+        return;
+      }
+      const run = d.runId ? w.runs.find((r) => r.id === d.runId) : undefined;
+      if (
+        w.deletion ||
+        !eligible(w, d.actor) ||
+        (d.runId && (!run || !runAllowed(w, run))) ||
+        (d.chatId !== d.actor &&
+          !w.chats.some((c) => c.id === d.chatId && c.active))
+      ) {
+        d.state = "cancelled";
+        return;
+      }
+      if (d.nextAt && Date.parse(d.nextAt) > Date.now()) return;
+      d.state = "sending";
+      d.startedAt = new Date().toISOString();
+      d.attempts++;
+      return structuredClone(d);
+    });
+    if (!intent) return;
+    try {
+      // This last durable policy check precedes the external effect. In-flight revocation cannot undo a send.
+      const current = await this.store.read(workspaceId);
+      requireThat(
+        !current.deletion &&
+          eligible(current, intent.actor) &&
+          (intent.chatId === intent.actor ||
+            current.chats.some((c) => c.id === intent.chatId && c.active)) &&
+          (!intent.runId ||
+            current.runs.some(
+              (r) => r.id === intent.runId && runAllowed(current, r),
+            )),
+        "delivery_revoked",
+        403,
+      );
+      const sent = await (await this.setup.client()).call<{
+        message_id: number;
+      }>("sendMessage", {
+        chat_id: intent.chatId,
+        ...(intent.format === "markdown"
+          ? telegramMarkdown(intent.text)
+          : { text: intent.text }),
+        message_thread_id: intent.topicId || undefined,
+        reply_parameters: intent.replyTo
+          ? { message_id: intent.replyTo, allow_sending_without_reply: true }
+          : undefined,
+        reply_markup: intent.buttons
+          ? { inline_keyboard: intent.buttons }
+          : undefined,
+        link_preview_options: { is_disabled: true },
+      });
+      await this.finish(workspaceId, id, (d) => {
+        d.state = "sent";
+        d.remoteId = sent.message_id;
+      });
+      this.store.log.write("delivery_sent", {
+        workspaceId,
+        runId: intent.runId,
+      });
+    } catch (error) {
+      this.store.log.write("delivery_failed", {
+        error,
+        workspaceId,
+        runId: intent.runId,
+      });
+      await this.finish(workspaceId, id, (d) => {
+        if (
+          error instanceof TelegramError &&
+          error.disposition === "retry" &&
+          d.attempts < 5
+        ) {
+          d.state = "pending";
+          d.nextAt = new Date(
+            Date.now() + error.retryAfter * 1000,
+          ).toISOString();
+        } else if (
+          error instanceof TelegramError &&
+          error.disposition === "permanent"
+        )
+          d.state = "failed";
+        else d.state = "delivery_unknown";
+      });
+    }
+  }
+  private async finish(
+    workspaceId: string,
+    id: string,
+    action: (d: Delivery) => void,
+  ) {
+    await this.store.change(workspaceId, (w) => {
+      const d = w.deliveries.find((d) => d.id === id);
+      if (d?.state === "sending") action(d);
+    });
+  }
+}

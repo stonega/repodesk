@@ -1,11 +1,69 @@
+x-runtime: &runtime
+  build: .
+  image: ${APP_IMAGE:-deepx-agent:local}
+  init: true
+  environment: &environment
+    NODE_ENV: production
+    PORT: "3000"
+    DATABASE_URL: postgres://deepx:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/deepx
+    TELEGRAM_TRANSPORT: ${TELEGRAM_TRANSPORT:-webhook}
+    PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:3000}
+    ENCRYPTION_KEY_FILE: /run/secrets/encryption_key
+  secrets:
+    - encryption_key
+  restart: unless-stopped
+  stop_grace_period: 30s
 services:
+  postgres:
+    image: postgres:17-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
+    environment:
+      POSTGRES_USER: deepx
+      POSTGRES_DB: deepx
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U deepx -d deepx"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+  migrate:
+    <<: *runtime
+    command: [node, dist/migrate.js]
+    restart: "no"
+    healthcheck:
+      disable: true
+    depends_on:
+      postgres:
+        condition: service_healthy
   app:
-    build: .
-    init: true
+    <<: *runtime
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     ports:
       - "127.0.0.1:${APP_PORT:-3000}:3000"
-    environment:
-      NODE_ENV: production
-      PORT: "3000"
-    restart: unless-stopped
-    stop_grace_period: 15s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  worker:
+    <<: *runtime
+    command: [node, dist/worker.js]
+    healthcheck:
+      test: [CMD, node, -e, "const {Client}=require('pg');const c=new Client({connectionString:process.env.DATABASE_URL});c.connect().then(()=>c.query(\"SELECT 1 FROM worker_heartbeats WHERE at>now()-interval '30 seconds' LIMIT 1\")).then(r=>{if(!r.rowCount)process.exitCode=1}).catch(()=>{process.exitCode=1}).finally(()=>c.end())"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+volumes:
+  postgres_data:
+secrets:
+  encryption_key:
+    file: ${ENCRYPTION_KEY_FILE:-./secrets/encryption-key}

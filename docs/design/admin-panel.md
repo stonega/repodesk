@@ -1,8 +1,8 @@
 # Admin web panel
 
-Status: proposed P0 scope, added at the user's request. Implementation is part of
-[the bot plan](../implementation/bot-plan.md). This is a browser administration
-surface; embedding it as a Telegram Mini App is optional later.
+Status: P0 design contract with a local React Router implementation. See
+[implementation evidence](../implementation/implementation-status.md) for the tested
+subset and deliberate UI choices. Embedding it as a Telegram Mini App remains optional.
 
 ## Deployment and application shape
 
@@ -25,9 +25,11 @@ Public static assets can load before login, but contain no workspace data or sec
 | Sign-in/workspace selector | Local admin sign-in; optional linked Telegram sign-in, authorized workspaces, logout | Login does not grant a workspace role; revoked sessions stop working. |
 | Overview | Bot/worker status, connected group, recent runs, active schedules, spend/budget | Loading, empty, stale and failure states are visible; tenant-scoped metrics. |
 | Bot settings | Display label, reply language, timezone, base instructions, response style, directed-response mode, pause switch | Validated form, versioned save, audit entry, saved/effective version shown. |
-| Model settings | Deployment-approved provider/model, reasoning setting where supported, output/turn/time limits | Unsupported combinations rejected; secrets masked; active runs keep their starting configuration. |
+| Model settings | Operator-configured OpenAI-compatible base URL, write-only API key, custom model ID, thinking level and token prices; workspace output/turn/time limits | Invalid settings rejected locally; provider capabilities require evaluation. Runs pin endpoint/thinking/prices at first execution; endpoint changes stop old runs. |
 | Groups and access | Connected group/topic, owner, bot visibility, history coverage, opt-in collection, unlink | Linking verifies authority; no arbitrary chat ID can be used to obtain access. |
 | Workflows | Create/edit draft, preview schedule and destination, approve, pause/resume, run now, delete | Same policy and version checks as Telegram buttons; edits cannot bypass approval. |
+| Plugins | Independent workspace registry of installed Pi extensions, managed by its operator; version/path/tool editing, enable/disable/remove, file status and revision conflicts | Database-backed settings reach workers without restart; settings and revisions isolated per workspace; no code executes on API reads/saves. |
+| GitHub | Guided App creation for personal or organization accounts, workspace OAuth, installation/repository selection and disconnect | Manifest state bound to operator/session/workspace; encrypted operator App credentials; one-use PKCE OAuth; verify user installation/repository access; installation tokens limited to selected repositories and Contents read. |
 | Agent skills | Create/import/edit, test, publish, enable/disable, scope, settings and version rollback | Permission-bounded skills; pinned workflow versions; disabling blocks dependent execution. |
 | Shared instructions | List, edit, scope, provenance, versions, forget | Never lists other users' personal memories by virtue of admin role. |
 | Runs | Filter by state/date/workflow, status, authorized result, evidence references, cost, cancel/retry | Retry creates a traceable attempt; uncertain delivery cannot be blindly resent. |
@@ -35,6 +37,7 @@ Public static assets can load before login, but contain no workspace data or sec
 | Members and roles | Enroll/revoke members, assign workspace admin, transfer workflow ownership | Cannot remove the last workspace owner without a valid transfer. |
 | Allowed users | Configure whitelist-only/members mode; add, remove, search and bulk import Telegram user IDs; preview affected access | Empty enforced list denies; checks apply to bot and panel; removal blocks queued work and schedules owned by affected users. |
 | Privacy and audit | Retention settings, deletion request/status, configuration/action audit | Destructive changes show scope; logs omit credentials and raw private chat text. |
+| Runtime logs | Operator-only API/worker/polling/run/delivery events; severity/service/search filters, cursor pagination, auto-refresh | Static messages and allowed error codes; no secrets/private text; workspace metadata scoped to its operator; seven-day/10,000-entry retention. |
 | Operator settings | Readiness of global bot/provider credentials, webhook state, allowed models, maintenance controls | Deployment-operator-only; workspace admins cannot modify global bot identity or webhook. |
 
 See [first-run setup](first-run-setup.md) and [agent skills](agent-skills.md) for detailed
@@ -101,12 +104,28 @@ encryption key and bootstrap-token issuance stay operator-level deployment setti
 | `/api/admin/workspaces/:id/access-policy` | Versioned access mode and allowed-user list management |
 | `/api/admin/workspaces/:id/usage` and `/audit` | Paginated accounting and audit metadata |
 | `/api/admin/workspaces/:id/deletion` | Request/status of authorized purge |
+| `/api/admin/workspaces/:id/plugins` | Read/update the workspace-scoped Pi extension registry with optimistic revisions and atomic audit |
 | `/api/admin/operator/*` | Deployment-wide health and restricted controls |
 
 These are proposed resource boundaries. Define shared request/response schemas before
 implementing forms; call domain services rather than duplicating Telegram logic.
 
 ## UI acceptance and testing
+
+Common admin actions use Reicon outline icons through `web/icon-button.tsx`.
+Icon buttons retain descriptive accessible names, hover titles, keyboard focus,
+44px hit targets and disabled/busy states. Primary form submissions, authorization,
+approvals and actions needing consequence text retain visible labels. Existing
+confirmation and permission checks still apply. See [UI rules](ui-rules.md).
+
+Add/Create controls open the shared native modal in `web/modal.tsx`. Related
+record editors reuse it. The background is inert, keyboard focus stays inside,
+Escape/Cancel discard the local draft and focus returns to the opener. Failed
+saves preserve entered values and show errors inside the dialog; saves in progress
+disable dismissal and repeated submission. Dialogs scroll within a mobile viewport.
+Repository and network dialogs apply to a local Code Truth draft; **Save Code Truth**
+still persists the configuration. Creating workflows/instructions still produces
+an approval proposal, and creating a GitHub App still requires GitHub confirmation.
 
 Test unauthorized/expired sessions, role downgrades, forged workspace IDs, cross-tenant
 reads, stale saves, credential redaction and CSRF. Test admin scheduling and Telegram
@@ -120,3 +139,7 @@ confirmation dialogs and errors. Test identities must be disabled in production.
 Release demonstration: configure the bot from the panel, see the new version take
 effect in Telegram, create/approve a schedule, inspect its run, then pause it from
 the panel and confirm no next run is dispatched.
+
+The **Plugins** page also offers predefined **Code Truth**: enable/disable, add/remove GitHub repositories, edit network-to-branch mappings, configure repositories for the selected workspace, and sync/check index readiness with commit provenance. `/api/admin/workspaces/:id/plugins/code-truth` supports GET/PUT; `/status` supports POST with `{}`; the URL identifies the workspace. These share workspace plugin revision checks and operator authorization.
+
+[GitHub App setup and API](../implementation/github-app.md) documents the implemented workspace connection flow.

@@ -1,11 +1,12 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "lib": ["ES2022"],
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "types": ["bun", "node"],
     "strict": true,
+    "jsx": "react-jsx",
     "noEmit": true,
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
@@ -13,5 +14,5 @@
     "noFallthroughCasesInSwitch": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"]
+  "include": ["src/**/*.ts", "tests/**/*.ts", "web/**/*.tsx", "scripts/**/*.ts"]
 }

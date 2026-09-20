@@ -1,0 +1,29 @@
+{
+  "name": "deepx-code-truth",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun src/index.ts",
+    "check": "biome check src tests",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests"
+  },
+  "dependencies": {
+    "@colbymchenry/codegraph": "1.5.0",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@octokit/rest": "^22.0.1",
+    "express": "^5.1.0",
+    "tar": "^7.5.22",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.2",
+    "@types/bun": "latest",
+    "@types/express": "^5.0.3",
+    "typescript": "^5.9.2"
+  },
+  "engines": {
+    "bun": ">=1.2.0"
+  }
+}

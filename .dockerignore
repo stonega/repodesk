@@ -5,3 +5,16 @@
 !tsconfig.json
 !src/
 !src/**
+!web/
+!web/**
+!scripts/
+!scripts/build.ts
+!scripts/operator.ts
+!scripts/evaluate.ts
+!scripts/runtime-contract.ts
+!scripts/register-webhook.ts
+!migrations/
+!migrations/**
+
+!skills/
+!skills/**

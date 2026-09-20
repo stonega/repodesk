@@ -1,8 +1,9 @@
 # First-run onboarding and initial admin
 
-Status: **proposed P0 requirement**. The first browser visit to an uninitialized
-deployment opens a setup wizard. It creates the admin account and configures the
-Telegram bot, model, whitelist and skills. It is not implemented yet.
+Status: **P0 design contract, locally implemented**. The first browser visit opens a
+claimed setup wizard. See [setup](../implementation/setup.md) for the implemented
+verification/activation sequence and [evidence](../implementation/implementation-status.md)
+for external gates. Optional web login and live model evaluation are not completed.
 
 ## Entry and ownership
 
@@ -28,7 +29,7 @@ This is our application design, not built-in behavior supplied by Pi or Docker.
 | 3. Workspace | Name, language, timezone and initial retention settings | Save a draft workspace and show the scope of administration. |
 | 4. Connect Telegram | BotFather instructions; enter bot token in a write-only field; validate bot identity | Show bot name/username and validation result without returning the token. |
 | 5. Link Telegram owner and access | Verify an owner through a one-time interaction with the configured bot; choose whitelist mode and allowed IDs | Add the verified Telegram owner as workspace member/owner and seed the whitelist. Typed IDs alone do not verify ownership. |
-| 6. Model | Choose a supported provider/model, enter or select a credential, set run and workspace budgets | Validate settings. An explicitly invoked small test displays estimated spend before any paid request. |
+| 6. Model | Enter an OpenAI-compatible base URL, write-only API key, suggested/custom model ID and thinking level; configure token prices and budgets | Validate settings locally. Saving makes no model request; live capability testing remains an explicit evaluation step. |
 | 7. Skills and behavior | Choose starter skills, edit permitted settings, preview instructions and required tools | Activate only valid approved versions; show unavailable dependencies. |
 | 8. Delivery and group | Confirm the public HTTPS origin/webhook URL; optionally link a group and choose collection scope | Private-only setup is valid. Group linking requires the separate admin/access checks. |
 | 9. Review and activate | Summary of bot, owner, model, skills, access, costs and data scope | Explicit activation validates prerequisites, registers/verifies the webhook and then enables processing. |
@@ -36,8 +37,10 @@ This is our application design, not built-in behavior supplied by Pi or Docker.
 During owner verification, process only the tightly scoped verification interaction;
 normal model requests remain disabled. Implementation may use a temporary verified
 webhook for this control flow; do not depend on a fully active bot to establish its
-first owner. If webhook setup is unavailable locally, leave owner linking pending
-and permit the deployment admin to finish other settings.
+first owner. For local operation, explicitly select `TELEGRAM_TRANSPORT=polling`; the worker
+receives the same verification interaction without an HTTPS webhook. If neither
+transport is ready, leave owner linking pending and permit the deployment admin to
+finish other settings. Polling never bypasses owner identity or whitelist checks.
 
 ## Authentication and privilege model
 

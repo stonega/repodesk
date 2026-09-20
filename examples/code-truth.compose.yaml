@@ -1,0 +1,48 @@
+# Run from the repository root with compose.yaml as the first file.
+services:
+  app:
+    depends_on:
+      code-truth:
+        condition: service_healthy
+    environment:
+      CODE_TRUTH_URL: http://code-truth:3010
+      CODE_TRUTH_TOKEN_FILE: /run/secrets/code_truth_token
+    secrets:
+      - code_truth_token
+  worker:
+    depends_on:
+      code-truth:
+        condition: service_healthy
+    environment:
+      CODE_TRUTH_URL: http://code-truth:3010
+      CODE_TRUTH_TOKEN_FILE: /run/secrets/code_truth_token
+    secrets:
+      - code_truth_token
+  code-truth:
+    build: ./services/code-truth
+    image: ${CODE_TRUTH_IMAGE:-deepx-code-truth:local}
+    init: true
+    environment:
+      CODE_TRUTH_TOKEN_FILE: /run/secrets/code_truth_token
+      GITHUB_TOKEN: ${CODE_TRUTH_GITHUB_TOKEN:-}
+    secrets:
+      - code_truth_token
+    volumes:
+      - code_truth_data:/data
+    tmpfs:
+      - /tmp:rw,mode=1777
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test: [CMD, bun, -e, "fetch('http://127.0.0.1:3010/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  code_truth_data:
+secrets:
+  code_truth_token:
+    file: ${CODE_TRUTH_TOKEN_FILE:-./secrets/code-truth-token}
