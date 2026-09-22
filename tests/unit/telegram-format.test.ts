@@ -1,5 +1,85 @@
 import { describe, expect, test } from "bun:test";
-import { telegramMarkdown } from "../../src/telegram/format.ts";
+import {
+  telegramMarkdown,
+  telegramRichMessage,
+} from "../../src/telegram/format.ts";
+
+describe("Telegram structured rich messages", () => {
+  test("renders headings, ordered/task lists, nested quotes, code and dividers as native blocks", () => {
+    const rich = telegramRichMessage(
+      "## Report\n\n3. Third\n4. Fourth\n\n- [x] Done\n- [ ] Open\n\n> Quote\n>\n> - Nested\n\n```ts\nconst x = '<b>literal</b>';\n```\n\n---",
+    );
+    expect(rich.blocks.map((b) => b.type)).toEqual([
+      "heading",
+      "list",
+      "list",
+      "blockquote",
+      "pre",
+      "divider",
+    ]);
+    expect(rich.blocks[0]).toMatchObject({
+      type: "heading",
+      size: 2,
+      text: ["Report"],
+    });
+    expect(rich.blocks[1]).toMatchObject({
+      items: [
+        { value: 3, type: "1" },
+        { value: 4, type: "1" },
+      ],
+    });
+    expect(rich.blocks[2]).toMatchObject({
+      items: [{ has_checkbox: true, is_checked: true }, { has_checkbox: true }],
+    });
+    expect(rich.blocks[3]).toMatchObject({
+      blocks: [{ type: "paragraph" }, { type: "list" }],
+    });
+    expect(rich.blocks[4]).toEqual({
+      type: "pre",
+      text: "const x = '<b>literal</b>';",
+      language: "ts",
+    });
+  });
+  test("renders compact tables with headers, alignment and nested inline styles", () => {
+    const rich = telegramRichMessage(
+      "| Name | Count |\n| :--- | ---: |\n| **A** | 2 |",
+    );
+    expect(rich.blocks).toEqual([
+      {
+        type: "table",
+        is_bordered: true,
+        is_compact: true,
+        cells: [
+          [
+            { text: ["Name"], is_header: true, align: "left", valign: "top" },
+            { text: ["Count"], is_header: true, align: "right", valign: "top" },
+          ],
+          [
+            {
+              text: [{ type: "bold", text: ["A"] }],
+              align: "left",
+              valign: "top",
+            },
+            { text: ["2"], align: "right", valign: "top" },
+          ],
+        ],
+      },
+    ]);
+  });
+  test("partial syntax is deliverable and bounded deep markup falls back to literal text", () => {
+    expect(telegramRichMessage("```ts\nunfinished").blocks).toEqual([
+      { type: "pre", language: "ts", text: "unfinished" },
+    ]);
+    const deep = `${"> ".repeat(50)}nested`;
+    expect(telegramRichMessage(deep).blocks).toEqual([
+      { type: "paragraph", text: deep },
+    ]);
+    const large = telegramRichMessage(`${"a".repeat(3999)}😀`);
+    expect(large.blocks).toEqual([
+      { type: "paragraph", text: ["a".repeat(3999)] },
+    ]);
+  });
+});
 
 describe("Telegram Markdown formatting", () => {
   test("renders the reported bold headings and lists", () => {

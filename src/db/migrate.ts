@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import type { Pool } from "pg";
 import { PgBoss } from "pg-boss";
-import { config } from "../config.ts";
+import { config, DEFAULT_RUN_TIMEOUT_SECONDS } from "../config.ts";
 import { database, transaction } from "./pool.ts";
 export async function migrate(pool: Pool) {
   await transaction(pool, async (sql) => {
@@ -23,19 +23,26 @@ export async function migrate(pool: Pool) {
     }
   });
 }
-export async function migrateJobs(url: string) {
+export async function migrateJobs(
+  url: string,
+  runTimeoutSeconds = DEFAULT_RUN_TIMEOUT_SECONDS,
+) {
   const boss = new PgBoss({ connectionString: url });
   boss.on("error", () => {});
   await boss.start();
   await boss.createQueue("dead-letter");
-  for (const name of ["run", "delivery"])
+  for (const name of ["run", "delivery"]) {
+    const expireInSeconds = name === "run" ? runTimeoutSeconds + 60 : 180;
     await boss.createQueue(name, {
       retryLimit: 5,
       retryDelay: 5,
       retryBackoff: true,
-      expireInSeconds: 180,
+      expireInSeconds,
       deadLetter: "dead-letter",
     });
+    // createQueue does not alter an existing queue's settings.
+    await boss.updateQueue(name, { expireInSeconds });
+  }
   await boss.stop();
 }
 if (import.meta.main) {
@@ -43,7 +50,7 @@ if (import.meta.main) {
   const pool = database(cfg.DATABASE_URL);
   try {
     await migrate(pool);
-    await migrateJobs(cfg.DATABASE_URL);
+    await migrateJobs(cfg.DATABASE_URL, cfg.RUN_TIMEOUT_SECONDS);
   } finally {
     await pool.end();
   }

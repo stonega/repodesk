@@ -23,11 +23,29 @@ import { type Deployment, Fault, requireThat } from "../domain.ts";
 import type { ExtensionCatalog, ExtensionHost } from "./extensions.ts";
 import {
   DEFAULT_MODEL_BASE_URL,
+  type ModelCapabilities,
   type ModelOptions,
   type ThinkingLevel,
 } from "./model-settings.ts";
 export const models = createModels();
 models.setProvider(openaiProvider());
+export function modelCapabilities(
+  id: string,
+  options: ModelOptions = {},
+): ModelCapabilities | undefined {
+  if (options.modelLimits)
+    return { limits: options.modelLimits, source: "operator" };
+  const catalog = models.getModel("openai", id);
+  return catalog
+    ? {
+        limits: {
+          contextWindow: catalog.contextWindow,
+          maxOutputTokens: catalog.maxTokens,
+        },
+        source: "catalog",
+      }
+    : undefined;
+}
 export function selectedModel(
   id: string,
   options: ModelOptions = {},
@@ -38,6 +56,8 @@ export function selectedModel(
     ? { ...pricing, cacheRead: pricing.input, cacheWrite: pricing.input }
     : catalog?.cost;
   requireThat(cost, "custom_model_pricing_required");
+  const capabilities = modelCapabilities(id, options);
+  requireThat(capabilities, "model_limits_required");
   return {
     id,
     name: catalog?.name ?? id,
@@ -49,8 +69,8 @@ export function selectedModel(
     input: ["text"],
     cost,
     thinkingLevelMap: { xhigh: "xhigh", max: "max" },
-    contextWindow: catalog?.contextWindow ?? 128000,
-    maxTokens: catalog?.maxTokens ?? 16384,
+    contextWindow: capabilities.limits.contextWindow,
+    maxTokens: capabilities.limits.maxOutputTokens,
     compat: {
       supportsDeveloperRole: false,
       supportsReasoningEffort: true,
@@ -60,6 +80,8 @@ export function selectedModel(
   };
 }
 export interface AgentInput {
+  purpose?: "compaction" | "followup";
+  cacheKey?: string;
   workspaceId?: string;
   actor: string;
   runId: string;
@@ -72,14 +94,17 @@ export interface AgentInput {
   tools: AgentTool[];
   maxTurns: number;
   maxTools: number;
-  maxInputChars: number;
-  maxOutputTokens: number;
+  // Optional caps are for evaluation callers, not workspace settings.
+  maxInputChars?: number;
+  maxOutputTokens?: number;
+  remainingBudget?: () => Promise<{ run: number; workspace: number }>;
   signal: AbortSignal;
   guard: () => Promise<void>;
   shouldPause?: () => Promise<boolean>;
   reserve: (amount: number) => Promise<string>;
   checkpoint: (message: AgentMessage, attemptId?: string) => Promise<void>;
   events?: (type: string) => void;
+  preview?: (text: string) => Promise<void>;
   extensionTool?: (
     name: string,
     callId: string,
@@ -162,6 +187,8 @@ export class PiRunner implements AgentRunner {
     return this.extensions?.version;
   }
   async run(input: AgentInput): Promise<AgentResult> {
+    // Internal summarization must not expose extension tools or replace its policy.
+    if (input.purpose) return this.execute(input);
     const extensions = await this.extensions?.open(input);
     try {
       return await this.execute(input, extensions);
@@ -207,18 +234,55 @@ export class PiRunner implements AgentRunner {
         }
         requireThat(turns < input.maxTurns, "turn_limit");
         const bytes = Buffer.byteLength(JSON.stringify(context));
-        requireThat(bytes <= input.maxInputChars, "input_budget_exceeded");
-        // A byte per token is deliberately conservative; include all serialized tools/context.
-        const reserve =
-          (bytes * model.cost.input +
-            input.maxOutputTokens * model.cost.output) /
-          1_000_000;
+        requireThat(
+          input.maxOutputTokens === undefined ||
+            input.maxOutputTokens <= model.maxTokens,
+          "model_output_limit_exceeded",
+        );
+        requireThat(
+          !input.maxInputChars || bytes <= input.maxInputChars,
+          "input_budget_exceeded",
+        );
+        let maxTokens =
+          input.maxOutputTokens ??
+          Math.min(model.maxTokens, model.contextWindow - bytes);
+        requireThat(
+          maxTokens > 0 && bytes + maxTokens <= model.contextWindow,
+          "model_context_limit_exceeded",
+        );
+        // Serialized bytes conservatively estimate input tokens. Automatic output also
+        // respects financial headroom; the atomic reservation below remains authoritative.
+        const inputCost = (bytes * model.cost.input) / 1_000_000;
+        const outputCost = model.cost.output / 1_000_000;
+        if (input.remainingBudget) {
+          const budgets = await input.remainingBudget();
+          const available = Math.min(budgets.run, budgets.workspace);
+          const error =
+            budgets.run <= budgets.workspace
+              ? "run_budget_exhausted"
+              : "workspace_budget_exhausted";
+          requireThat(inputCost <= available, error, 409);
+          if (input.maxOutputTokens === undefined && outputCost > 0) {
+            maxTokens = Math.min(
+              maxTokens,
+              Math.floor((available - inputCost) / outputCost),
+            );
+            // Avoid a rounding error reserving slightly more than the available balance.
+            if (inputCost + maxTokens * outputCost > available) maxTokens--;
+          }
+          requireThat(
+            maxTokens > 0 && inputCost + maxTokens * outputCost <= available,
+            error,
+            409,
+          );
+        }
+        const reserve = inputCost + maxTokens * outputCost;
         attemptId = await input.reserve(reserve);
         turns++;
         return this.stream(model, context, {
           ...options,
           apiKey: input.apiKey,
-          maxTokens: input.maxOutputTokens,
+          maxTokens,
           maxRetryDelayMs: 0,
           maxRetries: 0,
           signal: input.signal,
@@ -247,7 +311,7 @@ export class PiRunner implements AgentRunner {
       },
       streamFn,
       toolExecution: "sequential",
-      sessionId: input.runId,
+      sessionId: input.cacheKey ?? input.runId,
       beforeToolCall: async ({ toolCall, args }) => {
         try {
           input.signal.throwIfAborted();
@@ -329,6 +393,17 @@ export class PiRunner implements AgentRunner {
     });
     agent.subscribe(async (event) => {
       input.events?.(event.type);
+      if (
+        event.type === "message_update" &&
+        event.assistantMessageEvent.type === "text_delta" &&
+        event.message.role === "assistant"
+      )
+        await input.preview?.(
+          event.message.content
+            .filter((c) => c.type === "text")
+            .map((c) => c.text)
+            .join("\n"),
+        );
       if (event.type === "message_end") {
         await input.checkpoint(
           sanitizeMessage(event.message),

@@ -5,6 +5,7 @@ import {
   requireThat,
   type Workspace,
 } from "../domain.ts";
+import { validMemory } from "./conversation-memory.ts";
 export function eligible(w: Workspace, actor: string, admin = false) {
   const member = w.members.find((m) => m.id === actor && m.active);
   return (
@@ -53,10 +54,20 @@ export function runAllowed(w: Workspace, run: Run) {
     eligible(w, run.actor) &&
     !w.settings.paused &&
     !run.cancelled &&
+    (!run.followup ||
+      run.followup.decision === "reply" ||
+      (Date.parse(run.followup.expiresAt) > Date.now() &&
+        w.runs.some(
+          (r) => r.id === run.followup?.anchorRunId && !r.followupClosed,
+        ))) &&
+    (!run.followup?.references ||
+      validMemory(run.followup.references, w.messages)) &&
+    (!run.contextSummary || validMemory(run.contextSummary, w.messages)) &&
     run.sources.every(
       (s) =>
         Date.parse(s.expiresAt) > Date.now() &&
-        Date.parse(s.at) > Date.now() - w.settings.retentionDays * 86400000 &&
+        Date.parse(s.retentionOriginAt ?? s.at) >
+          Date.now() - w.settings.retentionDays * 86400000 &&
         w.messages.some((m) => m.id === s.id),
     ) &&
     (run.chatId === run.actor ||

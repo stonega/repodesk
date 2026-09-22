@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { PgBoss } from "pg-boss";
 import type { AgentRunner, RunnerProvider } from "../agent/runtime.ts";
+import type { CodingService } from "../coding/service.ts";
+import { DEFAULT_RUN_TIMEOUT_SECONDS } from "../config.ts";
 import { transaction } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
+import type { GitHubIssues } from "../github/issues.ts";
 import { pruneRuntimeLogs, RuntimeLogger } from "../observability/logs.ts";
 import { sweep } from "../privacy/service.ts";
 import type { SetupService } from "../setup/service.ts";
@@ -26,7 +29,11 @@ export function queue(
   });
   return boss;
 }
-export async function dispatch(store: Store, boss: PgBoss) {
+export async function dispatch(
+  store: Store,
+  boss: PgBoss,
+  runTimeoutSeconds = DEFAULT_RUN_TIMEOUT_SECONDS,
+) {
   return transaction(store.pool, async (sql) => {
     const rows = await sql.query(
       "SELECT id,kind,workspace_id,target_id FROM outbox WHERE dispatched_at IS NULL ORDER BY created_at LIMIT 50 FOR UPDATE SKIP LOCKED",
@@ -38,6 +45,9 @@ export async function dispatch(store: Store, boss: PgBoss) {
         { workspaceId: row.workspace_id, targetId: row.target_id },
         {
           id: row.id,
+          ...(row.kind === "run"
+            ? { expireInSeconds: runTimeoutSeconds + 60 }
+            : {}),
           db: { executeSql: (text, values) => sql.query(text, values) },
         },
       );
@@ -53,10 +63,13 @@ export async function startWorker(
   setup: SetupService,
   url: string,
   runner?: AgentRunner | RunnerProvider,
+  runTimeoutSeconds = DEFAULT_RUN_TIMEOUT_SECONDS,
+  githubIssues?: GitHubIssues,
+  coding?: CodingService,
 ) {
   const boss = queue(url, store.log);
   await boss.start();
-  const executor = new Executor(store, setup, runner);
+  const executor = new Executor(store, setup, runner, runTimeoutSeconds * 1000);
   const delivery = new DeliveryWorker(store, setup);
   const shutdown = new AbortController();
   const id = randomUUID();
@@ -120,6 +133,14 @@ export async function startWorker(
         });
         // Durable rate-limit retries and ambiguous-send detection do not rely on queue retry timing.
         const current = await store.read(workspaceId);
+        if (githubIssues && d.active && !d.paused)
+          for (const approval of current.approvals)
+            if (
+              approval.kind === "github_issue" &&
+              approval.decision === "approved" &&
+              (!approval.issue || approval.issue.state === "sending")
+            )
+              await githubIssues.send(workspaceId, approval.id);
         for (const intent of current.deliveries)
           if (
             (intent.state === "pending" &&
@@ -131,7 +152,7 @@ export async function startWorker(
       }
       await deliverAccessHelp(store, setup);
       await recoverJobs(store, boss);
-      await dispatch(store, boss);
+      await dispatch(store, boss, runTimeoutSeconds);
       await store.pool.query(
         "INSERT INTO worker_heartbeats(id,at) VALUES($1,now()) ON CONFLICT(id) DO UPDATE SET at=now()",
         [id],
@@ -162,11 +183,30 @@ export async function startWorker(
   void polling.catch((error) =>
     store.log.write("telegram_polling_stopped", { error }),
   );
+  // Remote coding runs must not block polling, scheduling or worker heartbeats.
+  let codingBusy: Promise<void> | undefined;
+  const codingTick = () => {
+    if (!coding || codingBusy || shutdown.signal.aborted) return;
+    codingBusy = (async () => {
+      for (const workspaceId of await store.ids()) {
+        if (shutdown.signal.aborted) break;
+        await coding.tick(workspaceId);
+      }
+    })()
+      .catch((error) => store.log.write("worker_maintenance_failed", { error }))
+      .finally(() => {
+        codingBusy = undefined;
+      });
+  };
+  codingTick();
+  const codingTimer = setInterval(codingTick, 5000);
   const timer = setInterval(() => void maintain(), 5000);
   return async () => {
     clearInterval(timer);
+    clearInterval(codingTimer);
     shutdown.abort();
     await Promise.all([polling, boss.stop({ graceful: true, timeout: 10000 })]);
+    await codingBusy;
     while (busy) await new Promise((resolve) => setTimeout(resolve, 25));
     await store.pool.query("DELETE FROM worker_heartbeats WHERE id=$1", [id]);
   };

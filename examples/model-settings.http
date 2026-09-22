@@ -19,5 +19,27 @@ Content-Type: application/json
   "modelKey": "REPLACE_WITH_API_KEY",
   "model": "team/custom-reasoner",
   "thinkingLevel": "high",
-  "modelPricing": { "input": 1, "output": 3 }
+  "modelPricing": { "input": 1, "output": 3 },
+  "modelLimits": { "contextWindow": 128000, "maxOutputTokens": 16000 }
+}
+
+### Capacity values above are examples: replace with your provider's documented limits.
+### Set modelLimits to null to restore bundled catalog values for a known model ID.
+
+### Save workspace budgets (replace workspace ID and its current version)
+PUT {{baseUrl}}/api/admin/workspaces/REPLACE_WORKSPACE_ID/settings
+Origin: {{baseUrl}}
+Cookie: deepx_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "version": 1,
+  "settings": {
+    "name": "My team",
+    "timezone": "Asia/Taipei",
+    "runBudgetUsd": 0.1,
+    "monthlyBudgetUsd": 10,
+    "maxTurns": 5
+  }
 }

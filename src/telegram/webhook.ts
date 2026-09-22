@@ -16,6 +16,8 @@ import {
   proposeInstruction,
   workflowAction,
 } from "../workflows/service.ts";
+import { requestAccess } from "../workspaces/access-requests.ts";
+import { updateMemberProfile } from "../workspaces/member-profile.ts";
 import {
   audit,
   authorize,
@@ -29,6 +31,8 @@ import {
   enrollOwner,
   visibleRuns,
 } from "../workspaces/service.ts";
+import { closeGroupAttention, followupCandidate } from "./followup.ts";
+import { stopGeneration } from "./generation.ts";
 import { command, type Update } from "./router.ts";
 export class Ingress {
   constructor(
@@ -38,6 +42,7 @@ export class Ingress {
   async accept(update: Update) {
     const d = await this.store.deployment();
     requireThat(d.bot, "bot_not_configured", 503);
+    const botId = d.bot.id;
     const msg = update.message;
     const cmd = msg ? command(msg, d.bot) : undefined;
     let verifiedAdmin = false;
@@ -58,26 +63,101 @@ export class Ingress {
         [d.bot?.id, update.update_id],
       );
       if (!accepted.rowCount) return { duplicate: true };
+      if (update.stopped_message_generation) {
+        const workspaceId = await stopGeneration(
+          this.store,
+          sql,
+          botId,
+          update.stopped_message_generation,
+        );
+        if (workspaceId)
+          await sql.query(
+            "UPDATE inbox SET workspace_id=$3 WHERE bot_id=$1 AND update_id=$2",
+            [d.bot?.id, update.update_id, workspaceId],
+          );
+        return workspaceId ? { accepted: true } : { ignored: true };
+      }
       const workspace = await this.resolve(sql, update, d);
+      const callback = update.callback_query;
+      const requester = callback?.from ?? msg?.from;
+      const requestChat = callback?.message?.chat ?? msg?.chat;
+      const accessCallback = callback?.data?.startsWith("request_access:");
+      if (accessCallback) {
+        let callbackText =
+          "This request link is unavailable. Ask your admin for a new link.";
+        if (
+          workspace &&
+          !workspace.deletion &&
+          requester &&
+          !requester.is_bot &&
+          callback?.message?.from?.id === Number(d.bot?.id) &&
+          callback.data === `request_access:${workspace.id}` &&
+          requestChat &&
+          (requestChat.type === "private"
+            ? requestChat.id === requester.id
+            : workspace.chats.some(
+                (c) => c.active && c.id === String(requestChat.id),
+              ))
+        ) {
+          if (eligible(workspace, String(requester.id))) {
+            updateMemberProfile(workspace, {
+              id: String(requester.id),
+              username: requester.username,
+              name:
+                [requester.first_name, requester.last_name]
+                  .filter(Boolean)
+                  .join(" ") || undefined,
+            });
+            await this.store.save(sql, workspace);
+            callbackText =
+              "You already have access. Send /help to get started.";
+          } else {
+            try {
+              const request = requestAccess(workspace, {
+                actor: String(requester.id),
+                username: requester.username,
+                name:
+                  [requester.first_name, requester.last_name]
+                    .filter(Boolean)
+                    .join(" ") || undefined,
+                chatId: String(requestChat.id),
+                topicId: callback.message.message_thread_id,
+              });
+              callbackText =
+                request.status === "rejected"
+                  ? "Your request was rejected. Contact your admin or try again after 24 hours."
+                  : "Access requested. Your workspace admin can now review it.";
+              await this.store.save(sql, workspace);
+              await this.accessHelp(sql, update, d, workspace);
+            } catch (error) {
+              if (!(error instanceof Fault)) throw error;
+              callbackText =
+                "Unable to request access right now. Contact your workspace admin.";
+            }
+          }
+        }
+        return { accepted: true, callbackText };
+      }
       if (
         !workspace ||
         (msg?.chat.type === "private" &&
           msg.from &&
           !eligible(workspace, String(msg.from.id)) &&
-          !cmd?.args.startsWith("verify_"))
+          !(cmd?.name === "start" && cmd.args.startsWith("verify_")))
       ) {
-        if (
-          msg?.chat.type === "private" &&
-          msg.from &&
-          !msg.from.is_bot &&
-          !msg.sender_chat
-        )
-          await sql.query(
-            "INSERT INTO control_deliveries(bot_id,update_id,actor) SELECT $1,$2,$3 WHERE NOT EXISTS (SELECT 1 FROM control_deliveries WHERE actor=$3 AND created_at>now()-interval '1 minute')",
-            [d.bot?.id, update.update_id, String(msg.from.id)],
-          );
+        if (msg?.chat.type === "private")
+          await this.accessHelp(sql, update, d, workspace);
         return { ignored: true };
       }
+      if (
+        msg?.from &&
+        cmd &&
+        !eligible(workspace, String(msg.from.id)) &&
+        !msg.sender_chat &&
+        !msg.from.is_bot &&
+        msg.chat.type !== "private"
+      )
+        await this.accessHelp(sql, update, d, workspace);
       await sql.query(
         "UPDATE inbox SET workspace_id=$3 WHERE bot_id=$1 AND update_id=$2",
         [d.bot?.id, update.update_id, workspace.id],
@@ -106,6 +186,36 @@ export class Ingress {
             { id: `event:${update.update_id}:error` },
           );
       }
+      if (
+        requester &&
+        !requester.is_bot &&
+        !msg?.sender_chat &&
+        requestChat &&
+        (requestChat.type === "private"
+          ? requestChat.id === requester.id
+          : workspace.chats.some(
+              (c) => c.active && c.id === String(requestChat.id),
+            ))
+      ) {
+        updateMemberProfile(workspace, {
+          id: String(requester.id),
+          username: requester.username,
+          name:
+            [requester.first_name, requester.last_name]
+              .filter(Boolean)
+              .join(" ") || undefined,
+        });
+      }
+      const groupMessage = update.message ?? update.edited_message;
+      const group =
+        groupMessage?.chat ??
+        update.my_chat_member?.chat ??
+        update.chat_member?.chat;
+      const title = (groupMessage?.new_chat_title ?? group?.title)?.trim();
+      if (group && title && ["group", "supergroup"].includes(group.type)) {
+        const chat = workspace.chats.find((c) => c.id === String(group.id));
+        if (chat) chat.title = title;
+      }
       await this.store.save(sql, workspace);
       return { accepted: true };
     });
@@ -113,13 +223,46 @@ export class Ingress {
       try {
         await (await this.setup.client()).call("answerCallbackQuery", {
           callback_query_id: update.callback_query.id,
-          text: "Request checked. See the bot or admin panel for status.",
+          text:
+            "callbackText" in result
+              ? result.callbackText
+              : "Request checked. See the bot or admin panel for status.",
         });
       } catch {
         /* Callback acknowledgements have no application effect. */
       }
     }
     return result;
+  }
+  private async accessHelp(sql: Sql, u: Update, d: Deployment, w?: Workspace) {
+    const from = u.callback_query?.from ?? u.message?.from;
+    const message = u.callback_query?.message ?? u.message;
+    if (!from || from.is_bot || !message || message.sender_chat || w?.deletion)
+      return;
+    const chatId = String(message.chat.id);
+    if (
+      message.chat.type === "private"
+        ? chatId !== String(from.id)
+        : !w?.chats.some((c) => c.active && c.id === chatId)
+    )
+      return;
+    // Serialize each actor's fixed replies so concurrent updates cannot evade throttling.
+    await sql.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
+      `access-help:${from.id}`,
+    ]);
+    await sql.query(
+      `INSERT INTO control_deliveries(bot_id,update_id,actor,workspace_id,chat_id,topic_id)
+       SELECT $1,$2,$3,$4,$5,$6 WHERE NOT EXISTS
+       (SELECT 1 FROM control_deliveries WHERE bot_id=$1 AND actor=$3 AND workspace_id IS NOT DISTINCT FROM $4::uuid AND created_at>now()-interval '1 minute')`,
+      [
+        d.bot?.id,
+        u.update_id,
+        String(from.id),
+        w?.id ?? null,
+        chatId,
+        message.message_thread_id ?? null,
+      ],
+    );
   }
   private async resolve(
     sql: Sql,
@@ -135,6 +278,27 @@ export class Ingress {
       u.callback_query?.message?.chat;
     const cmd = message && d.bot ? command(message, d.bot) : undefined;
     let id: string | undefined;
+    const requestedId = u.callback_query?.data?.startsWith("request_access:")
+      ? u.callback_query.data.slice(15)
+      : cmd?.name === "start" && cmd.args.startsWith("access_")
+        ? cmd.args.slice(7)
+        : undefined;
+    if (requestedId !== undefined && c?.type === "private") {
+      if (
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+          requestedId,
+        )
+      )
+        return;
+      const row = await sql.query(
+        "SELECT data FROM workspaces WHERE id=$1 AND NOT (data ? 'deletion') FOR UPDATE",
+        [requestedId],
+      );
+      const target = row.rows[0]?.data as Workspace | undefined;
+      return target?.members.some((m) => m.active && m.role === "owner")
+        ? target
+        : undefined;
+    }
     if (
       cmd?.name === "start" &&
       cmd.args.startsWith("verify_") &&
@@ -186,6 +350,13 @@ export class Ingress {
         const rows = await sql.query(
           "SELECT id FROM workspaces WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(data->'members') m WHERE m->>'id'=$1 AND m->>'active'='true') ORDER BY id",
           [String(actor)],
+        );
+        if (rows.rows.length === 1) id = rows.rows[0]?.id;
+      }
+      if (!id && c?.type === "private") {
+        // Only infer a tenant when there is exactly one configured workspace.
+        const rows = await sql.query(
+          "SELECT id FROM workspaces WHERE NOT (data ? 'deletion') AND EXISTS (SELECT 1 FROM jsonb_array_elements(data->'members') m WHERE m->>'role'='owner' AND m->>'active'='true') LIMIT 2",
         );
         if (rows.rows.length === 1) id = rows.rows[0]?.id;
       }
@@ -288,6 +459,7 @@ export class Ingress {
       w.chats = w.chats.filter((c) => c.id !== chatId);
       w.chats.push({
         id: chatId,
+        title: msg.chat.title?.trim() || undefined,
         active: true,
         collection: false,
         linkedAt: new Date().toISOString(),
@@ -362,10 +534,10 @@ export class Ingress {
     const actor = String(msg.from.id);
     const chatId = String(msg.chat.id);
     const topic = msg.message_thread_id ?? 0;
-    const cmd = command(msg, d.bot);
+    let cmd = command(msg, d.bot);
     const chat = w.chats.find((c) => c.id === chatId && c.active);
     if (msg.chat.type !== "private" && !chat) return;
-    const sourceId = `${chatId}:${msg.message_id}`;
+    const sourceId = `${msg.chat.type === "private" ? `${d.bot.id}:` : ""}${chatId}:${msg.message_id}`;
     if (u.edited_message) {
       const previous = w.messages.find(
         (s) => s.id === sourceId && s.author === actor,
@@ -373,6 +545,15 @@ export class Ingress {
       if (previous && msg.text) previous.text = msg.text.slice(0, 12000);
       return;
     }
+    if (
+      cmd &&
+      !["ask", "correct"].includes(cmd.name) &&
+      chat &&
+      eligible(w, actor)
+    )
+      closeGroupAttention(w, msg, d.bot.id);
+    const followup = !cmd ? followupCandidate(w, msg, d.bot.id) : undefined;
+    if (followup) cmd = { name: "ask", args: msg.text?.trim() ?? "" };
     if ((eligible(w, actor) && cmd) || (chat?.collection && msg.text)) {
       if (msg.text && !w.messages.some((s) => s.id === sourceId))
         w.messages.push({
@@ -385,7 +566,7 @@ export class Ingress {
           expiresAt: new Date(
             Date.now() + w.settings.retentionDays * 86400000,
           ).toISOString(),
-          directed: !!cmd,
+          directed: !!cmd && !followup,
         });
       w.messages = w.messages.slice(-2000);
     }
@@ -393,11 +574,13 @@ export class Ingress {
     const reply = (
       text: string,
       buttons?: Workspace["deliveries"][number]["buttons"],
+      format?: "markdown",
     ) =>
       deliver(w, actor, chatId, text, {
         topicId: topic,
         replyTo: msg.message_id,
         buttons,
+        format,
         id: `event:${u.update_id}:reply`,
       });
     const offer = (approval: { id: string }, text: string) =>
@@ -411,7 +594,7 @@ export class Ingress {
       case "start":
       case "help":
         reply(
-          `DeepX Agent · ${w.settings.name}\nTimezone: ${w.settings.timezone}\n/ask <request>, /recap, /status, /cancel <run>, /automations, /memory, /usage, /privacy\nAdmins: /linktoken, /capture on|off, /timezone <IANA>, /remember <instruction>\nContext contains only received retained messages. Access is managed in the admin panel. /workspace <id> selects a workspace.`,
+          `DeepX Agent · ${w.settings.name}\nTimezone: ${w.settings.timezone}\n/ask <request>, /recap, /status, /cancel <run>, /automations, /memory, /usage, /privacy\nAdmins: /linktoken, /capture on|off, /timezone <IANA>, /remember <instruction>\nIn groups, mention me or reply to start; clear follow-ups within five minutes can continue without mentioning me when Telegram delivers ordinary messages. In private Topics, just send messages to continue the topic's conversation. Use Telegram Topics to separate conversations. Outside Topics, reply to an answer or your own message to continue it; standalone messages start new conversations. Context contains only received retained messages. Access is managed in the admin panel. /workspace <id> selects a workspace.`,
         );
         break;
       case "workspace":
@@ -435,7 +618,9 @@ export class Ingress {
           expiresAt: new Date(Date.now() + 600000).toISOString(),
         });
         reply(
-          `As a Telegram group admin, send /link ${raw} in the intended group within 10 minutes.`,
+          `As a Telegram group admin, send \`/link ${raw}\` in the intended group within 10 minutes.`,
+          undefined,
+          "markdown",
         );
         break;
       }
@@ -607,16 +792,19 @@ export class Ingress {
         const [mode, ...parts] = cmd.args.split(/\s+/);
         const body = parts.join(" ");
         if (mode === "once" && body) {
-          const run = createRun(
+          createRun(
             w,
             actor,
             `${prior.task.slice(0, 2000)}\nFor this run only: ${body}`,
             chatId,
             topic,
             d.model,
-            { replyTo: msg.reply_to_message?.message_id },
+            {
+              replyTo: msg.message_id,
+              continueFrom: msg.reply_to_message?.message_id,
+              botId: d.bot.id,
+            },
           );
-          reply(`Correction queued for this run only: ${run.id}`);
         } else if (mode === "save" && body) {
           requireThat(prior.workflowId, "source_run_has_no_workflow");
           offer(
@@ -661,7 +849,7 @@ export class Ingress {
                 f.status === "active",
             )
           : undefined;
-        const run = createRun(
+        createRun(
           w,
           actor,
           cmd.name === "recap"
@@ -671,11 +859,14 @@ export class Ingress {
           topic,
           d.model,
           {
-            replyTo: msg.reply_to_message?.message_id,
-            workflowId: workflow?.id,
+            replyTo: msg.message_id,
+            continueFrom: msg.reply_to_message?.message_id,
+            botId: d.bot.id,
+            workflowId: msg.chat.type === "private" ? undefined : workflow?.id,
+            groupRecap: msg.chat.type !== "private" && cmd.name === "recap",
+            followup,
           },
         );
-        reply(`Queued ${run.id}. Use /status or /cancel ${run.id}.`);
         break;
       }
       default:

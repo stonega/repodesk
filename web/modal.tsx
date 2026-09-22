@@ -1,8 +1,8 @@
 import {
   createContext,
   type ReactNode,
+  useContext,
   useEffect,
-  useId,
   useRef,
   useState,
 } from "react";
@@ -12,6 +12,31 @@ import { type ActionIcon, IconButton } from "./icon-button.tsx";
 export const ModalPending = createContext<
   ((pending: boolean) => void) | undefined
 >(undefined);
+
+const ModalControls = createContext<{
+  onClose: () => void;
+  locked: boolean;
+  cancelLabel: string;
+} | null>(null);
+
+/** Keep primary and cancel actions together inside the owning form/dialog. */
+export function ModalActions({ children }: { children: ReactNode }) {
+  const controls = useContext(ModalControls);
+  if (!controls) return <>{children}</>;
+  return (
+    <div className="modal-actions">
+      {children}
+      <button
+        type="button"
+        className="secondary"
+        disabled={controls.locked}
+        onClick={controls.onClose}
+      >
+        {controls.cancelLabel}
+      </button>
+    </div>
+  );
+}
 
 /** Mount only while open; native modal dialogs keep the background inert. */
 export function Modal({
@@ -28,7 +53,6 @@ export function Modal({
   cancelLabel?: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const titleId = useId();
   const [pending, setPending] = useState(false);
   const locked = busy || pending;
   useEffect(() => {
@@ -50,7 +74,7 @@ export function Modal({
     <dialog
       ref={dialog}
       className="modal"
-      aria-labelledby={titleId}
+      aria-label={title}
       aria-busy={locked}
       onCancel={(event) => {
         event.preventDefault();
@@ -86,7 +110,7 @@ export function Modal({
       }}
     >
       <header className="modal-heading">
-        <h2 id={titleId}>{title}</h2>
+        <h2>{title}</h2>
         <IconButton
           icon="close"
           label={`Close ${title}`}
@@ -95,20 +119,12 @@ export function Modal({
         />
       </header>
       <ModalPending.Provider value={setPending}>
-        <fieldset className="modal-fields" disabled={locked}>
-          {children}
-        </fieldset>
+        <ModalControls.Provider value={{ onClose, locked, cancelLabel }}>
+          <fieldset className="modal-fields" disabled={locked}>
+            {children}
+          </fieldset>
+        </ModalControls.Provider>
       </ModalPending.Provider>
-      <footer className="modal-footer">
-        <button
-          type="button"
-          className="secondary"
-          disabled={locked}
-          onClick={onClose}
-        >
-          {cancelLabel}
-        </button>
-      </footer>
     </dialog>,
     document.body,
   );

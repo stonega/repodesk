@@ -1,31 +1,46 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import { compactTopic } from "../agent/compaction.ts";
 import { buildContext, validateSources } from "../agent/context.ts";
 import { extensionToolExecution } from "../agent/extension-execution.ts";
+import { classifyFollowup } from "../agent/followup.ts";
+import { remainingBudgets } from "../agent/limits.ts";
 import { DEFAULT_MODEL_BASE_URL } from "../agent/model-settings.ts";
 import {
+  type AgentInput,
   type AgentRunner,
+  modelCapabilities,
   PiRunner,
   type RunnerProvider,
   selectedModel,
 } from "../agent/runtime.ts";
 import { applicationTools } from "../agent/tools.ts";
+import { DEFAULT_RUN_TIMEOUT_SECONDS } from "../config.ts";
 import type { Store } from "../db/repositories.ts";
 import { Fault, requireThat } from "../domain.ts";
 import type { SetupService } from "../setup/service.ts";
+import { TelegramDraft } from "../telegram/draft.ts";
+import { discardFollowup } from "../telegram/followup.ts";
+import { commitDiscussions } from "../workspaces/conversation-memory.ts";
 import { audit, runAllowed } from "../workspaces/policy.ts";
 import { deliver } from "../workspaces/service.ts";
+import {
+  recordThreadAnswer,
+  refreshThreadContext,
+} from "../workspaces/threads.ts";
 export class Executor {
   constructor(
     private store: Store,
     private setup: SetupService,
     private runner: AgentRunner | RunnerProvider = new PiRunner(),
+    private timeoutMs = DEFAULT_RUN_TIMEOUT_SECONDS * 1000,
   ) {}
   async execute(workspaceId: string, runId: string, shutdown?: AbortSignal) {
     const deployment = await this.store.deployment();
     if (!deployment.active || deployment.paused) return;
-    const pluginRevision =
-      (await this.store.read(workspaceId)).plugins?.revision ?? 0;
+    const extensionWorkspace = await this.store.read(workspaceId);
+    const pluginRevision = extensionWorkspace.plugins?.revision ?? 0;
+    const codingRevision = extensionWorkspace.coding?.revision ?? 0;
     let runner: AgentRunner;
     try {
       runner =
@@ -39,6 +54,7 @@ export class Executor {
           run.status = "failed";
           run.error = "extension_configuration_invalid";
           run.finishedAt = new Date().toISOString();
+          discardFollowup(w, run);
         }
       });
       return;
@@ -49,6 +65,7 @@ export class Executor {
       if (!runAllowed(w, r)) {
         r.status = "cancelled";
         r.cancelled = true;
+        discardFollowup(w, r);
         return;
       }
       if (r.status === "running" && Date.parse(r.leaseUntil ?? "") > Date.now())
@@ -62,13 +79,28 @@ export class Executor {
             Date.parse(other.leaseUntil ?? "") > Date.now(),
         )
       )
-        throw new Fault("conversation_busy", 409);
+        if (r.threadId) return;
+        else throw new Fault("conversation_busy", 409);
+      // A waiting job completes cheaply; recovery redispatches it without spending
+      // queue retries. Insertion order is durable even for equal timestamps.
+      if (
+        r.threadId &&
+        w.runs
+          .slice(0, w.runs.indexOf(r))
+          .some(
+            (other) =>
+              other.threadId === r.threadId &&
+              ["queued", "running"].includes(other.status),
+          )
+      )
+        return;
       if (r.attempts.some((a) => a.status !== "settled")) {
         r.status = "failed";
         r.error = "provider_outcome_unknown";
         r.finishedAt = new Date().toISOString();
         for (const a of r.attempts)
           if (a.status === "reserved") a.status = "unknown";
+        discardFollowup(w, r);
         audit(w, r.actor, "run.recovery_required", r.id);
         return;
       }
@@ -76,6 +108,7 @@ export class Executor {
         modelBaseUrl: deployment.modelBaseUrl ?? DEFAULT_MODEL_BASE_URL,
         thinkingLevel: deployment.thinkingLevel ?? "off",
         modelPricing: deployment.modelPricing,
+        modelLimits: modelCapabilities(r.model, deployment)?.limits,
       };
       if (r.extensionVersion === undefined && !r.transcript.length)
         r.extensionVersion = runner.extensionVersion ?? "none";
@@ -85,17 +118,27 @@ export class Executor {
         r.status = "failed";
         r.error = "extension_configuration_changed";
         r.finishedAt = new Date().toISOString();
+        discardFollowup(w, r);
         return;
       }
+      refreshThreadContext(w, r);
       r.status = "running";
       r.fence++;
+      r.telegramDraft =
+        r.chatId === r.actor && !r.workflowId && deployment.bot
+          ? {
+              id: randomInt(1, 2 ** 48 - 1),
+              botId: deployment.bot.id,
+              fence: r.fence,
+            }
+          : undefined;
       r.leaseUntil = new Date(Date.now() + 120000).toISOString();
       return structuredClone(r);
     });
     if (!claimed) return;
     const fence = claimed.fence;
     const controller = new AbortController();
-    const deadline = AbortSignal.timeout(90000);
+    const deadline = AbortSignal.timeout(this.timeoutMs);
     const signal = AbortSignal.any([
       controller.signal,
       deadline,
@@ -113,7 +156,8 @@ export class Executor {
       );
       await this.store.change(workspaceId, (w) => {
         requireThat(
-          (w.plugins?.revision ?? 0) === pluginRevision,
+          (w.plugins?.revision ?? 0) === pluginRevision &&
+            (w.coding?.revision ?? 0) === codingRevision,
           "extension_configuration_changed",
           409,
         );
@@ -131,12 +175,14 @@ export class Executor {
       if (polling) return;
       polling = true;
       guard()
-        .catch(() => controller.abort())
+        .catch((error) => controller.abort(error))
         .finally(() => {
           polling = false;
         });
     }, 1000);
     poll.unref();
+    let compacting = false;
+    let classifying = false;
     const checkpoint = async (message: AgentMessage, attemptId?: string) => {
       await this.store.change(workspaceId, (w) => {
         const r = w.runs.find((r) => r.id === runId);
@@ -150,17 +196,47 @@ export class Executor {
             else {
               a.status = "settled";
               a.actual = Math.max(0, message.usage.cost.total);
+              a.tokens = {
+                input: message.usage.input,
+                output: message.usage.output,
+                cacheRead: message.usage.cacheRead,
+                cacheWrite: message.usage.cacheWrite,
+              };
             }
           }
         }
-        if (!w.deletion && runAllowed(w, r)) r.transcript.push(message);
+        if (!w.deletion && runAllowed(w, r)) {
+          if (classifying) r.followup?.transcript.push(message);
+          else if (compacting) r.compaction?.transcript.push(message);
+          else r.transcript.push(message);
+        }
       });
     };
     this.store.log.write("run_started", { workspaceId, runId });
+    const draft = claimed.telegramDraft
+      ? new TelegramDraft(
+          { ...claimed, draftId: claimed.telegramDraft.id },
+          () => this.setup.client(deployment),
+          async () => {
+            await guard();
+            requireThat(
+              (await this.store.deployment()).credentials.bot ===
+                deployment.credentials.bot,
+              "run_revoked",
+              409,
+            );
+          },
+          (text) => validateSources(text, claimed),
+          signal,
+          Date.now,
+          (event, error) =>
+            this.store.log.write(event, { error, workspaceId, runId }),
+        )
+      : undefined;
     try {
       await guard();
       const w = await this.store.read(workspaceId);
-      const context = buildContext(w, claimed);
+      let context = buildContext(w, claimed);
       const transcript = claimed.transcript as AgentMessage[];
       // Restore only complete transcript boundaries. Tool effects and outcomes are committed atomically.
       const tail = transcript.at(-1);
@@ -207,6 +283,129 @@ export class Executor {
         "turn_limit",
         409,
       );
+      if (!completed) await draft?.start();
+      const input: AgentInput = {
+        cacheKey: claimed.threadId
+          ? createHash("sha256")
+              .update(`${workspaceId}:${claimed.threadId}`)
+              .digest("hex")
+          : undefined,
+        workspaceId,
+        actor: claimed.actor,
+        runId,
+        model: selectedModel(claimed.model, claimed.modelOptions),
+        apiKey: await this.setup.modelKey(claimed.modelOptions?.modelBaseUrl),
+        thinkingLevel: claimed.modelOptions?.thinkingLevel,
+        system: context.system,
+        prompt: context.prompt,
+        transcript,
+        tools: applicationTools(this.store, workspaceId, runId, fence),
+        extensionTool: extensionToolExecution(
+          this.store,
+          workspaceId,
+          runId,
+          fence,
+          signal,
+        ),
+        maxTurns: Math.max(
+          1,
+          claimed.settings.maxTurns - claimed.attempts.length,
+        ),
+        maxTools: 8,
+        remainingBudget: async () => {
+          const w = await this.store.read(workspaceId);
+          const r = w.runs.find((r) => r.id === runId);
+          requireThat(
+            r && r.fence === fence && runAllowed(w, r),
+            "run_revoked",
+            409,
+          );
+          return remainingBudgets(w, r);
+        },
+        signal,
+        guard,
+        reserve: async (amount) =>
+          this.store.change(workspaceId, (w) => {
+            const r = w.runs.find((r) => r.id === runId);
+            requireThat(
+              r && r.fence === fence && runAllowed(w, r),
+              "run_revoked",
+              409,
+            );
+            const budgets = remainingBudgets(w, r);
+            requireThat(
+              Number.isFinite(amount) && amount >= 0 && amount <= budgets.run,
+              "run_budget_exhausted",
+              409,
+            );
+            requireThat(
+              amount <= budgets.workspace,
+              "workspace_budget_exhausted",
+              409,
+            );
+            const id = randomUUID();
+            r.attempts.push({
+              id,
+              purpose: classifying
+                ? "followup"
+                : compacting
+                  ? "compaction"
+                  : undefined,
+              reserved: amount,
+              status: "reserved",
+              at: new Date().toISOString(),
+            });
+            return id;
+          }),
+        shouldPause: async () =>
+          (await this.store.read(workspaceId)).approvals.some(
+            (a) => a.runId === runId && !a.decision,
+          ),
+        checkpoint,
+        preview: draft ? (text) => draft.update(text) : undefined,
+      };
+      if (claimed.followup && claimed.followup.decision !== "reply") {
+        classifying = true;
+        try {
+          const checked = await classifyFollowup(
+            this.store,
+            workspaceId,
+            runId,
+            fence,
+            runner,
+            input,
+          );
+          Object.assign(claimed, checked);
+          if (checked.followup?.decision !== "reply") return;
+        } finally {
+          classifying = false;
+        }
+      }
+      if (!completed && !transcript.length) {
+        compacting = true;
+        try {
+          Object.assign(
+            claimed,
+            await compactTopic(
+              this.store,
+              workspaceId,
+              runId,
+              fence,
+              runner,
+              input,
+            ),
+          );
+        } finally {
+          compacting = false;
+        }
+        context = buildContext(await this.store.read(workspaceId), claimed);
+        input.system = context.system;
+        input.prompt = context.prompt;
+        input.maxTurns = Math.max(
+          1,
+          claimed.settings.maxTurns - claimed.attempts.length,
+        );
+      }
       const result = completed
         ? {
             text: tail.content
@@ -215,86 +414,9 @@ export class Executor {
               .join("\n"),
             status: "succeeded" as const,
           }
-        : await runner.run({
-            workspaceId,
-            actor: claimed.actor,
-            runId,
-            model: selectedModel(claimed.model, claimed.modelOptions),
-            apiKey: await this.setup.modelKey(
-              claimed.modelOptions?.modelBaseUrl,
-            ),
-            thinkingLevel: claimed.modelOptions?.thinkingLevel,
-            system: context.system,
-            prompt: context.prompt,
-            transcript,
-            tools: applicationTools(this.store, workspaceId, runId, fence),
-            extensionTool: extensionToolExecution(
-              this.store,
-              workspaceId,
-              runId,
-              fence,
-              signal,
-            ),
-            maxTurns: Math.max(
-              1,
-              claimed.settings.maxTurns - claimed.attempts.length,
-            ),
-            maxTools: 8,
-            maxInputChars: claimed.settings.maxInputChars,
-            maxOutputTokens: claimed.settings.maxOutputTokens,
-            signal,
-            guard,
-            reserve: async (amount) =>
-              this.store.change(workspaceId, (w) => {
-                const r = w.runs.find((r) => r.id === runId);
-                requireThat(
-                  r && r.fence === fence && runAllowed(w, r),
-                  "run_revoked",
-                  409,
-                );
-                const own = r.attempts.reduce(
-                  (n, a) => n + (a.actual ?? a.reserved),
-                  0,
-                );
-                requireThat(
-                  amount > 0 &&
-                    own + amount <=
-                      Math.min(
-                        r.settings.runBudgetUsd,
-                        w.settings.runBudgetUsd,
-                      ),
-                  "run_budget_exhausted",
-                  409,
-                );
-                const month = new Date();
-                month.setUTCDate(1);
-                month.setUTCHours(0, 0, 0, 0);
-                const total = w.runs
-                  .flatMap((r) => r.attempts)
-                  .filter((a) => Date.parse(a.at) >= month.getTime())
-                  .reduce((n, a) => n + (a.actual ?? a.reserved), 0);
-                requireThat(
-                  total + amount <= w.settings.monthlyBudgetUsd,
-                  "workspace_budget_exhausted",
-                  409,
-                );
-                const id = randomUUID();
-                r.attempts.push({
-                  id,
-                  reserved: amount,
-                  status: "reserved",
-                  at: new Date().toISOString(),
-                });
-                return id;
-              }),
-            shouldPause: async () =>
-              (await this.store.read(workspaceId)).approvals.some(
-                (a) => a.runId === runId && !a.decision,
-              ),
-            checkpoint,
-          });
+        : await runner.run(input);
       await guard();
-      if (result.text) validateSources(result.text, claimed);
+
       await this.store.change(workspaceId, (w) => {
         const r = w.runs.find((r) => r.id === runId);
         requireThat(
@@ -302,6 +424,7 @@ export class Executor {
           "run_revoked",
           409,
         );
+        if (result.text) validateSources(result.text, r);
         const proposals = w.approvals.some(
           (a) =>
             !a.decision &&
@@ -312,46 +435,73 @@ export class Executor {
         r.result = result.text;
         r.finishedAt = new Date().toISOString();
         r.leaseUntil = undefined;
+        recordThreadAnswer(w, r);
+        if (result.text) commitDiscussions(w, r);
+        else delete r.discussionUpdates;
         if (result.text)
           deliver(
             w,
             r.actor,
             r.chatId,
-            `${result.text.slice(0, 2700)}\n\n${r.coverage.slice(0, 600)}\nRun ${r.id}${result.status === "partial" ? " · Partial: execution limit reached" : ""}`,
+            `${r.threadNotice ? `${r.threadNotice}\n\n` : ""}${result.text.slice(0, 2700)}${result.status === "partial" ? "\n\nI couldn’t finish this response within the available limits." : ""}`,
             {
               topicId: r.topicId,
               replyTo: r.replyTo,
               runId: r.id,
               id: `run:${r.id}:result`,
-              format: "markdown",
+              format: "rich",
             },
           );
         audit(w, r.actor, `run.${r.status}`, r.id);
       });
       this.store.log.write("run_completed", { workspaceId, runId });
     } catch (error) {
-      this.store.log.write("run_failed", { error, workspaceId, runId });
+      // AbortSignal.any preserves the first reason, even if another source aborts later.
+      const failure = signal.aborted
+        ? deadline.aborted && signal.reason === deadline.reason
+          ? new Fault("run_timeout", 504)
+          : shutdown?.aborted && signal.reason === shutdown.reason
+            ? new Fault("worker_shutdown", 503)
+            : signal.reason instanceof Fault
+              ? signal.reason
+              : new Fault("cancelled", 409)
+        : error;
+      const timedOut =
+        failure instanceof Fault && failure.code === "run_timeout";
+      this.store.log.write("run_failed", {
+        error: failure,
+        workspaceId,
+        runId,
+      });
       await this.store.change(workspaceId, (w) => {
         const r = w.runs.find((r) => r.id === runId);
         if (!r || r.fence !== fence) return;
         for (const a of r.attempts)
           if (a.status === "reserved") a.status = "unknown";
-        r.status = r.cancelled || signal.aborted ? "cancelled" : "failed";
-        r.error =
-          error instanceof Fault
-            ? error.code
-            : signal.aborted
-              ? "cancelled"
-              : "execution_failed";
+        r.status =
+          r.cancelled || (signal.aborted && !timedOut) ? "cancelled" : "failed";
+        r.error = r.cancelled
+          ? "cancelled"
+          : failure instanceof Fault
+            ? failure.code
+            : "execution_failed";
         r.finishedAt = new Date().toISOString();
         r.leaseUntil = undefined;
-        if (runAllowed(w, r))
+        delete r.discussionUpdates;
+        const unaddressed = r.followup && r.followup.decision !== "reply";
+        discardFollowup(w, r);
+        if (!unaddressed && runAllowed(w, r))
           deliver(
             w,
             r.actor,
             r.chatId,
-            `Run ${r.id}: ${r.status} (${r.error}). Inspect the run in the panel; unknown provider charges remain reserved.`,
-            { topicId: r.topicId, id: `run:${r.id}:failure` },
+            `Run ${r.id}: ${r.status} (${r.error}).${timedOut ? ` The run exceeded its ${this.timeoutMs / 1000}-second time limit.` : ""} Inspect the run in the panel.${r.attempts.some((a) => a.status === "unknown") ? " Unknown provider charges remain reserved." : ""}`,
+            {
+              topicId: r.topicId,
+              replyTo: r.replyTo,
+              runId: r.id,
+              id: `run:${r.id}:failure`,
+            },
           );
         audit(w, r.actor, `run.${r.status}`, r.id);
       });

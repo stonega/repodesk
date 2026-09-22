@@ -1,6 +1,36 @@
 # Telegram adaptation and platform constraints
 
-Reviewed 2026-09-18. This is implementation guidance for proposed features.
+Reviewed 2026-09-20. Platform constraints and implementation guidance.
+
+## Bot API 10.3 rich replies and Stop
+
+Selected API baseline: **10.3**, checked against the official
+[10.1](https://core.telegram.org/bots/api-changelog#june-11-2026),
+[10.2](https://core.telegram.org/bots/api-changelog#july-14-2026), and
+[10.3](https://core.telegram.org/bots/api-changelog#august-24-2026) changelogs.
+10.1 introduced rich messages/drafts; 10.2 added outgoing structured blocks;
+10.3 added compact tables and native draft cancellation.
+
+[sendRichMessage](https://core.telegram.org/bots/api#sendrichmessage) supports group
+and private replies. [sendRichMessageDraft](https://core.telegram.org/bots/api#sendrichmessagedraft)
+supports **private chats only**, with an optional thread ID and nonzero draft ID.
+Reusing the ID animates updates. Drafts are temporary 30-second previews; a final
+send is still required. They cannot upload new files or upload media by URL.
+`can_stop:true` enables Stop; `keep_on_stop` only temporarily retains the preview,
+not a persisted partial message.
+
+[MessageGenerationStopped](https://core.telegram.org/bots/api#messagegenerationstopped)
+contains `chat`, optional `message_thread_id`, and `draft_id`; there is **no sender
+field**. We only accept private-chat stops, using the chat ID as the actor and the
+persisted bot/topic/draft/fence binding to select the run. This update must be
+included in `allowed_updates` for polling and webhook subscriptions.
+
+Implemented: rich model replies with native headings, lists/tasks, quotes, code,
+dividers, compact aligned tables and safe inline formatting; private streaming;
+native Stop; durable final delivery and text fallback. Arbitrary rich media,
+LaTeX, inline rich buttons, ephemeral group messages and Communities remain outside
+this change. Live Telegram behavior still requires staging verification.
+See [manual example](../../examples/telegram-streaming.md).
 
 ## Verified platform facts
 
@@ -22,6 +52,20 @@ throughput. The older FAQ's blanket bot-to-bot restriction conflicts with newer
 feature-specific guidance. [FAQ](https://core.telegram.org/bots/faq),
 [newer bot communication rules](https://core.telegram.org/bots/features#bot-to-bot-communication)
 
+## Private Topics
+
+Telegram supports native topics in private chats with bots when topic mode is enabled
+through BotFather. Incoming `message_thread_id` selects the conversation; outgoing
+messages and drafts preserve it. `getMe.has_topics_enabled` reports the bot's mode.
+See [private Topics](https://core.telegram.org/bots/features#topics-in-private-chats)
+and [Bot API](https://core.telegram.org/bots/api), checked 2026-09-22.
+
+The application prioritizes native topic identity over reply anchors for private
+interactive requests. Topics partition default context within the selected workspace,
+user, chat and bot. Outside Topics, reply-based compatibility routing remains.
+See [private threads](../design/private-threads.md). Enabling topic mode is an operator
+BotFather action; local implementation does not change bot settings or create topics.
+
 ## Product decisions derived from those constraints
 
 | Slack concept | Proposed Telegram design | Consequence |
@@ -29,7 +73,7 @@ feature-specific guidance. [FAQ](https://core.telegram.org/bots/faq),
 | Workspace | Internal tenant containing explicitly linked chats | Never infer company membership from a Telegram username or group title. |
 | Channel | Group/supergroup; broadcast channels are later scope | Group membership, bot reach and publication rights need separate checks. |
 | Thread | Reply chain and, when present, forum topic | Include chat/topic IDs in context keys and delivery destinations. |
-| Mention anywhere | Command or reply in an approved chat | Do not promise delivery of every plain mention under privacy mode. |
+| Mention anywhere | Delivered mention, command or reply in an approved chat | Do not promise delivery of every plain mention under privacy mode. |
 | Public channel discovery | Admin explicitly connects each chat | No scan of all chats a person belongs to; no automatic chat joining. |
 | Historical retrieval | Locally retained, authorized received messages | Display oldest available message/time window. Never invent prior context. |
 | Private onboarding DM | User starts the bot through a private link | Design around a user-initiated private onboarding flow. |

@@ -67,6 +67,26 @@ to narrow the question instead of continuing an open-ended search loop.
 Do not invent code details, accept arbitrary repository URLs, or substitute an
 unindexed local checkout for MCP evidence.
 
+## Code citations
+
+The bot reserves `[source:EXACT_ID]` for chat-message IDs supplied in conversation
+sources or `query_chat_history` results. Never use that syntax for Code Truth
+evidence: `[source:package.json]` is invalid even when the tool returned that file.
+Do not substitute the user's request ID as evidence for repository facts.
+
+Cite code evidence in plain text with the returned target, network, branch and
+commit, then backtick-quoted file paths and line ranges. For example, if the tool
+returned target `deepx-web`, network `devnet`, branch `devnet-develop`, commit
+`abc123` and manifest lines 1–111, write:
+
+> Source: deepx-web / devnet, branch `devnet-develop`, commit `abc123`,
+> `package.json:1–111`.
+
+Use the actual returned commit SHA, paths and lines, not these example values.
+For multiple facts from the same snapshot, state its provenance once and cite
+individual `file:startLine–endLine` references next to the relevant claims.
+Include symbols when returned; omit unavailable fields rather than inventing them.
+
 ## Response ending
 
 End every response produced with this skill with this exact notice:

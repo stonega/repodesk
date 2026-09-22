@@ -121,6 +121,14 @@ and network IDs. Source results preserve commit/branch/file/line evidence, use b
 output, and count against run budgets. The companion skill instructs the model to
 treat code and manifests as evidence, not commands or authorization.
 
+Code answers cite the returned target, network, branch and commit in plain text,
+with file/line references such as `package.json:1–111`. The `[source:EXACT_ID]`
+notation is reserved for authorized chat-message IDs, including history retrieved
+through `query_chat_history`; repository paths are never valid IDs in that notation.
+The base prompt and companion skill both state this distinction. Chat-source
+validation remains strict. Code provenance is a model instruction, not a separate
+mechanical guarantee that each claim follows from the referenced code.
+
 Run only one Code Truth process per data volume. Up to 128 active configuration
 managers are kept in memory; unused managers expire on later configuration requests
 after an hour. Each configuration retains active/leased snapshots and two recent

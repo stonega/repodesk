@@ -234,7 +234,17 @@ audit and operational controls with I08. Those screens are required for the P0 g
 ### I05 — Pi-powered requests and manual recaps
 
 - [x] Persist run status, conversation identity and versioned Pi transcript envelopes.
-  Key sessions by workspace + chat + topic/reply context, not by a shared global Agent.
+  Private interactive runs use persisted user/workspace/bot thread IDs selected
+  first by native Telegram topic ID, so same-topic messages continue without Reply.
+  Outside Topics, reply fallback remains and standalone messages start new threads.
+  Group continuity and natural follow-ups now use participant-aware shared threads;
+  recap/workflow coverage remains separate; see [private threads](../design/private-threads.md).
+- [x] Add internal native-Topic discussion records and bounded retrieval, stable
+  history prefixes, and threshold-triggered compaction with budgeted tool-free Pi
+  calls, independent checkpoints, source invalidation and cancellation guards.
+- [x] Extend discussion memory and compaction to group threads, with per-user default
+  continuity, explicit shared-thread joins, scoped history retrieval and bounded
+  natural-follow-up classification. Gate failures are silent and separately checkpointed.
 - [x] Build context from permitted, retained messages and approved instructions;
   include source IDs, date range and gaps. Enforce input size before model dispatch.
 - [x] Supply initial tools: `read_chat_context`, `read_instructions`,

@@ -36,6 +36,7 @@ export function starterSkills(): Workspace["skills"] {
     const spec = skillSchema.parse({
       ...s,
       tools: [
+        "query_model_cost",
         "read_chat_context",
         "read_instructions",
         "propose_workflow",

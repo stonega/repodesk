@@ -56,19 +56,16 @@ button.icon-button {
   vertical-align: middle;
   background: transparent;
   color: #1d594c;
-  border-color: #ccd7cc;
+  border: 0;
 }
 button.icon-button:hover:not(:disabled) {
   background: #e7eddc;
-  border-color: #648678;
 }
 button.icon-button.danger {
   color: #923a32;
-  border-color: #d8aaa5;
 }
 button.icon-button.danger:hover:not(:disabled) {
   background: #f9dfda;
-  border-color: #923a32;
 }
 button:disabled {
   cursor: not-allowed;
@@ -132,12 +129,11 @@ body:has(dialog[open]) {
   margin: 0;
   border: 0;
 }
-.modal-footer {
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid #dfe6dc;
+.modal-actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 button.secondary {
   color: #1d594c;
@@ -300,6 +296,13 @@ main {
   flex-shrink: 0;
   gap: 8px;
 }
+.page-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
 .eyebrow {
   font-size: 10px;
   letter-spacing: 2px;
@@ -377,6 +380,75 @@ p {
 .row .field {
   margin: 0;
   max-width: 170px;
+}
+.skill-card-header,
+.skill-card-title,
+.skill-card-controls,
+.skill-card-actions,
+.skill-card-meta,
+.skill-card-rollback {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.skill-card-header {
+  justify-content: space-between;
+  gap: 8px 20px;
+}
+.skill-card-title {
+  min-width: 0;
+}
+.skill-card-title h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.skill-card-controls {
+  gap: 2px;
+}
+.skill-card-description {
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}
+.skill-card-meta {
+  gap: 6px 18px;
+  color: #596d61;
+  font-size: 12px;
+}
+.skill-card-preview {
+  margin-top: 18px;
+}
+.skill-card-footer {
+  border-top: 1px solid #e6ebe3;
+  margin-top: 20px;
+  padding-top: 18px;
+}
+.skill-card-secondary button {
+  color: #1d594c;
+  background: #fff;
+  border-color: #ccd7cc;
+}
+.skill-card-secondary button:hover:not(:disabled) {
+  background: #e7eddc;
+}
+.skill-card-versions {
+  margin-top: 16px;
+}
+.skill-card-versions > .muted {
+  margin: 10px 0 14px;
+}
+.skill-card-rollback {
+  align-items: flex-end;
+  gap: 12px;
+}
+.skill-card-rollback .field {
+  margin: 0;
+  flex: 0 1 190px;
+}
+.skill-card summary:focus-visible {
+  outline: 3px solid #abd5b5;
+  outline-offset: 3px;
+  border-radius: 3px;
 }
 .notice {
   padding: 12px 16px;
@@ -682,4 +754,179 @@ aside .field span {
 }
 .code-truth-fields .plugin-item {
   margin-bottom: 1rem;
+}
+
+.field input[aria-invalid="true"] {
+  border-color: #a33b32;
+}
+.field small[role="alert"] {
+  color: #a33b32;
+}
+
+.usage-summary,
+.usage-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.usage-summary strong {
+  display: block;
+}
+.usage-summary h2 {
+  font-size: 28px;
+  margin: 4px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.usage-table-scroll {
+  overflow-x: auto;
+}
+.usage-table-scroll:focus-visible {
+  outline: 3px solid #abd5b5;
+  outline-offset: 2px;
+}
+.usage-table {
+  min-width: 660px;
+  font-size: 12px;
+}
+.usage-table td {
+  vertical-align: middle;
+}
+.usage-table th:nth-child(2) {
+  width: 33%;
+}
+.usage-run {
+  display: block;
+  color: #718378;
+  font-size: 10px;
+  margin-top: 4px;
+}
+.usage-money {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.usage-unknown {
+  background: #fff0c2;
+  color: #705514;
+  border-color: #e9d798;
+}
+.usage-empty {
+  padding: 36px 12px;
+  text-align: center;
+  color: #718378;
+}
+.usage-pagination {
+  margin-top: 20px;
+}
+
+.data-details {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0;
+  min-width: 0;
+}
+.data-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.data-table-scroll table {
+  width: 100%;
+  min-width: 540px;
+}
+.data-table-scroll td {
+  max-width: 300px;
+  overflow-wrap: anywhere;
+}
+.data-details > div {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.35fr) minmax(0, 1fr);
+  gap: 8px 20px;
+  border-bottom: 1px solid #e4e9df;
+  padding-bottom: 10px;
+}
+.data-details dt {
+  font-weight: 600;
+  color: #596d61;
+  overflow-wrap: anywhere;
+}
+.data-details dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.detail-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.detail-list {
+  margin: 0;
+  padding-left: 20px;
+}
+.detail-list > li + li {
+  margin-top: 12px;
+}
+.data-details .data-details > div {
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+.record-form fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.record-form .choice-fields {
+  border: 1px solid #d5ded1;
+  padding: 14px;
+  border-radius: 8px;
+}
+.record-form legend {
+  font-weight: 600;
+  padding: 0 4px;
+}
+.record-form .form-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+.record-form .form-check input {
+  width: auto;
+}
+.record-form .field > label {
+  font-weight: 600;
+}
+.record-form .field small {
+  display: block;
+  margin-top: 6px;
+}
+@media (max-width: 640px) {
+  .data-details > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
+.data-table-scroll .member-table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.member-table th,
+.member-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #e8ede3;
+}
+.member-table td:first-child {
+  overflow-wrap: anywhere;
+  min-width: 160px;
+  max-width: 280px;
+}
+.member-table th,
+.member-table td:not(:first-child) {
+  white-space: nowrap;
 }

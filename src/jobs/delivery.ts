@@ -2,7 +2,7 @@ import type { Store } from "../db/repositories.ts";
 import { type Delivery, requireThat } from "../domain.ts";
 import type { SetupService } from "../setup/service.ts";
 import { TelegramError } from "../telegram/client.ts";
-import { telegramMarkdown } from "../telegram/format.ts";
+import { telegramMarkdown, telegramRichMessage } from "../telegram/format.ts";
 import { eligible, runAllowed } from "../workspaces/policy.ts";
 export class DeliveryWorker {
   constructor(
@@ -55,11 +55,13 @@ export class DeliveryWorker {
       );
       const sent = await (await this.setup.client()).call<{
         message_id: number;
-      }>("sendMessage", {
+      }>(intent.format === "rich" ? "sendRichMessage" : "sendMessage", {
         chat_id: intent.chatId,
-        ...(intent.format === "markdown"
-          ? telegramMarkdown(intent.text)
-          : { text: intent.text }),
+        ...(intent.format === "rich"
+          ? { rich_message: telegramRichMessage(intent.text) }
+          : intent.format === "markdown"
+            ? telegramMarkdown(intent.text)
+            : { text: intent.text }),
         message_thread_id: intent.topicId || undefined,
         reply_parameters: intent.replyTo
           ? { message_id: intent.replyTo, allow_sending_without_reply: true }
@@ -67,7 +69,9 @@ export class DeliveryWorker {
         reply_markup: intent.buttons
           ? { inline_keyboard: intent.buttons }
           : undefined,
-        link_preview_options: { is_disabled: true },
+        ...(intent.format === "rich"
+          ? {}
+          : { link_preview_options: { is_disabled: true } }),
       });
       await this.finish(workspaceId, id, (d) => {
         d.state = "sent";
@@ -85,6 +89,16 @@ export class DeliveryWorker {
       });
       await this.finish(workspaceId, id, (d) => {
         if (
+          intent.format === "rich" &&
+          error instanceof TelegramError &&
+          error.code === "telegram_destination_rejected" &&
+          error.disposition === "permanent"
+        ) {
+          // A confirmed rejection is safe to retry using the established text transport.
+          // Never fall back after an ambiguous send: that could duplicate a reply.
+          d.format = "markdown";
+          d.state = "pending";
+        } else if (
           error instanceof TelegramError &&
           error.disposition === "retry" &&
           d.attempts < 5

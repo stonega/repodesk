@@ -1,0 +1,33 @@
+# Use an operator session for this workspace. Never paste real session cookies into Git.
+@origin = http://localhost:3000
+@workspace = REPLACE_WORKSPACE_UUID
+@csrf = REPLACE_CSRF_TOKEN
+
+GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding
+
+### Save the current revision returned by GET. Repository IDs must be connected.
+PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "revision": 0,
+  "settings": {
+    "enabled": true,
+    "repositories": [{
+      "repositoryId": 7001,
+      "baseBranch": "develop",
+      "workflowFile": "deepx-codex.yml",
+      "maintainers": ["101"]
+    }]
+  }
+}
+
+### Stop a task; remote cancellation is best-effort.
+POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding/REPLACE_TASK_UUID/cancel
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{}

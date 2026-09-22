@@ -26,7 +26,7 @@ This is our application design, not built-in behavior supplied by Pi or Docker.
 | --- | --- | --- |
 | 1. Claim deployment | Enter the bootstrap token | Server verifies unclaimed state and token; no other configuration disclosed. |
 | 2. Create admin | Admin username, password and confirmation; optional contact email | Create the local deployment-admin account and a revocable session. No Telegram credentials or email provider needed. |
-| 3. Workspace | Name, language, timezone and initial retention settings | Save a draft workspace and show the scope of administration. |
+| 3. Workspace | Name, timezone and initial retention settings | Save a draft workspace and show the scope of administration. |
 | 4. Connect Telegram | BotFather instructions; enter bot token in a write-only field; validate bot identity | Show bot name/username and validation result without returning the token. |
 | 5. Link Telegram owner and access | Verify an owner through a one-time interaction with the configured bot; choose whitelist mode and allowed IDs | Add the verified Telegram owner as workspace member/owner and seed the whitelist. Typed IDs alone do not verify ownership. |
 | 6. Model | Enter an OpenAI-compatible base URL, write-only API key, suggested/custom model ID and thinking level; configure token prices and budgets | Validate settings locally. Saving makes no model request; live capability testing remains an explicit evaluation step. |

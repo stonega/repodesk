@@ -64,6 +64,11 @@ volume with `docker compose down -v`.
 - **Unknown delivery:** inspect Telegram. In Runs, resolve as sent with the observed
   remote message ID or abandon without resending. Neither option issues another send.
   Create an explicit new run only if you intend another publication.
+- **Run timeout:** `failed (run_timeout)` means the worker reached
+  `RUN_TIMEOUT_SECONDS` (300 seconds by default), not that the user cancelled it.
+  Review provider latency and reasoning settings; if needed, increase the bounded
+  deadline and redeploy after pending work drains. Provider billing still needs
+  reconciliation when the attempt is unknown. Do not blindly replay it.
 - **Unknown charge:** inspect provider billing. Record the actual charge and a billing
   reference in the run's reconciliation control. The unknown reservation persists until
   then. Retention purges content without erasing current budget accounting.

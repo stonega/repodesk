@@ -220,6 +220,13 @@ test("predefined Pi extension loads the real MCP tools with scoped factories and
     let turns = 0;
     const runner = new PiRunner((_model, context) => {
       expect(context.systemPrompt).toContain("## Configured repositories");
+      expect(context.systemPrompt).toContain(
+        "Never use that syntax for Code Truth",
+      );
+      expect(context.systemPrompt).toContain(
+        "[source:package.json]` is invalid",
+      );
+      expect(context.systemPrompt).toContain("`package.json:1–111`");
       expect(context.tools?.map((tool) => tool.name)).toContain(
         "get_code_context",
       );

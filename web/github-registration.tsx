@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { IconButton } from "./icon-button.tsx";
-import { Modal } from "./modal.tsx";
+import { Modal, ModalActions } from "./modal.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 export function GitHubRegistration({
@@ -78,9 +78,9 @@ export function GitHubRegistration({
             }}
           >
             <p>
-              Confirm creation on GitHub with read-only repository access. Your
-              App will be available to your workspaces; each workspace chooses
-              its own repositories.
+              Confirm creation on GitHub with source read access and permission
+              to create issues. Your App will be available to your workspaces;
+              each workspace chooses its own repositories.
             </p>
             <fieldset disabled={busy} className="plugin-fields">
               <label className="field">
@@ -128,11 +128,11 @@ export function GitHubRegistration({
                 Enable it if a personally owned App needs access to an
                 organization’s repositories.
               </p>
-              <div className="row">
+              <ModalActions>
                 <button type="submit">
                   {busy ? "Opening GitHub…" : "Continue to GitHub"}
                 </button>
-              </div>
+              </ModalActions>
             </fieldset>
           </form>
         </Modal>

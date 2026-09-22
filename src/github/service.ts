@@ -203,7 +203,11 @@ export class GitHubService {
         },
         public: input.public,
         request_oauth_on_install: false,
-        default_permissions: { contents: "read", metadata: "read" },
+        default_permissions: {
+          contents: "read",
+          metadata: "read",
+          issues: "write",
+        },
         default_events: [],
       },
     };

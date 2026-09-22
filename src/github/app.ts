@@ -142,7 +142,11 @@ export class GitHubApp {
     const payload = `${encode({ alg: "RS256", typ: "JWT" })}.${encode({ iat: now - 60, exp: now + 540, iss: this.config.clientId })}`;
     return `${payload}.${sign("RSA-SHA256", Buffer.from(payload), this.config.privateKey).toString("base64url")}`;
   }
-  async installationToken(installationId: number, repositoryIds: number[]) {
+  async installationToken(
+    installationId: number,
+    repositoryIds: number[],
+    permission: "contents" | "issues" | "coding" = "contents",
+  ) {
     requireThat(
       repositoryIds.length > 0 && repositoryIds.length <= 12,
       "github_repository_not_connected",
@@ -153,7 +157,12 @@ export class GitHubApp {
       this.jwt(),
       {
         repository_ids: repositoryIds,
-        permissions: { contents: "read" },
+        permissions:
+          permission === "issues"
+            ? { issues: "write" }
+            : permission === "coding"
+              ? { actions: "write", contents: "read", pull_requests: "read" }
+              : { contents: "read" },
       },
     );
     return z
@@ -162,6 +171,48 @@ export class GitHubApp {
         expires_at: z.string().datetime(),
       })
       .parse(data);
+  }
+  async createIssue(
+    token: string,
+    repository: string,
+    title: string,
+    body: string,
+  ) {
+    // No redirects or retries: an ambiguous POST must never be replayed.
+    try {
+      const response = await this.transport(
+        `https://api.github.com/repos/${repository}/issues`,
+        {
+          method: "POST",
+          headers: {
+            accept: "application/vnd.github+json",
+            "content-type": "application/json",
+            "X-GitHub-Api-Version": "2026-03-10",
+            authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ title, body }),
+          redirect: "error",
+          signal: AbortSignal.timeout(10000),
+        },
+      );
+      if ([401, 403, 404].includes(response.status))
+        throw new Fault("github_issue_access_denied", 403);
+      if (response.status === 410)
+        throw new Fault("github_issues_disabled", 409);
+      if ([400, 422, 429].includes(response.status))
+        throw new Fault("github_issue_rejected", 409);
+      requireThat(response.status === 201, "github_issue_outcome_unknown", 409);
+      const result = z
+        .object({ number: z.number().int().positive() })
+        .parse(await response.json());
+      return {
+        number: result.number,
+        url: `https://github.com/${repository}/issues/${result.number}`,
+      };
+    } catch (error) {
+      if (error instanceof Fault) throw error;
+      throw new Fault("github_issue_outcome_unknown", 409);
+    }
   }
 }
 

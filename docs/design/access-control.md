@@ -37,15 +37,27 @@ PostgreSQL so changes apply to all API and worker containers without redeploymen
 
 ## Admin panel controls
 
-Add **Access → Allowed users** with:
+The unified **Members & access** page provides:
 
-1. Current mode, allowed-user count and a plain-language explanation.
-2. Searchable/paginated list showing ID, known label, membership/role and date added.
-3. Add by ID, or select an already verified workspace member.
-4. Bulk paste/import of IDs with validation and a preview of additions/removals.
-5. Remove selected entries and preview affected access, runs and owned schedules.
-6. Save using an expected policy version; stale edits require reload/review.
-7. Audit history of mode changes and added/removed IDs, including actor and timestamp.
+1. A searchable, paginated member table with Telegram name, username and ID, role,
+   membership status, whitelist status and effective access. Whitelisted IDs without
+   membership are shown as **Not enrolled**, with an explicit enrollment action.
+2. Add/edit member dialogs and the existing access-request approval flow.
+3. Access mode selection and an expandable whitelist ID editor for bulk changes.
+4. A preview of affected access, runs and schedules before applying policy changes.
+5. Version checks, last-admin protection and audit records for mutations.
+
+The sidebar has one entry at `/admin/members`. Old `/admin/access-policy` links
+redirect there while preserving query parameters. The API routes remain available.
+
+Member names and usernames are display metadata captured from actual Telegram
+message/callback senders in the resolved workspace. Approved access requests also
+populate this profile; older approved requests provide a display fallback. No
+username lookup or extra Telegram request is made. A later sender update refreshes
+the profile and clears an old username when the user no longer has one. Unknown
+profiles show **Telegram user** and the numeric ID until an interaction supplies
+more information. Editing membership preserves these fields. Usernames never grant
+access, identify an API actor or replace numeric IDs in permission checks.
 
 Workspace owners/admins may manage their own policy. Ordinary members cannot edit it.
 Reject ordinary UI changes that would remove the last allowed active owner/admin's
@@ -139,3 +151,46 @@ Required acceptance cases:
 - Bulk input rejects malformed IDs, deduplicates entries and shows effective changes.
 - Denied task requests make zero provider calls; group visibility/context behavior
   matches the explanation above.
+
+## Telegram access requests (implemented, 2026-09-20)
+
+An unauthorized user receives a **Request access** button after messaging the bot
+privately or directing a command/reply to it in a linked group. A private chat uses
+its existing workspace selection or membership; when there is exactly one configured
+workspace with a verified owner, it can be inferred. With multiple possible workspaces,
+the bot asks for the workspace-specific link available under **Members & access → Access
+requests**. Opening that link offers the button; it does not grant access. No workspace
+names or member lists are exposed to unauthorized users.
+
+Pressing the button records the Telegram callback sender's numeric ID, optional name
+and username, request time and originating chat/topic in that workspace. Names and
+usernames are display labels only. Pending requests neither enroll users nor execute
+AI work. Requests from bots, anonymous senders, another user's private chat or an
+unrelated group are rejected. Normal group collection consent still applies.
+
+Workspace admins review requests in **Members & access → Access requests**. **Approve access**
+atomically enrolls/reactivates the user as a regular member, adds them to the whitelist,
+records the decision/audit events and queues an approval notification in the originating
+chat. It does not grant panel accounts or admin privileges; a revoked owner uses the
+existing operator recovery flow. A default private workspace selection is saved only
+when the user has none. Existing selections are preserved.
+
+**Reject request** grants nothing. The bot reports rejection on the next access check;
+the user may submit a new request after 24 hours. Duplicate pending requests and repeated
+identical decisions are idempotent. Replaying an old approval after revocation cannot
+restore access. Conflicting decisions and stale policy versions return HTTP 409.
+All decisions use current workspace admin authorization, CSRF and origin checks.
+
+Requests are limited to 500 retained records per workspace, one per Telegram identity.
+Records expire after 30 days from request/decision and are erased on workspace purge.
+Fixed access replies are throttled per bot, actor and workspace to one per minute,
+retained for one day, and use the existing retry/unknown-outcome delivery policy.
+Approval notifications use the normal outbox and recheck authorization before sending.
+
+API: `GET /api/admin/workspaces/:id/access-requests` returns pending `items`, policy
+`version` and `requestUrl`. `POST /api/admin/workspaces/:id/access-requests/:request/decision`
+accepts `{ "decision": "approved" | "rejected", "version": number }`.
+Apply migration `009_access_requests.sql` before running the updated app/worker.
+
+Telegram controls follow the [Bot API inline keyboard and callback contract](https://core.telegram.org/bots/api#inlinekeyboardbutton):
+callback data is under 64 bytes and button presses are acknowledged with `answerCallbackQuery`.

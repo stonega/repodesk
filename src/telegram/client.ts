@@ -20,6 +20,7 @@ export const ALLOWED_UPDATES = [
   "callback_query",
   "my_chat_member",
   "chat_member",
+  "stopped_message_generation",
 ];
 export interface TelegramCallOptions {
   signal?: AbortSignal;

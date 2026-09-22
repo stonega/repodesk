@@ -36,6 +36,12 @@ The skill manager configures instructions and already-registered tools in P0.
 | Usage | Show authorized runs/workflows using the skill and pinned version; respect run-level visibility. |
 | Archive | Stop new assignment while retaining referenced versions for history; show affected workflows before removal. |
 
+The implemented catalog groups management icons beside the title, separates the
+description from revision metadata, and places Publish draft and Test draft policy
+below the instruction preview. Restore a published version expands a version
+selector and rollback action; the selected source is independent for each card.
+Skills without published versions do not show restore controls.
+
 Starter catalog: team recap, decision/blocker summary and follow-up drafting. These
 are reusable instructions over available chat context, not new autonomous write tools.
 Workspace admins can manage their catalog; only deployment operators register new

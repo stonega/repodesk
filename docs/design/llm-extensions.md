@@ -35,6 +35,15 @@ raw extension exception messages are excluded from application logs and model re
 
 ## Installation and grants
 
+The application registry also includes the built-in `query_model_cost` tool.
+It uses the current run's published skill grant and retained workspace accounting;
+no file plugin or external billing API is involved. It defaults to the actor's own
+costs this UTC month, with today/retained-history filters and per-model totals.
+Queries require private chat; workspace-wide totals and monthly budget require
+current owner/admin access. Authorization is rechecked before replaying a stored
+result. New starter skills grant it; existing skills require an explicit edit and
+publication. See [examples and accounting limits](../../examples/model-cost.md).
+
 The deployment operator reviews and installs local extension files and dependencies.
 Open **Workspace → Plugins** (`/admin/plugins`) to register a file, edit its version,
 tool names for the selected workspace, enable/disable it, or remove its registration.
@@ -86,8 +95,11 @@ Do not keep tenant data in module globals, which Node or extension dependencies 
 cache. These are trusted **in-process** modules with the worker's OS permissions,
 not sandboxed code. The read-only declaration records the operator's review; it cannot
 technically prevent arbitrary Node code from writing or making network requests.
-Only install reviewed read-only/pure tools and hooks. External writes must use a
-future application service with actor, scope, destination, approval and recovery checks.
+Only install reviewed read-only/pure file tools and hooks. External writes must use
+an application service with actor, scope, destination, approval and recovery checks.
+The built-in GitHub proposal tool records a local approval draft; its application
+service performs issue submission only after explicit human approval. File plugins
+remain read-only.
 Do not use `pi.exec`, direct messaging, ambient credentials, or filesystem side effects.
 Do not log private context from an extension.
 
@@ -142,3 +154,22 @@ workspace configurations are preserved and the old deployment registry is remove
 Historical operator audit records remain available; new edits appear in workspace
 Audit. Workspace deletion purges its plugin settings along with other content.
 Run migrations before restarting the API and worker with this version.
+
+## Predefined GitHub issue drafts
+
+A connected GitHub installation exposes `propose_github_issue` through a built-in Pi
+factory, independently of Code Truth. The connection/repository list is pinned in the
+catalog digest and checked again when proposing, approving and submitting. The model
+can draft a repository ID, title and body, but cannot approve or invoke the external
+write. Telegram's actor-bound approval controls publish the exact reviewed payload.
+The worker reserves the send durably and never replays an ambiguous POST. See
+[permissions, limits and recovery](../implementation/github-app.md#submit-an-issue-from-telegram).
+
+## Predefined Codex implementation
+
+The optional Codex extension exposes `propose_coding_task`, `coding_task_status`
+and `cancel_coding_task`. Repository-specific Telegram maintainer grants and a
+complete approval bind issue creation and an independent GitHub Actions workflow.
+Application services own issue/dispatch writes and durable task state. Codex runs
+on a fresh GitHub runner, followed by project checks and draft PR publication.
+See [configuration, permissions and recovery](../implementation/codex-coding.md).

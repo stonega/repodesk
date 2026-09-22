@@ -62,7 +62,7 @@ activation so owner verification can work. Wait for **Polling: ready**, generate
 owner verification link, and open it with the intended Telegram account. Sign in again
 after verification, finish model/skill settings, then activate. The model, whitelist,
 tenant and approval requirements are identical in both modes. No webhook or tunnel is
-needed. The page refreshes polling status automatically every five seconds.
+needed. The setup page updates verification status automatically every five seconds in both transport modes.
 
 Polling and webhook delivery cannot operate on the same bot at the same time. If the
 bot already has a webhook, polling reports a conflict and makes no `deleteWebhook`
@@ -160,13 +160,61 @@ use explicit zeros for a free local model. Overrides also price cached input at 
 input rate and persist until replaced. Review both prices when changing models or
 providers; recorded costs are estimates, not an upstream billing guarantee.
 
-The worker pins endpoint, thinking level and prices at the first execution of a run.
+The worker pins model capacity, endpoint, thinking level and prices at the first execution of a run.
 Later thinking/price edits apply to future runs. If an endpoint changes, unfinished
 runs pinned to the old endpoint stop before another model dispatch. Existing saved
 configurations without these fields use the default URL and thinking `off`.
 
 See [the API example](../../examples/model-settings.http) and
 [Pi's custom-model documentation](https://github.com/earendil-works/pi/blob/main/packages/ai/README.md).
+
+## Model capacity and workspace budgets
+
+Known model IDs use the bundled Pi catalog for context window and maximum output.
+The catalog is versioned package data, not a live provider discovery request. Proxies
+may differ: operators can override both values in **Model configuration** using their
+provider's documented token limits. Unknown custom IDs require both values; the app
+no longer invents 128K/16K capabilities. Existing custom configurations need these
+values before the next run. Saving Telegram credentials remains available meanwhile.
+Set `modelLimits: null` to return to catalog values. Omitted overrides persist for the
+same model/endpoint; changing either clears them unless explicitly supplied again.
+Model limits are pinned at first execution, alongside endpoint, thinking and pricing.
+
+Workspace settings show model capacity and its source. Response language follows the
+model; there is no workspace language override. Input byte and output token budgets
+are managed automatically, with no workspace controls or hidden saved overrides.
+The API discards the retired `language`, `maxInputChars` and `maxOutputTokens` keys
+from older clients; migration `010_automatic_response_settings.sql` removes them from
+current workspace settings while retaining historical run snapshots.
+
+Before each model call, serialized UTF-8 input bytes provide a conservative token
+estimate. Output allowance is the minimum of model maximum output, remaining context
+capacity, and what the remaining USD budgets can reserve. This is not an exact
+provider tokenizer count. Tool definitions, history and tool results all count.
+The worker never silently summarizes context or translates the model's response.
+Bounded evaluation scripts can still supply internal input/output caps.
+
+USD run/month budgets accept finite non-negative amounts without the old $5/$1,000
+ceilings. Both budgets are checked transactionally before each dispatch; unknown
+charges remain reserved. Zero permits only zero-cost requests. Calls per run accept
+integers from 1 to 20 (default 3); the run deadline and eight-tool-call limit remain
+operational bounds. Set `RUN_TIMEOUT_SECONDS` in `.env` (default 300, range 1–1800)
+and redeploy to change the total wall-time allowance per execution. Reasoning
+models can need more than the previous 90 seconds. Queue expiry is set 60 seconds
+beyond this limit. Existing queued jobs retain their original queue expiry; let
+pending work drain before increasing the deadline. Timeouts report `run_timeout`;
+shutdown reports `worker_shutdown`, while explicit user cancellation remains
+`cancelled`. An interrupted request with unconfirmed usage keeps its reservation
+until billing reconciliation; raising the deadline does not retry old failures. Concurrent reservations can still exhaust the remaining
+budget between estimating output and reserving it; the final transaction prevents
+overspend before dispatch.
+
+The form reports individual invalid fields; API validation includes safe `issues`
+with field paths and messages, never submitted values. Runtime logs preserve
+`input_budget_exceeded`, `model_output_limit_exceeded`, `model_context_limit_exceeded`
+and `model_limits_required`. Changes apply to new runs; failed runs are not retried
+automatically. Large outputs still use the existing Telegram reply truncation; this
+change does not introduce long-message delivery or remove the response-length prompt.
 
 ## Admin creation dialogs
 
@@ -314,3 +362,39 @@ For local source-code queries, follow [Code Truth setup](code-truth.md). This op
 Plugin settings previously stored per operator are copied into independent workspace
 registries by migration `006_workspace_plugins.sql`; existing workspace grants and
 file hashes are preserved. Run migrations before starting the updated API and worker.
+
+## Approve requests for bot access
+
+After applying migration `009_access_requests.sql`, unauthorized users can press
+**Request access** in Telegram. In **Workspace → Members & access → Access requests**, review
+the Telegram ID/name and choose **Approve access** or **Reject request**. Approval
+adds a regular member, allows their ID and queues a Telegram confirmation. They can
+then send a new bot request; their original message is not automatically executed.
+
+Share the request-access link shown in that section when your bot serves multiple
+workspaces. It opens the correct workspace's request flow without granting access.
+Reopen the page to load new requests. A Reload access requests action appears
+after a failed request or conflicting edit. See
+[access-control behavior and limits](../design/access-control.md#telegram-access-requests-implemented-2026-09-20)
+and [the API example](../../examples/access-requests.http).
+
+## Rich replies and native Stop (Bot API 10.3)
+
+Updated app/worker code sends model answers as rich messages, with native private
+streaming and Stop. No dependency or database migration is needed. Restart both
+processes together. For webhook deployments, explicitly use **Register verification
+webhook** in Setup after updating to add `stopped_message_generation` to the existing
+subscription; ordinary startup does not register it. Polling uses the updated allowed
+updates automatically after worker restart. Old previews without a stored draft/run
+binding cannot be stopped through the native event; `/cancel` remains available.
+
+See the [manual staging check](../../examples/telegram-streaming.md). No live Telegram
+request is part of build/test or this implementation change.
+
+## Optional Codex feature and bug implementation
+
+Configure repository development branches and Telegram maintainers under
+**Plugins → Codex implementation**. Each target repository needs the supplied
+GitHub Actions workflow, an OpenAI secret, trusted check commands and updated App
+permissions. Follow [the complete setup](codex-coding.md); installing the bot does
+not install or dispatch remote workflows.

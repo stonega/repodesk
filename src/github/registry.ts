@@ -113,9 +113,11 @@ export class GitHubApps {
       );
       requireThat(
         data.permissions.contents === "read" &&
+          data.permissions.issues === "write" &&
           Object.entries(data.permissions).every(
             ([name, level]) =>
-              ["contents", "metadata"].includes(name) && level === "read",
+              (name === "issues" && level === "write") ||
+              (["contents", "metadata"].includes(name) && level === "read"),
           ),
         "github_registration_failed",
         400,

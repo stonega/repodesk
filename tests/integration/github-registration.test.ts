@@ -181,7 +181,11 @@ const url = process.env.TEST_DATABASE_URL;
     );
     expect(result.manifest).toMatchObject({
       public: false,
-      default_permissions: { contents: "read", metadata: "read" },
+      default_permissions: {
+        contents: "read",
+        metadata: "read",
+        issues: "write",
+      },
       default_events: [],
       hook_attributes: {
         url: "https://example.com/github/webhook",

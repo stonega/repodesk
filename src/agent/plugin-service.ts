@@ -9,6 +9,7 @@ import {
   targetsFor,
 } from "../code-truth/config.ts";
 import { codeTruthExtension } from "../code-truth/extension.ts";
+import { codingExtension } from "../coding/extension.ts";
 import type { Store } from "../db/repositories.ts";
 import {
   type Admin,
@@ -18,6 +19,7 @@ import {
   type Workspace,
 } from "../domain.ts";
 import type { GitHubApp } from "../github/app.ts";
+import { githubExtension } from "../github/extension.ts";
 import { GitHubApps } from "../github/registry.ts";
 import { audit } from "../workspaces/policy.ts";
 import { ExtensionCatalog } from "./extensions.ts";
@@ -112,6 +114,8 @@ export class PluginService {
       );
       const builtin = prior?.codeTruth;
       const names = new Set<string>(TOOLS);
+      names.add("record_discussion");
+      names.add("query_discussions");
       if (builtin?.enabled && targetsFor(builtin, workspaceId).length)
         for (const name of codeTruthTools) names.add(name);
       for (const entry of input.entries) {
@@ -273,6 +277,13 @@ export class PluginService {
     const config = workspace.plugins?.codeTruth;
     const targets = config?.enabled ? targetsFor(config, workspaceId) : [];
     const builtins = [];
+    if (workspace.coding?.settings.enabled && workspace.github?.installationId)
+      builtins.push(codingExtension(this.store, workspace));
+    if (
+      workspace.github?.installationId &&
+      workspace.github.repositories.length
+    )
+      builtins.push(githubExtension(this.store, workspaceId, workspace.github));
     if (targets.length) {
       requireThat(this.codeTruth, "code_truth_unavailable", 503);
       builtins.push(

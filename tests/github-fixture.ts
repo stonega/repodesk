@@ -34,7 +34,7 @@ export function githubTransport(
           client_secret: githubFixtureConfig.clientSecret,
           pem: githubFixtureConfig.privateKey,
           owner: { login: "example" },
-          permissions: { contents: "read", metadata: "read" },
+          permissions: { contents: "read", metadata: "read", issues: "write" },
         },
         201,
       );

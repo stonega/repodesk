@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import type { GitHubRepository } from "../src/github/app.ts";
 import type { GitHubPage } from "../src/github/config.ts";
 import { GitHubRegistration } from "./github-registration.tsx";
-import { IconButton } from "./icon-button.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 function explain(error: unknown) {
@@ -80,8 +79,8 @@ export function GitHubConnection({
         </span>
       </div>
       <p>
-        Connect a GitHub App to give this workspace read access to selected
-        repositories.
+        Connect a GitHub App to give this workspace source access to selected
+        repositories and submit issues after approval in Telegram.
       </p>
       {new URLSearchParams(window.location.search).get("github") ===
         "failed" && (
@@ -97,10 +96,10 @@ export function GitHubConnection({
       {new URLSearchParams(window.location.search).get("github") ===
         "registration-failed" && (
         <p className="notice" role="alert">
-          GitHub App setup did not complete. Reload to check whether an App is
-          already configured. If GitHub created an App but setup failed here,
-          remove that unused App in GitHub before retrying, or configure it
-          manually.
+          GitHub App setup did not complete. Reload the page to check whether an
+          App is already configured. If GitHub created an App but setup failed
+          here, remove that unused App in GitHub before retrying, or configure
+          it manually.
         </p>
       )}
       {new URLSearchParams(window.location.search).get("github") ===
@@ -138,6 +137,11 @@ export function GitHubConnection({
           <p>
             Connected to <strong>{data.connection.account}</strong> by{" "}
             {data.connection.connectedBy}.
+          </p>
+          <p className="muted">
+            To submit issues, grant the App Issues: read and write in GitHub and
+            approve the updated installation permissions. Then ask the Telegram
+            assistant to draft an issue and review its Approve/Reject buttons.
           </p>
           <ul>
             {data.connection.repositories.map((repo) => (
@@ -177,13 +181,11 @@ export function GitHubConnection({
             ? "Change GitHub connection"
             : "Connect GitHub"}
         </button>
-        <IconButton
-          icon="refresh"
-          label="Reload GitHub connection"
-          type="button"
-          busy={busy}
-          onClick={() => void load()}
-        />
+        {error && (
+          <button type="button" disabled={busy} onClick={() => void load()}>
+            Reload GitHub connection
+          </button>
+        )}
         {data &&
           (!data.connection ||
             data.connection.installationId ||
@@ -228,9 +230,11 @@ export function GitHubConnection({
           <h3>Choose repositories for this workspace</h3>
           <p>
             Authorized as {data.login}. Select an installation, then the
-            repositories this workspace may query.
+            repositories this workspace may query and submit issues to.
           </p>
-          <p>After GitHub approves the installation, reload this connection.</p>
+          <p>
+            After GitHub approves the installation, reopen Plugins to see it.
+          </p>
           <fieldset disabled={busy} className="plugin-fields">
             <label className="field">
               <span>GitHub installation</span>
@@ -263,7 +267,7 @@ export function GitHubConnection({
             {!data.installations.length && (
               <p>
                 No accessible installations yet. Install the App or ask your
-                organization owner to approve it, then reload.
+                organization owner to approve it, then reopen Plugins.
               </p>
             )}
             {!!installation && !repositories.length && (

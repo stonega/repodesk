@@ -26,7 +26,7 @@ Primary users:
 ## Scope and priorities
 
 **P0 / usable pilot:** private onboarding, one explicitly linked team group per
-workspace, deterministic command/reply routing, source-grounded recap generation,
+workspace, deterministic command/mention/reply routing, source-grounded recap generation,
 one manually triggered and scheduled recap workflow, approvals, scoped instructions,
 status/cancellation, tenant boundaries, usage limits, run history, deletion controls
 and an authenticated web admin panel with first-run admin/bot setup and skill management.
@@ -53,7 +53,7 @@ Inspired by E-25–35, E-49–50. A Telegram account is an identity; a group is 
 automatically a company or tenant. An internal workspace owns each connected chat.
 
 - `/start` in private chat explains capabilities, current limitations and data scope.
-- Champion creates a workspace and confirms name, timezone, preferred language and role.
+- Champion creates a workspace and confirms name, timezone and role.
 - Adding a bot to a group and linking that group are distinct operations. Confirm
   Telegram admin authority and workspace admin authority before establishing the link.
 - A one-time, expiring link token binds an explicitly selected group to the workspace.
@@ -72,17 +72,22 @@ group onboarding. If a welcome DM is unavailable, provide a Start link in the gr
 
 ## F02 — Conversation routing and context (P0)
 
-Inspired by E-01, E-07. Support private chat text, `/ask@botname` and replies to the
+Inspired by E-01, E-07. Support private chat text, delivered `@botname` mentions,
+`/ask@botname` and replies to the
 bot. Use current bot identity and Telegram entities for commands; do not rely on a
 substring username match. Plain group mentions are best-effort only where delivered.
 
 Associate each request with workspace, actor, chat, topic, reply chain and run ID.
-Ask a focused clarification when task, date range or destination is ambiguous.
+Answer directly and keep context handling silent unless asked. Resolve ordinary
+ambiguity from the conversation or a reasonable low-risk assumption. Ask one focused
+clarification only when essential information is missing and the answer or action
+would otherwise be materially incorrect or unsafe. Required approvals still apply.
 Reject unsupported media honestly. Group-wide passive response classification is P1.
 
 Acceptance: ignore unrelated chat, commands addressed to other bots and bot senders
 by default; keep simultaneous topics separate; duplicate update delivery creates one
-logical run; missing context produces a limitation statement rather than fabricated history.
+logical run; missing essential facts produce a brief statement of the specific
+unknown rather than fabricated history or routine context explanations.
 
 ## F03 — Task execution and reviewable results (P0)
 

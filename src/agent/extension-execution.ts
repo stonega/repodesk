@@ -2,7 +2,8 @@ import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { Store } from "../db/repositories.ts";
 import { requireThat } from "../domain.ts";
 import { runAllowed } from "../workspaces/policy.ts";
-import type { AgentInput } from "./runtime.ts";
+import { inputByteLimit } from "./limits.ts";
+import { type AgentInput, selectedModel } from "./runtime.ts";
 
 /** Reserve before execution; an unknown outcome is never automatically replayed. */
 export function extensionToolExecution(
@@ -55,8 +56,16 @@ export function extensionToolExecution(
         "tool_policy_denied",
         403,
       );
+      const model = selectedModel(run.model, run.modelOptions);
       requireThat(
-        Buffer.byteLength(JSON.stringify(result)) <= run.settings.maxInputChars,
+        Buffer.byteLength(JSON.stringify(result)) <=
+          inputByteLimit(
+            {},
+            {
+              contextWindow: model.contextWindow,
+              maxOutputTokens: model.maxTokens,
+            },
+          ),
         "extension_result_too_large",
         409,
       );

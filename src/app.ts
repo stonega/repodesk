@@ -93,7 +93,47 @@ export function createApp(
       if (error.status >= 500) store.log.write("request_failed", { error });
       return c.json({ error: error.code }, error.status as 400);
     }
-    if (error instanceof ZodError || error instanceof SyntaxError)
+    if (error instanceof ZodError) {
+      // Expose only known form paths and schema messages, never submitted values/unknown keys.
+      const fields = new Set([
+        "settings",
+        "name",
+        "timezone",
+        "language",
+        "retentionDays",
+        "monthlyBudgetUsd",
+        "runBudgetUsd",
+        "maxInputChars",
+        "maxOutputTokens",
+        "maxTurns",
+        "missedRunMinutes",
+        "paused",
+        "version",
+        "model",
+        "modelLimits",
+        "contextWindow",
+        "modelBaseUrl",
+        "modelPricing",
+        "input",
+        "output",
+        "thinkingLevel",
+      ]);
+      const issues = error.issues
+        .filter(
+          (issue) =>
+            issue.path.length &&
+            issue.path.every(
+              (part) => typeof part === "string" && fields.has(part),
+            ) &&
+            issue.code !== "unrecognized_keys",
+        )
+        .map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        }));
+      return c.json({ error: "invalid_request", issues }, 400);
+    }
+    if (error instanceof SyntaxError)
       return c.json({ error: "invalid_request" }, 400);
     store.log.write("request_failed", { error });
     return c.json({ error: "service_unavailable" }, 503);

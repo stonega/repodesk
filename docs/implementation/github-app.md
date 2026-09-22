@@ -2,7 +2,8 @@
 
 Implemented: guided GitHub App creation, workspace-scoped web authorization,
 installation/repository selection, disconnect, and short-lived read-only installation
-tokens for Code Truth. No personal token is accepted by the web panel.
+tokens for Code Truth, plus Telegram issue drafts with explicit approval and
+repository-scoped issue submission. No personal token is accepted by the web panel.
 
 ## Create the App from the panel
 
@@ -12,7 +13,8 @@ tokens for Code Truth. No personal token is accepted by the web panel.
    accounts** unchecked for an App used only by its owner. Enable it when a personally
    owned App needs installation on an organization, or when supporting other accounts.
 3. Click **Continue to GitHub** and confirm creation on GitHub. The form preconfigures
-   Contents/Metadata read access, no webhook events, and the deployment's callbacks.
+   Contents/Metadata read access, Issues write access, no webhook events, and the
+   deployment's callbacks.
    GitHub requires a publicly addressable webhook URL even when delivery is disabled.
    The inactive hook uses `https://example.com/github/webhook` as a reserved-domain
    placeholder. It receives no events; local browser callback URLs remain unchanged.
@@ -50,7 +52,8 @@ its pending registration flows but retains the operator's shared App credentials
    `http://localhost:3000/api/admin/github/callback` for this local deployment.
    A production origin uses HTTPS. The URL must match exactly; no extra query parameters.
 3. Grant **Repository permissions → Contents: Read-only**. Metadata read access is
-   included by GitHub. No write or organization permissions are required.
+   included by GitHub. Grant **Issues: Read and write** for issue submission. No
+   Contents write or organization permissions are required.
 4. A setup URL is unnecessary: the panel authorizes the user first, then lists their
    App installations. Leave webhooks disabled for this implementation; there is no
    webhook receiver. Installation suspension/removal is checked when minting tokens.
@@ -158,4 +161,43 @@ The guided creation flow uses [GitHub App Manifests](https://docs.github.com/en/
 Reference inspected: Coolify commit `89e8506023af83016e3ccd64dc1327f51a7f8674`,
 [manifest form](https://github.com/coollabsio/coolify/blob/89e8506023af83016e3ccd64dc1327f51a7f8674/resources/views/livewire/source/github/change.blade.php#L345)
 and [server-side conversion](https://github.com/coollabsio/coolify/blob/89e8506023af83016e3ccd64dc1327f51a7f8674/app/Http/Controllers/Webhook/Github.php#L509).
-DeepX requests only source-read permissions and keeps its own session/tenant checks.
+DeepX requests source-read and issue-write permissions and keeps its own session/tenant checks.
+
+## Submit an issue from Telegram
+
+Ask the assistant, for example: “Create an issue in example/workspace titled
+‘Recap omits the last message’. Include these reproduction steps: …”. The built-in
+`propose_github_issue` tool is available when the workspace has a connected GitHub
+installation and selected repositories; Code Truth need not be enabled.
+
+The bot shows the repository, exact title and body with **Approve** / **Reject**.
+Only the requesting actor can approve, within 15 minutes. Approval publishes the
+content under the GitHub App's identity and may notify repository subscribers.
+Titles are limited to 256 characters and bodies to 3,000 so the complete review fits
+in one Telegram message. Labels and assignees are not part of this first version.
+There is no issue-submission form in the web panel.
+
+After approval, the worker submits the issue and sends its link to the original
+chat/topic. It rechecks membership, run cancellation, deployment/workspace pause,
+connection revision and repository selection immediately before reserving the send.
+Disconnecting or changing repositories invalidates outstanding proposals. As with
+other external operations, revocation cannot undo a POST already in flight.
+
+**Existing Apps:** open the App's settings on GitHub, change Repository permissions
+→ Issues to **Read and write**, save, and approve the permission update for the
+installation (organization approval may be required). Reconnecting alone does not
+grant a missing permission. Newly created Apps request it through the manifest.
+Code Truth continues to use Contents-read tokens; issue submission obtains a separate
+short-lived Issues-write token limited to the single approved repository. Legacy
+Code Truth tokens cannot submit issues.
+
+A committed approval record reserves each send before the POST. Duplicate approvals
+are rejected; concurrent workers and restarts never replay a reserved send. A timeout,
+server error or crash with an uncertain outcome is reported as **unknown**. Inspect
+the repository before asking for a new draft. Known failures (missing permission,
+disabled issues or rejected input) are reported without including GitHub response
+bodies or credentials. No automatic retry is performed. Drafts/results follow the
+existing approval retention and workspace-deletion policy.
+
+See [the example and deterministic verification](../../examples/github-issue.md).
+API reference: [Create an issue](https://docs.github.com/en/rest/issues/issues#create-an-issue).

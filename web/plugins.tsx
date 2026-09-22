@@ -1,9 +1,10 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import type { PluginPage, PluginSpec } from "../src/agent/plugin-config.ts";
 import { CodeTruth } from "./code-truth.tsx";
+import { Coding } from "./coding.tsx";
 import { GitHubConnection } from "./github.tsx";
 import { IconButton } from "./icon-button.tsx";
-import { Modal } from "./modal.tsx";
+import { Modal, ModalActions } from "./modal.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 const spec = ({
@@ -105,6 +106,7 @@ export function Plugins({
       </header>
       <GitHubConnection request={request} workspaceId={workspaceId} />
       <CodeTruth request={request} workspaceId={workspaceId} />
+      <Coding request={request} workspaceId={workspaceId} />
       <section className="card" aria-label="Plugin management">
         <div className="row plugin-toolbar">
           <h2>Registered plugins</h2>
@@ -119,14 +121,15 @@ export function Plugins({
               setNotice("");
             }}
           />
-          <IconButton
-            icon="refresh"
-            label="Reload saved plugins"
-            type="button"
-            busy={loading}
-            disabled={busy}
-            onClick={() => void load()}
-          />
+          {error && editing === undefined && (
+            <button
+              type="button"
+              disabled={busy || loading}
+              onClick={() => void load()}
+            >
+              Reload saved plugins
+            </button>
+          )}
         </div>
         <p className="muted">
           Register reviewed files already installed on the server. Only
@@ -276,6 +279,13 @@ export function Plugins({
           {error && (
             <p className="notice" role="alert">
               {error}
+              <button
+                type="button"
+                disabled={busy || loading}
+                onClick={() => void load()}
+              >
+                Reload saved plugins
+              </button>
             </p>
           )}
           <PluginEditor
@@ -429,9 +439,9 @@ function PluginEditor({
           Saving an enabled plugin grants its tools and hooks to eligible users
           in this workspace.
         </p>
-        <div className="row">
+        <ModalActions>
           <button type="submit">{busy ? "Saving…" : "Save plugin"}</button>
-        </div>
+        </ModalActions>
       </fieldset>
     </form>
   );

@@ -8,6 +8,7 @@ import {
 } from "../domain.ts";
 import { starterSkills } from "../skills/catalog.ts";
 import { audience, audit, authorize } from "./policy.ts";
+import { groupThread, privateThread, refreshThreadContext } from "./threads.ts";
 export function newWorkspace(
   operatorId: string,
   settings: Settings,
@@ -55,7 +56,7 @@ export function deliver(
     runId?: string;
     buttons?: Workspace["deliveries"][number]["buttons"];
     id?: string;
-    format?: "markdown";
+    format?: "markdown" | "rich";
   } = {},
 ) {
   const id = options.id ?? randomUUID();
@@ -86,6 +87,10 @@ export function createRun(
   options: {
     replyTo?: number;
     workflowId?: string;
+    botId?: string;
+    continueFrom?: number;
+    groupRecap?: boolean;
+    followup?: Run["followup"];
     now?: Date;
     id?: string;
   } = {},
@@ -124,23 +129,36 @@ export function createRun(
     409,
   );
   const now = options.now ?? new Date();
+  const privateChat = chatId === actor && !options.workflowId;
+  const selected = privateChat
+    ? privateThread(w, actor, options.botId, topicId, options.continueFrom, now)
+    : options.botId && !options.workflowId && !options.groupRecap
+      ? groupThread(
+          w,
+          actor,
+          chatId,
+          topicId,
+          options.botId,
+          options.continueFrom,
+          now,
+        )
+      : undefined;
   const since = now.getTime() - (workflow?.spec.windowDays ?? 7) * 86400000;
   const candidates = w.messages
     .filter(
       (m) =>
+        !selected &&
+        (!m.runId ||
+          !w.runs.find((r) => r.id === m.runId)?.followup ||
+          w.runs.find((r) => r.id === m.runId)?.followup?.decision ===
+            "reply") &&
         m.chatId === chatId &&
         m.topicId === topicId &&
         Date.parse(m.expiresAt) > now.getTime() &&
         Date.parse(m.at) >= since,
     )
     .sort((a, b) => a.at.localeCompare(b.at));
-  let chars = task.length;
-  const sources: Workspace["messages"] = [];
-  for (const message of candidates.toReversed()) {
-    if (chars + message.text.length > w.settings.maxInputChars / 2) break;
-    sources.unshift(structuredClone(message));
-    chars += message.text.length;
-  }
+  const sources = candidates.map((message) => structuredClone(message));
   const instructions = w.instructions
     .filter(
       (i) =>
@@ -156,7 +174,13 @@ export function createRun(
     chatId,
     topicId,
     replyTo: options.replyTo,
-    conversation: `${chatId}:${topicId}:${options.replyTo ?? "root"}`,
+    conversation: selected
+      ? `${privateChat ? "private" : "group"}:${selected.thread.id}`
+      : `${chatId}:${topicId}:${options.replyTo ?? "root"}`,
+    threadId: selected?.thread.id,
+    threadNotice: selected?.notice,
+    replyAnchor: options.continueFrom,
+    followup: options.followup,
     status: "queued",
     task,
     at: now.toISOString(),
@@ -184,6 +208,34 @@ export function createRun(
     );
   }
   w.runs.push(run);
+  if (selected) {
+    const sourceId = options.replyTo
+      ? `${privateChat && options.botId ? `${options.botId}:` : ""}${chatId}:${options.replyTo}`
+      : `request:${run.id}`;
+    let source = w.messages.find(
+      (m) => m.id === sourceId && m.author === actor,
+    );
+    if (!source) {
+      source = {
+        id: sourceId,
+        chatId,
+        topicId,
+        author: actor,
+        text: task,
+        at: now.toISOString(),
+        directed: true,
+        expiresAt: new Date(
+          now.getTime() + w.settings.retentionDays * 86400000,
+        ).toISOString(),
+      };
+      w.messages.push(source);
+    }
+    source.threadId = selected.thread.id;
+    source.runId = run.id;
+    source.role = "user";
+    w.messages = w.messages.slice(-2000);
+    refreshThreadContext(w, run);
+  }
   audit(w, actor, "run.queued", run.id);
   return run;
 }

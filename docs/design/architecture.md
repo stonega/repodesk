@@ -13,8 +13,52 @@ Model delivery intents explicitly select Markdown formatting. The `marked` lexer
 parses model output; a bounded renderer produces plain text with Telegram UTF-16
 message entities, preserving code and literal HTML without using a parse mode.
 This dependency handles Markdown nesting and escapes instead of regex replacements.
-Control messages remain plain text. Formatting does not alter delivery retries or
+Control messages remain plain text except group-link instructions, which render
+the complete `/link TOKEN` command as inline code for copying. Formatting does not alter delivery retries or
 the handling of unknown send outcomes.
+
+Model replies use Bot API **10.3** `sendRichMessage` in private chats, groups and
+scheduled deliveries. A bounded Markdown lexer maps headings, paragraphs, ordered
+and task lists, quotes, fenced code, dividers, tables and safe inline styles into
+explicit `InputRichBlock` structures. Tables use native compact cells/alignment.
+Untrusted HTML, media and button syntax stay literal; only application code creates
+controls. Existing reply length bounds remain. Control/status messages keep their
+existing text transport. A confirmed rich-send rejection falls back to text through
+the same durable intent; ambiguous sends still require reconciliation.
+
+Requests no longer create a separate queued acknowledgement. Private interactive
+runs start with Telegram's native thinking placeholder (`sendMessageDraft` with
+empty text), then emit awaited Pi previews through `sendRichMessageDraft` using
+the same draft ID. The first text is sent without waiting for the placeholder's
+throttle interval. A final durable send persists the answer, as required by Telegram.
+The run claim persists a random nonzero draft ID, bot ID and execution fence before
+any request. Each execution gets a fresh ID. Updates are limited to one per second,
+with a two-second HTTP timeout, cancellation and fenced permission checks before
+sending. Bot credential rotation disables previews for that execution. Source
+validation applies to previews; incomplete or not-yet-valid citations are withheld.
+Only assistant text is exposed, never thinking or tool arguments. No background
+preview tasks can outlive the run or race final delivery. Draft errors are best-effort;
+429 retry delays are honored. Transient/unknown draft failures can retry the latest
+text after one second under the same draft ID, stopping after three consecutive
+failures. This applies only to ephemeral previews; unknown final sends never replay.
+First draft acceptance and failures emit fixed, sanitized runtime events.
+Groups and scheduled runs receive only final replies. Final answers do not append
+raw coverage metadata or run IDs; those remain in persisted run records and the
+admin panel. Relevant context gaps are explained naturally in the model response.
+
+Drafts set `can_stop:true` and `keep_on_stop:false`. Both polling and webhook
+subscriptions request `stopped_message_generation`. The authenticated ingress
+transaction deduplicates the event and resolves the workspace by its persisted
+bot/private-chat/topic/draft binding, independent of the current workspace selection.
+The locked run must match the execution fence and eligible actor; ambiguous matches
+are ignored. Stop uses normal run cancellation, even while deployment/workspace
+execution is paused. It also cancels a completed-but-pending final reply. A late
+click after confirmed/unknown delivery cannot retract or replay it. The worker's
+one-second guard aborts generation, prevents further tool dispatch and final
+publication, and retains unknown provider reservations. In-flight external calls
+cannot be undone. Drafts expire after 30 seconds; partial responses are not saved
+automatically. `/cancel` remains available. The optional run metadata needs no SQL
+migration; pre-upgrade drafts without a persisted binding cannot be matched.
 
 `TELEGRAM_TRANSPORT` defaults to `webhook`. In opt-in `polling` mode the worker uses
 Telegram `getUpdates` and passes validated updates to the same `Ingress` service.
@@ -108,9 +152,41 @@ workers resolve that registry per run and check its revision at every guard. A l
 manifest remains the fallback until the operator saves panel settings. The OpenAI catalog supplies known model metadata; execution
 uses Pi's OpenAI-compatible Chat Completions adapter with operator-configured base
 URL, custom model ID, encrypted key, thinking level and estimated token prices.
-The worker pins endpoint/thinking/prices on first execution and stops an unfinished
+Known model capacity comes from the bundled Pi catalog; custom IDs require operator-supplied
+context/output token limits. Workspace language and byte/token controls have been removed. Before each dispatch,
+serialized input bytes conservatively estimate tokens. Output allowance automatically
+fits model capacity, remaining context and remaining dollar budgets. USD budgets
+are independently configurable; fixed pilot dollar/output ceilings no longer apply.
+The worker pins model capacity/endpoint/thinking/prices on first execution and stops an unfinished
 run if its endpoint changes. The coding-agent dependency supplies the extension loader; no built-in coding,
 shell, browser or arbitrary send tool is enabled.
+
+Private requests use persisted user/workspace/bot threads selected first by native
+Telegram topic ID. Messages in the same topic continue without Reply; different
+topics stay separate. Outside Topics, retained reply anchors select threads and
+standalone messages start new threads. Context is isolated to the selected thread,
+with explicit cross-thread retrieval through `query_chat_history`. Each thread queues
+its requests in order. See [private conversation threads](private-threads.md) for
+identity, retention, upgrade and history-tool contracts.
+
+Within native private Topics and interactive group threads, internal discussion tools maintain source-linked summaries,
+decisions, todos and overlapping relations without user-facing thread controls.
+Record changes are staged until an answer succeeds. A frozen summary plus growing
+chronological history precedes per-turn metadata for prefix-cache reuse. At the
+context threshold, bounded tool-free Pi summary calls share the run's budgets and
+fence, use separate durable checkpoints, and atomically publish a new frozen summary.
+Source hashes/retention invalidate derived memory. Model semantic choices are still
+subject to live evaluation; local tests verify routing, persistence and controls.
+
+Group interactive requests resume a participant's current workspace/bot/group/topic
+thread. A confirmed same-topic bot reply can join a shared thread. Group retrieval
+stays in that group/topic; it never imports private messages or personal instructions.
+Ordinary received text from a recently answered participant can enter a bounded,
+tool-free follow-up classifier. Only an explicit REPLY verdict starts normal answering;
+other verdicts and gate failures stay silent. Classification checkpoints and charges
+are separate from the answer but share its budgets and cancellation. See
+[group conversations](group-conversations.md). Manual recaps and schedules keep their
+existing group coverage.
 
 Every request uses a separate Agent. Run envelopes pin settings, workflow, skill and
 instruction versions and source IDs. Text output citations are checked against that
@@ -119,8 +195,12 @@ cannot prove a claim follows from its citation. Thinking blocks are never persis
 
 Per-call reservations precede dispatch and reconcile completed usage. Provider retries
 are disabled. The worker checks cancellation every second and between tool/model
-steps, with 90-second run deadlines, configured turn/input/output caps and eight tool
-calls maximum. Skills request capabilities from the application registry; extension tools require
+steps, with configurable run deadlines (five minutes by default), model capacity and
+budget limits, and eight tool calls maximum. `RUN_TIMEOUT_SECONDS` accepts 1–1800
+seconds. New queue jobs expire 60 seconds after the configured run deadline; the
+120-second conversation lease is renewed by the one-second guard. Deadline expiry
+is recorded as `failed (run_timeout)`, distinct from user cancellation and worker
+shutdown. Unknown provider usage remains reserved after any interruption. Skills request capabilities from the application registry; extension tools require
 separate explicit operator grants. Extension configurations are pinned on runs and
 extension tool outcomes use durable reservations without automatic unknown replay. Proposals cannot
 activate schedules or persistent instructions.
@@ -168,3 +248,12 @@ covers deployment, backup, key recovery and ambiguous outcomes.
 ### Local source-query service
 
 An optional separately deployed Bun service reuses the DeepX Code Truth MCP/indexing core. The Node bot connects with an internal bearer token. Repository configurations live in each workspace’s plugin registry in PostgreSQL, while immutable source snapshots live in a separate Code Truth volume, partitioned by workspace and configuration digest. The service has no published Compose port and no public OAuth login. The predefined Pi extension captures only the current workspace’s configured targets and uses the same revocation guards and durable tool ledger as other extensions. See [setup, retention and trust boundaries](../implementation/code-truth.md).
+
+### Codex implementation tasks
+
+Optional repository-scoped maintainer grants permit approved issue-to-PR tasks.
+These use separate tenant `codingTasks` records and a worker polling loop, so the
+chat lease/deadline does not span remote implementation. The application reserves
+issue creation and Actions dispatch before sending; uncertain writes never replay.
+GitHub Actions isolates Codex/checks from the separate PR publication job. See
+[Codex workflow architecture and limits](../implementation/codex-coding.md).

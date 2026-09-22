@@ -4,7 +4,9 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
 import { credentialsSchema } from "../agent/model-settings.ts";
 import type { PluginService } from "../agent/plugin-service.ts";
-import { transaction } from "../db/pool.ts";
+import { modelCapabilities } from "../agent/runtime.ts";
+import { codingView, saveCoding } from "../coding/service.ts";
+import { type Sql, transaction } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import {
   requireThat,
@@ -22,6 +24,7 @@ import { equal, hash, passwordHash } from "../setup/credentials.ts";
 import type { SetupService } from "../setup/service.ts";
 import { changeSkill, saveSkill, testSkill } from "../skills/catalog.ts";
 import { importMarkdown } from "../skills/import.ts";
+import { TelegramError } from "../telegram/client.ts";
 import { nextOccurrences } from "../workflows/schedule.ts";
 import {
   decide,
@@ -29,6 +32,8 @@ import {
   proposeWorkflow,
   workflowAction,
 } from "../workflows/service.ts";
+import { decideAccessRequest } from "../workspaces/access-requests.ts";
+import { membersWithProfiles } from "../workspaces/member-profile.ts";
 import {
   audit,
   authorize,
@@ -311,6 +316,36 @@ export function adminRoutes(
       ),
     ),
   );
+  app.get("/api/admin/workspaces/:id/plugins/coding", async (c) =>
+    c.json(
+      codingView(
+        await store.read(validId(c.req.param("id"))),
+        c.get("session").admin,
+      ),
+    ),
+  );
+  app.put("/api/admin/workspaces/:id/plugins/coding", async (c) => {
+    const input = await c.req.json();
+    return c.json(
+      await store.change(validId(c.req.param("id")), (w) =>
+        saveCoding(w, c.get("session").admin, input),
+      ),
+    );
+  });
+  app.post("/api/admin/workspaces/:id/plugins/coding/:task/cancel", async (c) =>
+    c.json(
+      await store.change(validId(c.req.param("id")), (w) => {
+        codingView(w, c.get("session").admin);
+        const task = w.codingTasks?.find(
+          (t) => t.id === validId(c.req.param("task")),
+        );
+        requireThat(task, "not_found", 404);
+        task.cancelRequested = true;
+        audit(w, c.get("session").admin.id, "coding.cancel_requested", task.id);
+        return { ok: true };
+      }),
+    ),
+  );
   app.get("/api/admin/workspaces/:id/plugins/code-truth", async (c) =>
     c.json(
       await plugins.codeTruthView(
@@ -479,12 +514,19 @@ export function adminRoutes(
           },
           policyVersion: w.policy.version,
         });
-      case "settings":
-        return c.json({ version: w.version, settings: w.settings });
+      case "settings": {
+        const deployment = await store.deployment();
+        return c.json({
+          version: w.version,
+          settings: w.settings,
+          model: deployment.model,
+          capabilities: modelCapabilities(deployment.model, deployment) ?? null,
+        });
+      }
       case "access-policy":
         return c.json({
           ...w.policy,
-          members: w.members,
+          members: membersWithProfiles(w),
           affected: {
             runs: w.runs
               .filter((r) => ["queued", "running"].includes(r.status))
@@ -495,7 +537,17 @@ export function adminRoutes(
           },
         });
       case "members":
-        return c.json(take(w.members));
+        return c.json(take(membersWithProfiles(w)));
+      case "access-requests": {
+        const deployment = await store.deployment();
+        return c.json({
+          version: w.policy.version,
+          items: (w.accessRequests ?? []).filter((r) => r.status === "pending"),
+          requestUrl: deployment.bot
+            ? `https://t.me/${deployment.bot.username}?start=access_${w.id}`
+            : null,
+        });
+      }
       case "chats":
         return c.json(take(w.chats));
       case "workflows":
@@ -581,10 +633,10 @@ export function adminRoutes(
       req: { param: (key: string) => string };
       get: (key: "session") => Session;
     },
-    fn: (w: Workspace, actor: string) => T,
+    fn: (w: Workspace, actor: string, sql: Sql) => T,
   ) =>
-    store.change(validId(c.req.param("id")), (w) =>
-      fn(w, authorize(w, c.get("session").admin.telegramId, true)),
+    store.change(validId(c.req.param("id")), (w, sql) =>
+      fn(w, authorize(w, c.get("session").admin.telegramId, true), sql),
     );
   app.put("/api/admin/workspaces/:id/settings", async (c) => {
     const input = z
@@ -642,6 +694,33 @@ export function adminRoutes(
       }),
     );
   });
+  app.post(
+    "/api/admin/workspaces/:id/access-requests/:request/decision",
+    async (c) => {
+      const input = z
+        .object({ decision: z.enum(["approved", "rejected"]), version })
+        .strict()
+        .parse(await c.req.json());
+      const id = validId(c.req.param("request"));
+      return c.json(
+        await change(c, async (w, actor, sql) => {
+          const request = decideAccessRequest(
+            w,
+            actor,
+            id,
+            input.decision,
+            input.version,
+          );
+          if (request.status === "approved")
+            await sql.query(
+              "INSERT INTO telegram_selections(actor,workspace_id) VALUES($1,$2) ON CONFLICT(actor) DO NOTHING",
+              [request.actor, w.id],
+            );
+          return request;
+        }),
+      );
+    },
+  );
   app.post("/api/admin/workspaces/:id/members", async (c) => {
     const input = z
       .object({
@@ -1000,13 +1079,24 @@ export function adminRoutes(
   app.post("/api/admin/workspaces/:id/chats/:chat/visibility", async (c) => {
     const w = await store.read(validId(c.req.param("id")));
     authorize(w, c.get("session").admin.telegramId, true);
-    const me = await (await setup.client()).call<{
+    const linkedChat = w.chats.find((chat) => chat.id === c.req.param("chat"));
+    requireThat(linkedChat, "not_found", 404);
+    const client = await setup.client();
+    const me = await client.call<{
       can_read_all_group_messages?: boolean;
     }>("getMe");
+    const details = await client
+      .call<{ title?: string }>("getChat", { chat_id: linkedChat.id })
+      .catch((error: unknown) => {
+        // Inactive groups may be inaccessible; keep their last known name.
+        if (!(error instanceof TelegramError)) throw error;
+        return undefined;
+      });
     return c.json(
       await change(c, (w, actor) => {
         const chat = w.chats.find((chat) => chat.id === c.req.param("chat"));
         requireThat(chat, "not_found", 404);
+        if (details?.title?.trim()) chat.title = details.title.trim();
         chat.visibleAll = !!me.can_read_all_group_messages;
         if (!chat.visibleAll) chat.collection = false;
         audit(w, actor, "chat.visibility_checked", chat.id);

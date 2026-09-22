@@ -7,6 +7,7 @@ x-runtime: &runtime
     PORT: "3000"
     DATABASE_URL: postgres://deepx:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/deepx
     TELEGRAM_TRANSPORT: ${TELEGRAM_TRANSPORT:-webhook}
+    RUN_TIMEOUT_SECONDS: ${RUN_TIMEOUT_SECONDS:-300}
     PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:3000}
     ENCRYPTION_KEY_FILE: /run/secrets/encryption_key
   secrets:

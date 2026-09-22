@@ -4,10 +4,13 @@ const user = z.object({
   id: z.number().int().positive().safe(),
   is_bot: z.boolean(),
   username: z.string().optional(),
+  first_name: z.string().max(256).optional(),
+  last_name: z.string().max(256).optional(),
 });
 const chat = z.object({
   id: z.number().int().safe(),
   type: z.enum(["private", "group", "supergroup", "channel"]),
+  title: z.string().max(256).optional(),
 });
 const message = z.object({
   message_id: z.number().int().positive(),
@@ -16,6 +19,7 @@ const message = z.object({
   from: user.optional(),
   sender_chat: chat.optional(),
   text: z.string().max(20000).optional(),
+  new_chat_title: z.string().max(256).optional(),
   message_thread_id: z.number().int().optional(),
   entities: z
     .array(
@@ -52,6 +56,17 @@ export const updateSchema = z.object({
     .optional(),
   my_chat_member: membership.optional(),
   chat_member: membership.optional(),
+  stopped_message_generation: z
+    .object({
+      chat,
+      message_thread_id: z.number().int().positive().safe().optional(),
+      draft_id: z
+        .number()
+        .int()
+        .safe()
+        .refine((value) => value !== 0),
+    })
+    .optional(),
 });
 export type Update = z.infer<typeof updateSchema>;
 export type Message = z.infer<typeof message>;
@@ -82,4 +97,22 @@ export function command(
     String(message.reply_to_message?.from?.id) === bot.id
   )
     return { name: "ask", args: text };
+  if (!["group", "supergroup"].includes(message.chat.type)) return;
+  const mention = message.entities?.find(
+    (e) =>
+      e.type === "mention" &&
+      e.offset >= 0 &&
+      e.length === bot.username.length + 1 &&
+      text.slice(e.offset, e.offset + e.length).toLowerCase() ===
+        `@${bot.username.toLowerCase()}`,
+  );
+  if (mention)
+    return {
+      name: "ask",
+      args:
+        (
+          text.slice(0, mention.offset) +
+          text.slice(mention.offset + mention.length)
+        ).trim() || text,
+    };
 }

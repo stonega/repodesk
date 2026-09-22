@@ -146,13 +146,15 @@ export function RuntimeLogs({
             />
             Auto-refresh every 5 seconds
           </label>
-          <IconButton
-            icon="refresh"
-            label="Refresh logs"
-            type="button"
-            busy={loading}
-            onClick={() => setRevision((value) => value + 1)}
-          />
+          {(!auto || error) && (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => setRevision((value) => value + 1)}
+            >
+              Refresh logs
+            </button>
+          )}
           <IconButton
             icon="latest"
             label="Latest logs"

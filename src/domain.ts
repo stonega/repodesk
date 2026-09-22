@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ModelOptions } from "./agent/model-settings.ts";
 import type { PluginSettings } from "./agent/plugin-config.ts";
+import type { CodingConfig, CodingTask } from "./coding/config.ts";
 import type { GitHubConnection } from "./github/config.ts";
 
 export class Fault extends Error {
@@ -31,21 +32,30 @@ export const timezone = z
       return false;
     }
   }, "Use an IANA timezone");
-export const settingsSchema = z
-  .object({
-    name: z.string().trim().min(1).max(80),
-    timezone,
-    language: z.string().min(2).max(20).default("en"),
-    retentionDays: z.number().int().min(1).max(90).default(30),
-    monthlyBudgetUsd: z.number().min(0).max(1000).default(10),
-    runBudgetUsd: z.number().min(0.001).max(5).default(0.1),
-    maxInputChars: z.number().int().min(1000).max(32000).default(16000),
-    maxOutputTokens: z.number().int().min(128).max(2048).default(1024),
-    maxTurns: z.number().int().min(1).max(5).default(3),
-    missedRunMinutes: z.literal(5).default(5),
-    paused: z.boolean().default(false),
-  })
-  .strict();
+export const settingsSchema = z.preprocess(
+  (value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      return value;
+    // Older clients may still send these removed controls. Discard them on save.
+    const settings = { ...value } as Record<string, unknown>;
+    delete settings.language;
+    delete settings.maxInputChars;
+    delete settings.maxOutputTokens;
+    return settings;
+  },
+  z
+    .object({
+      name: z.string().trim().min(1).max(80),
+      timezone,
+      retentionDays: z.number().int().min(1).max(90).default(30),
+      monthlyBudgetUsd: z.number().finite().min(0).default(10),
+      runBudgetUsd: z.number().finite().min(0).default(0.1),
+      maxTurns: z.number().int().min(1).max(20).default(3),
+      missedRunMinutes: z.literal(5).default(5),
+      paused: z.boolean().default(false),
+    })
+    .strict(),
+);
 export type Settings = z.infer<typeof settingsSchema>;
 export const recurrenceSchema = z
   .object({
@@ -79,6 +89,8 @@ export const workflowSchema = z
   .strict();
 export type WorkflowSpec = z.infer<typeof workflowSchema>;
 export const TOOLS = [
+  "query_model_cost",
+  "query_chat_history",
   "read_chat_context",
   "read_instructions",
   "propose_workflow",
@@ -91,7 +103,7 @@ export const skillSchema = z
     name: z.string().min(1).max(80),
     description: z.string().min(1).max(300),
     body: z.string().min(1).max(12000),
-    tools: z.array(z.enum(TOOLS)).max(5),
+    tools: z.array(z.enum(TOOLS)).max(TOOLS.length),
     settings: z
       .object({
         sections: z
@@ -105,13 +117,29 @@ export const skillSchema = z
   })
   .strict();
 export type SkillSpec = z.infer<typeof skillSchema>;
+export interface AccessRequest {
+  id: string;
+  actor: string;
+  username?: string;
+  name?: string;
+  chatId: string;
+  topicId?: number;
+  requestedAt: string;
+  status: "pending" | "approved" | "rejected";
+  decidedAt?: string;
+  decidedBy?: string;
+}
 export interface Member {
   id: string;
+  username?: string;
+  name?: string;
+  profileUpdatedAt?: string;
   role: "owner" | "admin" | "member";
   active: boolean;
 }
 export interface Chat {
   id: string;
+  title?: string;
   active: boolean;
   collection: boolean;
   consentBy?: string;
@@ -119,7 +147,43 @@ export interface Chat {
   linkedAt: string;
   visibleAll: boolean;
 }
+export interface ConversationThread {
+  kind?: "group";
+  participants?: string[];
+  id: string;
+  actor: string;
+  chatId: string;
+  botId?: string;
+  topicId?: number;
+  at: string;
+  summary?: ConversationSummary;
+  discussions?: Discussion[];
+  activeDiscussionId?: string;
+}
+export interface MemoryReferences {
+  sourceIds: string[];
+  sourceHash: string;
+}
+export interface ConversationSummary extends MemoryReferences {
+  text: string;
+  version: number;
+  throughRunId: string;
+}
+export interface Discussion extends MemoryReferences {
+  id: string;
+  title: string;
+  summary: string;
+  decisions: string[];
+  todos: string[];
+  relatedIds: string[];
+  messageIds: string[];
+  updatedAt: string;
+}
 export interface Source {
+  threadId?: string;
+  runId?: string;
+  role?: "user" | "assistant";
+  retentionOriginAt?: string;
   id: string;
   chatId: string;
   topicId: number;
@@ -164,13 +228,25 @@ export interface Approval {
   runId?: string;
   id: string;
   actor: string;
-  kind: "workflow" | "instruction" | "deletion";
+  kind:
+    | "workflow"
+    | "instruction"
+    | "deletion"
+    | "github_issue"
+    | "coding_task";
   target: string;
   version: number;
   hash: string;
   payload: unknown;
   expiresAt: string;
   decision?: "approved" | "rejected" | "revoked";
+  issue?: {
+    state: "sending" | "created" | "failed" | "unknown";
+    startedAt: string;
+    url?: string;
+    number?: number;
+    error?: string;
+  };
 }
 export interface Run {
   id: string;
@@ -179,6 +255,26 @@ export interface Run {
   topicId: number;
   replyTo?: number;
   conversation: string;
+  threadId?: string;
+  threadNotice?: string;
+  replyAnchor?: number;
+  followupClosed?: boolean;
+  followup?: {
+    anchorRunId: string;
+    expiresAt: string;
+    decision?: "reply" | "ignore";
+    transcript: unknown[];
+    references?: MemoryReferences;
+  };
+  contextSummary?: ConversationSummary;
+  discussionUpdates?: Discussion[];
+  compaction?: {
+    state: "started" | "done";
+    transcript: unknown[];
+    summary: ConversationSummary;
+    maxBytes: number;
+    outputTokens: number;
+  };
   status:
     | "queued"
     | "running"
@@ -203,17 +299,30 @@ export interface Run {
   coverage: string;
   cancelled: boolean;
   fence: number;
+  telegramDraft?: { id: number; botId: string; fence: number };
   leaseUntil?: string;
   transcript: unknown[];
   transcriptVersion: 1;
   tools: Record<
     string,
-    { name: string; state: "started" | "done"; result?: unknown }
+    {
+      name: string;
+      state: "started" | "done";
+      result?: unknown;
+      arguments?: Record<string, unknown>;
+    }
   >;
   attempts: {
     id: string;
     reserved: number;
     actual?: number;
+    purpose?: "compaction" | "followup";
+    tokens?: {
+      input: number;
+      output: number;
+      cacheRead: number;
+      cacheWrite: number;
+    };
     reconciliation?: { actor: string; reference: string; at: string };
     status: "reserved" | "settled" | "unknown";
     at: string;
@@ -229,7 +338,7 @@ export interface Delivery {
   replyTo?: number;
   runId?: string;
   text: string;
-  format?: "markdown";
+  format?: "markdown" | "rich";
   buttons?: { text: string; callback_data: string }[][];
   state:
     | "pending"
@@ -253,6 +362,8 @@ export interface Audit {
   version?: number;
 }
 export interface Workspace {
+  coding?: CodingConfig;
+  codingTasks?: CodingTask[];
   github?: GitHubConnection;
   plugins?: PluginSettings;
   id: string;
@@ -261,8 +372,10 @@ export interface Workspace {
   settings: Settings;
   policy: { mode: "whitelist" | "members"; version: number; allowed: string[] };
   members: Member[];
+  accessRequests?: AccessRequest[];
   chats: Chat[];
   messages: Source[];
+  threads?: ConversationThread[];
   instructions: Instruction[];
   skills: Skill[];
   workflows: Workflow[];

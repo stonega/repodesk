@@ -66,6 +66,53 @@ function input(patch: Partial<AgentInput> = {}): AgentInput {
     ...patch,
   };
 }
+test("Pi previews cumulative text before completion, never thinking or tool arguments", async () => {
+  const previews: string[] = [];
+  const order: string[] = [];
+  const partial = message([
+    { type: "thinking", thinking: "private reasoning" },
+    { type: "text", text: "Hello" },
+  ]);
+  const runner = new PiRunner(() => {
+    const s = new AssistantMessageEventStream();
+    s.push({ type: "start", partial });
+    s.push({
+      type: "thinking_delta",
+      contentIndex: 0,
+      delta: "private reasoning",
+      partial,
+    });
+    s.push({ type: "text_delta", contentIndex: 1, delta: "Hello", partial });
+    const next = message([
+      ...partial.content.slice(0, 1),
+      { type: "text", text: "Hello world" },
+    ]);
+    s.push({
+      type: "text_delta",
+      contentIndex: 1,
+      delta: " world",
+      partial: next,
+    });
+    const final = message([{ type: "text", text: "Hello world" }]);
+    s.push({ type: "done", reason: "stop", message: final });
+    s.end(final);
+    return s;
+  });
+  const result = await runner.run(
+    input({
+      preview: async (text) => {
+        previews.push(text);
+        order.push("preview");
+      },
+      checkpoint: async (m) => {
+        if (m.role === "assistant") order.push("checkpoint");
+      },
+    }),
+  );
+  expect(previews).toEqual(["Hello", "Hello world"]);
+  expect(order).toEqual(["preview", "preview", "checkpoint"]);
+  expect(result.text).toBe("Hello world");
+});
 test("Pi fake stream validates and executes tools sequentially, checkpoints ordered events", async () => {
   const events: string[] = [];
   const transcript: AgentMessage[] = [];
@@ -295,6 +342,7 @@ test("compatible endpoint receives the custom model, key and exact thinking leve
         modelBaseUrl: `http://127.0.0.1:${server.port}/custom/v1`,
         thinkingLevel,
         modelPricing: { input: 1, output: 3 },
+        modelLimits: { contextWindow: 128000, maxOutputTokens: 16000 },
       });
       const result = await new PiRunner().run(
         input({ model, thinkingLevel, apiKey: "local-test-key" }),
@@ -322,6 +370,7 @@ test("unknown model pricing must be explicit and known model metadata stays isol
   );
   const custom = selectedModel("team/custom", {
     modelPricing: { input: 0, output: 0 },
+    modelLimits: { contextWindow: 128000, maxOutputTokens: 16000 },
   });
   expect(custom.cost.input).toBe(0);
   const first = selectedModel("gpt-4.1-mini", {
@@ -332,4 +381,159 @@ test("unknown model pricing must be explicit and known model metadata stays isol
   expect(first.baseUrl).not.toBe(second.baseUrl);
   expect(second.reasoning).toBe(false);
   expect(second.cost.input).toBeGreaterThan(0);
+});
+
+test("model capacity and explicit input limits reject before reservation or dispatch", async () => {
+  let reservations = 0;
+  let calls = 0;
+  const runner = new PiRunner(() => {
+    calls++;
+    return stream(message([{ type: "text", text: "Done" }]));
+  });
+  const model = {
+    ...selectedModel("gpt-4.1-mini"),
+    contextWindow: 5000,
+    maxTokens: 3000,
+  };
+  const base = input({
+    model,
+    maxInputChars: 0,
+    maxOutputTokens: 1000,
+    reserve: async () => {
+      reservations++;
+      return "id";
+    },
+  });
+  await expect(runner.run({ ...base, maxOutputTokens: 3001 })).rejects.toThrow(
+    "model_output_limit_exceeded",
+  );
+  await expect(
+    runner.run({ ...base, prompt: "字".repeat(1500) }),
+  ).rejects.toThrow("model_context_limit_exceeded");
+  await expect(runner.run({ ...base, maxInputChars: 10 })).rejects.toThrow(
+    "input_budget_exceeded",
+  );
+  expect(reservations).toBe(0);
+  expect(calls).toBe(0);
+  expect((await runner.run({ ...base, maxOutputTokens: 2500 })).status).toBe(
+    "succeeded",
+  );
+  expect(calls).toBe(1);
+});
+
+test("automatic input capacity permits a tool result that exceeded the old 16K cap", async () => {
+  let calls = 0;
+  const runner = new PiRunner(() =>
+    stream(
+      ++calls === 1
+        ? message(
+            [{ type: "toolCall", id: "large", name: "read", arguments: {} }],
+            "toolUse",
+          )
+        : message([{ type: "text", text: "Done" }]),
+    ),
+  );
+  const result = await runner.run(
+    input({
+      maxInputChars: 0,
+      tools: [
+        {
+          name: "read",
+          label: "Read",
+          description: "Read",
+          parameters: Type.Object({}),
+          execute: async () => ({
+            content: [{ type: "text", text: "source".repeat(4000) }],
+            details: {},
+          }),
+        },
+      ],
+    }),
+  );
+  expect(result.status).toBe("succeeded");
+  expect(calls).toBe(2);
+});
+
+test("automatic output fits remaining dollars and preserves the model response", async () => {
+  let outputLimit = 0;
+  let reserved = 0;
+  const runner = new PiRunner((_model, _context, options) => {
+    outputLimit = options?.maxTokens ?? 0;
+    return stream(message([{ type: "text", text: "这是模型原样回复。" }]));
+  });
+  const model = {
+    ...selectedModel("gpt-4.1-mini"),
+    cost: { input: 0, output: 1, cacheRead: 0, cacheWrite: 0 },
+  };
+  const result = await runner.run(
+    input({
+      model,
+      maxInputChars: undefined,
+      maxOutputTokens: undefined,
+      remainingBudget: async () => ({ run: 0.0003, workspace: 10 }),
+      reserve: async (amount) => {
+        reserved = amount;
+        return "id";
+      },
+    }),
+  );
+  expect(result.text).toBe("这是模型原样回复。");
+  expect(outputLimit).toBeGreaterThan(250);
+  expect(outputLimit).toBeLessThanOrEqual(300);
+  expect(reserved).toBeLessThanOrEqual(0.0003);
+});
+
+test("automatic output shrinks to remaining context and supports zero-cost models", async () => {
+  let sent = 0;
+  const model = {
+    ...selectedModel("gpt-4.1-mini"),
+    contextWindow: 5000,
+    maxTokens: 3000,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  };
+  const runner = new PiRunner((_model, context, options) => {
+    sent++;
+    const output = options?.maxTokens ?? 0;
+    expect(output).toBeGreaterThan(0);
+    expect(output).toBeLessThan(3000);
+    expect(Buffer.byteLength(JSON.stringify(context)) + output).toBe(5000);
+    return stream(message([{ type: "text", text: "Done" }]));
+  });
+  await runner.run(
+    input({
+      model,
+      prompt: "a".repeat(3500),
+      maxInputChars: undefined,
+      maxOutputTokens: undefined,
+      remainingBudget: async () => ({ run: 0, workspace: 0 }),
+      reserve: async (amount) => {
+        expect(amount).toBe(0);
+        return "id";
+      },
+    }),
+  );
+  expect(sent).toBe(1);
+});
+
+test("automatic output rejects an unaffordable input before reserving or dispatching", async () => {
+  let sent = 0;
+  let reserved = 0;
+  const runner = new PiRunner(() => {
+    sent++;
+    return stream(message([]));
+  });
+  await expect(
+    runner.run(
+      input({
+        maxOutputTokens: undefined,
+        remainingBudget: async () => ({ run: 1, workspace: 0 }),
+        reserve: async () => {
+          reserved++;
+          return "id";
+        },
+      }),
+    ),
+  ).rejects.toThrow("workspace_budget_exhausted");
+  expect(sent).toBe(0);
+  expect(reserved).toBe(0);
 });

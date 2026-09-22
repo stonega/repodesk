@@ -9,6 +9,7 @@ import {
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
+  Navigate,
   NavLink,
   Route,
   Routes,
@@ -16,6 +17,9 @@ import {
   useSearchParams,
 } from "react-router";
 import {
+  type ModelCapabilities,
+  type ModelLimits,
+  modelLimitsSchema,
   type ThinkingLevel,
   thinkingLevels,
 } from "../src/agent/model-settings.ts";
@@ -33,13 +37,39 @@ import type {
   SkillSpec,
   Workflow,
 } from "../src/domain.ts";
+import { settingsSchema } from "../src/domain.ts";
+import { AccessRequests } from "./access-requests.tsx";
+import { DataDetails, DataTable } from "./data-details.tsx";
+import {
+  accountFields,
+  chargeFields,
+  deliveryFields,
+  instructionFields,
+  runFields,
+  setupFields,
+  skillFields,
+  workflowFields,
+  workspaceOptions,
+} from "./form-fields.ts";
 import { type ActionIcon, IconButton } from "./icon-button.tsx";
 import { RuntimeLogs } from "./logs.tsx";
-import { CreateModal, Modal, ModalPending } from "./modal.tsx";
+import { CreateModal, Modal, ModalActions, ModalPending } from "./modal.tsx";
 import { Plugins } from "./plugins.tsx";
+import { prefixFields, RecordForm } from "./record-form.tsx";
+import { workspaceFields } from "./settings-fields.ts";
+import { Usage } from "./usage.tsx";
 import "./style.css";
 
 let csrf = "";
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public issues: { path: string; message: string }[] = [],
+  ) {
+    super(message);
+  }
+}
+
 async function api<T>(
   path: string,
   method = "GET",
@@ -55,7 +85,7 @@ async function api<T>(
   });
   const data = await response.json();
   if (!response.ok)
-    throw new Error(
+    throw new ApiError(
       response.status === 409 && data.error === "version_conflict"
         ? `${data.error}. Reload the current version and review your changes before saving again.`
         : response.status === 401
@@ -66,7 +96,17 @@ async function api<T>(
               ? "Verify a workspace owner and enable a published skill before activating."
               : data.error === "https_origin_required"
                 ? "Webhook mode requires a public HTTPS address. For local use, set TELEGRAM_TRANSPORT=polling and restart the app and worker."
-                : (data.error ?? "Request failed"),
+                : data.issues?.length
+                  ? data.issues
+                      .map(
+                        (issue: { path: string; message: string }) =>
+                          `${issue.path}: ${issue.message}`,
+                      )
+                      .join(" ")
+                  : data.error === "model_limits_required"
+                    ? "Enter the custom model's context window and maximum output tokens."
+                    : (data.error ?? "Request failed"),
+      data.issues ?? [],
     );
   return data;
 }
@@ -82,10 +122,15 @@ function useData<T>(path: string) {
   const [data, setData] = useState<T>();
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
-  const reload = useCallback(() => setRevision((n) => n + 1), []);
+  const [loading, setLoading] = useState(true);
+  const reload = useCallback(() => {
+    setLoading(true);
+    setRevision((n) => n + 1);
+  }, []);
   useEffect(() => {
     void revision; // Reload explicitly invalidates the fetched resource.
     let live = true;
+    setLoading(true);
     setError("");
     api<T>(resourcePath)
       .then((value) => {
@@ -93,17 +138,25 @@ function useData<T>(path: string) {
       })
       .catch((e) => {
         if (live) setError(e.message);
+      })
+      .finally(() => {
+        if (live) setLoading(false);
       });
     return () => {
       live = false;
     };
   }, [resourcePath, revision]);
-  return { data, error, reload };
+  return { data, error, reload, loading };
 }
 function Pager({ data }: { data: unknown }) {
   const [params, setParams] = useSearchParams();
   const total = (data as { total?: number } | undefined)?.total ?? 0;
   const offset = Number(params.get("offset")) || 0;
+  const goTo = (offset: number) => {
+    const next = new URLSearchParams(params);
+    next.set("offset", String(offset));
+    setParams(next);
+  };
   if (total <= 100 && offset === 0) return null;
   return (
     <div className="row">
@@ -112,7 +165,7 @@ function Pager({ data }: { data: unknown }) {
         label="Previous page"
         type="button"
         disabled={offset === 0}
-        onClick={() => setParams({ offset: String(Math.max(0, offset - 100)) })}
+        onClick={() => goTo(Math.max(0, offset - 100))}
       />
       <span>
         {offset + 1}–{Math.min(offset + 100, total)} of {total}
@@ -122,7 +175,7 @@ function Pager({ data }: { data: unknown }) {
         label="Next page"
         type="button"
         disabled={offset + 100 >= total}
-        onClick={() => setParams({ offset: String(offset + 100) })}
+        onClick={() => goTo(offset + 100)}
       />
     </div>
   );
@@ -144,22 +197,32 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 function Action({
+  resetKey,
   children,
   icon,
   onClick,
   danger = false,
   disabled = false,
+  loading = false,
+  onConflict,
 }: {
+  resetKey?: unknown;
   children: string;
   icon?: ActionIcon;
   onClick: () => Promise<unknown>;
   danger?: boolean;
   disabled?: boolean;
+  loading?: boolean;
+  onConflict?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const setModalPending = useContext(ModalPending);
+  useEffect(() => {
+    if (resetKey !== undefined) setError("");
+  }, [resetKey]);
   const perform = async () => {
+    if (busy || loading) return;
     setBusy(true);
     setModalPending?.(true);
     setError("");
@@ -180,64 +243,50 @@ function Action({
           label={children}
           className={danger ? "danger" : ""}
           disabled={disabled}
-          busy={busy}
+          busy={busy || loading}
           onClick={perform}
         />
       ) : (
         <button
           type="button"
           className={danger ? "danger" : ""}
-          disabled={busy || disabled}
-          aria-busy={busy}
+          disabled={busy || loading || disabled}
+          aria-busy={busy || loading}
           onClick={perform}
         >
-          {busy ? "Working…" : children}
+          {busy || loading ? "Working…" : children}
         </button>
       )}
       {icon && (
         <span className="sr-only" aria-live="polite">
-          {busy ? `${children}: Working…` : ""}
+          {busy || loading ? `${children}: Working…` : ""}
         </span>
       )}
       {error && <Notice>{error}</Notice>}
+      {error.includes("version_conflict") && onConflict && (
+        <button
+          type="button"
+          disabled={busy || loading}
+          onClick={() => {
+            onConflict();
+            setError("");
+          }}
+        >
+          Reload current version
+        </button>
+      )}
     </span>
-  );
-}
-function Json({ value }: { value: unknown }) {
-  return <pre>{JSON.stringify(value, null, 2)}</pre>;
-}
-function JsonForm({
-  value,
-  save,
-  label = "Save changes",
-}: {
-  value: unknown;
-  save: (value: unknown) => Promise<unknown>;
-  label?: string;
-}) {
-  const [text, setText] = useState(JSON.stringify(value, null, 2));
-  useEffect(() => setText(JSON.stringify(value, null, 2)), [value]);
-  return (
-    <div className="editor">
-      <Field label="Configuration (JSON)">
-        <textarea
-          rows={14}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          spellCheck={false}
-        />
-      </Field>
-      <Action onClick={() => save(JSON.parse(text))}>{label}</Action>
-    </div>
   );
 }
 function Page({
   title,
+  titleBadge,
   description,
   actions,
   children,
 }: {
   title: string;
+  titleBadge?: string;
   description?: string;
   actions?: ReactNode;
   children: ReactNode;
@@ -247,7 +296,10 @@ function Page({
       <div className="page-heading">
         <p className="eyebrow">DEEPX / TEAM OPERATIONS</p>
         <div className="page-title-row">
-          <h1>{title}</h1>
+          <div className="page-title">
+            <h1>{title}</h1>
+            {titleBadge && <span className="pill">{titleBadge}</span>}
+          </div>
           {actions && <div className="page-actions">{actions}</div>}
         </div>
         {description && <p className="muted">{description}</p>}
@@ -347,6 +399,8 @@ interface Progress {
   modelBaseUrl: string;
   thinkingLevel: ThinkingLevel;
   modelPricing?: { input: number; output: number };
+  modelLimits?: ModelLimits | null;
+  modelCapabilities?: ModelCapabilities;
   webhookReady: boolean;
   telegramTransport: "webhook" | "polling";
   receiver: { ready: boolean; error?: string };
@@ -362,14 +416,15 @@ interface Progress {
   }[];
 }
 function Setup() {
-  const { data, error, reload } = useData<Progress>("/api/setup/progress");
+  const { data, error, reload, loading } = useData<Progress>(
+    "/api/setup/progress",
+  );
   const [identity, setIdentity] = useState<{ url: string; command: string }>();
   const [selected, setSelected] = useState("");
   useEffect(() => {
-    if (data?.telegramTransport !== "polling") return;
     const timer = setInterval(reload, 5000);
     return () => clearInterval(timer);
-  }, [data?.telegramTransport, reload]);
+  }, [reload]);
   if (!data) return <Notice>{error || "Loading setup…"}</Notice>;
   const workspace =
     data.workspaces.find((w) => w.id === selected) ??
@@ -378,6 +433,8 @@ function Setup() {
     !workspace && "Save a workspace.",
     !data.credentials.bot && "Save a Telegram bot token.",
     !data.credentials.model && "Save a model API key.",
+    !data.modelCapabilities &&
+      "Configure the model context window and maximum output.",
     !data.receiver.ready &&
       (data.telegramTransport === "polling"
         ? "Wait for the polling worker to connect."
@@ -435,7 +492,8 @@ function Setup() {
               {workspace.settings.retentionDays} day retention
             </p>
             {!workspace.ownerVerified && (
-              <JsonForm
+              <RecordForm
+                fields={setupFields}
                 value={{
                   version: workspace.version,
                   settings: workspace.settings,
@@ -470,26 +528,28 @@ function Setup() {
                     }
                   />
                 </Field>
-                <Action
-                  onClick={async () => {
-                    await api("/api/setup/workspaces", "POST", {
-                      name: (
-                        document.getElementById(
-                          "workspace-name",
-                        ) as HTMLInputElement
-                      ).value,
-                      timezone: (
-                        document.getElementById(
-                          "workspace-timezone",
-                        ) as HTMLInputElement
-                      ).value,
-                    });
-                    close();
-                    reload();
-                  }}
-                >
-                  Save workspace
-                </Action>
+                <ModalActions>
+                  <Action
+                    onClick={async () => {
+                      await api("/api/setup/workspaces", "POST", {
+                        name: (
+                          document.getElementById(
+                            "workspace-name",
+                          ) as HTMLInputElement
+                        ).value,
+                        timezone: (
+                          document.getElementById(
+                            "workspace-timezone",
+                          ) as HTMLInputElement
+                        ).value,
+                      });
+                      close();
+                      reload();
+                    }}
+                  >
+                    Save workspace
+                  </Action>
+                </ModalActions>
               </form>
             )}
           </CreateModal>
@@ -637,14 +697,16 @@ function Setup() {
           >
             Activate bot
           </Action>
-          <Action
-            icon="refresh"
-            onClick={async () => {
-              reload();
-            }}
-          >
-            Refresh saved progress
-          </Action>
+          {error && (
+            <Action
+              loading={loading}
+              onClick={async () => {
+                reload();
+              }}
+            >
+              Try again
+            </Action>
+          )}
         </div>
         {data.active && <Notice>Active. Open the bot and send /start.</Notice>}
       </section>
@@ -715,6 +777,13 @@ function ModelCredentialForm({
   const [outputPrice, setOutputPrice] = useState(
     p.modelPricing?.output.toString() ?? "",
   );
+  const [contextWindow, setContextWindow] = useState(
+    p.modelLimits?.contextWindow.toString() ?? "",
+  );
+  const [modelOutput, setModelOutput] = useState(
+    p.modelLimits?.maxOutputTokens.toString() ?? "",
+  );
+  const [limitErrors, setLimitErrors] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
   return (
     <>
@@ -767,6 +836,51 @@ function ModelCredentialForm({
             ))}
           </select>
         </Field>
+        <Field label="Model context window (tokens)">
+          <input
+            type="number"
+            min="1"
+            step="1"
+            aria-label="Model context window (tokens)"
+            value={contextWindow}
+            onChange={(e) => {
+              setContextWindow(e.target.value);
+              setLimitErrors({});
+            }}
+            aria-invalid={!!limitErrors.contextWindow}
+            aria-describedby="model-context-help"
+            placeholder="Catalog value for known models"
+          />
+          <small id="model-context-help">
+            Input and output combined. Required for custom models.
+          </small>
+          {limitErrors.contextWindow && (
+            <small role="alert">{limitErrors.contextWindow}</small>
+          )}
+        </Field>
+        <Field label="Model maximum output (tokens)">
+          <input
+            type="number"
+            min="1"
+            step="1"
+            aria-label="Model maximum output (tokens)"
+            value={modelOutput}
+            onChange={(e) => {
+              setModelOutput(e.target.value);
+              setLimitErrors({});
+            }}
+            aria-invalid={!!limitErrors.maxOutputTokens}
+            aria-describedby="model-output-help"
+            placeholder="Catalog value for known models"
+          />
+          <small id="model-output-help">
+            Use your provider's documented limit, including reasoning where
+            applicable.
+          </small>
+          {limitErrors.maxOutputTokens && (
+            <small role="alert">{limitErrors.maxOutputTokens}</small>
+          )}
+        </Field>
         <Field label="Input price (USD / million tokens)">
           <input
             type="number"
@@ -795,8 +909,41 @@ function ModelCredentialForm({
         estimates; use 0 for a free local model. Saved price overrides remain
         until you replace them.
       </p>
+      <p className="muted">
+        Saved model limits:{" "}
+        {p.modelCapabilities
+          ? `${p.modelCapabilities.limits.contextWindow.toLocaleString()} context tokens · ${p.modelCapabilities.limits.maxOutputTokens.toLocaleString()} maximum output · ${p.modelCapabilities.source === "catalog" ? "bundled Pi catalog" : "operator supplied"}`
+          : "Unknown — configure before running the assistant"}
+        . Clear both model limit fields to use catalog values. Review these
+        limits when changing models or endpoints.
+      </p>
       <Action
         onClick={async () => {
+          if (!!contextWindow !== !!modelOutput)
+            throw new Error(
+              "Enter both model limits, or clear both to use the catalog.",
+            );
+          const limits =
+            contextWindow && modelOutput
+              ? {
+                  contextWindow: Number(contextWindow),
+                  maxOutputTokens: Number(modelOutput),
+                }
+              : null;
+          if (limits) {
+            const parsed = modelLimitsSchema.safeParse(limits);
+            if (!parsed.success) {
+              setLimitErrors(
+                Object.fromEntries(
+                  parsed.error.issues.map((issue) => [
+                    String(issue.path[0]),
+                    issue.message,
+                  ]),
+                ),
+              );
+              throw new Error("Check the model limit fields.");
+            }
+          }
           if (!!inputPrice !== !!outputPrice)
             throw new Error("Enter both token prices.");
           await api("/api/admin/operator/credentials", "PUT", {
@@ -805,6 +952,13 @@ function ModelCredentialForm({
             model,
             modelBaseUrl: baseUrl,
             thinkingLevel: thinking,
+            modelLimits:
+              contextWindow && modelOutput
+                ? {
+                    contextWindow: Number(contextWindow),
+                    maxOutputTokens: Number(modelOutput),
+                  }
+                : null,
             modelPricing:
               inputPrice !== "" && outputPrice !== ""
                 ? { input: Number(inputPrice), output: Number(outputPrice) }
@@ -824,8 +978,8 @@ function ModelCredentialForm({
   );
 }
 function WorkspacePage({ id, resource }: { id: string; resource: string }) {
+  if (resource === "usage") return <Usage id={id} request={api} />;
   if (resource === "settings") return <SettingsPage id={id} />;
-  if (resource === "access-policy") return <AccessPage id={id} />;
   if (resource === "skills") return <SkillsPage id={id} />;
   if (resource === "workflows") return <WorkflowsPage id={id} />;
   if (resource === "instructions") return <InstructionsPage id={id} />;
@@ -836,32 +990,26 @@ function WorkspacePage({ id, resource }: { id: string; resource: string }) {
   return <ReadPage id={id} resource={resource} />;
 }
 function ReadPage({ id, resource }: { id: string; resource: string }) {
-  const { data, error, reload } = useData<{
+  const { data, error, reload, loading } = useData<{
     settings?: Settings;
     version?: number;
     counts?: { members: number; runs: number; workflows: number };
     items?: Audit[];
-    totalUsd?: number;
-    budget?: number;
   }>(`/api/admin/workspaces/${id}/${resource}`);
   return (
     <Page
-      title={
-        resource === "overview"
-          ? "Your team, in view"
-          : resource === "usage"
-            ? "Usage & budget"
-            : "Audit history"
-      }
+      title={resource === "overview" ? "Your team, in view" : "Audit history"}
       description={
         resource === "overview"
           ? "A shared assistant with explicit permissions and a traceable history."
           : undefined
       }
       actions={
-        <Action icon="refresh" onClick={async () => reload()}>
-          Refresh
-        </Action>
+        error && (
+          <Action loading={loading} onClick={async () => reload()}>
+            Try again
+          </Action>
+        )
       }
     >
       {error && <Notice>{error}</Notice>}
@@ -886,15 +1034,6 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
             </p>
           </section>
         </>
-      ) : resource === "usage" ? (
-        <section className="card">
-          <h2>${data?.totalUsd?.toFixed(4) ?? "0"}</h2>
-          <p>
-            Recorded spend including unresolved reservations. Monthly limit: $
-            {data?.budget}.
-          </p>
-          <Json value={data} />
-        </section>
       ) : (
         <section className="card">
           <table>
@@ -923,83 +1062,178 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
   );
 }
 function SettingsPage({ id }: { id: string }) {
-  const { data, error, reload } = useData<{
+  const { data, error, reload, loading } = useData<{
     version: number;
     settings: Settings;
+    model: string;
+    capabilities: ModelCapabilities | null;
   }>(`/api/admin/workspaces/${id}/settings`);
   const [settings, setSettings] = useState<Settings>();
-  useEffect(() => setSettings(data?.settings), [data]);
+  const [issues, setIssues] = useState<Record<string, string>>({});
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    setSettings(data?.settings);
+    setIssues({});
+  }, [data]);
+  const update = (key: keyof Settings, value: string | number | boolean) => {
+    setSettings((previous) =>
+      previous ? { ...previous, [key]: value } : previous,
+    );
+    setIssues((previous) => ({ ...previous, [key]: "" }));
+    setSaved(false);
+  };
   return (
     <Page
       title="Workspace settings"
+      titleBadge={data ? `Version ${data.version}` : undefined}
       description="Changes apply to future runs. Pause and tighter budgets apply immediately."
+      actions={
+        error && (
+          <Action loading={loading} onClick={async () => reload()}>
+            Try again
+          </Action>
+        )
+      }
     >
       {error && <Notice>{error}</Notice>}
       {settings && data && (
         <section className="card">
+          <h2>Model capacity</h2>
+          <p>
+            {data.model} ·{" "}
+            {data.capabilities
+              ? `${data.capabilities.limits.contextWindow.toLocaleString()} context tokens · ${data.capabilities.limits.maxOutputTokens.toLocaleString()} maximum output tokens`
+              : "Limits not configured"}
+          </p>
+          <p className="muted">
+            {data.capabilities?.source === "catalog"
+              ? "Source: bundled Pi model catalog."
+              : data.capabilities
+                ? "Source: deployment operator."
+                : "Ask the deployment operator to configure model limits in Setup & credentials."}{" "}
+            Response language follows the model. Input and output capacity are
+            managed automatically within model limits and your dollar budgets.
+          </p>
           <div className="columns">
-            {Object.entries(settings).map(([key, value]) => (
-              <Field key={key} label={key}>
-                {typeof value === "boolean" ? (
-                  <input
-                    type="checkbox"
-                    checked={value}
-                    onChange={(e) =>
-                      setSettings({ ...settings, [key]: e.target.checked })
-                    }
-                  />
-                ) : (
-                  <input
-                    type={typeof value === "number" ? "number" : "text"}
-                    step="any"
-                    value={value}
-                    onChange={(e) =>
-                      setSettings({
-                        ...settings,
-                        [key]:
+            {workspaceFields.map(({ key, label, help, min, max, step }) => {
+              const value = settings[key];
+              const fieldId = `settings-${key}`;
+              return (
+                <Field key={key} label={label}>
+                  {typeof value === "boolean" ? (
+                    <input
+                      id={fieldId}
+                      aria-label={label}
+                      type="checkbox"
+                      checked={value}
+                      onChange={(e) => update(key, e.target.checked)}
+                    />
+                  ) : (
+                    <input
+                      id={fieldId}
+                      aria-label={label}
+                      type={typeof value === "number" ? "number" : "text"}
+                      min={min}
+                      max={max}
+                      step={step}
+                      value={Number.isNaN(value) ? "" : value}
+                      aria-invalid={!!issues[key]}
+                      aria-describedby={`${fieldId}-help${issues[key] ? ` ${fieldId}-error` : ""}`}
+                      onChange={(e) =>
+                        update(
+                          key,
                           typeof value === "number"
-                            ? Number(e.target.value)
+                            ? e.target.value === ""
+                              ? Number.NaN
+                              : Number(e.target.value)
                             : e.target.value,
-                      })
-                    }
-                  />
-                )}
-              </Field>
-            ))}
+                        )
+                      }
+                    />
+                  )}
+                  <small id={`${fieldId}-help`}>{help}</small>
+                  {issues[key] && (
+                    <small id={`${fieldId}-error`} role="alert">
+                      {issues[key]}
+                    </small>
+                  )}
+                </Field>
+              );
+            })}
           </div>
-          <p>Effective version: {data.version}</p>
           <div className="row">
             <Action
+              resetKey={settings}
+              onConflict={reload}
+              loading={loading}
               onClick={async () => {
-                await api(`/api/admin/workspaces/${id}/settings`, "PUT", {
-                  version: data.version,
-                  settings,
-                });
-                reload();
+                const parsed = settingsSchema.safeParse(settings);
+                const localIssues = parsed.success ? [] : parsed.error.issues;
+                if (localIssues.length) {
+                  setIssues(
+                    Object.fromEntries(
+                      localIssues.map((issue) => [
+                        String(issue.path[0]),
+                        issue.message,
+                      ]),
+                    ),
+                  );
+                  throw new Error("Check the highlighted fields.");
+                }
+                try {
+                  await api(`/api/admin/workspaces/${id}/settings`, "PUT", {
+                    version: data.version,
+                    settings,
+                  });
+                  setSaved(true);
+                  reload();
+                } catch (error) {
+                  if (error instanceof ApiError)
+                    setIssues(
+                      Object.fromEntries(
+                        error.issues.map((issue) => [
+                          issue.path.replace(/^settings\./, ""),
+                          issue.message,
+                        ]),
+                      ),
+                    );
+                  throw error;
+                }
               }}
             >
               Save settings
             </Action>
-            <Action icon="refresh" onClick={async () => reload()}>
-              Reload current version
-            </Action>
           </div>
+          {saved && (
+            <Notice>
+              Workspace settings saved. Submit a new run to use them.
+            </Notice>
+          )}
         </section>
       )}
     </Page>
   );
 }
-function AccessPage({ id }: { id: string }) {
-  const { data, error, reload } = useData<{
-    version: number;
-    mode: "whitelist" | "members";
-    allowed: string[];
-    members: Member[];
-  }>(`/api/admin/workspaces/${id}/access-policy`);
+interface AccessPolicyData {
+  version: number;
+  mode: "whitelist" | "members";
+  allowed: string[];
+  members: Member[];
+}
+function AccessPolicy({
+  id,
+  data,
+  reload,
+  loading,
+}: {
+  id: string;
+  data: AccessPolicyData;
+  reload: () => void;
+  loading: boolean;
+}) {
   const [text, setText] = useState("");
   const [mode, setMode] = useState("whitelist");
   const [preview, setPreview] = useState<unknown>();
-  const [search, setSearch] = useState("");
   useEffect(() => {
     if (data) {
       setText(data.allowed.join("\n"));
@@ -1013,24 +1247,32 @@ function AccessPage({ id }: { id: string }) {
     allowed: [...new Set(text.split(/[\s,]+/).filter(Boolean))],
   });
   return (
-    <Page
-      title="Allowed users"
-      description="Eligibility is separate from membership and role. An empty whitelist denies workspace access."
-    >
-      {error && <Notice>{error}</Notice>}
-      <section className="card">
-        <Field label="Access mode">
-          <select
-            value={mode}
-            onChange={(e) => {
-              setMode(e.target.value);
-              setPreview(undefined);
-            }}
-          >
-            <option value="whitelist">Whitelist only</option>
-            <option value="members">Active workspace members</option>
-          </select>
-        </Field>
+    <section className="card" aria-label="Access policy">
+      <div className="row">
+        <h2>Access policy</h2>
+        <span className="pill">Version {data.version}</span>
+      </div>
+      <p>
+        Active members can use the bot when they meet the selected access mode.
+        Roles determine which actions they can perform.
+      </p>
+      <Field label="Access mode">
+        <select
+          value={mode}
+          onChange={(e) => {
+            setMode(e.target.value);
+            setPreview(undefined);
+          }}
+        >
+          <option value="whitelist">Whitelist only</option>
+          <option value="members">Active workspace members</option>
+        </select>
+      </Field>
+      <details>
+        <summary>Manage whitelist IDs ({data.allowed.length})</summary>
+        <p>
+          Use numeric Telegram IDs. Adding an ID here does not enroll a member.
+        </p>
         <Field label="Telegram user IDs (one per line or comma separated)">
           <textarea
             rows={8}
@@ -1041,72 +1283,75 @@ function AccessPage({ id }: { id: string }) {
             }}
           />
         </Field>
-        <p>
-          {mode === "members"
-            ? "Editing the saved list does not revoke access in members mode."
-            : "Removing eligibility cancels pending work and suspends owned schedules."}{" "}
-          Last-admin management access is protected.
-        </p>
-        <div className="row">
+      </details>
+      <p>
+        {mode === "members"
+          ? "Editing the saved list does not revoke access in members mode."
+          : "Removing eligibility cancels pending work and suspends owned schedules."}{" "}
+        Last-admin management access is protected.
+      </p>
+      <div className="row">
+        <Action
+          onConflict={reload}
+          loading={loading}
+          onClick={async () =>
+            setPreview(
+              await api(
+                `/api/admin/workspaces/${id}/access-policy/preview`,
+                "POST",
+                input(),
+              ),
+            )
+          }
+        >
+          Preview affected work
+        </Action>
+        {preview !== undefined && (
           <Action
-            onClick={async () =>
-              setPreview(
-                await api(
-                  `/api/admin/workspaces/${id}/access-policy/preview`,
-                  "POST",
-                  input(),
-                ),
-              )
-            }
+            onConflict={reload}
+            loading={loading}
+            onClick={async () => {
+              await api(
+                `/api/admin/workspaces/${id}/access-policy`,
+                "PUT",
+                input(),
+              );
+              reload();
+            }}
           >
-            Preview affected work
+            Apply reviewed policy
           </Action>
-          {preview !== undefined && (
-            <Action
-              onClick={async () => {
-                await api(
-                  `/api/admin/workspaces/${id}/access-policy`,
-                  "PUT",
-                  input(),
-                );
-                reload();
-              }}
-            >
-              Apply reviewed policy
-            </Action>
-          )}
-          <Action icon="refresh" onClick={async () => reload()}>
-            Reload current version
-          </Action>
-        </div>
-        {preview !== undefined && <Json value={preview} />}
-        <p>Policy version {data?.version}</p>
-      </section>
-      <section className="card">
-        <Field label="Search allowed IDs">
-          <input value={search} onChange={(e) => setSearch(e.target.value)} />
-        </Field>
-        <ul>
-          {data?.allowed
-            .filter((s) => s.includes(search))
-            .map((s) => (
-              <li key={s}>
-                {s} ·{" "}
-                {data.members.find((m) => m.id === s)?.role ?? "not enrolled"}
-              </li>
-            ))}
-        </ul>
-      </section>
-    </Page>
+        )}
+      </div>
+      {preview !== undefined && <DataDetails value={preview} />}
+    </section>
   );
 }
 function MembersPage({ id }: { id: string }) {
-  const { data, error, reload } = useData<{ items: Member[] }>(
-    `/api/admin/workspaces/${id}/members`,
-  );
-  const policy = useData<{ version: number }>(
+  const { data, error, reload, loading } = useData<AccessPolicyData>(
     `/api/admin/workspaces/${id}/access-policy`,
   );
+  const [search, setSearch] = useState("");
+  const [params, setParams] = useSearchParams();
+  const offset = Math.max(0, Number(params.get("offset")) || 0);
+  const rows = data
+    ? [
+        ...data.members,
+        ...data.allowed
+          .filter((id) => !data.members.some((m) => m.id === id))
+          .map((id) => ({
+            id,
+            role: undefined,
+            active: false,
+            name: undefined,
+            username: undefined,
+          })),
+      ].filter((m) =>
+        `${m.id} ${m.username ?? ""} ${m.name ?? ""}`
+          .toLowerCase()
+          .includes(search.trim().replace(/^@/, "").toLowerCase()),
+      )
+    : [];
   const [member, setMember] = useState({
     id: "",
     role: "member",
@@ -1117,43 +1362,137 @@ function MembersPage({ id }: { id: string }) {
   const [editingMember, setEditingMember] = useState(false);
   return (
     <Page
-      title="Members"
-      description="Enrollment and whitelist access are explicit. Typed IDs grant membership, not proof of identity for browser sessions."
+      title="Members & access"
+      description="Manage members, roles, access requests and the workspace access policy in one place."
       actions={
-        <IconButton
-          icon="add"
-          label="Add member"
-          onClick={() => {
-            setMember({ id: "", role: "member", active: true, allow: true });
-            setEditingMember(false);
-            setOpen(true);
-          }}
-        />
+        <>
+          {error && (
+            <Action loading={loading} onClick={async () => reload()}>
+              Try again
+            </Action>
+          )}
+          <IconButton
+            icon="add"
+            label="Add member"
+            disabled={!data || loading}
+            onClick={() => {
+              setMember({ id: "", role: "member", active: true, allow: true });
+              setEditingMember(false);
+              setOpen(true);
+            }}
+          />
+        </>
       }
     >
       {error && <Notice>{error}</Notice>}
-      <Pager data={data} />
-      <section className="card">
-        <ul>
-          {data?.items.map((m) => (
-            <li key={m.id}>
-              {m.id} · {m.role} · {m.active ? "active" : "removed"}{" "}
-              {m.role !== "owner" && (
-                <IconButton
-                  icon="edit"
-                  label={`Edit member ${m.id}`}
-                  type="button"
-                  onClick={() => {
-                    setMember({ ...m, allow: false });
-                    setEditingMember(true);
-                    setOpen(true);
-                  }}
-                />
-              )}
-            </li>
-          ))}
-        </ul>
+      <section className="card" aria-label="Workspace members">
+        <h2>Members</h2>
+        <Field label="Search members by name, username or ID">
+          <input
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              const next = new URLSearchParams(params);
+              next.set("offset", "0");
+              setParams(next);
+            }}
+          />
+        </Field>
+        <p className="muted">
+          Telegram names update when people interact with the bot. Users without
+          a username or known profile are identified by their Telegram ID.
+        </p>
+        <Pager data={{ total: rows.length }} />
+        <section
+          className="data-table-scroll"
+          aria-label="Member access table"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users must be able to scroll the wide member table.
+          tabIndex={0}
+        >
+          <table className="member-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Membership</th>
+                <th>Whitelist</th>
+                <th>Access</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.slice(offset, offset + 100).map((m) => {
+                const allowed = data?.allowed.includes(m.id);
+                const access = !m.role
+                  ? "Not enrolled"
+                  : !m.active
+                    ? "Inactive"
+                    : data?.mode === "whitelist" && !allowed
+                      ? "Whitelist required"
+                      : "Allowed";
+                return (
+                  <tr key={m.id}>
+                    <td>
+                      <strong>
+                        {m.name ||
+                          (m.username ? `@${m.username}` : "Telegram user")}
+                      </strong>
+                      {m.username && m.name && <div>@{m.username}</div>}
+                      <div className="muted">ID: {m.id}</div>
+                    </td>
+                    <td>{m.role ?? "—"}</td>
+                    <td>
+                      {!m.role
+                        ? "Not enrolled"
+                        : m.active
+                          ? "Active"
+                          : "Removed"}
+                    </td>
+                    <td>{allowed ? "Listed" : "Not listed"}</td>
+                    <td>
+                      <span
+                        className={`pill ${access === "Allowed" ? "good" : ""}`}
+                      >
+                        {access}
+                      </span>
+                    </td>
+                    <td>
+                      {m.role !== "owner" && (
+                        <IconButton
+                          icon={m.role ? "edit" : "add"}
+                          label={`${m.role ? "Edit" : "Enroll"} member ${m.id}`}
+                          disabled={loading}
+                          onClick={() => {
+                            setMember({
+                              id: m.id,
+                              role: m.role ?? "member",
+                              active: m.role ? m.active : true,
+                              allow: false,
+                            });
+                            setEditingMember(!!m.role);
+                            setOpen(true);
+                          }}
+                        />
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
+        {data && rows.length === 0 && <p>No members match your search.</p>}
       </section>
+      <AccessRequests
+        key={id}
+        id={id}
+        request={api}
+        onChange={reload}
+        refreshKey={data}
+      />
+      {data && (
+        <AccessPolicy id={id} data={data} reload={reload} loading={loading} />
+      )}
       {open && (
         <Modal
           title={editingMember ? "Edit member" : "Add member"}
@@ -1162,11 +1501,13 @@ function MembersPage({ id }: { id: string }) {
           <Field label="Telegram user ID">
             <input
               value={member.id}
+              readOnly={editingMember}
               onChange={(e) => setMember({ ...member, id: e.target.value })}
             />
           </Field>
           <Field label="Role">
             <select
+              aria-label="Role"
               value={member.role}
               onChange={(e) => setMember({ ...member, role: e.target.value })}
             >
@@ -1183,6 +1524,10 @@ function MembersPage({ id }: { id: string }) {
               }
             />
           </Field>
+          <p className="muted">
+            Usernames are received from Telegram; a numeric user ID is required
+            for membership.
+          </p>
           <Field label="Also allow in whitelist">
             <input
               type="checkbox"
@@ -1192,26 +1537,30 @@ function MembersPage({ id }: { id: string }) {
               }
             />
           </Field>
-          <Action
-            onClick={async () => {
-              await api(`/api/admin/workspaces/${id}/members`, "POST", {
-                ...member,
-                version: policy.data?.version,
-              });
-              reload();
-              policy.reload();
-              setOpen(false);
-            }}
-          >
-            Save membership
-          </Action>
+          <ModalActions>
+            <Action
+              onClick={async () => {
+                await api(`/api/admin/workspaces/${id}/members`, "POST", {
+                  id: member.id,
+                  role: member.role,
+                  active: member.active,
+                  allow: member.allow,
+                  version: data?.version,
+                });
+                reload();
+                setOpen(false);
+              }}
+            >
+              Save membership
+            </Action>
+          </ModalActions>
         </Modal>
       )}
     </Page>
   );
 }
 function ChatsPage({ id }: { id: string }) {
-  const { data, error, reload } = useData<{ items: Chat[] }>(
+  const { data, error, reload, loading } = useData<{ items: Chat[] }>(
     `/api/admin/workspaces/${id}/chats`,
   );
   return (
@@ -1223,7 +1572,8 @@ function ChatsPage({ id }: { id: string }) {
       <Pager data={data} />
       {data?.items.map((chat) => (
         <section className="card" key={chat.id}>
-          <h2>{chat.id}</h2>
+          <h2>{chat.title || chat.id}</h2>
+          {chat.title && <p className="muted">Group ID: {chat.id}</p>}
           <p>
             {chat.active ? "Linked" : "Inactive"} ·{" "}
             {chat.visibleAll
@@ -1238,7 +1588,7 @@ function ChatsPage({ id }: { id: string }) {
           </p>
           <div className="row">
             <Action
-              icon="refresh"
+              loading={loading}
               onClick={async () => {
                 await api(
                   `/api/admin/workspaces/${id}/chats/${chat.id}/visibility`,
@@ -1279,20 +1629,27 @@ function ChatsPage({ id }: { id: string }) {
 function ApprovalList({
   id,
   reloadParent,
+  refreshKey,
 }: {
   id: string;
   reloadParent?: () => void;
+  refreshKey?: unknown;
 }) {
-  const { data, error, reload } = useData<{ items: Approval[] }>(
+  const { data, error, reload, loading } = useData<{ items: Approval[] }>(
     `/api/admin/workspaces/${id}/approvals`,
   );
+  useEffect(() => {
+    if (refreshKey !== undefined) reload();
+  }, [refreshKey, reload]);
   return (
     <section className="card">
       <h2>Awaiting your approval</h2>
       {error && <Notice>{error}</Notice>}
-      <Action icon="refresh" onClick={async () => reload()}>
-        Refresh proposals
-      </Action>
+      {error && (
+        <Action loading={loading} onClick={async () => reload()}>
+          Try again
+        </Action>
+      )}
       {data?.items.length === 0 && <p>No pending proposals.</p>}
       {data?.items.map((a) => (
         <article key={a.id}>
@@ -1300,7 +1657,7 @@ function ApprovalList({
             {a.kind} · v{a.version}
           </h3>
           <p>Expires {new Date(a.expiresAt).toLocaleString()}</p>
-          <Json value={a.payload} />
+          <DataDetails value={a.payload} />
           <div className="row">
             {[true, false].map((approve) => (
               <Action
@@ -1326,7 +1683,7 @@ function ApprovalList({
   );
 }
 function WorkflowsPage({ id }: { id: string }) {
-  const { data, error, reload } = useData<{
+  const { data, error, reload, loading } = useData<{
     items: (Workflow & { next: string[] })[];
   }>(`/api/admin/workspaces/${id}/workflows`);
   const skills = useData<{ items: Skill[] }>(
@@ -1367,9 +1724,11 @@ function WorkflowsPage({ id }: { id: string }) {
             label="Add workflow"
             onClick={() => setCreating(true)}
           />
-          <Action icon="refresh" onClick={async () => reload()}>
-            Refresh workflows
-          </Action>
+          {error && (
+            <Action loading={loading} onClick={async () => reload()}>
+              Try again
+            </Action>
+          )}
         </>
       }
     >
@@ -1435,7 +1794,11 @@ function WorkflowsPage({ id }: { id: string }) {
             delivery. Editing requires a new approval. Unsupported recurrence
             needs clarification.
           </p>
-          <JsonForm
+          <RecordForm
+            fields={prefixFields(
+              editing ? "spec." : "",
+              workflowFields(skills.data?.items ?? []),
+            )}
             value={
               editing
                 ? { version: editing.version, spec: editing.spec }
@@ -1457,10 +1820,10 @@ function WorkflowsPage({ id }: { id: string }) {
       )}
       {proposal !== undefined && (
         <section className="card" aria-label="Created workflow proposal">
-          <Json value={proposal} />
+          <DataDetails value={proposal} />
         </section>
       )}
-      <ApprovalList id={id} reloadParent={reload} />
+      <ApprovalList id={id} reloadParent={reload} refreshKey={data} />
     </Page>
   );
 }
@@ -1480,7 +1843,9 @@ function SkillsPage({ id }: { id: string }) {
   );
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState("");
-  const [pin, setPin] = useState(1);
+  const [rollbackVersions, setRollbackVersions] = useState<
+    Record<string, number>
+  >({});
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const spec: SkillSpec = {
@@ -1536,19 +1901,60 @@ function SkillsPage({ id }: { id: string }) {
             (filter === "all" || (filter === "enabled") === s.enabled),
         )
         .map((s) => (
-          <section className="card" key={s.id}>
-            <div className="row">
-              <h2>{s.draft.name}</h2>
-              <span className="pill">{s.enabled ? "Enabled" : "Disabled"}</span>
+          <section className="card skill-card" key={s.id}>
+            <div className="skill-card-header">
+              <div className="skill-card-title">
+                <h2>{s.draft.name}</h2>
+                <span className="pill">
+                  {s.enabled ? "Enabled" : "Disabled"}
+                </span>
+              </div>
+              <div className="skill-card-controls">
+                <IconButton
+                  icon="edit"
+                  label="Edit draft"
+                  type="button"
+                  onClick={() => setEditing(s)}
+                />
+                {([s.enabled ? "disable" : "enable", "archive"] as const).map(
+                  (action) => (
+                    <Action
+                      icon={
+                        action === "archive"
+                          ? "archive"
+                          : action === "disable"
+                            ? "pause"
+                            : "play"
+                      }
+                      key={action}
+                      danger={action === "archive"}
+                      onClick={async () => {
+                        await api(
+                          `/api/admin/workspaces/${id}/skills/${s.id}/action`,
+                          "POST",
+                          { version: s.version, action },
+                        );
+                        reload();
+                      }}
+                    >
+                      {action}
+                    </Action>
+                  ),
+                )}
+              </div>
             </div>
-            <p>
-              {s.draft.description} · Revision {s.version} ·{" "}
-              {s.published.length} published versions
-            </p>
-            <details>
+            <p className="skill-card-description">{s.draft.description}</p>
+            <div className="skill-card-meta">
+              <span>Revision {s.version}</span>
+              <span>
+                {s.published.length} published{" "}
+                {s.published.length === 1 ? "version" : "versions"}
+              </span>
+            </div>
+            <details className="skill-card-preview">
               <summary>Preview instructions & dependent schedules</summary>
               <p className="prose">{s.draft.body}</p>
-              <Json
+              <DataDetails
                 value={{
                   settings: s.draft.settings,
                   tools: s.draft.tools,
@@ -1556,81 +1962,84 @@ function SkillsPage({ id }: { id: string }) {
                 }}
               />
             </details>
-            <div className="row">
-              <IconButton
-                icon="edit"
-                label="Edit draft"
-                type="button"
-                onClick={() => setEditing(s)}
-              />
-              {(
-                [
-                  "publish",
-                  s.enabled ? "disable" : "enable",
-                  "archive",
-                ] as const
-              ).map((action) => (
+            <div className="skill-card-footer">
+              <div className="skill-card-actions">
                 <Action
-                  icon={
-                    action === "publish"
-                      ? undefined
-                      : action === "archive"
-                        ? "archive"
-                        : action === "disable"
-                          ? "pause"
-                          : "play"
-                  }
-                  key={action}
-                  danger={action === "archive"}
                   onClick={async () => {
                     await api(
                       `/api/admin/workspaces/${id}/skills/${s.id}/action`,
                       "POST",
-                      { version: s.version, action },
+                      { version: s.version, action: "publish" },
                     );
                     reload();
                   }}
                 >
-                  {action}
+                  Publish draft
                 </Action>
-              ))}
-              <Action
-                onClick={async () => {
-                  setResult(
-                    await api(
-                      `/api/admin/workspaces/${id}/skills/${s.id}/test`,
-                      "POST",
-                      { sample },
-                    ),
-                  );
-                  reload();
-                }}
-              >
-                Test draft policy
-              </Action>
-            </div>
-            <div className="row">
-              <Field label="Rollback source version">
-                <input
-                  type="number"
-                  min={1}
-                  max={s.published.length}
-                  value={pin}
-                  onChange={(e) => setPin(Number(e.target.value))}
-                />
-              </Field>
-              <Action
-                onClick={async () => {
-                  await api(
-                    `/api/admin/workspaces/${id}/skills/${s.id}/action`,
-                    "POST",
-                    { version: s.version, action: "rollback", pin },
-                  );
-                  reload();
-                }}
-              >
-                Publish rollback as new version
-              </Action>
+                <span className="skill-card-secondary">
+                  <Action
+                    onClick={async () => {
+                      setResult(
+                        await api(
+                          `/api/admin/workspaces/${id}/skills/${s.id}/test`,
+                          "POST",
+                          { sample },
+                        ),
+                      );
+                      reload();
+                    }}
+                  >
+                    Test draft policy
+                  </Action>
+                </span>
+              </div>
+              {s.published.length > 0 && (
+                <details className="skill-card-versions">
+                  <summary>Restore a published version</summary>
+                  <p className="muted">
+                    Copies the selected version into the draft and publishes it
+                    as a new version.
+                  </p>
+                  <div className="skill-card-rollback">
+                    <Field label="Rollback source version">
+                      <select
+                        value={rollbackVersions[s.id] ?? 1}
+                        onChange={(e) =>
+                          setRollbackVersions((versions) => ({
+                            ...versions,
+                            [s.id]: Number(e.target.value),
+                          }))
+                        }
+                      >
+                        {s.published.map((_, index) => (
+                          // biome-ignore lint/suspicious/noArrayIndexKey: Published versions are immutable and append-only; their position is their version number.
+                          <option key={index + 1} value={index + 1}>
+                            Version {index + 1}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <span className="skill-card-secondary">
+                      <Action
+                        onClick={async () => {
+                          await api(
+                            `/api/admin/workspaces/${id}/skills/${s.id}/action`,
+                            "POST",
+                            {
+                              version: s.version,
+                              action: "rollback",
+                              pin: rollbackVersions[s.id] ?? 1,
+                            },
+                          );
+                          reload();
+                        }}
+                      >
+                        Publish rollback as new version
+                      </Action>
+                    </span>
+                  </div>
+                </details>
+              )}
             </div>
           </section>
         ))}
@@ -1639,7 +2048,8 @@ function SkillsPage({ id }: { id: string }) {
           title={editing ? `Edit ${editing.draft.name}` : "Create skill"}
           onClose={closeEditor}
         >
-          <JsonForm
+          <RecordForm
+            fields={prefixFields(editing ? "spec." : "", skillFields)}
             value={
               editing ? { version: editing.version, spec: editing.draft } : spec
             }
@@ -1668,7 +2078,7 @@ function SkillsPage({ id }: { id: string }) {
           Tests validate policy and show model-visible content. They make no
           paid model request and publish no message.
         </p>
-        {result !== undefined && <Json value={result} />}
+        {result !== undefined && <DataDetails value={result} />}
       </section>
       {importing && (
         <Modal
@@ -1700,18 +2110,20 @@ function SkillsPage({ id }: { id: string }) {
               onChange={(e) => setImported(e.target.value)}
             />
           </Field>
-          <Action
-            onClick={async () => {
-              await api(`/api/admin/workspaces/${id}/skills/import`, "POST", {
-                markdown: imported,
-              });
-              setImported("");
-              setImporting(false);
-              reload();
-            }}
-          >
-            Import draft
-          </Action>
+          <ModalActions>
+            <Action
+              onClick={async () => {
+                await api(`/api/admin/workspaces/${id}/skills/import`, "POST", {
+                  markdown: imported,
+                });
+                setImported("");
+                setImporting(false);
+                reload();
+              }}
+            >
+              Import draft
+            </Action>
+          </ModalActions>
         </Modal>
       )}
     </Page>
@@ -1779,7 +2191,8 @@ function InstructionsPage({ id }: { id: string }) {
           title={editing ? "Review correction" : "Propose an instruction"}
           onClose={closeEditor}
         >
-          <JsonForm
+          <RecordForm
+            fields={instructionFields}
             value={
               editing
                 ? {
@@ -1803,12 +2216,12 @@ function InstructionsPage({ id }: { id: string }) {
           />
         </Modal>
       )}
-      <ApprovalList id={id} reloadParent={reload} />
+      <ApprovalList id={id} reloadParent={reload} refreshKey={data} />
     </Page>
   );
 }
 function RunsPage({ id }: { id: string }) {
-  const { data, error, reload } = useData<{
+  const { data, error, reload, loading } = useData<{
     items: (Run & { deliveries: Delivery[] })[];
   }>(`/api/admin/workspaces/${id}/runs`);
   return (
@@ -1820,7 +2233,8 @@ function RunsPage({ id }: { id: string }) {
           <CreateModal label="Request a run">
             {(close) => (
               <>
-                <JsonForm
+                <RecordForm
+                  fields={runFields}
                   value={{
                     task: "Create a source-grounded team recap.",
                     chatId: "",
@@ -1840,9 +2254,11 @@ function RunsPage({ id }: { id: string }) {
               </>
             )}
           </CreateModal>
-          <Action icon="refresh" onClick={async () => reload()}>
-            Refresh runs
-          </Action>
+          {error && (
+            <Action loading={loading} onClick={async () => reload()}>
+              Try again
+            </Action>
+          )}
         </>
       }
     >
@@ -1865,7 +2281,7 @@ function RunsPage({ id }: { id: string }) {
           <p className="muted">{r.coverage}</p>
           <details>
             <summary>Versions, usage, checkpoints & delivery</summary>
-            <Json
+            <DataDetails
               value={{
                 skillPins: r.skillPins,
                 instructions: r.instructions.map((i) => ({
@@ -1933,7 +2349,8 @@ function RunRecovery({
               Inspect the provider billing record first. This releases the
               reservation using the actual charge you enter.
             </p>
-            <JsonForm
+            <RecordForm
+              fields={chargeFields}
               value={{ attemptId: a.id, actualUsd: a.reserved, reference: "" }}
               label="Record verified charge"
               save={async (value) => {
@@ -1956,7 +2373,8 @@ function RunRecovery({
               Inspect Telegram first. Confirm the remote message ID, or abandon
               this delivery. Neither action resends it.
             </p>
-            <JsonForm
+            <RecordForm
+              fields={deliveryFields}
               value={{ action: "confirm_sent", remoteId: 0 }}
               label="Resolve observed outcome"
               save={async (value) => {
@@ -1986,9 +2404,10 @@ function RunRecovery({
   );
 }
 function PrivacyPage({ id }: { id: string }) {
-  const { data, error, reload } = useData<unknown>(
-    `/api/admin/workspaces/${id}/deletion`,
-  );
+  const { data, error, reload } = useData<
+    | { status: "not_requested"; retentionDays: number }
+    | { requestedAt: string; purgedAt?: string; providerState: string }
+  >(`/api/admin/workspaces/${id}/deletion`);
   const [confirm, setConfirm] = useState("");
   return (
     <Page
@@ -1997,7 +2416,32 @@ function PrivacyPage({ id }: { id: string }) {
     >
       {error && <Notice>{error}</Notice>}
       <section className="card">
-        <Json value={data} />
+        {data ? (
+          <>
+            <p>
+              <strong>Workspace removal: </strong>
+              {"status" in data
+                ? "No deletion requested."
+                : data.purgedAt
+                  ? "Stored content removed."
+                  : "Deletion in progress."}
+            </p>
+            {"retentionDays" in data ? (
+              <p>
+                <strong>Message retention: </strong>
+                {data.retentionDays} {data.retentionDays === 1 ? "day" : "days"}
+                .
+              </p>
+            ) : (
+              <p>
+                <strong>{data.purgedAt ? "Removed: " : "Requested: "}</strong>
+                {new Date(data.purgedAt ?? data.requestedAt).toLocaleString()}
+              </p>
+            )}
+          </>
+        ) : !error ? (
+          <p role="status">Loading privacy settings…</p>
+        ) : null}
         <p>
           No provider-hosted sessions are created. API providers may retain
           request data according to your account policy; this application cannot
@@ -2018,19 +2462,19 @@ function PrivacyPage({ id }: { id: string }) {
           </Action>
         )}
       </section>
-      <ApprovalList id={id} reloadParent={reload} />
+      <ApprovalList id={id} reloadParent={reload} refreshKey={data} />
     </Page>
   );
 }
 function Operations() {
-  const { data, error, reload } = useData<{
+  const { data, error, reload, loading } = useData<{
     workers: number;
     failed_runs: number;
     unknown_deliveries: number;
     pending: number;
     oldest_seconds: number;
     paused: boolean;
-    audit: unknown[];
+    audit: Record<string, unknown>[];
   }>("/api/admin/operator/health");
   const progress = useData<Progress>("/api/setup/progress");
   const [accountResult, setAccountResult] = useState<unknown>();
@@ -2064,15 +2508,17 @@ function Operations() {
         >
           {data?.paused ? "Resume deployment" : "Pause deployment"}
         </Action>
-        <Action
-          icon="refresh"
-          onClick={async () => {
-            reload();
-            progress.reload();
-          }}
-        >
-          Refresh
-        </Action>
+        {(error || progress.error) && (
+          <Action
+            loading={loading || progress.loading}
+            onClick={async () => {
+              reload();
+              progress.reload();
+            }}
+          >
+            Try again
+          </Action>
+        )}
         <Field label="Diagnose by run ID">
           <input
             value={diagnosticId}
@@ -2086,8 +2532,18 @@ function Operations() {
         >
           Inspect redacted status
         </Action>
-        {diagnostic !== undefined && <Json value={diagnostic} />}
-        <Json value={data?.audit} />
+        {diagnostic !== undefined && <DataDetails value={diagnostic} />}
+        <h2>Recent operator actions</h2>
+        <DataTable
+          rows={data?.audit}
+          label="Operator actions"
+          columns={[
+            { key: "at", label: "Time" },
+            { key: "action", label: "Action" },
+            { key: "actor", label: "Actor" },
+            { key: "target", label: "Target" },
+          ]}
+        />
       </section>
       <section className="card">
         <div className="row">
@@ -2099,7 +2555,8 @@ function Operations() {
                   New accounts have no operator privileges. Link their Telegram
                   identity and enroll them separately.
                 </p>
-                <JsonForm
+                <RecordForm
+                  fields={accountFields}
                   value={{ username: "", password: "" }}
                   label="Create account"
                   save={async (value) => {
@@ -2113,13 +2570,17 @@ function Operations() {
             )}
           </CreateModal>
         </div>
-        {accountResult !== undefined && <Json value={accountResult} />}
+        {accountResult !== undefined && <DataDetails value={accountResult} />}
         <h3>Issue identity verification</h3>
         <p>
           Enroll the intended Telegram ID in Members first. Verification
           succeeds only for an eligible workspace member.
         </p>
-        <JsonForm
+        <RecordForm
+          fields={[
+            { path: "accountId", label: "Panel account ID", required: true },
+            workspaceOptions(progress.data?.workspaces ?? []),
+          ]}
           value={{
             accountId: "",
             workspaceId: progress.data?.workspaces[0]?.id ?? "",
@@ -2143,7 +2604,11 @@ function Operations() {
           This audited operator action restores an existing owner or admin. It
           does not grant access to private conversations.
         </p>
-        <JsonForm
+        <RecordForm
+          fields={[
+            workspaceOptions(progress.data?.workspaces ?? []),
+            { path: "telegramId", label: "Telegram user ID", required: true },
+          ]}
           value={{
             workspaceId: progress.data?.workspaces[0]?.id ?? "",
             telegramId: "",
@@ -2162,7 +2627,23 @@ function Operations() {
       </section>
       <section className="card">
         <h2>Workspace setup & purge status</h2>
-        <Json value={progress.data?.workspaces} />
+        <DataTable
+          label="Workspaces"
+          rows={progress.data?.workspaces.map((workspace) => ({
+            name: workspace.settings.name,
+            status: workspace.deleted ? "Removed" : "Active",
+            ownerVerified: workspace.ownerVerified,
+            skills: `${workspace.skills.filter((skill) => skill.enabled).length} of ${workspace.skills.length} enabled`,
+            timezone: workspace.settings.timezone,
+          }))}
+          columns={[
+            { key: "name", label: "Workspace" },
+            { key: "status", label: "Status" },
+            { key: "ownerVerified", label: "Owner verified" },
+            { key: "skills", label: "Skills" },
+            { key: "timezone", label: "Timezone" },
+          ]}
+        />
       </section>
     </Page>
   );
@@ -2212,8 +2693,7 @@ function Shell() {
   const navigation = [
     ["overview", "Overview"],
     ["settings", "Settings"],
-    ["access-policy", "Allowed users"],
-    ["members", "Members"],
+    ["members", "Members & access"],
     ["chats", "Group access"],
     ["workflows", "Workflows"],
     ["skills", "Skills"],
@@ -2287,12 +2767,6 @@ function Shell() {
               >
                 Sign out
               </Action>
-              <IconButton
-                icon="refresh"
-                label="Refresh session"
-                type="button"
-                onClick={() => void load()}
-              />
             </div>
           </>
         ) : (
@@ -2344,6 +2818,15 @@ function Shell() {
                     <p>Runtime logs are available to deployment operators.</p>
                   </Page>
                 )
+              }
+            />
+            <Route
+              path="/admin/access-policy"
+              element={
+                <Navigate
+                  to={`/admin/members?${locationParams.toString()}`}
+                  replace
+                />
               }
             />
             {navigation.map(([path]) => (

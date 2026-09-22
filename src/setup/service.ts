@@ -4,7 +4,7 @@ import {
   credentialsSchema,
   DEFAULT_MODEL_BASE_URL,
 } from "../agent/model-settings.ts";
-import { selectedModel } from "../agent/runtime.ts";
+import { modelCapabilities, selectedModel } from "../agent/runtime.ts";
 import { type Sql, transaction } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import {
@@ -70,6 +70,8 @@ export class SetupService {
       modelBaseUrl: d.modelBaseUrl ?? DEFAULT_MODEL_BASE_URL,
       thinkingLevel: d.thinkingLevel ?? "off",
       modelPricing: d.modelPricing,
+      modelLimits: d.modelLimits,
+      modelCapabilities: modelCapabilities(d.model, d),
       webhookReady: d.webhookReady,
       telegramTransport: this.telegramTransport,
       receiver: await this.receiverStatus(d),
@@ -120,11 +122,27 @@ export class SetupService {
           input.modelKey,
         "new_endpoint_requires_api_key",
       );
-      selectedModel(input.model ?? d.model, {
-        modelBaseUrl: baseUrl,
-        thinkingLevel: input.thinkingLevel ?? d.thinkingLevel,
-        modelPricing: input.modelPricing ?? d.modelPricing,
-      });
+      const modelChanged =
+        (input.model !== undefined && input.model !== d.model) ||
+        baseUrl !== (d.modelBaseUrl ?? DEFAULT_MODEL_BASE_URL);
+      const modelLimits =
+        input.modelLimits !== undefined
+          ? input.modelLimits
+          : modelChanged
+            ? undefined
+            : d.modelLimits;
+      // Updating Telegram alone must remain possible for an older custom-model setup.
+      if (
+        Object.keys(input).some(
+          (key) => key !== "version" && key !== "botToken",
+        )
+      )
+        selectedModel(input.model ?? d.model, {
+          modelBaseUrl: baseUrl,
+          thinkingLevel: input.thinkingLevel ?? d.thinkingLevel,
+          modelPricing: input.modelPricing ?? d.modelPricing,
+          modelLimits,
+        });
       if (identity && input.botToken) {
         requireThat(
           !d.bot || d.bot.id === String(identity.id),
@@ -145,6 +163,7 @@ export class SetupService {
         d.credentials.model = encrypt(this.key, "model", input.modelKey);
       if (input.model) d.model = input.model;
       d.modelBaseUrl = baseUrl;
+      d.modelLimits = modelLimits;
       if (input.thinkingLevel !== undefined)
         d.thinkingLevel = input.thinkingLevel;
       if (input.modelPricing !== undefined) d.modelPricing = input.modelPricing;
@@ -265,6 +284,7 @@ export class SetupService {
         "setup_incomplete",
         409,
       );
+      selectedModel(d.model, d);
       const rows = await sql.query(
         "SELECT data FROM workspaces WHERE operator_id=$1 FOR UPDATE",
         [admin.id],

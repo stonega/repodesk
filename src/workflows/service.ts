@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { approveCoding } from "../coding/policy.ts";
 import {
   type Approval,
   type Instruction,
@@ -7,6 +8,7 @@ import {
   type Workspace,
   workflowSchema,
 } from "../domain.ts";
+import { checkIssueApproval } from "../github/issues.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import {
   audience,
@@ -163,6 +165,9 @@ export function decide(
     "approval_changed",
     409,
   );
+  if (accept && approval.kind === "coding_task") approveCoding(w, approval);
+  if (accept && approval.kind === "github_issue")
+    checkIssueApproval(w, approval);
   if (accept && approval.kind === "workflow") {
     authorize(w, actor);
     const workflow = w.workflows.find((f) => f.id === approval.target);

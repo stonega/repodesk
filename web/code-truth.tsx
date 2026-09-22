@@ -6,7 +6,7 @@ import type {
   CodeTruthStatus,
 } from "../src/code-truth/config.ts";
 import { IconButton } from "./icon-button.tsx";
-import { Modal } from "./modal.tsx";
+import { Modal, ModalActions } from "./modal.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 const explain = (error: unknown) => {
@@ -113,6 +113,9 @@ export function CodeTruth({
       {error && (
         <p role="alert" className="notice">
           {error}
+          <button type="button" disabled={busy} onClick={() => void load()}>
+            Reload Code Truth
+          </button>
         </p>
       )}
       {notice && (
@@ -120,7 +123,7 @@ export function CodeTruth({
           {notice}
         </p>
       )}
-      {!data && <p role="status">Loading Code Truth settings…</p>}
+      {!data && !error && <p role="status">Loading Code Truth settings…</p>}
       <form
         onSubmit={async (event) => {
           event.preventDefault();
@@ -213,13 +216,6 @@ export function CodeTruth({
             <button type="submit" disabled={!dirty}>
               Save Code Truth
             </button>
-            <IconButton
-              icon="refresh"
-              label="Reload Code Truth"
-              type="button"
-              busy={busy}
-              onClick={() => void load()}
-            />
           </div>
         </fieldset>
       </form>
@@ -385,7 +381,9 @@ function RepositoryEditor({
           value={draft.networks}
           change={(networks) => setDraft({ ...draft, networks })}
         />
-        <button type="submit">Apply repository</button>
+        <ModalActions>
+          <button type="submit">Apply repository</button>
+        </ModalActions>
       </form>
     </Modal>
   );
@@ -519,7 +517,9 @@ function NetworkEditor({
             onChange={(e) => setBranch(e.target.value)}
           />
         </label>
-        <button type="submit">Add network</button>
+        <ModalActions>
+          <button type="submit">Add network</button>
+        </ModalActions>
       </form>
     </Modal>
   );

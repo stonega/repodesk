@@ -50,6 +50,22 @@ test("logging storage failures do not throw or recursively log database errors",
   expect(output.join("")).toContain("log_storage_unavailable");
   expect(output.join("")).not.toContain("private-host");
 });
+test("draft diagnostics omit Telegram bodies, credentials and private content", () => {
+  const output: string[] = [];
+  const log = new RuntimeLogger(undefined, "worker", (line) =>
+    output.push(line),
+  );
+  log.write("telegram_draft_failed", {
+    error: new Error("private response and token"),
+  });
+  log.write("telegram_draft_failed", {
+    error: new Fault("telegram_destination_rejected"),
+  });
+  log.write("telegram_draft_started");
+  expect(output.join("")).not.toContain("private response and token");
+  expect(output.join("")).toContain("telegram_destination_rejected");
+  expect(output.join("")).toContain("telegram_draft_started");
+});
 test("log buffering is bounded while the database is slow", async () => {
   const gate = Promise.withResolvers<void>();
   let saved = 0;

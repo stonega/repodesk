@@ -11,6 +11,22 @@ export const thinkingLevels = [
   "max",
 ] as const;
 export type ThinkingLevel = (typeof thinkingLevels)[number];
+export const modelLimitsSchema = z
+  .object({
+    contextWindow: z.number().int().positive(),
+    maxOutputTokens: z.number().int().positive(),
+  })
+  .strict()
+  .refine((v) => v.maxOutputTokens < v.contextWindow, {
+    path: ["maxOutputTokens"],
+    message:
+      "Maximum output must be smaller than the context window to leave room for input.",
+  });
+export type ModelLimits = z.infer<typeof modelLimitsSchema>;
+export type ModelCapabilities = {
+  limits: ModelLimits;
+  source: "catalog" | "operator";
+};
 export const modelOptionsSchema = z.object({
   modelBaseUrl: z
     .string()
@@ -30,6 +46,7 @@ export const modelOptionsSchema = z.object({
     }, "Use an HTTP(S) base URL without credentials, query or fragment")
     .transform((value) => value.replace(/\/+$/, ""))
     .optional(),
+  modelLimits: modelLimitsSchema.nullable().optional(),
   thinkingLevel: z.enum(thinkingLevels).optional(),
   modelPricing: z
     .object({

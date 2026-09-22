@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { TSchema } from "typebox";
 import type { BuiltinExtension } from "../agent/extensions.ts";
+import { inputByteLimit } from "../agent/limits.ts";
 import { requireThat } from "../domain.ts";
 import type { CodeTruthClient } from "./client.ts";
 import { type CodeTarget, codeTruthTools } from "./config.ts";
@@ -73,16 +74,25 @@ export async function codeTruthExtension(
             );
             const limit = Math.max(
               1000,
-              Math.min(24000, Math.floor(input.maxInputChars / 2)),
+              Math.min(
+                24000,
+                Math.floor(
+                  inputByteLimit(input, {
+                    contextWindow: input.model.contextWindow,
+                    maxOutputTokens: input.model.maxTokens,
+                  }) / 2,
+                ),
+              ),
             );
+            const bytes = Buffer.from(text, "utf8");
             return {
               content: [
                 {
                   type: "text",
                   text:
-                    text.length <= limit
+                    bytes.length <= limit
                       ? text
-                      : `${text.slice(0, limit)}\n[Output truncated. Request a smaller excerpt or maxCharacters.]`,
+                      : `${new TextDecoder().decode(bytes.subarray(0, limit), { stream: true })}\n[Output truncated. Request a smaller excerpt or maxCharacters.]`,
                 },
               ],
               details: {},
