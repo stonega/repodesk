@@ -1,0 +1,52 @@
+# Merge with compose.yaml from the repository root. Build codex-job first;
+# dynamic task containers always use the prebuilt image (--pull=never).
+services:
+  worker:
+    environment:
+      CODEX_RUNNER_URL: http://codex-runner:3020
+      CODEX_RUNNER_TOKEN: ${CODEX_RUNNER_TOKEN:?Set CODEX_RUNNER_TOKEN}
+    depends_on:
+      codex-runner:
+        condition: service_healthy
+  codex-runner:
+    build:
+      context: .
+      target: codex-supervisor
+    image: localhost/deepx-codex-supervisor:local
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+    security_opt:
+      - no-new-privileges:true
+      - label=disable
+    cap_drop: [ALL]
+    environment:
+      CONTAINER_HOST: unix:///run/podman/podman.sock
+      CODEX_RUNNER_TOKEN: ${CODEX_RUNNER_TOKEN:?Set CODEX_RUNNER_TOKEN}
+      # Optional fallback; workspace keys can be saved in the web panel.
+      CODEX_PROVIDER_API_KEY: ${CODEX_PROVIDER_API_KEY:-}
+      CODEX_PROVIDER_NAME: ${CODEX_PROVIDER_NAME:-AIAPI}
+      CODEX_PROVIDER_BASE_URL: ${CODEX_PROVIDER_BASE_URL:-https://aiapi.abmatrix.cn/v1}
+      CODEX_MODEL: ${CODEX_MODEL:-gpt-6-astra}
+      CODEX_REASONING_EFFORT: ${CODEX_REASONING_EFFORT:-high}
+      CODEX_RUNNER_IMAGE: ${CODEX_RUNNER_IMAGE:-localhost/deepx-codex-job:local}
+      CODEX_RUNNER_NETWORK: ${CODEX_RUNNER_NETWORK:-deepx_codex_tasks}
+      CODEX_RUNNER_PROXY_URL: http://codex-runner:3020
+      CODEX_RUNNER_CPUS: ${CODEX_RUNNER_CPUS:-2}
+      CODEX_RUNNER_MEMORY_MB: ${CODEX_RUNNER_MEMORY_MB:-4096}
+      CODEX_RUNNER_TIMEOUT_SECONDS: ${CODEX_RUNNER_TIMEOUT_SECONDS:-2700}
+      CODEX_RUNNER_RETENTION_HOURS: ${CODEX_RUNNER_RETENTION_HOURS:-24}
+    volumes:
+      - ${PODMAN_SOCKET:?Set PODMAN_SOCKET}:/run/podman/podman.sock
+      - codex_runner_state:/var/lib/deepx-codex
+    networks:
+      - default
+      - codex_tasks
+networks:
+  codex_tasks:
+    name: ${CODEX_RUNNER_NETWORK:-deepx_codex_tasks}
+volumes:
+  codex_runner_state:

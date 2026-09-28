@@ -1,7 +1,7 @@
 # First-run onboarding and initial admin
 
 Status: **P0 design contract, locally implemented**. The first browser visit opens a
-claimed setup wizard. See [setup](../implementation/setup.md) for the implemented
+first-administrator form. See [setup](../implementation/setup.md) for the implemented
 verification/activation sequence and [evidence](../implementation/implementation-status.md)
 for external gates. Optional web login and live model evaluation are not completed.
 
@@ -11,12 +11,16 @@ for external gates. Optional web login and live model evaluation are not complet
 admin with incomplete configuration sees a resumable setup checklist after login.
 Other visitors see login, never another create-admin form.
 
-The setup page is visible before login, but claiming the deployment requires a
-one-time bootstrap token obtained through a local container command. Store only its
-hash, bind it to this deployment, expire it and consume it atomically with first-admin
-creation. Do not put it in URLs, images, JavaScript bundles or routine logs. Concurrent
-requests cannot create two initial administrators. A fresh host without a token shows
-instructions for the operator to generate one; visiting first does not grant ownership.
+The setup page is visible before login and asks only for a username and password.
+The first successful submission creates the deployment administrator and a session.
+The server locks the deployment row and atomically checks its unclaimed state,
+creates the account and marks it claimed; concurrent requests cannot create two
+initial administrators. Initialized deployments reject further claims. Complete
+first setup before exposing a fresh deployment beyond localhost, because anyone
+who can reach an unclaimed deployment can submit the first account.
+
+Updated 2026-09-27 following the user's request to remove bootstrap tokens and keep
+first setup to username and password only.
 
 This is our application design, not built-in behavior supplied by Pi or Docker.
 
@@ -24,23 +28,29 @@ This is our application design, not built-in behavior supplied by Pi or Docker.
 
 | Step | UI and action | Completion rule |
 | --- | --- | --- |
-| 1. Claim deployment | Enter the bootstrap token | Server verifies unclaimed state and token; no other configuration disclosed. |
-| 2. Create admin | Admin username, password and confirmation; optional contact email | Create the local deployment-admin account and a revocable session. No Telegram credentials or email provider needed. |
-| 3. Workspace | Name, timezone and initial retention settings | Save a draft workspace and show the scope of administration. |
-| 4. Connect Telegram | BotFather instructions; enter bot token in a write-only field; validate bot identity | Show bot name/username and validation result without returning the token. |
-| 5. Link Telegram owner and access | Verify an owner through a one-time interaction with the configured bot; choose whitelist mode and allowed IDs | Add the verified Telegram owner as workspace member/owner and seed the whitelist. Typed IDs alone do not verify ownership. |
-| 6. Model | Enter an OpenAI-compatible base URL, write-only API key, suggested/custom model ID and thinking level; configure token prices and budgets | Validate settings locally. Saving makes no model request; live capability testing remains an explicit evaluation step. |
-| 7. Skills and behavior | Choose starter skills, edit permitted settings, preview instructions and required tools | Activate only valid approved versions; show unavailable dependencies. |
-| 8. Delivery and group | Confirm the public HTTPS origin/webhook URL; optionally link a group and choose collection scope | Private-only setup is valid. Group linking requires the separate admin/access checks. |
-| 9. Review and activate | Summary of bot, owner, model, skills, access, costs and data scope | Explicit activation validates prerequisites, registers/verifies the webhook and then enables processing. |
+| Create admin | Username and password on the first-run entry | Atomically verify unclaimed state, create the local deployment-admin account and a revocable session. |
+| 1. Workspace | Enter a workspace name, select an IANA timezone, then continue | Continue saves the draft before advancing. Budget and retention policies can be adjusted later in Workspace settings. |
+| 2. Connect Telegram | Enter a BotFather token in a write-only field, then Continue | Validate bot identity and show its username without returning the token. |
+| 3. GitHub App | Click Connect GitHub; confirm authorization and choose repositories during GitHub installation | The setup page verifies one accessible installation and connects its granted repositories, then shows a RepoDesk welcome dialog with confetti. Get started opens the workspace. Detailed controls remain in Plugins. The bot stays inactive until model settings, a skill and activation are completed in the panel. |
 
-During owner verification, process only the tightly scoped verification interaction;
-normal model requests remain disabled. Implementation may use a temporary verified
-webhook for this control flow; do not depend on a fully active bot to establish its
-first owner. For local operation, explicitly select `TELEGRAM_TRANSPORT=polling`; the worker
-receives the same verification interaction without an HTTPS webhook. If neither
-transport is ready, leave owner linking pending and permit the deployment admin to
-finish other settings. Polling never bypasses owner identity or whitelist checks.
+The authenticated wizard uses the administrator entry's two-panel visual layout.
+Only one step is shown at a time; step navigation allows returning to saved work.
+Setup resumes from saved server state. GitHub registration and authorization return
+to the GitHub step when started there. Authorization alone does not grant repository
+access; the App must also appear under Installed GitHub Apps. Setup waits for an
+installation and verifies its repositories before showing the welcome dialog.
+After activation, the web administrator can share an access-request link,
+approve requests, directly allow a numeric Telegram ID, or revoke a member in
+Model settings. The bot denies ordinary use until a member is explicitly allowed.
+Linking the administrator's personal Telegram account later grants owner actions
+in Telegram. Optional group linking and detailed workspace policies can be
+configured after activation.
+
+Before activation, process only tightly scoped control interactions; normal model
+requests remain disabled. For local operation, explicitly select
+`TELEGRAM_TRANSPORT=polling`; the worker receives the same control interactions
+without an HTTPS webhook. Owner linking works before or after activation and
+never bypasses Telegram sender identity, membership or whitelist checks.
 
 ## Authentication and privilege model
 
@@ -68,8 +78,7 @@ an application encryption key supplied as a Docker runtime secret outside the DB
 Keep credentials out of model inputs, frontend storage, logs and audit diffs. Existing
 environment-provided credentials may be used as read-only references.
 
-The DB connection, encryption key and bootstrap-token command are operator-level
-deployment prerequisites. Missing encryption configuration blocks credential saving
+The DB connection and encryption key are operator-level deployment prerequisites. Missing encryption configuration blocks credential saving
 with an actionable error. Back up the key separately from the encrypted database;
 document rotation/recovery before launch.
 
@@ -81,33 +90,33 @@ their result and time; changing the associated value invalidates the prior check
 
 Use `unclaimed → admin_created → configuring → ready → active`, with a recoverable
 `activation_failed` result. The create-admin transaction permanently consumes the
-bootstrap claim; later retries resume using the admin session. Setup progress alone
+initial setup claim; later retries resume using the admin session. Setup progress alone
 does not enable model work or schedules.
 
-Allow **Save and finish later** from any authenticated step. Missing bot/model/owner
-configuration keeps the bot inactive and shows next actions in the dashboard. A
-skipped group is acceptable; unavailable credentials or an empty enforced owner
-whitelist are not valid activation prerequisites.
+Allow setup to resume from any authenticated step. Missing bot or model
+configuration keeps the bot inactive and shows next actions in the dashboard.
+An empty whitelist is valid at activation and denies all ordinary bot use until
+the administrator explicitly allows a member. Owner linking is optional.
 
 Make activation idempotent. If webhook registration succeeds but the final DB write
 fails, a retry inspects and reconciles remote state. If registration fails, keep
 processing disabled and show a retry action without discarding the draft. Successful
-activation closes setup mutation endpoints except authenticated configuration routes.
+activation keeps authenticated access management and optional identity-linking
+routes available.
 
 ## Proposed APIs and validation
 
 - `/api/setup/status`: minimal initialized/needs-claim status, no secrets or admin details.
-- `/api/setup/claim`: atomically verify token and create the initial admin account.
+- `/api/setup/claim`: atomically verify unclaimed state and create the initial admin account from a username and password.
 - `/api/setup/progress`: authenticated resumable draft/checklist.
 - `/api/setup/validate/*`: scoped bot/model/config checks with redacted errors.
 - `/api/setup/activate`: idempotent prerequisite validation and activation.
 
-The claim token and account form may be separate visual steps, but claiming ownership
-and account creation must be one atomic operation. An abandoned first page cannot
-reserve ownership indefinitely.
+Claiming ownership and account creation are one atomic operation. An abandoned
+first page cannot reserve ownership indefinitely.
 
-Acceptance: fresh install redirects to setup; unauthorized claim fails; concurrent
+Acceptance: fresh install redirects to setup; cross-origin claims and invalid credentials fail; concurrent
 claim creates one admin; reload/restart resumes; initialized deployments cannot be
 reclaimed; wrong bot token/model key is recoverable; secrets never appear in responses;
-activation cannot bypass whitelist/skill prerequisites; failed activation remains
+activation cannot bypass model, receiver or skill prerequisites; failed activation remains
 inactive; operator recovery does not require a working Telegram bot.

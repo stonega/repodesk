@@ -7,7 +7,7 @@ import {
   test,
 } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { claim, issueClaim, session } from "../../src/admin/auth.ts";
+import { claim, session } from "../../src/admin/auth.ts";
 import { createApp } from "../../src/app.ts";
 import { migrate } from "../../src/db/migrate.ts";
 import { database } from "../../src/db/pool.ts";
@@ -50,7 +50,7 @@ const url = process.env.TEST_DATABASE_URL;
     await migrate(store.pool);
     const auth = await claim(
       store.pool,
-      await issueClaim(store.pool),
+
       "accessadmin",
       "a long test password",
     );
@@ -90,6 +90,22 @@ const url = process.env.TEST_DATABASE_URL;
     );
     calls.length = 0;
   });
+  async function foreignWorkspace() {
+    const id = randomUUID();
+    await store.pool.query(
+      "INSERT INTO admins(id,username,password_hash,operator) VALUES($1,$2,'unused',true)",
+      [id, `foreign-${id}`],
+    );
+    const other = workspace();
+    other.operatorId = id;
+    other.members = [{ id: "303", active: true, role: "owner" }];
+    other.policy.allowed = ["303"];
+    await store.pool.query(
+      "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",
+      [other.id, id, JSON.stringify(other)],
+    );
+    return other;
+  }
   const api = (path: string, method = "GET", body?: unknown, headers = {}) =>
     app.request(`/api/admin/workspaces/${path}`, {
       method,
@@ -188,7 +204,9 @@ const url = process.env.TEST_DATABASE_URL;
       (await store.read(w.id)).members.find((m) => m.id === "202")?.username,
     ).toBe("new_user");
     expect((await store.read(other.id)).members[0]?.username).toBeUndefined();
-    expect((await api(`${other.id}/members`)).status).toBe(403);
+    expect((await api(`${other.id}/members`)).status).toBe(200);
+    const foreign = await foreignWorkspace();
+    expect((await api(`${foreign.id}/members`)).status).toBe(403);
   });
   const callback = (actor = 404, target = w.id, chat = actor): Update => ({
     update_id: ++updateId,
@@ -295,7 +313,7 @@ const url = process.env.TEST_DATABASE_URL;
       "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",
       [other.id, adminId, JSON.stringify(other)],
     );
-    expect((await api(`${other.id}/access-requests`)).status).toBe(403);
+    expect((await api(`${other.id}/access-requests`)).status).toBe(200);
     expect(
       (
         await api(
@@ -304,17 +322,18 @@ const url = process.env.TEST_DATABASE_URL;
           input,
         )
       ).status,
-    ).toBe(403);
+    ).toBe(404);
+    const foreign = await foreignWorkspace();
+    expect((await api(`${foreign.id}/access-requests`)).status).toBe(403);
     await store.pool.query("UPDATE admins SET telegram_id='202' WHERE id=$1", [
-      adminId,
-    ]);
-    expect((await api(path, "POST", input)).status).toBe(403);
-    await store.pool.query("UPDATE admins SET telegram_id='101' WHERE id=$1", [
       adminId,
     ]);
     expect(
       (await api(path, "POST", { ...input, decision: "rejected" })).status,
     ).toBe(200);
+    await store.pool.query("UPDATE admins SET telegram_id='101' WHERE id=$1", [
+      adminId,
+    ]);
     expect((await api(path, "POST", input)).status).toBe(409);
     await ingress.accept(callback());
     const rejected = await store.read(w.id);
@@ -365,6 +384,88 @@ const url = process.env.TEST_DATABASE_URL;
       (await store.read(w.id)).accessRequests?.find((r) => r.actor === "505")
         ?.chatId,
     ).toBe("-100100");
+  });
+  test("the access link offers a button in each private topic", async () => {
+    for (const topicId of [11, 22]) {
+      const update = message(404, `/start access_${w.id}`);
+      required(update.message).message_thread_id = topicId;
+      await ingress.accept(update);
+    }
+    const repeated = message(404, `/start access_${w.id}`);
+    required(repeated.message).message_thread_id = 22;
+    await ingress.accept(repeated);
+    const queued = await store.pool.query(
+      "SELECT topic_id FROM control_deliveries ORDER BY update_id",
+    );
+    expect(queued.rows.map((row) => row.topic_id)).toEqual([11, 22]);
+    await deliverAccessHelp(store, setup);
+    expect(
+      calls
+        .filter((call) => call.method === "sendMessage")
+        .map((call) => call.params.message_thread_id)
+        .sort(),
+    ).toEqual([11, 22]);
+    const request = callback();
+    required(required(request.callback_query).message).message_thread_id = 22;
+    await ingress.accept(request);
+    expect((await store.read(w.id)).accessRequests?.[0]?.topicId).toBe(22);
+  });
+  test("an inactive bot accepts the access link without starting model work", async () => {
+    const deployment = await store.deployment();
+    deployment.active = false;
+    await store.saveDeployment(store.pool, deployment);
+    try {
+      await store.change(w.id, (current) => {
+        current.members = [];
+        current.policy.allowed = [];
+      });
+      const page = await (await api(`${w.id}/access-requests`)).json();
+      expect(page.requestUrl).toContain(`start=access_${w.id}`);
+
+      await ingress.accept(message(404, "/start"));
+      await deliverAccessHelp(store, setup);
+      expect(calls.at(-1)?.params.text).toContain(
+        "Ask your admin for the workspace's request-access link",
+      );
+      calls.length = 0;
+
+      const linked = message(404, `/start access_${w.id}`);
+      required(linked.message).message_thread_id = 44;
+      await ingress.accept(linked);
+      await deliverAccessHelp(store, setup);
+      expect(calls.at(-1)?.params).toMatchObject({
+        message_thread_id: 44,
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: "Request access",
+                callback_data: `request_access:${w.id}`,
+              },
+            ],
+          ],
+        },
+      });
+      const button = callback();
+      required(required(button.callback_query).message).message_thread_id = 44;
+      await ingress.accept(button);
+      const request = required((await store.read(w.id)).accessRequests?.[0]);
+      expect(request.topicId).toBe(44);
+      expect(
+        (
+          await api(`${w.id}/access-requests/${request.id}/decision`, "POST", {
+            decision: "approved",
+            version: page.version,
+          })
+        ).status,
+      ).toBe(200);
+      await ingress.accept(message(404, "/ask hello"));
+      expect((await store.read(w.id)).runs).toHaveLength(0);
+    } finally {
+      const current = await store.deployment();
+      current.active = true;
+      await store.saveDeployment(store.pool, current);
+    }
   });
   test("bot/anonymous/forged private callbacks, deleted workspace and retention", async () => {
     const bot = callback();

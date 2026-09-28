@@ -171,5 +171,7 @@ The optional Codex extension exposes `propose_coding_task`, `coding_task_status`
 and `cancel_coding_task`. Repository-specific Telegram maintainer grants and a
 complete approval bind issue creation and an independent GitHub Actions workflow.
 Application services own issue/dispatch writes and durable task state. Codex runs
-on a fresh GitHub runner, followed by project checks and draft PR publication.
+on a fresh GitHub runner or an isolated local Podman container, followed by
+project checks and separate draft PR publication. Local execution and its
+custom-provider configuration and workspace API keys are described in [the Podman guide](../implementation/codex-podman.md).
 See [configuration, permissions and recovery](../implementation/codex-coding.md).

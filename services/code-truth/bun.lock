@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "deepx-code-truth",
+      "name": "repodesk-code-truth",
       "dependencies": {
         "@colbymchenry/codegraph": "1.5.0",
         "@modelcontextprotocol/sdk": "1.29.0",

@@ -3,6 +3,7 @@ import { operator } from "../admin/auth.ts";
 import type { Store } from "../db/repositories.ts";
 import { type Admin, Fault, requireThat, type Workspace } from "../domain.ts";
 import type { GitHubApps } from "../github/registry.ts";
+import { decrypt, encrypt } from "../setup/credentials.ts";
 import { audit, eligible } from "../workspaces/policy.ts";
 import {
   type CodingPage,
@@ -12,6 +13,7 @@ import {
   emptyCoding,
 } from "./config.ts";
 import { CodingGitHub } from "./github.ts";
+import type { LocalRunner } from "./local/protocol.ts";
 import { checkCodingTask, notifyCoding } from "./policy.ts";
 
 function operatorWorkspace(w: Workspace, admin: Admin) {
@@ -21,6 +23,7 @@ function operatorWorkspace(w: Workspace, admin: Admin) {
 export function codingView(w: Workspace, admin: Admin): CodingPage {
   operatorWorkspace(w, admin);
   return {
+    providerApiKeyConfigured: !!w.coding?.providerApiKey,
     revision: w.coding?.revision ?? 0,
     settings: structuredClone(w.coding?.settings ?? emptyCoding),
     repositories: w.github?.installationId ? w.github.repositories : [],
@@ -30,7 +33,12 @@ export function codingView(w: Workspace, admin: Admin): CodingPage {
     tasks: [...(w.codingTasks ?? [])].reverse(),
   };
 }
-export function saveCoding(w: Workspace, admin: Admin, value: unknown) {
+export function saveCoding(
+  w: Workspace,
+  admin: Admin,
+  value: unknown,
+  encryptionKey?: string,
+) {
   operatorWorkspace(w, admin);
   const input = codingSaveSchema.parse(value);
   requireThat(
@@ -53,7 +61,21 @@ export function saveCoding(w: Workspace, admin: Admin, value: unknown) {
       409,
     );
   }
-  w.coding = { revision: input.revision + 1, settings: input.settings };
+  let providerApiKey = w.coding?.providerApiKey;
+  if (input.providerApiKey === null) providerApiKey = undefined;
+  else if (input.providerApiKey !== undefined) {
+    requireThat(encryptionKey, "coding_credentials_unavailable", 503);
+    providerApiKey = encrypt(
+      encryptionKey,
+      `coding-provider:${w.id}`,
+      input.providerApiKey,
+    );
+  }
+  w.coding = {
+    revision: input.revision + 1,
+    settings: input.settings,
+    providerApiKey,
+  };
   audit(w, admin.id, "coding.settings_updated", w.id, w.coding.revision);
   return codingView(w, admin);
 }
@@ -66,6 +88,8 @@ export class CodingService {
     private store: Store,
     private apps: GitHubApps,
     private github = new CodingGitHub(),
+    private local?: LocalRunner,
+    private encryptionKey?: string,
   ) {}
   async tick(workspaceId: string) {
     const w = await this.store.read(workspaceId);
@@ -89,7 +113,11 @@ export class CodingService {
       )
         return;
       // No worker may resume an interrupted POST, even if it died before sending it.
-      if (["creating_issue", "dispatching"].includes(t.state)) {
+      if (
+        ["creating_issue", "dispatching", "starting_publication"].includes(
+          t.state,
+        )
+      ) {
         if (Date.parse(t.updatedAt) + 120000 < Date.now()) {
           t.state = "unknown";
           t.error = "coding_outcome_unknown";
@@ -102,7 +130,7 @@ export class CodingService {
         checkCodingTask(w, t);
         requireThat(d.active && !d.paused, "deployment_paused", 409);
       } catch (error) {
-        if (t.state === "running") {
+        if (t.state === "running" || t.state === "publishing") {
           t.cancelRequested = true;
           t.error = code(error);
         } else {
@@ -119,6 +147,12 @@ export class CodingService {
     if (!task) return;
     let externalWriteCompleted = false;
     try {
+      if (task.payload.backend === "podman" && task.state !== "queued") {
+        await this.advanceLocal(workspaceId, task, lease);
+        return;
+      }
+      if (task.payload.backend === "podman")
+        requireThat(this.local, "coding_runner_not_configured", 409);
       const snapshot = await this.store.read(workspaceId);
       const app = await this.apps.get(snapshot.operatorId);
       requireThat(app, "github_app_not_configured", 409);
@@ -232,9 +266,13 @@ export class CodingService {
       if (!current || current.lease !== lease) return;
       // Read failures can retry for up to two hours. Writes remain unknown forever.
       if (
-        current.state === "running" &&
+        ["running", "publishing"].includes(current.state) &&
         !current.cancellationSent &&
-        ["coding_github_unavailable", "github_unavailable"].includes(reason) &&
+        [
+          "coding_github_unavailable",
+          "github_unavailable",
+          "coding_runner_unavailable",
+        ].includes(reason) &&
         Date.parse(current.createdAt) + 7200000 > Date.now()
       ) {
         await this.update(workspaceId, id, lease, {});
@@ -248,12 +286,175 @@ export class CodingService {
           "coding_run_not_found",
           "coding_run_ambiguous",
         ].includes(reason) ||
-        current.state === "running";
+        ["running", "publishing", "starting_publication"].includes(
+          current.state,
+        );
       await this.update(workspaceId, id, lease, {
         state: uncertain ? "unknown" : "failed",
         error: reason,
       });
     }
+  }
+  private async advanceLocal(
+    workspaceId: string,
+    task: CodingTask,
+    lease: string,
+  ) {
+    const runner = this.local;
+    requireThat(runner, "coding_runner_not_configured", 409);
+    if (task.state === "issue_created") {
+      const w = await this.store.read(workspaceId);
+      let providerApiKey: string | undefined;
+      if (w.coding?.providerApiKey) {
+        requireThat(this.encryptionKey, "coding_credentials_unavailable", 503);
+        providerApiKey = decrypt(
+          this.encryptionKey,
+          `coding-provider:${workspaceId}`,
+          w.coding.providerApiKey,
+        );
+      }
+      const token = await this.localToken(workspaceId, task, "contents");
+      const reserved = await this.reserveLocal(
+        workspaceId,
+        task.id,
+        lease,
+        "dispatching",
+      );
+      if (!reserved) return;
+      requireThat(task.issue, "coding_issue_missing", 409);
+      try {
+        await runner.start({
+          workspaceId,
+          taskId: task.id,
+          payload: task.payload,
+          issue: task.issue,
+          readToken: token,
+          providerApiKey,
+        });
+      } catch (error) {
+        if (error instanceof Fault && error.code === "coding_runner_busy") {
+          await this.update(workspaceId, task.id, lease, {
+            state: "issue_created",
+          });
+          return;
+        }
+        throw error;
+      }
+      await this.update(workspaceId, task.id, lease, { state: "running" });
+      return;
+    }
+    const result = await runner.status(workspaceId, task.id);
+    const current = await this.store.read(workspaceId);
+    const latest = current.codingTasks?.find((t) => t.id === task.id);
+    if (!latest || latest.lease !== lease) return;
+    const d = await this.store.deployment();
+    let cancelled = false;
+    try {
+      checkCodingTask(current, latest);
+      requireThat(d.active && !d.paused, "deployment_paused", 409);
+      requireThat(
+        Date.parse(task.createdAt) + 7200000 > Date.now(),
+        "coding_task_timeout",
+      );
+    } catch {
+      cancelled = true;
+    }
+    if (
+      cancelled &&
+      !["succeeded", "failed", "cancelled", "unknown"].includes(result.state)
+    ) {
+      await runner.cancel(workspaceId, task.id);
+      await this.update(workspaceId, task.id, lease, {
+        state: task.state === "publishing" ? "unknown" : "cancelled",
+        cancelRequested: true,
+      });
+      return;
+    }
+    if (result.state === "ready") {
+      const token = await this.localToken(workspaceId, task, "publish");
+      try {
+        if (
+          !(await this.reserveLocal(
+            workspaceId,
+            task.id,
+            lease,
+            "starting_publication",
+          ))
+        )
+          return;
+      } catch (error) {
+        // No publication request has been made. Revoke the prepared local work
+        // immediately if authority changed while minting the token.
+        if (!(error instanceof Fault)) throw error;
+        await runner.cancel(workspaceId, task.id);
+        await this.update(workspaceId, task.id, lease, {
+          state: "cancelled",
+          error: error.code,
+        });
+        return;
+      }
+      await runner.publish(workspaceId, task.id, token);
+      await this.update(workspaceId, task.id, lease, {
+        state: "publishing",
+        threadId: result.threadId,
+      });
+    } else if (result.state === "succeeded") {
+      requireThat(
+        result.prUrl &&
+          new RegExp(
+            `^https://github\\.com/${task.payload.repository.replaceAll(".", "\\.")}/pull/[1-9][0-9]*$`,
+          ).test(result.prUrl),
+        "coding_pr_missing",
+      );
+      await this.update(workspaceId, task.id, lease, {
+        state: "succeeded",
+        prUrl: result.prUrl,
+        threadId: result.threadId,
+      });
+    } else if (["failed", "cancelled", "unknown"].includes(result.state)) {
+      await this.update(workspaceId, task.id, lease, {
+        state: result.state as "failed" | "cancelled" | "unknown",
+        error: result.error,
+        threadId: result.threadId,
+      });
+    } else {
+      await this.update(workspaceId, task.id, lease, {
+        threadId: result.threadId,
+      });
+    }
+  }
+  private async localToken(
+    workspaceId: string,
+    task: CodingTask,
+    permission: "contents" | "publish",
+  ) {
+    const w = await this.store.read(workspaceId);
+    const app = await this.apps.get(w.operatorId);
+    requireThat(app, "github_app_not_configured", 409);
+    return (
+      await app.installationToken(
+        task.payload.installationId,
+        [task.payload.repositoryId],
+        permission,
+      )
+    ).token;
+  }
+  private async reserveLocal(
+    workspaceId: string,
+    id: string,
+    lease: string,
+    state: "dispatching" | "starting_publication",
+  ) {
+    return this.store.change(workspaceId, async (w, sql) => {
+      const task = w.codingTasks?.find((t) => t.id === id);
+      if (!task || task.lease !== lease) return false;
+      checkCodingTask(w, task);
+      const d = await this.store.deployment(sql);
+      requireThat(d.active && !d.paused, "deployment_paused", 409);
+      task.state = state;
+      task.updatedAt = new Date().toISOString();
+      return true;
+    });
   }
   private async update(
     workspaceId: string,

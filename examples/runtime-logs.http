@@ -1,8 +1,8 @@
 # Sign in as a deployment operator; replace the cookie with your local session.
 # No CSRF token is required for this read-only endpoint.
 GET http://localhost:3000/api/admin/operator/logs?service=worker&level=warn&q=polling&limit=50
-Cookie: deepx_session=REPLACE_WITH_SESSION
+Cookie: repodesk_session=REPLACE_WITH_SESSION
 
 ### Next page: use nextBefore from the prior response, retaining the same filters.
 GET http://localhost:3000/api/admin/operator/logs?service=worker&level=warn&q=polling&limit=50&before=123
-Cookie: deepx_session=REPLACE_WITH_SESSION
+Cookie: repodesk_session=REPLACE_WITH_SESSION

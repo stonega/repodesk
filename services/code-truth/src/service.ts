@@ -165,7 +165,7 @@ export function createLocalService(options: {
     Object.assign(req, {
       auth: {
         token: "internal",
-        clientId: "deepx-agent",
+        clientId: "repodesk",
         scopes: ["code:read"],
         extra: { localPrincipal: req.params.namespace },
       },

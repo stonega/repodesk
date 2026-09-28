@@ -1,11 +1,14 @@
 import {
   type FormEvent,
+  type KeyboardEvent,
   type ReactNode,
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -13,6 +16,7 @@ import {
   NavLink,
   Route,
   Routes,
+  useLocation,
   useNavigate,
   useSearchParams,
 } from "react-router";
@@ -39,6 +43,7 @@ import type {
 } from "../src/domain.ts";
 import { settingsSchema } from "../src/domain.ts";
 import { AccessRequests } from "./access-requests.tsx";
+import { AuthNetwork } from "./auth-network.tsx";
 import { DataDetails, DataTable } from "./data-details.tsx";
 import {
   accountFields,
@@ -46,11 +51,11 @@ import {
   deliveryFields,
   instructionFields,
   runFields,
-  setupFields,
   skillFields,
   workflowFields,
   workspaceOptions,
 } from "./form-fields.ts";
+import { GitHubSetup } from "./github.tsx";
 import { type ActionIcon, IconButton } from "./icon-button.tsx";
 import { RuntimeLogs } from "./logs.tsx";
 import { CreateModal, Modal, ModalActions, ModalPending } from "./modal.tsx";
@@ -92,8 +97,8 @@ async function api<T>(
           ? "Your session expired. Sign in again."
           : data.error === "setup_incomplete"
             ? "Finish bot credentials, model configuration and Telegram reception before activating."
-            : data.error === "verified_owner_and_skill_required"
-              ? "Verify a workspace owner and enable a published skill before activating."
+            : data.error === "workspace_and_skill_required"
+              ? "Create a workspace with an enabled published skill before activating."
               : data.error === "https_origin_required"
                 ? "Webhook mode requires a public HTTPS address. For local use, set TELEGRAM_TRANSPORT=polling and restart the app and worker."
                 : data.issues?.length
@@ -294,7 +299,7 @@ function Page({
   return (
     <>
       <div className="page-heading">
-        <p className="eyebrow">DEEPX / TEAM OPERATIONS</p>
+        <p className="eyebrow">REPODESK / TEAM OPERATIONS</p>
         <div className="page-title-row">
           <div className="page-title">
             <h1>{title}</h1>
@@ -314,11 +319,6 @@ function Auth({ claim, onDone }: { claim: boolean; onDone: () => void }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
-    if (claim && values.password !== values.confirm) {
-      setError("Passwords do not match");
-      return;
-    }
-    delete values.confirm;
     setBusy(true);
     try {
       const result = await api<{ csrf: string }>(
@@ -335,26 +335,17 @@ function Auth({ claim, onDone }: { claim: boolean; onDone: () => void }) {
     }
   }
   return (
-    <Page
-      title={claim ? "Make this workspace yours" : "Welcome back"}
-      description={
-        claim
-          ? "Claim your deployment with the one-use token generated on your host."
-          : "Sign in to manage your team assistant."
-      }
-    >
-      <form className="card narrow" onSubmit={submit}>
-        {claim && (
-          <>
-            <Notice>
-              On your host, run: docker compose exec app node dist/operator.js
-              claim. Tokens expire after 15 minutes.
-            </Notice>
-            <Field label="Bootstrap token">
-              <input name="token" type="password" required autoComplete="off" />
-            </Field>
-          </>
-        )}
+    <div className="auth-content">
+      <p className="eyebrow">
+        {claim ? "FIRST RUN / ADMIN ACCOUNT" : "REPODESK / ADMIN ACCESS"}
+      </p>
+      <h1>{claim ? "Make this workspace yours" : "Welcome back"}</h1>
+      <p className="auth-lede">
+        {claim
+          ? "Create the administrator account for this deployment. You can finish the rest of setup at your own pace."
+          : "Sign in to manage your team assistant."}
+      </p>
+      <form className="auth-form" onSubmit={submit}>
         <Field label="Username">
           <input
             name="username"
@@ -373,22 +364,12 @@ function Auth({ claim, onDone }: { claim: boolean; onDone: () => void }) {
             autoComplete={claim ? "new-password" : "current-password"}
           />
         </Field>
-        {claim && (
-          <Field label="Confirm password">
-            <input
-              name="confirm"
-              type="password"
-              required
-              autoComplete="new-password"
-            />
-          </Field>
-        )}
         {error && <Notice>{error}</Notice>}
-        <button type="submit" disabled={busy}>
+        <button className="auth-submit" type="submit" disabled={busy}>
           {busy ? "Please wait…" : claim ? "Create administrator" : "Sign in"}
         </button>
       </form>
-    </Page>
+    </div>
   );
 }
 interface Progress {
@@ -411,16 +392,26 @@ interface Progress {
     version: number;
     settings: Settings;
     ownerVerified: boolean;
-    skills: { id: string; name: string; enabled: boolean }[];
+    skills: {
+      id: string;
+      name: string;
+      enabled: boolean;
+      published: boolean;
+    }[];
     deleted: boolean;
   }[];
 }
 function Setup() {
-  const { data, error, reload, loading } = useData<Progress>(
-    "/api/setup/progress",
+  const { data, error, reload } = useData<Progress>("/api/setup/progress");
+  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const [selected, setSelected] = useState(() => params.get("workspace") ?? "");
+  const [completedWorkspace, setCompletedWorkspace] = useState<string | null>(
+    null,
   );
-  const [identity, setIdentity] = useState<{ url: string; command: string }>();
-  const [selected, setSelected] = useState("");
+  const [workspaceSaving, setWorkspaceSaving] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const [credentialSaving, setCredentialSaving] = useState(false);
   useEffect(() => {
     const timer = setInterval(reload, 5000);
     return () => clearInterval(timer);
@@ -429,265 +420,408 @@ function Setup() {
   const workspace =
     data.workspaces.find((w) => w.id === selected) ??
     data.workspaces.find((w) => !w.deleted);
+  const localTimeZone =
+    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const suggestedTimeZones = Array.from(
+    new Set(
+      [localTimeZone, workspace?.settings.timezone, "UTC"].filter(
+        (zone): zone is string => !!zone,
+      ),
+    ),
+  );
+  const otherTimeZones = (Intl.supportedValuesOf?.("timeZone") ?? []).filter(
+    (zone) => !suggestedTimeZones.includes(zone),
+  );
+  const steps = [
+    { id: "workspace", label: "Workspace", complete: !!workspace },
+    { id: "telegram", label: "Telegram bot", complete: !!data.bot },
+    { id: "github", label: "GitHub App", complete: false },
+  ] as const;
+  const requestedStep = params.get("step");
+  const currentStep =
+    steps.find((step) => step.id === requestedStep)?.id ??
+    steps.find((step) => !step.complete)?.id ??
+    "github";
+  const currentIndex = steps.findIndex((step) => step.id === currentStep);
+  const previousStep = steps[currentIndex - 1];
+  const goToStep = (step: (typeof steps)[number]["id"]) => {
+    const next = new URLSearchParams(params);
+    next.set("step", step);
+    setParams(next);
+    window.scrollTo(0, 0);
+  };
+  return (
+    <Page
+      title="Set up your team assistant"
+      description="Create a workspace, connect Telegram and set up GitHub. Configure the model and activate the bot in the admin panel."
+    >
+      <p className="setup-account-status">
+        Administrator account created · Step {currentIndex + 1} of{" "}
+        {steps.length}
+      </p>
+      <nav className="setup-steps" aria-label="Setup steps">
+        {steps.map((step, index) => (
+          <button
+            key={step.id}
+            type="button"
+            className={
+              step.id === currentStep ? "setup-step current" : "setup-step"
+            }
+            aria-current={step.id === currentStep ? "step" : undefined}
+            disabled={
+              workspaceSaving || credentialSaving || !!completedWorkspace
+            }
+            onClick={() => goToStep(step.id)}
+          >
+            <span className="setup-step-number">{index + 1}</span>
+            <span className="setup-step-copy">
+              <strong>{step.label}</strong>
+              <small>
+                {step.complete
+                  ? "Complete"
+                  : step.id === currentStep
+                    ? "In progress"
+                    : "To do"}
+              </small>
+            </span>
+          </button>
+        ))}
+      </nav>
+      {currentStep === "workspace" && (
+        <section className="card setup-card">
+          <h2>Workspace</h2>
+          <p className="muted">
+            Create a space for your team. You can adjust budgets, retention, and
+            other policies in Workspace settings later.
+          </p>
+          {data.workspaces.length > 0 && (
+            <Field label="Workspace draft">
+              <select
+                value={workspace?.id ?? ""}
+                onChange={(e) => {
+                  setSelected(e.target.value);
+                  setWorkspaceError("");
+                }}
+              >
+                {data.workspaces
+                  .filter((w) => !w.deleted)
+                  .map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.settings.name}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+          )}
+          {workspace?.ownerVerified ? (
+            <p>
+              {workspace.settings.name} · {workspace.settings.timezone}
+            </p>
+          ) : (
+            <form
+              id="setup-workspace-form"
+              key={workspace?.id ?? "new"}
+              aria-busy={workspaceSaving}
+              onSubmit={async (event) => {
+                event.preventDefault();
+                if (workspaceSaving) return;
+                const values = new FormData(event.currentTarget);
+                const name = String(values.get("name") ?? "").trim();
+                const timezone = String(values.get("timezone") ?? "").trim();
+                setWorkspaceSaving(true);
+                setWorkspaceError("");
+                try {
+                  if (!workspace) {
+                    await api("/api/setup/workspaces", "POST", {
+                      name,
+                      timezone,
+                    });
+                  } else if (
+                    name !== workspace.settings.name ||
+                    timezone !== workspace.settings.timezone
+                  ) {
+                    await api(`/api/setup/workspaces/${workspace.id}`, "PUT", {
+                      version: workspace.version,
+                      settings: { ...workspace.settings, name, timezone },
+                    });
+                  }
+                  reload();
+                  goToStep("telegram");
+                } catch (error) {
+                  setWorkspaceError(
+                    error instanceof Error
+                      ? error.message
+                      : "Could not save workspace.",
+                  );
+                } finally {
+                  setWorkspaceSaving(false);
+                }
+              }}
+            >
+              <Field label="Workspace name">
+                <input
+                  name="name"
+                  required
+                  disabled={workspaceSaving}
+                  defaultValue={workspace?.settings.name ?? "My team"}
+                  onChange={() => setWorkspaceError("")}
+                />
+              </Field>
+              <Field label="Timezone">
+                <select
+                  name="timezone"
+                  required
+                  disabled={workspaceSaving}
+                  defaultValue={workspace?.settings.timezone ?? localTimeZone}
+                  onChange={() => setWorkspaceError("")}
+                >
+                  <optgroup label="Suggested">
+                    {suggestedTimeZones.map((zone) => (
+                      <option key={zone} value={zone}>
+                        {zone}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {otherTimeZones.length > 0 && (
+                    <optgroup label="All timezones">
+                      {otherTimeZones.map((zone) => (
+                        <option key={zone} value={zone}>
+                          {zone}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+              </Field>
+              {workspaceError && (
+                <p role="alert" className="notice">
+                  {workspaceError}
+                </p>
+              )}
+            </form>
+          )}
+        </section>
+      )}
+      {currentStep === "telegram" && (
+        <section className="card setup-card">
+          <h2>Connect Telegram</h2>
+          <p className="muted">
+            Create a dedicated bot with BotFather. Saving its token calls
+            Telegram to verify its identity.
+          </p>
+          <TelegramCredentialForm
+            progress={data}
+            reload={reload}
+            onContinue={() => goToStep("github")}
+            saving={credentialSaving}
+            setSaving={setCredentialSaving}
+          />
+        </section>
+      )}
+      {currentStep === "github" && (
+        <section className="card setup-card">
+          <h2>Connect GitHub</h2>
+          <p className="muted">
+            Continue on GitHub to authorize your account and choose the
+            repositories this workspace can access.
+          </p>
+          {workspace ? (
+            <GitHubSetup
+              request={api}
+              workspaceId={workspace.id}
+              onConnected={() => setCompletedWorkspace(workspace.id)}
+            />
+          ) : (
+            <Notice>Save a workspace before setting up GitHub.</Notice>
+          )}
+        </section>
+      )}
+      <div className="setup-navigation">
+        {previousStep && (
+          <button
+            type="button"
+            className="secondary"
+            disabled={
+              workspaceSaving || credentialSaving || !!completedWorkspace
+            }
+            onClick={() => goToStep(previousStep.id)}
+          >
+            Back
+          </button>
+        )}
+        {currentStep === "workspace" && !workspace?.ownerVerified ? (
+          <button
+            type="submit"
+            form="setup-workspace-form"
+            disabled={workspaceSaving}
+            aria-busy={workspaceSaving}
+          >
+            {workspaceSaving ? "Saving…" : "Continue to Telegram"}
+          </button>
+        ) : currentStep === "telegram" ? (
+          <button
+            type="submit"
+            form={`setup-${currentStep}-form`}
+            disabled={credentialSaving}
+            aria-busy={credentialSaving}
+          >
+            {credentialSaving ? "Saving…" : "Continue to GitHub App"}
+          </button>
+        ) : null}
+      </div>
+      {completedWorkspace && (
+        <SetupCelebration
+          onStart={() =>
+            navigate(`/admin?workspace=${completedWorkspace}`, {
+              replace: true,
+            })
+          }
+        />
+      )}
+    </Page>
+  );
+}
+const confettiPieces = Array.from({ length: 32 }, (_, index) => ({
+  id: `confetti-${index + 1}`,
+  left: `${(index * 37) % 100}%`,
+  color: ["#1d594c", "#84ae96", "#d8b762", "#e8a073", "#b6d1b2"][index % 5],
+  delay: `${(index * 73) % 650}ms`,
+  duration: `${1400 + (index % 5) * 170}ms`,
+}));
+function SetupCelebration({ onStart }: { onStart: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const element = dialog.current;
+    element?.showModal();
+    element?.querySelector("button")?.focus();
+    return () => element?.close();
+  }, []);
+  return createPortal(
+    <dialog
+      ref={dialog}
+      className="setup-celebration"
+      aria-labelledby="setup-welcome-title"
+      aria-describedby="setup-welcome-description"
+      onCancel={(event) => event.preventDefault()}
+    >
+      <div className="setup-confetti" aria-hidden="true">
+        {confettiPieces.map((piece) => (
+          <span
+            key={piece.id}
+            style={{
+              left: piece.left,
+              backgroundColor: piece.color,
+              animationDelay: piece.delay,
+              animationDuration: piece.duration,
+            }}
+          />
+        ))}
+      </div>
+      <div className="setup-celebration-card">
+        <span className="setup-celebration-mark" aria-hidden="true">
+          ✓
+        </span>
+        <h2 id="setup-welcome-title">Welcome to RepoDesk</h2>
+        <p id="setup-welcome-description">
+          Your workspace is ready. Configure your model and activate the bot in
+          the admin panel.
+        </p>
+        <button type="button" onClick={onStart}>
+          Get started
+        </button>
+      </div>
+    </dialog>,
+    document.body,
+  );
+}
+function ModelSettings({ workspaceId }: { workspaceId: string }) {
+  const { data, error, reload, loading } = useData<Progress>(
+    "/api/setup/progress",
+  );
+  const [saving, setSaving] = useState(false);
+  const [identity, setIdentity] = useState<{ url: string; command: string }>();
+  useEffect(() => {
+    const timer = setInterval(reload, 5000);
+    return () => clearInterval(timer);
+  }, [reload]);
+  if (!data) return <Notice>{error || "Loading model settings…"}</Notice>;
+  const workspace = data.workspaces.find((w) => w.id === workspaceId);
   const missing = [
-    !workspace && "Save a workspace.",
-    !data.credentials.bot && "Save a Telegram bot token.",
+    !workspace && "Create a workspace in Setup.",
+    !data.credentials.bot && "Save a Telegram bot token in Setup.",
     !data.credentials.model && "Save a model API key.",
     !data.modelCapabilities &&
       "Configure the model context window and maximum output.",
     !data.receiver.ready &&
       (data.telegramTransport === "polling"
         ? "Wait for the polling worker to connect."
-        : "Register the verification webhook."),
-    !workspace?.ownerVerified && "Verify the workspace owner through Telegram.",
+        : "Register the Telegram webhook."),
     workspace &&
-      !workspace.skills.some((s) => s.enabled) &&
+      !workspace.skills.some((s) => s.enabled && s.published) &&
       "Enable a published skill.",
   ].filter((item): item is string => typeof item === "string");
   return (
     <Page
-      title={data.active ? "Deployment settings" : "Set up your team assistant"}
-      description="Each step is saved. You can leave and resume later. Credentials are write-only."
+      title="Model settings"
+      description="Connect your model provider, then activate the assistant when its receiver and skills are ready."
     >
-      <div className="steps">
-        <span className="pill good">1 · Admin created</span>
-        <span className="pill">
-          2 · {workspace ? "Workspace saved" : "Workspace"}
-        </span>
-        <span className="pill">
-          3 · {data.bot ? "Bot checked" : "Telegram"}
-        </span>
-        <span className="pill">
-          4 · {data.credentials.model ? "Model saved" : "Model configuration"}
-        </span>
-        <span className="pill">
-          5 · {workspace?.ownerVerified ? "Owner verified" : "Verify owner"}
-        </span>
-        <span className="pill">
-          6 · {data.active ? "Active" : "Review & activate"}
-        </span>
-      </div>
-      <section className="card">
-        <h2>Workspace</h2>
-        {data.workspaces.length > 0 && (
-          <Field label="Workspace draft">
-            <select
-              value={workspace?.id ?? ""}
-              onChange={(e) => setSelected(e.target.value)}
-            >
-              {data.workspaces
-                .filter((w) => !w.deleted)
-                .map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.settings.name}
-                  </option>
-                ))}
-            </select>
-          </Field>
-        )}
-        {workspace ? (
-          <>
-            <p>
-              {workspace.settings.name} · {workspace.settings.timezone} ·{" "}
-              {workspace.settings.retentionDays} day retention
-            </p>
-            {!workspace.ownerVerified && (
-              <RecordForm
-                fields={setupFields}
-                value={{
-                  version: workspace.version,
-                  settings: workspace.settings,
-                }}
-                save={async (value) => {
-                  await api(
-                    `/api/setup/workspaces/${workspace.id}`,
-                    "PUT",
-                    value,
-                  );
-                  reload();
-                }}
-              />
-            )}
-          </>
-        ) : (
-          <CreateModal label="Add workspace" title="Create workspace">
-            {(close) => (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                }}
-              >
-                <Field label="Workspace name">
-                  <input id="workspace-name" defaultValue="My team" />
-                </Field>
-                <Field label="Timezone">
-                  <input
-                    id="workspace-timezone"
-                    defaultValue={
-                      Intl.DateTimeFormat().resolvedOptions().timeZone
-                    }
-                  />
-                </Field>
-                <ModalActions>
-                  <Action
-                    onClick={async () => {
-                      await api("/api/setup/workspaces", "POST", {
-                        name: (
-                          document.getElementById(
-                            "workspace-name",
-                          ) as HTMLInputElement
-                        ).value,
-                        timezone: (
-                          document.getElementById(
-                            "workspace-timezone",
-                          ) as HTMLInputElement
-                        ).value,
-                      });
-                      close();
-                      reload();
-                    }}
-                  >
-                    Save workspace
-                  </Action>
-                </ModalActions>
-              </form>
-            )}
-          </CreateModal>
-        )}
-      </section>
-      <section className="card">
-        <h2>Connect Telegram</h2>
+      <section className="card" aria-labelledby="model-settings-heading">
+        <h2 id="model-settings-heading">Model configuration</h2>
         <p className="muted">
-          Create a dedicated bot with BotFather. Saving its token calls Telegram
-          to verify its identity. You can configure the model before connecting
-          a bot.
+          Enter an OpenAI-compatible base URL, API key, and model ID. Saving
+          does not make a model request.
         </p>
-        <TelegramCredentialForm progress={data} reload={reload} />
+        <ModelCredentialForm
+          progress={data}
+          reload={reload}
+          saving={saving}
+          setSaving={setSaving}
+        />
       </section>
-      <section className="card" aria-labelledby="setup-model-heading">
-        <h2 id="setup-model-heading">Model configuration</h2>
-        <p className="muted">
-          Connect an OpenAI-compatible provider with its base URL and API key.
-          Choose a suggested model or enter your own model ID, then select a
-          supported thinking level. Saving does not make a model request.
-        </p>
-        <ModelCredentialForm progress={data} reload={reload} />
-      </section>
-      <section className="card">
-        <h2>Verify the owner</h2>
+      <section className="card" aria-label="Activation">
+        <h2>Activate the bot</h2>
         <p>
-          {data.telegramTransport === "polling"
-            ? "Local polling is enabled. The worker receives Telegram updates without a public URL or HTTPS webhook. Save your bot token, wait for Polling: ready, then open the one-use Telegram link."
-            : "Register the HTTPS webhook to receive verification commands, then open the one-use Telegram link."}{" "}
-          Ordinary bot requests stay inactive until activation.
+          {data.telegramTransport === "polling" ? "Polling" : "Webhook"}:{" "}
+          {data.receiver.ready ? "ready" : "pending"}
         </p>
-        <div className="row">
-          {data.telegramTransport === "webhook" && (
-            <Action
-              onClick={async () => {
-                await api("/api/setup/webhook", "POST", {});
-                reload();
-              }}
-            >
-              {data.webhookReady
-                ? "Reconcile webhook"
-                : "Register verification webhook"}
-            </Action>
-          )}
-          {workspace && (
-            <Action
-              disabled={!data.receiver.ready || !data.credentials.bot}
-              onClick={async () =>
-                setIdentity(
-                  await api(`/api/setup/identity/${workspace.id}`, "POST", {}),
-                )
-              }
-            >
-              Generate owner verification link
-            </Action>
-          )}
-        </div>
-        {identity && (
+        {data.telegramTransport === "webhook" && !data.receiver.ready && (
+          <Action
+            disabled={!data.credentials.bot}
+            onClick={async () => {
+              await api("/api/setup/webhook", "POST", {});
+              reload();
+            }}
+          >
+            Register Telegram webhook
+          </Action>
+        )}
+        {data.telegramTransport === "polling" && data.receiver.error && (
           <Notice>
-            <a href={identity.url} target="_blank" rel="noreferrer">
-              Verify with Telegram
-            </a>
-            <br />
-            {identity.command}
-            <br />
-            Expires in 15 minutes. After verification, sign in again.
+            {data.receiver.error === "polling_webhook_conflict"
+              ? "This bot already has a webhook. Stop the other deployment and remove its webhook before using polling."
+              : data.receiver.error === "telegram_polling_conflict"
+                ? "Another receiver is using this bot. Stop it before retrying."
+                : data.receiver.error === "telegram_unauthorized"
+                  ? "Telegram rejected the saved bot token. Save a valid token in Setup."
+                  : "Polling is not ready. Check the worker and its Telegram connection; it will retry automatically."}
           </Notice>
         )}
         <p>
-          {data.telegramTransport === "polling" ? "Polling" : "Webhook"}:{" "}
-          {data.receiver.ready ? "ready" : "pending"} · Owner:{" "}
-          {workspace?.ownerVerified ? "verified" : "pending"}
-        </p>
-      </section>
-      {data.telegramTransport === "polling" && data.receiver.error && (
-        <Notice>
-          {data.receiver.error === "polling_webhook_conflict"
-            ? "This bot already has a webhook. Stop the other deployment and deliberately remove its webhook before using polling; no pending updates have been discarded."
-            : data.receiver.error === "telegram_polling_conflict"
-              ? "Another receiver is using this bot. Stop the other polling process or webhook before retrying."
-              : data.receiver.error === "bot_not_configured"
-                ? "Save your Telegram bot token to start polling."
-                : data.receiver.error === "telegram_unauthorized"
-                  ? "Telegram rejected the saved bot token. Save a valid token to reconnect."
-                  : "Polling could not receive updates. Check the worker and its connection to Telegram; it will retry automatically."}
-        </Notice>
-      )}
-      <section className="card">
-        <h2>Review & activate</h2>
-        <p>Bot: {data.bot ? `@${data.bot.username}` : "not configured"}</p>
-        <dl
-          className="setup-model-summary"
-          aria-label="Saved model configuration"
-        >
-          <dt>API</dt>
-          <dd>OpenAI-compatible</dd>
-          <dt>Base URL</dt>
-          <dd>{data.modelBaseUrl}</dd>
-          <dt>Model</dt>
-          <dd>{data.model}</dd>
-          <dt>Thinking level</dt>
-          <dd>{data.thinkingLevel}</dd>
-          <dt>API key</dt>
-          <dd>
-            {data.credentials.model
-              ? "Configured"
-              : "Missing — save model configuration to continue"}
-          </dd>
-        </dl>
-        <p>
-          Workspace starts with whitelist-only access. Verification enrolls and
-          allows its owner. Group context defaults to directed messages.
-        </p>
-        <p>
-          Starter skills:{" "}
+          Enabled skills:{" "}
           {workspace?.skills
-            .filter((s) => s.enabled)
+            .filter((s) => s.enabled && s.published)
             .map((s) => s.name)
             .join(", ") || "none"}
-          . Manage versions, settings and enabled skills in the Skills screen
-          after owner verification.
-        </p>
-        <p>
-          Budget:{" "}
-          {workspace
-            ? `$${workspace.settings.runBudgetUsd}/run, $${workspace.settings.monthlyBudgetUsd}/month.`
-            : "Save a workspace to configure budgets."}{" "}
-          Group linking is optional and starts with /linktoken in a private bot
-          chat.
+          .
         </p>
         {!data.active && missing.length > 0 && (
-          <ul aria-label="Remaining setup steps">
+          <ul aria-label="Remaining activation requirements">
             {missing.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
         )}
-        <div className="row">
+        {!data.active && (
           <Action
             disabled={missing.length > 0}
             onClick={async () => {
@@ -697,43 +831,236 @@ function Setup() {
           >
             Activate bot
           </Action>
-          {error && (
+        )}
+        {data.active && (
+          <Notice>
+            Active. Share the access link below and approve people who request
+            access. Others cannot use the bot.
+          </Notice>
+        )}
+        {data.active && workspace && <SetupAccess workspaceId={workspace.id} />}
+        {data.active && workspace && !workspace.ownerVerified && (
+          <details className="setup-advanced">
+            <summary>Link my Telegram account (optional)</summary>
+            <p className="muted">
+              Link your personal Telegram account if you want owner controls in
+              Telegram. It is not required for activation or web access.
+            </p>
             <Action
-              loading={loading}
-              onClick={async () => {
-                reload();
-              }}
+              disabled={!data.receiver.ready}
+              onClick={async () =>
+                setIdentity(
+                  await api(`/api/setup/identity/${workspace.id}`, "POST", {}),
+                )
+              }
             >
-              Try again
+              Generate Telegram link
             </Action>
-          )}
-        </div>
-        {data.active && <Notice>Active. Open the bot and send /start.</Notice>}
+            {identity && (
+              <Notice>
+                <a href={identity.url} target="_blank" rel="noreferrer">
+                  Link account in Telegram
+                </a>
+                <br />
+                {identity.command}
+                <br />
+                Expires in 15 minutes. Sign in again after linking.
+              </Notice>
+            )}
+          </details>
+        )}
+        {error && (
+          <Action loading={loading} onClick={async () => reload()}>
+            Try again
+          </Action>
+        )}
       </section>
     </Page>
+  );
+}
+type SetupAccessData = {
+  version: number;
+  requestUrl: string | null;
+  members: { id: string; role: string; allowed: boolean }[];
+  requests: { id: string; actor: string; username?: string; name?: string }[];
+};
+function SetupAccess({ workspaceId }: { workspaceId: string }) {
+  const path = `/api/setup/workspaces/${workspaceId}/access`;
+  const { data, error, reload, loading } = useData<SetupAccessData>(path);
+  const [actor, setActor] = useState("");
+  useEffect(() => {
+    const timer = setInterval(reload, 5000);
+    return () => clearInterval(timer);
+  }, [reload]);
+  return (
+    <div className="setup-access">
+      <h3>Telegram access</h3>
+      <p className="muted">
+        Share the request link with teammates and approve them here, or add a
+        known Telegram user ID directly. Only approved members can use the bot.
+      </p>
+      {error && <Notice>{error}</Notice>}
+      {data?.requestUrl && (
+        <Field label="Request access link">
+          <input
+            readOnly
+            value={data.requestUrl}
+            onFocus={(e) => e.target.select()}
+          />
+        </Field>
+      )}
+      {data && (
+        <>
+          <Field label="Telegram user ID">
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[1-9][0-9]{0,15}"
+              value={actor}
+              onChange={(event) => setActor(event.target.value)}
+              placeholder="Numeric ID"
+            />
+          </Field>
+          <Action
+            disabled={!/^[1-9]\d{0,15}$/.test(actor) || loading}
+            onConflict={reload}
+            onClick={async () => {
+              await api(path, "POST", { actor, version: data.version });
+              setActor("");
+              reload();
+            }}
+          >
+            Allow user
+          </Action>
+          <h4>Pending requests</h4>
+          {data.requests.length ? (
+            <ul className="setup-access-list">
+              {data.requests.map((request) => (
+                <li key={request.id}>
+                  <span>
+                    {request.name || request.username
+                      ? `${request.name || request.username} · ${request.actor}`
+                      : request.actor}
+                  </span>
+                  <div className="row">
+                    {(["approved", "rejected"] as const).map((decision) => (
+                      <Action
+                        key={decision}
+                        onConflict={reload}
+                        onClick={async () => {
+                          await api(
+                            `${path}-requests/${request.id}/decision`,
+                            "POST",
+                            { decision, version: data.version },
+                          );
+                          reload();
+                        }}
+                      >
+                        {decision === "approved" ? "Approve" : "Reject"}
+                      </Action>
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="muted">No pending requests.</p>
+          )}
+          <h4>Allowed members</h4>
+          {data.members.filter((member) => member.allowed).length ? (
+            <ul className="setup-access-list">
+              {data.members
+                .filter((member) => member.allowed)
+                .map((member) => (
+                  <li key={member.id}>
+                    <span>
+                      {member.id} · {member.role}
+                    </span>
+                    {member.role !== "owner" && (
+                      <Action
+                        onConflict={reload}
+                        onClick={async () => {
+                          await api(`${path}/${member.id}`, "DELETE", {
+                            version: data.version,
+                          });
+                          reload();
+                        }}
+                      >
+                        Revoke
+                      </Action>
+                    )}
+                  </li>
+                ))}
+            </ul>
+          ) : (
+            <p className="muted">No one has access yet.</p>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 function TelegramCredentialForm({
   progress: p,
   reload,
+  onContinue,
+  saving,
+  setSaving,
 }: {
   progress: Progress;
   reload: () => void;
+  onContinue: () => void;
+  saving: boolean;
+  setSaving: (saving: boolean) => void;
 }) {
   const [bot, setBot] = useState("");
-  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
   return (
-    <>
+    <form
+      id="setup-telegram-form"
+      aria-busy={saving}
+      onSubmit={async (event) => {
+        event.preventDefault();
+        if (saving) return;
+        setError("");
+        if (!bot.trim() && !p.credentials.bot) {
+          setError("Enter a bot token to continue.");
+          return;
+        }
+        setSaving(true);
+        try {
+          if (bot.trim()) {
+            await api("/api/admin/operator/credentials", "PUT", {
+              version: p.version,
+              botToken: bot,
+            });
+            setBot("");
+            reload();
+          }
+          onContinue();
+        } catch (cause) {
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Could not save bot token.",
+          );
+        } finally {
+          setSaving(false);
+        }
+      }}
+    >
       <Field
         label={`Bot token · ${p.credentials.bot ? "configured" : "missing"}`}
       >
         <input
-          type="password"
+          type="text"
           autoComplete="off"
+          autoCapitalize="off"
+          spellCheck={false}
           value={bot}
           onChange={(e) => {
             setBot(e.target.value);
-            setSaved(false);
+            setError("");
           }}
           placeholder={
             p.credentials.bot
@@ -742,30 +1069,24 @@ function TelegramCredentialForm({
           }
         />
       </Field>
-      <Action
-        onClick={async () => {
-          if (!bot.trim()) throw new Error("Enter a bot token to save.");
-          await api("/api/admin/operator/credentials", "PUT", {
-            version: p.version,
-            botToken: bot,
-          });
-          setBot("");
-          setSaved(true);
-          reload();
-        }}
-      >
-        Save Telegram token
-      </Action>
-      {saved && <Notice>Telegram token saved. Secret input cleared.</Notice>}
-    </>
+      {error && (
+        <p role="alert" className="notice">
+          {error}
+        </p>
+      )}
+    </form>
   );
 }
 function ModelCredentialForm({
   progress: p,
   reload,
+  saving,
+  setSaving,
 }: {
   progress: Progress;
   reload: () => void;
+  saving: boolean;
+  setSaving: (saving: boolean) => void;
 }) {
   const [key, setKey] = useState("");
   const [model, setModel] = useState(p.model);
@@ -784,9 +1105,90 @@ function ModelCredentialForm({
     p.modelLimits?.maxOutputTokens.toString() ?? "",
   );
   const [limitErrors, setLimitErrors] = useState<Record<string, string>>({});
+  const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   return (
-    <>
+    <form
+      aria-busy={saving}
+      onChangeCapture={() => {
+        setError("");
+        setSaved(false);
+      }}
+      onSubmit={async (event) => {
+        event.preventDefault();
+        if (saving) return;
+        setError("");
+        setLimitErrors({});
+        setSaving(true);
+        try {
+          const unchanged =
+            !key &&
+            p.credentials.model &&
+            !!p.modelCapabilities &&
+            model === p.model &&
+            baseUrl === p.modelBaseUrl &&
+            thinking === p.thinkingLevel &&
+            inputPrice === (p.modelPricing?.input.toString() ?? "") &&
+            outputPrice === (p.modelPricing?.output.toString() ?? "") &&
+            contextWindow === (p.modelLimits?.contextWindow.toString() ?? "") &&
+            modelOutput === (p.modelLimits?.maxOutputTokens.toString() ?? "");
+          if (!unchanged) {
+            if (!key && !p.credentials.model)
+              throw new Error("Enter a model API key to save settings.");
+            if (!!contextWindow !== !!modelOutput)
+              throw new Error(
+                "Enter both model limits, or clear both to use the catalog.",
+              );
+            const limits =
+              contextWindow && modelOutput
+                ? {
+                    contextWindow: Number(contextWindow),
+                    maxOutputTokens: Number(modelOutput),
+                  }
+                : null;
+            if (limits) {
+              const parsed = modelLimitsSchema.safeParse(limits);
+              if (!parsed.success) {
+                setLimitErrors(
+                  Object.fromEntries(
+                    parsed.error.issues.map((issue) => [
+                      String(issue.path[0]),
+                      issue.message,
+                    ]),
+                  ),
+                );
+                throw new Error("Check the model limit fields.");
+              }
+            }
+            if (!!inputPrice !== !!outputPrice)
+              throw new Error("Enter both token prices.");
+            await api("/api/admin/operator/credentials", "PUT", {
+              version: p.version,
+              modelKey: key || undefined,
+              model,
+              modelBaseUrl: baseUrl,
+              thinkingLevel: thinking,
+              modelLimits: limits,
+              modelPricing:
+                inputPrice !== "" && outputPrice !== ""
+                  ? { input: Number(inputPrice), output: Number(outputPrice) }
+                  : undefined,
+            });
+            setKey("");
+            reload();
+          }
+          setSaved(true);
+        } catch (cause) {
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Could not save model configuration.",
+          );
+        } finally {
+          setSaving(false);
+        }
+      }}
+    >
       <div className="columns">
         <Field
           label={`Model API key · ${p.credentials.model ? "configured" : "missing"}`}
@@ -824,162 +1226,124 @@ function ModelCredentialForm({
             <option value="gpt-4o-mini" />
           </datalist>
         </Field>
-        <Field label="Thinking level">
-          <select
-            value={thinking}
-            onChange={(e) => setThinking(e.target.value as ThinkingLevel)}
-          >
-            {thinkingLevels.map((level) => (
-              <option key={level} value={level}>
-                {level}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Model context window (tokens)">
-          <input
-            type="number"
-            min="1"
-            step="1"
-            aria-label="Model context window (tokens)"
-            value={contextWindow}
-            onChange={(e) => {
-              setContextWindow(e.target.value);
-              setLimitErrors({});
-            }}
-            aria-invalid={!!limitErrors.contextWindow}
-            aria-describedby="model-context-help"
-            placeholder="Catalog value for known models"
-          />
-          <small id="model-context-help">
-            Input and output combined. Required for custom models.
-          </small>
-          {limitErrors.contextWindow && (
-            <small role="alert">{limitErrors.contextWindow}</small>
-          )}
-        </Field>
-        <Field label="Model maximum output (tokens)">
-          <input
-            type="number"
-            min="1"
-            step="1"
-            aria-label="Model maximum output (tokens)"
-            value={modelOutput}
-            onChange={(e) => {
-              setModelOutput(e.target.value);
-              setLimitErrors({});
-            }}
-            aria-invalid={!!limitErrors.maxOutputTokens}
-            aria-describedby="model-output-help"
-            placeholder="Catalog value for known models"
-          />
-          <small id="model-output-help">
-            Use your provider's documented limit, including reasoning where
-            applicable.
-          </small>
-          {limitErrors.maxOutputTokens && (
-            <small role="alert">{limitErrors.maxOutputTokens}</small>
-          )}
-        </Field>
-        <Field label="Input price (USD / million tokens)">
-          <input
-            type="number"
-            min="0"
-            step="any"
-            value={inputPrice}
-            onChange={(e) => setInputPrice(e.target.value)}
-            placeholder="Catalog price"
-          />
-        </Field>
-        <Field label="Output price (USD / million tokens)">
-          <input
-            type="number"
-            min="0"
-            step="any"
-            value={outputPrice}
-            onChange={(e) => setOutputPrice(e.target.value)}
-            placeholder="Catalog price"
-          />
-        </Field>
       </div>
-      <p className="muted">
-        Include the API path (usually /v1). Enter the API key again when
-        changing endpoints. Thinking levels require model support; off omits
-        reasoning effort. Custom models need both token prices for budget
-        estimates; use 0 for a free local model. Saved price overrides remain
-        until you replace them.
-      </p>
-      <p className="muted">
-        Saved model limits:{" "}
-        {p.modelCapabilities
-          ? `${p.modelCapabilities.limits.contextWindow.toLocaleString()} context tokens · ${p.modelCapabilities.limits.maxOutputTokens.toLocaleString()} maximum output · ${p.modelCapabilities.source === "catalog" ? "bundled Pi catalog" : "operator supplied"}`
-          : "Unknown — configure before running the assistant"}
-        . Clear both model limit fields to use catalog values. Review these
-        limits when changing models or endpoints.
-      </p>
-      <Action
-        onClick={async () => {
-          if (!!contextWindow !== !!modelOutput)
-            throw new Error(
-              "Enter both model limits, or clear both to use the catalog.",
-            );
-          const limits =
-            contextWindow && modelOutput
-              ? {
-                  contextWindow: Number(contextWindow),
-                  maxOutputTokens: Number(modelOutput),
-                }
-              : null;
-          if (limits) {
-            const parsed = modelLimitsSchema.safeParse(limits);
-            if (!parsed.success) {
-              setLimitErrors(
-                Object.fromEntries(
-                  parsed.error.issues.map((issue) => [
-                    String(issue.path[0]),
-                    issue.message,
-                  ]),
-                ),
-              );
-              throw new Error("Check the model limit fields.");
-            }
-          }
-          if (!!inputPrice !== !!outputPrice)
-            throw new Error("Enter both token prices.");
-          await api("/api/admin/operator/credentials", "PUT", {
-            version: p.version,
-            modelKey: key || undefined,
-            model,
-            modelBaseUrl: baseUrl,
-            thinkingLevel: thinking,
-            modelLimits:
-              contextWindow && modelOutput
-                ? {
-                    contextWindow: Number(contextWindow),
-                    maxOutputTokens: Number(modelOutput),
-                  }
-                : null,
-            modelPricing:
-              inputPrice !== "" && outputPrice !== ""
-                ? { input: Number(inputPrice), output: Number(outputPrice) }
-                : undefined,
-          });
-          setKey("");
-          setSaved(true);
-          reload();
-        }}
-      >
-        Save model configuration
-      </Action>
-      {saved && (
-        <Notice>Model configuration saved. API key input cleared.</Notice>
+      <details className="setup-advanced">
+        <summary>Advanced model settings</summary>
+        <p className="muted">
+          Set thinking, capacity, and token prices when your provider needs
+          them. You can return to this page later. Custom models require
+          capacity and prices.
+        </p>
+        <div className="columns">
+          <Field label="Thinking level">
+            <select
+              value={thinking}
+              onChange={(e) => setThinking(e.target.value as ThinkingLevel)}
+            >
+              {thinkingLevels.map((level) => (
+                <option key={level} value={level}>
+                  {level}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Model context window (tokens)">
+            <input
+              type="number"
+              min="1"
+              step="1"
+              aria-label="Model context window (tokens)"
+              value={contextWindow}
+              onChange={(e) => {
+                setContextWindow(e.target.value);
+                setLimitErrors({});
+              }}
+              aria-invalid={!!limitErrors.contextWindow}
+              aria-describedby="model-context-help"
+              placeholder="Catalog value for known models"
+            />
+            <small id="model-context-help">
+              Input and output combined. Required for custom models.
+            </small>
+            {limitErrors.contextWindow && (
+              <small role="alert">{limitErrors.contextWindow}</small>
+            )}
+          </Field>
+          <Field label="Model maximum output (tokens)">
+            <input
+              type="number"
+              min="1"
+              step="1"
+              aria-label="Model maximum output (tokens)"
+              value={modelOutput}
+              onChange={(e) => {
+                setModelOutput(e.target.value);
+                setLimitErrors({});
+              }}
+              aria-invalid={!!limitErrors.maxOutputTokens}
+              aria-describedby="model-output-help"
+              placeholder="Catalog value for known models"
+            />
+            <small id="model-output-help">
+              Use your provider's documented limit, including reasoning where
+              applicable.
+            </small>
+            {limitErrors.maxOutputTokens && (
+              <small role="alert">{limitErrors.maxOutputTokens}</small>
+            )}
+          </Field>
+          <Field label="Input price (USD / million tokens)">
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={inputPrice}
+              onChange={(e) => setInputPrice(e.target.value)}
+              placeholder="Catalog price"
+            />
+          </Field>
+          <Field label="Output price (USD / million tokens)">
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={outputPrice}
+              onChange={(e) => setOutputPrice(e.target.value)}
+              placeholder="Catalog price"
+            />
+          </Field>
+        </div>
+        <p className="muted">
+          Include the API path (usually /v1). Enter the API key again when
+          changing endpoints. Thinking levels require model support; off omits
+          reasoning effort. Custom models need both token prices for budget
+          estimates; use 0 for a free local model. Saved price overrides remain
+          until you replace them.
+        </p>
+        <p className="muted">
+          Saved model limits:{" "}
+          {p.modelCapabilities
+            ? `${p.modelCapabilities.limits.contextWindow.toLocaleString()} context tokens · ${p.modelCapabilities.limits.maxOutputTokens.toLocaleString()} maximum output · ${p.modelCapabilities.source === "catalog" ? "bundled Pi catalog" : "operator supplied"}`
+            : "Unknown — configure before running the assistant"}
+          . Clear both model limit fields to use catalog values. Review these
+          limits when changing models or endpoints.
+        </p>
+      </details>
+      {error && (
+        <p role="alert" className="notice">
+          {error}
+        </p>
       )}
-    </>
+      {saved && <p role="status">Model settings saved.</p>}
+      <button type="submit" disabled={saving}>
+        {saving ? "Saving…" : "Save model configuration"}
+      </button>
+    </form>
   );
 }
 function WorkspacePage({ id, resource }: { id: string; resource: string }) {
   if (resource === "usage") return <Usage id={id} request={api} />;
-  if (resource === "settings") return <SettingsPage id={id} />;
+  if (resource === "settings") return <SettingsPage key={id} id={id} />;
   if (resource === "skills") return <SkillsPage id={id} />;
   if (resource === "workflows") return <WorkflowsPage id={id} />;
   if (resource === "instructions") return <InstructionsPage id={id} />;
@@ -994,6 +1358,10 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
     settings?: Settings;
     version?: number;
     counts?: { members: number; runs: number; workflows: number };
+    connections?: {
+      bot: { configured: boolean; username?: string };
+      github: { connected: boolean; account?: string; repositories: number };
+    };
     items?: Audit[];
   }>(`/api/admin/workspaces/${id}/${resource}`);
   return (
@@ -1024,6 +1392,57 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
               </div>
             ))}
           </div>
+          {data.connections && (
+            <section className="overview-connections" aria-label="Connections">
+              <section
+                className="card overview-connection-card"
+                aria-label="Telegram bot"
+              >
+                <div className="row overview-connection-heading">
+                  <h2>Telegram bot</h2>
+                  <span
+                    className={`pill${data.connections.bot.configured ? " good" : ""}`}
+                  >
+                    {data.connections.bot.configured
+                      ? "Configured"
+                      : "Not configured"}
+                  </span>
+                </div>
+                <p>
+                  {data.connections.bot.configured &&
+                  data.connections.bot.username
+                    ? `@${data.connections.bot.username}`
+                    : "Connect a Telegram bot to use this workspace in chat."}
+                </p>
+                <NavLink to={`/setup?step=telegram&workspace=${id}`}>
+                  Manage bot
+                </NavLink>
+              </section>
+              <section
+                className="card overview-connection-card"
+                aria-label="GitHub"
+              >
+                <div className="row overview-connection-heading">
+                  <h2>GitHub</h2>
+                  <span
+                    className={`pill${data.connections.github.connected ? " good" : ""}`}
+                  >
+                    {data.connections.github.connected
+                      ? "Connected"
+                      : "Not connected"}
+                  </span>
+                </div>
+                <p>
+                  {data.connections.github.connected
+                    ? `${data.connections.github.account ?? "GitHub App"} · ${data.connections.github.repositories} ${data.connections.github.repositories === 1 ? "repository" : "repositories"}`
+                    : "Connect a GitHub App to grant repository access."}
+                </p>
+                <NavLink to={`/admin/plugins?workspace=${id}`}>
+                  Manage GitHub
+                </NavLink>
+              </section>
+            </section>
+          )}
           <section className="card">
             <h2>{data.settings?.name}</h2>
             <p>
@@ -1068,24 +1487,19 @@ function SettingsPage({ id }: { id: string }) {
     model: string;
     capabilities: ModelCapabilities | null;
   }>(`/api/admin/workspaces/${id}/settings`);
-  const [settings, setSettings] = useState<Settings>();
-  const [issues, setIssues] = useState<Record<string, string>>({});
+  const [current, setCurrent] = useState<{
+    version: number;
+    settings: Settings;
+  }>();
+  const [editing, setEditing] = useState<(typeof workspaceFields)[number]>();
   const [saved, setSaved] = useState(false);
   useEffect(() => {
-    setSettings(data?.settings);
-    setIssues({});
+    if (data) setCurrent({ version: data.version, settings: data.settings });
   }, [data]);
-  const update = (key: keyof Settings, value: string | number | boolean) => {
-    setSettings((previous) =>
-      previous ? { ...previous, [key]: value } : previous,
-    );
-    setIssues((previous) => ({ ...previous, [key]: "" }));
-    setSaved(false);
-  };
   return (
     <Page
       title="Workspace settings"
-      titleBadge={data ? `Version ${data.version}` : undefined}
+      titleBadge={current ? `Version ${current.version}` : undefined}
       description="Changes apply to future runs. Pause and tighter budgets apply immediately."
       actions={
         error && (
@@ -1096,122 +1510,193 @@ function SettingsPage({ id }: { id: string }) {
       }
     >
       {error && <Notice>{error}</Notice>}
-      {settings && data && (
-        <section className="card">
-          <h2>Model capacity</h2>
-          <p>
-            {data.model} ·{" "}
-            {data.capabilities
-              ? `${data.capabilities.limits.contextWindow.toLocaleString()} context tokens · ${data.capabilities.limits.maxOutputTokens.toLocaleString()} maximum output tokens`
-              : "Limits not configured"}
-          </p>
-          <p className="muted">
-            {data.capabilities?.source === "catalog"
-              ? "Source: bundled Pi model catalog."
-              : data.capabilities
-                ? "Source: deployment operator."
-                : "Ask the deployment operator to configure model limits in Setup & credentials."}{" "}
-            Response language follows the model. Input and output capacity are
-            managed automatically within model limits and your dollar budgets.
-          </p>
-          <div className="columns">
-            {workspaceFields.map(({ key, label, help, min, max, step }) => {
-              const value = settings[key];
-              const fieldId = `settings-${key}`;
-              return (
-                <Field key={key} label={label}>
-                  {typeof value === "boolean" ? (
-                    <input
-                      id={fieldId}
-                      aria-label={label}
-                      type="checkbox"
-                      checked={value}
-                      onChange={(e) => update(key, e.target.checked)}
-                    />
-                  ) : (
-                    <input
-                      id={fieldId}
-                      aria-label={label}
-                      type={typeof value === "number" ? "number" : "text"}
-                      min={min}
-                      max={max}
-                      step={step}
-                      value={Number.isNaN(value) ? "" : value}
-                      aria-invalid={!!issues[key]}
-                      aria-describedby={`${fieldId}-help${issues[key] ? ` ${fieldId}-error` : ""}`}
-                      onChange={(e) =>
-                        update(
-                          key,
-                          typeof value === "number"
-                            ? e.target.value === ""
-                              ? Number.NaN
-                              : Number(e.target.value)
-                            : e.target.value,
-                        )
-                      }
+      {!error && current && data && (
+        <>
+          <section className="card">
+            <h2>Model capacity</h2>
+            <p>
+              {data.model} ·{" "}
+              {data.capabilities
+                ? `${data.capabilities.limits.contextWindow.toLocaleString()} context tokens · ${data.capabilities.limits.maxOutputTokens.toLocaleString()} maximum output tokens`
+                : "Limits not configured"}
+            </p>
+            <p className="muted">
+              {data.capabilities?.source === "catalog"
+                ? "Source: bundled Pi model catalog."
+                : data.capabilities
+                  ? "Source: deployment operator."
+                  : "Ask the deployment operator to configure model limits in Model settings."}{" "}
+              Response language follows the model. Input and output capacity are
+              managed automatically within model limits and your dollar budgets.
+            </p>
+          </section>
+          <section
+            className="card"
+            aria-labelledby="workspace-configuration-heading"
+          >
+            <h2 id="workspace-configuration-heading">Configuration</h2>
+            <ul className="settings-list">
+              {workspaceFields.map((field) => (
+                <li className="settings-item" key={field.key}>
+                  <div className="settings-item-details">
+                    <h3>{field.label}</h3>
+                    <p className="settings-item-value">
+                      {settingValue(field.key, current.settings[field.key])}
+                    </p>
+                    <p className="muted">{field.help}</p>
+                  </div>
+                  {(field.min === undefined || field.min !== field.max) && (
+                    <IconButton
+                      icon="edit"
+                      label={`Edit ${field.label}`}
+                      disabled={loading}
+                      onClick={() => {
+                        setSaved(false);
+                        setEditing(field);
+                      }}
                     />
                   )}
-                  <small id={`${fieldId}-help`}>{help}</small>
-                  {issues[key] && (
-                    <small id={`${fieldId}-error`} role="alert">
-                      {issues[key]}
-                    </small>
-                  )}
-                </Field>
-              );
-            })}
-          </div>
-          <div className="row">
-            <Action
-              resetKey={settings}
-              onConflict={reload}
-              loading={loading}
-              onClick={async () => {
-                const parsed = settingsSchema.safeParse(settings);
-                const localIssues = parsed.success ? [] : parsed.error.issues;
-                if (localIssues.length) {
-                  setIssues(
-                    Object.fromEntries(
-                      localIssues.map((issue) => [
-                        String(issue.path[0]),
-                        issue.message,
-                      ]),
-                    ),
-                  );
-                  throw new Error("Check the highlighted fields.");
-                }
-                try {
-                  await api(`/api/admin/workspaces/${id}/settings`, "PUT", {
-                    version: data.version,
-                    settings,
-                  });
-                  setSaved(true);
-                  reload();
-                } catch (error) {
-                  if (error instanceof ApiError)
-                    setIssues(
-                      Object.fromEntries(
-                        error.issues.map((issue) => [
-                          issue.path.replace(/^settings\./, ""),
-                          issue.message,
-                        ]),
-                      ),
-                    );
-                  throw error;
-                }
+                </li>
+              ))}
+            </ul>
+            {saved && <Notice>Workspace setting saved.</Notice>}
+          </section>
+          {editing && (
+            <WorkspaceSettingEditor
+              key={editing.key}
+              id={id}
+              field={editing}
+              current={current}
+              onClose={() => setEditing(undefined)}
+              onConflict={() => {
+                setEditing(undefined);
+                reload();
               }}
-            >
-              Save settings
-            </Action>
-          </div>
-          {saved && (
-            <Notice>
-              Workspace settings saved. Submit a new run to use them.
-            </Notice>
+              onSaved={(updated) => {
+                setCurrent(updated);
+                setEditing(undefined);
+                setSaved(true);
+                reload();
+              }}
+            />
           )}
-        </section>
+        </>
       )}
     </Page>
+  );
+}
+function settingValue(key: keyof Settings, value: Settings[keyof Settings]) {
+  if (key === "paused") return value ? "Paused" : "Not paused";
+  if (key === "runBudgetUsd" || key === "monthlyBudgetUsd")
+    return `$${String(value)}`;
+  const units: Partial<Record<keyof Settings, string>> = {
+    maxTurns: "calls",
+    retentionDays: "days",
+    missedRunMinutes: "minutes",
+  };
+  const unit = units[key];
+  return unit ? `${value} ${unit}` : String(value);
+}
+function WorkspaceSettingEditor({
+  id,
+  field,
+  current,
+  onClose,
+  onConflict,
+  onSaved,
+}: {
+  id: string;
+  field: (typeof workspaceFields)[number];
+  current: { version: number; settings: Settings };
+  onClose: () => void;
+  onConflict: () => void;
+  onSaved: (updated: { version: number; settings: Settings }) => void;
+}) {
+  const [draft, setDraft] = useState(current.settings[field.key]);
+  const [issue, setIssue] = useState("");
+  const fieldId = `settings-${field.key}`;
+  const isBoolean = typeof draft === "boolean";
+  return (
+    <Modal title={`Edit ${field.label}`} onClose={onClose}>
+      <Field label={field.label}>
+        {isBoolean ? (
+          <input
+            id={fieldId}
+            type="checkbox"
+            checked={draft as boolean}
+            onChange={(event) => {
+              setDraft(event.target.checked);
+              setIssue("");
+            }}
+          />
+        ) : (
+          <input
+            id={fieldId}
+            type={typeof draft === "number" ? "number" : "text"}
+            min={field.min}
+            max={field.max}
+            step={field.step}
+            value={Number.isNaN(draft) ? "" : String(draft)}
+            aria-invalid={!!issue}
+            aria-describedby={`${fieldId}-help${issue ? ` ${fieldId}-error` : ""}`}
+            onChange={(event) => {
+              setDraft(
+                typeof current.settings[field.key] === "number"
+                  ? event.target.value === ""
+                    ? Number.NaN
+                    : Number(event.target.value)
+                  : event.target.value,
+              );
+              setIssue("");
+            }}
+          />
+        )}
+        <small id={`${fieldId}-help`}>{field.help}</small>
+        {issue && (
+          <small id={`${fieldId}-error`} role="alert">
+            {issue}
+          </small>
+        )}
+      </Field>
+      <ModalActions>
+        <Action
+          resetKey={draft}
+          onConflict={onConflict}
+          onClick={async () => {
+            const settings = { ...current.settings, [field.key]: draft };
+            const parsed = settingsSchema.safeParse(settings);
+            if (!parsed.success) {
+              setIssue(
+                parsed.error.issues.find((item) => item.path[0] === field.key)
+                  ?.message ?? "Invalid value.",
+              );
+              throw new Error("Check the highlighted field.");
+            }
+            try {
+              const updated = await api<{
+                version: number;
+                settings: Settings;
+              }>(`/api/admin/workspaces/${id}/settings`, "PUT", {
+                version: current.version,
+                settings: parsed.data,
+              });
+              onSaved(updated);
+            } catch (error) {
+              if (error instanceof ApiError)
+                setIssue(
+                  error.issues.find(
+                    (item) =>
+                      item.path.replace(/^settings\./, "") === field.key,
+                  )?.message ?? "",
+                );
+              throw error;
+            }
+          }}
+        >
+          Save change
+        </Action>
+      </ModalActions>
+    </Modal>
   );
 }
 interface AccessPolicyData {
@@ -1374,6 +1859,7 @@ function MembersPage({ id }: { id: string }) {
           <IconButton
             icon="add"
             label="Add member"
+            showLabel
             disabled={!data || loading}
             onClick={() => {
               setMember({ id: "", role: "member", active: true, allow: true });
@@ -1505,6 +1991,10 @@ function MembersPage({ id }: { id: string }) {
               onChange={(e) => setMember({ ...member, id: e.target.value })}
             />
           </Field>
+          <p className="muted member-id-help">
+            Usernames are received from Telegram; a numeric user ID is required
+            for membership.
+          </p>
           <Field label="Role">
             <select
               aria-label="Role"
@@ -1515,28 +2005,32 @@ function MembersPage({ id }: { id: string }) {
               <option value="admin">Admin</option>
             </select>
           </Field>
-          <Field label="Active membership">
+          <label className="member-toggle-row">
+            <span>Active membership</span>
             <input
+              className="member-toggle-input"
               type="checkbox"
+              role="switch"
+              aria-checked={member.active}
               checked={member.active}
               onChange={(e) =>
                 setMember({ ...member, active: e.target.checked })
               }
             />
-          </Field>
-          <p className="muted">
-            Usernames are received from Telegram; a numeric user ID is required
-            for membership.
-          </p>
-          <Field label="Also allow in whitelist">
+          </label>
+          <label className="member-toggle-row">
+            <span>Also allow in whitelist</span>
             <input
+              className="member-toggle-input"
               type="checkbox"
+              role="switch"
+              aria-checked={member.allow}
               checked={member.allow}
               onChange={(e) =>
                 setMember({ ...member, allow: e.target.checked })
               }
             />
-          </Field>
+          </label>
           <ModalActions>
             <Action
               onClick={async () => {
@@ -2639,7 +3133,7 @@ function Operations() {
           columns={[
             { key: "name", label: "Workspace" },
             { key: "status", label: "Status" },
-            { key: "ownerVerified", label: "Owner verified" },
+            { key: "ownerVerified", label: "Telegram owner linked" },
             { key: "skills", label: "Skills" },
             { key: "timezone", label: "Timezone" },
           ]}
@@ -2648,15 +3142,243 @@ function Operations() {
     </Page>
   );
 }
+function NewWorkspaceDialog({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (workspace: { id: string; name: string }) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const localTimeZone =
+    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const timeZones = Array.from(
+    new Set([
+      localTimeZone,
+      "UTC",
+      ...(Intl.supportedValuesOf?.("timeZone") ?? []),
+    ]),
+  );
+  return (
+    <Modal title="New workspace" onClose={onClose} busy={saving}>
+      <form
+        onSubmit={async (event) => {
+          event.preventDefault();
+          if (saving) return;
+          const values = new FormData(event.currentTarget);
+          const name = String(values.get("name") ?? "").trim();
+          const timezone = String(values.get("timezone") ?? "");
+          setSaving(true);
+          setError("");
+          try {
+            const created = await api<{ id: string }>(
+              "/api/setup/workspaces",
+              "POST",
+              { name, timezone },
+            );
+            onCreated({ id: created.id, name });
+          } catch (failure) {
+            setError(
+              failure instanceof Error
+                ? failure.message
+                : "Could not create workspace.",
+            );
+          } finally {
+            setSaving(false);
+          }
+        }}
+      >
+        <Field label="Workspace name">
+          <input name="name" required maxLength={80} autoComplete="off" />
+        </Field>
+        <Field label="Timezone">
+          <select name="timezone" defaultValue={localTimeZone} required>
+            {timeZones.map((zone) => (
+              <option key={zone} value={zone}>
+                {zone}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {error && (
+          <p className="notice" role="alert">
+            {error}
+          </p>
+        )}
+        <ModalActions>
+          <button type="submit" disabled={saving}>
+            {saving ? "Creating…" : "Create workspace"}
+          </button>
+        </ModalActions>
+      </form>
+    </Modal>
+  );
+}
+function WorkspacePicker({
+  workspaces,
+  chosen,
+  operator,
+  onSelect,
+  onCreate,
+}: {
+  workspaces: { id: string; name: string }[];
+  chosen: string;
+  operator: boolean;
+  onSelect: (id: string) => void;
+  onCreate: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const focusOnOpen = useRef<"first" | "last" | null>(null);
+  const selected = workspaces.find((workspace) => workspace.id === chosen);
+  const currentLabel =
+    selected?.name ??
+    (operator ? "No workspaces yet" : "Verify Telegram to continue");
+  const items = useCallback(
+    () =>
+      Array.from(
+        root.current?.querySelectorAll<HTMLButtonElement>(
+          ".workspace-menu-item",
+        ) ?? [],
+      ),
+    [],
+  );
+  useEffect(() => {
+    if (!open) return;
+    if (focusOnOpen.current) {
+      const options = items();
+      (focusOnOpen.current === "first" ? options[0] : options.at(-1))?.focus();
+      focusOnOpen.current = null;
+    }
+    const closeOutside = (event: Event) => {
+      if (event.target instanceof Node && !root.current?.contains(event.target))
+        setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("focusin", closeOutside);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("focusin", closeOutside);
+    };
+  }, [open, items]);
+  const handleMenuKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape" && open) {
+      event.preventDefault();
+      setOpen(false);
+      trigger.current?.focus();
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!open) {
+        focusOnOpen.current = event.key === "ArrowDown" ? "first" : "last";
+        setOpen(true);
+        return;
+      }
+      const options = items();
+      const index = options.indexOf(
+        document.activeElement as HTMLButtonElement,
+      );
+      const next =
+        index < 0
+          ? event.key === "ArrowDown"
+            ? 0
+            : options.length - 1
+          : (index + (event.key === "ArrowDown" ? 1 : -1) + options.length) %
+            options.length;
+      options[next]?.focus();
+    } else if (open && (event.key === "Home" || event.key === "End")) {
+      event.preventDefault();
+      const options = items();
+      (event.key === "Home" ? options[0] : options.at(-1))?.focus();
+    }
+  };
+  return (
+    <div className="workspace-picker">
+      <span className="workspace-picker-label">Workspace</span>
+      <div className="workspace-picker-control" ref={root}>
+        <button
+          ref={trigger}
+          type="button"
+          className="workspace-picker-trigger"
+          aria-label="Workspace"
+          aria-describedby="workspace-picker-current"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-controls={open ? "workspace-picker-menu" : undefined}
+          disabled={!workspaces.length && !operator}
+          onClick={() => {
+            if (open) setOpen(false);
+            else {
+              focusOnOpen.current = "first";
+              setOpen(true);
+            }
+          }}
+          onKeyDown={handleMenuKeyDown}
+        >
+          <span id="workspace-picker-current">{currentLabel}</span>
+        </button>
+        {open && (
+          <div
+            id="workspace-picker-menu"
+            className="workspace-picker-menu"
+            role="menu"
+            aria-label="Workspaces"
+            onKeyDown={handleMenuKeyDown}
+          >
+            {workspaces.map((workspace) => (
+              <button
+                key={workspace.id}
+                type="button"
+                className="workspace-menu-item"
+                role="menuitemradio"
+                aria-checked={workspace.id === chosen}
+                data-workspace-id={workspace.id}
+                onClick={() => {
+                  setOpen(false);
+                  onSelect(workspace.id);
+                  trigger.current?.focus();
+                }}
+              >
+                <span>{workspace.name}</span>
+                {workspace.id === chosen && (
+                  <span className="workspace-menu-check" aria-hidden="true">
+                    ✓
+                  </span>
+                )}
+              </button>
+            ))}
+            {operator && (
+              <button
+                type="button"
+                className="workspace-menu-item workspace-menu-create"
+                role="menuitem"
+                onClick={() => {
+                  trigger.current?.focus();
+                  setOpen(false);
+                  onCreate();
+                }}
+              >
+                + New workspace…
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 function Shell() {
   const [current, setCurrent] = useState<Session>();
   const [initialized, setInitialized] = useState<boolean>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [workspace, setWorkspace] = useState("");
+  const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [workspaces, setWorkspaces] = useState<{ id: string; name: string }[]>(
     [],
   );
+  const location = useLocation();
   const navigate = useNavigate();
   const [locationParams] = useSearchParams();
   const requestedWorkspace = locationParams.get("workspace");
@@ -2689,8 +3411,25 @@ function Shell() {
   useEffect(() => {
     void load();
   }, [load]);
+  useEffect(() => {
+    void location.key;
+    if (!current) return;
+    void api<{ id: string; name: string }[]>("/api/admin/workspaces")
+      .then(setWorkspaces)
+      .catch(() => {});
+  }, [current, location.key]);
   const chosen = workspace || workspaces[0]?.id || "";
-  const navigation = [
+  const selectWorkspace = (id: string) => {
+    setWorkspace(id);
+    const params = new URLSearchParams(location.search);
+    params.set("workspace", id);
+    navigate(
+      { pathname: location.pathname, search: params.toString() },
+      { replace: true },
+    );
+  };
+  const setupLayout = !!current && location.pathname === "/setup";
+  const navigation: [string, string][] = [
     ["overview", "Overview"],
     ["settings", "Settings"],
     ["members", "Members & access"],
@@ -2703,37 +3442,56 @@ function Shell() {
     ["audit", "Audit"],
     ["deletion", "Privacy"],
   ];
+  const operatorOnly = !!current?.admin.operator && !current.admin.telegramId;
+  const visibleNavigation = operatorOnly
+    ? navigation.filter(([path]) =>
+        ["overview", "settings", "members", "skills"].includes(path),
+      )
+    : navigation;
   return (
-    <div className="layout">
+    <div
+      className={
+        current && !setupLayout
+          ? "layout"
+          : `layout layout-auth${setupLayout ? " layout-setup" : ""}`
+      }
+    >
       <aside>
         <div className="brand">
-          <span className="mark">D</span>
+          <img
+            className="brand-mark"
+            src="/assets/repodesk-mark.svg"
+            width="42"
+            height="42"
+            alt=""
+          />
           <div>
-            DeepX<span>TEAM ASSISTANT</span>
+            RepoDesk<span>GITHUB ASSISTANT</span>
           </div>
         </div>
-        {current ? (
+        {current && !setupLayout ? (
           <>
-            <div className="workspace-picker">
-              <Field label="Workspace">
-                <select
-                  value={chosen}
-                  onChange={(e) => setWorkspace(e.target.value)}
-                >
-                  {workspaces.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name}
-                    </option>
-                  ))}
-                  {!workspaces.length && (
-                    <option>Verify Telegram to continue</option>
-                  )}
-                </select>
-              </Field>
-            </div>
+            <WorkspacePicker
+              workspaces={workspaces}
+              chosen={chosen}
+              operator={current.admin.operator}
+              onSelect={selectWorkspace}
+              onCreate={() => setCreatingWorkspace(true)}
+            />
+            {creatingWorkspace && (
+              <NewWorkspaceDialog
+                onClose={() => setCreatingWorkspace(false)}
+                onCreated={(created) => {
+                  setWorkspaces((previous) => [...previous, created]);
+                  setWorkspace(created.id);
+                  setCreatingWorkspace(false);
+                  navigate(`/admin/settings?workspace=${created.id}`);
+                }}
+              />
+            )}
             <nav>
               {chosen &&
-                navigation.map(([path, label]) => (
+                visibleNavigation.map(([path, label]) => (
                   <NavLink key={path} to={`/admin/${path}`}>
                     {label}
                   </NavLink>
@@ -2744,7 +3502,8 @@ function Shell() {
               {current.admin.operator && (
                 <>
                   <p className="nav-label">DEPLOYMENT</p>
-                  <NavLink to="/setup">Setup & credentials</NavLink>
+                  <NavLink to="/admin/model">Model settings</NavLink>
+                  <NavLink to="/setup">Setup</NavLink>
                   <NavLink to="/admin/operations">Operations</NavLink>
                   <NavLink to="/admin/logs">Runtime logs</NavLink>
                 </>
@@ -2770,12 +3529,43 @@ function Shell() {
             </div>
           </>
         ) : (
-          <p className="sidebar-note">
-            A workspace for useful, accountable team assistance.
-          </p>
+          <>
+            <div className="auth-hero">
+              <p className="auth-hero-kicker">A WORKSPACE FOR YOUR TEAM</p>
+              <h2>Make room for better work.</h2>
+              <p className="auth-hero-copy">
+                Set up your assistant, connect Telegram, and choose how your
+                team works with it.
+              </p>
+              <AuthNetwork />
+            </div>
+            <p className="auth-hero-footer">RepoDesk / Your deployment</p>
+            {current && (
+              <div className="account setup-account">
+                <small>
+                  {current.admin.username} · Telegram{" "}
+                  {current.admin.telegramId ? "linked" : "unlinked"}
+                </small>
+                <Action
+                  icon="logout"
+                  onClick={async () => {
+                    await api("/api/admin/auth/logout", "POST", {});
+                    csrf = "";
+                    setCurrent(undefined);
+                  }}
+                >
+                  Sign out
+                </Action>
+              </div>
+            )}
+          </>
         )}
       </aside>
-      <main>
+      <main
+        className={
+          setupLayout ? "setup-main" : !current ? "auth-main" : undefined
+        }
+      >
         {loading ? (
           <Notice>Connecting to your deployment…</Notice>
         ) : error ? (
@@ -2791,6 +3581,18 @@ function Shell() {
         ) : (
           <Routes>
             <Route path="/setup" element={<Setup />} />
+            <Route
+              path="/admin/model"
+              element={
+                current.admin.operator ? (
+                  <ModelSettings workspaceId={chosen} />
+                ) : (
+                  <Page title="Operator access required">
+                    <p>Model settings are available to deployment operators.</p>
+                  </Page>
+                )
+              }
+            />
             <Route path="/admin/operations" element={<Operations />} />
             <Route
               path="/admin/plugins"
@@ -2829,7 +3631,7 @@ function Shell() {
                 />
               }
             />
-            {navigation.map(([path]) => (
+            {visibleNavigation.map(([path]) => (
               <Route
                 key={path}
                 path={`/admin/${path}`}

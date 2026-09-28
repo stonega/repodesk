@@ -8,7 +8,6 @@ import { Store } from "../../src/db/repositories.ts";
 import { GitHubApps } from "../../src/github/registry.ts";
 import { GitHubService } from "../../src/github/service.ts";
 import { RuntimeLogger } from "../../src/observability/logs.ts";
-import { hash } from "../../src/setup/credentials.ts";
 import { SetupService } from "../../src/setup/service.ts";
 import { TelegramPoller } from "../../src/telegram/polling.ts";
 import { githubTransport } from "../github-fixture.ts";
@@ -22,10 +21,6 @@ const parsed = new URL(rootUrl);
 parsed.pathname = `/${name}`;
 const pool = database(parsed.toString());
 await migrate(pool);
-await pool.query(
-  "UPDATE deployment SET bootstrap_hash=$1,bootstrap_expires_at=now()+interval '15 minutes' WHERE id=true",
-  [hash("browser-claim-token")],
-);
 await mkdir("test-results", { recursive: true });
 await writeFile(
   "test-results/browser-db.json",
@@ -71,8 +66,14 @@ const server = serve({
       store,
       "ab".repeat(32),
       "http://127.0.0.1:3107",
-      new GitHubApps(store, "ab".repeat(32), undefined, githubTransport()),
+      new GitHubApps(
+        store,
+        "ab".repeat(32),
+        undefined,
+        githubTransport(undefined, 13),
+      ),
     ),
+    "ab".repeat(32),
   ).fetch,
   hostname: "127.0.0.1",
   port: 3107,

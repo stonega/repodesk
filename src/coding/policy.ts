@@ -51,6 +51,12 @@ export function codingDestination(
     configRevision: w.coding.revision,
     baseBranch: target.baseBranch,
     workflowFile: target.workflowFile,
+    ...(w.coding.settings.backend
+      ? { backend: w.coding.settings.backend }
+      : {}),
+    ...(w.coding.settings.backend === "podman"
+      ? { setupCommand: target.setupCommand, checkCommand: target.checkCommand }
+      : {}),
   });
 }
 export function checkCodingPayload(
@@ -121,7 +127,7 @@ export function proposeCoding(
     w,
     actor,
     run.chatId,
-    `Start Codex implementation in ${payload.repository}?\nBase branch: ${payload.baseBranch}\nWorkflow: ${payload.workflowFile}\n\nTitle: ${payload.title}\n\n${payload.body}\n\nApprove to create this issue, run Codex in GitHub Actions, push a task branch and open a draft PR referencing the issue. GitHub Actions and OpenAI usage are billed separately.`,
+    `Start Codex implementation in ${payload.repository}?\nBase branch: ${payload.baseBranch}\n${payload.backend === "podman" ? "Runner: local Podman" : `Workflow: ${payload.workflowFile}`}\n\nTitle: ${payload.title}\n\n${payload.body}\n\nApprove to create this issue, run Codex ${payload.backend === "podman" ? "in an isolated local container" : "in GitHub Actions"}, push a task branch and open a draft PR referencing the issue. Coding provider usage${payload.backend === "podman" ? "" : " and GitHub Actions"} is billed separately from chat usage.`,
     {
       runId,
       topicId: run.topicId,

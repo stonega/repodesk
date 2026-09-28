@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { branchName } from "../../src/coding/config.ts";
+import { branchName, type CodingTask } from "../../src/coding/config.ts";
+import { CodingGitHub } from "../../src/coding/github.ts";
 import {
   cancelCoding,
   codingDestination,
@@ -7,6 +8,7 @@ import {
 } from "../../src/coding/policy.ts";
 import { codingView, saveCoding } from "../../src/coding/service.ts";
 import { sweep } from "../../src/privacy/service.ts";
+import { decrypt } from "../../src/setup/credentials.ts";
 import { decide } from "../../src/workflows/service.ts";
 import { createRun } from "../../src/workspaces/service.ts";
 import { workspace } from "../fixtures.ts";
@@ -53,6 +55,62 @@ const input = {
   title: "Fix recap",
   body: "Include the last message. Add regression tests.",
 };
+test("coding run and PR discovery accept RepoDesk and earlier task names", async () => {
+  for (const prefix of ["repodesk", "deepx"]) {
+    const id = "task-123";
+    const branch = `codex/${prefix}-${id}`;
+    const task = {
+      id,
+      createdAt: "2026-09-26T00:00:00.000Z",
+      issue: {
+        number: 42,
+        url: "https://github.com/example/workspace/issues/42",
+      },
+      payload: {
+        repository: "example/workspace",
+        baseBranch: "develop",
+        workflowFile: `${prefix}-codex.yml`,
+      },
+    } as CodingTask;
+    const github = new CodingGitHub((async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/runs"))
+        return Response.json({
+          workflow_runs: [
+            {
+              id: 81,
+              display_title: `${prefix}-coding:${id}`,
+              event: "workflow_dispatch",
+              head_branch: "develop",
+              status: "completed",
+              conclusion: "success",
+            },
+          ],
+        });
+      if (url.pathname.endsWith("/pulls"))
+        return Response.json(
+          url.searchParams.get("head") === `example:${branch}`
+            ? [
+                {
+                  number: 43,
+                  body: "Implements https://github.com/example/workspace/issues/42",
+                  head: {
+                    ref: branch,
+                    repo: { full_name: "example/workspace" },
+                  },
+                  base: { ref: "develop" },
+                },
+              ]
+            : [],
+        );
+      throw new Error(`Unexpected GitHub request: ${url.pathname}`);
+    }) as typeof fetch);
+    expect((await github.run("token", task))?.id).toBe(81);
+    expect(await github.pull("token", task)).toBe(
+      "https://github.com/example/workspace/pull/43",
+    );
+  }
+});
 test("only a repository maintainer can propose; workspace admin is not an implicit grant", () => {
   const { w } = codingFixture();
   for (const actor of ["202", "303"])
@@ -171,4 +229,46 @@ test("disconnected repositories do not prevent disabling the extension", () => {
     { revision: 1, settings: { ...settings, enabled: false } },
   );
   expect(result.settings.enabled).toBe(false);
+});
+
+test("workspace provider credentials are encrypted, redacted, revisioned and explicitly removable", () => {
+  const { w, run } = codingFixture();
+  const admin = { id: w.operatorId, operator: true, username: "operator" };
+  const key = "ab".repeat(32);
+  const settings = present(w.coding).settings;
+  const approval = proposeCoding(w, "101", run.id, "before-key", input);
+  const save = (revision: number, providerApiKey?: string | null) =>
+    saveCoding(w, admin, { revision, settings, providerApiKey }, key);
+  const page = save(1, "workspace-provider-secret");
+  const ciphertext = present(w.coding?.providerApiKey);
+  expect(ciphertext).not.toContain("workspace-provider-secret");
+  expect(decrypt(key, `coding-provider:${w.id}`, ciphertext)).toBe(
+    "workspace-provider-secret",
+  );
+  expect(() =>
+    decrypt(key, "coding-provider:another-workspace", ciphertext),
+  ).toThrow();
+  expect(page.providerApiKeyConfigured).toBe(true);
+  expect(JSON.stringify(page)).not.toContain(ciphertext);
+  expect(JSON.stringify(w)).not.toContain("workspace-provider-secret");
+  expect(() => decide(w, "101", approval.id, true)).toThrow();
+  save(2);
+  expect(w.coding?.providerApiKey).toBe(ciphertext);
+  expect(() => save(2, "stale-secret")).toThrow("version_conflict");
+  expect(() =>
+    saveCoding(
+      w,
+      { ...admin, id: "other" },
+      { revision: 3, settings, providerApiKey: "foreign-secret" },
+      key,
+    ),
+  ).toThrow("access_denied");
+  expect(w.coding?.providerApiKey).toBe(ciphertext);
+  expect(() => save(3, " ")).toThrow();
+  save(3, "replacement-secret");
+  expect(
+    decrypt(key, `coding-provider:${w.id}`, present(w.coding?.providerApiKey)),
+  ).toBe("replacement-secret");
+  expect(save(4, null).providerApiKeyConfigured).toBe(false);
+  expect(w.coding?.providerApiKey).toBeUndefined();
 });

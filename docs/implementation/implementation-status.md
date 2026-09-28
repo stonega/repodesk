@@ -1,10 +1,25 @@
-# Implementation evidence — 2026-09-18
+# Implementation evidence
 
-The repository now contains the local P0 bot/admin/worker implementation. It has not
-been connected to a live Telegram bot or paid model account, deployed to a public host,
-or accepted by a pilot team. Those external gates remain unchecked in the bot plan.
+This dated log records local implementation and verification, including the P0
+bot/admin/worker foundation and bounded GitHub paths. Some changes were deployed to
+a local Podman stack, but the [primary GitHub journey](../design/github-workflows.md)
+has not been validated end to end with live GitHub, model and Telegram operations or
+accepted by a pilot team. Each entry states its own test scope and remaining gates.
 
 ## Implemented
+
+### Setup flow and panel model settings (2026-09-27)
+
+The authenticated wizard now follows Workspace → Telegram → GitHub App → Enter
+panel. It reuses guided App registration and repository connection, returning
+GitHub callbacks to the wizard when started there. GitHub access can be finished
+later from Plugins. Model credentials and explicit bot activation moved to the
+operator's Model settings page; entering the panel leaves the bot inactive.
+
+Validation: Biome, TypeScript and build passed; 296 Bun tests passed with an
+isolated PostgreSQL test database, and all 16 browser tests passed. Browser tests
+used fake Telegram, GitHub and model transports. This change was not deployed or
+tested against live providers.
 
 ### Group names and local deployment (2026-09-21)
 
@@ -692,3 +707,84 @@ returned `ready`, and the new worker logged `telegram_polling_connected` at
 2026-09-22 04:34:06 UTC. Temporary browser/database/smoke containers were removed.
 No manual Telegram test message or paid model evaluation was sent. Actual follow-up
 classification quality and cache hit rates remain live acceptance work.
+
+## Silent unsupported media deployment (2026-09-22)
+
+Non-text requests no longer receive the text-only pilot warning. Unsupported media,
+including captions, is silently ignored by the ask/recap handler.
+
+Updated the existing Podman app and worker to
+`localhost/deepx-agent:quiet-media-20260922`, also tagged `:local`, image
+`3d4f7a5356e571af1d9a60d2c4924b195fcd2e9da63235e5a78bf311dc4f1df1`.
+Lint, strict TypeScript and build passed, along with all 278 tests against disposable
+PostgreSQL and all 16 browser tests. The Docker-format image passed the isolated
+Node runtime contract, migration and HTTP/UI startup smoke checks. Compose validated.
+
+No runs or deliveries were active at the pre-cutover check. The protected backup
+`backups/deepx-pre-quiet-media-20260922T0704.dump` was created and its archive directory
+verified. The prior image `82dc91185b8992898417447f20e792dd4a74cbc887d4054cfc7b71e74b3655be`
+is retained as `localhost/deepx-agent:rollback-pre-quiet-media-20260922`.
+Migration completed successfully; PostgreSQL and Code Truth were not recreated.
+
+Both replaced containers are healthy, liveness/readiness return `ok`/`ready`, and
+Telegram polling reconnected at 2026-09-22 07:05:11 UTC. The removed warning is absent
+from the deployed worker bundle. Temporary test containers were removed. No manual
+Telegram test message or paid model evaluation was sent.
+
+## Local Codex Podman backend — 2026-09-22
+
+- Added the optional `podman` coding backend alongside the existing GitHub Actions
+  default, with panel selection and per-repository setup/check commands pinned to
+  the maintainer approval. Provider settings follow the inspected device's custom
+  Responses-provider configuration. Workspace operators can save, replace and remove
+  API keys in the panel; keys are encrypted and redacted. The supervisor environment
+  variable `CODEX_PROVIDER_API_KEY` remains an optional fallback.
+- Added a trusted supervisor, per-task rootless containers/volumes, bounded execution,
+  temporary model proxy credentials, separate preparation and publication, durable
+  task state, cancellation, restart reconciliation and retention cleanup. Publication
+  rechecks authorization after minting repository-scoped GitHub write credentials.
+- Validation: full suite with isolated PostgreSQL **286 passed**; final focused
+  coding/runner suite after recovery hardening **24 passed**; browser suite **16
+  passed**. Biome, TypeScript and Bun build passed. All three Docker image targets
+  built with Podman; the app served health/setup/assets successfully. The real
+  Podman smoke passed with fake Codex and a local Git fixture. Merged Docker Compose
+  configuration validated. Tests excluded this device's HTTP proxy for loopback
+  requests. No live model call, GitHub publication or deployment was performed.
+- Panel credential follow-up: save/replace/remove uses workspace-bound AES-256-GCM,
+  redacted responses, revision invalidation and active-task cancellation. The runner
+  retains an encrypted credential only while preparing/running. Validation: **292
+  tests passed**, **16 browser tests passed**, and **11 focused coding integration
+  tests passed** after adding key-rotation cancellation coverage. Biome, TypeScript,
+  build, all three image targets, app health/assets smoke, real Podman smoke without
+  an environment API key, and Compose validation passed. No deployment performed.
+- Existing Telegram issue-to-PR semantics remain. Codex session files/thread IDs
+  are retained, but continuing a completed task from Telegram is not exposed yet.
+  Live custom-provider execution and GitHub publication remain staging gates.
+  See [local runner setup and boundaries](codex-podman.md).
+
+## Codex panel credentials deployment (2026-09-22)
+
+Updated the existing Podman stack with `compose.yaml`,
+`examples/code-truth.compose.yaml` and `deploy/codex/compose.yaml`. App and worker
+run `localhost/deepx-agent:codex-panel-20260922` (also `:local`), image
+`8eb16f6b41ffd6d5c553b3f41437b8408902270929c7bda3d17f27ed8163caee`.
+The new healthy Codex supervisor uses image `0028cf13ee5f`; the prebuilt local job
+image is `39beb8943be7`. Private deployment configuration now includes the Codex
+overlay, a generated runner authentication token and the rootless Podman socket.
+Provider API keys are configured through the workspace panel; no provider key was
+copied from the host or configured as an environment fallback. Existing workspace
+backend selections and plugin enablement were preserved.
+
+Pre-cutover counts showed no queued/running runs, pending/sending deliveries or
+active coding tasks. A protected database archive was created and validated at
+`backups/deepx-pre-codex-panel-20260922T100107Z.dump`; the previous private environment
+was also backed up. The old app image remains tagged
+`localhost/deepx-agent:rollback-pre-codex-panel-20260922`. Migration completed.
+PostgreSQL and Code Truth containers were not recreated.
+
+The rebuilt app image matches the previously tested image, and its isolated Node
+runtime contract passed. Compose validation and deployment health checks passed.
+The app serves the API-key management bundle, the worker reaches the supervisor,
+and the supervisor confirms rootless Podman access. `/readyz` returns HTTP 200
+with `ready`; Telegram polling reconnected at 2026-09-22 10:02:32 UTC.
+No manual Telegram message, live model test or GitHub publication was performed.

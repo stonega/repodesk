@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
 import { credentialsSchema } from "../agent/model-settings.ts";
@@ -9,6 +9,7 @@ import { codingView, saveCoding } from "../coding/service.ts";
 import { type Sql, transaction } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import {
+  type Admin,
   requireThat,
   type Session,
   settingsSchema,
@@ -45,6 +46,9 @@ import { cancelRun, createRun, visibleRuns } from "../workspaces/service.ts";
 import { claim, login, operator, session, throttle } from "./auth.ts";
 
 type Env = { Variables: { session: Session } };
+const sessionCookie = "repodesk_session";
+const sessionCookieValue = (c: Context<Env>) =>
+  getCookie(c, sessionCookie) ?? getCookie(c, "deepx_session");
 const version = z.number().int().positive();
 const authInput = z.object({
   username: z.string().regex(/^[a-zA-Z0-9_.-]{3,64}$/),
@@ -58,6 +62,13 @@ const policyInput = z
   })
   .strict();
 const validId = (id: string) => z.uuid().parse(id);
+const workspaceActor = (w: Workspace, admin: Admin) => {
+  if (admin.telegramId && eligible(w, admin.telegramId, true))
+    return admin.telegramId;
+  if (admin.operator && w.operatorId === admin.id && !w.deletion)
+    return admin.id;
+  return authorize(w, admin.telegramId, true);
+};
 
 import type { GitHubService } from "../github/service.ts";
 
@@ -67,6 +78,7 @@ export function adminRoutes(
   origin: string,
   plugins: PluginService,
   github: GitHubService,
+  encryptionKey?: string,
 ) {
   const app = new Hono<Env>();
   app.use("/api/*", async (c, next) => {
@@ -79,7 +91,7 @@ export function adminRoutes(
       c.req.path === "/api/admin/auth/login"
     )
       return next();
-    const current = await session(store.pool, getCookie(c, "deepx_session"));
+    const current = await session(store.pool, sessionCookieValue(c));
     requireThat(current, "authentication_required", 401);
     c.set("session", current);
     if (!["GET", "HEAD"].includes(c.req.method))
@@ -105,31 +117,24 @@ export function adminRoutes(
   });
   app.post("/api/setup/claim", async (c) => {
     await throttle(store.pool, "claim");
-    const input = authInput
-      .extend({ token: z.string().max(100) })
-      .strict()
-      .parse(await c.req.json());
-    const result = await claim(
-      store.pool,
-      input.token,
-      input.username,
-      input.password,
-    );
-    setCookie(c, "deepx_session", result.raw, cookieOptions);
+    const input = authInput.strict().parse(await c.req.json());
+    const result = await claim(store.pool, input.username, input.password);
+    setCookie(c, sessionCookie, result.raw, cookieOptions);
     return c.json({ csrf: result.csrf });
   });
   app.post("/api/admin/auth/login", async (c) => {
     const input = authInput.strict().parse(await c.req.json());
     await throttle(store.pool, `login:${input.username}`);
     const result = await login(store.pool, input.username, input.password);
-    setCookie(c, "deepx_session", result.raw, cookieOptions);
+    setCookie(c, sessionCookie, result.raw, cookieOptions);
     return c.json({ csrf: result.csrf });
   });
   app.get("/api/admin/auth/session", (c) => c.json(c.get("session")));
   app.post("/api/admin/auth/logout", async (c) => {
     await store.pool.query("DELETE FROM sessions WHERE token_hash=$1", [
-      hash(getCookie(c, "deepx_session") ?? ""),
+      hash(sessionCookieValue(c) ?? ""),
     ]);
+    deleteCookie(c, sessionCookie, { path: "/" });
     deleteCookie(c, "deepx_session", { path: "/" });
     return c.json({ ok: true });
   });
@@ -190,8 +195,60 @@ export function adminRoutes(
   app.post("/api/setup/activate", async (c) =>
     c.json(await setup.activate(c.get("session").admin)),
   );
+  app.get("/api/setup/workspaces/:id/access", async (c) =>
+    c.json(
+      await setup.access(c.get("session").admin, validId(c.req.param("id"))),
+    ),
+  );
+  app.post("/api/setup/workspaces/:id/access", async (c) => {
+    const input = z
+      .object({ actor: userId, version })
+      .strict()
+      .parse(await c.req.json());
+    return c.json(
+      await setup.allowMember(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+        input.actor,
+        input.version,
+      ),
+    );
+  });
+  app.delete("/api/setup/workspaces/:id/access/:actor", async (c) => {
+    const input = z
+      .object({ version })
+      .strict()
+      .parse(await c.req.json());
+    return c.json(
+      await setup.revokeMember(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+        userId.parse(c.req.param("actor")),
+        input.version,
+      ),
+    );
+  });
+  app.post(
+    "/api/setup/workspaces/:id/access-requests/:request/decision",
+    async (c) => {
+      const input = z
+        .object({ version, decision: z.enum(["approved", "rejected"]) })
+        .strict()
+        .parse(await c.req.json());
+      return c.json(
+        await setup.decideAccess(
+          c.get("session").admin,
+          validId(c.req.param("id")),
+          validId(c.req.param("request")),
+          input.decision,
+          input.version,
+        ),
+      );
+    },
+  );
   app.get("/api/admin/github/app/callback", async (c) => {
     c.header("Referrer-Policy", "no-referrer");
+    let fromSetup = false;
     try {
       const input = z
         .object({
@@ -199,26 +256,35 @@ export function adminRoutes(
           code: z.string().min(1).max(200).optional(),
         })
         .parse(c.req.query());
+      fromSetup = input.state.startsWith("setup_");
       const id = await github.registrationResult(
         c.get("session").admin,
-        hash(getCookie(c, "deepx_session") ?? ""),
+        hash(sessionCookieValue(c) ?? ""),
         input.state,
         input.code,
       );
-      return c.redirect(`/admin/plugins?workspace=${id}&github=app-created`);
+      return c.redirect(
+        fromSetup
+          ? `/setup?step=github&workspace=${id}&github=app-created`
+          : `/admin/plugins?workspace=${id}&github=app-created`,
+      );
     } catch {
-      return c.redirect("/admin/plugins?github=registration-failed");
+      return c.redirect(
+        fromSetup
+          ? "/setup?step=github&github=registration-failed"
+          : "/admin/plugins?github=registration-failed",
+      );
     }
   });
   app.post("/api/admin/workspaces/:id/github/register", async (c) => {
-    const raw = getCookie(c, "deepx_session") ?? "";
+    const raw = sessionCookieValue(c) ?? "";
     const result = await github.register(
       c.get("session").admin,
       validId(c.req.param("id")),
       hash(raw),
       await c.req.json(),
     );
-    setCookie(c, "deepx_session", raw, {
+    setCookie(c, sessionCookie, raw, {
       ...cookieOptions,
       maxAge: Math.max(
         0,
@@ -231,6 +297,7 @@ export function adminRoutes(
   });
   app.get("/api/admin/github/callback", async (c) => {
     c.header("Referrer-Policy", "no-referrer");
+    let fromSetup = false;
     try {
       const input = z
         .object({
@@ -238,15 +305,24 @@ export function adminRoutes(
           code: z.string().min(1).max(1000).optional(),
         })
         .parse(c.req.query());
+      fromSetup = input.state.startsWith("setup_");
       const id = await github.callbackResult(
         c.get("session").admin,
-        hash(getCookie(c, "deepx_session") ?? ""),
+        hash(sessionCookieValue(c) ?? ""),
         input.state,
         input.code,
       );
-      return c.redirect(`/admin/plugins?workspace=${id}&github=authorized`);
+      return c.redirect(
+        fromSetup
+          ? `/setup?step=github&workspace=${id}&github=authorized`
+          : `/admin/plugins?workspace=${id}&github=authorized`,
+      );
     } catch {
-      return c.redirect("/admin/plugins?github=failed");
+      return c.redirect(
+        fromSetup
+          ? "/setup?step=github&github=failed"
+          : "/admin/plugins?github=failed",
+      );
     }
   });
   app.get("/api/admin/workspaces/:id/github", async (c) =>
@@ -254,22 +330,24 @@ export function adminRoutes(
       await github.view(
         c.get("session").admin,
         validId(c.req.param("id")),
-        hash(getCookie(c, "deepx_session") ?? ""),
+        hash(sessionCookieValue(c) ?? ""),
       ),
     ),
   );
   app.post("/api/admin/workspaces/:id/github/connect", async (c) => {
-    z.object({})
+    const input = z
+      .object({ source: z.literal("setup").optional() })
       .strict()
       .parse(await c.req.json());
-    const raw = getCookie(c, "deepx_session") ?? "";
+    const raw = sessionCookieValue(c) ?? "";
     const result = await github.begin(
       c.get("session").admin,
       validId(c.req.param("id")),
       hash(raw),
+      input.source,
     );
     // Refresh existing Strict cookies for the top-level OAuth return. All ordinary writes still require Origin and CSRF.
-    setCookie(c, "deepx_session", raw, {
+    setCookie(c, sessionCookie, raw, {
       ...cookieOptions,
       maxAge: Math.max(
         0,
@@ -287,7 +365,7 @@ export function adminRoutes(
         await github.repositories(
           c.get("session").admin,
           validId(c.req.param("id")),
-          hash(getCookie(c, "deepx_session") ?? ""),
+          hash(sessionCookieValue(c) ?? ""),
           z.coerce
             .number()
             .int()
@@ -301,7 +379,7 @@ export function adminRoutes(
       await github.connect(
         c.get("session").admin,
         validId(c.req.param("id")),
-        hash(getCookie(c, "deepx_session") ?? ""),
+        hash(sessionCookieValue(c) ?? ""),
         await c.req.json(),
       ),
     ),
@@ -311,7 +389,7 @@ export function adminRoutes(
       await github.disconnect(
         c.get("session").admin,
         validId(c.req.param("id")),
-        hash(getCookie(c, "deepx_session") ?? ""),
+        hash(sessionCookieValue(c) ?? ""),
         await c.req.json(),
       ),
     ),
@@ -328,7 +406,7 @@ export function adminRoutes(
     const input = await c.req.json();
     return c.json(
       await store.change(validId(c.req.param("id")), (w) =>
-        saveCoding(w, c.get("session").admin, input),
+        saveCoding(w, c.get("session").admin, input, encryptionKey),
       ),
     );
   });
@@ -480,21 +558,37 @@ export function adminRoutes(
     return c.json({ ok: true });
   });
   app.get("/api/admin/workspaces", async (c) => {
-    const actor = c.get("session").admin.telegramId;
+    const admin = c.get("session").admin;
     return c.json(
       (await store.all())
-        .filter((w) => actor && eligible(w, actor, true))
+        .filter(
+          (w) =>
+            !w.deletion &&
+            ((admin.telegramId && eligible(w, admin.telegramId, true)) ||
+              (admin.operator && w.operatorId === admin.id)),
+        )
         .map((w) => ({ id: w.id, name: w.settings.name })),
     );
   });
   app.use("/api/admin/workspaces/:id/*", async (c, next) => {
     const w = await store.read(validId(c.req.param("id") ?? ""));
-    authorize(w, c.get("session").admin.telegramId, true);
+    const admin = c.get("session").admin;
+    const actor = workspaceActor(w, admin);
+    if (actor === admin.id) {
+      const resource = c.req.path.split("/").slice(5).join("/");
+      requireThat(
+        /^(overview|settings|members|access-policy|access-requests|skills)(\/.*)?$/.test(
+          resource,
+        ),
+        "access_denied",
+        403,
+      );
+    }
     await next();
   });
   app.get("/api/admin/workspaces/:id/:resource", async (c) => {
     const w = await store.read(validId(c.req.param("id")));
-    const actor = authorize(w, c.get("session").admin.telegramId, true);
+    const actor = workspaceActor(w, c.get("session").admin);
     const offset = Math.max(0, Number(c.req.query("offset")) || 0);
     const take = <T>(items: T[]) => ({
       items: items.slice(offset, offset + 100),
@@ -502,18 +596,39 @@ export function adminRoutes(
       offset,
     });
     switch (c.req.param("resource")) {
-      case "overview":
+      case "overview": {
+        const admin = c.get("session").admin;
+        const deployment =
+          admin.operator && w.operatorId === admin.id
+            ? await store.deployment()
+            : undefined;
         return c.json({
           id: w.id,
           settings: w.settings,
           version: w.version,
           counts: {
             members: w.members.filter((m) => m.active).length,
-            runs: visibleRuns(w, actor).length,
+            runs: actor === w.operatorId ? 0 : visibleRuns(w, actor).length,
             workflows: w.workflows.filter((f) => f.status === "active").length,
           },
           policyVersion: w.policy.version,
+          connections: deployment
+            ? {
+                bot: {
+                  configured: !!deployment.credentials.bot && !!deployment.bot,
+                  username: deployment.credentials.bot
+                    ? deployment.bot?.username
+                    : undefined,
+                },
+                github: {
+                  connected: !!w.github?.installationId,
+                  account: w.github?.account,
+                  repositories: w.github?.repositories.length ?? 0,
+                },
+              }
+            : undefined,
         });
+      }
       case "settings": {
         const deployment = await store.deployment();
         return c.json({
@@ -636,7 +751,7 @@ export function adminRoutes(
     fn: (w: Workspace, actor: string, sql: Sql) => T,
   ) =>
     store.change(validId(c.req.param("id")), (w, sql) =>
-      fn(w, authorize(w, c.get("session").admin.telegramId, true), sql),
+      fn(w, workspaceActor(w, c.get("session").admin), sql),
     );
   app.put("/api/admin/workspaces/:id/settings", async (c) => {
     const input = z
@@ -755,16 +870,18 @@ export function adminRoutes(
           });
         if (input.allow && !w.policy.allowed.includes(input.id))
           w.policy.allowed.push(input.id);
-        requireThat(
-          w.members.some(
-            (m) =>
-              m.active &&
-              m.role !== "member" &&
-              (w.policy.mode === "members" || w.policy.allowed.includes(m.id)),
-          ),
-          "last_admin_lockout",
-          409,
-        );
+        if (actor !== w.operatorId)
+          requireThat(
+            w.members.some(
+              (m) =>
+                m.active &&
+                m.role !== "member" &&
+                (w.policy.mode === "members" ||
+                  w.policy.allowed.includes(m.id)),
+            ),
+            "last_admin_lockout",
+            409,
+          );
         w.policy.version++;
         revokeWork(w);
         audit(w, actor, "member.updated", input.id, w.policy.version);

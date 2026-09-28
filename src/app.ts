@@ -18,6 +18,7 @@ export function createApp(
   origin: string,
   plugins = new PluginService(store),
   github = new GitHubService(store, "", origin),
+  encryptionKey?: string,
 ) {
   const app = new Hono();
   const ingress = new Ingress(store, setup);
@@ -76,7 +77,10 @@ export function createApp(
     const update = updateSchema.parse(await c.req.json());
     return c.json(await ingress.accept(update));
   });
-  app.route("/", adminRoutes(store, setup, origin, plugins, github));
+  app.route(
+    "/",
+    adminRoutes(store, setup, origin, plugins, github, encryptionKey),
+  );
   app.get("/", async (c) => {
     const row = (
       await store.pool.query("SELECT claimed FROM deployment WHERE id=true")

@@ -97,7 +97,7 @@ export function Plugins({
   return (
     <>
       <header className="page-heading">
-        <p className="eyebrow">DEEPX / WORKSPACE</p>
+        <p className="eyebrow">REPODESK / WORKSPACE</p>
         <h1>Plugins</h1>
         <p className="muted">
           Pi extensions add tools and hooks to your assistant. Manage their

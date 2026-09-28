@@ -2,6 +2,12 @@
 
 Status: local pilot implementation, 2026-09-18. Live staging validation is pending.
 
+The main product path is Telegram request → workspace and repository authorization
+→ AI with scoped GitHub source/action tools → answer or human-reviewed proposal →
+GitHub result in the originating chat. See the
+[GitHub journey](github-workflows.md) for capability status and policy boundaries.
+The existing recap and scheduling services remain supporting paths.
+
 ## Runtime
 
 One Docker image contains the Hono API, React Router admin assets, and Pi worker.
@@ -66,9 +72,10 @@ The HTTP webhook endpoint and registration action are disabled in polling mode.
 A per-bot PostgreSQL session advisory lock spans each HTTP poll and acceptance batch;
 `telegram_polling` stores cursor, credential fingerprint, readiness and retry metadata.
 The cursor advances only after durable ingress commits, so crashes can replay safely.
-Polling runs before activation for owner verification, without enabling ordinary agent
-work. A recent polling success replaces webhook readiness in activation checks; owner,
-model, skills and access checks are unchanged. Existing webhooks are reported as a
+Polling runs before activation to establish receiver readiness, without enabling ordinary agent
+work. A recent polling success replaces webhook readiness in activation checks;
+model and skill checks remain. Owner linking can happen after activation, while
+an empty membership and whitelist deny bot use. Existing webhooks are reported as a
 conflict, never silently deleted.
 
 ```mermaid
@@ -82,6 +89,8 @@ flowchart LR
   Worker --> Pi[Pi Agent / OpenAI-compatible API]
   Pi --> Tools[Scoped application tools]
   Tools --> DB
+  Tools --> CT[Code Truth / selected source]
+  Tools --> GH[GitHub App / approved actions]
   Worker --> Intent[Recorded delivery intent]
   Intent --> Send[Telegram delivery worker]
   Send --> TG
@@ -100,8 +109,8 @@ This is an intentional pilot implementation choice instead of a table for each
 nested record. Short workspace mutations serialize; provider/Telegram calls execute
 outside these locks. API and worker use the same repository and policy services.
 
-Relational tables cover deployment/configuration, local admins/sessions, bootstrap
-claim, chat bindings, Telegram workspace selections, inbox, outbox, authentication
+Relational tables cover deployment/configuration, local admins/sessions, first-run
+claim state, chat bindings, Telegram workspace selections, inbox, outbox, authentication
 limits, worker heartbeats, fixed access-help deliveries and operator audit.
 Database primary/unique constraints enforce one deployment, one account identity,
 one active group binding per workspace/chat and one `(bot_id, update_id)` receipt.
@@ -247,7 +256,7 @@ covers deployment, backup, key recovery and ambiguous outcomes.
 
 ### Local source-query service
 
-An optional separately deployed Bun service reuses the DeepX Code Truth MCP/indexing core. The Node bot connects with an internal bearer token. Repository configurations live in each workspace’s plugin registry in PostgreSQL, while immutable source snapshots live in a separate Code Truth volume, partitioned by workspace and configuration digest. The service has no published Compose port and no public OAuth login. The predefined Pi extension captures only the current workspace’s configured targets and uses the same revocation guards and durable tool ledger as other extensions. See [setup, retention and trust boundaries](../implementation/code-truth.md).
+An optional separately deployed Bun service reuses the Code Truth MCP/indexing core. The Node bot connects with an internal bearer token. Repository configurations live in each workspace’s plugin registry in PostgreSQL, while immutable source snapshots live in a separate Code Truth volume, partitioned by workspace and configuration digest. The service has no published Compose port and no public OAuth login. The predefined Pi extension captures only the current workspace’s configured targets and uses the same revocation guards and durable tool ledger as other extensions. See [setup, retention and trust boundaries](../implementation/code-truth.md).
 
 ### Codex implementation tasks
 
@@ -255,5 +264,10 @@ Optional repository-scoped maintainer grants permit approved issue-to-PR tasks.
 These use separate tenant `codingTasks` records and a worker polling loop, so the
 chat lease/deadline does not span remote implementation. The application reserves
 issue creation and Actions dispatch before sending; uncertain writes never replay.
-GitHub Actions isolates Codex/checks from the separate PR publication job. See
+GitHub Actions isolates Codex/checks from the separate PR publication job. The
+optional [Podman backend](../implementation/codex-podman.md) uses a trusted
+supervisor and separate preparation, implementation and publication containers.
+Workspace provider keys are encrypted in the database and sent to the supervisor
+behind a task-scoped proxy; an optional environment key provides a fallback;
+the worker rechecks authority before issuing publication. See
 [Codex workflow architecture and limits](../implementation/codex-coding.md).

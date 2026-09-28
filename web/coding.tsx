@@ -15,7 +15,7 @@ function message(error: unknown) {
     github_repository_not_connected:
       "Connect the selected repository in GitHub before saving.",
     invalid_request:
-      "Check the branch, workflow filename and maintainer selections.",
+      "Check the branch, repository commands and maintainer selections.",
   };
   return messages[code] ?? code;
 }
@@ -32,12 +32,16 @@ export function Coding({
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<Repository>();
+  const [keyEditing, setKeyEditing] = useState(false);
+  const [keyDraft, setKeyDraft] = useState("");
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
       setData(await request<CodingPage>(endpoint));
       setEditing(undefined);
+      setKeyEditing(false);
+      setKeyDraft("");
     } catch (e) {
       setError(message(e));
     } finally {
@@ -45,9 +49,15 @@ export function Coding({
     }
   }, [request, endpoint]);
   useEffect(() => {
+    setKeyEditing(false);
+    setKeyDraft("");
     void load();
   }, [load]);
-  const save = async (settings: CodingSettings, optimistic = false) => {
+  const save = async (
+    settings: CodingSettings,
+    optimistic = false,
+    providerApiKey?: string | null,
+  ) => {
     if (!data || busy) return;
     const previous = data;
     if (optimistic) setData({ ...data, settings });
@@ -58,9 +68,12 @@ export function Coding({
         await request<CodingPage>(endpoint, "PUT", {
           revision: data.revision,
           settings,
+          ...(providerApiKey !== undefined ? { providerApiKey } : {}),
         }),
       );
       setEditing(undefined);
+      setKeyEditing(false);
+      setKeyDraft("");
     } catch (e) {
       if (optimistic) setData(previous);
       setError(message(e));
@@ -81,7 +94,7 @@ export function Coding({
             setEditing({
               repositoryId: 0,
               baseBranch: "develop",
-              workflowFile: "deepx-codex.yml",
+              workflowFile: "repodesk-codex.yml",
               maintainers: [],
             });
           }}
@@ -92,12 +105,11 @@ export function Coding({
         PR. Only each repository’s selected maintainers can start tasks.
       </p>
       <p className="muted">
-        Copy examples/coding/deepx-codex.yml from the bot source into each
-        repository’s .github/workflows directory and configure its OpenAI secret
-        and GitHub App bot login. Actions and OpenAI usage are billed separately
-        from chat usage.
+        Coding provider usage is billed separately from chat usage. Local Podman
+        uses the deployment’s custom provider configuration and the API key
+        saved for this workspace.
       </p>
-      {error && !editing && (
+      {error && !editing && !keyEditing && (
         <p role="alert">
           {error}
           <button
@@ -122,10 +134,80 @@ export function Coding({
             />
             Enable Codex implementation
           </label>
+          <label>
+            Execution backend
+            <select
+              value={data.settings.backend ?? "github-actions"}
+              disabled={busy || loading}
+              onChange={(e) =>
+                void save(
+                  {
+                    ...data.settings,
+                    backend: e.target.value as "github-actions" | "podman",
+                  },
+                  true,
+                )
+              }
+            >
+              <option value="github-actions">GitHub Actions</option>
+              <option value="podman">Local Podman</option>
+            </select>
+          </label>
+          <p className="muted">
+            {data.settings.backend === "podman"
+              ? "Each approved task runs in its own container. Configure the local runner and provider endpoint in deployment settings, save your provider API key below, and set each repository’s setup and check commands."
+              : "Install examples/coding/repodesk-codex.yml in each repository and configure its OpenAI secret and GitHub App bot login. GitHub Actions usage is billed separately."}
+          </p>
           <p className="muted">
             Saving settings invalidates pending approvals and requests
             cancellation of active tasks using older settings.
           </p>
+          {data.settings.backend === "podman" && (
+            <div className="card">
+              <h3>Provider API key</h3>
+              <p>
+                {data.providerApiKeyConfigured
+                  ? "Configured for this workspace."
+                  : "No workspace key saved. A deployment key is used if configured."}
+              </p>
+              <p className="muted">
+                The key is stored encrypted and is never displayed again. Saving
+                or removing a key invalidates pending approvals and requests
+                cancellation of active tasks.
+              </p>
+              <div className="row">
+                <button
+                  type="button"
+                  disabled={busy || loading}
+                  onClick={() => {
+                    setError("");
+                    setKeyDraft("");
+                    setKeyEditing(true);
+                  }}
+                >
+                  {data.providerApiKeyConfigured
+                    ? "Replace API key"
+                    : "Set API key"}
+                </button>
+                {data.providerApiKeyConfigured && (
+                  <button
+                    type="button"
+                    disabled={busy || loading}
+                    onClick={() => {
+                      if (
+                        confirm(
+                          "Remove the saved Codex API key? Active tasks will receive cancellation requests. A deployment key will be used if configured.",
+                        )
+                      )
+                        void save(data.settings, false, null);
+                    }}
+                  >
+                    Remove saved key
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
           {!data.repositories.length && (
             <p>Connect a GitHub repository above to configure coding tasks.</p>
           )}
@@ -306,6 +388,62 @@ export function Coding({
           )}
         </>
       )}
+      {keyEditing && data && (
+        <Modal
+          title={
+            data.providerApiKeyConfigured
+              ? "Replace Codex API key"
+              : "Set Codex API key"
+          }
+          busy={busy}
+          onClose={() => {
+            setKeyEditing(false);
+            setKeyDraft("");
+            setError("");
+          }}
+        >
+          {error && (
+            <p role="alert">
+              {error}{" "}
+              <button
+                type="button"
+                disabled={busy || loading}
+                onClick={() => void load()}
+              >
+                Reload coding settings
+              </button>
+            </p>
+          )}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (keyDraft.trim())
+                void save(data.settings, false, keyDraft.trim());
+            }}
+          >
+            <label>
+              Provider API key
+              <input
+                type="password"
+                autoComplete="new-password"
+                required
+                maxLength={8192}
+                value={keyDraft}
+                onChange={(e) => setKeyDraft(e.target.value)}
+              />
+            </label>
+            <p className="muted">
+              Use a key for the custom provider configured on this deployment.
+              It applies only to this workspace’s local Codex tasks.
+            </p>
+            <ModalActions>
+              <button type="submit" disabled={busy || !keyDraft.trim()}>
+                Save API key
+              </button>
+            </ModalActions>
+          </form>
+        </Modal>
+      )}
       {editing && data && (
         <Modal
           title={
@@ -412,19 +550,56 @@ function RepositoryEditor({
         An existing branch, for example develop. Task branches and PRs use this
         base.
       </p>
-      <label>
-        Workflow filename
-        <input
-          required
-          maxLength={100}
-          value={draft.workflowFile}
-          onChange={(e) => setDraft({ ...draft, workflowFile: e.target.value })}
-        />
-      </label>
-      <p className="muted">
-        A .yml or .yaml filename under .github/workflows, installed on the
-        default and base branches.
-      </p>
+      {
+        <>
+          <label>
+            Local setup command (optional)
+            <textarea
+              maxLength={2000}
+              value={draft.setupCommand ?? ""}
+              placeholder="bun install --frozen-lockfile"
+              onChange={(e) =>
+                setDraft({ ...draft, setupCommand: e.target.value })
+              }
+            />
+          </label>
+          <label>
+            Local check command
+            <textarea
+              required={data.settings.backend === "podman"}
+              maxLength={2000}
+              value={draft.checkCommand ?? ""}
+              placeholder="bun run check && bun run typecheck && bun test && bun run build"
+              onChange={(e) =>
+                setDraft({ ...draft, checkCommand: e.target.value })
+              }
+            />
+          </label>
+          <p className="muted">
+            Commands run in the isolated checkout. Checks must pass before
+            publication. The standard runner includes Node, Bun, Git and Bash.
+          </p>
+        </>
+      }
+      {data.settings.backend !== "podman" && (
+        <>
+          <label>
+            Workflow filename
+            <input
+              required
+              maxLength={100}
+              value={draft.workflowFile}
+              onChange={(e) =>
+                setDraft({ ...draft, workflowFile: e.target.value })
+              }
+            />
+          </label>
+          <p className="muted">
+            A .yml or .yaml filename under .github/workflows, installed on the
+            default and base branches.
+          </p>
+        </>
+      )}
       <fieldset>
         <legend>Maintainers (Telegram user IDs)</legend>
         {[

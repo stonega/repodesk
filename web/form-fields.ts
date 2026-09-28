@@ -1,20 +1,6 @@
 import { TOOLS } from "../src/domain.ts";
 import { detailLabel } from "./data-details.tsx";
 import type { FormField } from "./record-form.tsx";
-import { workspaceFields } from "./settings-fields.ts";
-
-export const setupFields: FormField[] = workspaceFields.map(
-  ({ key, label, help, min, max, step }) => ({
-    path: `settings.${key}`,
-    label,
-    help,
-    min,
-    max,
-    step,
-    required: key !== "paused",
-    kind: key === "paused" ? "checkbox" : min !== undefined ? "number" : "text",
-  }),
-);
 export function workflowFields(
   skills: { id: string; draft: { name: string } }[],
 ): FormField[] {

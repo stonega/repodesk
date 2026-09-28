@@ -5,6 +5,8 @@ const backend = await Bun.build({
   entrypoints: [
     "src/server.ts",
     "src/worker.ts",
+    "src/coding/local/runner-server.ts",
+    "src/coding/local/job.ts",
     "src/db/migrate.ts",
     "scripts/operator.ts",
     "scripts/evaluate.ts",
@@ -29,6 +31,7 @@ if (!frontend.success)
   throw new AggregateError(frontend.logs, "Frontend build failed");
 await mkdir("dist/web", { recursive: true });
 await cp("web/style.css", "dist/web/assets/style.css");
+await cp("web/assets/repodesk-mark.svg", "dist/web/assets/repodesk-mark.svg");
 let html = await readFile("web/index.html", "utf8");
 for (const asset of ["app.js", "style.css"]) {
   const content = await readFile(`dist/web/assets/${asset}`);

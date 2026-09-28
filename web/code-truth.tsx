@@ -361,7 +361,7 @@ function RepositoryEditor({
             required
             pattern="[a-z0-9][a-z0-9_-]{0,63}"
             value={draft.id}
-            placeholder="deepx-web"
+            placeholder="my-repository"
             onChange={(e) => setDraft({ ...draft, id: e.target.value })}
           />
         </label>
@@ -371,7 +371,7 @@ function RepositoryEditor({
             type="url"
             required
             value={draft.repositoryUrl}
-            placeholder="https://github.com/deepxfinance/web.git"
+            placeholder="https://github.com/your-org/my-repository.git"
             onChange={(e) =>
               setDraft({ ...draft, repositoryUrl: e.target.value })
             }

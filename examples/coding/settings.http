@@ -18,7 +18,7 @@ Content-Type: application/json
     "repositories": [{
       "repositoryId": 7001,
       "baseBranch": "develop",
-      "workflowFile": "deepx-codex.yml",
+      "workflowFile": "repodesk-codex.yml",
       "maintainers": ["101"]
     }]
   }
@@ -31,3 +31,28 @@ X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
 {}
+
+### Local Podman configuration. Replace revision with the latest GET result.
+# Configure deploy/codex/compose.yaml separately. Use a fake key in checked-in examples.
+# Omit providerApiKey to preserve it; use null to remove it and restore any environment fallback.
+# Responses include providerApiKeyConfigured only, never the saved key.
+PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "revision": 1,
+  "providerApiKey": "REPLACE_PROVIDER_API_KEY",
+  "settings": {
+    "enabled": true,
+    "backend": "podman",
+    "repositories": [{
+      "repositoryId": 7001,
+      "baseBranch": "develop",
+      "maintainers": ["101"],
+      "setupCommand": "bun install --frozen-lockfile",
+      "checkCommand": "bun run check && bun run typecheck && bun test && bun run build"
+    }]
+  }
+}

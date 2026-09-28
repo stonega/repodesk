@@ -54,7 +54,7 @@ export function decideAccessRequest(
   version: number,
   now = new Date(),
 ) {
-  authorize(w, actor, true);
+  if (actor !== w.operatorId) authorize(w, actor, true);
   const request = w.accessRequests?.find((r) => r.id === id);
   requireThat(request, "not_found", 404);
   // A replay must never restore access revoked after the original decision.

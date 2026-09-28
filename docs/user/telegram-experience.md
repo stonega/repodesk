@@ -3,6 +3,11 @@
 Implemented local pilot interface. A working deployment requires the operator to
 finish the web setup and activate a dedicated Telegram bot. No public bot is shipped.
 
+RepoDesk's main use is asking about selected GitHub repositories and reviewing
+GitHub actions from Telegram. The AI helps interpret the request; repository access,
+tool grants and write approvals come from the application. See the
+[GitHub journey and capability status](../design/github-workflows.md).
+
 ## Get started
 
 The operator first creates the local admin, configures the bot, registers the
@@ -80,8 +85,8 @@ See [examples](../../examples/private-threads.md).
 | `/privacy` | Collection, retention and removal explanation |
 | `/privacy delete` | Private admin request for confirmed workspace removal |
 
-Unsupported media receives text-only guidance on directed requests. Commands addressed
-to other bots, bot-authored requests and unrelated group messages are ignored.
+Unsupported non-text requests are silently ignored, including media with captions.
+Commands addressed to other bots, bot-authored requests and unrelated group messages are ignored.
 Message edits update context and do not launch another request.
 
 For example, send `@agent_bub_bot hi` using your bot's actual username. Mentions
@@ -170,8 +175,9 @@ have accepted the send; inspect the destination before resolving it. Unknown pro
 charges remain reserved until an authorized admin reconciles billing. A cancellation
 cannot undo a message already sent.
 
-Files, arbitrary browsing/shell, external app connectors, proactive monitoring and
-external writes are not supported. Source IDs establish an authorized citation set;
+Files, arbitrary browsing/shell, general app connectors and proactive monitoring
+are not supported. The GitHub issue and coding paths below are the bounded external
+writes. Source IDs establish an authorized citation set;
 the operator must still evaluate the chosen model's factual accuracy before a pilot.
 
 ## Request access (implemented)
@@ -186,6 +192,16 @@ If the bot serves several workspaces and cannot identify yours, ask your admin f
 the request-access link shown in their Members page. Open it, then tap **Request
 access**. In a linked group, a command directed at the bot offers the same action.
 A rejected request can be submitted again after 24 hours.
+The link can be used during setup before bot activation; regular requests start
+only after activation.
+
+## Repository source questions (implemented; setup required)
+
+The operator must configure and enable Code Truth for the selected repository and
+branch. Ask a source question such as “Where does example/workspace handle Telegram
+updates?” The answer should carry source references;
+check its indexed commit/branch coverage before treating it as current. Code Truth
+does not read live issue or PR metadata. See [Code Truth setup](../implementation/code-truth.md).
 
 ## GitHub issue submission (implemented)
 

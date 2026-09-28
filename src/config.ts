@@ -21,6 +21,8 @@ const schema = z.object({
     .min(1)
     .max(1800)
     .default(DEFAULT_RUN_TIMEOUT_SECONDS),
+  CODEX_RUNNER_URL: z.string().url().optional(),
+  CODEX_RUNNER_TOKEN: z.string().min(32).optional(),
   CODE_TRUTH_URL: z.string().url().optional(),
   CODE_TRUTH_TOKEN: z.string().min(32).optional(),
   PI_EXTENSIONS_FILE: z.string().trim().min(1).optional(),
@@ -46,6 +48,10 @@ export function config(env = process.env) {
       ? readFileSync(env.ENCRYPTION_KEY_FILE, "utf8").trim()
       : env.ENCRYPTION_KEY,
   });
+  if (Boolean(data.CODEX_RUNNER_URL) !== Boolean(data.CODEX_RUNNER_TOKEN))
+    throw new Error(
+      "CODEX_RUNNER_URL and CODEX_RUNNER_TOKEN must be configured together",
+    );
   if (Boolean(data.CODE_TRUTH_URL) !== Boolean(data.CODE_TRUTH_TOKEN))
     throw new Error(
       "CODE_TRUTH_URL and CODE_TRUTH_TOKEN must be configured together",

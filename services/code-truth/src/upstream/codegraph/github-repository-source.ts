@@ -36,7 +36,7 @@ export class OctokitGitHubRepositorySource implements GitHubRepositorySource {
     this.#octokit = new Octokit({
       ...(options.token ? { auth: options.token } : {}),
       baseUrl: apiUrl.href.replace(/\/$/, ""),
-      userAgent: "deepx-code-truth/1.0.0",
+      userAgent: "repodesk-code-truth/1.0.0",
       log: silentLogger,
       ...(options.fetch ? { request: { fetch: options.fetch } } : {}),
     });

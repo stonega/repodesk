@@ -1,5 +1,6 @@
 import { PluginService } from "./agent/plugin-service.ts";
 import { CodeTruthClient } from "./code-truth/client.ts";
+import { LocalRunnerClient } from "./coding/local/client.ts";
 import { CodingService } from "./coding/service.ts";
 import { config } from "./config.ts";
 import { database } from "./db/pool.ts";
@@ -41,7 +42,15 @@ const stop = await startWorker(
   (deployment, workspaceId) => plugins.runner(deployment, workspaceId),
   cfg.RUN_TIMEOUT_SECONDS,
   new GitHubIssues(store, githubApps),
-  new CodingService(store, githubApps),
+  new CodingService(
+    store,
+    githubApps,
+    undefined,
+    cfg.CODEX_RUNNER_URL && cfg.CODEX_RUNNER_TOKEN
+      ? new LocalRunnerClient(cfg.CODEX_RUNNER_URL, cfg.CODEX_RUNNER_TOKEN)
+      : undefined,
+    cfg.ENCRYPTION_KEY,
+  ),
 );
 log.write("worker_started");
 let stopping = false;

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { claim, issueClaim, login } from "../../src/admin/auth.ts";
+import { claim, login } from "../../src/admin/auth.ts";
 import type { PluginPage, PluginSpec } from "../../src/agent/plugin-config.ts";
 import { PluginService } from "../../src/agent/plugin-service.ts";
 import { createApp } from "../../src/app.ts";
@@ -49,7 +49,7 @@ const url = process.env.TEST_DATABASE_URL;
       app = createApp(store, setup, origin, service);
       auth = await claim(
         pool,
-        await issueClaim(pool),
+
         "pluginoperator",
         "plugin test password",
       );

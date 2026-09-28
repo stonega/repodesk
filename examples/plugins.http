@@ -1,5 +1,5 @@
 @base = http://localhost:3000
-@cookie = deepx_session=REPLACE_WITH_SESSION
+@cookie = repodesk_session=REPLACE_WITH_SESSION
 @csrf = REPLACE_WITH_CSRF
 @workspace = 00000000-0000-4000-8000-000000000001
 
@@ -76,4 +76,4 @@ Origin: {{base}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
-{"owner": "organization", "organization": "deepxfinance", "name": "DeepX Workspace Agent", "public": false}
+{"owner": "organization", "organization": "your-org", "name": "RepoDesk", "public": false}

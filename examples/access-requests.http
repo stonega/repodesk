@@ -2,7 +2,7 @@
 @origin = http://localhost:3000
 @workspace = REPLACE_WORKSPACE_UUID
 @request = REPLACE_REQUEST_UUID
-@cookie = deepx_session=REPLACE_SESSION
+@cookie = repodesk_session=REPLACE_SESSION
 @csrf = REPLACE_CSRF
 
 ### Unified Members & access page uses this policy with member profiles

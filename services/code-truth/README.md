@@ -1,7 +1,7 @@
 # Local Code Truth service
 
-Private, read-only MCP service for DeepX Agent. Reuses the source-query core of
-`../deepx-code-truth`; see [source provenance](UPSTREAM.md). Runs separately with
+Private, read-only MCP service for RepoDesk. Reuses the source-query core of
+the earlier source-query project; see [source provenance](UPSTREAM.md). Runs separately with
 Bun because the upstream process adapter uses Bun. The bot remains a Node service.
 
 Follow [the application setup guide](../../docs/implementation/code-truth.md).

@@ -4,13 +4,19 @@ import { ExtensionCatalog } from "../../src/agent/extensions.ts";
 import { type AgentInput, selectedModel } from "../../src/agent/runtime.ts";
 import { codingExtension } from "../../src/coding/extension.ts";
 import { CodingGitHub } from "../../src/coding/github.ts";
+import type {
+  LocalRunner,
+  LocalStart,
+  LocalStatus,
+} from "../../src/coding/local/protocol.ts";
 import { proposeCoding } from "../../src/coding/policy.ts";
-import { CodingService } from "../../src/coding/service.ts";
+import { CodingService, saveCoding } from "../../src/coding/service.ts";
 import { migrate } from "../../src/db/migrate.ts";
 import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
 import { GitHubApp } from "../../src/github/app.ts";
 import { GitHubApps } from "../../src/github/registry.ts";
+import { encrypt } from "../../src/setup/credentials.ts";
 import { decide } from "../../src/workflows/service.ts";
 import { createRun } from "../../src/workspaces/service.ts";
 import { workspace } from "../fixtures.ts";
@@ -46,7 +52,7 @@ const url = process.env.TEST_DATABASE_URL;
     await root.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
     await root.end();
   });
-  async function fixture() {
+  async function fixture(backend?: "podman") {
     const w = workspace();
     w.operatorId = operatorId;
     w.github = {
@@ -58,11 +64,13 @@ const url = process.env.TEST_DATABASE_URL;
       revision: 1,
       settings: {
         enabled: true,
+        backend,
         repositories: [
           {
             repositoryId: 7001,
             baseBranch: "develop",
             workflowFile: "deepx-codex.yml",
+            ...(backend ? { checkCommand: "bun test" } : {}),
             maintainers: ["101"],
           },
         ],
@@ -97,6 +105,7 @@ const url = process.env.TEST_DATABASE_URL;
       dispatchStatus?: number;
       complete?: boolean;
       onToken?: () => Promise<void>;
+      local?: LocalRunner;
     } = {},
   ) {
     const requests: { url: string; init: RequestInit }[] = [];
@@ -158,6 +167,8 @@ const url = process.env.TEST_DATABASE_URL;
           new GitHubApp(githubFixtureConfig, transport),
         ),
         new CodingGitHub(transport),
+        options.local,
+        "ab".repeat(32),
       ),
     };
   }
@@ -348,5 +359,175 @@ const url = process.env.TEST_DATABASE_URL;
     await service.advance(id, taskId);
     expect((await read(id)).state).toBe("cancelled");
     expect(requests).toHaveLength(0);
+  });
+  function localFixture() {
+    const calls: string[] = [];
+    let state: LocalStatus = { state: "running" };
+    const runner: LocalRunner = {
+      async start() {
+        calls.push("start");
+      },
+      async status() {
+        calls.push("status");
+        return state;
+      },
+      async publish() {
+        calls.push("publish");
+        state = { state: "publishing" };
+      },
+      async cancel() {
+        calls.push("cancel");
+        state = { state: "cancelled" };
+      },
+    };
+    return {
+      runner,
+      calls,
+      set: (value: LocalStatus) => {
+        state = value;
+      },
+    };
+  }
+  test("Podman tasks retain approval and duplicate protection through fresh publication", async () => {
+    const { id, taskId } = await fixture("podman");
+    const local = localFixture();
+    const { service, requests } = provider(taskId, { local: local.runner });
+    await service.advance(id, taskId);
+    await ready(id);
+    await Promise.all([
+      service.advance(id, taskId),
+      service.advance(id, taskId),
+    ]);
+    expect(local.calls.filter((c) => c === "start")).toHaveLength(1);
+    local.set({ state: "ready", threadId: "thread-123" });
+    await ready(id);
+    await Promise.all([
+      service.advance(id, taskId),
+      service.advance(id, taskId),
+    ]);
+    expect((await read(id)).state).toBe("publishing");
+    expect(local.calls.filter((c) => c === "publish")).toHaveLength(1);
+    const permissions = requests
+      .filter((r) => r.url.endsWith("/access_tokens"))
+      .map((r) => JSON.parse(String(r.init.body)).permissions);
+    expect(permissions).toContainEqual({ contents: "read" });
+    expect(permissions).toContainEqual({
+      contents: "write",
+      pull_requests: "write",
+    });
+    expect(requests.some((r) => r.url.includes("/actions/"))).toBe(false);
+    local.set({
+      state: "succeeded",
+      prUrl: "https://github.com/example/workspace/pull/43",
+      threadId: "thread-123",
+    });
+    await ready(id);
+    await service.advance(id, taskId);
+    expect((await read(id)).state).toBe("succeeded");
+    expect((await read(id)).threadId).toBe("thread-123");
+  });
+  test("worker sends only the owning workspace's decrypted key to its local runner", async () => {
+    const { id, taskId } = await fixture("podman");
+    await store.change(id, (w) => {
+      present(w.coding).providerApiKey = encrypt(
+        "ab".repeat(32),
+        `coding-provider:${id}`,
+        "workspace-provider-secret",
+      );
+    });
+    let started: LocalStart | undefined;
+    const local = localFixture();
+    local.runner.start = async (input) => {
+      started = input;
+    };
+    const { service } = provider(taskId, { local: local.runner });
+    await service.advance(id, taskId);
+    await ready(id);
+    await service.advance(id, taskId);
+    expect(present(started).providerApiKey).toBe("workspace-provider-secret");
+    expect(present(started).workspaceId).toBe(id);
+    expect(JSON.stringify(present(started).payload)).not.toContain(
+      "workspace-provider-secret",
+    );
+    expect(JSON.stringify(await store.read(id))).not.toContain(
+      "workspace-provider-secret",
+    );
+    expect((await read(id)).state).toBe("running");
+    await store.change(id, (w) => {
+      const config = present(w.coding);
+      saveCoding(
+        w,
+        { id: operatorId, operator: true, username: "coding" },
+        {
+          revision: config.revision,
+          settings: config.settings,
+          providerApiKey: "rotated-secret",
+        },
+        "ab".repeat(32),
+      );
+    });
+    await ready(id);
+    await service.advance(id, taskId);
+    expect(local.calls).toContain("cancel");
+    expect(local.calls).not.toContain("publish");
+    expect((await read(id)).state).toBe("cancelled");
+  });
+  test("Podman publication rechecks authority after minting write credentials", async () => {
+    const { id, taskId } = await fixture("podman");
+    const local = localFixture();
+    let revoke = false;
+    const { service } = provider(taskId, {
+      local: local.runner,
+      onToken: async () => {
+        if (revoke)
+          await store.change(id, (w) => {
+            present(w.coding).settings.enabled = false;
+          });
+      },
+    });
+    await service.advance(id, taskId);
+    await ready(id);
+    await service.advance(id, taskId);
+    local.set({ state: "ready" });
+    revoke = true;
+    await ready(id);
+    await service.advance(id, taskId);
+    expect(local.calls).not.toContain("publish");
+    expect(local.calls).toContain("cancel");
+    expect((await read(id)).state).toBe("cancelled");
+  });
+  test("revoked local tasks cancel without GitHub credentials; ambiguous publication is not replayed", async () => {
+    const { id, taskId } = await fixture("podman");
+    const local = localFixture();
+    const { service, requests } = provider(taskId, { local: local.runner });
+    await service.advance(id, taskId);
+    await ready(id);
+    await service.advance(id, taskId);
+    requests.splice(0);
+    await store.change(id, (w) => {
+      present(w.coding).settings.enabled = false;
+    });
+    await ready(id);
+    await service.advance(id, taskId);
+    expect(local.calls).toContain("cancel");
+    expect(requests).toHaveLength(0);
+    expect((await read(id)).state).toBe("cancelled");
+    const g = await fixture("podman");
+    const failed = localFixture();
+    failed.runner.publish = async () => {
+      failed.calls.push("publish");
+      throw new Error("network reset");
+    };
+    const second = provider(g.taskId, { local: failed.runner }).service;
+    await second.advance(g.id, g.taskId);
+    await ready(g.id);
+    await second.advance(g.id, g.taskId);
+    failed.set({ state: "ready" });
+    await ready(g.id);
+    await second.advance(g.id, g.taskId);
+    expect((await read(g.id)).state).toBe("unknown");
+    await ready(g.id);
+    await second.advance(g.id, g.taskId);
+    expect(failed.calls.filter((c) => c === "publish")).toHaveLength(1);
   });
 });

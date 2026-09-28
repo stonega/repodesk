@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID, verify } from "node:crypto";
-import { claim, issueClaim, login } from "../../src/admin/auth.ts";
+import { claim, login } from "../../src/admin/auth.ts";
 import { PluginService } from "../../src/agent/plugin-service.ts";
 import { createApp } from "../../src/app.ts";
 import { CodeTruthClient } from "../../src/code-truth/client.ts";
@@ -37,7 +37,7 @@ const url = process.env.TEST_DATABASE_URL;
     store = new Store(pool);
     auth = await claim(
       pool,
-      await issueClaim(pool),
+
       "githubadmin",
       "test github password",
     );
@@ -309,6 +309,35 @@ const url = process.env.TEST_DATABASE_URL;
     } finally {
       await server.stop(true);
     }
+  });
+  test("setup connects every repository granted by the installation", async () => {
+    service = new GitHubService(
+      store,
+      key,
+      origin,
+      githubFixture(undefined, 13),
+    );
+    app = createApp(
+      store,
+      new SetupService(store, key, origin),
+      origin,
+      undefined,
+      service,
+    );
+    await authorize();
+    const response = await request(base(), "PUT", {
+      revision: (await store.read(id)).github?.revision,
+      installationId: 501,
+      allRepositories: true,
+    });
+    expect(response.status).toBe(200);
+    const page = await response.json();
+    expect(page.connection.repositories).toHaveLength(13);
+    expect(page.connection.repositories[12]).toEqual({
+      id: 7013,
+      full_name: "example/repo-13",
+    });
+    expect((await store.read(id)).github?.repositories).toHaveLength(13);
   });
   test("revoked workspace ownership cannot complete authorization", async () => {
     const start = await service.begin(admin, id, hash(auth.raw));

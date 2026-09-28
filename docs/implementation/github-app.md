@@ -7,22 +7,40 @@ repository-scoped issue submission. No personal token is accepted by the web pan
 
 ## Create the App from the panel
 
-1. Select a workspace and open **Plugins → GitHub → Create GitHub App**.
-2. Enter an App name, choose **Organization** or **Personal account**, and enter the
-   organization login when applicable. Leave **Allow installation on other GitHub
-   accounts** unchecked for an App used only by its owner. Enable it when a personally
-   owned App needs installation on an organization, or when supporting other accounts.
-3. Click **Continue to GitHub** and confirm creation on GitHub. The form preconfigures
+1. During first-run setup, click **Connect GitHub**. Setup creates a private,
+   personally owned App automatically when needed. To choose an organization
+   owner, select a workspace and use **Plugins → GitHub → Create GitHub App**.
+2. Setup uses an automatically generated App name and personal ownership. In
+   Plugins, enter an App name. **Personal account** is selected initially; choose
+   **Organization** and enter its login when the organization should own the App.
+   Leave **Allow installation on other GitHub accounts** unchecked for an App used
+   only by its owner. Enable it when a personally owned App needs installation on an
+   organization, or when supporting other accounts.
+3. Setup sends the manifest when you click **Connect GitHub**. In Plugins, click
+   **Continue to GitHub**. Confirm creation on GitHub. The manifest preconfigures
    Contents/Metadata read access, Issues write access, no webhook events, and the
    deployment's callbacks.
    GitHub requires a publicly addressable webhook URL even when delivery is disabled.
    The inactive hook uses `https://example.com/github/webhook` as a reserved-domain
    placeholder. It receives no events; local browser callback URLs remain unchanged.
-4. GitHub returns to the original workspace. The server exchanges its one-use code
+4. GitHub returns to the setup step or original workspace. The server exchanges its one-use code
    for App credentials and encrypts them in PostgreSQL; nothing needs copying into
    `.env`, no extra Compose override is needed, and API/worker restarts are unnecessary.
-5. Use **Install or update the GitHub App** to select repositories on GitHub, then
-   **Connect GitHub** to authorize and select repositories for this workspace.
+5. In setup, authorize the account, then use the same **Connect GitHub** button
+   to open GitHub installation. Choose repositories on GitHub and return to the
+   setup tab. It detects the installation, connects the granted repositories and
+   shows a RepoDesk welcome dialog. Click **Get started** to enter the workspace.
+   In Plugins, installation and repository selection remain
+   separate controls.
+
+GitHub lists user authorization under **Authorized GitHub Apps**. That confirms
+identity only. Repository access appears under **Installed GitHub Apps** after
+installation. Setup does not mark the workspace connected until it verifies an
+installation and saves the repositories chosen on GitHub. It connects all granted
+repositories when exactly one installation is accessible. The workspace records
+the repositories accessible at connection time; a new authorization and selection
+flow is required to include repositories granted later. Multiple installations
+require an explicit choice in Plugins.
 
 App credentials are scoped to the local operator account and can be reused by that
 operator's workspaces. Creating an App does not connect any workspace or grant it
@@ -32,6 +50,11 @@ credentials take precedence and remain supported.
 
 Creation must finish within 10 minutes, in the same signed-in browser session.
 Cancelled, expired, repeated or mismatched callbacks cannot save credentials.
+Both App registration and user authorization use the exact configured callback
+URL. The server keeps the setup return destination in its session-bound `state`
+value, not in extra `redirect_uri` query parameters. If GitHub shows a
+`redirect_uri` warning from an earlier attempt, start **Connect GitHub** again
+to generate a new authorization URL.
 If GitHub creates an App but the return/exchange fails, check whether the panel
 already has an App; otherwise delete the unused App in GitHub before retrying, or
 use the manual configuration below. There is no automatic deletion of GitHub Apps.
@@ -97,7 +120,7 @@ the `_FILE` forms above. All five App settings must be provided together.
 3. If there is no installation, use **Install or update the GitHub App**. Select the
    required repositories on GitHub. Organization owners may need to approve it.
    Return to the panel and **Reload GitHub connection**.
-4. Choose the installation and up to 12 repositories, then **Connect selected repositories**.
+4. Choose the installation and repositories, then **Connect selected repositories**.
 5. Configure matching repository URLs and branch names in Code Truth, save, then
    **Sync & check indexes**. Connection alone does not add targets or enable Code Truth.
 
@@ -105,9 +128,11 @@ The user authorization/selection window expires after 10 minutes. Start Connect
 GitHub again if it expires or GitHub denies access. For SAML organizations, establish
 an active organization SSO session before authorizing the App.
 
-**Disconnect GitHub** disconnects only this workspace; it does not uninstall the App
-from GitHub or affect another workspace. It also explicitly disables the legacy shared
-GitHub token fallback for this workspace. Public repository access remains possible.
+The connected GitHub card lists repositories with links to GitHub. It has no
+change-connection or disconnect button. The workspace-scoped DELETE API still
+disconnects only this workspace; it does not uninstall the App from GitHub or
+affect another workspace. It also explicitly disables the legacy shared GitHub
+token fallback for this workspace. Public repository access remains possible.
 Workspaces without a connection record retain legacy deployment access until connected
 or disconnected. Once every private-repository workspace uses the App, remove the
 legacy `CODE_TRUTH_GITHUB_TOKEN` from `.env` and recreate Code Truth.
@@ -115,8 +140,8 @@ legacy `CODE_TRUTH_GITHUB_TOKEN` from `.env` and recreate Code Truth.
 ## Security and API
 
 POST `/api/admin/workspaces/:id/github/register` accepts
-`{owner: "organization", organization: "example", name: "DeepX Agent", public: false}`
-or `{owner: "personal", name: "DeepX Agent", public: false}`. It returns only the
+`{owner: "organization", organization: "example", name: "RepoDesk", public: false}`
+or `{owner: "personal", name: "RepoDesk", public: false}`. It returns only the
 public manifest and a fixed GitHub form destination. The browser POSTs `manifest`
 as a JSON string. GET `/api/admin/github/app/callback` exchanges the temporary code
 server-side, then redirects to the originating workspace without secrets or codes.
@@ -161,7 +186,7 @@ The guided creation flow uses [GitHub App Manifests](https://docs.github.com/en/
 Reference inspected: Coolify commit `89e8506023af83016e3ccd64dc1327f51a7f8674`,
 [manifest form](https://github.com/coollabsio/coolify/blob/89e8506023af83016e3ccd64dc1327f51a7f8674/resources/views/livewire/source/github/change.blade.php#L345)
 and [server-side conversion](https://github.com/coollabsio/coolify/blob/89e8506023af83016e3ccd64dc1327f51a7f8674/app/Http/Controllers/Webhook/Github.php#L509).
-DeepX requests source-read and issue-write permissions and keeps its own session/tenant checks.
+RepoDesk requests source-read and issue-write permissions and keeps its own session/tenant checks.
 
 ## Submit an issue from Telegram
 

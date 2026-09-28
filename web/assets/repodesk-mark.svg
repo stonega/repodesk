@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title">
+  <title id="title">RepoDesk</title>
+  <rect width="48" height="48" rx="11" fill="#d9eab2" />
+  <path d="M15 37V11h10c7 0 11 3.5 11 9.5S32 30 25 30H15m10 0 11 7" fill="none" stroke="#153b35" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

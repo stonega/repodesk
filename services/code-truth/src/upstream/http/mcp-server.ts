@@ -46,7 +46,10 @@ type McpDependencies = {
 export function createCodeTruthMcpServer(
   dependencies: McpDependencies,
 ): McpServer {
-  const server = new McpServer({ name: "deepx-code-truth", version: "1.0.0" });
+  const server = new McpServer({
+    name: "repodesk-code-truth",
+    version: "1.0.0",
+  });
 
   server.registerTool(
     "list_code_targets",

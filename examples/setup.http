@@ -1,0 +1,70 @@
+@baseUrl = http://localhost:3000
+
+### Check whether the first administrator has been created
+GET {{baseUrl}}/api/setup/status
+
+### Create the first administrator on an unclaimed deployment
+### Replace these credentials before sending; never commit real passwords.
+### Username: 3–64 letters, digits, underscores, dots or hyphens.
+### Password: 12–256 characters. Further claims return 409 already_claimed.
+POST {{baseUrl}}/api/setup/claim
+Origin: {{baseUrl}}
+Content-Type: application/json
+
+{
+  "username": "REPLACE_USERNAME",
+  "password": "REPLACE_WITH_UNIQUE_PASSWORD"
+}
+
+### After saving the workspace, bot token, model, and receiver, activate.
+### A personal Telegram owner link is optional; an empty access list denies bot use.
+@session = REPLACE_SESSION_COOKIE
+@csrf = REPLACE_CSRF_TOKEN
+@workspaceId = REPLACE_WORKSPACE_UUID
+@telegramUserId = REPLACE_TELEGRAM_USER_ID
+@requestId = REPLACE_REQUEST_UUID
+
+POST {{baseUrl}}/api/setup/activate
+Origin: {{baseUrl}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+
+### Get the request link, pending requests, allowed members, and policy version.
+GET {{baseUrl}}/api/setup/workspaces/{{workspaceId}}/access
+Cookie: repodesk_session={{session}}
+
+### Allow a known numeric Telegram user ID as a member.
+### Replace version with the value from the preceding GET response.
+POST {{baseUrl}}/api/setup/workspaces/{{workspaceId}}/access
+Origin: {{baseUrl}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "actor": "{{telegramUserId}}",
+  "version": 1
+}
+
+### Or approve a pending request using its ID and the latest policy version.
+POST {{baseUrl}}/api/setup/workspaces/{{workspaceId}}/access-requests/{{requestId}}/decision
+Origin: {{baseUrl}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "decision": "approved",
+  "version": 1
+}
+
+### Revoke that member using the latest policy version.
+DELETE {{baseUrl}}/api/setup/workspaces/{{workspaceId}}/access/{{telegramUserId}}
+Origin: {{baseUrl}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "version": 2
+}

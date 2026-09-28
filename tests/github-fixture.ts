@@ -16,6 +16,7 @@ export const githubFixtureConfig = {
 export const githubPublicKey = keys.publicKey;
 export function githubTransport(
   observe?: (url: string, init: RequestInit) => void,
+  repositoryCount = 2,
 ) {
   const fetcher = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = String(input);
@@ -73,10 +74,15 @@ export function githubTransport(
       )
     )
       return json({
-        repositories: [
-          { id: 7001, full_name: "example/workspace" },
-          { id: 7002, full_name: "example/second" },
-        ],
+        repositories: Array.from({ length: repositoryCount }, (_, index) => ({
+          id: 7001 + index,
+          full_name:
+            index === 0
+              ? "example/workspace"
+              : index === 1
+                ? "example/second"
+                : `example/repo-${index + 1}`,
+        })),
       });
     if (url === "https://api.github.com/app/installations/501/access_tokens")
       return json({
@@ -89,6 +95,10 @@ export function githubTransport(
 }
 export function githubFixture(
   observe?: (url: string, init: RequestInit) => void,
+  repositoryCount = 2,
 ) {
-  return new GitHubApp(githubFixtureConfig, githubTransport(observe));
+  return new GitHubApp(
+    githubFixtureConfig,
+    githubTransport(observe, repositoryCount),
+  );
 }

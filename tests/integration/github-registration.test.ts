@@ -7,7 +7,7 @@ import {
   test,
 } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { claim, issueClaim, login } from "../../src/admin/auth.ts";
+import { claim, login } from "../../src/admin/auth.ts";
 import { PluginService } from "../../src/agent/plugin-service.ts";
 import { createApp } from "../../src/app.ts";
 import { CodeTruthClient } from "../../src/code-truth/client.ts";
@@ -47,6 +47,7 @@ const url = process.env.TEST_DATABASE_URL;
     id: string,
     sibling: string;
   let conversions = 0;
+  let exchangeRedirect = "";
   beforeAll(async () => {
     await root.query(`CREATE DATABASE ${name}`);
     const parsed = new URL(url ?? "");
@@ -56,7 +57,7 @@ const url = process.env.TEST_DATABASE_URL;
     store = new Store(pool);
     auth = await claim(
       pool,
-      await issueClaim(pool),
+
       "manifestadmin",
       "manifest test password",
     );
@@ -71,8 +72,10 @@ const url = process.env.TEST_DATABASE_URL;
       store,
       key,
       undefined,
-      githubTransport((u) => {
+      githubTransport((u, init) => {
         if (u.includes("/conversions")) conversions++;
+        if (u === "https://github.com/login/oauth/access_token")
+          exchangeRedirect = JSON.parse(String(init.body)).redirect_uri;
       }),
     );
     service = new GitHubService(store, key, origin, apps);
@@ -89,6 +92,7 @@ const url = process.env.TEST_DATABASE_URL;
     await store.pool.query("DELETE FROM github_app_flows");
     await store.pool.query("DELETE FROM auth_limits");
     conversions = 0;
+    exchangeRedirect = "";
     for (let i = 0; i < 2; i++) {
       const w = workspace();
       w.operatorId = admin.id;
@@ -175,6 +179,7 @@ const url = process.env.TEST_DATABASE_URL;
     ).toBe(400);
     const response = await request(`${endpoint()}/register`, "POST", input);
     expect(response.headers.get("set-cookie")).toContain("SameSite=Lax");
+    expect(response.headers.get("set-cookie")).toContain("repodesk_session=");
     const result = await response.json();
     expect(new URL(result.url).pathname).toBe(
       "/organizations/example/settings/apps/new",
@@ -280,6 +285,41 @@ const url = process.env.TEST_DATABASE_URL;
       (await store.pool.query("SELECT count(*) FROM github_app_flows")).rows[0]
         .count,
     ).toBe("0");
+  });
+  test("setup GitHub callbacks return to the wizard", async () => {
+    const registration = await request(`${endpoint()}/register`, "POST", {
+      ...input,
+      source: "setup",
+    });
+    expect(registration.status).toBe(200);
+    const result = await registration.json();
+    expect(result.manifest.redirect_url).toBe(
+      `${origin}/api/admin/github/app/callback`,
+    );
+    expect(stateOf(result).startsWith("setup_")).toBe(true);
+    const created = await request(
+      `/api/admin/github/app/callback?state=${stateOf(result)}&code=fixture-manifest-code`,
+    );
+    expect(created.headers.get("location")).toBe(
+      `/setup?step=github&workspace=${id}&github=app-created`,
+    );
+    const authorization = await request(`${endpoint()}/connect`, "POST", {
+      source: "setup",
+    });
+    expect(authorization.status).toBe(200);
+    const oauth = await authorization.json();
+    expect(new URL(oauth.url).searchParams.get("redirect_uri")).toBe(
+      `${origin}/api/admin/github/callback`,
+    );
+    expect(stateOf(oauth).startsWith("setup_")).toBe(true);
+    const authorized = await request(
+      `/api/admin/github/callback?state=${stateOf(oauth)}&code=fixture-code`,
+    );
+    expect(authorized.headers.get("location")).toBe(
+      `/setup?step=github&workspace=${id}&github=authorized`,
+    );
+    expect(exchangeRedirect).toBe(`${origin}/api/admin/github/callback`);
+    expect((await service.view(admin, id, hash(auth.raw))).pending).toBe(true);
   });
   test("expired, cancelled, logged-out and deleted-workspace callbacks never exchange credentials", async () => {
     let state = stateOf(await start());

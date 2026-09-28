@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
-import { claim, issueClaim, login, session } from "../../src/admin/auth.ts";
+import { login, session } from "../../src/admin/auth.ts";
 import { extensionToolExecution } from "../../src/agent/extension-execution.ts";
 import { type AgentRunner, PiRunner } from "../../src/agent/runtime.ts";
 import { createApp } from "../../src/app.ts";
@@ -103,6 +103,22 @@ suite("PostgreSQL integration (isolated database)", () => {
     );
     return w;
   }
+  async function foreignWorkspace() {
+    const id = randomUUID();
+    await store.pool.query(
+      "INSERT INTO admins(id,username,password_hash,operator) VALUES($1,$2,'unused',true)",
+      [id, `foreign-${id}`],
+    );
+    const w = workspace();
+    w.operatorId = id;
+    w.members = [{ id: "303", active: true, role: "owner" }];
+    w.policy.allowed = ["303"];
+    await store.pool.query(
+      "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",
+      [w.id, id, JSON.stringify(w)],
+    );
+    return w;
+  }
   const request = (
     path: string,
     method = "GET",
@@ -120,22 +136,55 @@ suite("PostgreSQL integration (isolated database)", () => {
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-  test("one-use bootstrap is atomic under two concurrent claims", async () => {
-    const token = await issueClaim(store.pool);
-    const attempts = await Promise.allSettled([
-      claim(store.pool, token, "operator", "a long test password"),
-      claim(store.pool, token, "intruder", "a long test password"),
+  test("username/password setup allows exactly one initial administrator", async () => {
+    const credentials = {
+      username: "operator",
+      password: "a long test password",
+    };
+    expect(await (await request("/api/setup/status")).json()).toEqual({
+      initialized: false,
+    });
+    for (const origin of ["https://other.example", ""]) {
+      expect(
+        (await request("/api/setup/claim", "POST", credentials, { origin }))
+          .status,
+      ).toBe(403);
+    }
+    expect(
+      (
+        await request("/api/setup/claim", "POST", {
+          ...credentials,
+          password: "short",
+        })
+      ).status,
+    ).toBe(400);
+    expect((await store.pool.query("SELECT * FROM admins")).rowCount).toBe(0);
+    const attempts = await Promise.all([
+      request("/api/setup/claim", "POST", credentials),
+      request("/api/setup/claim", "POST", {
+        ...credentials,
+        username: "secondadmin",
+      }),
     ]);
-    expect(attempts.filter((r) => r.status === "fulfilled")).toHaveLength(1);
-    const fulfilled = attempts.find((r) => r.status === "fulfilled");
-    if (fulfilled?.status !== "fulfilled") throw Error();
-    cookie = `deepx_session=${fulfilled.value.raw}`;
-    csrf = fulfilled.value.csrf;
-    const account = await session(store.pool, fulfilled.value.raw);
+    expect(attempts.map((r) => r.status).sort()).toEqual([200, 409]);
+    const fulfilled = attempts.find((r) => r.status === 200);
+    if (!fulfilled) throw Error("No initial administrator created");
+    cookie = fulfilled.headers.get("set-cookie")?.split(";")[0] ?? "";
+    csrf = (await fulfilled.json()).csrf;
+    expect(cookie).toStartWith("repodesk_session=");
+    expect(fulfilled.headers.get("set-cookie")).toContain("HttpOnly");
+    const account = await session(store.pool, cookie.split("=")[1]);
     operatorId = account?.admin.id ?? "";
     expect(operatorId).toBeTruthy();
+    expect(account?.admin.operator).toBe(true);
     expect((await store.pool.query("SELECT * FROM admins")).rowCount).toBe(1);
-    await expect(issueClaim(store.pool)).rejects.toThrow("already_claimed");
+    expect(await (await request("/api/setup/status")).json()).toEqual({
+      initialized: true,
+    });
+    const repeated = await request("/api/setup/claim", "POST", credentials);
+    expect(repeated.status).toBe(409);
+    expect(repeated.headers.get("set-cookie")).toBeNull();
+    expect((await store.pool.query("SELECT * FROM admins")).rowCount).toBe(1);
     await store.pool.query("UPDATE admins SET telegram_id='101' WHERE id=$1", [
       operatorId,
     ]);
@@ -159,6 +208,36 @@ suite("PostgreSQL integration (isolated database)", () => {
   });
   test("authentication, CSRF, cross-tenant and secret redaction", async () => {
     const w = await seed();
+    await store.change(w.id, (saved) => {
+      saved.github = {
+        revision: 1,
+        installationId: 123,
+        account: "repo-team",
+        repositories: [{ id: 456, full_name: "repo-team/example" }],
+      };
+    });
+    const overviewPath = `/api/admin/workspaces/${w.id}/overview`;
+    const overview = await request(overviewPath);
+    expect(overview.status).toBe(200);
+    expect((await overview.json()).connections).toEqual({
+      bot: { configured: true, username: "deepx_test_bot" },
+      github: { connected: true, account: "repo-team", repositories: 1 },
+    });
+    const memberName = `member_${randomUUID().slice(0, 8)}`;
+    await store.pool.query(
+      "INSERT INTO admins(id,username,password_hash,telegram_id) VALUES($1,$2,$3,'303')",
+      [randomUUID(), memberName, await passwordHash("a long test password")],
+    );
+    const memberSession = await login(
+      store.pool,
+      memberName,
+      "a long test password",
+    );
+    const memberOverview = await request(overviewPath, "GET", undefined, {
+      cookie: `repodesk_session=${memberSession.raw}`,
+    });
+    expect(memberOverview.status).toBe(200);
+    expect((await memberOverview.json()).connections).toBeUndefined();
     expect(
       (await app.request(`/api/admin/workspaces/${w.id}/settings`)).status,
     ).toBe(401);
@@ -178,6 +257,10 @@ suite("PostgreSQL integration (isolated database)", () => {
     });
     expect(
       (await request(`/api/admin/workspaces/${other.id}/settings`)).status,
+    ).toBe(200);
+    const foreign = await foreignWorkspace();
+    expect(
+      (await request(`/api/admin/workspaces/${foreign.id}/settings`)).status,
     ).toBe(403);
     const progress = await request("/api/setup/progress");
     expect(progress.status).toBe(200);
@@ -351,11 +434,11 @@ suite("PostgreSQL integration (isolated database)", () => {
     expect((await store.read(w.id)).settings).not.toHaveProperty(
       "maxInputChars",
     );
-    // A foreign/non-member actor cannot read limits or write settings.
+    // The deployment operator keeps web configuration access without Telegram membership.
     await store.change(w.id, (v) => {
       v.policy.allowed = ["303"];
     });
-    expect((await request(path)).status).toBe(403);
+    expect((await request(path)).status).toBe(200);
     expect(
       (
         await request(path, "PUT", {
@@ -363,7 +446,7 @@ suite("PostgreSQL integration (isolated database)", () => {
           settings: w.settings,
         })
       ).status,
-    ).toBe(403);
+    ).toBe(200);
   });
   test("migration removes retired controls without changing historical snapshots", async () => {
     const w = await seed();

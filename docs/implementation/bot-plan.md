@@ -6,6 +6,9 @@ Checked items below refer to local implementation and automated verification, no
 pilot. See [implementation evidence](implementation-status.md), including the JSONB
 aggregate storage choice, capacity limits and provisional model selection. No paid
 model calls, real messages, public deployment or webhook registration were performed.
+This plan records the original recap-first implementation sequence. The current
+product focus and next release validation are in the
+[GitHub journey](../design/github-workflows.md) and [roadmap](roadmap.md).
 
 ## 1. First release and definition of done
 
@@ -23,10 +26,11 @@ request recap → correct its format → approve Friday schedule → restart con
 receive one scheduled recap using the corrected format → inspect it in the admin
 panel → pause it from the panel successfully.
 
-P0 supports text and message references. External app connectors, uploaded-file
-processing, proactive suggestions, arbitrary browsing, shell access, payments and a
-Mini App follow the pilot. The existing [requirements](../design/product-requirements.md)
-remain the product contract; this document determines implementation order.
+The original P0 supports text and message references. Its plan deferred external
+connectors, uploaded-file processing, proactive suggestions, arbitrary browsing,
+shell access, payments and a Mini App. GitHub App, Code Truth and approved issue and
+coding paths were added locally afterward; see the [current requirements](../design/product-requirements.md).
+This document records the foundation's implementation order.
 
 ## 2. Technical decisions
 
@@ -152,8 +156,8 @@ rollback leaves neither accepted event nor job. Container restart preserves stat
 - [x] Create the React Router SPA shell and `/setup` route; fresh deployments redirect
   there, initialized deployments redirect to admin login/dashboard.
 - [x] Add deployment setup state, local admin account/password-hash records, sessions
-  and a host command issuing a one-use expiring bootstrap token.
-- [x] Atomically consume the token and create one admin; protect against concurrent
+  and username/password-only first setup. Updated 2026-09-27 to remove token issuance.
+- [x] Atomically claim the deployment and create one admin; protect against concurrent
   claims, public reinitialization and last-admin lockout. Add operator recovery.
 - [x] Add a resumable wizard and encrypted credential storage using a Docker runtime
   encryption key. Bot/model token fields are write-only; logs and responses are redacted.
@@ -393,12 +397,12 @@ No deployment, account connection or real message sending is part of writing thi
 
 ## 7. After P0
 
-1. Add one read-only connector based on pilot demand: GitHub PR summaries or Google
-   Drive source documents. Keep connection owner and permitted audience explicit.
+1. Validate the locally implemented GitHub source, issue and coding paths; then
+   define a separate read-only issue/PR metadata tool from pilot questions.
 2. Add multi-chat workspaces, files, follow-up queues and blocker digests.
 3. Add opt-in proactive suggestions with rejection memory and notification limits.
-4. Extend P0 instruction skills with reviewed reference/script bundles and approved
-   external writes only with tool-specific isolation and recovery tests.
+4. Extend P0 instruction skills with reviewed reference/script bundles and any
+   broader GitHub writes only with tool-specific isolation and recovery tests.
 5. Optionally embed the existing admin panel as a Mini App; add voice and payments
    only after usage justifies them.
 

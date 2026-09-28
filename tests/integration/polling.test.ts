@@ -12,6 +12,7 @@ import { migrate } from "../../src/db/migrate.ts";
 import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
 import { type Admin, settingsSchema } from "../../src/domain.ts";
+import { deliverAccessHelp } from "../../src/jobs/control.ts";
 import { encrypt } from "../../src/setup/credentials.ts";
 import { SetupService } from "../../src/setup/service.ts";
 import {
@@ -20,6 +21,7 @@ import {
   TelegramError,
 } from "../../src/telegram/client.ts";
 import { TelegramPoller } from "../../src/telegram/polling.ts";
+import { requestAccess } from "../../src/workspaces/access-requests.ts";
 import { newWorkspace } from "../../src/workspaces/service.ts";
 import { workspace } from "../fixtures.ts";
 
@@ -55,7 +57,9 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         return (
           method === "getWebhookInfo"
             ? { url: webhook }
-            : await updates(params, options)
+            : method === "sendMessage"
+              ? { message_id: 77 }
+              : await updates(params, options)
         ) as T;
       },
     };
@@ -136,13 +140,15 @@ const rootUrl = process.env.TEST_DATABASE_URL;
           chat: { id: actor, type: "private" },
           from: { id: actor, is_bot: false },
           text,
-          entities: [
-            {
-              type: "bot_command",
-              offset: 0,
-              length: text.split(" ")[0]?.length,
-            },
-          ],
+          entities: text.startsWith("/")
+            ? [
+                {
+                  type: "bot_command",
+                  offset: 0,
+                  length: text.split(" ")[0]?.length,
+                },
+              ]
+            : [],
         },
       };
     }
@@ -272,6 +278,29 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       await store.saveDeployment(store.pool, d);
       expect((await setup.progress(admin)).receiver.ready).toBe(false);
     });
+    test("an allowed private message gets an activation notice before activation", async () => {
+      const w = await seed(false);
+      await setup.allowMember(admin, w.id, "101", w.policy.version);
+      updates = async () => [message(1, "hi"), message(2, "hi")];
+      await poller.pollOnce(signal());
+      expect((await store.read(w.id)).runs).toHaveLength(0);
+      expect(
+        (
+          await store.pool.query(
+            "SELECT update_id,state FROM control_deliveries ORDER BY update_id",
+          )
+        ).rows,
+      ).toMatchObject([{ update_id: "1", state: "pending" }]);
+      await deliverAccessHelp(store, setup);
+      expect(calls.filter((c) => c.method === "sendMessage")).toMatchObject([
+        {
+          params: {
+            chat_id: "101",
+            text: "RepoDesk is not active yet. Ask a deployment admin to activate it in Model settings.",
+          },
+        },
+      ]);
+    });
     test("owner verification uses existing policy; pre-activation messages cannot start runs", async () => {
       const w = await seed(false);
       const token = await setup.identityToken(admin, w.id);
@@ -303,12 +332,71 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       expect(active.runs).toHaveLength(1);
       expect(active.runs[0]?.actor).toBe("101");
     });
-    test("polling cannot bypass owner/skill checks, and webhook mode retains its requirements", async () => {
+    test("activation without a Telegram owner keeps access closed until the web admin allows a member", async () => {
+      const w = await seed(false);
+      await poller.pollOnce(signal());
+      await setup.activate(admin);
+      expect((await setup.progress(admin)).active).toBe(true);
+      expect((await setup.progress(admin)).workspaces[0]?.ownerVerified).toBe(
+        false,
+      );
+      const access = await setup.access(admin, w.id);
+      expect(access.members).toHaveLength(0);
+      expect(access.requestUrl).toContain(`access_${w.id}`);
+      updates = async () => [message(10, "/ask denied")];
+      await poller.pollOnce(signal());
+      expect((await store.read(w.id)).runs).toHaveLength(0);
+      await setup.allowMember(admin, w.id, "101", access.version);
+      updates = async () => [message(11, "/ask allowed")];
+      await poller.pollOnce(signal());
+      expect((await store.read(w.id)).runs).toHaveLength(1);
+      const allowed = await setup.access(admin, w.id);
+      await setup.revokeMember(admin, w.id, "101", allowed.version);
+      expect((await store.read(w.id)).runs[0]?.status).toBe("cancelled");
+      updates = async () => [message(12, "/ask denied again")];
+      await poller.pollOnce(signal());
+      expect((await store.read(w.id)).runs).toHaveLength(1);
+      updates = async () => [message(13, `/start access_${w.id}`, 303)];
+      await poller.pollOnce(signal());
+      expect(
+        (
+          await store.pool.query(
+            "SELECT workspace_id FROM control_deliveries WHERE update_id=13",
+          )
+        ).rows[0]?.workspace_id,
+      ).toBe(w.id);
+      const pending = await store.change(w.id, (current) =>
+        requestAccess(current, { actor: "202", chatId: "202" }),
+      );
+      const review = await setup.access(admin, w.id);
+      await setup.decideAccess(
+        admin,
+        w.id,
+        pending.id,
+        "approved",
+        review.version,
+      );
+      expect((await setup.access(admin, w.id)).members).toContainEqual({
+        id: "202",
+        role: "member",
+        allowed: true,
+      });
+      const identity = await setup.identityToken(admin, w.id);
+      updates = async () => [message(14, identity.command)];
+      await poller.pollOnce(signal());
+      expect(
+        (await store.read(w.id)).members.find((m) => m.id === "101"),
+      ).toMatchObject({
+        role: "owner",
+        active: true,
+      });
+      await expect(
+        setup.access({ ...admin, id: randomUUID() }, w.id),
+      ).rejects.toThrow("access_denied");
+    });
+    test("polling keeps the webhook boundary, and webhook mode still requires a receiver", async () => {
       await seed(false);
       await poller.pollOnce(signal());
-      await expect(setup.activate(admin)).rejects.toThrow(
-        "verified_owner_and_skill_required",
-      );
       await expect(setup.register(admin)).rejects.toThrow(
         "webhook_disabled_in_polling_mode",
       );

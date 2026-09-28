@@ -23,16 +23,39 @@ secret. The database is private; the app listens on loopback only.
 ```sh
 docker compose config --quiet
 docker compose up --build -d
-docker compose exec app node dist/operator.js claim
 ```
 
-Open `http://localhost:3000`. Paste the 15-minute claim token and create an admin
-with a password of at least 12 characters. Concurrent claims cannot create two
-initial admins. The claim token is printed only by the explicit host command.
-There is no default password. Setup progress persists in PostgreSQL.
+For subsequent local Podman starts, run `bun run local:start`. It uses the Compose
+files selected in `.env` and starts the rootless Podman socket when the Codex
+overlay is present. Pass `--build` to rebuild Compose images after source changes
+(`bun run local:start --build`). The separate Codex job image is built as described
+in [the Podman runner guide](codex-podman.md). The default reuses local images for a
+quick restart.
 
-Create a workspace and confirm timezone, retention and budgets. Bot and model
-credentials can be left pending for local work. They are write-only and encrypted
+Open `http://localhost:3000/setup`. Create the first administrator with a username
+and a password of at least 12 characters. No bootstrap token or host command is
+needed. Concurrent requests cannot create two initial admins, and setup cannot be
+claimed again after account creation. There is no default password. Setup progress
+persists in PostgreSQL. Complete first setup before exposing a fresh deployment
+beyond localhost: the first successful submission establishes its administrator.
+See [the setup API example](../../examples/setup.http) for the equivalent request.
+
+The authenticated setup wizard guides you through Workspace, Telegram bot and
+GitHub App. Create the workspace with a name and timezone;
+**Continue to Telegram** saves it and keeps you on Workspace if validation fails.
+The timezone selector starts with your browser's IANA timezone and also offers UTC
+and other available IANA zones.
+Adjust budgets and retention later in Workspace settings. You can revisit steps.
+The GitHub step has one **Connect GitHub** button. It creates a personal App when
+needed, then asks GitHub for user authorization and installation. Choose the
+repositories in GitHub. Setup verifies one accessible installation, connects its
+granted repositories and shows a RepoDesk welcome dialog with confetti. Click
+**Get started** to enter the workspace. If more
+than one installation is accessible, use Plugins to choose the right account.
+Selecting **All repositories** in GitHub connects all repositories currently
+accessible to the authorizing user through that installation. Entering the panel
+does not activate the bot. Configure the model and activate under **Model settings**.
+Bot and model credentials are write-only and encrypted
 with AES-256-GCM; the database does not contain the runtime encryption key.
 
 `GET /healthz` reports process liveness. `GET /readyz` also requires a recent
@@ -58,11 +81,14 @@ container access; keep the containing `secrets/` directory private.
 
 Save a workspace and bot token in Setup. Selecting polling explicitly opts the worker
 into outbound Telegram requests using the saved bot credential, including before
-activation so owner verification can work. Wait for **Polling: ready**, generate the
-owner verification link, and open it with the intended Telegram account. Sign in again
-after verification, finish model/skill settings, then activate. The model, whitelist,
-tenant and approval requirements are identical in both modes. No webhook or tunnel is
-needed. The setup page updates verification status automatically every five seconds in both transport modes.
+activation so receiver readiness can be checked. Wait for **Polling: ready**, finish
+model settings, then activate. The bot denies ordinary requests until the web
+administrator approves or allows Telegram users from Setup. Personal Telegram
+account linking is optional and can happen later. The model, tenant and approval
+requirements are identical in both modes. No webhook or tunnel is needed. The setup
+page updates receiver status automatically every five seconds in both transport modes.
+An allowed user who messages the bot before activation receives a throttled setup
+notice instead of an AI response.
 
 Polling and webhook delivery cannot operate on the same bot at the same time. If the
 bot already has a webhook, polling reports a conflict and makes no `deleteWebhook`
@@ -105,20 +131,25 @@ Webhook remains the default transport; polling starts only when explicitly confi
 1. Configure an HTTPS reverse proxy and set `PUBLIC_ORIGIN` to its exact origin,
    without a trailing slash. Restart the app and worker after origin changes.
 2. Enter a dedicated BotFather token in Setup. Save calls `getMe` and shows its identity.
-3. Click **Register verification webhook**. This reconciles `getWebhookInfo` and
+3. Click **Register Telegram webhook** under Model settings in the admin panel. This reconciles `getWebhookInfo` and
    `setWebhook` without dropping pending updates. Only verification/control interactions
    work until activation. Alternatively, explicitly run
    `REGISTER_STAGING_WEBHOOK=yes bun run register:webhook` with host configuration.
-4. Generate the owner verification link and open it with the intended Telegram account.
-   This atomically enrolls/whitelists the owner and links the local account. Existing
-   sessions are revoked; sign in again.
-5. Configure the OpenAI-compatible model base URL, API key, model ID and thinking
-   level under **Setup & credentials**. The default base URL is
+4. Configure the OpenAI-compatible model base URL, API key, model ID and thinking
+   level under **Model settings**. The default base URL is
    `https://api.openai.com/v1`, model `gpt-4.1-mini`, and thinking `off`.
    Choose a suggested model or enter any custom ID. Set budgets and enabled skills.
-6. Review settings and activate. Private-only activation is valid. Send `/start`,
-   confirm `/timezone Asia/Taipei` (or your IANA zone), then use `/linktoken` privately
-   to link a group in which you are also a Telegram administrator.
+5. Review readiness under Model settings and activate. No Telegram owner or allowed user is required at
+   activation; an empty allowlist means the bot denies ordinary use. Share the
+   request-access link there and approve a user, or allow a known numeric ID.
+   The web administrator can also manage workspace settings, skills and access in
+   the admin panel before linking a personal Telegram account.
+   Once Telegram updates are being received, the request-access link can collect
+   requests before activation; approval does not enable ordinary bot work.
+6. If owner actions in Telegram are needed, generate the optional identity link
+   from Model settings and open it with the intended Telegram account. This enrolls and
+   whitelists that account. Existing sessions are revoked; sign in again. Then
+   `/linktoken` can link a group in which that user is a Telegram administrator.
 
 Telegram ID entry alone never proves identity. Extra panel accounts are created
 under Operations; enroll their Telegram IDs in Members and issue a one-use identity
@@ -131,11 +162,13 @@ outside the whitelist, and does not import old history.
 
 ## OpenAI-compatible model settings
 
-The setup page has separate **Connect Telegram** and **Model configuration** cards.
-Use **Save model configuration** to save the model before or after connecting Telegram;
-**Save Telegram token** updates only the bot credential. The setup checklist marks
-**Model saved** when a key is configured, and **Review & activate** shows the saved
-base URL, model ID, thinking level and key status without displaying the key.
+The setup wizard saves Telegram credentials before moving to GitHub. The admin
+panel's **Model settings** page saves model credentials separately and shows
+activation requirements. Errors leave entered values in place. A saved credential
+can be retained by leaving its write-only field blank. Model settings initially show
+the key, base URL and model ID. Open **Advanced model settings** for thinking level,
+capacity overrides and token prices, including the required values for custom models.
+You can return to those controls later. Activation never displays credentials.
 
 Only deployment operators can change these settings. The base URL includes the API
 prefix (usually `/v1`); requests go to its `/chat/completions` endpoint using streaming
@@ -398,3 +431,12 @@ Configure repository development branches and Telegram maintainers under
 GitHub Actions workflow, an OpenAI secret, trusted check commands and updated App
 permissions. Follow [the complete setup](codex-coding.md); installing the bot does
 not install or dispatch remote workflows.
+
+### Local Podman Codex backend
+
+For local coding execution, use [the Podman runner guide](codex-podman.md) and
+`deploy/codex/compose.yaml`. Configure the custom Responses provider endpoint/model
+in deployment settings, then save the workspace API key in **Plugins → Codex
+implementation → Local Podman**. Keys are encrypted and never displayed again.
+`CODEX_PROVIDER_API_KEY` is an optional supervisor environment fallback. Existing coding configurations
+continue to use GitHub Actions until switched in the Codex panel.

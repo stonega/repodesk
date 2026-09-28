@@ -14,7 +14,7 @@ export async function codeTruthExtension(
   targets: CodeTarget[],
   connectionRevision?: number,
 ): Promise<BuiltinExtension> {
-  const skill = await readFile("skills/deepx-code-truth/SKILL.md", "utf8");
+  const skill = await readFile("skills/repodesk-code-truth/SKILL.md", "utf8");
   return {
     id: "code-truth",
     version: "1",

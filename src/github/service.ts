@@ -9,13 +9,24 @@ import type { GitHubPage } from "./config.ts";
 import { GitHubApps, registrationInput } from "./registry.ts";
 
 const revisionSchema = z.number().int().nonnegative();
-const selectionSchema = z
-  .object({
-    revision: revisionSchema,
-    installationId: z.number().int().positive(),
-    repositoryIds: z.array(z.number().int().positive()).min(1).max(12),
-  })
-  .strict();
+const selectionSchema = z.union([
+  z
+    .object({
+      revision: revisionSchema,
+      installationId: z.number().int().positive(),
+      repositoryIds: z.array(z.number().int().positive()).min(1),
+    })
+    .strict(),
+  z
+    .object({
+      revision: revisionSchema,
+      installationId: z.number().int().positive(),
+      allRepositories: z.literal(true),
+    })
+    .strict(),
+]);
+const flowState = (source?: "setup") =>
+  source === "setup" ? `setup_${token()}` : token();
 export function githubAuthority(admin: Admin, w: Workspace) {
   operator(admin);
   requireThat(w.operatorId === admin.id && !w.deletion, "access_denied", 403);
@@ -88,12 +99,12 @@ export class GitHubService {
       installations,
     };
   }
-  async begin(admin: Admin, id: string, sessionHash: string) {
+  async begin(admin: Admin, id: string, sessionHash: string, source?: "setup") {
     const w = await this.workspace(admin, id);
     const app = await this.apps.get(w.operatorId);
     requireThat(app, "github_app_not_configured", 409);
     await throttle(this.store.pool, `github:${admin.id}`);
-    const state = token(),
+    const state = flowState(source),
       verifier = token();
     await this.store.pool.query(
       "DELETE FROM github_flows WHERE expires_at<=now()",
@@ -175,7 +186,7 @@ export class GitHubService {
       409,
     );
     await throttle(this.store.pool, `github-registration:${admin.id}`);
-    const state = token();
+    const state = flowState(input.source);
     const organization =
       input.owner === "organization" ? input.organization : null;
     await this.store.pool.query(
@@ -278,14 +289,18 @@ export class GitHubService {
       pending.token,
       input.installationId,
     );
-    const selected = accessible.filter((r) =>
-      input.repositoryIds.includes(r.id),
-    );
-    requireThat(
-      selected.length === new Set(input.repositoryIds).size,
-      "github_access_denied",
-      403,
-    );
+    const selected =
+      "allRepositories" in input
+        ? accessible
+        : accessible.filter((r) => input.repositoryIds.includes(r.id));
+    if ("allRepositories" in input)
+      requireThat(selected.length > 0, "github_repository_not_connected", 409);
+    else
+      requireThat(
+        selected.length === new Set(input.repositoryIds).size,
+        "github_access_denied",
+        403,
+      );
     await this.store.change(id, async (w, sql) => {
       githubAuthority(admin, w);
       requireThat(

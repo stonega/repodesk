@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowUpRightSquare } from "reicon-react";
 import type { GitHubRepository } from "../src/github/app.ts";
 import type { GitHubPage } from "../src/github/config.ts";
-import { GitHubRegistration } from "./github-registration.tsx";
+import {
+  GitHubRegistration,
+  submitGitHubManifest,
+} from "./github-registration.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 function explain(error: unknown) {
@@ -28,12 +32,215 @@ function explain(error: unknown) {
     )[message] ?? message
   );
 }
-export function GitHubConnection({
+export function GitHubSetup({
   request,
   workspaceId,
+  onConnected,
 }: {
   request: Request;
   workspaceId: string;
+  onConnected: () => void;
+}) {
+  const endpoint = `/api/admin/workspaces/${workspaceId}/github`;
+  const [data, setData] = useState<GitHubPage>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [installing, setInstalling] = useState(false);
+  const [needsRepositoryChoice, setNeedsRepositoryChoice] = useState(false);
+  const completed = useRef(false);
+  const completing = useRef(false);
+  const autoConnecting = useRef(false);
+  const callback = new URLSearchParams(window.location.search).get("github");
+  const requestedInstallation = Number(
+    new URLSearchParams(window.location.search).get("installation_id"),
+  );
+  const selectedInstallation = data?.installations.find(
+    (item) => item.id === requestedInstallation,
+  );
+  const needsInstallationSelection =
+    !!data?.pending && data.installations.length > 1 && !selectedInstallation;
+  const refresh = useCallback(async () => {
+    try {
+      setData(await request<GitHubPage>(endpoint));
+    } catch (error) {
+      setError(explain(error));
+    }
+  }, [request, endpoint]);
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+  useEffect(() => {
+    if (data?.connection?.installationId && !completed.current) {
+      completed.current = true;
+      onConnected();
+    }
+  }, [data, onConnected]);
+  useEffect(() => {
+    if (!data?.pending) return;
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh();
+    }, 4000);
+    const onFocus = () => {
+      if (installing) completing.current = false;
+      void refresh();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [data?.pending, installing, refresh]);
+  useEffect(() => {
+    if (!data?.pending || completing.current) return;
+    const installation =
+      selectedInstallation ??
+      (data.installations.length === 1 ? data.installations[0] : undefined);
+    if (!installation) return;
+    completing.current = true;
+    setBusy(true);
+    void (async () => {
+      try {
+        await request(endpoint, "PUT", {
+          revision: data.revision,
+          installationId: installation.id,
+          allRepositories: true,
+        });
+        completed.current = true;
+        onConnected();
+      } catch (error) {
+        if ((error as Error).message === "github_repository_not_connected") {
+          setNeedsRepositoryChoice(true);
+          setError(
+            "Choose at least one repository for the App in GitHub, then return here.",
+          );
+        } else setError(explain(error));
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }, [data, endpoint, onConnected, request, selectedInstallation]);
+  const connect = useCallback(async () => {
+    if (!data || busy) return;
+    if (data.pending) {
+      if (data.installations.length && error && !needsRepositoryChoice) {
+        completing.current = false;
+        void refresh();
+        return;
+      }
+      if (data.installUrl) {
+        window.open(data.installUrl, "_blank", "noopener,noreferrer");
+        setInstalling(true);
+      }
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      if (data.configured) {
+        const result = await request<{ url: string }>(
+          `${endpoint}/connect`,
+          "POST",
+          { source: "setup" },
+        );
+        window.location.assign(result.url);
+      } else if (data.canRegister) {
+        const result = await request<{ url: string; manifest: object }>(
+          `${endpoint}/register`,
+          "POST",
+          {
+            owner: "personal",
+            name: `RepoDesk-${workspaceId.slice(0, 8)}`,
+            public: false,
+            source: "setup",
+          },
+        );
+        submitGitHubManifest(result);
+      } else {
+        setError("A GitHub App is not available for this deployment.");
+      }
+    } catch (error) {
+      setError(explain(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [
+    busy,
+    data,
+    endpoint,
+    error,
+    needsRepositoryChoice,
+    refresh,
+    request,
+    workspaceId,
+  ]);
+  useEffect(() => {
+    if (
+      callback !== "app-created" ||
+      !data?.configured ||
+      autoConnecting.current
+    )
+      return;
+    autoConnecting.current = true;
+    void connect();
+  }, [callback, connect, data]);
+  return (
+    <>
+      {callback === "failed" && (
+        <p className="notice" role="alert">
+          GitHub authorization did not complete. Try connecting again.
+        </p>
+      )}
+      {callback === "registration-failed" && (
+        <p className="notice" role="alert">
+          GitHub App creation did not complete. Try connecting again.
+        </p>
+      )}
+      {error && (
+        <p className="notice" role="alert">
+          {error}
+        </p>
+      )}
+      {!data && !error && <p role="status">Loading GitHub connection…</p>}
+      {data?.pending && !completed.current && (
+        <p className="muted" role="status">
+          {needsInstallationSelection
+            ? "Several App installations are available. Choose the right account in Plugins."
+            : data.installations.length
+              ? "Connecting the repositories approved in GitHub…"
+              : installing
+                ? "Complete the installation in GitHub. This page will continue when the App has repository access."
+                : "GitHub account authorized. Install the App to grant repository access."}
+        </p>
+      )}
+      {needsInstallationSelection && (
+        <a href={`/admin/plugins?workspace=${workspaceId}`}>
+          Choose an account in Plugins
+        </a>
+      )}
+      {data && !data.connection?.installationId && (
+        <button
+          type="button"
+          disabled={
+            busy ||
+            (!data.configured && !data.canRegister) ||
+            needsInstallationSelection
+          }
+          onClick={() => void connect()}
+        >
+          {busy ? "Connecting GitHub…" : "Connect GitHub"}
+        </button>
+      )}
+    </>
+  );
+}
+export function GitHubConnection({
+  request,
+  workspaceId,
+  source,
+}: {
+  request: Request;
+  workspaceId: string;
+  source?: "setup";
 }) {
   const endpoint = `/api/admin/workspaces/${workspaceId}/github`;
   const [data, setData] = useState<GitHubPage>();
@@ -42,6 +249,7 @@ export function GitHubConnection({
   const [installation, setInstallation] = useState("");
   const [repositories, setRepositories] = useState<GitHubRepository[]>([]);
   const [selected, setSelected] = useState<number[]>([]);
+  const [showAllRepositories, setShowAllRepositories] = useState(false);
   const load = useCallback(async () => {
     setBusy(true);
     setError("");
@@ -50,6 +258,7 @@ export function GitHubConnection({
       setInstallation("");
       setRepositories([]);
       setSelected([]);
+      setShowAllRepositories(false);
     } catch (error) {
       setError(explain(error));
     } finally {
@@ -116,6 +325,7 @@ export function GitHubConnection({
           request={request}
           endpoint={endpoint}
           onError={(error) => setError(explain(error))}
+          source={source}
         />
       )}
       {data && !data.configured && !data.canRegister && (
@@ -143,14 +353,52 @@ export function GitHubConnection({
             approve the updated installation permissions. Then ask the Telegram
             assistant to draft an issue and review its Approve/Reject buttons.
           </p>
-          <ul>
-            {data.connection.repositories.map((repo) => (
-              <li key={repo.id}>{repo.full_name}</li>
+          <ul
+            className="github-repositories"
+            aria-label="Connected repositories"
+          >
+            {(showAllRepositories
+              ? data.connection.repositories
+              : data.connection.repositories.slice(0, 5)
+            ).map((repo) => (
+              <li className="github-repository" key={repo.id}>
+                <span>{repo.full_name}</span>
+                <a
+                  className="github-repository-link"
+                  href={`https://github.com/${repo.full_name}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Open ${repo.full_name} on GitHub`}
+                  title={`Open ${repo.full_name} on GitHub`}
+                >
+                  <ArrowUpRightSquare
+                    size={18}
+                    weight="Outline"
+                    color="currentColor"
+                    aria-hidden="true"
+                    focusable="false"
+                  />
+                </a>
+              </li>
             ))}
+            {data.connection.repositories.length > 5 && (
+              <li>
+                <button
+                  type="button"
+                  className="github-repository-more"
+                  aria-expanded={showAllRepositories}
+                  onClick={() => setShowAllRepositories(!showAllRepositories)}
+                >
+                  {showAllRepositories
+                    ? "Show less"
+                    : `${data.connection.repositories.length - 5} more`}
+                </button>
+              </li>
+            )}
           </ul>
         </>
       )}
-      {data && !data.connection && (
+      {data?.configured && !data.connection && (
         <p className="muted">
           Existing deployment credentials may apply until you connect or
           disconnect this workspace.
@@ -163,55 +411,29 @@ export function GitHubConnection({
         </p>
       )}
       <div className="row">
-        <button
-          type="button"
-          disabled={busy || !data?.configured}
-          onClick={() =>
-            void act(async () => {
-              const result = await request<{ url: string }>(
-                `${endpoint}/connect`,
-                "POST",
-                {},
-              );
-              window.location.assign(result.url);
-            })
-          }
-        >
-          {data?.connection?.installationId
-            ? "Change GitHub connection"
-            : "Connect GitHub"}
-        </button>
+        {data?.configured && !data.connection?.installationId && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              void act(async () => {
+                const result = await request<{ url: string }>(
+                  `${endpoint}/connect`,
+                  "POST",
+                  source ? { source } : {},
+                );
+                window.location.assign(result.url);
+              })
+            }
+          >
+            Connect GitHub
+          </button>
+        )}
         {error && (
           <button type="button" disabled={busy} onClick={() => void load()}>
             Reload GitHub connection
           </button>
         )}
-        {data &&
-          (!data.connection ||
-            data.connection.installationId ||
-            data.pending) && (
-            <button
-              type="button"
-              className="danger"
-              disabled={busy}
-              onClick={() => {
-                if (
-                  !window.confirm(
-                    "Disconnect GitHub from this workspace? Private repository access and deployment-token fallback will stop for this workspace.",
-                  )
-                )
-                  return;
-                void act(async () => {
-                  await request(endpoint, "DELETE", {
-                    revision: data.revision,
-                  });
-                  window.location.reload();
-                });
-              }}
-            >
-              Disconnect GitHub
-            </button>
-          )}
       </div>
       {data?.pending && (
         <form
@@ -233,7 +455,7 @@ export function GitHubConnection({
             repositories this workspace may query and submit issues to.
           </p>
           <p>
-            After GitHub approves the installation, reopen Plugins to see it.
+            After GitHub approves the installation, reopen this page to see it.
           </p>
           <fieldset disabled={busy} className="plugin-fields">
             <label className="field">
@@ -267,7 +489,7 @@ export function GitHubConnection({
             {!data.installations.length && (
               <p>
                 No accessible installations yet. Install the App or ask your
-                organization owner to approve it, then reopen Plugins.
+                organization owner to approve it, then reopen this page.
               </p>
             )}
             {!!installation && !repositories.length && (
@@ -278,9 +500,6 @@ export function GitHubConnection({
                 <input
                   type="checkbox"
                   checked={selected.includes(repo.id)}
-                  disabled={
-                    selected.length >= 12 && !selected.includes(repo.id)
-                  }
                   onChange={(e) =>
                     setSelected(
                       e.target.checked

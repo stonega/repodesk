@@ -67,7 +67,7 @@ export function Usage({
   return (
     <>
       <div className="page-heading">
-        <p className="eyebrow">DEEPX / TEAM OPERATIONS</p>
+        <p className="eyebrow">REPODESK / TEAM OPERATIONS</p>
         <div className="page-title-row">
           <h1>Usage &amp; budget</h1>
         </div>

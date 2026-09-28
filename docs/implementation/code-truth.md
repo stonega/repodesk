@@ -74,10 +74,10 @@ changes apply without a process restart.
 
 1. Open **Workspace → Plugins → Code Truth**, then **Add repository**.
 2. Enter a unique target ID and canonical HTTPS GitHub repository URL, for example
-   `deepx-web` and `https://github.com/deepxfinance/web.git`.
-3. Map network names to branch names, for example `devnet` → `devnet-develop` and
-   `testnet` → `testnet-develop`. Default query network is `devnet`; the assistant
-   reports unavailable networks rather than silently substituting one.
+   `my-repository` and `https://github.com/your-org/my-repository.git`.
+3. Map a logical network name to a branch, for example `main` → `main`.
+   The assistant uses the sole configured network when none is specified; when
+   several are available, it uses explicit context or asks which one to query.
 4. Confirm the selected workspace in the sidebar. All eligible actors in this
    workspace receive access; other workspaces have independent repositories.
 5. Enable Code Truth and save. Settings can be saved before the local service is

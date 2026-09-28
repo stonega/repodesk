@@ -4,12 +4,12 @@
 
 ### Read current version (requires an operator session)
 GET {{baseUrl}}/api/setup/progress
-Cookie: deepx_session={{session}}
+Cookie: repodesk_session={{session}}
 
 ### Save model settings; replace version and placeholders, never commit real keys
 PUT {{baseUrl}}/api/admin/operator/credentials
 Origin: {{baseUrl}}
-Cookie: deepx_session={{session}}
+Cookie: repodesk_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
@@ -29,7 +29,7 @@ Content-Type: application/json
 ### Save workspace budgets (replace workspace ID and its current version)
 PUT {{baseUrl}}/api/admin/workspaces/REPLACE_WORKSPACE_ID/settings
 Origin: {{baseUrl}}
-Cookie: deepx_session={{session}}
+Cookie: repodesk_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 

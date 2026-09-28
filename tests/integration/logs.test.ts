@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { claim, issueClaim, login } from "../../src/admin/auth.ts";
+import { claim, login } from "../../src/admin/auth.ts";
 import { createApp } from "../../src/app.ts";
 import { migrate } from "../../src/db/migrate.ts";
 import { database } from "../../src/db/pool.ts";
@@ -38,7 +38,7 @@ const url = process.env.TEST_DATABASE_URL;
     );
     const claimed = await claim(
       pool,
-      await issueClaim(pool),
+
       "logoperator",
       "test password long enough",
     );

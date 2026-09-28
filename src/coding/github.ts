@@ -74,7 +74,9 @@ export class CodingGitHub {
   async run(token: string, task: CodingTask) {
     const p = task.payload;
     const matches = (run: z.infer<typeof runSchema>) =>
-      run.display_title === `deepx-coding:${task.id}` &&
+      [`repodesk-coding:${task.id}`, `deepx-coding:${task.id}`].includes(
+        run.display_title,
+      ) &&
       run.event === "workflow_dispatch" &&
       run.head_branch === p.baseBranch;
     if (task.workflowRunId) {
@@ -112,38 +114,43 @@ export class CodingGitHub {
   }
   async pull(token: string, task: CodingTask) {
     const p = task.payload;
-    const branch = `codex/deepx-${task.id}`;
-    const params = new URLSearchParams({
-      state: "all",
-      head: `${p.repository.split("/")[0]}:${branch}`,
-      base: p.baseBranch,
-    });
-    const pulls = z
-      .array(
-        z.object({
-          number: z.number().int().positive(),
-          body: z.string().nullable(),
-          head: z.object({
-            ref: z.string(),
-            repo: z.object({ full_name: z.string() }).nullable(),
-          }),
-          base: z.object({ ref: z.string() }),
+    const branches = [`codex/repodesk-${task.id}`, `codex/deepx-${task.id}`];
+    const pullSchema = z.array(
+      z.object({
+        number: z.number().int().positive(),
+        body: z.string().nullable(),
+        head: z.object({
+          ref: z.string(),
+          repo: z.object({ full_name: z.string() }).nullable(),
         }),
-      )
-      .parse(
+        base: z.object({ ref: z.string() }),
+      }),
+    );
+    const matches: z.infer<typeof pullSchema> = [];
+    for (const branch of branches) {
+      const params = new URLSearchParams({
+        state: "all",
+        head: `${p.repository.split("/")[0]}:${branch}`,
+        base: p.baseBranch,
+      });
+      const pulls = pullSchema.parse(
         await this.request(token, `/repos/${p.repository}/pulls?${params}`),
       );
-    const pull = pulls.find(
-      (r) =>
-        r.head.ref === branch &&
-        r.head.repo?.full_name === p.repository &&
-        r.base.ref === p.baseBranch &&
-        r.body?.includes(
-          `https://github.com/${p.repository}/issues/${task.issue?.number}`,
+      matches.push(
+        ...pulls.filter(
+          (r) =>
+            r.head.ref === branch &&
+            r.head.repo?.full_name === p.repository &&
+            r.base.ref === p.baseBranch &&
+            r.body?.includes(
+              `https://github.com/${p.repository}/issues/${task.issue?.number}`,
+            ),
         ),
-    );
-    return pull
-      ? `https://github.com/${p.repository}/pull/${pull.number}`
+      );
+    }
+    requireThat(matches.length <= 1, "coding_pr_ambiguous", 409);
+    return matches[0]
+      ? `https://github.com/${p.repository}/pull/${matches[0].number}`
       : undefined;
   }
   async cancel(token: string, task: CodingTask) {

@@ -19,10 +19,10 @@ export function equal(a: string, b: string) {
 export function encrypt(key: string, name: string, value: string) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", Buffer.from(key, "hex"), iv);
-  cipher.setAAD(Buffer.from(`deepx:v1:${name}`));
+  cipher.setAAD(Buffer.from(`repodesk:v2:${name}`));
   const data = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
   return [
-    "v1",
+    "v2",
     iv.toString("base64"),
     cipher.getAuthTag().toString("base64"),
     data.toString("base64"),
@@ -30,13 +30,18 @@ export function encrypt(key: string, name: string, value: string) {
 }
 export function decrypt(key: string, name: string, value: string) {
   const [version, iv, tag, data] = value.split(".");
-  requireThat(version === "v1" && iv && tag && data, "invalid_ciphertext");
+  requireThat(
+    (version === "v1" || version === "v2") && iv && tag && data,
+    "invalid_ciphertext",
+  );
   const cipher = createDecipheriv(
     "aes-256-gcm",
     Buffer.from(key, "hex"),
     Buffer.from(iv, "base64"),
   );
-  cipher.setAAD(Buffer.from(`deepx:v1:${name}`));
+  cipher.setAAD(
+    Buffer.from(`${version === "v1" ? "deepx:v1" : "repodesk:v2"}:${name}`),
+  );
   cipher.setAuthTag(Buffer.from(tag, "base64"));
   return Buffer.concat([
     cipher.update(Buffer.from(data, "base64")),

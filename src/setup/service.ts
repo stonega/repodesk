@@ -23,6 +23,8 @@ import {
   pollingStatus,
   type TelegramTransport,
 } from "../telegram/polling-state.ts";
+import { decideAccessRequest } from "../workspaces/access-requests.ts";
+import { audit, revokeWork } from "../workspaces/policy.ts";
 import { newWorkspace } from "../workspaces/service.ts";
 import { decrypt, encrypt, hash, token } from "./credentials.ts";
 export class SetupService {
@@ -58,6 +60,7 @@ export class SetupService {
           id: s.id,
           name: s.draft.name,
           enabled: s.enabled,
+          published: s.published.length > 0,
         })),
         deleted: !!w.deletion,
         deletion: w.deletion,
@@ -206,6 +209,102 @@ export class SetupService {
       expiresInMinutes: 15,
     };
   }
+  async access(admin: Admin, id: string) {
+    operator(admin);
+    const w = await this.store.read(id);
+    requireThat(w.operatorId === admin.id && !w.deletion, "access_denied", 403);
+    const d = await this.store.deployment();
+    return {
+      version: w.policy.version,
+      members: w.members
+        .filter((member) => member.active)
+        .map((member) => ({
+          id: member.id,
+          role: member.role,
+          allowed:
+            w.policy.mode === "members" || w.policy.allowed.includes(member.id),
+        })),
+      requests: (w.accessRequests ?? []).filter(
+        (request) => request.status === "pending",
+      ),
+      requestUrl: d.bot
+        ? `https://t.me/${d.bot.username}?start=access_${w.id}`
+        : null,
+    };
+  }
+  async allowMember(admin: Admin, id: string, actor: string, version: number) {
+    operator(admin);
+    await this.store.change(id, (w) => {
+      requireThat(
+        w.operatorId === admin.id && !w.deletion,
+        "access_denied",
+        403,
+      );
+      requireThat(w.policy.version === version, "version_conflict", 409);
+      const member = w.members.find((item) => item.id === actor);
+      requireThat(
+        member?.role !== "owner",
+        "owner_requires_host_recovery",
+        409,
+      );
+      if (member) {
+        member.active = true;
+      } else w.members.push({ id: actor, role: "member", active: true });
+      if (!w.policy.allowed.includes(actor)) w.policy.allowed.push(actor);
+      w.policy.version++;
+      audit(w, admin.id, "member.updated", actor, w.policy.version);
+      audit(w, admin.id, "access.allowed", actor, w.policy.version);
+    });
+    return this.access(admin, id);
+  }
+  async revokeMember(admin: Admin, id: string, actor: string, version: number) {
+    operator(admin);
+    await this.store.change(id, (w) => {
+      requireThat(
+        w.operatorId === admin.id && !w.deletion,
+        "access_denied",
+        403,
+      );
+      requireThat(w.policy.version === version, "version_conflict", 409);
+      const member = w.members.find((item) => item.id === actor);
+      requireThat(member && member.role !== "owner", "not_found", 404);
+      member.active = false;
+      w.policy.allowed = w.policy.allowed.filter((item) => item !== actor);
+      w.policy.version++;
+      revokeWork(w);
+      audit(w, admin.id, "access.revoked", actor, w.policy.version);
+    });
+    return this.access(admin, id);
+  }
+  async decideAccess(
+    admin: Admin,
+    id: string,
+    requestId: string,
+    decision: "approved" | "rejected",
+    version: number,
+  ) {
+    operator(admin);
+    await this.store.change(id, async (w, sql) => {
+      requireThat(
+        w.operatorId === admin.id && !w.deletion,
+        "access_denied",
+        403,
+      );
+      const request = decideAccessRequest(
+        w,
+        admin.id,
+        requestId,
+        decision,
+        version,
+      );
+      if (request.status === "approved")
+        await sql.query(
+          "INSERT INTO telegram_selections(actor,workspace_id) VALUES($1,$2) ON CONFLICT(actor) DO NOTHING",
+          [request.actor, w.id],
+        );
+    });
+    return this.access(admin, id);
+  }
   async accountIdentityToken(
     operatorAdmin: Admin,
     accountId: string,
@@ -294,23 +393,22 @@ export class SetupService {
           const w = r.data;
           return (
             !w.deletion &&
-            w.members.some(
-              (m: { id: string; role: string; active: boolean }) =>
-                m.role === "owner" &&
-                m.active &&
-                w.policy.allowed.includes(m.id),
-            ) &&
             w.skills.some(
               (s: { enabled: boolean; published: unknown[] }) =>
                 s.enabled && s.published.length,
             )
           );
         }),
-        "verified_owner_and_skill_required",
+        "workspace_and_skill_required",
         409,
       );
       d.active = true;
-      d.ownerVerified = true;
+      d.ownerVerified = rows.rows.some((r) =>
+        r.data.members.some(
+          (m: { role: string; active: boolean }) =>
+            m.role === "owner" && m.active,
+        ),
+      );
       d.version++;
       await this.store.saveDeployment(sql, d);
       await sql.query(

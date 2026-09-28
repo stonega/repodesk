@@ -29,7 +29,9 @@ export const codingRepositorySchema = z
       .string()
       .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*\.ya?ml$/)
       .max(100)
-      .default("deepx-codex.yml"),
+      .default("repodesk-codex.yml"),
+    setupCommand: z.string().trim().max(2000).optional(),
+    checkCommand: z.string().trim().max(2000).optional(),
     maintainers: z
       .array(z.string().regex(/^[1-9]\d{0,15}$/))
       .min(1)
@@ -39,6 +41,7 @@ export const codingRepositorySchema = z
 export const codingSettingsSchema = z
   .object({
     enabled: z.boolean(),
+    backend: z.enum(["github-actions", "podman"]).optional(),
     repositories: z.array(codingRepositorySchema).max(12),
   })
   .strict()
@@ -47,15 +50,24 @@ export const codingSettingsSchema = z
       new Set(s.repositories.map((r) => r.repositoryId)).size ===
       s.repositories.length,
     "Select each repository only once",
+  )
+  .refine(
+    (s) =>
+      !s.enabled ||
+      s.backend !== "podman" ||
+      s.repositories.every((r) => r.checkCommand?.trim()),
+    "Local repositories require a check command",
   );
 export const codingSaveSchema = z
   .object({
     revision: z.number().int().nonnegative(),
     settings: codingSettingsSchema,
+    providerApiKey: z.string().trim().min(1).max(8192).nullable().optional(),
   })
   .strict();
 export type CodingSettings = z.infer<typeof codingSettingsSchema>;
 export interface CodingConfig {
+  providerApiKey?: string; // Encrypted with the deployment key and workspace-bound AAD.
   revision: number;
   settings: CodingSettings;
 }
@@ -74,6 +86,9 @@ export const codingPayload = codingInput.extend({
   configRevision: z.number().int().positive(),
   baseBranch: branchName,
   workflowFile: codingRepositorySchema.shape.workflowFile,
+  backend: z.enum(["github-actions", "podman"]).optional(),
+  setupCommand: codingRepositorySchema.shape.setupCommand,
+  checkCommand: codingRepositorySchema.shape.checkCommand,
 });
 export type CodingPayload = z.infer<typeof codingPayload>;
 export type CodingState =
@@ -82,6 +97,8 @@ export type CodingState =
   | "issue_created"
   | "dispatching"
   | "running"
+  | "starting_publication"
+  | "publishing"
   | "succeeded"
   | "failed"
   | "unknown"
@@ -97,6 +114,7 @@ export interface CodingTask {
   createdAt: string;
   updatedAt: string;
   issue?: { number: number; url: string };
+  threadId?: string;
   workflowRunId?: number;
   workflowUrl?: string;
   prUrl?: string;
@@ -107,6 +125,7 @@ export interface CodingTask {
   cancellationSent?: boolean;
 }
 export interface CodingPage {
+  providerApiKeyConfigured: boolean;
   revision: number;
   settings: CodingSettings;
   repositories: { id: number; full_name: string }[];

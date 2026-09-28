@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import { issueClaim } from "../src/admin/auth.ts";
 import { config } from "../src/config.ts";
 import { database, transaction } from "../src/db/pool.ts";
 import { requireThat } from "../src/domain.ts";
@@ -9,8 +8,7 @@ const cfg = config();
 const pool = database(cfg.DATABASE_URL);
 try {
   const [action, username, path] = process.argv.slice(2);
-  if (action === "claim") process.stdout.write(`${await issueClaim(pool)}\n`);
-  else if (action === "recover") {
+  if (action === "recover") {
     requireThat(username && path, "usage_recover_USERNAME_PASSWORD_FILE");
     const password = (await readFile(path, "utf8")).trimEnd();
     const encoded = await passwordHash(password);
@@ -29,10 +27,7 @@ try {
       );
     });
     process.stdout.write("Operator recovered; sessions revoked.\n");
-  } else
-    throw new Error(
-      "Usage: operator claim | operator recover USERNAME PASSWORD_FILE",
-    );
+  } else throw new Error("Usage: operator recover USERNAME PASSWORD_FILE");
 } finally {
   await pool.end();
 }

@@ -17,13 +17,15 @@ type HelperRequest = {
 };
 
 try {
-  const encodedRequest = process.env.DEEPX_PROCESS_REQUEST;
+  const encodedRequest = process.env.REPODESK_PROCESS_REQUEST;
   if (!encodedRequest) throw new Error("Missing process request");
-  delete process.env.DEEPX_PROCESS_REQUEST;
+  delete process.env.REPODESK_PROCESS_REQUEST;
   const input = JSON.parse(
     Buffer.from(encodedRequest, "base64").toString("utf8"),
   ) as HelperRequest;
-  const outputDirectory = mkdtempSync(join(tmpdir(), "deepx-process-output-"));
+  const outputDirectory = mkdtempSync(
+    join(tmpdir(), "repodesk-process-output-"),
+  );
   const stdoutPath = join(outputDirectory, "stdout");
   const stderrPath = join(outputDirectory, "stderr");
   const stdoutDescriptor = openSync(stdoutPath, "w", 0o600);

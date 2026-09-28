@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createCipheriv } from "node:crypto";
 import { validateSources } from "../../src/agent/context.ts";
 import { requestDeletion, sweep } from "../../src/privacy/service.ts";
 import {
@@ -257,6 +258,25 @@ describe("transport and credentials", () => {
     expect(ciphertext).not.toContain("secret-value");
     expect(decrypt(key, "bot", ciphertext)).toBe("secret-value");
     expect(() => decrypt(key, "model", ciphertext)).toThrow();
+  });
+  test("existing v1 credentials remain readable after the RepoDesk rename", () => {
+    const key = "ab".repeat(32);
+    const iv = Buffer.alloc(12, 1);
+    const cipher = createCipheriv("aes-256-gcm", Buffer.from(key, "hex"), iv);
+    cipher.setAAD(Buffer.from("deepx:v1:bot"));
+    const payload = Buffer.concat([
+      cipher.update("existing-token"),
+      cipher.final(),
+    ]);
+    const existing = [
+      "v1",
+      iv.toString("base64"),
+      cipher.getAuthTag().toString("base64"),
+      payload.toString("base64"),
+    ].join(".");
+    expect(decrypt(key, "bot", existing)).toBe("existing-token");
+    expect(() => decrypt(key, "model", existing)).toThrow();
+    expect(encrypt(key, "bot", "new-token").startsWith("v2.")).toBe(true);
   });
   test("passwords use salted hashes", async () => {
     const a = await passwordHash("long test password");

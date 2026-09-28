@@ -2,7 +2,7 @@
 
 ## Product and scope
 
-DeepX Agent is a proposed Telegram team assistant inspired by Every Agent. Start with
+RepoDesk is a Telegram assistant for GitHub organizations and personal repositories, inspired by Every Agent. Start with
 `docs/README.md`. Public competitor claims, design proposals, and implemented behavior
 must remain distinguishable. The initial code is a backend scaffold, not a working AI bot.
 

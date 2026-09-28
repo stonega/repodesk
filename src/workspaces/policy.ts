@@ -20,6 +20,7 @@ export function authorize(
   actor: string | undefined,
   admin = false,
 ) {
+  if (admin && actor === w.operatorId && !w.deletion) return actor;
   requireThat(actor && eligible(w, actor, admin), "access_denied", 403);
   return actor;
 }
@@ -132,16 +133,17 @@ export function setPolicy(
   authorize(w, actor, true);
   requireThat(w.policy.version === version, "version_conflict", 409);
   const next = { mode, version: version + 1, allowed: [...new Set(allowed)] };
-  requireThat(
-    w.members.some(
-      (m) =>
-        m.active &&
-        m.role !== "member" &&
-        (mode === "members" || next.allowed.includes(m.id)),
-    ),
-    "last_admin_lockout",
-    409,
-  );
+  if (actor !== w.operatorId)
+    requireThat(
+      w.members.some(
+        (m) =>
+          m.active &&
+          m.role !== "member" &&
+          (mode === "members" || next.allowed.includes(m.id)),
+      ),
+      "last_admin_lockout",
+      409,
+    );
   w.policy = next;
   revokeWork(w);
   audit(w, actor, "access_policy.updated", w.id, next.version);

@@ -21,15 +21,15 @@ Public static assets can load before login, but contain no workspace data or sec
 
 | Page | P0 controls and information | Acceptance criteria |
 | --- | --- | --- |
-| First-run setup | Claim deployment, create local admin, configure bot/model/access/skills, review and activate | Resumable; one initial admin; no public reinitialization or premature activation. |
-| Sign-in/workspace selector | Local admin sign-in; optional linked Telegram sign-in, authorized workspaces, logout | Login does not grant a workspace role; revoked sessions stop working. |
-| Overview | Bot/worker status, connected group, recent runs, active schedules, spend/budget | Loading, empty, stale and failure states are visible; tenant-scoped metrics. |
+| First-run setup | Claim deployment, create local admin, configure workspace and bot, set up a GitHub App, enter the panel | Resumable; one initial admin; no public reinitialization. Bot remains inactive until explicit panel activation. |
+| Sign-in/workspace selector | Local admin sign-in; optional linked Telegram sign-in, authorized workspaces, operator-only New workspace entry in the selector, logout | Login does not grant a workspace role; revoked sessions stop working. New workspaces are selected after creation. |
+| Overview | Workspace counts and deployment-administrator cards for the configured Telegram bot and workspace GitHub App, with safe identity details and settings links; broader bot/worker, group, run, schedule and budget status remain planned | Loading, empty, stale and failure states are visible; tenant-scoped metrics. |
 | Bot settings | Display label, timezone, base instructions, response style, directed-response mode, pause switch | Validated form, versioned save, audit entry, saved/effective version shown. |
-| Model settings | Operator-configured OpenAI-compatible base URL, write-only API key, custom model ID, thinking level and token prices; workspace output/turn/time limits | Invalid settings rejected locally; provider capabilities require evaluation. Runs pin endpoint/thinking/prices at first execution; endpoint changes stop old runs. |
+| Model settings | Operator-configured OpenAI-compatible base URL, write-only API key, custom model ID, thinking level and token prices; activation readiness and explicit activation | Invalid settings rejected locally; provider capabilities require evaluation. Runs pin endpoint/thinking/prices at first execution; endpoint changes stop old runs. |
 | Groups and access | Connected group/topic, owner, bot visibility, history coverage, opt-in collection, unlink | Linking verifies authority; no arbitrary chat ID can be used to obtain access. |
 | Workflows | Create/edit draft, preview schedule and destination, approve, pause/resume, run now, delete | Same policy and version checks as Telegram buttons; edits cannot bypass approval. |
 | Plugins | Independent workspace registry of installed Pi extensions, managed by its operator; version/path/tool editing, enable/disable/remove, file status and revision conflicts | Database-backed settings reach workers without restart; settings and revisions isolated per workspace; no code executes on API reads/saves. |
-| GitHub | Guided App creation for personal or organization accounts, workspace OAuth, installation/repository selection and disconnect | Manifest state bound to operator/session/workspace; encrypted operator App credentials; one-use PKCE OAuth; verify user installation/repository access; installation tokens limited to selected repositories and Contents read. |
+| GitHub | Guided App creation for personal or organization accounts, workspace OAuth, installation/repository selection, connected repository links and a disconnect API | Manifest state bound to operator/session/workspace; encrypted operator App credentials; one-use PKCE OAuth; verify user installation/repository access; installation tokens limited to selected repositories and Contents read. |
 | Agent skills | Create/import/edit, test, publish, enable/disable, scope, settings and version rollback | Permission-bounded skills; pinned workflow versions; disabling blocks dependent execution. |
 | Shared instructions | List, edit, scope, provenance, versions, forget | Never lists other users' personal memories by virtue of admin role. |
 | Runs | Filter by state/date/workflow, status, authorized result, evidence references, cost, cancel/retry | Retry creates a traceable attempt; uncertain delivery cannot be blindly resent. |
@@ -80,11 +80,12 @@ At run start, snapshot model, instruction and workflow versions. Routine edits a
 to future runs. Emergency pause, membership revocation, budget restrictions and
 deletion are checked again before each costly/action step and before delivery.
 
-The first-run wizard and operator settings accept bot/provider credentials as write-only
-inputs in P0, encrypting them with a Docker-injected application key. Environment-provided
+The first-run wizard accepts bot credentials; Model settings accepts provider
+credentials as write-only inputs in P0, encrypting them with a Docker-injected
+application key. Environment-provided
 keys may be referenced instead. Responses show status and safe labels only; credentials
 never enter model context, frontend storage or audit diffs. The database connection,
-encryption key and bootstrap-token issuance stay operator-level deployment settings.
+and encryption key stay operator-level deployment settings.
 
 ## API plan
 
@@ -138,7 +139,10 @@ Routine pages, sections and the sidebar omit refresh buttons. Explicit text
 recovery actions appear after load failures or conflicting edits. Logs offer manual
 refresh when automatic updates are off or have failed; active coding tasks offer
 Check progress. Workspace settings shows its saved version as a badge after the
-title, updating after saves or conflict recovery.
+title, updating after saves or conflict recovery. Each Workspace setting shows its
+saved value and explanation in a row; its edit action opens a single-setting modal.
+The sidebar workspace selector uses a panel-styled menu with a selected state and
+the operator-only New workspace action.
 
 Add/Create controls open the shared native modal in `web/modal.tsx`. Related
 record editors reuse it. The background is inert, keyboard focus stays inside,

@@ -48,27 +48,13 @@ export async function session(
     expiresAt: row.expires_at.toISOString(),
   };
 }
-export async function claim(
-  pool: Pool,
-  bootstrap: string,
-  username: string,
-  password: string,
-) {
+export async function claim(pool: Pool, username: string, password: string) {
   const encoded = await passwordHash(password);
   return transaction(pool, async (sql) => {
     const row = (
-      await sql.query(
-        "SELECT claimed,bootstrap_hash,bootstrap_expires_at FROM deployment WHERE id=true FOR UPDATE",
-      )
+      await sql.query("SELECT claimed FROM deployment WHERE id=true FOR UPDATE")
     ).rows[0];
-    requireThat(
-      row &&
-        !row.claimed &&
-        row.bootstrap_hash === hash(bootstrap) &&
-        row.bootstrap_expires_at > new Date(),
-      "invalid_claim",
-      403,
-    );
+    requireThat(row && !row.claimed, "already_claimed", 409);
     const id = randomUUID();
     await sql.query(
       "INSERT INTO admins(id,username,password_hash,operator) VALUES($1,$2,$3,true)",
@@ -95,20 +81,6 @@ export async function login(pool: Pool, username: string, password: string) {
   const valid = await verifyPassword(password, row?.password_hash ?? fallback);
   requireThat(row && valid, "invalid_login", 401);
   return transaction(pool, (sql) => makeSession(sql, row.id));
-}
-export async function issueClaim(pool: Pool) {
-  const raw = token();
-  await transaction(pool, async (sql) => {
-    const row = (
-      await sql.query("SELECT claimed FROM deployment WHERE id=true FOR UPDATE")
-    ).rows[0];
-    requireThat(row && !row.claimed, "already_claimed", 409);
-    await sql.query(
-      "UPDATE deployment SET bootstrap_hash=$1,bootstrap_expires_at=now()+interval '15 minutes' WHERE id=true",
-      [hash(raw)],
-    );
-  });
-  return raw;
 }
 export function operator(admin: Admin) {
   requireThat(admin.operator, "operator_required", 403);

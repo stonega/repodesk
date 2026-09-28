@@ -253,7 +253,11 @@ export class Ingress {
     await sql.query(
       `INSERT INTO control_deliveries(bot_id,update_id,actor,workspace_id,chat_id,topic_id)
        SELECT $1,$2,$3,$4,$5,$6 WHERE NOT EXISTS
-       (SELECT 1 FROM control_deliveries WHERE bot_id=$1 AND actor=$3 AND workspace_id IS NOT DISTINCT FROM $4::uuid AND created_at>now()-interval '1 minute')`,
+       (SELECT 1 FROM control_deliveries WHERE bot_id=$1 AND actor=$3
+         AND workspace_id IS NOT DISTINCT FROM $4::uuid
+         AND chat_id IS NOT DISTINCT FROM $5
+         AND topic_id IS NOT DISTINCT FROM $6
+         AND created_at>now()-interval '1 minute')`,
       [
         d.bot?.id,
         u.update_id,
@@ -294,10 +298,7 @@ export class Ingress {
         "SELECT data FROM workspaces WHERE id=$1 AND NOT (data ? 'deletion') FOR UPDATE",
         [requestedId],
       );
-      const target = row.rows[0]?.data as Workspace | undefined;
-      return target?.members.some((m) => m.active && m.role === "owner")
-        ? target
-        : undefined;
+      return row.rows[0]?.data as Workspace | undefined;
     }
     if (
       cmd?.name === "start" &&
@@ -421,7 +422,12 @@ export class Ingress {
       );
       return true;
     }
-    if (!d.active || d.paused) return true;
+    if (!d.active) {
+      if (msg?.chat.type === "private" && actor && cmd)
+        await this.accessHelp(sql, u, d, w);
+      return true;
+    }
+    if (d.paused) return true;
     if (cmd?.name === "link" && actor && msg) {
       authorize(w, actor, true);
       requireThat(verifiedAdmin, "telegram_admin_required", 403);
@@ -594,7 +600,7 @@ export class Ingress {
       case "start":
       case "help":
         reply(
-          `DeepX Agent · ${w.settings.name}\nTimezone: ${w.settings.timezone}\n/ask <request>, /recap, /status, /cancel <run>, /automations, /memory, /usage, /privacy\nAdmins: /linktoken, /capture on|off, /timezone <IANA>, /remember <instruction>\nIn groups, mention me or reply to start; clear follow-ups within five minutes can continue without mentioning me when Telegram delivers ordinary messages. In private Topics, just send messages to continue the topic's conversation. Use Telegram Topics to separate conversations. Outside Topics, reply to an answer or your own message to continue it; standalone messages start new conversations. Context contains only received retained messages. Access is managed in the admin panel. /workspace <id> selects a workspace.`,
+          `RepoDesk · ${w.settings.name}\nTimezone: ${w.settings.timezone}\n/ask <request>, /recap, /status, /cancel <run>, /automations, /memory, /usage, /privacy\nAdmins: /linktoken, /capture on|off, /timezone <IANA>, /remember <instruction>\nIn groups, mention me or reply to start; clear follow-ups within five minutes can continue without mentioning me when Telegram delivers ordinary messages. In private Topics, just send messages to continue the topic's conversation. Use Telegram Topics to separate conversations. Outside Topics, reply to an answer or your own message to continue it; standalone messages start new conversations. Context contains only received retained messages. Access is managed in the admin panel. /workspace <id> selects a workspace.`,
         );
         break;
       case "workspace":
@@ -826,12 +832,7 @@ export class Ingress {
       }
       case "recap":
       case "ask": {
-        if (!msg.text) {
-          reply(
-            "This pilot supports text only. Send a text request with /ask.",
-          );
-          break;
-        }
+        if (!msg.text) break;
         const previousDelivery = w.deliveries.find(
           (d) =>
             d.chatId === chatId &&

@@ -143,7 +143,7 @@ export class ExtensionCatalog {
     if (!entries.length) return undefined;
     await input.guard();
     input.signal.throwIfAborted();
-    const cwd = await mkdtemp(join(tmpdir(), "deepx-extension-"));
+    const cwd = await mkdtemp(join(tmpdir(), "repodesk-extension-"));
     let loaded: LoadExtensionsResult | undefined;
     try {
       for (const entry of entries.filter(

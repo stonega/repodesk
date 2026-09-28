@@ -4,9 +4,11 @@ import {
   Archive,
   ArrowDown,
   ArrowUp,
+  Check,
   ChevronLeft,
   ChevronRight,
   CloseCircle,
+  Copy,
   DocumentUpload,
   Edit,
   Logout,
@@ -24,6 +26,8 @@ const icons = {
   previous: ChevronLeft,
   next: ChevronRight,
   close: CloseCircle,
+  copy: Copy,
+  done: Check,
   edit: Edit,
   import: DocumentUpload,
   logout: Logout,
@@ -45,6 +49,7 @@ type IconButtonProps = Omit<
   icon: ActionIcon;
   label: string;
   busy?: boolean;
+  showLabel?: boolean;
 };
 
 /** Keep the action's accessible name stable while a request is in flight. */
@@ -52,6 +57,7 @@ export function IconButton({
   icon,
   label,
   busy = false,
+  showLabel = false,
   disabled,
   className = "",
   type = "button",
@@ -62,7 +68,7 @@ export function IconButton({
     <button
       {...props}
       type={type}
-      className={`icon-button ${className}`}
+      className={`icon-button${showLabel ? " with-label" : ""} ${className}`}
       aria-label={label}
       title={busy ? `${label} — Working…` : label}
       aria-busy={busy}
@@ -76,6 +82,7 @@ export function IconButton({
         focusable="false"
         className={busy ? "icon-spinning" : undefined}
       />
+      {showLabel && <span>{label}</span>}
     </button>
   );
 }

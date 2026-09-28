@@ -5,11 +5,11 @@
 
 ### Read saved configuration and current revision
 GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/code-truth
-Cookie: deepx_session={{session}}
+Cookie: repodesk_session={{session}}
 
 ### Replace revision 0 with the revision returned above
 PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/code-truth
-Cookie: deepx_session={{session}}
+Cookie: repodesk_session={{session}}
 Origin: {{origin}}
 x-csrf-token: {{csrf}}
 Content-Type: application/json
@@ -19,8 +19,8 @@ Content-Type: application/json
   "settings": {
     "enabled": true,
     "repositories": [{
-      "id": "deepx-web",
-      "repositoryUrl": "https://github.com/deepxfinance/web.git",
+      "id": "my-repository",
+      "repositoryUrl": "https://github.com/your-org/my-repository.git",
       "networks": { "devnet": "devnet-develop", "testnet": "testnet-develop" },
       "workspaces": ["{{workspace}}"]
     }]
@@ -29,7 +29,7 @@ Content-Type: application/json
 
 ### Start or check the workspace's managed index (requires local service)
 POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/code-truth/status
-Cookie: deepx_session={{session}}
+Cookie: repodesk_session={{session}}
 Origin: {{origin}}
 x-csrf-token: {{csrf}}
 Content-Type: application/json

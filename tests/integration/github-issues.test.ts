@@ -139,7 +139,16 @@ const url = process.env.TEST_DATABASE_URL;
     try {
       const tool = host?.tools.find((t) => t.name === "propose_github_issue");
       requireThat(tool, "missing tool");
-      expect(tool.description).toContain("example/workspace");
+      const find = host?.tools.find(
+        (t) => t.name === "find_connected_repository",
+      );
+      requireThat(find, "missing repository lookup");
+      expect(
+        JSON.stringify(
+          await find.execute("lookup", { query: "workspace" }, input.signal),
+        ),
+      ).toContain("example/workspace");
+      expect(tool.description).toContain("find_connected_repository");
       const payload = {
         repositoryId: args.repositoryId,
         title: args.title,
@@ -160,6 +169,9 @@ const url = process.env.TEST_DATABASE_URL;
       });
       await expect(
         tool.execute("call2", payload, input.signal),
+      ).rejects.toThrow();
+      await expect(
+        find.execute("lookup2", { query: "workspace" }, input.signal),
       ).rejects.toThrow();
     } finally {
       await host?.close();

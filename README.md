@@ -1,14 +1,16 @@
-# DeepX Agent for Telegram
+# RepoDesk
 
-A team assistant with bounded Pi requests, source-aware recaps, approved recurring
-workflows, shared instructions, and a web admin panel.
+A Telegram bot for working with selected GitHub repositories through AI. Ask about
+code, review an issue draft, or delegate a maintainer-approved coding task from a
+Telegram chat. Repository access and GitHub writes remain scoped and explicit.
 
-**Status:** local P0 implementation, 2026-09-18. Automated tests use fake Telegram/model
-transports and real PostgreSQL. Live model evaluation and staging deployment remain
-release gates; no bot or paid account is connected by installation.
+**Status:** local implementation. Automated tests use fake Telegram, model and GitHub
+transports with real PostgreSQL. Live repository, model and Telegram evaluation and
+staging deployment remain release gates; no account is connected by installation.
 
 ## Start here
 
+- [Main GitHub journey and capability status](docs/design/github-workflows.md)
 - [Setup and Docker](docs/implementation/setup.md)
 - [Implementation evidence and limits](docs/implementation/implementation-status.md)
 - [Telegram commands and admin guide](docs/user/telegram-experience.md)
@@ -26,10 +28,9 @@ cp .env.example .env
 mkdir -p secrets
 openssl rand -hex 32 > secrets/encryption-key
 docker compose up --build -d
-docker compose exec app node dist/operator.js claim
 ```
 
-Open `http://localhost:3000`, enter the one-use claim token, and create your admin.
+Open `http://localhost:3000/setup` and create your admin with a username and password.
 The resumable wizard accepts write-only encrypted bot/model credentials. Webhook
 registration and activation are explicit actions after HTTPS and staging credentials
 are ready. The database is private; Compose exposes only the API on loopback.
@@ -57,8 +58,9 @@ edit tools, and enable/disable or remove plugins for the selected workspace. Set
 and revisions are independent per workspace and reach workers without restart; `PI_EXTENSIONS_FILE` remains an optional
 fallback. See the compatibility guide above; extensions are off by default.
 
-No shell, arbitrary browsing, executable skills, app connectors, files, payments or
-external write tools are exposed. Group context collection requires separate consent.
+The general agent has no arbitrary shell, browsing, files or unrestricted connector
+access. The built-in GitHub issue and coding flows perform only their approved,
+repository-scoped actions. Group context collection requires separate consent.
 Inspired by Every Agent; independent branding and a Telegram-specific permission model.
 
 Predefined **Code Truth** adds read-only source queries and its companion skill. Configure each workspace’s repositories under **Workspace → Plugins**. See [local Code Truth setup](docs/implementation/code-truth.md).

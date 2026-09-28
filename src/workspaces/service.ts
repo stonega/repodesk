@@ -39,8 +39,9 @@ export function enrollOwner(w: Workspace, actor: string) {
     "owner_already_linked",
     409,
   );
-  if (!w.members.some((m) => m.id === actor))
-    w.members.push({ id: actor, role: "owner", active: true });
+  const member = w.members.find((m) => m.id === actor);
+  if (member) Object.assign(member, { role: "owner", active: true });
+  else w.members.push({ id: actor, role: "owner", active: true });
   if (!w.policy.allowed.includes(actor)) w.policy.allowed.push(actor);
   w.policy.version++;
   audit(w, actor, "owner.verified", w.id);

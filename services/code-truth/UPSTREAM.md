@@ -14,7 +14,7 @@ upstream OAuth server, OAuth database and organization login are not included.
 The retained config module includes upstream config helpers used by baseline tests;
 the local entrypoint does not invoke its OAuth environment configuration.
 
-The companion skill in `../../skills/deepx-code-truth/SKILL.md` comes from the same
+The companion skill in `../../skills/repodesk-code-truth/SKILL.md` comes from the same
 commit. Its fixed three-repository list was replaced by workspace-configured targets.
 Network selection, context-first queries, provenance and the response notice remain.
 

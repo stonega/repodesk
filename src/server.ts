@@ -39,6 +39,7 @@ const app = createApp(
     githubApp,
   ),
   new GitHubService(store, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN, githubApp),
+  cfg.ENCRYPTION_KEY,
 );
 const server = serve({ fetch: app.fetch, hostname: "0.0.0.0", port: cfg.PORT });
 log.write("app_started");

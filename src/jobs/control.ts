@@ -36,7 +36,9 @@ export async function deliverAccessHelp(store: Store, setup: SetupService) {
         request?.status === "rejected" &&
         Date.parse(request.decidedAt ?? "") > Date.now() - 86400000;
       const text = allowed
-        ? "You already have access. Send /help to get started."
+        ? deployment.active
+          ? "You already have access. Send /help to get started."
+          : "RepoDesk is not active yet. Ask a deployment admin to activate it in Model settings."
         : request?.status === "pending"
           ? "Your access request is pending. A workspace admin will review it."
           : rejected

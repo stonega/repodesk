@@ -23,3 +23,31 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 CMD ["node", "dist/server.js"]
+
+# Optional supervisor: only this service receives the rootless Podman socket.
+FROM runtime AS codex-supervisor
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends podman \
+    && rm -rf /var/lib/apt/lists/*
+HEALTHCHECK --interval=30s --timeout=5s \
+  CMD node -e "fetch('http://127.0.0.1:3020/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+CMD ["node", "dist/runner-server.js"]
+
+# Reused for preparation, isolated implementation, and fresh PR publication.
+FROM node:24-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS codex-job
+ARG CODEX_VERSION=0.155.1
+RUN apt-get update && apt-get install -y --no-install-recommends git bash ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g @openai/codex@${CODEX_VERSION} \
+    && npm cache clean --force
+COPY --from=base /usr/local/bin/bun /usr/local/bin/bun
+WORKDIR /opt/deepx
+COPY --from=build /app/dist/job.js ./job.js
+COPY --from=dependencies /app/node_modules/zod ./node_modules/zod
+RUN mkdir /task /input && chown node:node /task
+ENV HOME=/task/home
+USER node
+ENTRYPOINT ["node", "/opt/deepx/job.js"]
+
+# Preserve the ordinary app as the default build target.
+FROM runtime AS app

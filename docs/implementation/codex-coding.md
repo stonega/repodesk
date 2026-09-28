@@ -1,7 +1,10 @@
 # Codex issue-to-PR tasks
 
 Implemented locally, 2026-09-21. This is a built-in Pi extension backed by an
-application service and **GitHub Actions**, not a shell tool running inside the bot.
+application service with **GitHub Actions** (the default) or **Local Podman**
+execution. Neither backend runs repository code inside the bot. This page describes
+the GitHub Actions backend; see [Local Codex execution](codex-podman.md) for the
+custom-provider configuration, workspace API key management and local repository commands.
 Live GitHub/Codex execution remains a staging gate; deterministic tests use fake
 GitHub responses and real PostgreSQL. No deployment, account connection or live
 coding run is performed by setup or tests.
@@ -14,22 +17,26 @@ coding run is performed by setup or tests.
    **Pull requests: read**. Approve the installation's updated permissions.
    The guided App registration initially requests only source-read/issue-write;
    this optional extension requires the additional permissions afterward.
-3. Copy [the workflow template](../../examples/coding/deepx-codex.yml) to
-   `.github/workflows/deepx-codex.yml` on the repository's **default branch and
+3. Copy [the workflow template](../../examples/coding/repodesk-codex.yml) to
+   `.github/workflows/repodesk-codex.yml` on the repository's **default branch and
    configured development branch**. GitHub requires the dispatch workflow on the
    default branch; execution checks out the dispatched branch's exact commit.
 4. Configure these repository Actions settings:
    - Secret `OPENAI_API_KEY`: used only by the Codex action's API proxy.
-   - Variable `DEEPX_BOT_LOGIN`: the connected App's exact bot login, e.g.
-     `my-deepx-app[bot]`. The template refuses other actors and manual reruns.
-   - Variable `DEEPX_CHECK_COMMAND`: a required, trusted repository check command,
+   - Variable `REPODESK_BOT_LOGIN`: the connected App's exact bot login, e.g.
+     `my-repodesk-app[bot]`. The template refuses other actors and manual reruns.
+   - Variable `REPODESK_CHECK_COMMAND`: a required, trusted repository check command,
      e.g. `bun run check && bun run typecheck && bun test && bun run build`.
-   - Optional `DEEPX_SETUP_COMMAND`: install required runtimes and dependencies
+   - Optional `REPODESK_SETUP_COMMAND`: install required runtimes and dependencies
      before Codex starts. Adapt the template's setup steps to the repository;
      the stock Ubuntu runner does not provide every project runtime.
    - Allow GitHub Actions to create pull requests. Organization policies may
      require an administrator to enable this. The publish job requests only
      Contents-write and Pull-requests-write using its own `GITHUB_TOKEN`.
+   Existing repositories using `deepx-codex.yml` can keep that configured
+   filename and its `DEEPX_*` variables until they install the RepoDesk
+   template on both required branches. Earlier runs and PR branches remain
+   discoverable during the transition.
 5. Under **Plugins → Codex implementation**, add a repository, base branch
    (default suggestion: `develop`), workflow filename and maintainers. Maintainers
    are active, allowed workspace members identified by their Telegram user IDs.
@@ -63,7 +70,7 @@ and opening a draft PR**. Another actor cannot approve it. Approval expires afte
 
 The service creates the issue, dispatches the configured workflow, and tracks the
 remote run. Each run uses a fresh checkout and a unique
-`codex/deepx-<task UUID>` branch. Codex implements the reviewed requirements;
+`codex/repodesk-<task UUID>` branch. Codex implements the reviewed requirements;
 configured project checks must pass. A fresh publish runner applies the patch as
 data without running repository code, pushes the branch and opens a draft PR
 against the configured development branch. Its body references the issue's full
@@ -113,7 +120,7 @@ runs before deleting a workspace. Retention follows workspace content retention;
 the pilot accepts up to 10 active and 200 retained coding tasks per workspace.
 
 For **unknown** outcomes, inspect the repository's issues, Actions runs named
-`deepx-coding:<UUID>`, branch and PR before starting a new request. Do not rerun the
+`repodesk-coding:<UUID>`, branch and PR before starting a new request. Do not rerun the
 remote workflow or re-dispatch the same task. GitHub may have accepted a POST even
 when the bot received no response. Known workflow failures can leave an issue or
 branch for human inspection. Starting another task always creates a new issue and

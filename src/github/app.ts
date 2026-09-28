@@ -98,7 +98,7 @@ export class GitHubApp {
     field: string,
   ): Promise<unknown[]> {
     const result: unknown[] = [];
-    for (let page = 1; page <= 5; page++) {
+    for (let page = 1; page <= 20; page++) {
       const data = await this.request(
         `https://api.github.com${path}?per_page=100&page=${page}`,
         token,
@@ -145,7 +145,7 @@ export class GitHubApp {
   async installationToken(
     installationId: number,
     repositoryIds: number[],
-    permission: "contents" | "issues" | "coding" = "contents",
+    permission: "contents" | "issues" | "coding" | "publish" = "contents",
   ) {
     requireThat(
       repositoryIds.length > 0 && repositoryIds.length <= 12,
@@ -162,7 +162,9 @@ export class GitHubApp {
             ? { issues: "write" }
             : permission === "coding"
               ? { actions: "write", contents: "read", pull_requests: "read" }
-              : { contents: "read" },
+              : permission === "publish"
+                ? { contents: "write", pull_requests: "write" }
+                : { contents: "read" },
       },
     );
     return z

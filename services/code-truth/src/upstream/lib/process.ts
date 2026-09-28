@@ -52,7 +52,7 @@ export class BunProcessRunner implements ProcessRunner {
     const helper = Bun.spawn([process.execPath, helperPath], {
       env: {
         ...process.env,
-        DEEPX_PROCESS_REQUEST: Buffer.from(
+        REPODESK_PROCESS_REQUEST: Buffer.from(
           JSON.stringify({ command, args, options }),
           "utf8",
         ).toString("base64"),

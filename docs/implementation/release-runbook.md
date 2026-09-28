@@ -23,8 +23,9 @@ Roll forward migrations rather than reverting an image against an incompatible s
 Use only your dedicated staging bot/group and explicit model spend cap.
 
 1. Claim setup, create admin, save draft, reload and verify it resumes.
-2. Check bot identity, reconcile the HTTPS webhook, verify owner, configure model,
-   whitelist and skills, then activate.
+2. Check bot identity, reconcile the HTTPS webhook, configure model and skills,
+   then activate without a Telegram owner. Confirm the empty allowlist denies use,
+   approve one staging user from Setup, and verify only that user can use the bot.
 3. Confirm `/help`; forged webhook calls must return 401. Duplicate update delivery
    must create one run. Link a group as both workspace and Telegram administrator.
 4. With explicit visibility/collection consent, add representative source messages.

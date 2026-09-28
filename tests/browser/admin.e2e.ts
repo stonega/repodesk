@@ -1,47 +1,147 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
 import { Fault, workflowSchema } from "../../src/domain.ts";
 import { RuntimeLogger } from "../../src/observability/logs.ts";
+import { decrypt } from "../../src/setup/credentials.ts";
 import { decide, proposeWorkflow } from "../../src/workflows/service.ts";
 import { requestAccess } from "../../src/workspaces/access-requests.ts";
-import { enrollOwner, newWorkspace } from "../../src/workspaces/service.ts";
+import { enrollOwner } from "../../src/workspaces/service.ts";
 
 let workspaceId = "";
+async function chooseWorkspace(page: Page, id: string) {
+  await page.getByRole("button", { name: "Workspace", exact: true }).click();
+  await page
+    .locator(`[role="menuitemradio"][data-workspace-id="${id}"]`)
+    .click();
+}
 test.describe
   .serial("web administration", () => {
-    test("first visit claims setup, resumes draft and redacts credentials", async ({
+    test("first visit follows setup into panel model settings and activation", async ({
       page,
     }) => {
       await page.goto("/");
       await expect(page).toHaveURL(/\/setup$/);
-      await page.getByLabel("Bootstrap token").fill("browser-claim-token");
+      await expect(
+        page.getByRole("heading", { name: "Make this workspace yours" }),
+      ).toBeVisible();
+      const network = page.getByRole("img", {
+        name: "Your repositories, in the conversation",
+      });
+      await expect(network).toBeVisible();
+      await expect(network.locator(".network-signal").first()).toHaveCSS(
+        "animation-name",
+        "none",
+      );
+      const art = page.locator(".layout-auth aside");
+      const formPanel = page.locator(".auth-main");
+      const desktopArt = await art.boundingBox();
+      const desktopForm = await formPanel.boundingBox();
+      expect(
+        Math.abs((desktopArt?.width ?? 0) - (desktopForm?.width ?? 0)),
+      ).toBeLessThan(2);
+      await page.screenshot({
+        path: "test-results/setup-entry-desktop.png",
+        fullPage: true,
+      });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
+      await expect(art).toHaveCSS("width", "390px");
+      await expect(network).toBeVisible();
+      await page.screenshot({
+        path: "test-results/setup-entry-mobile.png",
+        fullPage: true,
+      });
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await expect(page.locator(".auth-form input")).toHaveCount(2);
       await page.getByLabel("Username", { exact: true }).fill("browseradmin");
       await page
         .getByLabel("Password", { exact: true })
         .fill("browser test password");
-      await page.getByLabel("Confirm password").fill("browser test password");
       await page.getByRole("button", { name: "Create administrator" }).click();
       await expect(
         page.getByRole("heading", { name: "Set up your team assistant" }),
       ).toBeVisible();
+      await expect(page.locator(".layout-setup aside")).toBeVisible();
+      await expect(
+        page.getByRole("navigation", { name: "Setup steps" }),
+      ).toBeVisible();
+      const setupSteps = page.getByRole("navigation", { name: "Setup steps" });
+      await expect(setupSteps.getByRole("button")).toHaveCount(3);
+      await expect(setupSteps).toContainText("GitHub App");
+      await expect(setupSteps).not.toContainText("Enter panel");
+      await expect(
+        page.getByRole("heading", { name: "Connect Telegram" }),
+      ).toHaveCount(0);
+      await expect(page.getByLabel("Timezone")).toHaveJSProperty(
+        "tagName",
+        "SELECT",
+      );
+      await page.getByLabel("Timezone").selectOption("America/New_York");
+      await page.getByLabel("Workspace name").fill("Browser team");
+      await page.getByRole("button", { name: "Continue to Telegram" }).click();
+      await expect(
+        page.getByRole("heading", { name: "Connect Telegram" }),
+      ).toBeVisible();
       await page
-        .getByRole("button", { name: "Add workspace", exact: true })
+        .getByRole("button", { name: "Continue to GitHub App" })
+        .click();
+      await expect(page.getByRole("alert")).toContainText(
+        "Enter a bot token to continue.",
+      );
+      await page
+        .getByLabel(/Bot token/)
+        .fill("999:fake-token-that-is-never-sent-to-Telegram");
+      await page
+        .getByRole("button", { name: "Continue to GitHub App" })
         .click();
       await expect(
-        page.getByRole("dialog", { name: "Create workspace" }),
-      ).toBeVisible();
-      await page.getByLabel("Workspace name").fill("Browser team");
-      await page.getByRole("button", { name: "Save workspace" }).click();
-      await expect(page.getByText(/Browser team ·/)).toBeVisible();
-      await expect(
-        page.getByText("4 · Model configuration", { exact: true }),
+        page.getByRole("heading", { name: "Connect GitHub" }),
       ).toBeVisible();
       await expect(
-        page.getByRole("heading", { name: "Model configuration", exact: true }),
+        page.getByRole("button", { name: "Connect GitHub" }),
       ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Disconnect GitHub" }),
+      ).toHaveCount(0);
+      await page.screenshot({
+        path: "test-results/setup-github.png",
+        fullPage: true,
+      });
+      await page.goto("/admin");
+      const botCard = page.getByRole("region", { name: "Telegram bot" });
+      const githubCard = page.getByRole("region", { name: "GitHub" });
+      await expect(botCard).toContainText("@fixture_bot");
+      await expect(botCard).toContainText("Configured");
+      await expect(githubCard).toContainText("Not connected");
+      await expect(
+        botCard.getByRole("link", { name: "Manage bot" }),
+      ).toHaveAttribute("href", /\/setup\?step=telegram&workspace=/);
+      await expect(page.getByRole("link", { name: "Plugins" })).toBeVisible();
+      await page.getByRole("link", { name: "Plugins" }).click();
+      await expect(
+        page.getByRole("heading", { name: "Registered plugins" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Model settings" }),
+      ).toBeVisible();
+      await page.getByRole("link", { name: "Model settings" }).click();
+      await expect(
+        page.getByRole("heading", { name: "Model settings" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Activate bot", exact: true }),
+      ).toBeDisabled();
+      await page
+        .getByRole("button", { name: "Save model configuration" })
+        .click();
+      await expect(page.getByRole("alert")).toContainText(
+        "Enter a model API key to save settings.",
+      );
+      await expect(page.getByLabel("Thinking level")).toBeHidden();
+      await page.getByText("Advanced model settings").click();
       await page.getByLabel(/Model API key/).fill("fake-provider-key");
       await page
         .getByLabel("Model base URL")
@@ -49,10 +149,9 @@ test.describe
       await page.getByLabel("Model", { exact: true }).fill("team/custom-model");
       await page.getByLabel("Thinking level").selectOption("high");
       await page.getByLabel("Model context window (tokens)").fill("128000");
-      await page.getByLabel("Model maximum output (tokens)").fill("16000");
+      await page.getByLabel("Model maximum output (tokens)").fill("128000");
       await page.getByLabel("Input price (USD / million tokens)").fill("1");
       await page.getByLabel("Output price (USD / million tokens)").fill("3");
-      await page.getByLabel("Model maximum output (tokens)").fill("128000");
       await page
         .getByRole("button", { name: "Save model configuration" })
         .click();
@@ -66,49 +165,8 @@ test.describe
       await page
         .getByRole("button", { name: "Save model configuration" })
         .click();
-      await expect(
-        page.getByText("Model configuration saved. API key input cleared."),
-      ).toBeVisible();
-      await expect(
-        page.getByText("4 · Model saved", { exact: true }),
-      ).toBeVisible();
-      const review = page.getByLabel("Saved model configuration");
-      await expect(review).toContainText("https://models.example.test/v1");
-      await expect(review).toContainText("team/custom-model");
-      await expect(review).toContainText("high");
-      await expect(review).not.toContainText("fake-provider-key");
-      await expect(page.getByLabel(/Bot token/)).toHaveValue("");
-      await page
-        .getByLabel(/Bot token/)
-        .fill("999:fake-token-that-is-never-sent-to-Telegram");
-      await page.getByRole("button", { name: "Save Telegram token" }).click();
-      await expect(
-        page.getByText("Telegram token saved. Secret input cleared."),
-      ).toBeVisible();
-      await expect(page.getByLabel(/Bot token/)).toHaveValue("");
-      if (process.env.BROWSER_TELEGRAM_TRANSPORT === "polling") {
-        await expect(page.getByText(/Local polling is enabled/)).toBeVisible();
-        await expect(
-          page.getByRole("button", { name: "Register verification webhook" }),
-        ).toHaveCount(0);
-        await expect(page.getByText(/Polling: ready/)).toBeVisible({
-          timeout: 10000,
-        });
-        await expect(
-          page.getByRole("button", {
-            name: "Generate owner verification link",
-          }),
-        ).toBeEnabled();
-        await expect(
-          page.getByRole("button", { name: "Activate bot", exact: true }),
-        ).toBeDisabled();
-      } else {
-        await expect(
-          page.getByRole("button", { name: "Register verification webhook" }),
-        ).toBeVisible();
-      }
+      await expect(page.getByText("Model settings saved.")).toBeVisible();
       await page.reload();
-      await expect(page.getByText(/Browser team ·/)).toBeVisible();
       await expect(page.getByLabel(/Model API key/)).toHaveValue("");
       await expect(page.getByLabel("Model base URL")).toHaveValue(
         "https://models.example.test/v1",
@@ -116,17 +174,49 @@ test.describe
       await expect(page.getByLabel("Model", { exact: true })).toHaveValue(
         "team/custom-model",
       );
+      await page.getByText("Advanced model settings").click();
       await expect(page.getByLabel("Thinking level")).toHaveValue("high");
+      if (process.env.BROWSER_TELEGRAM_TRANSPORT === "polling") {
+        await expect(page.getByText(/Polling: ready/)).toBeVisible({
+          timeout: 10000,
+        });
+        await expect(
+          page.getByRole("button", { name: "Activate bot", exact: true }),
+        ).toBeEnabled();
+        await page.getByRole("button", { name: "Activate bot" }).click();
+        await expect(
+          page.getByText(/Active. Share the access link/),
+        ).toBeVisible();
+        await expect(page.getByText("No one has access yet.")).toBeVisible();
+        await expect(
+          page.getByText("Link my Telegram account (optional)"),
+        ).toBeVisible();
+        await page.getByLabel("Telegram user ID").fill("202");
+        await page.getByRole("button", { name: "Allow user" }).click();
+        await expect(page.getByText("202 · member")).toBeVisible();
+        await page.getByRole("button", { name: "Revoke" }).click();
+        await expect(page.getByText("No one has access yet.")).toBeVisible();
+      } else {
+        await expect(
+          page.getByRole("button", { name: "Register Telegram webhook" }),
+        ).toBeVisible();
+        await page
+          .getByRole("button", { name: "Register Telegram webhook" })
+          .click();
+        await expect(
+          page.getByText(/Webhook mode requires a public HTTPS address/),
+        ).toBeVisible();
+        await expect(
+          page.getByRole("button", { name: "Activate bot", exact: true }),
+        ).toBeDisabled();
+      }
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await page.screenshot({
-        path: "test-results/setup-mobile.png",
+        path: "test-results/panel-model-mobile.png",
         fullPage: true,
       });
       await page.setViewportSize({ width: 1280, height: 900 });
-      await page
-        .getByRole("region", { name: "Model configuration", exact: true })
-        .screenshot({ path: "test-results/setup-model.png" });
       const fixture = JSON.parse(
         await readFile("test-results/browser-db.json", "utf8"),
       );
@@ -160,22 +250,46 @@ test.describe
       ]) {
         await expect(page.getByLabel(label, { exact: true })).toHaveCount(0);
       }
-      await page.getByLabel("Model calls per run", { exact: true }).fill("21");
-      await page
-        .getByRole("button", { name: "Save settings", exact: true })
-        .click();
       await expect(
         page.getByLabel("Model calls per run", { exact: true }),
+      ).toHaveCount(0);
+      await page
+        .getByRole("button", { name: "Edit Model calls per run" })
+        .click();
+      const callsDialog = page.getByRole("dialog", {
+        name: "Edit Model calls per run",
+      });
+      await callsDialog
+        .getByLabel("Model calls per run", { exact: true })
+        .fill("21");
+      await page
+        .getByRole("button", { name: "Save change", exact: true })
+        .click();
+      await expect(
+        callsDialog.getByLabel("Model calls per run", { exact: true }),
       ).toHaveAttribute("aria-invalid", "true");
-      await page.getByLabel("Model calls per run", { exact: true }).fill("20");
-      await page.getByLabel("Run budget (USD)", { exact: true }).fill("200");
+      await callsDialog
+        .getByLabel("Model calls per run", { exact: true })
+        .fill("20");
+      await callsDialog.getByRole("button", { name: "Save change" }).click();
+      await expect(callsDialog).toHaveCount(0);
+      await expect(
+        page.getByRole("listitem").filter({ hasText: "Model calls per run" }),
+      ).toContainText("20 calls");
       await page.screenshot({
         path: "test-results/workspace-settings-desktop.png",
         fullPage: true,
       });
+      await page.getByRole("button", { name: "Edit Run budget (USD)" }).click();
+      const budgetDialog = page.getByRole("dialog", {
+        name: "Edit Run budget (USD)",
+      });
+      await budgetDialog
+        .getByLabel("Run budget (USD)", { exact: true })
+        .fill("200");
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(
-        page.getByRole("button", { name: "Save settings", exact: true }),
+        budgetDialog.getByRole("button", { name: "Save change", exact: true }),
       ).toBeVisible();
       expect(
         await page.evaluate(
@@ -186,32 +300,55 @@ test.describe
         path: "test-results/workspace-settings-mobile.png",
         fullPage: true,
       });
+      await budgetDialog.getByRole("button", { name: "Save change" }).click();
+      await expect(budgetDialog).toHaveCount(0);
+      await expect(
+        page.getByRole("listitem").filter({ hasText: "Run budget (USD)" }),
+      ).toContainText("$200");
+      await expect(
+        page.getByRole("button", { name: "Edit Missed-run grace (minutes)" }),
+      ).toHaveCount(0);
       await page.setViewportSize({ width: 1280, height: 720 });
+      await page.getByRole("button", { name: "Edit Workspace name" }).click();
+      await page
+        .getByLabel("Workspace name", { exact: true })
+        .fill("Discarded");
+      await page.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(
+        page.getByRole("listitem").filter({ hasText: "Workspace name" }),
+      ).toContainText("Browser team");
       const second = await context.newPage();
       await second.goto("/admin/settings");
+      await second.getByRole("button", { name: "Edit Workspace name" }).click();
+      const staleDialog = second.getByRole("dialog", {
+        name: "Edit Workspace name",
+      });
       await expect(
-        second.getByLabel("Workspace name", { exact: true }),
+        staleDialog.getByLabel("Workspace name", { exact: true }),
       ).toHaveValue("Browser team");
+      await staleDialog
+        .getByLabel("Workspace name", { exact: true })
+        .fill("Stale overwrite");
+      await page.getByRole("button", { name: "Edit Workspace name" }).click();
       await page
         .getByLabel("Workspace name", { exact: true })
         .fill("Updated browser team");
       await page
-        .getByRole("button", { name: "Save settings", exact: true })
+        .getByRole("button", { name: "Save change", exact: true })
         .click();
-      await expect(page.locator(".page-title .pill")).toHaveText("Version 2");
+      await expect(page.locator(".page-title .pill")).toHaveText("Version 4");
       await second
-        .getByLabel("Workspace name", { exact: true })
-        .fill("Stale overwrite");
-      await second
-        .getByRole("button", { name: "Save settings", exact: true })
+        .getByRole("button", { name: "Save change", exact: true })
         .click();
       await expect(second.getByText(/version_conflict/)).toBeVisible();
       await expect(
-        second.getByLabel("Workspace name", { exact: true }),
+        staleDialog.getByLabel("Workspace name", { exact: true }),
       ).toHaveValue("Stale overwrite");
       await second
         .getByRole("button", { name: "Reload current version", exact: true })
         .click();
+      await expect(staleDialog).toHaveCount(0);
+      await second.getByRole("button", { name: "Edit Workspace name" }).click();
       await expect(
         second.getByLabel("Workspace name", { exact: true }),
       ).toHaveValue("Updated browser team");
@@ -751,40 +888,55 @@ test.describe
       await page.reload();
       await expect(card.getByText("No repositories configured.")).toBeVisible();
     });
-    test("switching workspaces isolates plugins, Code Truth and unsaved drafts", async ({
+    test("creating and switching workspaces isolates plugins, Code Truth and unsaved drafts", async ({
       page,
     }) => {
-      const fixture = JSON.parse(
-        await readFile("test-results/browser-db.json", "utf8"),
-      );
-      const pool = database(fixture.url);
-      let secondId = "";
-      try {
-        const original = await new Store(pool).read(workspaceId);
-        const second = newWorkspace(original.operatorId, {
-          ...original.settings,
-          name: "Independent team",
-        });
-        enrollOwner(second, "101");
-        secondId = second.id;
-        await pool.query(
-          "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",
-          [second.id, second.operatorId, JSON.stringify(second)],
-        );
-      } finally {
-        await pool.end();
-      }
       await page.goto("/admin/plugins");
       await page.getByLabel("Username", { exact: true }).fill("browseradmin");
       await page
         .getByLabel("Password", { exact: true })
         .fill("browser test password");
       await page.getByRole("button", { name: "Sign in", exact: true }).click();
-      const picker = page.getByRole("combobox", {
+      const picker = page.getByRole("button", {
         name: "Workspace",
         exact: true,
       });
-      await picker.selectOption(workspaceId);
+      await picker.focus();
+      await picker.press("ArrowDown");
+      const menu = page.getByRole("menu", { name: "Workspaces" });
+      await expect(menu.getByRole("menuitemradio").first()).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(menu).toHaveCount(0);
+      await expect(picker).toBeFocused();
+      await picker.click();
+      await menu.getByRole("menuitem", { name: "+ New workspace…" }).click();
+      const creation = page.getByRole("dialog", { name: "New workspace" });
+      await creation.getByLabel("Workspace name").fill("Independent team");
+      await creation.getByLabel("Timezone").selectOption("America/New_York");
+      await creation.getByRole("button", { name: "Create workspace" }).click();
+      await expect(creation).toHaveCount(0);
+      await expect(picker).toContainText("Independent team");
+      await picker.click();
+      const second = menu.getByRole("menuitemradio", {
+        name: "Independent team",
+      });
+      const secondId = await second.getAttribute("data-workspace-id");
+      if (!secondId) throw Error("missing created workspace ID");
+      await expect(second).toHaveAttribute("aria-checked", "true");
+      await picker.click();
+      const fixture = JSON.parse(
+        await readFile("test-results/browser-db.json", "utf8"),
+      );
+      const pool = database(fixture.url);
+      try {
+        const store = new Store(pool);
+        const created = await store.read(secondId);
+        expect(created.settings.timezone).toBe("America/New_York");
+        await store.change(secondId, (w) => enrollOwner(w, "101"));
+      } finally {
+        await pool.end();
+      }
+      await chooseWorkspace(page, workspaceId);
       await page.getByRole("link", { name: "Plugins", exact: true }).click();
       await page
         .getByRole("button", { name: "Add plugin", exact: true })
@@ -853,12 +1005,12 @@ test.describe
         .getByRole("button", { name: "Save plugin", exact: true })
         .click();
       await expect(plugin).toContainText("Version 2");
-      await picker.selectOption(workspaceId);
+      await chooseWorkspace(page, workspaceId);
       await expect(plugin).toContainText("Version 1");
       await expect(
         truth.getByRole("heading", { name: "isolated-repo", exact: true }),
       ).toBeVisible();
-      await picker.selectOption(secondId);
+      await chooseWorkspace(page, secondId);
       await expect(plugin).toContainText("Version 2");
       await expect(
         truth.getByText("No repositories configured."),
@@ -873,21 +1025,20 @@ test.describe
         .getByLabel("Password", { exact: true })
         .fill("browser test password");
       await page.getByRole("button", { name: "Sign in", exact: true }).click();
-      await page
-        .getByRole("combobox", { name: "Workspace", exact: true })
-        .selectOption(workspaceId);
+      await chooseWorkspace(page, workspaceId);
       await page.getByRole("link", { name: "Plugins", exact: true }).click();
       const card = page.getByRole("region", { name: "GitHub connection" });
       await expect(
         card.getByRole("button", { name: "Connect GitHub", exact: true }),
-      ).toBeDisabled();
+      ).toHaveCount(0);
       await card
         .getByRole("button", { name: "Create GitHub App", exact: true })
         .click();
-      await page
-        .getByRole("dialog", { name: "Create GitHub App", exact: true })
-        .getByRole("combobox", { name: "App owner", exact: true })
-        .selectOption("personal");
+      await expect(
+        page
+          .getByRole("dialog", { name: "Create GitHub App", exact: true })
+          .getByRole("combobox", { name: "App owner", exact: true }),
+      ).toHaveValue("personal");
       await expect(
         page
           .getByRole("dialog", { name: "Create GitHub App", exact: true })
@@ -901,6 +1052,10 @@ test.describe
         .getByRole("dialog", { name: "Create GitHub App", exact: true })
         .getByLabel("GitHub organization", { exact: true })
         .fill("example");
+      await page
+        .getByRole("dialog", { name: "Create GitHub App", exact: true })
+        .getByRole("combobox", { name: "App owner", exact: true })
+        .selectOption("personal");
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await page.screenshot({
@@ -909,7 +1064,7 @@ test.describe
       });
       await page.setViewportSize({ width: 1280, height: 900 });
       await page.route(
-        "https://github.com/organizations/example/settings/apps/new**",
+        "https://github.com/settings/apps/new**",
         async (route) => {
           expect(route.request().method()).toBe("POST");
           const manifest = JSON.parse(
@@ -982,9 +1137,7 @@ test.describe
         .getByLabel("Password", { exact: true })
         .fill("browser test password");
       await page.getByRole("button", { name: "Sign in", exact: true }).click();
-      await page
-        .getByRole("combobox", { name: "Workspace", exact: true })
-        .selectOption(workspaceId);
+      await chooseWorkspace(page, workspaceId);
       await page.getByRole("link", { name: "Plugins", exact: true }).click();
       await page.route(
         "https://github.com/login/oauth/authorize**",
@@ -1021,30 +1174,35 @@ test.describe
         card.getByText("example/workspace", { exact: true }),
       ).toBeVisible();
       await expect(
+        card.getByRole("link", { name: "Open example/workspace on GitHub" }),
+      ).toHaveAttribute("href", "https://github.com/example/workspace");
+      await expect(
+        card.getByRole("link", { name: "Open example/workspace on GitHub" }),
+      ).toHaveAttribute("target", "_blank");
+      await expect(card.locator(".github-repositories")).toHaveCSS(
+        "display",
+        "flex",
+      );
+      await expect(
         card.getByText("example/second", { exact: true }),
       ).toHaveCount(0);
       await page.reload();
       await expect(card.getByText("Connected", { exact: true })).toBeVisible();
+      const picker = page.getByRole("button", {
+        name: "Workspace",
+        exact: true,
+      });
+      await picker.click();
       const other = await page
-        .getByRole("combobox", { name: "Workspace", exact: true })
-        .locator("option")
-        .evaluateAll(
-          (options, id) =>
-            options
-              .map((o) => (o as HTMLOptionElement).value)
-              .find((v) => v !== id),
-          workspaceId,
-        );
+        .getByRole("menuitemradio", { name: "Independent team" })
+        .getAttribute("data-workspace-id");
+      await picker.click();
       if (!other) throw Error("missing sibling workspace");
-      await page
-        .getByRole("combobox", { name: "Workspace", exact: true })
-        .selectOption(other);
+      await chooseWorkspace(page, other);
       await expect(
         card.getByText("Not connected", { exact: true }),
       ).toBeVisible();
-      await page
-        .getByRole("combobox", { name: "Workspace", exact: true })
-        .selectOption(workspaceId);
+      await chooseWorkspace(page, workspaceId);
       const coding = page.getByRole("region", { name: "Codex implementation" });
       await page.goto(`/admin/plugins?workspace=${workspaceId}`);
       await coding
@@ -1100,21 +1258,216 @@ test.describe
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await coding.screenshot({ path: "test-results/coding-mobile.png" });
-      page.once("dialog", (dialog) => dialog.accept());
-      await card
-        .getByRole("button", { name: "Disconnect GitHub", exact: true })
+      await coding.getByLabel("Enable Codex implementation").uncheck();
+      await expect(coding.getByLabel("Execution backend")).toBeEnabled();
+      await coding.getByLabel("Execution backend").selectOption("podman");
+      await coding
+        .getByRole("button", { name: "Set API key", exact: true })
         .click();
+      const keyDialog = page.getByRole("dialog", { name: "Set Codex API key" });
+      await keyDialog.getByLabel("Provider API key").fill("fake-panel-key");
+      const [keyResponse] = await Promise.all([
+        page.waitForResponse(
+          (r) =>
+            r.url().endsWith("/plugins/coding") &&
+            r.request().method() === "PUT",
+        ),
+        keyDialog.getByRole("button", { name: "Save API key" }).click(),
+      ]);
+      expect(keyResponse.status()).toBe(200);
+      expect(await keyResponse.text()).not.toContain("fake-panel-key");
+      await expect(keyDialog).toHaveCount(0);
       await expect(
-        card.getByText("Private repository access is disconnected.", {
-          exact: false,
-        }),
+        coding.getByText("Configured for this workspace.", { exact: true }),
       ).toBeVisible();
+      const fixture = JSON.parse(
+        await readFile("test-results/browser-db.json", "utf8"),
+      );
+      const keyPool = database(fixture.url);
+      try {
+        const saved = await new Store(keyPool).read(workspaceId);
+        const ciphertext = saved.coding?.providerApiKey;
+        if (!ciphertext) throw Error("Missing encrypted provider key");
+        expect(JSON.stringify(saved)).not.toContain("fake-panel-key");
+        expect(
+          decrypt(
+            "ab".repeat(32),
+            `coding-provider:${workspaceId}`,
+            ciphertext,
+          ),
+        ).toBe("fake-panel-key");
+        expect(await keyResponse.text()).not.toContain(ciphertext);
+      } finally {
+        await keyPool.end();
+      }
+      await page.reload();
+      await coding
+        .getByRole("button", { name: "Replace API key", exact: true })
+        .click();
+      const replaceDialog = page.getByRole("dialog", {
+        name: "Replace Codex API key",
+      });
+      await expect(replaceDialog.getByLabel("Provider API key")).toHaveValue(
+        "",
+      );
+      await replaceDialog
+        .getByLabel("Provider API key")
+        .fill("fake-replacement-key");
+      await replaceDialog.getByRole("button", { name: "Save API key" }).click();
+      await expect(replaceDialog).toHaveCount(0);
+      await coding
+        .getByRole("button", { name: "Replace API key", exact: true })
+        .click();
+      await expect(replaceDialog.getByLabel("Provider API key")).toHaveValue(
+        "",
+      );
+      await replaceDialog
+        .getByLabel("Provider API key")
+        .fill("discard-this-draft");
+      await replaceDialog
+        .getByRole("button", { name: "Cancel", exact: true })
+        .click();
+      page.once("dialog", (dialog) => dialog.accept());
+      await coding.getByRole("button", { name: "Remove saved key" }).click();
+      await expect(
+        coding.getByRole("button", { name: "Set API key", exact: true }),
+      ).toBeVisible();
+      await page.reload();
+      await expect(
+        coding.getByRole("button", { name: "Set API key", exact: true }),
+      ).toBeVisible();
+
+      await expect(
+        card.getByRole("button", { name: "Change GitHub connection" }),
+      ).toHaveCount(0);
+      await expect(
+        card.getByRole("button", { name: "Disconnect GitHub" }),
+      ).toHaveCount(0);
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await page.screenshot({
         path: "test-results/github-mobile.png",
         fullPage: true,
       });
+    });
+    test("setup welcomes the user before entering the connected workspace", async ({
+      page,
+    }) => {
+      await page.goto("/admin");
+      await page.getByLabel("Username", { exact: true }).fill("browseradmin");
+      await page
+        .getByLabel("Password", { exact: true })
+        .fill("browser test password");
+      await page.getByRole("button", { name: "Sign in", exact: true }).click();
+      await page.getByRole("button", { name: "Workspace" }).click();
+      const other = await page
+        .getByRole("menuitemradio", { name: "Independent team" })
+        .getAttribute("data-workspace-id");
+      if (!other) throw Error("missing sibling workspace");
+      await page.route(
+        "https://github.com/login/oauth/authorize**",
+        async (route) => {
+          const url = new URL(route.request().url());
+          const callback = new URL(url.searchParams.get("redirect_uri") ?? "");
+          callback.searchParams.set(
+            "state",
+            url.searchParams.get("state") ?? "",
+          );
+          callback.searchParams.set("code", "fixture-code");
+          await route.fulfill({
+            status: 302,
+            headers: { location: callback.href },
+          });
+        },
+      );
+      await page.goto(`/setup?step=github&workspace=${other}`);
+      await expect(
+        page
+          .getByRole("navigation", { name: "Setup steps" })
+          .getByRole("button"),
+      ).toHaveCount(3);
+      await page.getByRole("button", { name: "Connect GitHub" }).click();
+      const celebration = page.locator(".setup-celebration");
+      await expect(
+        celebration.getByRole("heading", { name: "Welcome to RepoDesk" }),
+      ).toBeVisible();
+      const getStarted = celebration.getByRole("button", {
+        name: "Get started",
+      });
+      await expect(getStarted).toBeFocused();
+      expect(Math.round((await celebration.boundingBox())?.width ?? 0)).toBe(
+        page.viewportSize()?.width,
+      );
+      await expect(page.locator(".setup-confetti span")).toHaveCount(32);
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: "test-results/setup-confetti.png" });
+      await page.waitForTimeout(1900);
+      await expect(page).toHaveURL(/\/setup\?/);
+      await getStarted.click();
+      await expect(page).toHaveURL(new RegExp(`/admin\\?workspace=${other}$`));
+      const githubCard = page.getByRole("region", { name: "GitHub" });
+      await expect(githubCard).toContainText("Connected");
+      await expect(githubCard).toContainText("13 repositories");
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
+      await page.screenshot({
+        path: "test-results/overview-connections-mobile.png",
+        fullPage: true,
+      });
+      await page.setViewportSize({ width: 1280, height: 720 });
+      const connection = await page.request.get(
+        `/api/admin/workspaces/${other}/github`,
+      );
+      expect((await connection.json()).connection.repositories).toHaveLength(
+        13,
+      );
+      await page.goto(`/admin/plugins?workspace=${other}`);
+      const connected = page.getByRole("region", { name: "GitHub connection" });
+      await expect(connected.locator(".github-repository")).toHaveCount(5);
+      const more = connected.getByRole("button", { name: "8 more" });
+      await expect(more).toHaveAttribute("aria-expanded", "false");
+      await more.click();
+      await expect(connected.locator(".github-repository")).toHaveCount(13);
+      await expect(
+        connected.getByRole("link", { name: "Open example/repo-13 on GitHub" }),
+      ).toBeVisible();
+      const less = connected.getByRole("button", { name: "Show less" });
+      await expect(less).toHaveAttribute("aria-expanded", "true");
+      await less.click();
+      await expect(connected.locator(".github-repository")).toHaveCount(5);
+
+      // Authorization without installation must not finish setup.
+      await page.route(
+        `**/api/admin/workspaces/${workspaceId}/github`,
+        async (route) => {
+          if (route.request().method() !== "GET") return route.continue();
+          await route.fulfill({
+            json: {
+              configured: true,
+              canRegister: false,
+              installUrl:
+                "https://github.com/apps/deepx-fixture/installations/new",
+              revision: 0,
+              pending: true,
+              installations: [],
+            },
+          });
+        },
+      );
+      await page.goto(
+        `/setup?step=github&workspace=${workspaceId}&github=authorized`,
+      );
+      await expect(
+        page.getByText(
+          "GitHub account authorized. Install the App to grant repository access.",
+        ),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Connect GitHub" }),
+      ).toBeEnabled();
+      await page.waitForTimeout(1900);
+      await expect(page.locator(".setup-celebration")).toHaveCount(0);
+      await expect(page).toHaveURL(/\/setup\?/);
     });
     test("creation dialogs isolate drafts, trap focus and keep failed saves open", async ({
       page,
@@ -1141,6 +1494,7 @@ test.describe
       ]) {
         await page.goto(`/admin/${path}`);
         const trigger = page.getByRole("button", { name: label, exact: true });
+        if (path === "members") await expect(trigger).toHaveText("Add member");
         await trigger.click();
         const dialog = page.getByRole("dialog", { name: title, exact: true });
         await expect(dialog).toBeVisible();
@@ -1288,9 +1642,8 @@ test.describe
         await page
           .getByRole("link", { name: "Members & access", exact: true })
           .click();
-        await page
-          .getByRole("combobox", { name: "Workspace", exact: true })
-          .selectOption(workspaceId);
+        await chooseWorkspace(page, workspaceId);
+        await page.goto(`/admin/members?workspace=${workspaceId}`);
         const requests = page.getByRole("region", {
           name: "Access requests",
           exact: true,
@@ -1298,9 +1651,32 @@ test.describe
         await expect(
           requests.getByRole("heading", { name: "Access requests (2)" }),
         ).toBeVisible();
-        await expect(requests.getByLabel("Request access link")).toHaveValue(
+        const accessLink = requests.getByText(
           new RegExp(`start=access_${workspaceId}`),
         );
+        await expect(accessLink).toBeVisible();
+        await expect(requests.getByRole("textbox")).toHaveCount(0);
+        await page
+          .context()
+          .grantPermissions(["clipboard-read", "clipboard-write"]);
+        const copyButton = requests.getByRole("button", {
+          name: "Copy access link",
+        });
+        const copyIcon = await copyButton.locator("svg").innerHTML();
+        await copyButton.click();
+        const copiedButton = requests.getByRole("button", {
+          name: "Copied access link",
+        });
+        await expect(copiedButton).toBeVisible();
+        expect(await copiedButton.locator("svg").innerHTML()).not.toBe(
+          copyIcon,
+        );
+        await expect(requests.getByText("Link copied.")).toHaveCount(0);
+        expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+          await accessLink.textContent(),
+        );
+        await expect(copyButton).toBeVisible();
+        expect(await copyButton.locator("svg").innerHTML()).toBe(copyIcon);
         await page.setViewportSize({ width: 390, height: 844 });
         await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
         await page.screenshot({

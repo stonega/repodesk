@@ -21,8 +21,10 @@ role; apply both changes atomically and audit them separately.
 
 Workspace creation through Telegram enrolls its verified creator as owner and adds
 that identity to the whitelist in the same transaction. In web-first onboarding, the
-local deployment admin can configure a draft before linking Telegram; linking the
-verified Telegram owner performs membership and whitelist enrollment atomically. An empty enforced list denies all ordinary workspace access.
+local deployment admin can activate a draft and approve or allow members from
+the authenticated Setup panel before linking Telegram. Linking the verified
+Telegram owner later performs membership and whitelist enrollment atomically.
+An empty enforced list denies all ordinary workspace access.
 Never interpret an empty, invalid or unavailable list as unrestricted access.
 
 Proposed stored fields:
@@ -59,11 +61,16 @@ profiles show **Telegram user** and the numeric ID until an interaction supplies
 more information. Editing membership preserves these fields. Usernames never grant
 access, identify an API actor or replace numeric IDs in permission checks.
 
-Workspace owners/admins may manage their own policy. Ordinary members cannot edit it.
+Workspace owners/admins may manage their own policy. The password-authenticated
+deployment operator may also manage configuration, skills, members and access for
+workspaces they created without linking a personal Telegram account. This web
+authority cannot read runs or private conversation history or execute bot work.
+Ordinary members cannot edit policy.
 Reject ordinary UI changes that would remove the last allowed active owner/admin's
-management access. Deployment operators have an explicit, audited recovery action for
-restoring management access; their operator role is not a blanket right to run the
-bot or read workspace conversations.
+management access. Deployment operators can manage setup access for workspaces
+they created, with audited membership and whitelist changes. This does not grant
+bot execution or private conversation retrieval. Their separate recovery action
+remains available.
 
 ## Enforcement contract
 
@@ -161,6 +168,9 @@ workspace with a verified owner, it can be inferred. With multiple possible work
 the bot asks for the workspace-specific link available under **Members & access → Access
 requests**. Opening that link offers the button; it does not grant access. No workspace
 names or member lists are exposed to unauthorized users.
+The link and request button also work while the deployment is inactive, once
+Telegram updates are being received. Approval can happen during setup; ordinary
+bot requests still require activation.
 
 Pressing the button records the Telegram callback sender's numeric ID, optional name
 and username, request time and originating chat/topic in that workspace. Names and
@@ -183,7 +193,7 @@ All decisions use current workspace admin authorization, CSRF and origin checks.
 
 Requests are limited to 500 retained records per workspace, one per Telegram identity.
 Records expire after 30 days from request/decision and are erased on workspace purge.
-Fixed access replies are throttled per bot, actor and workspace to one per minute,
+Fixed access replies are throttled per bot, actor, workspace and chat/topic to one per minute,
 retained for one day, and use the existing retry/unknown-outcome delivery policy.
 Approval notifications use the normal outbox and recheck authorization before sending.
 

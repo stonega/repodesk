@@ -80,7 +80,7 @@ export function RuntimeLogs({
   return (
     <>
       <header className="page-heading">
-        <p className="eyebrow">DEEPX / TEAM OPERATIONS</p>
+        <p className="eyebrow">REPODESK / TEAM OPERATIONS</p>
         <h1>Runtime logs</h1>
         <p className="muted">
           API, worker and Telegram reception events. Credentials and message
