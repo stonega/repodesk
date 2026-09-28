@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
@@ -11,6 +12,7 @@ import { requestAccess } from "../../src/workspaces/access-requests.ts";
 import { enrollOwner } from "../../src/workspaces/service.ts";
 
 let workspaceId = "";
+const browserDbPath = join(tmpdir(), "repodesk-browser-3107-db.json");
 async function chooseWorkspace(page: Page, id: string) {
   await page.getByRole("button", { name: "Workspace", exact: true }).click();
   await page
@@ -111,14 +113,61 @@ test.describe
         fullPage: true,
       });
       await page.goto("/admin");
+      await expect(
+        page.getByRole("link", { name: "Runs", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Workflows", exact: true }),
+      ).toBeVisible();
+      await page.getByRole("link", { name: "0 runs. View details" }).click();
+      await expect(
+        page.getByRole("heading", { name: "Runs & delivery" }),
+      ).toBeVisible();
+      await expect(page.getByText("No assistant runs yet.")).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Request a run" }),
+      ).toHaveCount(0);
+      await page.getByRole("link", { name: "Workflows", exact: true }).click();
+      await expect(
+        page.getByRole("heading", { name: "Scheduled workflows" }),
+      ).toBeVisible();
+      await expect(page.getByText("No scheduled workflows yet.")).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Add workflow" }),
+      ).toHaveCount(0);
+      await page.goto("/admin");
       const botCard = page.getByRole("region", { name: "Telegram bot" });
       const githubCard = page.getByRole("region", { name: "GitHub" });
       await expect(botCard).toContainText("@fixture_bot");
       await expect(botCard).toContainText("Configured");
       await expect(githubCard).toContainText("Not connected");
+      await botCard.getByRole("button", { name: "Manage bot" }).click();
+      const botDialog = page.getByRole("dialog", {
+        name: "Manage Telegram bot",
+      });
+      await expect(botDialog).toBeVisible();
+      await expect(botDialog).toContainText("Current bot: @fixture_bot");
+      await expect(page).toHaveURL(/\/admin\/?$/);
+      const replacementToken = botDialog.getByLabel("New bot token");
+      await expect(replacementToken).toHaveAttribute("type", "text");
+      await expect(replacementToken).toHaveValue("");
+      await replacementToken.fill(
+        "999:fake-token-that-is-never-sent-to-Telegram",
+      );
+      await botDialog.getByRole("button", { name: "Save token" }).click();
+      await expect(botDialog).toHaveCount(0);
+      await expect(page.getByText("Telegram bot token saved.")).toBeVisible();
+      await expect(botCard).toContainText("@fixture_bot");
+      await expect(page).toHaveURL(/\/admin\/?$/);
+      await botCard.getByRole("button", { name: "Manage bot" }).click();
       await expect(
-        botCard.getByRole("link", { name: "Manage bot" }),
-      ).toHaveAttribute("href", /\/setup\?step=telegram&workspace=/);
+        page
+          .getByRole("dialog", { name: "Manage Telegram bot" })
+          .getByLabel("New bot token"),
+      ).toHaveValue("");
+      await page
+        .getByRole("button", { name: "Close Manage Telegram bot" })
+        .click();
       await expect(page.getByRole("link", { name: "Plugins" })).toBeVisible();
       await page.getByRole("link", { name: "Plugins" }).click();
       await expect(
@@ -217,9 +266,7 @@ test.describe
         fullPage: true,
       });
       await page.setViewportSize({ width: 1280, height: 900 });
-      const fixture = JSON.parse(
-        await readFile("test-results/browser-db.json", "utf8"),
-      );
+      const fixture = JSON.parse(await readFile(browserDbPath, "utf8"));
       const pool = database(fixture.url);
       const store = new Store(pool);
       workspaceId = (await store.ids())[0] ?? "";
@@ -233,16 +280,21 @@ test.describe
       page,
       context,
     }) => {
-      await page.goto("/admin/settings");
+      await page.goto("/admin/overview");
       await page.getByLabel("Username", { exact: true }).fill("browseradmin");
       await page
         .getByLabel("Password", { exact: true })
         .fill("browser test password");
       await page.getByRole("button", { name: "Sign in", exact: true }).click();
-      await page.getByRole("link", { name: "Settings", exact: true }).click();
       await expect(
-        page.getByRole("heading", { name: "Workspace settings" }),
+        page.getByRole("heading", { name: "Your team, in view" }),
       ).toBeVisible();
+      const teamCard = page.getByRole("region", { name: "Team" });
+      await expect(teamCard).toContainText("Browser team");
+      await expect(teamCard).toContainText("5 minutes");
+      await expect(
+        teamCard.getByRole("button", { name: "Edit team configuration" }),
+      ).toHaveCount(1);
       for (const label of [
         "Reply language",
         "Input byte budget",
@@ -253,43 +305,39 @@ test.describe
       await expect(
         page.getByLabel("Model calls per run", { exact: true }),
       ).toHaveCount(0);
-      await page
-        .getByRole("button", { name: "Edit Model calls per run" })
+      await teamCard
+        .getByRole("button", { name: "Edit team configuration" })
         .click();
       const callsDialog = page.getByRole("dialog", {
-        name: "Edit Model calls per run",
+        name: "Edit team configuration",
       });
+      await expect(callsDialog.locator("form")).toHaveCount(1);
+      await expect(
+        callsDialog.getByLabel("Missed-run grace (minutes)"),
+      ).toHaveCount(0);
       await callsDialog
-        .getByLabel("Model calls per run", { exact: true })
+        .getByRole("spinbutton", { name: "Model calls per run" })
         .fill("21");
       await page
-        .getByRole("button", { name: "Save change", exact: true })
+        .getByRole("button", { name: "Save configuration", exact: true })
         .click();
       await expect(
-        callsDialog.getByLabel("Model calls per run", { exact: true }),
+        callsDialog.getByRole("spinbutton", { name: "Model calls per run" }),
       ).toHaveAttribute("aria-invalid", "true");
       await callsDialog
-        .getByLabel("Model calls per run", { exact: true })
+        .getByRole("spinbutton", { name: "Model calls per run" })
         .fill("20");
-      await callsDialog.getByRole("button", { name: "Save change" }).click();
-      await expect(callsDialog).toHaveCount(0);
-      await expect(
-        page.getByRole("listitem").filter({ hasText: "Model calls per run" }),
-      ).toContainText("20 calls");
+      await callsDialog.getByLabel("Run budget (USD)").fill("200");
       await page.screenshot({
         path: "test-results/workspace-settings-desktop.png",
         fullPage: true,
       });
-      await page.getByRole("button", { name: "Edit Run budget (USD)" }).click();
-      const budgetDialog = page.getByRole("dialog", {
-        name: "Edit Run budget (USD)",
-      });
-      await budgetDialog
-        .getByLabel("Run budget (USD)", { exact: true })
-        .fill("200");
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(
-        budgetDialog.getByRole("button", { name: "Save change", exact: true }),
+        callsDialog.getByRole("button", {
+          name: "Save configuration",
+          exact: true,
+        }),
       ).toBeVisible();
       expect(
         await page.evaluate(
@@ -300,28 +348,39 @@ test.describe
         path: "test-results/workspace-settings-mobile.png",
         fullPage: true,
       });
-      await budgetDialog.getByRole("button", { name: "Save change" }).click();
-      await expect(budgetDialog).toHaveCount(0);
+      await callsDialog
+        .getByRole("button", { name: "Save configuration" })
+        .click();
+      await expect(callsDialog).toHaveCount(0);
       await expect(
-        page.getByRole("listitem").filter({ hasText: "Run budget (USD)" }),
+        teamCard
+          .getByRole("listitem")
+          .filter({ hasText: "Model calls per run" }),
+      ).toContainText("20 calls");
+      await expect(
+        teamCard.getByRole("listitem").filter({ hasText: "Run budget (USD)" }),
       ).toContainText("$200");
       await expect(
         page.getByRole("button", { name: "Edit Missed-run grace (minutes)" }),
       ).toHaveCount(0);
       await page.setViewportSize({ width: 1280, height: 720 });
-      await page.getByRole("button", { name: "Edit Workspace name" }).click();
+      await page
+        .getByRole("button", { name: "Edit team configuration" })
+        .click();
       await page
         .getByLabel("Workspace name", { exact: true })
         .fill("Discarded");
       await page.getByRole("button", { name: "Cancel", exact: true }).click();
       await expect(
-        page.getByRole("listitem").filter({ hasText: "Workspace name" }),
+        teamCard.getByRole("listitem").filter({ hasText: "Workspace name" }),
       ).toContainText("Browser team");
       const second = await context.newPage();
-      await second.goto("/admin/settings");
-      await second.getByRole("button", { name: "Edit Workspace name" }).click();
+      await second.goto("/admin/overview");
+      await second
+        .getByRole("button", { name: "Edit team configuration" })
+        .click();
       const staleDialog = second.getByRole("dialog", {
-        name: "Edit Workspace name",
+        name: "Edit team configuration",
       });
       await expect(
         staleDialog.getByLabel("Workspace name", { exact: true }),
@@ -329,16 +388,18 @@ test.describe
       await staleDialog
         .getByLabel("Workspace name", { exact: true })
         .fill("Stale overwrite");
-      await page.getByRole("button", { name: "Edit Workspace name" }).click();
+      await page
+        .getByRole("button", { name: "Edit team configuration" })
+        .click();
       await page
         .getByLabel("Workspace name", { exact: true })
         .fill("Updated browser team");
       await page
-        .getByRole("button", { name: "Save change", exact: true })
+        .getByRole("button", { name: "Save configuration", exact: true })
         .click();
-      await expect(page.locator(".page-title .pill")).toHaveText("Version 4");
+      await expect(teamCard).toContainText("Settings version 3");
       await second
-        .getByRole("button", { name: "Save change", exact: true })
+        .getByRole("button", { name: "Save configuration", exact: true })
         .click();
       await expect(second.getByText(/version_conflict/)).toBeVisible();
       await expect(
@@ -348,7 +409,9 @@ test.describe
         .getByRole("button", { name: "Reload current version", exact: true })
         .click();
       await expect(staleDialog).toHaveCount(0);
-      await second.getByRole("button", { name: "Edit Workspace name" }).click();
+      await second
+        .getByRole("button", { name: "Edit team configuration" })
+        .click();
       await expect(
         second.getByLabel("Workspace name", { exact: true }),
       ).toHaveValue("Updated browser team");
@@ -443,9 +506,7 @@ test.describe
       await expect(
         page.getByText(/Deterministic policy test passed/),
       ).toBeVisible();
-      const fixture = JSON.parse(
-        await readFile("test-results/browser-db.json", "utf8"),
-      );
+      const fixture = JSON.parse(await readFile(browserDbPath, "utf8"));
       const pool = database(fixture.url);
       const store = new Store(pool);
       await store.change(workspaceId, (w) => {
@@ -590,9 +651,7 @@ test.describe
     test("runtime logs filter, paginate, refresh and fit a mobile screen", async ({
       page,
     }) => {
-      const fixture = JSON.parse(
-        await readFile("test-results/browser-db.json", "utf8"),
-      );
+      const fixture = JSON.parse(await readFile(browserDbPath, "utf8"));
       const pool = database(fixture.url);
       const log = new RuntimeLogger(pool, "worker", () => {});
       for (let i = 0; i < 55; i++) log.write("worker_started");
@@ -924,9 +983,7 @@ test.describe
       if (!secondId) throw Error("missing created workspace ID");
       await expect(second).toHaveAttribute("aria-checked", "true");
       await picker.click();
-      const fixture = JSON.parse(
-        await readFile("test-results/browser-db.json", "utf8"),
-      );
+      const fixture = JSON.parse(await readFile(browserDbPath, "utf8"));
       const pool = database(fixture.url);
       try {
         const store = new Store(pool);
@@ -1028,10 +1085,23 @@ test.describe
       await chooseWorkspace(page, workspaceId);
       await page.getByRole("link", { name: "Plugins", exact: true }).click();
       const card = page.getByRole("region", { name: "GitHub connection" });
+      const manage = page.getByRole("dialog", { name: "Manage GitHub" });
+      await expect(manage).toHaveCount(0);
+      await card.getByRole("button", { name: "Manage GitHub" }).click();
+      await expect(manage).toBeVisible();
       await expect(
-        card.getByRole("button", { name: "Connect GitHub", exact: true }),
+        manage.getByRole("button", { name: "Create GitHub App" }),
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(manage).toHaveCount(0);
+      await expect(
+        card.getByRole("button", { name: "Manage GitHub" }),
+      ).toBeFocused();
+      await card.getByRole("button", { name: "Manage GitHub" }).click();
+      await expect(
+        manage.getByRole("button", { name: "Connect GitHub", exact: true }),
       ).toHaveCount(0);
-      await card
+      await manage
         .getByRole("button", { name: "Create GitHub App", exact: true })
         .click();
       await expect(
@@ -1105,24 +1175,25 @@ test.describe
       await expect(page).toHaveURL(
         new RegExp(`workspace=${workspaceId}&github=app-created`),
       );
+      await expect(manage).toBeVisible();
       await expect(
-        card.getByRole("button", { name: "Connect GitHub", exact: true }),
+        manage.getByRole("button", { name: "Connect GitHub", exact: true }),
       ).toBeEnabled();
       await expect(
-        card.getByText("deepx-fixture", { exact: true }),
+        manage.getByText("deepx-fixture", { exact: true }),
       ).toBeVisible();
       await expect(
-        card.getByRole("link", { name: "Install or update the GitHub App" }),
+        manage.getByRole("link", { name: "Install or update the GitHub App" }),
       ).toHaveAttribute(
         "href",
         "https://github.com/apps/deepx-fixture/installations/new",
       );
       await expect(
-        card.getByRole("button", { name: "Create GitHub App", exact: true }),
+        manage.getByRole("button", { name: "Create GitHub App", exact: true }),
       ).toHaveCount(0);
       await page.reload();
       await expect(
-        card.getByRole("button", { name: "Connect GitHub", exact: true }),
+        manage.getByRole("button", { name: "Connect GitHub", exact: true }),
       ).toBeEnabled();
       await expect(page.locator("body")).not.toContainText(
         "fixture-client-secret",
@@ -1157,37 +1228,44 @@ test.describe
         },
       );
       const card = page.getByRole("region", { name: "GitHub connection" });
-      await card
+      const manage = page.getByRole("dialog", { name: "Manage GitHub" });
+      await card.getByRole("button", { name: "Manage GitHub" }).click();
+      await manage
         .getByRole("button", { name: "Connect GitHub", exact: true })
         .click();
       await expect(page).toHaveURL(new RegExp(`workspace=${workspaceId}`));
       await expect(
-        card.getByText("Choose repositories for this workspace"),
+        manage.getByText("Choose repositories for this workspace"),
       ).toBeVisible();
-      await card.getByLabel("GitHub installation").selectOption("501");
-      await card.getByLabel("example/workspace", { exact: true }).check();
-      await card
+      await manage.getByLabel("GitHub installation").selectOption("501");
+      await manage.getByLabel("example/workspace", { exact: true }).check();
+      await manage
         .getByRole("button", { name: "Connect selected repositories" })
         .click();
-      await expect(card.getByText("Connected", { exact: true })).toBeVisible();
       await expect(
-        card.getByText("example/workspace", { exact: true }),
+        manage.getByText("Connected", { exact: true }),
       ).toBeVisible();
       await expect(
-        card.getByRole("link", { name: "Open example/workspace on GitHub" }),
+        manage.getByText("example/workspace", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        manage.getByRole("link", { name: "Open example/workspace on GitHub" }),
       ).toHaveAttribute("href", "https://github.com/example/workspace");
       await expect(
-        card.getByRole("link", { name: "Open example/workspace on GitHub" }),
+        manage.getByRole("link", { name: "Open example/workspace on GitHub" }),
       ).toHaveAttribute("target", "_blank");
-      await expect(card.locator(".github-repositories")).toHaveCSS(
+      await expect(manage.locator(".github-repositories")).toHaveCSS(
         "display",
         "flex",
       );
       await expect(
-        card.getByText("example/second", { exact: true }),
+        manage.getByText("example/second", { exact: true }),
       ).toHaveCount(0);
       await page.reload();
       await expect(card.getByText("Connected", { exact: true })).toBeVisible();
+      await manage.getByRole("button", { name: "Close Manage GitHub" }).click();
+      await expect(manage).toHaveCount(0);
+      await expect(page).not.toHaveURL(/github=authorized/);
       const picker = page.getByRole("button", {
         name: "Workspace",
         exact: true,
@@ -1280,9 +1358,7 @@ test.describe
       await expect(
         coding.getByText("Configured for this workspace.", { exact: true }),
       ).toBeVisible();
-      const fixture = JSON.parse(
-        await readFile("test-results/browser-db.json", "utf8"),
-      );
+      const fixture = JSON.parse(await readFile(browserDbPath, "utf8"));
       const keyPool = database(fixture.url);
       try {
         const saved = await new Store(keyPool).read(workspaceId);
@@ -1421,20 +1497,32 @@ test.describe
       expect((await connection.json()).connection.repositories).toHaveLength(
         13,
       );
-      await page.goto(`/admin/plugins?workspace=${other}`);
+      await githubCard.getByRole("link", { name: "Manage GitHub" }).click();
+      await expect(page).toHaveURL(/github=manage/);
+      const manage = page.getByRole("dialog", { name: "Manage GitHub" });
+      await expect(manage).toBeVisible();
+      await page.screenshot({ path: "test-results/github-manage-desktop.png" });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
+      await page.screenshot({ path: "test-results/github-manage-mobile.png" });
+      await page.setViewportSize({ width: 1280, height: 720 });
       const connected = page.getByRole("region", { name: "GitHub connection" });
-      await expect(connected.locator(".github-repository")).toHaveCount(5);
-      const more = connected.getByRole("button", { name: "8 more" });
+      await expect(connected.locator(".github-repository")).toHaveCount(0);
+      await expect(manage.locator(".github-repository")).toHaveCount(5);
+      const more = manage.getByRole("button", { name: "8 more" });
       await expect(more).toHaveAttribute("aria-expanded", "false");
       await more.click();
-      await expect(connected.locator(".github-repository")).toHaveCount(13);
+      await expect(manage.locator(".github-repository")).toHaveCount(13);
       await expect(
-        connected.getByRole("link", { name: "Open example/repo-13 on GitHub" }),
+        manage.getByRole("link", { name: "Open example/repo-13 on GitHub" }),
       ).toBeVisible();
-      const less = connected.getByRole("button", { name: "Show less" });
+      const less = manage.getByRole("button", { name: "Show less" });
       await expect(less).toHaveAttribute("aria-expanded", "true");
       await less.click();
-      await expect(connected.locator(".github-repository")).toHaveCount(5);
+      await expect(manage.locator(".github-repository")).toHaveCount(5);
+      await manage.getByRole("button", { name: "Close Manage GitHub" }).click();
+      await expect(manage).toHaveCount(0);
+      await expect(page).not.toHaveURL(/github=manage/);
 
       // Authorization without installation must not finish setup.
       await page.route(
@@ -1612,9 +1700,7 @@ test.describe
     test("access requests approve members, reject requests and fit mobile", async ({
       page,
     }) => {
-      const fixture = JSON.parse(
-        await readFile("test-results/browser-db.json", "utf8"),
-      );
+      const fixture = JSON.parse(await readFile(browserDbPath, "utf8"));
       const pool = database(fixture.url);
       const store = new Store(pool);
       try {
@@ -1740,9 +1826,7 @@ test.describe
     test("members and access share one page with Telegram profiles and effective access", async ({
       page,
     }) => {
-      const fixture = JSON.parse(
-        await readFile("test-results/browser-db.json", "utf8"),
-      );
+      const fixture = JSON.parse(await readFile(browserDbPath, "utf8"));
       const pool = database(fixture.url);
       const store = new Store(pool);
       try {

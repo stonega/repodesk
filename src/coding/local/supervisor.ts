@@ -39,6 +39,12 @@ interface Record extends LocalStatus {
 }
 const terminal = (state: string) =>
   ["succeeded", "failed", "cancelled", "unknown"].includes(state);
+const implementationFailures = new Set([
+  "coding_setup_failed",
+  "coding_codex_failed",
+  "coding_check_failed",
+  "coding_patch_empty",
+]);
 export const taskKey = (workspaceId: string, taskId: string) => {
   z.uuid().parse(workspaceId);
   z.uuid().parse(taskId);
@@ -233,6 +239,20 @@ export class RunnerSupervisor implements LocalRunner {
           r.phase === "publish"
             ? "coding_publication_unknown"
             : "coding_execution_failed";
+        if (r.phase === "implement") {
+          try {
+            const id = (await this.copyResult(r, "thread-id")).trim();
+            if (/^[a-zA-Z0-9-]{1,100}$/.test(id)) r.threadId = id;
+          } catch {
+            // Codex may have failed before starting a thread.
+          }
+          try {
+            const code = (await this.copyResult(r, "failure-code")).trim();
+            if (implementationFailures.has(code)) r.error = code;
+          } catch {
+            // Keep the generic failure when no safe stage marker exists.
+          }
+        }
       } else if (r.phase === "prepare") {
         r.baseSha = z
           .string()

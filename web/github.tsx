@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 import { ArrowUpRightSquare } from "reicon-react";
 import type { GitHubRepository } from "../src/github/app.ts";
 import type { GitHubPage } from "../src/github/config.ts";
@@ -6,6 +7,7 @@ import {
   GitHubRegistration,
   submitGitHubManifest,
 } from "./github-registration.tsx";
+import { Modal } from "./modal.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 function explain(error: unknown) {
@@ -250,6 +252,20 @@ export function GitHubConnection({
   const [repositories, setRepositories] = useState<GitHubRepository[]>([]);
   const [selected, setSelected] = useState<number[]>([]);
   const [showAllRepositories, setShowAllRepositories] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const [open, setOpen] = useState(() => params.has("github"));
+  useEffect(() => {
+    if (params.has("github")) setOpen(true);
+  }, [params]);
+  const close = () => {
+    setOpen(false);
+    setShowAllRepositories(false);
+    if (params.has("github")) {
+      const next = new URLSearchParams(params);
+      next.delete("github");
+      setParams(next, { replace: true });
+    }
+  };
   const load = useCallback(async () => {
     setBusy(true);
     setError("");
@@ -280,243 +296,276 @@ export function GitHubConnection({
     }
   };
   return (
-    <section className="card" aria-label="GitHub connection">
-      <div className="row">
-        <h2>GitHub</h2>
-        <span className="pill">
-          {data?.connection?.installationId ? "Connected" : "Not connected"}
-        </span>
-      </div>
-      <p>
-        Connect a GitHub App to give this workspace source access to selected
-        repositories and submit issues after approval in Telegram.
-      </p>
-      {new URLSearchParams(window.location.search).get("github") ===
-        "failed" && (
-        <p className="notice" role="alert">
-          GitHub authorization did not complete. Connect again to retry.
-        </p>
-      )}
-      {error && (
-        <p className="notice" role="alert">
-          {error}
-        </p>
-      )}
-      {new URLSearchParams(window.location.search).get("github") ===
-        "registration-failed" && (
-        <p className="notice" role="alert">
-          GitHub App setup did not complete. Reload the page to check whether an
-          App is already configured. If GitHub created an App but setup failed
-          here, remove that unused App in GitHub before retrying, or configure
-          it manually.
-        </p>
-      )}
-      {new URLSearchParams(window.location.search).get("github") ===
-        "app-created" &&
-        data?.configured && (
-          <p role="status">
-            GitHub App created. Install it on the repositories you need, then
-            connect this workspace.
-          </p>
-        )}
-      {!data && <p role="status">Loading GitHub connection…</p>}
-      {data?.canRegister && (
-        <GitHubRegistration
-          request={request}
-          endpoint={endpoint}
-          onError={(error) => setError(explain(error))}
-          source={source}
-        />
-      )}
-      {data && !data.configured && !data.canRegister && (
-        <p className="notice">
-          A deployment operator must register and configure the GitHub App
-          before connecting.
-        </p>
-      )}
-      {data?.configured && (
-        <p>
-          App: <strong>{data.appSlug}</strong>.{" "}
-          <a href={data.installUrl} target="_blank" rel="noreferrer">
-            Install or update the GitHub App
-          </a>
-        </p>
-      )}
-      {data?.connection?.installationId && (
-        <>
-          <p>
-            Connected to <strong>{data.connection.account}</strong> by{" "}
-            {data.connection.connectedBy}.
-          </p>
-          <p className="muted">
-            To submit issues, grant the App Issues: read and write in GitHub and
-            approve the updated installation permissions. Then ask the Telegram
-            assistant to draft an issue and review its Approve/Reject buttons.
-          </p>
-          <ul
-            className="github-repositories"
-            aria-label="Connected repositories"
-          >
-            {(showAllRepositories
-              ? data.connection.repositories
-              : data.connection.repositories.slice(0, 5)
-            ).map((repo) => (
-              <li className="github-repository" key={repo.id}>
-                <span>{repo.full_name}</span>
-                <a
-                  className="github-repository-link"
-                  href={`https://github.com/${repo.full_name}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={`Open ${repo.full_name} on GitHub`}
-                  title={`Open ${repo.full_name} on GitHub`}
-                >
-                  <ArrowUpRightSquare
-                    size={18}
-                    weight="Outline"
-                    color="currentColor"
-                    aria-hidden="true"
-                    focusable="false"
-                  />
-                </a>
-              </li>
-            ))}
-            {data.connection.repositories.length > 5 && (
-              <li>
-                <button
-                  type="button"
-                  className="github-repository-more"
-                  aria-expanded={showAllRepositories}
-                  onClick={() => setShowAllRepositories(!showAllRepositories)}
-                >
-                  {showAllRepositories
-                    ? "Show less"
-                    : `${data.connection.repositories.length - 5} more`}
-                </button>
-              </li>
-            )}
-          </ul>
-        </>
-      )}
-      {data?.configured && !data.connection && (
-        <p className="muted">
-          Existing deployment credentials may apply until you connect or
-          disconnect this workspace.
-        </p>
-      )}
-      {data?.connection && !data.connection.installationId && (
-        <p className="muted">
-          Private repository access is disconnected. Public repositories can
-          still be queried.
-        </p>
-      )}
-      <div className="row">
-        {data?.configured && !data.connection?.installationId && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              void act(async () => {
-                const result = await request<{ url: string }>(
-                  `${endpoint}/connect`,
-                  "POST",
-                  source ? { source } : {},
-                );
-                window.location.assign(result.url);
-              })
-            }
-          >
-            Connect GitHub
+    <>
+      <section className="card" aria-label="GitHub connection">
+        <div className="row github-summary-heading">
+          <div className="row">
+            <h2>GitHub</h2>
+            <span className="pill">
+              {data?.connection?.installationId
+                ? "Connected"
+                : data
+                  ? "Not connected"
+                  : error
+                    ? "Unavailable"
+                    : "Loading"}
+            </span>
+          </div>
+          <button type="button" onClick={() => setOpen(true)}>
+            Manage GitHub
           </button>
-        )}
-        {error && (
-          <button type="button" disabled={busy} onClick={() => void load()}>
-            Reload GitHub connection
-          </button>
-        )}
-      </div>
-      {data?.pending && (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void act(async () => {
-              await request(endpoint, "PUT", {
-                revision: data.revision,
-                installationId: Number(installation),
-                repositoryIds: selected,
-              });
-              window.location.reload();
-            });
-          }}
-        >
-          <h3>Choose repositories for this workspace</h3>
-          <p>
-            Authorized as {data.login}. Select an installation, then the
-            repositories this workspace may query and submit issues to.
-          </p>
-          <p>
-            After GitHub approves the installation, reopen this page to see it.
-          </p>
-          <fieldset disabled={busy} className="plugin-fields">
-            <label className="field">
-              <span>GitHub installation</span>
-              <select
-                required
-                value={installation}
-                onChange={(event) => {
-                  const id = event.target.value;
-                  setInstallation(id);
-                  setRepositories([]);
-                  setSelected([]);
-                  if (id)
-                    void act(async () =>
-                      setRepositories(
-                        await request<GitHubRepository[]>(
-                          `${endpoint}/installations/${id}/repositories`,
-                        ),
-                      ),
-                    );
-                }}
-              >
-                <option value="">Choose an account</option>
-                {data.installations.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.account}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {!data.installations.length && (
-              <p>
-                No accessible installations yet. Install the App or ask your
-                organization owner to approve it, then reopen this page.
+        </div>
+        <p className="muted">
+          {data?.connection?.installationId
+            ? `${data.connection.account} · ${data.connection.repositories.length} ${data.connection.repositories.length === 1 ? "repository" : "repositories"}`
+            : "Connect a GitHub App to grant this workspace repository access."}
+        </p>
+      </section>
+      {open && (
+        <Modal title="Manage GitHub" onClose={close} busy={busy}>
+          <div className="github-details">
+            <span className="pill">
+              {data?.connection?.installationId ? "Connected" : "Not connected"}
+            </span>
+            <p>
+              Connect a GitHub App to give this workspace source access to
+              selected repositories and submit issues after approval in
+              Telegram.
+            </p>
+            {params.get("github") === "failed" && (
+              <p className="notice" role="alert">
+                GitHub authorization did not complete. Connect again to retry.
               </p>
             )}
-            {!!installation && !repositories.length && (
-              <p>No accessible repositories in this installation.</p>
+            {error && (
+              <p className="notice" role="alert">
+                {error}
+              </p>
             )}
-            {repositories.map((repo) => (
-              <label className="checkbox" key={repo.id}>
-                <input
-                  type="checkbox"
-                  checked={selected.includes(repo.id)}
-                  onChange={(e) =>
-                    setSelected(
-                      e.target.checked
-                        ? [...selected, repo.id]
-                        : selected.filter((id) => id !== repo.id),
-                    )
+            {params.get("github") === "registration-failed" && (
+              <p className="notice" role="alert">
+                GitHub App setup did not complete. Reload the page to check
+                whether an App is already configured. If GitHub created an App
+                but setup failed here, remove that unused App in GitHub before
+                retrying, or configure it manually.
+              </p>
+            )}
+            {params.get("github") === "app-created" && data?.configured && (
+              <p role="status">
+                GitHub App created. Install it on the repositories you need,
+                then connect this workspace.
+              </p>
+            )}
+            {!data && <p role="status">Loading GitHub connection…</p>}
+            {data?.canRegister && (
+              <GitHubRegistration
+                request={request}
+                endpoint={endpoint}
+                onError={(error) => setError(explain(error))}
+                source={source}
+              />
+            )}
+            {data && !data.configured && !data.canRegister && (
+              <p className="notice">
+                A deployment operator must register and configure the GitHub App
+                before connecting.
+              </p>
+            )}
+            {data?.configured && (
+              <p>
+                App: <strong>{data.appSlug}</strong>.{" "}
+                <a href={data.installUrl} target="_blank" rel="noreferrer">
+                  Install or update the GitHub App
+                </a>
+              </p>
+            )}
+            {data?.connection?.installationId && (
+              <>
+                <p>
+                  Connected to <strong>{data.connection.account}</strong> by{" "}
+                  {data.connection.connectedBy}.
+                </p>
+                <p className="muted">
+                  To submit issues, grant the App Issues: read and write in
+                  GitHub and approve the updated installation permissions. Then
+                  ask the Telegram assistant to draft an issue and review its
+                  Approve/Reject buttons.
+                </p>
+                <ul
+                  className="github-repositories"
+                  aria-label="Connected repositories"
+                >
+                  {(showAllRepositories
+                    ? data.connection.repositories
+                    : data.connection.repositories.slice(0, 5)
+                  ).map((repo) => (
+                    <li className="github-repository" key={repo.id}>
+                      <span>{repo.full_name}</span>
+                      <a
+                        className="github-repository-link"
+                        href={`https://github.com/${repo.full_name}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Open ${repo.full_name} on GitHub`}
+                        title={`Open ${repo.full_name} on GitHub`}
+                      >
+                        <ArrowUpRightSquare
+                          size={18}
+                          weight="Outline"
+                          color="currentColor"
+                          aria-hidden="true"
+                          focusable="false"
+                        />
+                      </a>
+                    </li>
+                  ))}
+                  {data.connection.repositories.length > 5 && (
+                    <li>
+                      <button
+                        type="button"
+                        className="github-repository-more"
+                        aria-expanded={showAllRepositories}
+                        onClick={() =>
+                          setShowAllRepositories(!showAllRepositories)
+                        }
+                      >
+                        {showAllRepositories
+                          ? "Show less"
+                          : `${data.connection.repositories.length - 5} more`}
+                      </button>
+                    </li>
+                  )}
+                </ul>
+              </>
+            )}
+            {data?.configured && !data.connection && (
+              <p className="muted">
+                Existing deployment credentials may apply until you connect or
+                disconnect this workspace.
+              </p>
+            )}
+            {data?.connection && !data.connection.installationId && (
+              <p className="muted">
+                Private repository access is disconnected. Public repositories
+                can still be queried.
+              </p>
+            )}
+            <div className="row">
+              {data?.configured && !data.connection?.installationId && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    void act(async () => {
+                      const result = await request<{ url: string }>(
+                        `${endpoint}/connect`,
+                        "POST",
+                        source ? { source } : {},
+                      );
+                      window.location.assign(result.url);
+                    })
                   }
-                />
-                {repo.full_name}
-              </label>
-            ))}
-            <button type="submit" disabled={!selected.length}>
-              Connect selected repositories
-            </button>
-          </fieldset>
-        </form>
+                >
+                  Connect GitHub
+                </button>
+              )}
+              {error && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void load()}
+                >
+                  Reload GitHub connection
+                </button>
+              )}
+            </div>
+            {data?.pending && (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void act(async () => {
+                    await request(endpoint, "PUT", {
+                      revision: data.revision,
+                      installationId: Number(installation),
+                      repositoryIds: selected,
+                    });
+                    window.location.reload();
+                  });
+                }}
+              >
+                <h3>Choose repositories for this workspace</h3>
+                <p>
+                  Authorized as {data.login}. Select an installation, then the
+                  repositories this workspace may query and submit issues to.
+                </p>
+                <p>
+                  After GitHub approves the installation, reopen this page to
+                  see it.
+                </p>
+                <fieldset disabled={busy} className="plugin-fields">
+                  <label className="field">
+                    <span>GitHub installation</span>
+                    <select
+                      required
+                      value={installation}
+                      onChange={(event) => {
+                        const id = event.target.value;
+                        setInstallation(id);
+                        setRepositories([]);
+                        setSelected([]);
+                        if (id)
+                          void act(async () =>
+                            setRepositories(
+                              await request<GitHubRepository[]>(
+                                `${endpoint}/installations/${id}/repositories`,
+                              ),
+                            ),
+                          );
+                      }}
+                    >
+                      <option value="">Choose an account</option>
+                      {data.installations.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.account}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {!data.installations.length && (
+                    <p>
+                      No accessible installations yet. Install the App or ask
+                      your organization owner to approve it, then reopen this
+                      page.
+                    </p>
+                  )}
+                  {!!installation && !repositories.length && (
+                    <p>No accessible repositories in this installation.</p>
+                  )}
+                  {repositories.map((repo) => (
+                    <label className="checkbox" key={repo.id}>
+                      <input
+                        type="checkbox"
+                        checked={selected.includes(repo.id)}
+                        onChange={(e) =>
+                          setSelected(
+                            e.target.checked
+                              ? [...selected, repo.id]
+                              : selected.filter((id) => id !== repo.id),
+                          )
+                        }
+                      />
+                      {repo.full_name}
+                    </label>
+                  ))}
+                  <button type="submit" disabled={!selected.length}>
+                    Connect selected repositories
+                  </button>
+                </fieldset>
+              </form>
+            )}
+          </div>
+        </Modal>
       )}
-    </section>
+    </>
   );
 }

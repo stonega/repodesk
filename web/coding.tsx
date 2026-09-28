@@ -19,6 +19,14 @@ function message(error: unknown) {
   };
   return messages[code] ?? code;
 }
+const taskFailures: Record<string, string> = {
+  coding_setup_failed: "Repository setup command failed.",
+  coding_codex_failed: "Codex stopped before completing the implementation.",
+  coding_check_failed: "The configured repository check command failed.",
+  coding_patch_empty: "Codex produced no changes to publish.",
+  coding_execution_failed:
+    "Implementation or repository checks failed. Review the configured check command.",
+};
 export function Coding({
   request,
   workspaceId,
@@ -82,7 +90,11 @@ export function Coding({
     }
   };
   return (
-    <section className="card" aria-label="Codex implementation">
+    <section
+      className="card"
+      id="coding-tasks"
+      aria-label="Codex implementation"
+    >
       <div className="row plugin-toolbar">
         <h2>Codex implementation</h2>
         <IconButton
@@ -313,7 +325,20 @@ export function Coding({
                       <td>
                         {task.state.replaceAll("_", " ")}
                         {task.cancelRequested && " · stop requested"}
-                        {task.error && <p>{task.error}</p>}
+                        {task.error && (
+                          <p>{taskFailures[task.error] ?? task.error}</p>
+                        )}
+                        {task.threadId && (
+                          <p>
+                            Codex thread <code>{task.threadId}</code>
+                          </p>
+                        )}
+                        {task.state === "running" && !task.threadId && (
+                          <p className="muted">
+                            Codex is running; its thread ID appears after the
+                            implementation finishes.
+                          </p>
+                        )}
                       </td>
                       <td>
                         {task.issue && (

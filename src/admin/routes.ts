@@ -69,6 +69,13 @@ const workspaceActor = (w: Workspace, admin: Admin) => {
     return admin.id;
   return authorize(w, admin.telegramId, true);
 };
+const visibleWorkflows = (w: Workspace, actor: string) =>
+  w.workflows.filter(
+    (f) =>
+      f.status !== "deleted" &&
+      (f.owner === actor ||
+        w.chats.some((chat) => chat.id === f.spec.chatId && chat.active)),
+  );
 
 import type { GitHubService } from "../github/service.ts";
 
@@ -579,7 +586,10 @@ export function adminRoutes(
       requireThat(
         /^(overview|settings|members|access-policy|access-requests|skills)(\/.*)?$/.test(
           resource,
-        ),
+        ) ||
+          (c.req.method === "GET" &&
+            !admin.telegramId &&
+            /^(runs|workflows)$/.test(resource)),
         "access_denied",
         403,
       );
@@ -598,6 +608,7 @@ export function adminRoutes(
     switch (c.req.param("resource")) {
       case "overview": {
         const admin = c.get("session").admin;
+        const operatorView = actor === w.operatorId;
         const deployment =
           admin.operator && w.operatorId === admin.id
             ? await store.deployment()
@@ -608,8 +619,13 @@ export function adminRoutes(
           version: w.version,
           counts: {
             members: w.members.filter((m) => m.active).length,
-            runs: actor === w.operatorId ? 0 : visibleRuns(w, actor).length,
-            workflows: w.workflows.filter((f) => f.status === "active").length,
+            runs: operatorView ? w.runs.length : visibleRuns(w, actor).length,
+            workflows: operatorView
+              ? w.workflows.filter((f) => f.status !== "deleted").length
+              : visibleWorkflows(w, actor).length,
+            ...(operatorView
+              ? { codingTasks: w.codingTasks?.length ?? 0 }
+              : {}),
           },
           policyVersion: w.policy.version,
           connections: deployment
@@ -666,21 +682,34 @@ export function adminRoutes(
       case "chats":
         return c.json(take(w.chats));
       case "workflows":
-        return c.json(
-          take(
-            w.workflows
-              .filter(
-                (f) =>
-                  f.status !== "deleted" &&
-                  (f.owner === actor ||
-                    w.chats.some((c) => c.id === f.spec.chatId && c.active)),
-              )
-              .map((f) => ({
-                ...f,
-                next: nextOccurrences(f.spec.recurrence, new Date()),
-              })),
+        if (actor === w.operatorId)
+          return c.json({
+            mode: "operator",
+            ...take(
+              w.workflows
+                .filter((f) => f.status !== "deleted")
+                .map((f) => ({
+                  id: f.id,
+                  name: f.spec.name,
+                  owner: f.owner,
+                  status: f.status,
+                  version: f.version,
+                  recurrence: f.spec.recurrence,
+                  budgetUsd: f.spec.budgetUsd,
+                  next: nextOccurrences(f.spec.recurrence, new Date()),
+                  reason: f.reason,
+                })),
+            ),
+          });
+        return c.json({
+          mode: "member",
+          ...take(
+            visibleWorkflows(w, actor).map((f) => ({
+              ...f,
+              next: nextOccurrences(f.spec.recurrence, new Date()),
+            })),
           ),
-        );
+        });
       case "approvals":
         return c.json(
           take(w.approvals.filter((a) => a.actor === actor && !a.decision)),
@@ -710,8 +739,39 @@ export function adminRoutes(
           ),
         );
       case "runs":
-        return c.json(
-          take(
+        if (actor === w.operatorId)
+          return c.json({
+            mode: "operator",
+            ...take(
+              w.runs.toReversed().map((r) => ({
+                id: r.id,
+                actor: r.actor,
+                status: r.status,
+                at: r.at,
+                finishedAt: r.finishedAt,
+                model: r.model,
+                workflowId: r.workflowId,
+                workflowVersion: r.workflowVersion,
+                settingsVersion: r.settingsVersion,
+                attempts: r.attempts.map((attempt) => ({
+                  at: attempt.at,
+                  status: attempt.status,
+                  reserved: attempt.reserved,
+                  actual: attempt.actual,
+                })),
+                deliveries: w.deliveries
+                  .filter((delivery) => delivery.runId === r.id)
+                  .map((delivery) => ({
+                    state: delivery.state,
+                    at: delivery.at,
+                    attempts: delivery.attempts,
+                  })),
+              })),
+            ),
+          });
+        return c.json({
+          mode: "member",
+          ...take(
             visibleRuns(w, actor)
               .toReversed()
               .map((r) => ({
@@ -719,7 +779,7 @@ export function adminRoutes(
                 deliveries: w.deliveries.filter((d) => d.runId === r.id),
               })),
           ),
-        );
+        });
       case "usage": {
         const attempts = w.runs.flatMap((r) =>
           r.attempts.map((a) => ({ ...a, runId: r.id, model: r.model })),

@@ -271,6 +271,61 @@ suite("PostgreSQL integration (isolated database)", () => {
       (await request("/api/admin/not-a-resource")).headers.get("content-type"),
     ).toContain("json");
   });
+  test("unlinked deployment operator sees accurate read-only run and workflow history", async () => {
+    const w = await seed();
+    await store.change(w.id, (saved) => {
+      const run = createRun(
+        saved,
+        "101",
+        "Private request that must stay hidden",
+        "101",
+        0,
+        "test-model",
+      );
+      run.status = "succeeded";
+      run.result = "Private response that must stay hidden";
+      proposeWorkflow(saved, "101", spec(saved));
+    });
+    await store.pool.query("UPDATE admins SET telegram_id=NULL WHERE id=$1", [
+      operatorId,
+    ]);
+    try {
+      const base = `/api/admin/workspaces/${w.id}`;
+      const overview = await (await request(`${base}/overview`)).json();
+      expect(overview.counts).toMatchObject({ runs: 1, workflows: 1 });
+      const runs = await request(`${base}/runs`);
+      expect(runs.status).toBe(200);
+      const runHistory = await runs.json();
+      expect(runHistory.mode).toBe("operator");
+      expect(runHistory.total).toBe(1);
+      expect(runHistory.items[0]).toMatchObject({
+        actor: "101",
+        status: "succeeded",
+        model: "test-model",
+      });
+      expect(JSON.stringify(runHistory)).not.toContain("Private request");
+      expect(JSON.stringify(runHistory)).not.toContain("Private response");
+      expect(runHistory.items[0]).not.toHaveProperty("chatId");
+      expect(runHistory.items[0]).not.toHaveProperty("transcript");
+      const workflows = await request(`${base}/workflows`);
+      expect(workflows.status).toBe(200);
+      const workflowHistory = await workflows.json();
+      expect(workflowHistory.mode).toBe("operator");
+      expect(workflowHistory.total).toBe(1);
+      expect(workflowHistory.items[0]).toMatchObject({
+        name: "Friday recap",
+        status: "draft",
+      });
+      expect(workflowHistory.items[0]).not.toHaveProperty("spec");
+      expect((await request(`${base}/runs`, "POST", {})).status).toBe(403);
+      expect((await request(`${base}/workflows`, "POST", {})).status).toBe(403);
+    } finally {
+      await store.pool.query(
+        "UPDATE admins SET telegram_id='101' WHERE id=$1",
+        [operatorId],
+      );
+    }
+  });
   test("operator saves compatible settings, protects keys and worker uses the saved model", async () => {
     const original = await store.deployment();
     const path = "/api/admin/operator/credentials";

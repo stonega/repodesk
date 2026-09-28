@@ -8,6 +8,32 @@ accepted by a pilot team. Each entry states its own test scope and remaining gat
 
 ## Implemented
 
+### Overview run and workflow visibility (2026-09-28)
+
+Overview count cards now open their corresponding member, assistant-run,
+scheduled-workflow and Codex-task views. Counts match the records in those views.
+An unlinked deployment administrator can inspect read-only run and workflow
+metadata without receiving private prompts, results, transcripts, destinations or
+delivery text. Linked, eligible members retain their existing authorized details
+and actions. The Codex task table also shows a recorded thread ID when available.
+
+Validation: Biome, TypeScript and build passed; all 301 Bun tests passed against
+disposable PostgreSQL, and all 17 browser tests passed with fake external services.
+The live Clawearn task check failures are documented in
+[the incident record](../../postmortem/2026-09-28-clawearn-coding-checks.md).
+Future failed local Codex tasks now retain their thread ID and a safe failure
+stage when the job supplies one; the panel renders the stage in plain language.
+The local Podman app, worker and Codex supervisor were rebuilt and restarted with
+the verified images. The job image was prebuilt for future tasks. The protected,
+verified pre-cutover archive is
+`backups/repodesk-pre-overview-20260928T104445Z.dump`; prior images remain tagged
+`rollback-pre-overview-20260928`. Compose validation, the isolated Node runtime
+contract, app health and asset smoke, and real Podman success/failure smoke passed.
+All three services became healthy, `/readyz` returned `ready`, and Telegram polling
+reconnected. No live Telegram message or new paid Codex task was sent for this
+release check. Historical failed tasks remain failed with their original generic
+error code.
+
 ### Setup flow and panel model settings (2026-09-27)
 
 The authenticated wizard now follows Workspace → Telegram → GitHub App → Enter

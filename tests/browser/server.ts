@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import { createApp } from "../../src/app.ts";
 import { migrate } from "../../src/db/migrate.ts";
@@ -14,6 +16,7 @@ import { githubTransport } from "../github-fixture.ts";
 
 const rootUrl = process.env.TEST_DATABASE_URL;
 if (!rootUrl) throw Error("TEST_DATABASE_URL required");
+const browserDbPath = join(tmpdir(), "repodesk-browser-3107-db.json");
 const root = database(rootUrl);
 const name = `deepx_browser_${randomUUID().replaceAll("-", "")}`;
 await root.query(`CREATE DATABASE ${name}`);
@@ -22,10 +25,9 @@ parsed.pathname = `/${name}`;
 const pool = database(parsed.toString());
 await migrate(pool);
 await mkdir("test-results", { recursive: true });
-await writeFile(
-  "test-results/browser-db.json",
-  JSON.stringify({ url: parsed.toString() }),
-);
+await writeFile(browserDbPath, JSON.stringify({ url: parsed.toString() }), {
+  mode: 0o600,
+});
 const log = new RuntimeLogger(pool, "app", () => {});
 const store = new Store(pool, log);
 log.write("app_started");
@@ -89,6 +91,7 @@ const stop = () => {
     await pool.end();
     await root.query(`DROP DATABASE ${name} WITH (FORCE)`);
     await root.end();
+    await rm(browserDbPath, { force: true });
   });
 };
 process.on("SIGTERM", stop);

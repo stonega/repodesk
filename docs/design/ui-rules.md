@@ -138,25 +138,55 @@ them.
 ### Overview shows connected services
 
 - **Preference:** Show Telegram bot and GitHub connection cards on the workspace
-  Overview, with saved status, safe identity details, and links to their settings.
-  Keep the cards usable on narrow screens.
+  Overview, with saved status and safe identity details. Manage bot opens a dialog
+  to replace the write-only Telegram token without leaving Overview; Manage GitHub
+  opens the GitHub management dialog. Keep the cards usable on narrow screens.
 - **Scope:** Deployment administrator's workspace Overview.
 - **Source:** 2026-09-27 — user requested bot and GitHub cards on the Overview
-  after completing setup.
+  after completing setup. 2026-09-28 — user requested editing the Telegram token
+  in a dialog from Manage bot instead of navigating to Setup.
 - **Exceptions:** Connection details remain limited to the workspace's deployment
   administrator; other members keep their existing Overview.
 
+### Overview counts lead to the matching records
+
+- **Preference:** Make Overview count cards open their detail pages, and count the
+  same records those pages list. Show assistant runs, scheduled workflows and
+  coding tasks as distinct totals so active Codex work is easy to find.
+- **Scope:** Workspace Overview for deployment administrators and linked members.
+- **Source:** 2026-09-28 — user showed zero Runs and Workflows cards despite live
+  bot work and asked for pages with details.
+- **Exceptions:** An unlinked deployment administrator sees read-only run and
+  workflow metadata; private conversation content still requires an eligible
+  linked Telegram identity.
+
+### Team configuration uses one overview editor
+
+- **Preference:** Show saved workspace configuration in the Overview team card.
+  Place one Edit action on that card and edit all changeable settings together in
+  one dialog with one save action. Keep fixed policy values visible and read-only.
+- **Scope:** Workspace Overview configuration for authorized administrators.
+- **Source:** 2026-09-28 — user showed the separate Configuration list and asked
+  to show its values in the Overview team card, with one edit button and one form.
+- **Exceptions:** Model capacity remains on Workspace settings because it describes
+  deployment model limits rather than editable team configuration.
+
 ### Connected GitHub repositories stay compact and directly accessible
 
-- **Preference:** Show connected repositories as a wrapping inline list of compact
-  items, each with an external link to its GitHub repository at the end. Show
-  at most five by default, followed by an "N more" tag that reveals the rest and
-  can collapse the list again. Keep connection-change and disconnect buttons
-  out of the connected GitHub card.
-- **Scope:** Connected GitHub App details in the workspace Plugins panel.
+- **Preference:** Show a compact GitHub connection summary in Plugins. Open
+  connection details in a Manage GitHub modal, including when entered from the
+  Overview card. Show connected repositories there as a wrapping inline list of
+  compact items, each with an external link to its GitHub repository at the end.
+  Show at most five by default, followed by an "N more" tag that reveals the rest
+  and can collapse the list again. Keep connection-change and disconnect buttons
+  out of the connected GitHub details.
+- **Scope:** Workspace GitHub App details in Plugins and the Manage GitHub link
+  on Overview.
 - **Source:** 2026-09-27 — user requested an inline flex repository list with
   external links and removal of the two connection buttons shown below it.
   2026-09-28 — user requested a five-repository limit and a remaining-count tag.
+  2026-09-28 — user requested moving the GitHub details into a modal opened by
+  Manage GitHub.
 - **Exceptions:** An unconnected workspace still shows Connect GitHub; failed
   loads may show Reload GitHub connection.
 

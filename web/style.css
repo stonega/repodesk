@@ -489,6 +489,21 @@ p {
   padding: 0;
   list-style: none;
 }
+.team-card-heading {
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+.team-card-heading h2,
+.team-card-heading p {
+  margin: 0;
+}
+.team-card-heading p {
+  margin-top: 4px;
+}
+.team-card-heading + .settings-list {
+  margin-top: 12px;
+}
 .settings-item {
   display: flex;
   align-items: center;
@@ -545,6 +560,11 @@ p {
   margin-bottom: 18px;
 }
 .field span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ui-text);
+}
+.field > label {
   font-size: 13px;
   font-weight: 600;
   color: var(--ui-text);
@@ -618,6 +638,12 @@ input.member-toggle-input:checked::before {
 .row .field {
   margin: 0;
   max-width: 170px;
+}
+.github-summary-heading {
+  justify-content: space-between;
+}
+.github-summary-heading h2 {
+  margin: 0;
 }
 .github-repositories {
   display: flex;
@@ -956,15 +982,20 @@ button.github-repository-more:hover:not(:disabled) {
 }
 .stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 17px;
   margin-top: 20px;
 }
-.stats div {
+.stats a {
   background: var(--ui-surface);
   border: 1px solid var(--ui-border);
   border-radius: var(--ui-radius);
   padding: 24px;
+  text-decoration: none;
+}
+.stats a:hover,
+.stats a:focus-visible {
+  border-color: var(--ui-accent);
 }
 .stats strong {
   display: block;
@@ -994,7 +1025,8 @@ button.github-repository-more:hover:not(:disabled) {
 .overview-connection-heading {
   justify-content: space-between;
 }
-.overview-connection-card a {
+.overview-connection-card a,
+.overview-connection-card button {
   margin-top: auto;
   align-self: flex-start;
 }
@@ -1439,7 +1471,7 @@ aside .field span {
   .stats {
     gap: 10px;
   }
-  .stats div {
+  .stats a {
     padding: 16px;
   }
   .stats strong {

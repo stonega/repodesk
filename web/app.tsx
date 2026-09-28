@@ -205,6 +205,7 @@ function Action({
   resetKey,
   children,
   icon,
+  type = "button",
   onClick,
   danger = false,
   disabled = false,
@@ -214,6 +215,7 @@ function Action({
   resetKey?: unknown;
   children: string;
   icon?: ActionIcon;
+  type?: "button" | "submit";
   onClick: () => Promise<unknown>;
   danger?: boolean;
   disabled?: boolean;
@@ -253,7 +255,7 @@ function Action({
         />
       ) : (
         <button
-          type="button"
+          type={type}
           className={danger ? "danger" : ""}
           disabled={busy || loading || disabled}
           aria-busy={busy || loading}
@@ -1351,19 +1353,36 @@ function WorkspacePage({ id, resource }: { id: string; resource: string }) {
   if (resource === "members") return <MembersPage id={id} />;
   if (resource === "chats") return <ChatsPage id={id} />;
   if (resource === "deletion") return <PrivacyPage id={id} />;
-  return <ReadPage id={id} resource={resource} />;
+  return <ReadPage key={`${id}:${resource}`} id={id} resource={resource} />;
 }
 function ReadPage({ id, resource }: { id: string; resource: string }) {
   const { data, error, reload, loading } = useData<{
     settings?: Settings;
     version?: number;
-    counts?: { members: number; runs: number; workflows: number };
+    counts?: {
+      members: number;
+      runs: number;
+      workflows: number;
+      codingTasks?: number;
+    };
     connections?: {
       bot: { configured: boolean; username?: string };
       github: { connected: boolean; account?: string; repositories: number };
     };
     items?: Audit[];
   }>(`/api/admin/workspaces/${id}/${resource}`);
+  const [current, setCurrent] = useState<{
+    version: number;
+    settings: Settings;
+  }>();
+  const [editing, setEditing] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [managingBot, setManagingBot] = useState(false);
+  const [botSaved, setBotSaved] = useState(false);
+  useEffect(() => {
+    if (resource === "overview" && data?.settings && data.version)
+      setCurrent({ version: data.version, settings: data.settings });
+  }, [resource, data]);
   return (
     <Page
       title={resource === "overview" ? "Your team, in view" : "Audit history"}
@@ -1386,10 +1405,14 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
         <>
           <div className="stats">
             {Object.entries(data.counts).map(([key, value]) => (
-              <div key={key}>
+              <NavLink
+                key={key}
+                to={`/admin/${key === "codingTasks" ? "plugins" : key}?workspace=${id}${key === "codingTasks" ? "#coding-tasks" : ""}`}
+                aria-label={`${value} ${key === "codingTasks" ? "coding tasks" : key}. View details`}
+              >
                 <strong>{value}</strong>
-                <span>{key}</span>
-              </div>
+                <span>{key === "codingTasks" ? "Coding tasks" : key}</span>
+              </NavLink>
             ))}
           </div>
           {data.connections && (
@@ -1414,9 +1437,15 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
                     ? `@${data.connections.bot.username}`
                     : "Connect a Telegram bot to use this workspace in chat."}
                 </p>
-                <NavLink to={`/setup?step=telegram&workspace=${id}`}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBotSaved(false);
+                    setManagingBot(true);
+                  }}
+                >
                   Manage bot
-                </NavLink>
+                </button>
               </section>
               <section
                 className="card overview-connection-card"
@@ -1437,21 +1466,72 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
                     ? `${data.connections.github.account ?? "GitHub App"} · ${data.connections.github.repositories} ${data.connections.github.repositories === 1 ? "repository" : "repositories"}`
                     : "Connect a GitHub App to grant repository access."}
                 </p>
-                <NavLink to={`/admin/plugins?workspace=${id}`}>
+                <NavLink to={`/admin/plugins?workspace=${id}&github=manage`}>
                   Manage GitHub
                 </NavLink>
               </section>
             </section>
           )}
-          <section className="card">
-            <h2>{data.settings?.name}</h2>
-            <p>
-              {data.settings?.timezone} · Settings version {data.version}
-            </p>
-            <p>
-              Start in Telegram with /help, or review queued work under Runs.
-            </p>
-          </section>
+          {managingBot && (
+            <TelegramBotDialog
+              onClose={() => setManagingBot(false)}
+              onSaved={() => {
+                setBotSaved(true);
+                reload();
+              }}
+            />
+          )}
+          {botSaved && <Notice>Telegram bot token saved.</Notice>}
+          {current && (
+            <section className="card" aria-label="Team">
+              <div className="row team-card-heading">
+                <div>
+                  <h2>{current.settings.name}</h2>
+                  <p className="muted">Settings version {current.version}</p>
+                </div>
+                <IconButton
+                  icon="edit"
+                  label="Edit team configuration"
+                  disabled={loading}
+                  onClick={() => {
+                    setSaved(false);
+                    setEditing(true);
+                  }}
+                />
+              </div>
+              <ul className="settings-list">
+                {workspaceFields.map((field) => (
+                  <li className="settings-item" key={field.key}>
+                    <div className="settings-item-details">
+                      <h3>{field.label}</h3>
+                      <p className="settings-item-value">
+                        {settingValue(field.key, current.settings[field.key])}
+                      </p>
+                      <p className="muted">{field.help}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {saved && <Notice>Team configuration saved.</Notice>}
+            </section>
+          )}
+          {editing && current && (
+            <WorkspaceSettingsEditor
+              id={id}
+              current={current}
+              onClose={() => setEditing(false)}
+              onConflict={() => {
+                setEditing(false);
+                reload();
+              }}
+              onSaved={(updated) => {
+                setCurrent(updated);
+                setEditing(false);
+                setSaved(true);
+                reload();
+              }}
+            />
+          )}
         </>
       ) : (
         <section className="card">
@@ -1480,27 +1560,113 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
     </Page>
   );
 }
+function TelegramBotDialog({
+  onClose,
+  onSaved,
+}: {
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const {
+    data,
+    error: loadError,
+    loading,
+    reload,
+  } = useData<Progress>("/api/setup/progress");
+  const [token, setToken] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  return (
+    <Modal title="Manage Telegram bot" onClose={onClose} busy={saving}>
+      <form
+        aria-busy={saving}
+        onSubmit={async (event) => {
+          event.preventDefault();
+          if (saving || !data || !token.trim()) return;
+          setSaving(true);
+          setError("");
+          try {
+            await api("/api/admin/operator/credentials", "PUT", {
+              version: data.version,
+              botToken: token.trim(),
+            });
+            setToken("");
+            onSaved();
+            onClose();
+          } catch (cause) {
+            const message =
+              cause instanceof Error
+                ? cause.message
+                : "Could not save bot token.";
+            setError(message);
+            if (message.includes("version_conflict")) reload();
+          } finally {
+            setSaving(false);
+          }
+        }}
+      >
+        {loadError && (
+          <>
+            <Notice>{loadError}</Notice>
+            <Action loading={loading} onClick={async () => reload()}>
+              Try again
+            </Action>
+          </>
+        )}
+        {data && !loadError && (
+          <>
+            <p>
+              {data.bot
+                ? `Current bot: @${data.bot.username}`
+                : "No bot configured."}
+            </p>
+            <Field label="New bot token">
+              <input
+                type="text"
+                autoComplete="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                value={token}
+                onChange={(event) => {
+                  setToken(event.target.value);
+                  setError("");
+                }}
+                placeholder="Paste your BotFather token"
+                required
+              />
+            </Field>
+            <p className="muted">
+              Saving a token turns off the bot until Telegram reception is ready
+              and you reactivate it in Model settings.
+            </p>
+          </>
+        )}
+        {error && (
+          <p role="alert" className="notice">
+            {error}
+          </p>
+        )}
+        <ModalActions>
+          <button
+            type="submit"
+            disabled={!data || !!loadError || loading || !token.trim()}
+          >
+            {saving ? "Saving…" : "Save token"}
+          </button>
+        </ModalActions>
+      </form>
+    </Modal>
+  );
+}
 function SettingsPage({ id }: { id: string }) {
   const { data, error, reload, loading } = useData<{
-    version: number;
-    settings: Settings;
     model: string;
     capabilities: ModelCapabilities | null;
   }>(`/api/admin/workspaces/${id}/settings`);
-  const [current, setCurrent] = useState<{
-    version: number;
-    settings: Settings;
-  }>();
-  const [editing, setEditing] = useState<(typeof workspaceFields)[number]>();
-  const [saved, setSaved] = useState(false);
-  useEffect(() => {
-    if (data) setCurrent({ version: data.version, settings: data.settings });
-  }, [data]);
   return (
     <Page
       title="Workspace settings"
-      titleBadge={current ? `Version ${current.version}` : undefined}
-      description="Changes apply to future runs. Pause and tighter budgets apply immediately."
+      description="Model capacity and workspace configuration."
       actions={
         error && (
           <Action loading={loading} onClick={async () => reload()}>
@@ -1510,7 +1676,7 @@ function SettingsPage({ id }: { id: string }) {
       }
     >
       {error && <Notice>{error}</Notice>}
-      {!error && current && data && (
+      {!error && data && (
         <>
           <section className="card">
             <h2>Model capacity</h2>
@@ -1530,56 +1696,10 @@ function SettingsPage({ id }: { id: string }) {
               managed automatically within model limits and your dollar budgets.
             </p>
           </section>
-          <section
-            className="card"
-            aria-labelledby="workspace-configuration-heading"
-          >
-            <h2 id="workspace-configuration-heading">Configuration</h2>
-            <ul className="settings-list">
-              {workspaceFields.map((field) => (
-                <li className="settings-item" key={field.key}>
-                  <div className="settings-item-details">
-                    <h3>{field.label}</h3>
-                    <p className="settings-item-value">
-                      {settingValue(field.key, current.settings[field.key])}
-                    </p>
-                    <p className="muted">{field.help}</p>
-                  </div>
-                  {(field.min === undefined || field.min !== field.max) && (
-                    <IconButton
-                      icon="edit"
-                      label={`Edit ${field.label}`}
-                      disabled={loading}
-                      onClick={() => {
-                        setSaved(false);
-                        setEditing(field);
-                      }}
-                    />
-                  )}
-                </li>
-              ))}
-            </ul>
-            {saved && <Notice>Workspace setting saved.</Notice>}
-          </section>
-          {editing && (
-            <WorkspaceSettingEditor
-              key={editing.key}
-              id={id}
-              field={editing}
-              current={current}
-              onClose={() => setEditing(undefined)}
-              onConflict={() => {
-                setEditing(undefined);
-                reload();
-              }}
-              onSaved={(updated) => {
-                setCurrent(updated);
-                setEditing(undefined);
-                setSaved(true);
-                reload();
-              }}
-            />
-          )}
+          <p>
+            Edit team configuration on the{" "}
+            <NavLink to={`/admin/overview?workspace=${id}`}>Overview</NavLink>.
+          </p>
         </>
       )}
     </Page>
@@ -1597,105 +1717,128 @@ function settingValue(key: keyof Settings, value: Settings[keyof Settings]) {
   const unit = units[key];
   return unit ? `${value} ${unit}` : String(value);
 }
-function WorkspaceSettingEditor({
+function WorkspaceSettingsEditor({
   id,
-  field,
   current,
   onClose,
   onConflict,
   onSaved,
 }: {
   id: string;
-  field: (typeof workspaceFields)[number];
   current: { version: number; settings: Settings };
   onClose: () => void;
   onConflict: () => void;
   onSaved: (updated: { version: number; settings: Settings }) => void;
 }) {
-  const [draft, setDraft] = useState(current.settings[field.key]);
-  const [issue, setIssue] = useState("");
-  const fieldId = `settings-${field.key}`;
-  const isBoolean = typeof draft === "boolean";
+  const [draft, setDraft] = useState<Settings>(current.settings);
+  const [issues, setIssues] = useState<Record<string, string>>({});
   return (
-    <Modal title={`Edit ${field.label}`} onClose={onClose}>
-      <Field label={field.label}>
-        {isBoolean ? (
-          <input
-            id={fieldId}
-            type="checkbox"
-            checked={draft as boolean}
-            onChange={(event) => {
-              setDraft(event.target.checked);
-              setIssue("");
-            }}
-          />
-        ) : (
-          <input
-            id={fieldId}
-            type={typeof draft === "number" ? "number" : "text"}
-            min={field.min}
-            max={field.max}
-            step={field.step}
-            value={Number.isNaN(draft) ? "" : String(draft)}
-            aria-invalid={!!issue}
-            aria-describedby={`${fieldId}-help${issue ? ` ${fieldId}-error` : ""}`}
-            onChange={(event) => {
-              setDraft(
-                typeof current.settings[field.key] === "number"
-                  ? event.target.value === ""
-                    ? Number.NaN
-                    : Number(event.target.value)
-                  : event.target.value,
-              );
-              setIssue("");
-            }}
-          />
-        )}
-        <small id={`${fieldId}-help`}>{field.help}</small>
-        {issue && (
-          <small id={`${fieldId}-error`} role="alert">
-            {issue}
-          </small>
-        )}
-      </Field>
-      <ModalActions>
-        <Action
-          resetKey={draft}
-          onConflict={onConflict}
-          onClick={async () => {
-            const settings = { ...current.settings, [field.key]: draft };
-            const parsed = settingsSchema.safeParse(settings);
-            if (!parsed.success) {
-              setIssue(
-                parsed.error.issues.find((item) => item.path[0] === field.key)
-                  ?.message ?? "Invalid value.",
-              );
-              throw new Error("Check the highlighted field.");
-            }
-            try {
-              const updated = await api<{
-                version: number;
-                settings: Settings;
-              }>(`/api/admin/workspaces/${id}/settings`, "PUT", {
-                version: current.version,
-                settings: parsed.data,
-              });
-              onSaved(updated);
-            } catch (error) {
-              if (error instanceof ApiError)
-                setIssue(
-                  error.issues.find(
-                    (item) =>
-                      item.path.replace(/^settings\./, "") === field.key,
-                  )?.message ?? "",
+    <Modal title="Edit team configuration" onClose={onClose}>
+      <form onSubmit={(event) => event.preventDefault()}>
+        {workspaceFields.map((field) => {
+          const fieldId = `settings-${field.key}`;
+          const value = draft[field.key];
+          const issue = issues[field.key];
+          if (field.min !== undefined && field.min === field.max)
+            return (
+              <div className="field" key={field.key}>
+                <span>{field.label}</span>
+                <strong>{settingValue(field.key, value)}</strong>
+                <small>{field.help}</small>
+              </div>
+            );
+          return (
+            <div className="field" key={field.key}>
+              <label htmlFor={fieldId}>{field.label}</label>
+              <input
+                id={fieldId}
+                type={
+                  typeof value === "boolean"
+                    ? "checkbox"
+                    : typeof value === "number"
+                      ? "number"
+                      : "text"
+                }
+                min={field.min}
+                max={field.max}
+                step={field.step}
+                checked={typeof value === "boolean" ? value : undefined}
+                value={
+                  typeof value === "boolean"
+                    ? undefined
+                    : Number.isNaN(value)
+                      ? ""
+                      : String(value)
+                }
+                aria-invalid={!!issue}
+                aria-describedby={`${fieldId}-help${issue ? ` ${fieldId}-error` : ""}`}
+                onChange={(event) => {
+                  const next =
+                    typeof value === "boolean"
+                      ? event.target.checked
+                      : typeof value === "number"
+                        ? event.target.value === ""
+                          ? Number.NaN
+                          : Number(event.target.value)
+                        : event.target.value;
+                  setDraft({ ...draft, [field.key]: next });
+                  setIssues((previous) => ({ ...previous, [field.key]: "" }));
+                }}
+              />
+              <small id={`${fieldId}-help`}>{field.help}</small>
+              {issue && (
+                <small id={`${fieldId}-error`} role="alert">
+                  {issue}
+                </small>
+              )}
+            </div>
+          );
+        })}
+        <ModalActions>
+          <Action
+            type="submit"
+            resetKey={draft}
+            onConflict={onConflict}
+            onClick={async () => {
+              const parsed = settingsSchema.safeParse(draft);
+              if (!parsed.success) {
+                setIssues(
+                  Object.fromEntries(
+                    parsed.error.issues.map((item) => [
+                      String(item.path[0]),
+                      item.message,
+                    ]),
+                  ),
                 );
-              throw error;
-            }
-          }}
-        >
-          Save change
-        </Action>
-      </ModalActions>
+                throw new Error("Check the highlighted fields.");
+              }
+              try {
+                const updated = await api<{
+                  version: number;
+                  settings: Settings;
+                }>(`/api/admin/workspaces/${id}/settings`, "PUT", {
+                  version: current.version,
+                  settings: parsed.data,
+                });
+                onSaved(updated);
+              } catch (error) {
+                if (error instanceof ApiError)
+                  setIssues(
+                    Object.fromEntries(
+                      error.issues.map((item) => [
+                        item.path.replace(/^settings\./, ""),
+                        item.message,
+                      ]),
+                    ),
+                  );
+                throw error;
+              }
+            }}
+          >
+            Save configuration
+          </Action>
+        </ModalActions>
+      </form>
     </Modal>
   );
 }
@@ -2177,9 +2320,30 @@ function ApprovalList({
   );
 }
 function WorkflowsPage({ id }: { id: string }) {
-  const { data, error, reload, loading } = useData<{
-    items: (Workflow & { next: string[] })[];
-  }>(`/api/admin/workspaces/${id}/workflows`);
+  const { data, error, reload, loading } = useData<
+    | {
+        mode: "member";
+        items: (Workflow & { next: string[] })[];
+        total: number;
+      }
+    | {
+        mode: "operator";
+        items: {
+          id: string;
+          name: string;
+          owner: string;
+          status: Workflow["status"];
+          version: number;
+          recurrence: Workflow["spec"]["recurrence"];
+          budgetUsd: number;
+          next: string[];
+          reason?: string;
+        }[];
+        total: number;
+      }
+  >(`/api/admin/workspaces/${id}/workflows`);
+  const memberData = data?.mode === "member" ? data : undefined;
+  const operatorData = data?.mode === "operator" ? data : undefined;
   const skills = useData<{ items: Skill[] }>(
     `/api/admin/workspaces/${id}/skills`,
   );
@@ -2213,11 +2377,13 @@ function WorkflowsPage({ id }: { id: string }) {
       description="Daily and weekly schedules use the displayed timezone. Late runs over five minutes are skipped; daylight-saving gaps are skipped and repeated times run once."
       actions={
         <>
-          <IconButton
-            icon="add"
-            label="Add workflow"
-            onClick={() => setCreating(true)}
-          />
+          {memberData && (
+            <IconButton
+              icon="add"
+              label="Add workflow"
+              onClick={() => setCreating(true)}
+            />
+          )}
           {error && (
             <Action loading={loading} onClick={async () => reload()}>
               Try again
@@ -2228,7 +2394,36 @@ function WorkflowsPage({ id }: { id: string }) {
     >
       {error && <Notice>{error}</Notice>}
       <Pager data={data} />
-      {data?.items.map((f) => (
+      {operatorData && (
+        <p className="muted">
+          Workspace schedule details are read-only here. Link your Telegram
+          identity in <NavLink to="/setup">Setup</NavLink> to manage workflows.
+        </p>
+      )}
+      {data?.total === 0 && (
+        <section className="card">No scheduled workflows yet.</section>
+      )}
+      {operatorData?.items.map((f) => (
+        <section className="card" key={f.id}>
+          <div className="row">
+            <h2>{f.name}</h2>
+            <span className="pill">{f.status}</span>
+          </div>
+          <p className="mono">{f.id}</p>
+          <p>
+            Owner {f.owner} · Version {f.version} · Budget ${f.budgetUsd}/run
+          </p>
+          <p>
+            {f.recurrence.frequency} at{" "}
+            {String(f.recurrence.hour).padStart(2, "0")}:
+            {String(f.recurrence.minute).padStart(2, "0")}{" "}
+            {f.recurrence.timezone}
+          </p>
+          {f.next.length > 0 && <p>Next: {f.next.join(" · ")}</p>}
+          {f.reason && <p className="muted">{f.reason}</p>}
+        </section>
+      ))}
+      {memberData?.items.map((f) => (
         <section className="card" key={f.id}>
           <div className="row">
             <h2>{f.spec.name}</h2>
@@ -2278,7 +2473,7 @@ function WorkflowsPage({ id }: { id: string }) {
           </div>
         </section>
       ))}
-      {(creating || editing) && (
+      {memberData && (creating || editing) && (
         <Modal
           title={editing ? `Edit ${editing.spec.name}` : "Propose a schedule"}
           onClose={closeEditor}
@@ -2317,7 +2512,9 @@ function WorkflowsPage({ id }: { id: string }) {
           <DataDetails value={proposal} />
         </section>
       )}
-      <ApprovalList id={id} reloadParent={reload} refreshKey={data} />
+      {memberData && (
+        <ApprovalList id={id} reloadParent={reload} refreshKey={data} />
+      )}
     </Page>
   );
 }
@@ -2715,39 +2912,73 @@ function InstructionsPage({ id }: { id: string }) {
   );
 }
 function RunsPage({ id }: { id: string }) {
-  const { data, error, reload, loading } = useData<{
-    items: (Run & { deliveries: Delivery[] })[];
-  }>(`/api/admin/workspaces/${id}/runs`);
+  const { data, error, reload, loading } = useData<
+    | {
+        mode: "member";
+        items: (Run & { deliveries: Delivery[] })[];
+        total: number;
+      }
+    | {
+        mode: "operator";
+        items: {
+          id: string;
+          actor: string;
+          status: Run["status"];
+          at: string;
+          finishedAt?: string;
+          model: string;
+          workflowId?: string;
+          workflowVersion?: number;
+          settingsVersion: number;
+          attempts: {
+            at: string;
+            status: Run["attempts"][number]["status"];
+            reserved: number;
+            actual?: number;
+          }[];
+          deliveries: {
+            state: Delivery["state"];
+            at: string;
+            attempts: number;
+          }[];
+        }[];
+        total: number;
+      }
+  >(`/api/admin/workspaces/${id}/runs`);
+  const memberData = data?.mode === "member" ? data : undefined;
+  const operatorData = data?.mode === "operator" ? data : undefined;
   return (
     <Page
       title="Runs & delivery"
       description="Generation and delivery have separate states. An unknown send is never automatically repeated."
       actions={
         <>
-          <CreateModal label="Request a run">
-            {(close) => (
-              <>
-                <RecordForm
-                  fields={runFields}
-                  value={{
-                    task: "Create a source-grounded team recap.",
-                    chatId: "",
-                    topicId: 0,
-                  }}
-                  label="Queue request"
-                  save={async (value) => {
-                    await api(
-                      `/api/admin/workspaces/${id}/runs`,
-                      "POST",
-                      value,
-                    );
-                    close();
-                    reload();
-                  }}
-                />
-              </>
-            )}
-          </CreateModal>
+          {memberData && (
+            <CreateModal label="Request a run">
+              {(close) => (
+                <>
+                  <RecordForm
+                    fields={runFields}
+                    value={{
+                      task: "Create a source-grounded team recap.",
+                      chatId: "",
+                      topicId: 0,
+                    }}
+                    label="Queue request"
+                    save={async (value) => {
+                      await api(
+                        `/api/admin/workspaces/${id}/runs`,
+                        "POST",
+                        value,
+                      );
+                      close();
+                      reload();
+                    }}
+                  />
+                </>
+              )}
+            </CreateModal>
+          )}
           {error && (
             <Action loading={loading} onClick={async () => reload()}>
               Try again
@@ -2758,7 +2989,50 @@ function RunsPage({ id }: { id: string }) {
     >
       {error && <Notice>{error}</Notice>}
       <Pager data={data} />
-      {data?.items.map((r) => (
+      {operatorData && (
+        <p className="muted">
+          This read-only view shows workspace run status and delivery metadata.
+          Link your Telegram identity in <NavLink to="/setup">Setup</NavLink> to
+          see conversations you can access.
+        </p>
+      )}
+      {data?.total === 0 && (
+        <section className="card">No assistant runs yet.</section>
+      )}
+      {operatorData?.items.map((r) => (
+        <section className="card" key={r.id}>
+          <div className="row">
+            <h2>Run {r.id.slice(0, 8)}</h2>
+            <span className="pill">{r.status}</span>
+          </div>
+          <p className="mono">{r.id}</p>
+          <p>
+            Started {new Date(r.at).toLocaleString()} · Actor {r.actor} ·{" "}
+            {r.model}
+          </p>
+          {r.finishedAt && (
+            <p>Finished {new Date(r.finishedAt).toLocaleString()}</p>
+          )}
+          <p>
+            Settings v{r.settingsVersion}
+            {r.workflowId && ` · Workflow ${r.workflowId}`}
+            {r.workflowVersion && ` v${r.workflowVersion}`}
+          </p>
+          <p>
+            {r.attempts.length} model{" "}
+            {r.attempts.length === 1 ? "attempt" : "attempts"}
+            {r.attempts.length > 0 &&
+              ` · ${r.attempts.map((attempt) => attempt.status).join(", ")}`}
+          </p>
+          <p>
+            Delivery:{" "}
+            {r.deliveries.length
+              ? r.deliveries.map((delivery) => delivery.state).join(", ")
+              : "none"}
+          </p>
+        </section>
+      ))}
+      {memberData?.items.map((r) => (
         <section className="card" key={r.id}>
           <div className="row">
             <h2>{r.task.slice(0, 90)}</h2>
@@ -3445,7 +3719,14 @@ function Shell() {
   const operatorOnly = !!current?.admin.operator && !current.admin.telegramId;
   const visibleNavigation = operatorOnly
     ? navigation.filter(([path]) =>
-        ["overview", "settings", "members", "skills"].includes(path),
+        [
+          "overview",
+          "settings",
+          "members",
+          "workflows",
+          "skills",
+          "runs",
+        ].includes(path),
       )
     : navigation;
   return (
@@ -3512,9 +3793,7 @@ function Shell() {
             <div className="account">
               <small>
                 {current.admin.username}
-                {current.admin.telegramId
-                  ? ` · ${current.admin.telegramId}`
-                  : " · Telegram unlinked"}
+                {current.admin.telegramId && ` · ${current.admin.telegramId}`}
               </small>
               <Action
                 icon="logout"
@@ -3543,8 +3822,8 @@ function Shell() {
             {current && (
               <div className="account setup-account">
                 <small>
-                  {current.admin.username} · Telegram{" "}
-                  {current.admin.telegramId ? "linked" : "unlinked"}
+                  {current.admin.username}
+                  {current.admin.telegramId && " · Telegram linked"}
                 </small>
                 <Action
                   icon="logout"

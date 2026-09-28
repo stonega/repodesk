@@ -19,6 +19,8 @@ const image = `localhost/${name}:local`;
 const workspaceId = randomUUID();
 const taskId = randomUUID();
 const key = taskKey(workspaceId, taskId);
+const failedTaskId = randomUUID();
+const failedKey = taskKey(workspaceId, failedTaskId);
 const token = "smoke-management-token-no-real-secrets";
 try {
   await writeFile(
@@ -118,7 +120,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
   }
-  await request("/tasks", {
+  const input = {
     workspaceId,
     taskId,
     payload: {
@@ -137,7 +139,8 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     issue: { number: 1, url: "https://github.com/example/smoke/issues/1" },
     readToken: "fake-read-token",
     providerApiKey: "fake-panel-provider-key",
-  });
+  };
+  await request("/tasks", input);
   for (let attempt = 0; ; attempt++) {
     const status = (await request(`/tasks/${workspaceId}/${taskId}`)) as {
       state: string;
@@ -156,8 +159,33 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   await request(`/tasks/${workspaceId}/${taskId}/cancel`, {});
+  await request("/tasks", {
+    ...input,
+    taskId: failedTaskId,
+    payload: { ...input.payload, checkCommand: "false" },
+  });
+  for (let attempt = 0; ; attempt++) {
+    const status = (await request(`/tasks/${workspaceId}/${failedTaskId}`)) as {
+      state: string;
+      error?: string;
+      threadId?: string;
+    };
+    if (status.state === "failed") {
+      if (
+        status.error !== "coding_check_failed" ||
+        status.threadId !== "smoke-thread"
+      )
+        throw new Error(
+          `Failure diagnostics were lost: ${JSON.stringify(status)}`,
+        );
+      break;
+    }
+    if (attempt > 30)
+      throw new Error(`Task did not fail its check: ${JSON.stringify(status)}`);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
   console.log(
-    "Podman smoke passed: prepare → isolated implementation → checks → patch export; thread persisted; cancellation confirmed.",
+    "Podman smoke passed: successful patch export and failed checks both preserve thread IDs; cancellation confirmed.",
   );
 } catch (error) {
   for (const phase of ["prepare", "implement", "export", "publish"]) {
@@ -182,8 +210,17 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     ...["prepare", "implement", "export", "publish"].map(
       (phase) => `${key}-${phase}`,
     ),
+    ...["prepare", "implement", "export", "publish"].map(
+      (phase) => `${failedKey}-${phase}`,
+    ),
   ]).catch(() => {});
-  for (const volume of [`${name}-state`, `${key}-work`, `${key}-publish`])
+  for (const volume of [
+    `${name}-state`,
+    `${key}-work`,
+    `${key}-publish`,
+    `${failedKey}-work`,
+    `${failedKey}-publish`,
+  ])
     await podman(["volume", "rm", "--force", volume]).catch(() => {});
   await podman(["network", "rm", name]).catch(() => {});
   await podman(["rmi", image]).catch(() => {});

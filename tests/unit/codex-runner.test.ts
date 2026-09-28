@@ -40,7 +40,13 @@ async function fixture() {
     async readText(_container, path) {
       return path.endsWith("base-sha")
         ? "a".repeat(40)
-        : JSON.stringify({ prUrl: "https://github.com/example/repo/pull/43" });
+        : path.endsWith("thread-id")
+          ? "thread-123"
+          : path.endsWith("failure-code")
+            ? "coding_check_failed"
+            : JSON.stringify({
+                prUrl: "https://github.com/example/repo/pull/43",
+              });
     },
     async command(args, env) {
       calls.push({ args, env });
@@ -181,8 +187,12 @@ test("failed checks prevent publishing and cancellation cannot restart a task", 
   await f.supervisor.status(f.input.workspaceId, f.input.taskId);
   f.fail();
   expect(
-    (await f.supervisor.status(f.input.workspaceId, f.input.taskId)).state,
-  ).toBe("failed");
+    await f.supervisor.status(f.input.workspaceId, f.input.taskId),
+  ).toMatchObject({
+    state: "failed",
+    error: "coding_check_failed",
+    threadId: "thread-123",
+  });
   await expect(
     f.supervisor.publish(f.input.workspaceId, f.input.taskId, "token"),
   ).rejects.toThrow("coding_task_not_ready");
