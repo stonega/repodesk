@@ -427,12 +427,13 @@ request is part of build/test or this implementation change.
 ## Optional Codex feature and bug implementation
 
 Configure repository development branches and Telegram maintainers under
-**Plugins → Codex implementation**. Each target repository needs a trusted check
-command and updated App permissions. Follow [the complete setup](codex-coding.md)
+**Plugins → Codex implementation**. Codex prepares the environment and selects
+verification automatically; only the repository binding, maintainers and updated
+App permissions need configuring. Follow [the complete setup](codex-coding.md)
 and [the Podman runner guide](codex-podman.md) with
 `deploy/codex/compose.yaml`. Configure the custom Responses provider endpoint/model
 in deployment settings, then save the workspace API key in **Plugins → Codex
 implementation**. Keys are encrypted and never displayed again.
 `CODEX_PROVIDER_API_KEY` is an optional supervisor environment fallback. Older
-GitHub Actions configurations must be updated with local check commands before
-new coding tasks can run.
+GitHub Actions configurations must be saved with the local runner before new
+coding tasks can run.

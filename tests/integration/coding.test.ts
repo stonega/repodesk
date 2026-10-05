@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { ExtensionCatalog } from "../../src/agent/extensions.ts";
 import { type AgentInput, selectedModel } from "../../src/agent/runtime.ts";
 import { codingExtension } from "../../src/coding/extension.ts";
@@ -70,7 +71,6 @@ const url = process.env.TEST_DATABASE_URL;
           {
             repositoryId: 7001,
             baseBranch: "develop",
-            checkCommand: "bun test",
             maintainers: ["101"],
           },
         ],
@@ -138,6 +138,34 @@ const url = process.env.TEST_DATABASE_URL;
       ),
     };
   }
+  test("automatic-check migration removes stored overrides and invalidates old grants only once", async () => {
+    const { id } = await fixture();
+    await store.change(id, (w) => {
+      Object.assign(present(present(w.coding).settings.repositories[0]), {
+        setupCommand: "exit 91",
+        checkCommand: "exit 92",
+      });
+    });
+    const before = await store.read(id);
+    const migration = await readFile(
+      "migrations/013_automatic_coding_checks.sql",
+      "utf8",
+    );
+    await store.pool.query(migration);
+    const migrated = await store.read(id);
+    expect(migrated.coding?.settings.repositories[0]).not.toHaveProperty(
+      "setupCommand",
+    );
+    expect(migrated.coding?.settings.repositories[0]).not.toHaveProperty(
+      "checkCommand",
+    );
+    expect(migrated.coding?.revision).toBe(present(before.coding).revision + 1);
+    expect(migrated.version).toBe(before.version + 1);
+    await store.pool.query(migration);
+    expect((await store.read(id)).version).toBe(migrated.version);
+    await provider().service.tick(id);
+    expect((await read(id)).state).toBe("cancelled");
+  });
   test("real Pi extension registers coding tools and enforces maintainer identity", async () => {
     const { id } = await fixture();
     for (const actor of ["101", "202"]) {

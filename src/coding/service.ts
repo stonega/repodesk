@@ -35,8 +35,6 @@ export function codingView(w: Workspace, admin: Admin): CodingPage {
       repositories: settings.repositories.map((target) => ({
         repositoryId: target.repositoryId,
         baseBranch: target.baseBranch,
-        setupCommand: target.setupCommand,
-        checkCommand: target.checkCommand,
         maintainers: [...target.maintainers],
         development: target.development,
       })),

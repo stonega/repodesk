@@ -28,6 +28,7 @@ const server = Bun.serve({
       question: calls === 2 ? "Should empty results keep page one?" : null,
       title: "Fix pagination",
       body: "Local fixture only.",
+      verificationCommands: calls > 2 ? ["git diff --check"] : [],
     });
     const item = {
       type: "message",

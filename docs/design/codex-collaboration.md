@@ -116,10 +116,12 @@ issue is optional and must be permitted by the task grant; it is not a prerequis
 for investigation. Codex prepares issue/PR content when needed, and application
 services validate and perform the authorized external actions.
 
-Configured repository checks remain application-owned acceptance gates. On a
-confirmed check failure, provide Codex bounded, sanitized diagnostics and permit
-repair/recheck within the attempt budget. Codex cannot remove or weaken the gate
-to mark work successful. Distinguish code failures, environment failures and missing
+Codex discovers and prepares the environment and selects relevant repository
+checks; users never configure setup/check commands. Application services capture
+the bounded verification plan and replay it without model or GitHub credentials,
+with an additional patch-integrity check. On a confirmed failure, provide Codex
+bounded, sanitized diagnostics and permit repair/recheck within the attempt budget.
+Repairs rerun the original plan; Codex cannot weaken it to mark work successful. Distinguish code failures, environment failures and missing
 requirements. Stop on exhausted limits and report the remaining work rather than
 starting another task or increasing the budget automatically.
 

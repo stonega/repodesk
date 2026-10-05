@@ -104,10 +104,10 @@ if(process.argv[2]==='app-server') {
    const question=!intake&&text.includes('Question fixture')&&!answer;
    if(!intake) {
     if(answer&&!text.includes('Followup fixture')&&fs.readFileSync('/task/repo/README.md','utf8')!=='partial\\n')process.exit(6);
-    fs.writeFileSync('/task/repo/README.md',question?'partial\\n':text.includes('Repair fixture')&&!text.includes('Configured checks failed.')?'broken\\n':'fixed\\n');
+    fs.writeFileSync('/task/repo/README.md',question?'partial\\n':text.includes('Repair fixture')&&!text.includes('Verification checks failed.')?'broken\\n':'fixed\\n');
    }
    if(text.includes('Followup fixture'))fs.writeFileSync('/task/repo/extra.txt','updated\\n');
-   const result={status:intake?'intent':question?'needs_input':'completed',intent:'implement',evidenceRevision:1,evidence:'Fixture',publishRequested:true,summary:'Fixture checked.',question:question?'Keep page one for empty results?':null,title:'Smoke fix',body:'Local smoke checks passed.'};
+   const result={status:intake?'intent':question?'needs_input':'completed',intent:'implement',evidenceRevision:1,evidence:'Fixture',publishRequested:true,summary:'Fixture checked.',question:question?'Keep page one for empty results?':null,title:'Smoke fix',body:'Local smoke checks passed.',verificationCommands:intake||question?[]:text.includes('Verification checks failed.')?['true']:text.includes('Exhaust fixture')?['false']:['test -z "$CODEX_TASK_TOKEN" && test -z "$GITHUB_TOKEN" && test "$(cat README.md)" = fixed']};
    send({id:r.id,result:{turn:{id:'smoke-turn'}}});send({method:'turn/started',params:{threadId:'smoke-thread',turn:{id:'smoke-turn'}}});
    send({method:'thread/tokenUsage/updated',params:{threadId:'smoke-thread',turnId:'smoke-turn',tokenUsage:{total:{totalTokens:20},last:{totalTokens:20}}}});
    send({method:'item/completed',params:{threadId:'smoke-thread',turnId:'smoke-turn',item:{type:'agentMessage',phase:'final_answer',text:JSON.stringify(result)}}});
@@ -117,6 +117,7 @@ if(process.argv[2]==='app-server') {
  });return;
 }
 fs.writeFileSync('/task/repo/README.md','fixed\\n');
+fs.writeFileSync('/task/verification.json',JSON.stringify([JSON.parse(fs.readFileSync('/input/job.json','utf8')).payload.body==='Fail verification fixture'?'false':'test -z "$CODEX_TASK_TOKEN" && test -z "$GITHUB_TOKEN" && test "$(cat README.md)" = fixed']));
 console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
 `,
   );
@@ -207,7 +208,6 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
       title: "Smoke",
       body: "Change old to fixed",
       backend: "podman",
-      checkCommand: 'test "$(cat README.md)" = fixed',
     },
     issue: { number: 1, url: "https://github.com/example/smoke/issues/1" },
     readToken: "fake-read-token",
@@ -235,7 +235,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   await request("/tasks", {
     ...input,
     taskId: failedTaskId,
-    payload: { ...input.payload, checkCommand: "false" },
+    payload: { ...input.payload, body: "Fail verification fixture" },
   });
   for (let attempt = 0; ; attempt++) {
     const status = (await request(`/tasks/${workspaceId}/${failedTaskId}`)) as {
@@ -406,11 +406,12 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     ...input,
     taskId: developmentIds[3],
     issue: undefined,
-    payload: { ...input.payload, checkCommand: "false" },
     development: {
       ...development,
       taskId: randomUUID(),
-      inputs: [{ ...development.inputs[0], text: "Repair fixture" }],
+      inputs: [
+        { ...development.inputs[0], text: "Repair fixture Exhaust fixture" },
+      ],
       maxRepairAttempts: 1,
     },
   });

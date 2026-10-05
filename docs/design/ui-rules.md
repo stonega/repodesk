@@ -65,6 +65,19 @@ them.
   fix its UI issues, and requested Telegram usernames in the user list.
 - **Exceptions:** When no username is known, show the numeric Telegram ID alone.
 
+### Codex owns environment preparation and verification
+
+- **Preference:** Do not expose setup or check command configuration in either
+  Add or Edit coding repository. Codex discovers and prepares the repository's
+  environment and chooses relevant verification from project instructions.
+- **Scope:** Coding repository forms and the local execution workflow, desktop
+  and mobile. Remove obsolete saved command overrides rather than hiding them.
+- **Source:** 2026-10-05 — user requested removing the command fields, then
+  clarified that these commands should require no configuration at all. This
+  supersedes the interpretation that command configuration moves to Edit.
+- **Exceptions:** Application services still enforce isolated verification,
+  publication permissions and task budgets; failed verification blocks publication.
+
 ### Plugin detail back links use SVG icons
 
 - **Preference:** Pair the Plugins back label with an SVG back icon.

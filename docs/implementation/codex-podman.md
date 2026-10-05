@@ -111,26 +111,28 @@ or GitHub App private key is mounted into coding containers. The supervisor HTTP
 2. For local publication, grant the App **Contents: read and write**, **Issues:
    read and write**, and **Pull requests: read and write**, then approve the
    installation's permission update. No Actions permission is needed.
-3. Under **Plugins → Codex → Repositories**, add the repository's base branch,
-   maintainers, optional setup command and required check command. For this repo,
-   use `bun install --frozen-lockfile` and
-   `bun run check && bun run typecheck && bun test && bun run build`.
+3. Under **Plugins → Codex → Repositories**, add the repository's base branch
+   and maintainers. Codex discovers environment preparation and relevant tests
+   automatically from repository instructions; no command configuration is needed.
 4. Open **Configuration → Edit** to save the workspace provider key or complete
-   device-code sign-in, then enable Codex. Older GitHub Actions configurations require local check commands
-   for every repository before enabling coding tasks.
+   device-code sign-in, then enable Codex.
 
-Commands are trusted operator configuration, limited to 2,000 characters each;
-the model cannot choose them. They execute inside the task checkout. Saving
-commands or provider credentials changes the configuration revision and invalidates
-pending approvals. Coding tasks do not require a repository Actions workflow.
+Repository identity, maintainers and budgets are operator configuration. Codex
+chooses a bounded verification plan (one to eight commands, at most 2000 characters
+each), including required preparation for credential-free replay. The runner freezes
+that plan for repairs and runs it in the check container without model/GitHub
+credentials. Patch integrity is always checked too. A missing/invalid plan or failed
+verification prevents publication. Old command overrides are discarded; migration
+013 removes them from persisted repository settings and invalidates old grants.
 
 ## Lifecycle and recovery
 
 Each approved task gets a tenant-scoped name, private work volume, checkout and
 Codex thread. The supervisor permits one active task at a time; additional
 approved tasks wait. An initial preparation container receives only a
-repository-scoped read token and pins the base commit. A separate implementation
-containers run setup, Codex and the configured checks separately without any GitHub token.
+repository-scoped read token and pins the base commit. The implementation
+container lets Codex prepare the environment and implement without a GitHub token.
+A separate container replays the captured verification plan without model or GitHub credentials.
 The workspace survives container exit in the task volume. Custom provider Codex
 sessions survive there too; device-code auth and sessions in the temporary auth
 volume are removed after implementation.

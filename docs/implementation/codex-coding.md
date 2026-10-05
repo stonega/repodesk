@@ -34,7 +34,11 @@ Send **stop**, **停止**, or `/cancel` in the bound conversation to stop the ta
 `/status` in that conversation reports its state and confirmed PR. The admin task
 list supports cancellation in both modes.
 
-Configured checks run without model or GitHub credentials. Failed checks return
+Codex discovers environment preparation and relevant checks from AGENTS.md,
+project manifests, scripts and CI. No setup/check commands are configured in the
+panel. Its bounded verification plan is captured by the runner and replayed
+without model or GitHub credentials; patch integrity is also checked. The first
+plan stays fixed during automatic repair. Failed checks return
 bounded private diagnostics to Codex for automatic repair within the same cycle's
 limits. New requirements received before publication reservation block the older
 patch until they are consumed and checked. Inputs arriving after reservation
@@ -70,9 +74,10 @@ it enables no new execution policy by itself. See [delivery evidence and rollout
 2. Connect the workspace GitHub App and select each target repository. For local
    publication, grant **Contents: read and write**, **Issues: read and write** and
    **Pull requests: read and write** to the App installation.
-3. Under **Plugins → Codex implementation**, add a base branch, active Telegram
-   maintainer IDs, an optional setup command and a required check command for
-   every repository. Choose **Custom provider API key** or **ChatGPT device code**
+3. Under **Plugins → Codex implementation**, add each repository with a base
+   branch and active Telegram maintainer IDs. Codex handles environment preparation
+   and verification automatically; neither Add nor Edit asks for commands.
+   Choose **Custom provider API key** or **ChatGPT device code**
    in the panel. The custom provider endpoint and model are deployment settings;
    its key is saved per workspace (with an optional deployment fallback). Device
    code sign-in shows a link and one-time code in the panel and is available only
@@ -92,7 +97,7 @@ usage through a custom provider is billed separately from Pi chat usage.
 The operator API is `GET|PUT /api/admin/workspaces/:id/plugins/coding`.
 PUT accepts `{ revision, settings: { enabled, backend: "podman", authMode:
 "provider_key" | "device_code", repositories:
-[{ repositoryId, baseBranch, maintainers, setupCommand?, checkCommand }] },
+[{ repositoryId, baseBranch, maintainers, development? }] },
 providerApiKey? }`. Omit `providerApiKey` to retain it; send `null` to remove
 the saved key. Responses return only `providerApiKeyConfigured` and device
 connection status, never credentials. Device sign-in uses `POST
@@ -113,7 +118,7 @@ Before reserving issue creation, the worker checks GitHub's current repository
 visibility to block device-code tasks if a selected repository has become public.
 It checks again before starting Codex.
 The worker creates the issue after a durable reservation. The supervisor uses
-separate preparation, setup, implementation, check and publication containers. Only the
+separate preparation, environment initialization, implementation, verification and publication containers. Only the
 preparation container gets a repository read token; Codex and checks run without a
 GitHub token. Publication gets a fresh scoped write token after the worker
 rechecks actor, repository, configuration and deployment authority. It rejects
@@ -132,8 +137,7 @@ best-effort during publication, since a push or PR may already exist. Workspace
 deletion removes local records and the sealed device credential, and does not undo GitHub writes.
 
 Older GitHub Actions configurations cannot propose or dispatch new tasks. The panel
-shows a migration notice until the operator adds local check commands and saves
-the settings. Queued and issue-created Actions tasks become **cancelled**; tasks
+shows a migration notice until the operator saves the local runner settings. Queued and issue-created Actions tasks become **cancelled**; tasks
 that may already have started remotely become **unknown**. Their recorded links
 remain visible, but the worker no longer polls or cancels Actions runs. Inspect
 and, if necessary, stop an already-running workflow in GitHub before starting
@@ -143,3 +147,9 @@ No provider key, installation token, raw GitHub response or generated code is
 stored in routine task records or logs. The pilot retains up to 10 active and 200
 recorded coding tasks per workspace. See [runner isolation, limits and
 recovery](codex-podman.md).
+
+Migration `013_automatic_coding_checks.sql` removes old repository command settings
+and increments affected coding revisions, invalidating old grants. Older client
+command fields are discarded on save; they cannot override automatic verification.
+Historical approval evidence stays immutable. Drain/cancel active attempts before
+upgrading app, supervisor and job images together.

@@ -32,9 +32,7 @@ Content-Type: application/json
         "maxRepairAttempts": 2,
         "activeSeconds": 2700,
         "maxTokens": 200000
-      },
-      "setupCommand": "bun install --frozen-lockfile",
-      "checkCommand": "bun run check && bun run typecheck && bun test && bun run build"
+      }
     }]
   }
 }

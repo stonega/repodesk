@@ -73,6 +73,7 @@ const url = process.env.TEST_DATABASE_URL;
     question: null,
     title: "Fix pagination",
     body: "Fixed pagination and verified checks.",
+    verificationCommands: ["bun test"],
     ...patch,
   });
   async function fixture(text = original, chatId = "101") {
@@ -95,7 +96,6 @@ const url = process.env.TEST_DATABASE_URL;
           {
             repositoryId: 7001,
             baseBranch: "develop",
-            checkCommand: "bun test",
             maintainers: ["101", "202"],
             development: developmentPolicy.parse({ executionMode: "direct" }),
           },

@@ -44,7 +44,6 @@ export function codingDestination(
     "coding_maintainer_required",
     403,
   );
-  requireThat(target.checkCommand?.trim(), "coding_check_required", 409);
   const repo = w.github?.repositories.find((r) => r.id === input.repositoryId);
   requireThat(
     repo && w.github?.installationId,
@@ -66,8 +65,6 @@ export function codingDestination(
     baseBranch: target.baseBranch,
     backend: "podman",
     authMode: w.coding.settings.authMode ?? "provider_key",
-    setupCommand: target.setupCommand,
-    checkCommand: target.checkCommand,
   });
 }
 export function checkCodingPayload(

@@ -34,7 +34,6 @@ export function codingFixture() {
         {
           repositoryId: 7001,
           baseBranch: "develop",
-          checkCommand: "bun test",
           maintainers: ["101"],
         },
       ],
@@ -64,31 +63,43 @@ test("legacy Actions settings cannot authorize a new coding task", () => {
     "coding_local_configuration_required",
   );
 });
-test("legacy settings are shown for migration and save only with local checks", () => {
+test("legacy settings discard operator commands and allow autonomous execution", () => {
   const { w } = codingFixture();
   const admin = { id: w.operatorId, operator: true, username: "operator" };
   const legacy = present(w.coding).settings;
   (legacy as { backend: string }).backend = "github-actions";
-  const target = present(legacy.repositories[0]) as {
-    workflowFile?: string;
-    checkCommand?: string;
-  };
-  target.workflowFile = "repodesk-codex.yml";
-  delete target.checkCommand;
+  Object.assign(present(legacy.repositories[0]), {
+    workflowFile: "repodesk-codex.yml",
+    setupCommand: "exit 91",
+    checkCommand: "exit 92",
+  });
   const page = codingView(w, admin);
   expect(page.legacyActionsConfiguration).toBe(true);
-  expect(page.settings.backend).toBe("podman");
-  expect(page.settings.repositories[0]).not.toHaveProperty("workflowFile");
-  expect(() =>
-    saveCoding(w, admin, { revision: page.revision, settings: page.settings }),
-  ).toThrow();
-  present(page.settings.repositories[0]).checkCommand = "bun test";
+  expect(page.settings.repositories[0]).not.toHaveProperty("setupCommand");
+  expect(page.settings.repositories[0]).not.toHaveProperty("checkCommand");
   const saved = saveCoding(w, admin, {
     revision: page.revision,
     settings: page.settings,
   });
+  expect(saved.settings.enabled).toBe(true);
   expect(saved.legacyActionsConfiguration).toBe(false);
-  expect(saved.settings.backend).toBe("podman");
+  expect(codingDestination(w, "101", input)).not.toHaveProperty("checkCommand");
+});
+test("repository saves discard obsolete command overrides from older clients", () => {
+  const { w } = codingFixture();
+  const settings = structuredClone(present(w.coding).settings);
+  Object.assign(present(settings.repositories[0]), {
+    setupCommand: "exit 91",
+    checkCommand: "exit 92",
+  });
+  const saved = saveCoding(
+    w,
+    { id: w.operatorId, operator: true, username: "operator" },
+    { revision: 1, settings },
+  );
+  expect(saved.settings.repositories[0]).not.toHaveProperty("setupCommand");
+  expect(saved.settings.repositories[0]).not.toHaveProperty("checkCommand");
+  expect(codingDestination(w, "101", input)).not.toHaveProperty("checkCommand");
 });
 test("only a repository maintainer can propose; workspace admin is not an implicit grant", () => {
   const { w } = codingFixture();

@@ -36,12 +36,13 @@ function message(error: unknown) {
       "The Codex runner could not be reached. Recheck connection after it is available.",
     coding_outcome_unknown:
       "The sign-in response could not be confirmed. Recheck connection before trying again.",
-    invalid_request:
-      "Check the branch, repository commands and maintainer selections.",
+    invalid_request: "Check the branch and maintainer selections.",
   };
   return messages[code] ?? code;
 }
 const taskFailures: Record<string, string> = {
+  coding_verification_invalid:
+    "Codex did not provide runnable verification checks.",
   coding_budget_exhausted:
     "Task limits reached. Review its result before starting another task.",
   coding_token_limit: "Codex reached the task's token limit.",
@@ -56,12 +57,11 @@ const taskFailures: Record<string, string> = {
 
   coding_legacy_backend_disabled:
     "GitHub Actions execution was removed. Inspect any existing workflow on GitHub.",
-  coding_setup_failed: "Repository setup command failed.",
+  coding_setup_failed: "Repository environment preparation failed.",
   coding_codex_failed: "Codex stopped before completing the implementation.",
-  coding_check_failed: "The configured repository check command failed.",
+  coding_check_failed: "The repository verification checks failed.",
   coding_patch_empty: "Codex produced no changes to publish.",
-  coding_execution_failed:
-    "Implementation or repository checks failed. Review the configured check command.",
+  coding_execution_failed: "Implementation or repository verification failed.",
 };
 export function Coding({
   request,
@@ -290,9 +290,8 @@ export function Coding({
             </dl>
             {data.legacyActionsConfiguration && (
               <p className="notice" role="status">
-                This workspace still has a GitHub Actions configuration. Coding
-                tasks are paused until every repository has local check commands
-                saved.
+                This workspace still has a GitHub Actions configuration. Save
+                the repository configuration to use the local runner.
               </p>
             )}
           </section>
@@ -897,36 +896,6 @@ function RepositoryEditor({
         />
         <small id="coding-base-branch-help">
           Use an existing branch. Task branches and pull requests start here.
-        </small>
-      </div>
-      <div className="field">
-        <label htmlFor="coding-setup-command">
-          Local setup command (optional)
-        </label>
-        <textarea
-          id="coding-setup-command"
-          rows={2}
-          maxLength={2000}
-          value={draft.setupCommand ?? ""}
-          placeholder="e.g. bun install --frozen-lockfile"
-          onChange={(e) => setDraft({ ...draft, setupCommand: e.target.value })}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor="coding-check-command">Local check command</label>
-        <textarea
-          id="coding-check-command"
-          aria-describedby="coding-check-command-help"
-          rows={2}
-          required
-          maxLength={2000}
-          value={draft.checkCommand ?? ""}
-          placeholder="e.g. bun run check && bun test"
-          onChange={(e) => setDraft({ ...draft, checkCommand: e.target.value })}
-        />
-        <small id="coding-check-command-help">
-          Runs in the isolated checkout and must pass before publication. Node,
-          Bun, Git and Bash are available.
         </small>
       </div>
       <fieldset className="plugin-workspaces">

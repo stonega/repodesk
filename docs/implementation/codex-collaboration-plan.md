@@ -6,6 +6,13 @@ Current baseline: [coding tasks](codex-coding.md) and [Podman runner](codex-podm
 
 ## Delivered implementation and validation
 
+Updated 2026-10-05: the user removed setup/check configuration entirely. Codex
+prepares the environment and returns a bounded repository verification plan. The
+runner freezes that plan during repair and replays it without model/GitHub credentials,
+with an additional patch-integrity check. Migration 013 removes obsolete command
+settings and invalidates affected old grants. Earlier local evidence below predates
+this automatic-verification revision; see the implementation log for its checks.
+
 The original delivery sequence below remains the acceptance contract. The selected
 transport is a private Codex app-server JSONL client in the existing container,
 using CLI 0.155.1. Questions are validated completed-turn envelopes, and inputs
@@ -97,7 +104,7 @@ The end-to-end acceptance journey is:
    waiting does not hold a Telegram request lease or require a container forever.
 3. The maintainer supplies another requirement during work. Codex receives it in
    order and verifies the resulting revision before publication.
-4. A configured check fails; Codex receives diagnostics and repairs it within limits.
+4. A Codex-selected check fails; Codex receives diagnostics and repairs it within limits.
 5. The application publishes one draft PR and reports verification and limitations.
 6. The maintainer requests another change after completion. The application obtains
    current branch/PR state and Codex updates that PR, preserving others' changes.
@@ -287,7 +294,7 @@ out-of-order arrivals, waiting-slot release and cancellation while waiting/worki
 - Return bounded, sanitized check outcomes to Codex. Separate failed assertions,
   setup/environment failure, missing requirements and executor interruption.
 - Reserve a repair attempt before dispatch, recheck authority and limits, then
-  let Codex select the repair. Run the operator-configured gate again afterward.
+  let Codex select the repair. Rerun the initially captured verification plan afterward.
   Start with at most two automatic repair attempts per execution cycle, configurable
   within task limits; never let an agent weaken the gate or reset its budget.
 - Reacquire task-scoped model credentials for each repair through the existing

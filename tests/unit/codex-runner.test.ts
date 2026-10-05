@@ -40,13 +40,15 @@ async function fixture() {
     async readText(_container, path) {
       return path.endsWith("base-sha")
         ? "a".repeat(40)
-        : path.endsWith("thread-id")
-          ? "thread-123"
-          : path.endsWith("failure-code")
-            ? "coding_check_failed"
-            : JSON.stringify({
-                prUrl: "https://github.com/example/repo/pull/43",
-              });
+        : path.endsWith("verification.json")
+          ? JSON.stringify(["bun test"])
+          : path.endsWith("thread-id")
+            ? "thread-123"
+            : path.endsWith("failure-code")
+              ? "coding_check_failed"
+              : JSON.stringify({
+                  prUrl: "https://github.com/example/repo/pull/43",
+                });
     },
     async command(args, env) {
       calls.push({ args, env });
@@ -82,7 +84,6 @@ async function fixture() {
       body: "Fix the bug",
       backend: "podman",
       authMode: "provider_key",
-      checkCommand: "bun test",
     },
     issue: { number: 42, url: "https://github.com/example/repo/issues/42" },
     readToken: "read-only-github-token",
@@ -496,7 +497,8 @@ test("continuous questions checkpoint and release the runner; tenant-scoped answ
             summary: "Fixed pagination",
             question: question ? "Keep page one for empty results?" : null,
             title: "Fix pagination",
-            body: "Configured checks passed.",
+            body: "Repository checks passed.",
+            verificationCommands: ["bun test"],
           },
         })
       : originalRead(container, path, max);
@@ -553,7 +555,7 @@ test("continuous questions checkpoint and release the runner; tenant-scoped answ
   expect(record).not.toContain("Keep page one");
 });
 
-test("failed configured checks trigger bounded repairs with sealed credentials and cumulative usage", async () => {
+test("failed automatic checks trigger bounded repairs with sealed credentials and cumulative usage", async () => {
   const f = await fixture();
   const input = {
     ...f.input,
@@ -595,7 +597,8 @@ test("failed configured checks trigger bounded repairs with sealed credentials a
             summary: "Fixed pagination",
             question: null,
             title: "Fix pagination",
-            body: "Configured checks passed.",
+            body: "Repository checks passed.",
+            verificationCommands: checks ? ["true"] : ["bun test"],
           },
         })
       : originalRead(container, path, max);
@@ -633,6 +636,14 @@ test("failed configured checks trigger bounded repairs with sealed credentials a
     true,
   );
   expect(JSON.stringify(repairedInputs)).not.toContain(input.providerApiKey);
+  const checkInputs = repairedInputs.filter((j) => j.verificationCommands);
+  expect(checkInputs.length).toBeGreaterThanOrEqual(2);
+  expect(
+    checkInputs.every(
+      (j) => JSON.stringify(j.verificationCommands) === '["bun test"]',
+    ),
+  ).toBe(true);
+  expect(ready.result?.verificationCommands).toEqual(["bun test"]);
 });
 
 test("device continuous result is captured before deleting its credentialed container", async () => {
@@ -702,4 +713,65 @@ test("device continuous result is captured before deleting its credentialed cont
   expect(status.state).toBe("succeeded");
   expect(status.result?.question).toBe("Keep page one?");
   expect(removed).toBe(true);
+});
+
+test("completed work without a valid verification plan cannot become ready", async () => {
+  for (const commands of [undefined, []]) {
+    const f = await fixture();
+    f.input.issue = undefined;
+    f.input.development = {
+      taskId: randomUUID(),
+      revision: 1,
+      mode: "work",
+      context: "",
+      maxRepairAttempts: 1,
+      activeSeconds: 2700,
+      maxTokens: 1000,
+      inputs: [
+        {
+          revision: 1,
+          actor: "101",
+          sourceId: "101:10",
+          text: "Fix bug",
+          kind: "request",
+        },
+      ],
+    };
+    const read = f.engine.readText;
+    f.engine.readText = async (container, path, max) =>
+      path.endsWith("conversation.json")
+        ? JSON.stringify({
+            tokens: 10,
+            threadId: "thread-123",
+            result: {
+              status: "completed",
+              intent: "implement",
+              evidenceRevision: 1,
+              evidence: "Fix bug",
+              publishRequested: true,
+              summary: "Fixed",
+              question: null,
+              title: "Fix bug",
+              body: "",
+              verificationCommands: commands,
+            },
+          })
+        : read(container, path, max);
+    await f.supervisor.start(f.input);
+    for (let i = 0; i < 3; i++)
+      await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+    const status = await f.supervisor.status(
+      f.input.workspaceId,
+      f.input.taskId,
+    );
+    expect(status.state).toBe("failed");
+    expect(status.error).toBe("coding_result_invalid");
+    expect(status.checkPassed).not.toBe(true);
+    expect(
+      f.calls.some(
+        (c) =>
+          c.args[0] === "create" && c.args.some((a) => a.endsWith("-check")),
+      ),
+    ).toBe(false);
+  }
 });

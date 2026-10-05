@@ -8,6 +8,22 @@ accepted by a pilot team. Each entry states its own test scope and remaining gat
 
 ## Implemented
 
+### Automatic Codex environment preparation and checks (2026-10-05)
+
+Removed setup/check command configuration from both repository forms and the
+execution contract. Codex prepares the environment and selects a bounded
+verification plan from repository instructions. The runner captures the plan,
+replays it without model/GitHub credentials and checks patch integrity. Repairs
+retain the original commands; missing plans and failed checks block publication.
+Migration 013 removes stored overrides and invalidates affected old grants.
+Older client command fields are discarded rather than becoming hidden overrides.
+
+Local validation before publication: Biome, TypeScript, build, 354 Bun tests,
+23 browser tests, pinned CLI protocol, image builds, Node runtime contract,
+Compose and real Podman smoke with fake external services passed. Live model
+selection quality and the Telegram/GitHub pilot remain separate release gates.
+The user requested proceeding to release without additional verification.
+
 ### Continuous Codex collaboration (2026-10-05)
 
 Implemented the [accepted plan](codex-collaboration-plan.md) locally. Pi relays

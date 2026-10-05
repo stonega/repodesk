@@ -60,7 +60,6 @@ test("synced read access permits issue proposals but does not confer coding acce
           repositoryId: 7001,
           baseBranch: "main",
           maintainers: ["202"],
-          checkCommand: "bun test",
         },
       ],
     },

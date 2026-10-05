@@ -1440,7 +1440,21 @@ test.describe
       await codingDialog
         .getByLabel("Development / base branch")
         .fill("develop");
-      await codingDialog.getByLabel("Local check command").fill("bun test");
+      await expect(
+        codingDialog.getByLabel("Local setup command (optional)"),
+      ).toHaveCount(0);
+      await expect(codingDialog.getByLabel("Local check command")).toHaveCount(
+        0,
+      );
+      await codingDialog.screenshot({
+        path: "test-results/coding-add-desktop.png",
+      });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
+      await codingDialog.screenshot({
+        path: "test-results/coding-add-mobile.png",
+      });
+      await page.setViewportSize({ width: 1280, height: 720 });
       await codingDialog
         .getByRole("button", { name: "Save coding repository" })
         .click();
@@ -1488,6 +1502,10 @@ test.describe
       const codingEdit = page.getByRole("dialog", {
         name: "Edit coding repository",
       });
+      await expect(
+        codingEdit.getByLabel("Local setup command (optional)"),
+      ).toHaveCount(0);
+      await expect(codingEdit.getByLabel("Local check command")).toHaveCount(0);
       await expect(codingEdit.getByLabel("Execution policy")).toHaveValue(
         "direct",
       );

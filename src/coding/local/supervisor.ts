@@ -17,7 +17,7 @@ import {
   fingerprint,
   hash,
 } from "../../setup/credentials.ts";
-import { developmentResult } from "../development.ts";
+import { developmentResult, verificationCommands } from "../development.ts";
 import { DeviceAuth } from "./device-auth.ts";
 import { type ContainerEngine, containerArgs } from "./podman.ts";
 import {
@@ -33,6 +33,7 @@ interface Record extends LocalStatus {
   input: Omit<LocalStart, "readToken" | "providerApiKey">;
   providerApiKey?: string; // Encrypted task credential; never copied into job input.
   phase: "prepare" | "setup" | "implement" | "check" | "publish";
+  verificationCommands?: string[];
   proxyToken: string;
   createdAt: number;
   finishedAt?: number;
@@ -217,6 +218,7 @@ export class RunnerSupervisor implements LocalRunner {
               }
             : {}),
           baseSha: r.baseSha,
+          verificationCommands: r.verificationCommands,
           config: codexConfig(this.settings, r.input.payload.authMode),
         }),
         { mode: 0o644 },
@@ -252,9 +254,7 @@ export class RunnerSupervisor implements LocalRunner {
     return this.serial(async () => {
       const { readToken, providerApiKey, ...safe } = localStart.parse(input);
       requireThat(
-        safe.payload.backend === "podman" &&
-          safe.payload.checkCommand &&
-          (safe.issue || safe.development),
+        safe.payload.backend === "podman" && (safe.issue || safe.development),
         "coding_job_invalid",
       );
       const key = taskKey(safe.workspaceId, safe.taskId);
@@ -474,6 +474,25 @@ export class RunnerSupervisor implements LocalRunner {
               64000,
             )
           : undefined;
+        if (!r.input.development && !r.verificationCommands) {
+          try {
+            r.verificationCommands = verificationCommands.parse(
+              JSON.parse(
+                await this.engine.readText(
+                  `${r.key}-implement`,
+                  "/task/verification.json",
+                  20000,
+                ),
+              ),
+            );
+          } catch {
+            r.state = "failed";
+            r.error = "coding_verification_invalid";
+            await this.removeAuthVolume(r);
+            await this.save(r);
+            return;
+          }
+        }
         await this.removeAuthVolume(r);
         if (r.input.development) {
           let value: unknown;
@@ -524,6 +543,11 @@ export class RunnerSupervisor implements LocalRunner {
             "coding_result_invalid",
             409,
           );
+          // Repairs rerun the initial plan; subsequent model output cannot weaken it.
+          r.verificationCommands ??= verificationCommands.parse(
+            turn.result.verificationCommands,
+          );
+          r.result.verificationCommands = r.verificationCommands;
         }
         r.phase = "check";
         await this.save(r);
@@ -667,6 +691,7 @@ export class RunnerSupervisor implements LocalRunner {
       r.cleaned = true;
       r.proxyToken = "";
       r.result = undefined;
+      r.verificationCommands = undefined;
       r.threadId = undefined;
       r.input.development = undefined;
       r.input.issue = undefined;
@@ -777,6 +802,7 @@ export class RunnerSupervisor implements LocalRunner {
           r.input.payload.body = "[expired]";
           r.input.payload.title = "[expired]";
           delete r.result;
+          delete r.verificationCommands;
           if (r.input.development) {
             r.input.development.inputs = [];
             r.input.development.context = "";

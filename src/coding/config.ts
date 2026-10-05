@@ -23,19 +23,28 @@ export const branchName = z
         ),
     "Enter a branch name such as develop or release/next",
   );
-export const codingRepositorySchema = z
-  .object({
-    repositoryId: z.number().int().positive(),
-    baseBranch: branchName,
-    setupCommand: z.string().trim().max(2000).optional(),
-    checkCommand: z.string().trim().max(2000).optional(),
-    development: developmentPolicy.optional(),
-    maintainers: z
-      .array(z.string().regex(/^[1-9]\d{0,15}$/))
-      .min(1)
-      .max(100),
-  })
-  .strict();
+// Discard obsolete command settings when loading old records or saving older clients.
+function withoutCommands(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const clean = { ...value } as Record<string, unknown>;
+  delete clean.setupCommand;
+  delete clean.checkCommand;
+  return clean;
+}
+export const codingRepositorySchema = z.preprocess(
+  withoutCommands,
+  z
+    .object({
+      repositoryId: z.number().int().positive(),
+      baseBranch: branchName,
+      development: developmentPolicy.optional(),
+      maintainers: z
+        .array(z.string().regex(/^[1-9]\d{0,15}$/))
+        .min(1)
+        .max(100),
+    })
+    .strict(),
+);
 export const codingSettingsSchema = z
   .object({
     enabled: z.boolean(),
@@ -49,10 +58,6 @@ export const codingSettingsSchema = z
       new Set(s.repositories.map((r) => r.repositoryId)).size ===
       s.repositories.length,
     "Select each repository only once",
-  )
-  .refine(
-    (s) => !s.enabled || s.repositories.every((r) => r.checkCommand?.trim()),
-    "Local repositories require a check command",
   );
 export const codingSaveSchema = z
   .object({
@@ -80,17 +85,18 @@ export const codingInput = z
     body: z.string().trim().min(1).max(2500),
   })
   .strict();
-export const codingPayload = codingInput.extend({
-  repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
-  installationId: z.number().int().positive(),
-  githubRevision: z.number().int().nonnegative(),
-  configRevision: z.number().int().positive(),
-  baseBranch: branchName,
-  backend: z.literal("podman"),
-  authMode: z.enum(["provider_key", "device_code"]).default("provider_key"),
-  setupCommand: codingRepositorySchema.shape.setupCommand,
-  checkCommand: codingRepositorySchema.shape.checkCommand,
-});
+export const codingPayload = z.preprocess(
+  withoutCommands,
+  codingInput.extend({
+    repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
+    installationId: z.number().int().positive(),
+    githubRevision: z.number().int().nonnegative(),
+    configRevision: z.number().int().positive(),
+    baseBranch: branchName,
+    backend: z.literal("podman"),
+    authMode: z.enum(["provider_key", "device_code"]).default("provider_key"),
+  }),
+);
 export type CodingPayload = z.infer<typeof codingPayload>;
 export type CodingState =
   | "queued"
