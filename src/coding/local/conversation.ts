@@ -57,7 +57,11 @@ export async function runConversation(options: {
   const decoder = new StringDecoder("utf8");
   const pending = new Map<
     number,
-    { resolve: (v: unknown) => void; reject: (e: Error) => void }
+    {
+      method: string;
+      resolve: (v: unknown) => void;
+      reject: (e: Error) => void;
+    }
   >();
   let complete!: () => void, fail!: (e: Error) => void;
   const completion = new Promise<void>((resolve, reject) => {
@@ -84,7 +88,7 @@ export async function runConversation(options: {
         return;
       }
       const id = ++sequence;
-      pending.set(id, { resolve, reject });
+      pending.set(id, { method, resolve, reject });
       write({ id, method, params });
     });
   child.stdin.on("error", () => stop(failure()));
@@ -108,6 +112,12 @@ export async function runConversation(options: {
         if (typeof message.id === "number" && pending.has(message.id)) {
           const p = pending.get(message.id);
           if (!p) continue;
+          // Bind the turn before draining notifications in this same stdout chunk.
+          // Resolving the promise alone defers the awaiting caller until after them.
+          if (!message.error && p.method === "turn/start")
+            turnId = z
+              .object({ turn: z.object({ id: z.string() }) })
+              .parse(message.result).turn.id;
           pending.delete(message.id);
           if (message.error)
             p.reject(

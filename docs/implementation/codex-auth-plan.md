@@ -19,6 +19,11 @@ and supervisor image builds, Compose validation and the real rootless Podman
 smoke covering auth expiry, supervisor restart, re-login, preserved checkout and
 duplicate resume. Local fake services use no paid model requests or GitHub writes.
 
+The protocol fixture also sends the turn-start reply, usage and completion in one
+stdout chunk. The client binds the turn ID before processing those notifications,
+so authentication failures retain reported usage and enforce the token limit
+regardless of how the operating system batches output.
+
 ## Plan
 
 1. Keep workspace credentials encrypted in the persistent supervisor state. Let

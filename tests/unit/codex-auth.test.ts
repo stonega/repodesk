@@ -45,13 +45,20 @@ test("failed auth turns retain safe usage; transient auth events allow Codex ref
       script,
       `
 const rl = require('node:readline').createInterface({ input: process.stdin });
-const send = (v) => process.stdout.write(JSON.stringify(v)+'\\n');
+let batch;
+const send = (v) => {
+  const line = JSON.stringify(v)+'\\n';
+  if (batch) batch.push(line);
+  else process.stdout.write(line);
+};
 rl.on('line', (line) => {
   const m = JSON.parse(line);
   if (m.id == null) return;
   if (m.method === 'initialize') send({id:m.id,result:{}});
   if (m.method === 'thread/start') send({id:m.id,result:{thread:{id:'auth-thread'}}});
   if (m.method === 'turn/start') {
+    // One stdout write deterministically exercises replies and notifications in the same chunk.
+    batch = [];
     send({id:m.id,result:{turn:{id:'auth-turn'}}});
     if (process.env.NO_USAGE !== 'yes') send({method:'thread/tokenUsage/updated',params:{threadId:'auth-thread',turnId:'auth-turn',tokenUsage:{last:{totalTokens:7},total:{totalTokens:7}}}});
     if (process.env.PARTIAL === 'yes') send({method:'item/started',params:{threadId:'auth-thread',item:{type:'commandExecution'}}});
@@ -60,6 +67,8 @@ rl.on('line', (line) => {
       send({method:'item/completed',params:{threadId:'auth-thread',item:{type:'agentMessage',text:JSON.stringify({status:'analysis',intent:'analyze',evidenceRevision:1,evidence:'Explain',publishRequested:false,summary:'Explained',question:null,title:'Explain',body:''})}}});
       send({method:'turn/completed',params:{threadId:'auth-thread',turn:{id:'auth-turn',status:'completed'}}});
     } else send({method:'turn/completed',params:{threadId:'auth-thread',turn:{id:'auth-turn',status:'failed',error:{codexErrorInfo:'unauthorized'}}}});
+    process.stdout.write(batch.join(''));
+    batch = undefined;
   }
 });
 `,
@@ -77,11 +86,16 @@ rl.on('line', (line) => {
       throw Error("Expected auth error");
     } catch (error) {
       expect(error).toBeInstanceOf(CodexAuthError);
-      expect(error).toMatchObject({
-        code: "coding_device_auth_required",
-        threadId: "auth-thread",
-        tokens: 7,
-      });
+      const auth = error as CodexAuthError;
+      expect(auth.code).toBe("coding_device_auth_required");
+      expect(auth.threadId).toBe("auth-thread");
+      expect(auth.tokens).toBe(7);
+    }
+    try {
+      await runConversation({ ...options, maxTokens: 6 });
+      throw Error("Expected token limit");
+    } catch (error) {
+      expect((error as { code: string }).code).toBe("coding_token_limit");
     }
     for (const partial of ["no", "yes"]) {
       try {
