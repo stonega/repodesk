@@ -147,3 +147,49 @@ release directories, images and backups require an operator retention policy.
 This workflow has local deterministic and container validation; an actual VPS
 release deployment remains unverified until host provisioning, GitHub secrets
 and a successful release run are complete.
+
+## Custom domain from the panel
+
+Sign in as a deployment administrator and open **Deployment → Site domain**.
+Use **Add custom domain** (or **Edit domain**) and enter a hostname such as
+`admin.example.com`, without `https://`, a port or a path. This setting overrides
+`PUBLIC_ORIGIN` for generated callback URLs and adds the new HTTPS origin to
+allowed admin requests immediately, across the app and worker. No restart or
+`.env` edit is needed. Keep the original configured address routed for recovery.
+
+Prepare DNS and HTTPS before switching:
+
+1. At your DNS provider, add an A record pointing the hostname to the VPS public
+   IPv4 address. Add AAAA only if your server and proxy also serve IPv6.
+2. Configure your existing HTTPS proxy to serve this hostname and forward to the
+   app's loopback port. For host-installed Caddy with the default `APP_PORT=3000`,
+   the site block is:
+
+   ```caddy
+   admin.example.com {
+       reverse_proxy 127.0.0.1:3000
+   }
+   ```
+
+   Adjust the upstream port if `APP_PORT` differs. A containerized proxy needs a
+   reachable container upstream instead of host loopback. Caddy can obtain and
+   renew HTTPS certificates when DNS points to the server and ports 80 and 443
+   reach it. See the [official Caddy guide](https://caddyserver.com/docs/quick-starts/reverse-proxy).
+3. Save the domain in the panel, open its HTTPS address and sign in there. The
+   panel stores the hostname; it does not verify DNS or HTTPS availability or
+   modify infrastructure. The original site remains an allowed recovery origin.
+4. For existing GitHub Apps, copy the Homepage URL, Callback URL and Setup URL
+   shown in **Site domain** into GitHub App settings. Pending connections are
+   cancelled by domain changes and must be started again. New App manifests use
+   the saved address automatically.
+5. In webhook mode, use **Register Telegram webhook** only after HTTPS is ready.
+   Domain changes clear the saved webhook-ready status but leave the existing
+   remote webhook until you explicitly register the new address. Polling mode
+   requires no webhook changes.
+
+To remove a custom domain, open **Edit domain → Use default address**. This restores
+`PUBLIC_ORIGIN`, revokes the removed origin for admin writes, and requires the same
+callback/webhook updates. Saving uses an independent revision; a stale editor
+must reload current settings before retrying. Domain changes and their operator
+are recorded atomically in the deployment audit. The setting persists in the
+existing deployment JSON record, so no database migration is needed.

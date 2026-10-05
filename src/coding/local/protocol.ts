@@ -1,15 +1,19 @@
 import { z } from "zod";
 import { codingPayload } from "../config.ts";
+import { developmentResult, developmentRun } from "../development.ts";
 
 export const localStart = z
   .object({
     workspaceId: z.uuid(),
     taskId: z.uuid(),
     payload: codingPayload,
-    issue: z.object({
-      number: z.number().int().positive(),
-      url: z.string().url(),
-    }),
+    issue: z
+      .object({
+        number: z.number().int().positive(),
+        url: z.string().url(),
+      })
+      .optional(),
+    development: developmentRun.optional(),
     providerApiKey: z.string().trim().min(1).max(8192).optional(),
     readToken: z.string().min(1).max(8192),
   })
@@ -27,6 +31,20 @@ export const localStatus = z.object({
     "unknown",
   ]),
   threadId: z.string().max(100).optional(),
+  phase: z
+    .enum(["prepare", "setup", "implement", "check", "publish"])
+    .optional(),
+  result: developmentResult.optional(),
+  tokens: z.number().int().nonnegative().optional(),
+  baseSha: z
+    .string()
+    .regex(/^[0-9a-f]{40}$/)
+    .optional(),
+  publishedSha: z
+    .string()
+    .regex(/^[0-9a-f]{40}$/)
+    .optional(),
+  checkPassed: z.boolean().optional(),
   prUrl: z.string().url().optional(),
   error: z
     .string()
@@ -49,6 +67,7 @@ export interface LocalDeviceAuth {
   deviceLogout(workspaceId: string): Promise<DeviceAuthStatus>;
 }
 export interface LocalRunner {
+  erase?(workspaceId: string, taskId: string): Promise<void>;
   start(input: LocalStart): Promise<void>;
   status(workspaceId: string, taskId: string): Promise<LocalStatus>;
   publish(workspaceId: string, taskId: string, token: string): Promise<void>;

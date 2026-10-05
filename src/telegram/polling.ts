@@ -24,6 +24,8 @@ export function pollingErrorCode(error: unknown) {
       : "polling_receive_failed";
 }
 
+import type { GitHubUsers } from "../github/users.ts";
+
 export class TelegramPoller {
   private id = randomUUID();
   private ingress: Ingress;
@@ -31,8 +33,9 @@ export class TelegramPoller {
   constructor(
     private store: Store,
     private setup: SetupService,
+    githubUsers?: GitHubUsers,
   ) {
-    this.ingress = new Ingress(store, setup);
+    this.ingress = new Ingress(store, setup, githubUsers);
   }
 
   async pollOnce(signal: AbortSignal): Promise<void> {

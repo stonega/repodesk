@@ -1,4 +1,5 @@
 import { ZodError } from "zod";
+import { routeDevelopment, selectDevelopment } from "../coding/telegram.ts";
 import { type Sql, transaction } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import {
@@ -8,6 +9,7 @@ import {
   timezone,
   type Workspace,
 } from "../domain.ts";
+import type { GitHubUsers } from "../github/users.ts";
 import { requestDeletion } from "../privacy/service.ts";
 import { hash, token } from "../setup/credentials.ts";
 import type { SetupService } from "../setup/service.ts";
@@ -34,10 +36,12 @@ import {
 import { closeGroupAttention, followupCandidate } from "./followup.ts";
 import { stopGeneration } from "./generation.ts";
 import { command, type Update } from "./router.ts";
+
 export class Ingress {
   constructor(
     private store: Store,
     private setup: SetupService,
+    private githubUsers?: GitHubUsers,
   ) {}
   async accept(update: Update) {
     const d = await this.store.deployment();
@@ -172,12 +176,21 @@ export class Ingress {
           verifiedAdmin,
         );
         if (!handled && d.active && !d.paused)
-          await this.handleMessage(workspace, update, d);
+          await this.handleMessage(sql, workspace, update, d);
       } catch (error) {
         if (!(error instanceof Fault) && !(error instanceof ZodError))
           throw error;
-        const actor = msg?.from && String(msg.from.id);
-        if (actor && msg.chat.type === "private" && eligible(workspace, actor))
+        const actor = msg?.from
+          ? String(msg.from.id)
+          : update.callback_query?.data?.startsWith("github_")
+            ? String(update.callback_query.from.id)
+            : undefined;
+        if (
+          actor &&
+          requestChat?.type === "private" &&
+          String(requestChat.id) === actor &&
+          eligible(workspace, actor)
+        )
           deliver(
             workspace,
             actor,
@@ -371,6 +384,7 @@ export class Ingress {
     d: Deployment,
     verifiedAdmin: boolean,
   ) {
+    if (d.bot && (await selectDevelopment(sql, w, u, d.bot.id))) return true;
     const msg = u.message;
     const cmd = msg && d.bot ? command(msg, d.bot) : undefined;
     const actor = msg?.from && String(msg.from.id);
@@ -419,6 +433,65 @@ export class Ingress {
         actor,
         actor,
         `Identity verified for ${w.settings.name}. Sign in again to the panel. Timezone: ${w.settings.timezone}. Confirm with /timezone ${w.settings.timezone}.`,
+      );
+      return true;
+    }
+    if (cmd?.name === "github" && actor && msg) {
+      authorize(w, actor);
+      requireThat(
+        !msg.from?.is_bot &&
+          !msg.sender_chat &&
+          msg.chat.type === "private" &&
+          String(msg.chat.id) === actor,
+        "use_private_chat",
+        403,
+      );
+      requireThat(this.githubUsers && d.bot, "github_app_not_configured", 409);
+      let text: string;
+      if (cmd.args === "disconnect") {
+        await this.githubUsers.disconnect(sql, w, actor);
+        text =
+          "GitHub account disconnected. Send /github connect to authorize again.";
+      } else if (cmd.args === "sync") {
+        const access = await this.githubUsers.sync(sql, w, actor);
+        text =
+          access.status === "connected"
+            ? `GitHub permissions synced for ${access.repositories.length} selected repositories.`
+            : "GitHub permissions could not be synced. Repository access is blocked. Send /github connect to authorize again.";
+      } else if (!cmd.args || cmd.args === "connect") {
+        const url = await this.githubUsers.begin(sql, w, actor, d.bot.id);
+        text = `Connect your GitHub account within 10 minutes:\n${url}\nThen return here to confirm your account.`;
+      } else text = "Use /github connect, /github sync or /github disconnect.";
+      deliver(w, actor, actor, text, { id: `event:${u.update_id}:github` });
+      return true;
+    }
+    const githubCallback = u.callback_query;
+    if (githubCallback?.data?.startsWith("github_")) {
+      const [action, key] = githubCallback.data.split(":");
+      const sender = String(githubCallback.from.id);
+      requireThat(
+        this.githubUsers &&
+          d.bot &&
+          !githubCallback.from.is_bot &&
+          !githubCallback.message?.sender_chat &&
+          githubCallback.message?.chat.type === "private" &&
+          String(githubCallback.message.chat.id) === sender,
+        "access_denied",
+        403,
+      );
+      requireThat(
+        key &&
+          /^[A-Za-z0-9_-]{43}$/.test(key) &&
+          ["github_confirm", "github_reject"].includes(action ?? ""),
+        "invalid_request",
+      );
+      await this.githubUsers.confirm(
+        sql,
+        w,
+        sender,
+        d.bot.id,
+        Buffer.from(key, "base64url").toString("hex"),
+        action === "github_confirm",
       );
       return true;
     }
@@ -533,7 +606,12 @@ export class Ingress {
     }
     return false;
   }
-  private async handleMessage(w: Workspace, u: Update, d: Deployment) {
+  private async handleMessage(
+    sql: Sql,
+    w: Workspace,
+    u: Update,
+    d: Deployment,
+  ) {
     const msg = u.message ?? u.edited_message;
     if (!msg || msg.from?.is_bot || msg.sender_chat || !msg.from || !d.bot)
       return;
@@ -543,6 +621,7 @@ export class Ingress {
     let cmd = command(msg, d.bot);
     const chat = w.chats.find((c) => c.id === chatId && c.active);
     if (msg.chat.type !== "private" && !chat) return;
+    if (await routeDevelopment(sql, w, u, d.bot.id, msg, cmd)) return;
     const sourceId = `${msg.chat.type === "private" ? `${d.bot.id}:` : ""}${chatId}:${msg.message_id}`;
     if (u.edited_message) {
       const previous = w.messages.find(
@@ -600,7 +679,7 @@ export class Ingress {
       case "start":
       case "help":
         reply(
-          `RepoDesk · ${w.settings.name}\nTimezone: ${w.settings.timezone}\n/ask <request>, /recap, /status, /cancel <run>, /automations, /memory, /usage, /privacy\nAdmins: /linktoken, /capture on|off, /timezone <IANA>, /remember <instruction>\nIn groups, mention me or reply to start; clear follow-ups within five minutes can continue without mentioning me when Telegram delivers ordinary messages. In private Topics, just send messages to continue the topic's conversation. Use Telegram Topics to separate conversations. Outside Topics, reply to an answer or your own message to continue it; standalone messages start new conversations. Context contains only received retained messages. Access is managed in the admin panel. /workspace <id> selects a workspace.`,
+          `RepoDesk · ${w.settings.name}\nTimezone: ${w.settings.timezone}\n/ask <request>, /recap, /status, /cancel <run>, /automations, /memory, /usage, /privacy\nGitHub: /github connect, /github sync, /github disconnect (private chat)\nAdmins: /linktoken, /capture on|off, /timezone <IANA>, /remember <instruction>\nIn groups, mention me or reply to start; clear follow-ups within five minutes can continue without mentioning me when Telegram delivers ordinary messages. In private Topics, just send messages to continue the topic's conversation. Use Telegram Topics to separate conversations. Outside Topics, reply to an answer or your own message to continue it; standalone messages start new conversations. For configured Codex repositories, ask for a change in your own words. Reply to the task's message or continue its Topic to answer questions and add requirements; /status checks the bound task and /cancel or stop cancels it. Direct execution follows the repository's saved policy. Context contains only received retained messages. Access is managed in the admin panel. /workspace <id> selects a workspace.`,
         );
         break;
       case "workspace":

@@ -6,11 +6,63 @@ authorization, task state, issue creation and publication. Setup and determinist
 tests do not start a coding task, connect an account or send a message. A live
 end-to-end GitHub/Codex staging run remains a release gate.
 
-The [continuous collaboration design](../design/codex-collaboration.md) records the
-accepted next direction: Pi requirements intake, Codex-led decisions, direct task
-authorization and ongoing task/PR conversations. Those capabilities are not yet
-implemented; the approval and one-shot execution instructions below describe
-current behavior.
+The [continuous collaboration design](../design/codex-collaboration.md) is now
+implemented behind per-repository **Direct** execution policy. Existing settings
+remain **Reviewed** when the new policy is omitted. The reviewed issue-to-PR
+workflow below is preserved; direct tasks use original received messages and do
+not require creating an issue.
+
+## Continuous collaboration
+
+In the repository editor, select **Direct** to allow a current maintainer's clear
+instruction to authorize a bounded task. Set whether verified implementations
+publish a draft PR by default, execution cycles (default 8), repairs per cycle
+(default 2), active seconds (default 2700) and token allowance (default 200000).
+Pi selects the requested repository and relays source IDs. Codex investigates,
+interprets the original instruction, decides the solution and handles checks.
+Analysis-only requests receive investigation answers and cannot publish changes.
+Implementation needs a source-grounded Codex intent result; uncertain intent waits
+for a product clarification. Semantic intent quality remains a live pilot gate.
+
+Task-bound messages reach Codex at the next completed turn boundary. Reply to its
+question or task update, or continue the same private/linked-group Topic. A Topic
+with several tasks offers a selection; private conversations and unaddressed group
+messages are never imported across audiences. Outside Topics, reply to the task's
+confirmed message. Edits append new inputs. A necessary Codex question checkpoints
+partial work and releases the runner slot; answers preserve their original text.
+Send **stop**, **停止**, or `/cancel` in the bound conversation to stop the task.
+`/status` in that conversation reports its state and confirmed PR. The admin task
+list supports cancellation in both modes.
+
+Configured checks run without model or GitHub credentials. Failed checks return
+bounded private diagnostics to Codex for automatic repair within the same cycle's
+limits. New requirements received before publication reservation block the older
+patch until they are consumed and checked. Inputs arriving after reservation
+become the next cycle. Unknown usage retains the whole token reservation; this
+allowance is not an exact provider-dollar ceiling. Waiting does not consume active
+execution time; retention still applies.
+
+A follow-up fetches the existing PR and current branch head, then updates that
+branch using non-force publication from a fresh container. Closed/merged PRs are
+not recreated. A remote-head change detected before any write returns to current
+code and checks. Ambiguous publication is never replayed; a read-only GitHub lookup
+can confirm exactly the recorded commit/branch/PR. Otherwise the task stops with
+an unknown outcome for inspection. Existing confirmed links remain available.
+
+Threads can resume within a surviving work volume (including automatic repair).
+New isolated cycles reconstruct from original inputs, question/answer decisions,
+prior outcomes and current code if the session is unavailable. Device credentials
+are sealed separately and reacquired for each implementation. Expired checkpoints
+are rebuilt from retained requirements; they are never described as surviving
+patches. Permission/configuration changes, bot changes and removed source context
+stop execution. Source expiry and soft deletion scrub relational private content
+immediately and retry idempotent container/volume erasure until confirmed.
+
+GET additionally returns `developmentTasks`; repository settings accept optional
+`development: { executionMode, publishByDefault, maxAttempts, maxRepairAttempts,
+activeSeconds, maxTokens }`. The existing cancellation route handles continuous
+task IDs. The migration creates tenant-scoped task/input/grant/attempt/event tables;
+it enables no new execution policy by itself. See [delivery evidence and rollout](codex-collaboration-plan.md).
 
 ## Set up
 
@@ -25,7 +77,8 @@ current behavior.
    its key is saved per workspace (with an optional deployment fallback). Device
    code sign-in shows a link and one-time code in the panel and is available only
    for trusted private repositories. Enable the extension after signing in.
-4. Review the requested issue and branch in Telegram before approving a task.
+4. Keep **Reviewed** for actor-bound issue/branch approval, or explicitly select
+   **Direct** per repository after validating the dedicated live pilot journey.
 
 The repository editor shows a saved Telegram username when available, alongside
 the numeric user ID. Maintainer grants remain bound to numeric IDs.

@@ -7,6 +7,7 @@ import type { PluginService } from "../agent/plugin-service.ts";
 import { modelCapabilities } from "../agent/runtime.ts";
 import type { LocalDeviceAuth } from "../coding/local/protocol.ts";
 import { codingView, saveCoding } from "../coding/service.ts";
+import { taskGet, taskList, taskSave } from "../coding/task-store.ts";
 import { type Sql, transaction } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import {
@@ -45,6 +46,7 @@ import {
 } from "../workspaces/policy.ts";
 import { cancelRun, createRun, visibleRuns } from "../workspaces/service.ts";
 import { claim, login, operator, session, throttle } from "./auth.ts";
+import { deploymentOrigin, SiteService } from "./site.ts";
 
 type Env = { Variables: { session: Session } };
 const sessionCookie = "repodesk_session";
@@ -90,10 +92,17 @@ export function adminRoutes(
   deviceAuth?: LocalDeviceAuth,
 ) {
   const app = new Hono<Env>();
+  const site = new SiteService(store, origin);
   app.use("/api/*", async (c, next) => {
     c.header("Cache-Control", "no-store");
-    if (!["GET", "HEAD"].includes(c.req.method))
-      requireThat(c.req.header("origin") === origin, "origin_denied", 403);
+    if (!["GET", "HEAD"].includes(c.req.method)) {
+      const configured = deploymentOrigin(await store.deployment(), origin);
+      requireThat(
+        [origin, configured].includes(c.req.header("origin") ?? ""),
+        "origin_denied",
+        403,
+      );
+    }
     if (
       c.req.path === "/api/setup/status" ||
       c.req.path === "/api/setup/claim" ||
@@ -111,13 +120,13 @@ export function adminRoutes(
       );
     await next();
   });
-  const cookieOptions = {
+  const cookieOptions = (c: Context<Env>) => ({
     httpOnly: true,
-    secure: origin.startsWith("https:"),
+    secure: (c.req.header("origin") ?? origin).startsWith("https:"),
     sameSite: "Lax" as const,
     path: "/",
     maxAge: 8 * 3600,
-  };
+  });
   app.get("/api/setup/status", async (c) => {
     const row = (
       await store.pool.query("SELECT claimed FROM deployment WHERE id=true")
@@ -128,17 +137,26 @@ export function adminRoutes(
     await throttle(store.pool, "claim");
     const input = authInput.strict().parse(await c.req.json());
     const result = await claim(store.pool, input.username, input.password);
-    setCookie(c, sessionCookie, result.raw, cookieOptions);
+    setCookie(c, sessionCookie, result.raw, cookieOptions(c));
     return c.json({ csrf: result.csrf });
   });
   app.post("/api/admin/auth/login", async (c) => {
     const input = authInput.strict().parse(await c.req.json());
     await throttle(store.pool, `login:${input.username}`);
     const result = await login(store.pool, input.username, input.password);
-    setCookie(c, sessionCookie, result.raw, cookieOptions);
+    setCookie(c, sessionCookie, result.raw, cookieOptions(c));
     return c.json({ csrf: result.csrf });
   });
   app.get("/api/admin/auth/session", (c) => c.json(c.get("session")));
+  app.get("/api/admin/operator/site", async (c) =>
+    c.json(await site.view(c.get("session").admin, setup.telegramTransport)),
+  );
+  app.put("/api/admin/operator/site", async (c) => {
+    await site.save(c.get("session").admin, await c.req.json());
+    return c.json(
+      await site.view(c.get("session").admin, setup.telegramTransport),
+    );
+  });
   app.post("/api/admin/auth/logout", async (c) => {
     await store.pool.query("DELETE FROM sessions WHERE token_hash=$1", [
       hash(sessionCookieValue(c) ?? ""),
@@ -294,7 +312,7 @@ export function adminRoutes(
       await c.req.json(),
     );
     setCookie(c, sessionCookie, raw, {
-      ...cookieOptions,
+      ...cookieOptions(c),
       maxAge: Math.max(
         0,
         Math.floor(
@@ -357,7 +375,7 @@ export function adminRoutes(
     );
     // Refresh existing Strict cookies for the top-level OAuth return. All ordinary writes still require Origin and CSRF.
     setCookie(c, sessionCookie, raw, {
-      ...cookieOptions,
+      ...cookieOptions(c),
       maxAge: Math.max(
         0,
         Math.floor(
@@ -406,6 +424,7 @@ export function adminRoutes(
   app.get("/api/admin/workspaces/:id/plugins/coding", async (c) => {
     const id = validId(c.req.param("id"));
     const page = codingView(await store.read(id), c.get("session").admin);
+    page.developmentTasks = await taskList(store.pool, id);
     if (deviceAuth)
       try {
         page.deviceAuth = await deviceAuth.deviceStatus(id);
@@ -421,6 +440,7 @@ export function adminRoutes(
     const page = await store.change(id, (w) =>
       saveCoding(w, c.get("session").admin, input, encryptionKey),
     );
+    page.developmentTasks = await taskList(store.pool, id);
     if (deviceAuth)
       try {
         page.deviceAuth = await deviceAuth.deviceStatus(id);
@@ -473,12 +493,29 @@ export function adminRoutes(
   );
   app.post("/api/admin/workspaces/:id/plugins/coding/:task/cancel", async (c) =>
     c.json(
-      await store.change(validId(c.req.param("id")), (w) => {
+      await store.change(validId(c.req.param("id")), async (w, sql) => {
         codingView(w, c.get("session").admin);
         const task = w.codingTasks?.find(
           (t) => t.id === validId(c.req.param("task")),
         );
-        requireThat(task, "not_found", 404);
+        if (!task) {
+          const continuous = await taskGet(
+            sql,
+            w.id,
+            validId(c.req.param("task")),
+          );
+          continuous.cancelRequested = true;
+          if (["queued", "waiting", "review"].includes(continuous.state))
+            continuous.state = "cancelled";
+          await taskSave(sql, continuous);
+          audit(
+            w,
+            c.get("session").admin.id,
+            "coding.cancel_requested",
+            continuous.id,
+          );
+          return { ok: true };
+        }
         task.cancelRequested = true;
         audit(w, c.get("session").admin.id, "coding.cancel_requested", task.id);
         return { ok: true };

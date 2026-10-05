@@ -13,6 +13,7 @@ import {
   codingTerminal,
   emptyCoding,
 } from "./config.ts";
+import { DevelopmentExecutor } from "./executor.ts";
 import type { LocalDeviceAuth, LocalRunner } from "./local/protocol.ts";
 import { checkCodingTask, notifyCoding } from "./policy.ts";
 
@@ -37,6 +38,7 @@ export function codingView(w: Workspace, admin: Admin): CodingPage {
         setupCommand: target.setupCommand,
         checkCommand: target.checkCommand,
         maintainers: [...target.maintainers],
+        development: target.development,
       })),
     },
     repositories: w.github?.installationId ? w.github.repositories : [],
@@ -114,6 +116,12 @@ export class CodingService {
     return true;
   }
   async tick(workspaceId: string) {
+    await new DevelopmentExecutor(
+      this.store,
+      this.apps,
+      this.local,
+      this.encryptionKey,
+    ).tick(workspaceId);
     const w = await this.store.read(workspaceId);
     for (const task of w.codingTasks ?? []) {
       if (

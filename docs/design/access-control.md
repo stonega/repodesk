@@ -204,3 +204,17 @@ Apply migration `009_access_requests.sql` before running the updated app/worker.
 
 Telegram controls follow the [Bot API inline keyboard and callback contract](https://core.telegram.org/bots/api#inlinekeyboardbutton):
 callback data is under 64 bytes and button presses are acknowledged with `answerCallbackQuery`.
+
+## GitHub identity and repository permission sync (2026-10-05)
+
+Eligible members can link GitHub through `/github connect` in private Telegram chat,
+then confirm the returned account in Telegram. Stable GitHub numeric IDs and repository
+permission snapshots are stored per workspace member and shown in Members & access.
+The OAuth browser callback alone grants nothing. Repository grants are the intersection
+of GitHub user access and the operator-selected installation repositories; RepoDesk
+membership, whitelist, administrator roles, coding-maintainer grants and write approvals
+remain separate application boundaries. Existing unlinked users retain the manually
+configured policy; linked users must satisfy the synchronized upstream boundary,
+including after disconnect. Snapshots expire after ten minutes and refresh about every
+five minutes or via `/github sync`. Failed syncs deny linked repository access and
+permission loss invalidates pending work. See [implementation and rollout limits](../implementation/github-app.md#connect-a-verified-telegram-members-github-account).

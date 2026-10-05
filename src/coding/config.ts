@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { DevelopmentTask } from "./development.ts";
+import { developmentPolicy } from "./development-policy.ts";
 
 // Git branch names, not arbitrary refs, command arguments, or filesystem paths.
 export const branchName = z
@@ -27,6 +29,7 @@ export const codingRepositorySchema = z
     baseBranch: branchName,
     setupCommand: z.string().trim().max(2000).optional(),
     checkCommand: z.string().trim().max(2000).optional(),
+    development: developmentPolicy.optional(),
     maintainers: z
       .array(z.string().regex(/^[1-9]\d{0,15}$/))
       .min(1)
@@ -134,6 +137,7 @@ export interface CodingPage {
   repositories: { id: number; full_name: string; private?: boolean }[];
   members: { id: string; active: boolean; username?: string }[];
   tasks: CodingTask[];
+  developmentTasks?: DevelopmentTask[];
 }
 export const codingTerminal = (state: CodingState) =>
   ["succeeded", "failed", "unknown", "cancelled"].includes(state);

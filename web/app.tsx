@@ -65,6 +65,7 @@ import { prefixFields, RecordForm } from "./record-form.tsx";
 import { workspaceFields } from "./settings-fields.ts";
 import { Usage } from "./usage.tsx";
 import "./style.css";
+import { SiteDomain } from "./site-domain.tsx";
 
 let csrf = "";
 class ApiError extends Error {
@@ -2021,9 +2022,10 @@ function MembersPage({ id }: { id: string }) {
             active: false,
             name: undefined,
             username: undefined,
+            github: undefined,
           })),
       ].filter((m) =>
-        `${m.id} ${m.username ?? ""} ${m.name ?? ""}`
+        `${m.id} ${m.username ?? ""} ${m.name ?? ""} ${m.github?.login ?? ""}`
           .toLowerCase()
           .includes(search.trim().replace(/^@/, "").toLowerCase()),
       )
@@ -2093,6 +2095,7 @@ function MembersPage({ id }: { id: string }) {
                 <th>Role</th>
                 <th>Membership</th>
                 <th>Whitelist</th>
+                <th>GitHub</th>
                 <th>Access</th>
                 <th>Actions</th>
               </tr>
@@ -2126,6 +2129,33 @@ function MembersPage({ id }: { id: string }) {
                           : "Removed"}
                     </td>
                     <td>{allowed ? "Listed" : "Not listed"}</td>
+                    <td className="github-access">
+                      {m.github ? (
+                        <>
+                          <strong>{m.github.login}</strong>
+                          <div className="muted">
+                            {m.github.status} · Synced{" "}
+                            {new Date(m.github.syncedAt).toLocaleString()}
+                          </div>
+                          {m.github.repositories.map((r) => (
+                            <div key={r.id}>
+                              {r.full_name} ·{" "}
+                              {r.permissions?.admin
+                                ? "Admin"
+                                : r.permissions?.maintain
+                                  ? "Maintain"
+                                  : r.permissions?.push
+                                    ? "Write"
+                                    : r.permissions?.triage
+                                      ? "Triage"
+                                      : "Read"}
+                            </div>
+                          ))}
+                        </>
+                      ) : (
+                        <span className="muted">Not linked</span>
+                      )}
+                    </td>
                     <td>
                       <span
                         className={`pill ${access === "Allowed" ? "good" : ""}`}
@@ -3852,6 +3882,7 @@ function Shell() {
                 <>
                   <p className="nav-label">DEPLOYMENT</p>
                   <NavLink to="/admin/model">Model settings</NavLink>
+                  <NavLink to="/admin/site">Site domain</NavLink>
                   <NavLink to="/setup">Setup</NavLink>
                   <NavLink to="/admin/operations">Operations</NavLink>
                   <NavLink to="/admin/logs">Runtime logs</NavLink>
@@ -3941,6 +3972,23 @@ function Shell() {
               }
             />
             <Route path="/admin/operations" element={<Operations />} />
+            <Route
+              path="/admin/site"
+              element={
+                current.admin.operator ? (
+                  <Page
+                    title="Site domain"
+                    description="Set the public address for this admin panel and its connected services."
+                  >
+                    <SiteDomain request={api} />
+                  </Page>
+                ) : (
+                  <Page title="Operator access required">
+                    <p>Site domains can be managed by deployment operators.</p>
+                  </Page>
+                )
+              }
+            />
             <Route
               path="/admin/plugins"
               element={

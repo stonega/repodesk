@@ -1,3 +1,5 @@
+import { taskGet } from "../coding/task-store.ts";
+import { checkDevelopment } from "../coding/tasks.ts";
 import type { Store } from "../db/repositories.ts";
 import { type Delivery, requireThat } from "../domain.ts";
 import type { SetupService } from "../setup/service.ts";
@@ -12,13 +14,29 @@ export class DeliveryWorker {
   async send(workspaceId: string, id: string) {
     const deployment = await this.store.deployment();
     if (deployment.paused) return;
-    const intent = await this.store.change(workspaceId, (w) => {
+    const intent = await this.store.change(workspaceId, async (w, sql) => {
       const d = w.deliveries.find((d) => d.id === id);
       if (!d || !["pending", "sending"].includes(d.state)) return;
       if (d.state === "sending") {
         if (Date.parse(d.startedAt ?? "") + 30000 < Date.now())
           d.state = "delivery_unknown";
         return;
+      }
+      if (
+        d.id.startsWith("development:") &&
+        /^development:[0-9a-f-]{36}:/.test(d.id)
+      ) {
+        try {
+          const task = await taskGet(
+            sql,
+            workspaceId,
+            d.id.split(":")[1] ?? "",
+          );
+          checkDevelopment(w, task, d.actor, d.id.includes(":cancel:"));
+        } catch {
+          d.state = "cancelled";
+          return;
+        }
       }
       const run = d.runId ? w.runs.find((r) => r.id === d.runId) : undefined;
       if (
@@ -53,6 +71,22 @@ export class DeliveryWorker {
         "delivery_revoked",
         403,
       );
+      if (
+        intent.id.startsWith("development:") &&
+        /^development:[0-9a-f-]{36}:/.test(intent.id)
+      ) {
+        const task = await taskGet(
+          this.store.pool,
+          workspaceId,
+          intent.id.split(":")[1] ?? "",
+        );
+        checkDevelopment(
+          current,
+          task,
+          intent.actor,
+          intent.id.includes(":cancel:"),
+        );
+      }
       const sent = await (await this.setup.client()).call<{
         message_id: number;
       }>(intent.format === "rich" ? "sendRichMessage" : "sendMessage", {

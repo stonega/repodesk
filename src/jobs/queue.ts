@@ -2,10 +2,12 @@ import { randomUUID } from "node:crypto";
 import { PgBoss } from "pg-boss";
 import type { AgentRunner, RunnerProvider } from "../agent/runtime.ts";
 import type { CodingService } from "../coding/service.ts";
+import { pruneDevelopment } from "../coding/tasks.ts";
 import { DEFAULT_RUN_TIMEOUT_SECONDS } from "../config.ts";
 import { transaction } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import type { GitHubIssues } from "../github/issues.ts";
+import type { GitHubUsers } from "../github/users.ts";
 import { pruneRuntimeLogs, RuntimeLogger } from "../observability/logs.ts";
 import { sweep } from "../privacy/service.ts";
 import type { SetupService } from "../setup/service.ts";
@@ -15,6 +17,7 @@ import { deliverAccessHelp } from "./control.ts";
 import { DeliveryWorker } from "./delivery.ts";
 import { Executor } from "./execute.ts";
 import { recoverJobs } from "./recovery.ts";
+
 export interface JobData {
   workspaceId: string;
   targetId: string;
@@ -66,6 +69,7 @@ export async function startWorker(
   runTimeoutSeconds = DEFAULT_RUN_TIMEOUT_SECONDS,
   githubIssues?: GitHubIssues,
   coding?: CodingService,
+  githubUsers?: GitHubUsers,
 ) {
   const boss = queue(url, store.log);
   await boss.start();
@@ -111,7 +115,16 @@ export async function startWorker(
       for (const workspaceId of await store.ids()) {
         await store.change(workspaceId, async (w, sql) => {
           sweep(w);
+          await pruneDevelopment(sql, w);
           if (w.deletion) {
+            await sql.query(
+              "DELETE FROM github_user_flows WHERE workspace_id=$1",
+              [w.id],
+            );
+            await sql.query(
+              "DELETE FROM github_user_accounts WHERE workspace_id=$1",
+              [w.id],
+            );
             await sql.query(
               "DELETE FROM github_app_flows WHERE workspace_id=$1",
               [w.id],
@@ -195,7 +208,7 @@ export async function startWorker(
   await maintain();
   const polling =
     setup.telegramTransport === "polling"
-      ? new TelegramPoller(store, setup).run(shutdown.signal)
+      ? new TelegramPoller(store, setup, githubUsers).run(shutdown.signal)
       : Promise.resolve();
   // Observe unexpected infrastructure failures immediately; normal poll failures retry in the loop.
   void polling.catch((error) =>
@@ -216,15 +229,28 @@ export async function startWorker(
         codingBusy = undefined;
       });
   };
+  let githubBusy: Promise<void> | undefined;
+  const githubTick = () => {
+    if (!githubUsers || githubBusy || shutdown.signal.aborted) return;
+    githubBusy = githubUsers
+      .syncDue()
+      .catch(() => store.log.write("worker_maintenance_failed"))
+      .finally(() => {
+        githubBusy = undefined;
+      });
+  };
+  githubTick();
+  const githubTimer = setInterval(githubTick, 30000);
   codingTick();
   const codingTimer = setInterval(codingTick, 5000);
   const timer = setInterval(() => void maintain(), 5000);
   return async () => {
     clearInterval(timer);
     clearInterval(codingTimer);
+    clearInterval(githubTimer);
     shutdown.abort();
     await Promise.all([polling, boss.stop({ graceful: true, timeout: 10000 })]);
-    await codingBusy;
+    await Promise.all([codingBusy, githubBusy]);
     while (busy) await new Promise((resolve) => setTimeout(resolve, 25));
     await store.pool.query("DELETE FROM worker_heartbeats WHERE id=$1", [id]);
   };

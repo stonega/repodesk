@@ -8,6 +8,8 @@ import { deliver } from "../workspaces/service.ts";
 import type { GitHubConnection } from "./config.ts";
 import { issueApproval, issueInput } from "./issues.ts";
 
+import { repositoryAccess } from "./user-access.ts";
+
 /** No external writes: the application submits only after a human approves. */
 export function githubExtension(
   store: Store,
@@ -43,8 +45,10 @@ export function githubExtension(
             409,
           );
           const query = args.query.trim().toLowerCase();
-          const matches = connection.repositories.filter((repo) =>
-            repo.full_name.toLowerCase().includes(query),
+          const matches = connection.repositories.filter(
+            (repo) =>
+              repo.full_name.toLowerCase().includes(query) &&
+              repositoryAccess(current, input.actor, repo.id),
           );
           return {
             content: [

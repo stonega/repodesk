@@ -25,6 +25,8 @@ export class LocalRunnerClient implements LocalRunner, LocalDeviceAuth {
         redirect: "error",
         signal: AbortSignal.timeout(90000),
       });
+      if (response.status === 404 && path.startsWith("/tasks/"))
+        throw new Fault("coding_task_not_found", 404);
       if (response.status === 429)
         throw new Fault(
           path.includes("/device-auth/")
@@ -77,6 +79,9 @@ export class LocalRunnerClient implements LocalRunner, LocalDeviceAuth {
   }
   async publish(workspaceId: string, taskId: string, token: string) {
     await this.request(`${this.path(workspaceId, taskId)}/publish`, { token });
+  }
+  async erase(workspaceId: string, taskId: string) {
+    await this.request(`${this.path(workspaceId, taskId)}/erase`, {});
   }
   async cancel(workspaceId: string, taskId: string) {
     await this.request(`${this.path(workspaceId, taskId)}/cancel`, {});

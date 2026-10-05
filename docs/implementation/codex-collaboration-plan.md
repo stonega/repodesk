@@ -1,8 +1,76 @@
 # Continuous Codex collaboration — implementation plan
 
-Date: 2026-10-05. Status: **planned; no implementation slices completed**.
+Date: 2026-10-05. Status: **M0–M5 implemented and locally verified; M6 operator controls implemented, live pilot gate pending**.
 Product authority: [accepted collaboration design](../design/codex-collaboration.md).
 Current baseline: [coding tasks](codex-coding.md) and [Podman runner](codex-podman.md).
+
+## Delivered implementation and validation
+
+The original delivery sequence below remains the acceptance contract. The selected
+transport is a private Codex app-server JSONL client in the existing container,
+using CLI 0.155.1. Questions are validated completed-turn envelopes, and inputs
+queue at confirmed turn boundaries. Native connection-local questions/live steering
+are not used for durable delivery. Waiting frees the single global runner slot.
+
+Migration `011_coding_collaboration.sql` adds tenant-scoped task/input/grant/
+attempt/event records. Direct mode is opt-in per repository; omitted policy retains
+reviewed approvals. Pi's tools resolve original source IDs. Source-bound intent
+interpretations append execution-grant events; model output cannot change repository
+identity, policy, limits or publication credentials. Application services recheck
+all participating maintainers, audience, source retention, configuration and bot
+identity before execution/publication.
+
+Check repair reacquires task credentials within the same isolated work volume and
+reserves each bounded repair before launch. Usage is accumulated by turn ID, excluding
+replayed events from earlier turns. Unknown usage keeps its reservation. A verified
+revision cannot publish while an earlier-arriving input remains unconsumed. Fresh
+publication preserves one branch/PR, checks current state and expected head, uses
+non-force push, and returns to work on confirmed non-fast-forward rejection.
+Ambiguous writes are inspected through GitHub using the exact recorded commit;
+unconfirmed outcomes stop without replay. New isolated cycles rebuild context from
+retained original inputs, question/answer decisions and current code when sessions
+or checkpoints are lost. Source expiry/deletion scrubs private relational content
+and retries runner erasure by attempt identity.
+
+Reproducible local evidence:
+
+- `bun scripts/codex-protocol-proof.ts`: real pinned CLI with a local fake Responses
+  provider, structured question/answer, resume, missing-session reconstruction,
+  token accounting and cancellation. Passed on the host and inside the isolated
+  job image. No host credentials or paid calls.
+- `tests/integration/development.test.ts`: disposable real PostgreSQL tests for
+  atomic input/outbox records, rollback, duplicate updates, edits, tenant/audience
+  boundaries, ordered collaborators, two-worker fencing, intent evidence, questions,
+  pending inputs, revocation during token minting, conservative budgets, same-PR
+  follow-up, closed PR, unknown-publication reconciliation and private-state erasure.
+- `tests/unit/codex-runner.test.ts`: legacy compatibility plus checkpoint/slot release,
+  bounded repair with sealed credentials and cumulative usage.
+- `bun scripts/codex-smoke.ts`: real rootless Podman with fake Codex/GitHub, local Git,
+  provider/device credentials, checkpoint recovery, check repair/exhaustion, fresh
+  and same-PR publication, remote-head fencing, device continuation and erasure.
+  Set `CODEX_SMOKE_PODMAN_SOCKET` when using a temporary rootless service socket.
+- The existing admin browser journey verifies reviewed defaults, explicit direct
+  policy, publication default/limits persistence and desktop/mobile form layout.
+
+Biome, TypeScript, Bun build, all 351 Bun tests, all 19 browser journeys,
+application Node runtime contract, all three image builds and Compose configuration
+passed. The protocol and Podman fixtures use synthetic messages and fake external
+services; their evidence does not establish live-model interpretation quality.
+
+The dedicated live pilot remains pending: authenticated maintainer → question →
+answer → in-flight input → failed check/repair → one draft PR → restart/session loss
+→ follow-up on that PR. Evaluate analysis/execute/ambiguous/quoted-instruction intent
+with the actual configured model. No local fake proves natural-language consent
+quality, device-account billing or live GitHub/Telegram behavior. Pilot enablement,
+account connection and external test messages require their own explicit scope.
+
+Upgrade with the additive migration and rebuilt app/supervisor/job images. Back up
+and restore the new relational tables alongside workspace/outbox state. To roll back
+behavior, disable direct policy/new starts and drain/cancel existing attempts first.
+Changing repository policy invalidates existing pinned tasks. Keep tables and
+confirmed artifacts; do not run a destructive down migration, reinterpret queued
+inputs as legacy approvals, or restart unknown writes. Local validation includes
+migration reruns, application image runtime smoke and Compose validation.
 
 ## Outcome and first release
 

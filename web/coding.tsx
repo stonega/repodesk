@@ -29,6 +29,18 @@ function message(error: unknown) {
   return messages[code] ?? code;
 }
 const taskFailures: Record<string, string> = {
+  coding_budget_exhausted:
+    "Task limits reached. Review its result before starting another task.",
+  coding_token_limit: "Codex reached the task's token limit.",
+  coding_publication_unknown:
+    "Publication could not be confirmed. Inspect GitHub before starting more work.",
+  coding_pr_closed:
+    "The task's PR is closed or merged. It will not be recreated automatically.",
+  coding_source_expired:
+    "A retained source expired or was removed; the task was stopped.",
+  coding_configuration_changed:
+    "Repository configuration changed; the task was stopped.",
+
   coding_legacy_backend_disabled:
     "GitHub Actions execution was removed. Inspect any existing workflow on GitHub.",
   coding_setup_failed: "Repository setup command failed.",
@@ -113,11 +125,28 @@ export function Coding({
       setBusy(false);
     }
   };
-  const activeTasks =
-    data?.tasks.filter(
-      (task) =>
-        !["succeeded", "failed", "unknown", "cancelled"].includes(task.state),
-    ).length ?? 0;
+  const tasks = data
+    ? [
+        ...(data.developmentTasks ?? []).map((t) => ({
+          ...t,
+          runId: "",
+          prUrl: t.pr?.url,
+          issue: undefined,
+          workflowUrl: undefined,
+          continuous: true,
+          questionText: t.question?.text,
+        })),
+        ...data.tasks.map((t) => ({
+          ...t,
+          continuous: false,
+          questionText: undefined,
+        })),
+      ]
+    : [];
+  const activeTasks = tasks.filter(
+    (task) =>
+      !["succeeded", "failed", "unknown", "cancelled"].includes(task.state),
+  ).length;
   const credentialStatus =
     data?.settings.authMode === "device_code"
       ? data.deviceAuth?.state === "connected"
@@ -154,7 +183,8 @@ export function Coding({
               <div>
                 <h2>Configuration</h2>
                 <p className="muted">
-                  Approved coding work runs in a local Podman container.
+                  Repository policy controls coding work in isolated local
+                  containers.
                 </p>
               </div>
               <IconButton
@@ -306,7 +336,7 @@ export function Coding({
                   PRs remain on GitHub.
                 </p>
               </div>
-              {data.tasks.some(
+              {tasks.some(
                 (task) =>
                   !["succeeded", "failed", "unknown", "cancelled"].includes(
                     task.state,
@@ -321,7 +351,7 @@ export function Coding({
                 </button>
               )}
             </div>
-            {!data.tasks.length ? (
+            {!tasks.length ? (
               <p>
                 No tasks yet. Ask the bot in Telegram to implement a feature or
                 fix a bug in a configured repository.
@@ -339,10 +369,16 @@ export function Coding({
                     </tr>
                   </thead>
                   <tbody>
-                    {data.tasks.map((task) => (
+                    {tasks.map((task) => (
                       <tr key={task.id}>
                         <td>
                           {task.payload.title}
+                          <br />
+                          <small>
+                            {task.continuous
+                              ? "Continuous collaboration"
+                              : "Reviewed task"}
+                          </small>
                           <br />
                           <small>
                             {new Date(task.createdAt).toLocaleString()} ·{" "}
@@ -359,20 +395,23 @@ export function Coding({
                         <td>
                           {task.state.replaceAll("_", " ")}
                           {task.cancelRequested && " · stop requested"}
+                          {task.questionText && <p>{task.questionText}</p>}
                           {task.error && (
                             <p>{taskFailures[task.error] ?? task.error}</p>
                           )}
-                          {task.threadId && (
+                          {!task.continuous && task.threadId && (
                             <p>
                               Codex thread <code>{task.threadId}</code>
                             </p>
                           )}
-                          {task.state === "running" && !task.threadId && (
-                            <p className="muted">
-                              Codex is running; its thread ID appears after the
-                              implementation finishes.
-                            </p>
-                          )}
+                          {!task.continuous &&
+                            task.state === "running" &&
+                            !task.threadId && (
+                              <p className="muted">
+                                Codex is running; its thread ID appears after
+                                the implementation finishes.
+                              </p>
+                            )}
                         </td>
                         <td>
                           {task.issue && (
@@ -728,6 +767,14 @@ function RepositoryEditor({
 }) {
   const [draft, setDraft] = useState(initial);
   const [validation, setValidation] = useState("");
+  const policy = draft.development ?? {
+    executionMode: "reviewed",
+    publishByDefault: false,
+    maxAttempts: 8,
+    maxRepairAttempts: 2,
+    activeSeconds: 2700,
+    maxTokens: 200000,
+  };
   return (
     <form
       className="coding-repository-form"
@@ -810,6 +857,81 @@ function RepositoryEditor({
           Bun, Git and Bash are available.
         </small>
       </div>
+      <fieldset className="plugin-workspaces">
+        <legend>Development collaboration</legend>
+        <label className="field" htmlFor="coding-execution-mode">
+          <span>Execution policy</span>
+          <select
+            id="coding-execution-mode"
+            value={policy.executionMode}
+            onChange={(e) =>
+              setDraft({
+                ...draft,
+                development: {
+                  ...policy,
+                  executionMode: e.target.value as "reviewed" | "direct",
+                },
+              })
+            }
+          >
+            <option value="reviewed">
+              Reviewed — approve each new implementation
+            </option>
+            <option value="direct">
+              Direct — maintainer's clear instruction starts Codex
+            </option>
+          </select>
+          <small>
+            Codex makes technical decisions. Analysis requests allow
+            investigation only. Existing tasks stop if their policy changes.
+          </small>
+        </label>
+        <label className="coding-maintainer-row">
+          <input
+            type="checkbox"
+            checked={policy.publishByDefault}
+            onChange={(e) =>
+              setDraft({
+                ...draft,
+                development: { ...policy, publishByDefault: e.target.checked },
+              })
+            }
+          />
+          <span>Publish verified implementations as draft PRs by default</span>
+        </label>
+        {(
+          [
+            ["maxAttempts", "Maximum execution cycles", 1, 20],
+            ["maxRepairAttempts", "Automatic check repairs per cycle", 0, 5],
+            ["activeSeconds", "Active execution time (seconds)", 60, 7200],
+            ["maxTokens", "Codex token limit", 1000, 2000000],
+          ] as const
+        ).map(([key, label, min, max]) => (
+          <label className="field" key={key} htmlFor={`coding-${key}`}>
+            <span>{label}</span>
+            <input
+              id={`coding-${key}`}
+              type="number"
+              required
+              min={min}
+              max={max}
+              step={1}
+              value={policy[key]}
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  development: { ...policy, [key]: Number(e.target.value) },
+                })
+              }
+            />
+          </label>
+        ))}
+        <small>
+          Waiting for an answer releases the runner slot. Unreported model usage
+          keeps its full reservation; device account billing is not a dollar
+          budget.
+        </small>
+      </fieldset>
       <fieldset className="coding-maintainers">
         <legend>Maintainers</legend>
         <div className="coding-maintainer-list">

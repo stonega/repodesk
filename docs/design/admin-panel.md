@@ -183,3 +183,28 @@ eligibility; **Reject request** dismisses the request without granting access. A
 are disabled while saving, conflicts keep the request visible for reload, and successful
 approval refreshes the member list. See [access control](access-control.md#telegram-access-requests-implemented-2026-09-20)
 for tenant routing, retention, authorization and API behavior.
+
+### Custom admin domain (implemented)
+
+Deployment operators can open **Deployment → Site domain** to add, edit or remove
+an HTTPS hostname for the admin panel. The setting applies to all workspaces;
+workspace administrators cannot read or change it. Edits use a dialog with preserved
+error drafts, an independent optimistic revision and atomic operator audit. The
+hostname accepts IDNs, normalizes to ASCII, and rejects URLs, paths, ports, IP
+addresses, wildcards and local hostnames. No additional dependency is required.
+
+`GET/PUT /api/admin/operator/site` returns the effective address and callback URLs;
+PUT takes `{ revision, domain }`, with `domain: null` restoring `PUBLIC_ORIGIN`.
+The saved domain is read from deployment state by both the app and worker. It
+updates allowed mutation origins, secure sign-in cookies, GitHub callback URLs
+and explicit Telegram webhook registration without a process restart. The
+configured `PUBLIC_ORIGIN` remains an allowed recovery address. Removed custom
+origins are rejected. Each hostname has its own host-only login cookie.
+
+Saving does not provision DNS, configure the host proxy, issue certificates or
+perform external writes. The page explains DNS and HTTPS routing, shows a Caddy
+example, and labels availability as unverified. Changing the domain cancels
+pending GitHub flows and marks the webhook as requiring registration. Existing
+GitHub Apps need updated Homepage, Callback and Setup URLs in GitHub. Webhook
+registration is a separate explicit action after HTTPS is ready; polling requires
+no registration. See [VPS deployment](../implementation/vps-deployment.md#custom-domain-from-the-panel).

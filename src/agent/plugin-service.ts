@@ -21,6 +21,7 @@ import {
 import type { GitHubApp } from "../github/app.ts";
 import { githubExtension } from "../github/extension.ts";
 import { GitHubApps } from "../github/registry.ts";
+import { repositoryAccess } from "../github/user-access.ts";
 import { audit } from "../workspaces/policy.ts";
 import { ExtensionCatalog } from "./extensions.ts";
 import {
@@ -292,6 +293,26 @@ export class PluginService {
           workspaceId,
           targets,
           workspace.github?.revision,
+          async (actor) => {
+            const current = await this.store.read(workspaceId);
+            const allowed = targets.filter((target) => {
+              if (!current.members.find((m) => m.id === actor)?.github)
+                return true;
+              const name = new URL(target.repositoryUrl).pathname
+                .slice(1)
+                .replace(/\.git$/, "")
+                .toLowerCase();
+              const repo = current.github?.repositories.find(
+                (r) => r.full_name.toLowerCase() === name,
+              );
+              return !!repo && repositoryAccess(current, actor, repo.id);
+            });
+            requireThat(allowed.length, "github_user_access_denied", 403);
+            return {
+              client: await this.codeClient(current, allowed),
+              targets: allowed,
+            };
+          },
         ),
       );
     }

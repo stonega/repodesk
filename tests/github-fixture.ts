@@ -50,7 +50,7 @@ export function githubTransport(
       return json({ access_token: "ghu_fixture_secret" });
     }
     if (url === "https://api.github.com/user")
-      return json({ login: "fixture-user" });
+      return json({ id: 42, login: "fixture-user" });
     if (url.startsWith("https://api.github.com/user/installations?"))
       return json({
         installations: [

@@ -231,9 +231,33 @@ grant `query_model_cost`; new starter skills include it. See the
 
 ## Codex feature and bug tasks (implemented; repository setup required)
 
-Configured repository maintainers can ask the bot to implement a feature or fix.
-The bot proposes the exact issue and target branch; the requester approves once
-to create the issue, start Codex and open a draft PR. Each task has its own status
-and issue/PR links. Ask for status or to stop a task using its UUID.
-Cancellation during publication is best-effort. Ordinary membership or administrator status
-does not grant coding access. See [Codex setup](../implementation/codex-coding.md).
+Configured repository maintainers can ask Codex to implement or investigate a
+change. In **Reviewed** mode the bot proposes the issue/branch for one approval.
+In operator-enabled **Direct** mode, a clear implementation instruction starts a
+bounded continuous task without that extra click. Pi relays the original request;
+Codex makes technical decisions, runs checks and repairs failures within limits.
+Analysis requests do not authorize implementation or publication.
+
+Reply to a Codex question or task message, or continue its Telegram Topic, to add
+requirements and answer necessary product questions. Multiple tasks in a Topic
+require a task selection. Follow-ups continue the same draft PR. Waiting releases
+the runner slot; pending requirements are retained in order. Send **stop**, **停止**,
+or `/cancel` in the task conversation to cancel; `/status` reports its state and
+confirmed PR. Cancellation during publication is best-effort. Ordinary membership
+or administrator status does not grant coding access. See
+[Codex setup](../implementation/codex-coding.md). Direct mode still requires live
+pilot validation before production enablement.
+
+## Connect your GitHub account (implemented locally)
+
+After your workspace administrator approves your Telegram identity, send
+`/github connect` in a private chat with the bot. Follow the GitHub authorization
+link, return to Telegram, check the GitHub login and press **Connect account**.
+Your administrator can see the linked account and repository permissions under
+Members & access. With multiple workspaces, use `/workspace <id>` first.
+
+Permissions cover only repositories selected for that workspace. GitHub admin
+rights do not make you a RepoDesk administrator. Send `/github sync` to refresh
+permissions or `/github disconnect` to remove the link and repository grants.
+The worker also refreshes permissions about every five minutes. If authorization
+expires or syncing fails, use `/github connect` again.

@@ -226,3 +226,61 @@ existing approval retention and workspace-deletion policy.
 
 See [the example and deterministic verification](../../examples/github-issue.md).
 API reference: [Create an issue](https://docs.github.com/en/rest/issues/issues#create-an-issue).
+
+## Connect a verified Telegram member's GitHub account
+
+Implemented locally, 2026-10-05. Apply `012_github_users.sql` through the normal
+migration command before starting the updated app and worker. No new dependencies
+or webhook subscriptions are required; the existing GitHub App callback URL is reused.
+
+An eligible member (active membership plus the workspace whitelist policy) sends
+`/github connect` in the bot's private chat. The bot supplies a ten-minute GitHub
+App authorization link with PKCE. After GitHub returns, the member must confirm the
+identified GitHub account using a button in that same Telegram account's private
+chat. Browser authorization alone never links an account. Group commands cannot
+produce authorization links. With multiple workspaces, select one using
+`/workspace <id>` first. No panel login or extra RepoDesk account is needed.
+
+The link records GitHub's stable numeric user ID, login and repository permission
+snapshot on the workspace member. Members & access displays these details.
+One GitHub identity can belong to only one Telegram member within a workspace;
+links and permissions are independent between workspaces. GitHub admin/maintain
+access never promotes a RepoDesk member to workspace administrator, bypasses the
+whitelist or creates workspace membership.
+
+Permission synchronization uses GitHub's
+[List repositories accessible to the user access token](https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-user-access-token).
+Only repositories also selected in the workspace connection are imported.
+Read/triage/write/maintain/admin flags are kept as upstream repository permissions.
+Linked users' repository lookup, source retrieval and issue proposals require read
+access; coding additionally requires GitHub write/admin access and the operator's
+existing coding-maintainer grant. Existing unlinked members retain the previous
+operator-managed repository policy. Linking adds the upstream restriction; subsequent
+disconnect does not restore that member's previous unrestricted repository access.
+This is an additive rollout, not mandatory GitHub identity enrollment for all members.
+
+The worker refreshes each account about every five minutes, in bounded batches
+independently of Telegram polling and job maintenance. `/github sync` refreshes
+immediately. Snapshots older than ten minutes, workspace connection revisions that
+have changed, missing permission fields and failed API calls deny linked repository
+access. Downgrades cancel that actor's queued/active assistant work, pending GitHub
+approvals and coding tasks. Already completed remote actions and group replies cannot
+be undone. Remote permission changes have a polling delay; no real-time webhook
+revocation is claimed.
+
+`/github disconnect` deletes the encrypted user credential and pending authorization
+state, clears permission grants, and cancels pending work. Access-policy revocation
+also removes user credentials during the next worker sync; workspace deletion purges
+credentials and flows through worker maintenance. Temporary states are one-use,
+actor/workspace/bot/App/revision bound and expire after ten minutes. Credentials
+use workspace/actor-bound AES-GCM and are never returned in member APIs, previews,
+model context or routine logs.
+
+Expiring user access tokens rotate automatically using an encrypted refresh token.
+Rotation is serialized by the workspace transaction; new access/refresh credentials
+replace the previous pair. Revoked tokens, expired refresh tokens or failed rotation
+clear effective grants; use `/github connect` to authorize again when needed. See
+GitHub's [refresh-token guidance](https://docs.github.com/en/enterprise-cloud%40latest/apps/creating-github-apps/authenticating-with-a-github-app/refreshing-user-access-tokens).
+Local tests use fake GitHub responses and disposable PostgreSQL; real account linking
+and permission changes remain live acceptance checks. Local implementation does not
+connect accounts, send live Telegram messages or deploy this change.

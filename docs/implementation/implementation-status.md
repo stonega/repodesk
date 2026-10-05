@@ -8,6 +8,31 @@ accepted by a pilot team. Each entry states its own test scope and remaining gat
 
 ## Implemented
 
+### Continuous Codex collaboration (2026-10-05)
+
+Implemented the [accepted plan](codex-collaboration-plan.md) locally. Pi relays
+original source messages; Codex interprets intent, makes technical decisions,
+asks product questions, implements and repairs failed checks. Repository direct
+policy is opt-in; existing settings retain reviewed approvals. The application
+persists tenant-scoped inputs, grants, fenced attempts and delivery events, checks
+authority again before execution/publication, and enforces cumulative budgets.
+Telegram replies and Topic follow-ups continue one task and PR. Waiting releases
+the runner; restarts reconstruct retained context. Ambiguous publication outcomes
+are reconciled without replaying writes, and expired/deleted sources trigger
+private-state erasure.
+
+Validation: Biome, TypeScript, Bun build and **351 Bun tests** passed with disposable
+PostgreSQL. All 19 browser tests passed, including reviewed defaults, direct
+policy persistence and desktop/mobile layout. The pinned Codex 0.155.1 protocol passed
+on the host and in the isolated job image with a local fake Responses provider.
+Application, supervisor and job images built; the isolated Node runtime contract
+and Compose configuration passed. Real rootless Podman smoke with fake external
+services covered provider/device credentials, questions, checkpoint reconstruction,
+bounded repair/exhaustion, fresh and same-PR publication, remote-head fencing,
+cancellation and erasure. No live model call, Telegram message, GitHub write or
+deployment was performed. The live pilot and semantic intent evaluation remain
+release gates; see the plan for their acceptance journey.
+
 ### Release-driven VPS deployment (2026-10-05)
 
 Added a stable GitHub Release workflow that reuses CI verification, builds the
@@ -929,3 +954,46 @@ configuration validated. After cutover, app, worker and supervisor are healthy;
 the worker can reach the authenticated device-status endpoint, and Telegram
 polling reconnected. No live ChatGPT sign-in, model call or GitHub publication
 was performed.
+
+## Verified Telegram GitHub account linking — 2026-10-05
+
+Added private `/github connect`, `/github sync` and `/github disconnect` controls for
+eligible members. GitHub App OAuth uses PKCE and a one-use ten-minute flow; the
+same Telegram sender confirms the stable GitHub identity before linking. Encrypted
+user/refresh credentials stay outside workspace API responses. Permission snapshots
+sync about every five minutes, intersect user access with workspace-selected repos,
+and appear in Members & access. Linked users' reads/issues require read access;
+coding also needs write/admin plus the existing maintainer grant. Missing, stale or
+failed snapshots deny access; downgrades invalidate pending work. Automatic token
+rotation is serialized and refresh failures clear grants. Existing unlinked members
+retain the manually configured policy; mandatory linking is not enabled globally.
+
+Apply migration `012_github_users.sql`. Documentation and a runnable Telegram command
+example were added. Local verification passed **328 tests across 41 files** against
+disposable PostgreSQL and **18 browser scenarios**, including member permission
+display and search. The final focused linking/permission suite passed **11 tests**.
+The build, strict typecheck and checks scoped to these changed files passed.
+Repository-wide lint still reported issues in concurrently edited Codex collaboration
+files; these edits were preserved. The final table-layout follow-up also passed three
+focused browser scenarios. No deployment, account connection, live Telegram
+message or GitHub write was performed. See [GitHub linking](github-app.md#connect-a-verified-telegram-members-github-account)
+and [command examples](../../examples/github-user-linking.md).
+
+## Admin site custom domain (2026-10-05)
+
+Deployment operators can configure the admin panel hostname from **Site domain**.
+The persisted deployment setting updates admin origin checks and GitHub/Telegram
+callback generation in the app and worker without restarting. Domain changes are
+versioned and audited atomically, expire pending GitHub connections and require
+explicit webhook re-registration. The original environment address remains a
+recovery origin. DNS/TLS/proxy provisioning and reachability remain external and
+unverified; the panel provides instructions and callback URLs.
+
+Validation: all 350 unit/integration tests passed with isolated PostgreSQL and
+`NO_PROXY=localhost,127.0.0.1`; lint, strict type checking and build passed. The new
+browser scenario passed on desktop and at 390px width, including invalid-hostname
+errors, retained drafts, saving and restoring the default address. Domain-specific
+coverage includes operator-only access, Origin/CSRF, normalization, persistence,
+revision conflicts, audit deduplication, secure cookies, generated GitHub callbacks
+(including Telegram linking), explicit webhook registration and removed-origin
+rejection. Public DNS, certificate issuance and live provider changes were not run.

@@ -1448,6 +1448,21 @@ test.describe
         "Select at least one maintainer.",
       );
       await codingDialog.getByRole("checkbox", { name: /@maintainer/ }).check();
+      await expect(codingDialog.getByLabel("Execution policy")).toHaveValue(
+        "reviewed",
+      );
+      await codingDialog.getByLabel("Execution policy").selectOption("direct");
+      await codingDialog
+        .getByLabel("Publish verified implementations as draft PRs by default")
+        .check();
+      await codingDialog.getByLabel("Maximum execution cycles").fill("6");
+      await codingDialog
+        .getByLabel("Automatic check repairs per cycle")
+        .fill("1");
+      await codingDialog
+        .getByLabel("Active execution time (seconds)")
+        .fill("1800");
+      await codingDialog.getByLabel("Codex token limit").fill("150000");
       await codingDialog
         .getByRole("button", { name: "Save coding repository" })
         .click();
@@ -1473,6 +1488,35 @@ test.describe
       const codingEdit = page.getByRole("dialog", {
         name: "Edit coding repository",
       });
+      await expect(codingEdit.getByLabel("Execution policy")).toHaveValue(
+        "direct",
+      );
+      await expect(
+        codingEdit.getByLabel(
+          "Publish verified implementations as draft PRs by default",
+        ),
+      ).toBeChecked();
+      await expect(
+        codingEdit.getByLabel("Maximum execution cycles"),
+      ).toHaveValue("6");
+      await expect(
+        codingEdit.getByLabel("Automatic check repairs per cycle"),
+      ).toHaveValue("1");
+      await expect(
+        codingEdit.getByLabel("Active execution time (seconds)"),
+      ).toHaveValue("1800");
+      await expect(codingEdit.getByLabel("Codex token limit")).toHaveValue(
+        "150000",
+      );
+      await codingEdit.screenshot({
+        path: "test-results/coding-policy-desktop.png",
+      });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
+      await codingEdit.screenshot({
+        path: "test-results/coding-policy-mobile.png",
+      });
+      await page.setViewportSize({ width: 1280, height: 720 });
       await codingEdit
         .getByLabel("Development / base branch")
         .fill("other-branch");
@@ -2030,7 +2074,25 @@ test.describe
       try {
         await store.change(workspaceId, (w) => {
           w.members.push(
-            { id: "810", role: "member", active: true },
+            {
+              id: "810",
+              role: "member",
+              active: true,
+              github: {
+                id: 42,
+                login: "linked-github-member",
+                status: "connected",
+                connectionRevision: 1,
+                syncedAt: new Date().toISOString(),
+                repositories: [
+                  {
+                    id: 7001,
+                    full_name: "example/workspace",
+                    permissions: { pull: true, push: false, admin: false },
+                  },
+                ],
+              },
+            },
             {
               id: "811",
               role: "member",
@@ -2069,6 +2131,13 @@ test.describe
         await expect(row("808")).toContainText("@applicant");
         await expect(row("808")).toContainText("Access applicant");
         await expect(row("810")).toContainText("Whitelist required");
+        await expect(
+          table.getByRole("columnheader", { name: "GitHub", exact: true }),
+        ).toBeVisible();
+        await expect(row("810")).toContainText("linked-github-member");
+        await expect(row("810")).toContainText("example/workspace · Read");
+        await expect(row("810")).toContainText("Synced");
+        await expect(row("808")).toContainText("Not linked");
         await expect(row("811")).toContainText("Inactive");
         await expect(row("812")).toContainText("Not enrolled");
         const search = page.getByLabel(
@@ -2080,6 +2149,9 @@ test.describe
         );
         await expect(table.getByRole("row")).toHaveCount(2);
         await expect(row("808")).toBeVisible();
+        await search.fill("linked-github-member");
+        await expect(table.getByRole("row")).toHaveCount(2);
+        await expect(row("810")).toBeVisible();
         await search.fill("810");
         await expect(row("810")).toContainText("Telegram user");
         await search.fill("");

@@ -1,0 +1,26 @@
+# Sign in as a deployment operator; supply the session cookie and CSRF token.
+@origin = http://localhost:3000
+@session = replace-with-session-cookie-value
+@csrf = replace-with-session-csrf
+
+### Read current settings and revision
+GET {{origin}}/api/admin/operator/site
+Cookie: repodesk_session={{session}}
+
+### Save a hostname (use the current revision returned above)
+PUT {{origin}}/api/admin/operator/site
+Origin: {{origin}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"revision":0,"domain":"admin.example.com"}
+
+### Restore PUBLIC_ORIGIN (use the current revision)
+PUT {{origin}}/api/admin/operator/site
+Origin: {{origin}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"revision":1,"domain":null}

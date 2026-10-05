@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { operator } from "../admin/auth.ts";
+import { deploymentOrigin } from "../admin/site.ts";
 import {
   credentialsSchema,
   DEFAULT_MODEL_BASE_URL,
@@ -351,15 +352,13 @@ export class SetupService {
       "webhook_disabled_in_polling_mode",
       409,
     );
-    requireThat(
-      new URL(this.origin).protocol === "https:",
-      "https_origin_required",
-    );
     const d = await this.store.deployment();
+    const origin = deploymentOrigin(d, this.origin);
+    requireThat(new URL(origin).protocol === "https:", "https_origin_required");
     requireThat(d.credentials.webhook, "bot_not_configured", 409);
     const result = await registerWebhook(
       await this.client(),
-      this.origin,
+      origin,
       decrypt(this.key, "webhook", d.credentials.webhook),
     );
     await transaction(this.store.pool, async (sql) => {

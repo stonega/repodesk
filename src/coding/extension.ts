@@ -1,10 +1,18 @@
 import { Type } from "typebox";
 import type { BuiltinExtension } from "../agent/extensions.ts";
+import type { Sql } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import { requireThat, type Workspace } from "../domain.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import { authorize, runAllowed } from "../workspaces/policy.ts";
 import { cancelCoding, proposeCoding } from "./policy.ts";
+import { taskGet } from "./task-store.ts";
+import {
+  appendDevelopment,
+  cancelDevelopment,
+  checkDevelopment,
+  startDevelopment,
+} from "./tasks.ts";
 
 export function codingExtension(
   store: Store,
@@ -16,16 +24,24 @@ export function codingExtension(
     id: "codex-coding",
     version: "1",
     path: "<inline:codex-coding>",
-    tools: ["propose_coding_task", "coding_task_status", "cancel_coding_task"],
+    tools: [
+      "propose_coding_task",
+      "coding_task_status",
+      "cancel_coding_task",
+      "start_development_task",
+      "send_development_input",
+      "development_task_status",
+      "cancel_development_task",
+    ],
     execution: "read-only",
     enabled: true,
     workspaces: [workspace.id],
     hash,
     factory: (input) => async (pi) => {
-      const operate = async (action: (w: Workspace) => unknown) => {
+      const operate = async (action: (w: Workspace, sql: Sql) => unknown) => {
         input.signal.throwIfAborted();
         await input.guard();
-        return store.change(workspace.id, (w) => {
+        return store.change(workspace.id, async (w, sql) => {
           input.signal.throwIfAborted();
           authorize(w, input.actor);
           const run = w.runs.find((r) => r.id === input.runId);
@@ -44,12 +60,117 @@ export function codingExtension(
           );
           return {
             content: [
-              { type: "text" as const, text: JSON.stringify(action(w)) },
+              {
+                type: "text" as const,
+                text: JSON.stringify(await action(w, sql)),
+              },
             ],
             details: {},
           };
         });
       };
+      pi.registerTool({
+        name: "start_development_task",
+        label: "Start continuous Codex task",
+        description: `Relay an authenticated maintainer's ORIGINAL received message to Codex for investigation, analysis or implementation. Codex owns all technical decisions and any necessary product questions. Do not write a technical plan or issue body. Direct execution requires repository policy and Codex's validated interpretation of the original instruction. Choose only a clearly requested repository. Source IDs must include this run's request. Targets: ${JSON.stringify(workspace.coding?.settings.repositories.map((r) => ({ repositoryId: r.repositoryId, repository: workspace.github?.repositories.find((repo) => repo.id === r.repositoryId)?.full_name, mode: r.development?.executionMode ?? "reviewed" })))}.`,
+        parameters: Type.Object({
+          repositoryId: Type.Integer(),
+          sourceIds: Type.Array(Type.String(), { minItems: 1, maxItems: 10 }),
+        }),
+        execute: async (_id, args) =>
+          operate(async (w, sql) => {
+            const deployment = await store.deployment(sql);
+            requireThat(deployment.bot, "bot_not_configured", 409);
+            const task = await startDevelopment(
+              sql,
+              w,
+              input.runId,
+              input.actor,
+              Number(args.repositoryId),
+              args.sourceIds as string[],
+              deployment.bot.id,
+            );
+            return {
+              taskId: task.id,
+              state: task.state,
+              message:
+                "Original request queued for Codex. Do not add technical decisions or invent completion.",
+            };
+          }),
+      });
+      pi.registerTool({
+        name: "send_development_input",
+        label: "Relay original Codex task input",
+        description:
+          "Relay a received authenticated message to an existing task. Preserve original wording. Only resolve task bindings; Codex handles technical choices and questions.",
+        parameters: Type.Object({
+          taskId: Type.String(),
+          sourceId: Type.String(),
+        }),
+        execute: async (_id, args) =>
+          operate(async (w, sql) => {
+            const task = await taskGet(sql, w.id, String(args.taskId));
+            const source = w.messages.find((s) => s.id === args.sourceId);
+            const run = w.runs.find((r) => r.id === input.runId);
+            requireThat(
+              source &&
+                run &&
+                (source.runId === run.id ||
+                  source.id.endsWith(`:${run.replyTo}`)),
+              "coding_current_request_required",
+              409,
+            );
+            await appendDevelopment(
+              sql,
+              w,
+              task,
+              input.actor,
+              source,
+              `${source.id}:relay`,
+            );
+            return {
+              taskId: task.id,
+              revision: task.revision,
+              state: task.state,
+            };
+          }),
+      });
+      for (const cancel of [false, true])
+        pi.registerTool({
+          name: cancel ? "cancel_development_task" : "development_task_status",
+          label: cancel ? "Stop continuous task" : "Continuous task status",
+          description: cancel
+            ? "Stop the user's continuous Codex task immediately when requested."
+            : "Read state, pending question and confirmed PR for the current audience's task.",
+          parameters: Type.Object({ taskId: Type.String() }),
+          execute: async (_id, args) =>
+            operate(async (w, sql) => {
+              const task = cancel
+                ? await cancelDevelopment(
+                    sql,
+                    w,
+                    input.actor,
+                    String(args.taskId),
+                  )
+                : await taskGet(sql, w.id, String(args.taskId));
+              checkDevelopment(w, task, input.actor, cancel);
+              const run = w.runs.find((r) => r.id === input.runId);
+              requireThat(run, "run_revoked", 409);
+              requireThat(
+                task.chatId === run.chatId && task.topicId === run.topicId,
+                "access_denied",
+                403,
+              );
+              return {
+                taskId: task.id,
+                state: task.state,
+                revision: task.revision,
+                question: task.question?.text,
+                pr: task.pr?.url,
+                error: task.error,
+              };
+            }),
+        });
       pi.registerTool({
         name: "propose_coding_task",
         label: "Propose Codex implementation",

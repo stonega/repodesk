@@ -17,6 +17,7 @@ import {
   fingerprint,
   hash,
 } from "../../setup/credentials.ts";
+import { developmentResult } from "../development.ts";
 import { DeviceAuth } from "./device-auth.ts";
 import { type ContainerEngine, containerArgs } from "./podman.ts";
 import {
@@ -35,6 +36,9 @@ interface Record extends LocalStatus {
   proxyToken: string;
   createdAt: number;
   finishedAt?: number;
+  repairs?: number;
+  checkpointId?: string;
+  checkpointLost?: boolean;
   cleaned?: boolean;
   baseSha?: string;
 }
@@ -112,6 +116,12 @@ export class RunnerSupervisor implements LocalRunner {
       threadId: r.threadId,
       prUrl: r.prUrl,
       error: r.error,
+      phase: r.phase,
+      result: r.result,
+      tokens: r.tokens,
+      baseSha: r.baseSha,
+      publishedSha: r.publishedSha,
+      checkPassed: r.checkPassed,
     };
   }
   private volume(r: Record, mode: string) {
@@ -183,6 +193,29 @@ export class RunnerSupervisor implements LocalRunner {
         file,
         JSON.stringify({
           ...r.input,
+          ...(r.input.development
+            ? {
+                development: {
+                  ...r.input.development,
+                  threadId: r.threadId ?? r.input.development.threadId,
+                  context: r.checkpointLost
+                    ? `Prior work checkpoint is unavailable for the current branch head. Reconstruct the implementation from authenticated requirements and current code; do not claim the old patch survived.\n${r.input.development.context}`.slice(
+                        0,
+                        40000,
+                      )
+                    : r.input.development.context,
+                  maxTokens: Math.max(
+                    1,
+                    r.input.development.maxTokens - (r.tokens ?? 0),
+                  ),
+                  activeSeconds: Math.max(
+                    1,
+                    r.input.development.activeSeconds -
+                      Math.ceil((Date.now() - r.createdAt) / 1000),
+                  ),
+                },
+              }
+            : {}),
           baseSha: r.baseSha,
           config: codexConfig(this.settings, r.input.payload.authMode),
         }),
@@ -190,6 +223,20 @@ export class RunnerSupervisor implements LocalRunner {
       );
       await this.engine.command(["cp", file, `${name}:/input/job.json`]);
       await rm(file);
+      if (mode === "prepare" && r.checkpointId) {
+        const prior = this.get(r.input.workspaceId, r.checkpointId);
+        await this.engine.command([
+          "cp",
+          this.path(prior, "patch"),
+          `${name}:/input/checkpoint.patch`,
+        ]);
+      }
+      if (mode === "publish" && r.input.development)
+        await this.engine.command([
+          "cp",
+          this.path(r, "conversation"),
+          `${name}:/input/conversation.json`,
+        ]);
       if (mode === "publish")
         await this.engine.command([
           "cp",
@@ -205,12 +252,15 @@ export class RunnerSupervisor implements LocalRunner {
     return this.serial(async () => {
       const { readToken, providerApiKey, ...safe } = localStart.parse(input);
       requireThat(
-        safe.payload.backend === "podman" && safe.payload.checkCommand,
+        safe.payload.backend === "podman" &&
+          safe.payload.checkCommand &&
+          (safe.issue || safe.development),
         "coding_job_invalid",
       );
       const key = taskKey(safe.workspaceId, safe.taskId);
       const prior = this.records.get(key);
       if (prior) {
+        requireThat(!prior.cleaned, "coding_task_stopped", 409);
         requireThat(
           fingerprint(prior.input) === fingerprint(safe),
           "coding_task_conflict",
@@ -247,6 +297,28 @@ export class RunnerSupervisor implements LocalRunner {
         proxyToken: randomBytes(32).toString("hex"),
         createdAt: Date.now(),
       };
+      if (safe.development?.previousAttemptId) {
+        const checkpoint = this.records.get(
+          taskKey(safe.workspaceId, safe.development.previousAttemptId),
+        );
+        if (checkpoint && !checkpoint.cleaned) {
+          requireThat(
+            checkpoint.input.development?.taskId === safe.development.taskId &&
+              checkpoint.input.payload.repositoryId ===
+                safe.payload.repositoryId &&
+              checkpoint.baseSha,
+            "coding_checkpoint_invalid",
+            409,
+          );
+          if (
+            !safe.development.pr ||
+            checkpoint.baseSha === safe.development.pr.headSha
+          ) {
+            r.baseSha = checkpoint.baseSha;
+            r.checkpointId = checkpoint.input.taskId;
+          } else r.checkpointLost = true;
+        } else r.checkpointLost = true;
+      }
       await this.save(r); // Reserve before invoking the engine.
       try {
         await this.launch(r, "prepare", { GITHUB_TOKEN: readToken });
@@ -278,7 +350,13 @@ export class RunnerSupervisor implements LocalRunner {
     try {
       if (
         Date.now() >
-        r.createdAt + this.settings.CODEX_RUNNER_TIMEOUT_SECONDS * 1000
+        r.createdAt +
+          Math.min(
+            this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
+            r.input.development?.activeSeconds ??
+              this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
+          ) *
+            1000
       ) {
         await this.timeout(r);
         return;
@@ -301,12 +379,56 @@ export class RunnerSupervisor implements LocalRunner {
         throw new Error("Incomplete container start");
       if (r.phase === "implement" && r.input.payload.authMode === "device_code")
         await this.captureAuth(r);
+      if (
+        state.ExitCode !== 0 &&
+        r.phase === "check" &&
+        r.input.development &&
+        (r.repairs ?? 0) < r.input.development.maxRepairAttempts &&
+        (r.tokens ?? 0) < r.input.development.maxTokens
+      ) {
+        r.repairs = (r.repairs ?? 0) + 1; // Reserve before the repair launch.
+        await this.engine.command([
+          "rm",
+          "--force",
+          "--ignore",
+          `${r.key}-implement`,
+          `${r.key}-check`,
+        ]);
+        r.phase = "implement";
+        await this.save(r);
+        await this.launch(
+          r,
+          "implement",
+          r.input.payload.authMode === "provider_key"
+            ? { CODEX_TASK_TOKEN: r.proxyToken }
+            : {},
+        );
+        return;
+      }
       if (state.ExitCode !== 0) {
         r.state = r.phase === "publish" ? "unknown" : "failed";
         r.error =
           r.phase === "publish"
             ? "coding_publication_unknown"
             : "coding_execution_failed";
+        if (r.phase === "publish" && r.input.development) {
+          try {
+            r.publishedSha = z
+              .object({ publishedSha: z.string().regex(/^[0-9a-f]{40}$/) })
+              .parse(
+                JSON.parse(await this.copyResult(r, "publication-intent.json")),
+              ).publishedSha;
+          } catch {}
+          try {
+            if (
+              (await this.copyResult(r, "failure-code")).trim() ===
+              "coding_remote_head_changed"
+            ) {
+              r.state = "failed";
+              r.error = "coding_remote_head_changed";
+            }
+          } catch {}
+        }
         if (
           r.phase === "implement" ||
           r.phase === "check" ||
@@ -345,38 +467,80 @@ export class RunnerSupervisor implements LocalRunner {
             : {},
         );
       } else if (r.phase === "implement") {
+        const conversation = r.input.development
+          ? await this.engine.readText(
+              `${r.key}-implement`,
+              "/task/conversation.json",
+              64000,
+            )
+          : undefined;
         await this.removeAuthVolume(r);
+        if (r.input.development) {
+          let value: unknown;
+          try {
+            value = JSON.parse(conversation ?? "null");
+          } catch {
+            value = null;
+          }
+          const parsed = z
+            .object({
+              result: developmentResult,
+              tokens: z.number().int().nonnegative(),
+              threadId: z.string().regex(/^[a-zA-Z0-9-]{1,100}$/),
+            })
+            .safeParse(value);
+          if (!parsed.success) {
+            r.state = "failed";
+            r.error = "coding_result_invalid";
+            await this.save(r);
+            return;
+          }
+          const turn = parsed.data;
+          r.result = turn.result;
+          r.threadId = turn.threadId;
+          // No usage report preserves the entire reservation rather than inventing zero usage.
+          r.tokens =
+            (r.tokens ?? 0) + (turn.tokens || r.input.development.maxTokens);
+          await writeFile(this.path(r, "conversation"), JSON.stringify(turn), {
+            mode: 0o600,
+          });
+          if (r.tokens > r.input.development.maxTokens) {
+            r.state = "failed";
+            r.error = "coding_token_limit";
+            await this.save(r);
+            return;
+          }
+          await this.exportArtifact(r);
+          if (
+            r.input.development.mode !== "work" ||
+            turn.result.status === "needs_input"
+          ) {
+            r.state = "succeeded";
+            await this.save(r);
+            return;
+          }
+          requireThat(
+            turn.result.status === "completed",
+            "coding_result_invalid",
+            409,
+          );
+        }
         r.phase = "check";
         await this.save(r);
         await this.launch(r, "check");
       } else if (r.phase === "check") {
-        // Export only reads the work volume and has no credentials or network.
-        // Remove a stale container before retrying an interrupted export.
-        await this.engine.command([
-          "rm",
-          "--force",
-          "--ignore",
-          `${r.key}-export`,
-        ]);
-        const exported = JSON.parse(await this.launch(r, "export"));
-        const artifact = z
-          .object({
-            patch: z
-              .string()
-              .min(1)
-              .max(5 * 1024 * 1024),
-            threadId: z
-              .string()
-              .regex(/^[a-zA-Z0-9-]{1,100}$/)
-              .optional(),
-          })
-          .parse(exported);
-        await writeFile(this.path(r, "patch"), artifact.patch, { mode: 0o644 });
-        r.threadId = artifact.threadId;
+        await this.exportArtifact(r);
+        r.checkPassed = true;
         r.state = "ready";
       } else {
         const result = z
-          .object({ prUrl: z.string().url() })
+          .object({
+            prUrl: z.string().url(),
+            publishedSha: z
+              .string()
+              .regex(/^[0-9a-f]{40}$/)
+              .optional(),
+          })
           .parse(JSON.parse(await this.copyResult(r, "publication.json")));
         requireThat(
           result.prUrl.startsWith(
@@ -385,6 +549,7 @@ export class RunnerSupervisor implements LocalRunner {
           "coding_pr_missing",
         );
         r.prUrl = result.prUrl;
+        r.publishedSha = result.publishedSha;
         r.state = "succeeded";
       }
       if (state.ExitCode !== 0 && r.phase === "implement")
@@ -395,6 +560,25 @@ export class RunnerSupervisor implements LocalRunner {
       throw new Fault("coding_runner_unavailable", 503);
     }
   }
+  private async exportArtifact(r: Record) {
+    await this.engine.command(["rm", "--force", "--ignore", `${r.key}-export`]);
+    const artifact = z
+      .object({
+        patch: z.string().max(5 * 1024 * 1024),
+        threadId: z
+          .string()
+          .regex(/^[a-zA-Z0-9-]{1,100}$/)
+          .optional(),
+      })
+      .parse(JSON.parse(await this.launch(r, "export")));
+    requireThat(
+      r.input.development || artifact.patch.length,
+      "coding_patch_empty",
+      409,
+    );
+    await writeFile(this.path(r, "patch"), artifact.patch, { mode: 0o600 });
+    r.threadId = artifact.threadId ?? r.threadId;
+  }
   async publish(workspaceId: string, taskId: string, token: string) {
     return this.serial(async () => {
       const r = this.get(workspaceId, taskId);
@@ -402,7 +586,13 @@ export class RunnerSupervisor implements LocalRunner {
       requireThat(
         r.state === "ready" &&
           Date.now() <
-            r.createdAt + this.settings.CODEX_RUNNER_TIMEOUT_SECONDS * 1000,
+            r.createdAt +
+              Math.min(
+                this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
+                r.input.development?.activeSeconds ??
+                  this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
+              ) *
+                1000,
         "coding_task_not_ready",
         409,
       );
@@ -442,6 +632,50 @@ export class RunnerSupervisor implements LocalRunner {
   async cancel(workspaceId: string, taskId: string) {
     return this.serial(() => this.stop(this.get(workspaceId, taskId)));
   }
+  async erase(workspaceId: string, taskId: string) {
+    return this.serial(async () => {
+      const r = this.records.get(taskKey(workspaceId, taskId));
+      if (!r || r.cleaned) return;
+      await this.stop(r);
+      await this.engine.command([
+        "rm",
+        "--force",
+        "--ignore",
+        ...["prepare", "setup", "implement", "check", "export", "publish"].map(
+          (p) => `${r.key}-${p}`,
+        ),
+      ]);
+      for (const volume of ["work", "publish", "auth"]) {
+        const names = await this.engine.command([
+          "volume",
+          "ls",
+          "--format",
+          "{{.Name}}",
+          "--filter",
+          `name=${r.key}-${volume}`,
+        ]);
+        if (names.split("\n").includes(`${r.key}-${volume}`))
+          await this.engine.command([
+            "volume",
+            "rm",
+            "--force",
+            `${r.key}-${volume}`,
+          ]);
+      }
+      for (const suffix of ["patch", "result", "input", "conversation", "auth"])
+        await rm(this.path(r, suffix), { force: true });
+      r.cleaned = true;
+      r.proxyToken = "";
+      r.result = undefined;
+      r.threadId = undefined;
+      r.input.development = undefined;
+      r.input.issue = undefined;
+      r.input.payload.title = "[removed]";
+      r.input.payload.body = "[removed]";
+      r.input.payload.repository = "removed/removed";
+      await this.save(r);
+    });
+  }
   async logoutDevice(workspaceId: string) {
     return this.serial(async () => {
       for (const r of this.records.values())
@@ -461,7 +695,13 @@ export class RunnerSupervisor implements LocalRunner {
         r.phase === "implement" &&
         r.input.payload.authMode === "provider_key" &&
         Date.now() <
-          r.createdAt + this.settings.CODEX_RUNNER_TIMEOUT_SECONDS * 1000 &&
+          r.createdAt +
+            Math.min(
+              this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
+              r.input.development?.activeSeconds ??
+                this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
+            ) *
+              1000 &&
         equal(token, r.proxyToken),
     );
     requireThat(record, "coding_proxy_denied", 401);
@@ -481,7 +721,13 @@ export class RunnerSupervisor implements LocalRunner {
         if (
           !terminal(r.state) &&
           Date.now() >
-            r.createdAt + this.settings.CODEX_RUNNER_TIMEOUT_SECONDS * 1000
+            r.createdAt +
+              Math.min(
+                this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
+                r.input.development?.activeSeconds ??
+                  this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
+              ) *
+                1000
         )
           await this.timeout(r);
         if (!terminal(r.state)) await this.advance(r);
@@ -523,12 +769,18 @@ export class RunnerSupervisor implements LocalRunner {
             );
           if (volumes.length)
             await this.engine.command(["volume", "rm", "--force", ...volumes]);
-          for (const suffix of ["patch", "result", "input"])
+          for (const suffix of ["patch", "result", "input", "conversation"])
             await rm(this.path(r, suffix), { force: true });
           // Keep a small tombstone so delayed duplicate requests cannot replay the task.
           r.cleaned = true;
           r.proxyToken = "";
           r.input.payload.body = "[expired]";
+          r.input.payload.title = "[expired]";
+          delete r.result;
+          if (r.input.development) {
+            r.input.development.inputs = [];
+            r.input.development.context = "";
+          }
           await this.save(r);
         }
       }

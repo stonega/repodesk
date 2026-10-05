@@ -3,6 +3,7 @@ import type { ModelOptions } from "./agent/model-settings.ts";
 import type { PluginSettings } from "./agent/plugin-config.ts";
 import type { CodingConfig, CodingTask } from "./coding/config.ts";
 import type { GitHubConnection } from "./github/config.ts";
+import type { GitHubUserAccess } from "./github/user-access.ts";
 
 export class Fault extends Error {
   constructor(
@@ -130,6 +131,7 @@ export interface AccessRequest {
   decidedBy?: string;
 }
 export interface Member {
+  github?: GitHubUserAccess;
   id: string;
   username?: string;
   name?: string;
@@ -406,6 +408,7 @@ export interface Workspace {
   };
 }
 export interface Deployment extends ModelOptions {
+  site?: { domain: string | null; revision: number };
   version: number;
   active: boolean;
   bot?: { id: string; username: string; visibleAll: boolean };

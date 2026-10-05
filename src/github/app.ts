@@ -21,6 +21,15 @@ const repositorySchema = z.object({
   id: z.number().int().positive(),
   full_name: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
   private: z.boolean().optional(),
+  permissions: z
+    .object({
+      pull: z.boolean(),
+      push: z.boolean(),
+      admin: z.boolean(),
+      triage: z.boolean().optional(),
+      maintain: z.boolean().optional(),
+    })
+    .optional(),
 });
 export type GitHubRepository = z.infer<typeof repositorySchema>;
 export interface GitHubInstallation {
@@ -89,17 +98,45 @@ export class GitHubApp {
         redirect_uri: callback,
       },
     );
+    const result = this.userToken(data);
+    const user = await this.user(result.token);
+    return { ...result, login: user.login, id: user.id };
+  }
+  private userToken(data: unknown) {
     const result = z
-      .object({ access_token: z.string().min(1).max(8192) })
+      .object({
+        access_token: z.string().min(1).max(8192),
+        refresh_token: z.string().min(1).max(8192).optional(),
+        expires_in: z.number().int().positive().max(31536000).optional(),
+      })
       .safeParse(data);
     requireThat(result.success, "github_authorization_failed", 400);
-    const user = accountSchema.parse(
+    return {
+      token: result.data.access_token,
+      refreshToken: result.data.refresh_token,
+      expiresAt: result.data.expires_in
+        ? new Date(Date.now() + result.data.expires_in * 1000).toISOString()
+        : undefined,
+    };
+  }
+  async user(token: string) {
+    return accountSchema
+      .extend({ id: z.number().int().positive().safe() })
+      .parse(await this.request("https://api.github.com/user", token));
+  }
+  async refresh(refreshToken: string) {
+    return this.userToken(
       await this.request(
-        "https://api.github.com/user",
-        result.data.access_token,
+        "https://github.com/login/oauth/access_token",
+        undefined,
+        {
+          client_id: this.config.clientId,
+          client_secret: this.config.clientSecret,
+          grant_type: "refresh_token",
+          refresh_token: refreshToken,
+        },
       ),
     );
-    return { token: result.data.access_token, login: user.login };
   }
   private async pages(
     token: string,
@@ -154,7 +191,7 @@ export class GitHubApp {
   async installationToken(
     installationId: number,
     repositoryIds: number[],
-    permission: "contents" | "issues" | "publish" = "contents",
+    permission: "contents" | "issues" | "publish" | "coding_read" = "contents",
   ) {
     requireThat(
       repositoryIds.length > 0 && repositoryIds.length <= 12,
@@ -171,7 +208,9 @@ export class GitHubApp {
             ? { issues: "write" }
             : permission === "publish"
               ? { contents: "write", pull_requests: "write" }
-              : { contents: "read" },
+              : permission === "coding_read"
+                ? { contents: "read", pull_requests: "read" }
+                : { contents: "read" },
       },
     );
     return z
@@ -180,6 +219,87 @@ export class GitHubApp {
         expires_at: z.string().datetime(),
       })
       .parse(data);
+  }
+  async codingPull(token: string, repository: string, number: number) {
+    const pr = z
+      .object({
+        number: z.number().int().positive(),
+        state: z.enum(["open", "closed"]),
+        merged: z.boolean(),
+        head: z.object({
+          ref: z.string(),
+          sha: z.string().regex(/^[0-9a-f]{40}$/),
+          repo: z.object({ full_name: z.string() }).nullable(),
+        }),
+      })
+      .parse(
+        await this.request(
+          `https://api.github.com/repos/${repository}/pulls/${number}`,
+          token,
+        ),
+      );
+    requireThat(pr.state === "open" && !pr.merged, "coding_pr_closed", 409);
+    requireThat(
+      pr.head.repo?.full_name === repository,
+      "coding_pr_target_changed",
+      409,
+    );
+    return {
+      number: pr.number,
+      url: `https://github.com/${repository}/pull/${pr.number}`,
+      branch: pr.head.ref,
+      headSha: pr.head.sha,
+    };
+  }
+  async codingPublishedPull(
+    token: string,
+    repository: string,
+    branch: string,
+    sha: string,
+    baseBranch: string,
+  ) {
+    const owner = repository.split("/")[0];
+    const params = new URLSearchParams({
+      head: `${owner}:${branch}`,
+      state: "all",
+      per_page: "100",
+    });
+    const pulls = z
+      .array(
+        z.object({
+          number: z.number().int().positive(),
+          state: z.enum(["open", "closed"]),
+          head: z.object({
+            ref: z.string(),
+            sha: z.string(),
+            repo: z.object({ full_name: z.string() }).nullable(),
+          }),
+          base: z.object({ ref: z.string() }),
+        }),
+      )
+      .parse(
+        await this.request(
+          `https://api.github.com/repos/${repository}/pulls?${params}`,
+          token,
+        ),
+      );
+    const matching = pulls.filter(
+      (p) =>
+        p.state === "open" &&
+        p.head.ref === branch &&
+        p.head.sha === sha &&
+        p.head.repo?.full_name === repository &&
+        p.base.ref === baseBranch,
+    );
+    if (matching.length !== 1) return;
+    const number = matching[0]?.number;
+    if (!number) return;
+    return {
+      number,
+      url: `https://github.com/${repository}/pull/${number}`,
+      branch,
+      headSha: sha,
+    };
   }
   async createIssue(
     token: string,

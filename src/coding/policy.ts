@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { type Approval, requireThat, type Workspace } from "../domain.ts";
+import { authorizeRepository } from "../github/user-access.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import {
   audience,
@@ -33,6 +34,7 @@ export function codingDestination(
     409,
   );
   const input = codingInput.parse(value);
+  authorizeRepository(w, actor, input.repositoryId, true);
   const target = w.coding.settings.repositories.find(
     (r) => r.repositoryId === input.repositoryId,
   );

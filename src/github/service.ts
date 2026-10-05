@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { operator, throttle } from "../admin/auth.ts";
+import { publicOrigin } from "../admin/site.ts";
 import type { Store } from "../db/repositories.ts";
 import { type Admin, requireThat, type Workspace } from "../domain.ts";
 import { decrypt, encrypt, hash, token } from "../setup/credentials.ts";
@@ -7,6 +8,8 @@ import { audit } from "../workspaces/policy.ts";
 import type { GitHubApp } from "./app.ts";
 import type { GitHubPage } from "./config.ts";
 import { GitHubApps, registrationInput } from "./registry.ts";
+
+import { GitHubUsers } from "./users.ts";
 
 const revisionSchema = z.number().int().nonnegative();
 const selectionSchema = z.union([
@@ -33,6 +36,7 @@ export function githubAuthority(admin: Admin, w: Workspace) {
 }
 export class GitHubService {
   private apps: GitHubApps;
+  readonly users: GitHubUsers;
   constructor(
     private store: Store,
     private key: string,
@@ -41,9 +45,10 @@ export class GitHubService {
   ) {
     this.apps =
       app instanceof GitHubApps ? app : new GitHubApps(store, key, app);
+    this.users = new GitHubUsers(store, this.apps, key, origin);
   }
-  private get callback() {
-    return `${this.origin}/api/admin/github/callback`;
+  private async callback() {
+    return `${await publicOrigin(this.store, this.origin)}/api/admin/github/callback`;
   }
   private async workspace(admin: Admin, id: string) {
     operator(admin);
@@ -119,7 +124,9 @@ export class GitHubService {
         encrypt(this.key, `github:${id}:${sessionHash}`, verifier),
       ],
     );
-    return { url: app.authorizationUrl(state, verifier, this.callback) };
+    return {
+      url: app.authorizationUrl(state, verifier, await this.callback()),
+    };
   }
   async callbackResult(
     admin: Admin,
@@ -147,7 +154,7 @@ export class GitHubService {
           `github:${row.workspace_id}:${sessionHash}`,
           row.verifier,
         ),
-        this.callback,
+        await this.callback(),
       );
       await this.workspace(admin, row.workspace_id);
       const saved = await this.store.pool.query(
@@ -199,13 +206,14 @@ export class GitHubService {
     const path = organization
       ? `/organizations/${organization}/settings/apps/new`
       : "/settings/apps/new";
+    const origin = await publicOrigin(this.store, this.origin);
     return {
       url: `https://github.com${path}?state=${state}`,
       manifest: {
         name: input.name,
-        url: this.origin,
-        redirect_url: `${this.origin}/api/admin/github/app/callback`,
-        callback_urls: [this.callback],
+        url: origin,
+        redirect_url: `${origin}/api/admin/github/app/callback`,
+        callback_urls: [`${origin}/api/admin/github/callback`],
         // GitHub validates this required URL even for an inactive hook. Use
         // the reserved example domain; this app never subscribes to webhooks.
         hook_attributes: {

@@ -1,0 +1,178 @@
+// Local fake Responses endpoint + the pinned real Codex app-server. No live model calls.
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import { runConversation } from "../src/coding/local/conversation.ts";
+
+const exec = promisify(execFile);
+const root = await mkdtemp(join(tmpdir(), "repodesk-protocol-"));
+let calls = 0;
+const server = Bun.serve({
+  hostname: "127.0.0.1",
+  port: 0,
+  fetch: async (request) => {
+    if (!new URL(request.url).pathname.endsWith("/responses"))
+      return new Response("unsupported", { status: 404 });
+    await request.json();
+    calls++;
+    const text = JSON.stringify({
+      status:
+        calls === 1 ? "intent" : calls === 2 ? "needs_input" : "completed",
+      intent: "implement",
+      evidenceRevision: 1,
+      evidence: "Fix pagination and open a draft PR",
+      publishRequested: true,
+      summary: "Local protocol fixture completed.",
+      question: calls === 2 ? "Should empty results keep page one?" : null,
+      title: "Fix pagination",
+      body: "Local fixture only.",
+    });
+    const item = {
+      type: "message",
+      id: "msg_fixture",
+      role: "assistant",
+      status: "completed",
+      content: [{ type: "output_text", text, annotations: [] }],
+    };
+    const response = {
+      id: "resp_fixture",
+      object: "response",
+      created_at: 1,
+      status: "completed",
+      model: "gpt-5.4",
+      output: [item],
+      usage: {
+        input_tokens: 10,
+        output_tokens: 10,
+        total_tokens: 20,
+        input_tokens_details: { cached_tokens: 0 },
+        output_tokens_details: { reasoning_tokens: 0 },
+      },
+    };
+    const events = [
+      {
+        type: "response.created",
+        response: { ...response, status: "in_progress", output: [] },
+      },
+      {
+        type: "response.output_item.added",
+        output_index: 0,
+        item: { ...item, status: "in_progress", content: [] },
+      },
+      {
+        type: "response.content_part.added",
+        item_id: item.id,
+        output_index: 0,
+        content_index: 0,
+        part: { type: "output_text", text: "", annotations: [] },
+      },
+      {
+        type: "response.output_text.delta",
+        item_id: item.id,
+        output_index: 0,
+        content_index: 0,
+        delta: text,
+      },
+      {
+        type: "response.output_text.done",
+        item_id: item.id,
+        output_index: 0,
+        content_index: 0,
+        text,
+      },
+      {
+        type: "response.content_part.done",
+        item_id: item.id,
+        output_index: 0,
+        content_index: 0,
+        part: item.content[0],
+      },
+      { type: "response.output_item.done", output_index: 0, item },
+      { type: "response.completed", response },
+    ];
+    return new Response(
+      events
+        .map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`)
+        .join(""),
+      { headers: { "content-type": "text/event-stream" } },
+    );
+  },
+});
+try {
+  const home = join(root, "codex");
+  const repo = join(root, "repo");
+  await mkdir(home);
+  await mkdir(repo);
+  await exec("git", ["init", repo]);
+  await writeFile(
+    join(home, "config.toml"),
+    `model="gpt-5.4"\nmodel_provider="fixture"\napproval_policy="never"\n[model_providers.fixture]\nname="Local proof"\nbase_url="http://127.0.0.1:${server.port}/v1"\nwire_api="responses"\nsupports_websockets=false\n`,
+  );
+  const options = {
+    binary: process.env.CODEX_PROTOCOL_BINARY ?? "bunx",
+    args: process.env.CODEX_PROTOCOL_BINARY
+      ? ["app-server"]
+      : ["--package", "@openai/codex@0.155.1", "codex", "app-server"],
+    cwd: repo,
+    env: { PATH: process.env.PATH, HOME: root, CODEX_HOME: home },
+    prompt: "Return only the fixture JSON.",
+    timeoutMs: 30000,
+    readOnly: true,
+  };
+  const first = await runConversation(options);
+  const question = await runConversation({
+    ...options,
+    threadId: first.threadId,
+  });
+  const answer = await runConversation({
+    ...options,
+    threadId: question.threadId,
+    prompt: "Yes, keep page one.",
+  });
+  if (
+    first.result.status !== "intent" ||
+    question.result.status !== "needs_input" ||
+    answer.result.status !== "completed" ||
+    answer.threadId !== first.threadId ||
+    calls !== 3
+  )
+    throw new Error("Protocol contract failed");
+  const reconstructed = await runConversation({
+    ...options,
+    threadId: "00000000-0000-0000-0000-000000000000",
+  });
+  if (
+    !reconstructed.reconstructed ||
+    reconstructed.threadId === first.threadId ||
+    first.tokens !== 20 ||
+    question.tokens !== 20 ||
+    answer.tokens !== 20
+  )
+    throw new Error(
+      `Recovery or token accounting failed: ${JSON.stringify({ reconstructed: reconstructed.reconstructed, same: reconstructed.threadId === first.threadId, tokens: [first.tokens, question.tokens, answer.tokens] })}`,
+    );
+  const abort = new AbortController();
+  abort.abort();
+  try {
+    await runConversation({ ...options, signal: abort.signal });
+    throw new Error("Abort was ignored");
+  } catch (error) {
+    if (
+      !(
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === "coding_cancelled"
+      )
+    )
+      throw error;
+  }
+  console.log(
+    "Pinned Codex protocol: start, structured question, resume, missing-session reconstruction, token accounting and cancellation passed (local fake provider).",
+  );
+} finally {
+  server.stop(true);
+  await rm(root, { recursive: true, force: true });
+}

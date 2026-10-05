@@ -13,6 +13,8 @@ import { deliver } from "../workspaces/service.ts";
 import type { GitHubApp } from "./app.ts";
 import type { GitHubApps } from "./registry.ts";
 
+import { authorizeRepository } from "./user-access.ts";
+
 export const issueInput = z
   .object({
     repositoryId: z.number().int().positive(),
@@ -50,6 +52,7 @@ export function issueApproval(
   input: IssueInput,
   id = randomUUID(),
 ): Approval {
+  authorizeRepository(w, actor, input.repositoryId);
   const payload = issueDestination(w, issueInput.parse(input));
   const prior = w.approvals.find((a) => a.id === id);
   if (prior) {
@@ -90,6 +93,7 @@ export function checkIssueApproval(w: Workspace, approval: Approval) {
     409,
   );
   const payload = issuePayload.parse(approval.payload);
+  authorizeRepository(w, approval.actor, payload.repositoryId);
   const { repository: _, installationId: __, ...input } = payload;
   requireThat(
     fingerprint(issueDestination(w, input)) === approval.hash,

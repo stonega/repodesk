@@ -1,6 +1,6 @@
 # Local Codex execution with Podman
 
-The **Local Podman** runner runs approved coding tasks on the deployment
+The **Local Podman** runner runs policy-authorized coding tasks on the deployment
 host. Pi still
 handles Telegram conversations; the coding service handles approval, identity,
 task state and publication. Enabling the plugin does not start a coding container.
@@ -172,11 +172,28 @@ task content are private supervisor state. Replacing the
 supervisor state volume loses recovery information and must not be used to retry
 tasks automatically.
 
-The current Telegram workflow remains one approved issue-to-PR task. Session
-files and thread IDs are retained for recovery/inspection; a conversational
-continue/resume tool for a completed coding task is not exposed yet. Local checks
-and container smoke tests do not prove live provider/GitHub publication; that
-remains a staging gate.
+Continuous tasks use a private stdin/stdout Codex app-server adapter alongside
+legacy reviewed `codex exec` tasks. CLI 0.155.1 is unchanged. Completed-turn
+`needs_input` results checkpoint questions; no connection-local question ID or live
+steering acknowledgement is treated as durable. The allowlist is initialize,
+initialized, thread/start, thread/resume and turn/start. Relevant notifications are
+turn/started, item/completed, thread/tokenUsage/updated and turn/completed. Unsupported
+server requests are rejected; process cancellation interrupts active execution.
+JSONL frames are capped at 4 MiB and final envelopes at 60000 UTF-8 bytes. Model
+reasoning and raw protocol streams are not routine logs.
+
+Run `bun scripts/codex-protocol-proof.ts` to verify the pinned real CLI against a
+local fake Responses provider: structured questions, continuation, missing-session
+reconstruction, per-turn token accounting and cancellation. It creates a clean
+Codex home and uses no host auth or paid model calls. The fixture passed both on
+the host and bundled inside the read-only job image with no external network.
+The real Podman smoke also covers question checkpoints, automatic repair/repair
+exhaustion, fresh and same-PR publication with fake GitHub, remote-head fencing,
+device continuation and explicit private-state erasure. Waiting releases the global
+runner slot. Retained work checkpoints can seed a new isolated cycle; expired
+checkpoints reconstruct from authorized context. See [continuous setup](codex-coding.md).
+Local checks do not establish live model intent quality or live publication; the
+staging journey remains a release gate.
 
 For a repeatable smoke test without model calls or GitHub writes, build the
 `codex-job` and `codex-supervisor` targets with the `:verify` tags, then run
@@ -184,6 +201,7 @@ For a repeatable smoke test without model calls or GitHub writes, build the
 executable while exercising the real supervisor, Podman socket, resource limits,
 volumes, patch export and cancellation, and removes its test resources afterward.
 `CODEX_SMOKE_JOB_IMAGE` and `CODEX_SMOKE_SUPERVISOR_IMAGE` can select other tags.
+`CODEX_SMOKE_PODMAN_SOCKET` can select an already running rootless Unix socket.
 When a host HTTP proxy is configured, exempt localhost with `NO_PROXY`/`no_proxy`
 for tests; a loopback-only build proxy may need `podman build --network=host`.
 

@@ -13,6 +13,9 @@ export async function codeTruthExtension(
   workspaceId: string,
   targets: CodeTarget[],
   connectionRevision?: number,
+  resolveScope?: (
+    actor: string,
+  ) => Promise<{ client: CodeTruthClient; targets: CodeTarget[] }>,
 ): Promise<BuiltinExtension> {
   const skill = await readFile("skills/repodesk-code-truth/SKILL.md", "utf8");
   return {
@@ -30,8 +33,14 @@ export async function codeTruthExtension(
       .digest("hex"),
     factory: (input) => async (pi) => {
       const signal = input.signal;
-      const available = await client.use(workspaceId, targets, signal, (mcp) =>
-        mcp.listTools({}, { signal, timeout: 10000 }),
+      const scope = resolveScope
+        ? await resolveScope(input.actor)
+        : { client, targets };
+      const available = await scope.client.use(
+        workspaceId,
+        scope.targets,
+        signal,
+        (mcp) => mcp.listTools({}, { signal, timeout: 10000 }),
       );
       requireThat(
         available.tools.length === codeTruthTools.length &&
@@ -54,9 +63,12 @@ export async function codeTruthExtension(
             const activeSignal = callSignal
               ? AbortSignal.any([signal, callSignal])
               : signal;
-            const result = await client.use(
+            const currentScope = resolveScope
+              ? await resolveScope(input.actor)
+              : scope;
+            const result = await currentScope.client.use(
               workspaceId,
-              targets,
+              currentScope.targets,
               activeSignal,
               (mcp) =>
                 mcp.callTool(

@@ -650,3 +650,13 @@ Use this format for each preference:
 - **Source:** 2026-09-27 — user requested removing the Bootstrap token and asking
   only for username and password on first setup.
 - **Exceptions:** None recorded.
+
+### Admin site domains are configured in the panel
+
+- **Preference:** Provide custom-domain setup in the admin panel, with an editable
+  hostname and the routing instructions needed to connect the site.
+- **Scope:** Deployment-wide admin site address; restricted to deployment operators.
+- **Source:** 2026-10-05 — user requested custom-domain setup for the admin panel
+  site inside the admin panel.
+- **Exceptions:** DNS, certificates and host proxy routing require infrastructure
+  configuration outside the panel; availability must not be implied by saving.

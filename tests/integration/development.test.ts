@@ -1,0 +1,657 @@
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { randomUUID } from "node:crypto";
+import {
+  type DevelopmentResult,
+  developmentPolicy,
+} from "../../src/coding/development.ts";
+import { DevelopmentExecutor } from "../../src/coding/executor.ts";
+import type {
+  LocalRunner,
+  LocalStart,
+  LocalStatus,
+} from "../../src/coding/local/protocol.ts";
+import { taskGet, taskInputs, taskSave } from "../../src/coding/task-store.ts";
+import {
+  appendDevelopment,
+  cancelDevelopment,
+  pruneDevelopment,
+  startDevelopment,
+} from "../../src/coding/tasks.ts";
+import {
+  routeDevelopment,
+  selectDevelopment,
+} from "../../src/coding/telegram.ts";
+import { migrate } from "../../src/db/migrate.ts";
+import { database } from "../../src/db/pool.ts";
+import { Store } from "../../src/db/repositories.ts";
+import type { Source } from "../../src/domain.ts";
+import { GitHubApp } from "../../src/github/app.ts";
+import { GitHubApps } from "../../src/github/registry.ts";
+import { createRun } from "../../src/workspaces/service.ts";
+import { workspace } from "../fixtures.ts";
+import { githubFixtureConfig, githubTransport } from "../github-fixture.ts";
+
+function present<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("Missing fixture value");
+  return value;
+}
+const url = process.env.TEST_DATABASE_URL;
+(url ? describe : describe.skip)("Continuous development collaboration", () => {
+  const root = database(url ?? "postgres://unused@localhost/unused");
+  const dbName = `development_${randomUUID().replaceAll("-", "")}`;
+  const operator = randomUUID();
+  let store: Store;
+  beforeAll(async () => {
+    await root.query(`CREATE DATABASE ${dbName}`);
+    const parsed = new URL(present(url));
+    parsed.pathname = `/${dbName}`;
+    store = new Store(database(parsed.toString()));
+    await migrate(store.pool);
+    await store.pool.query(
+      "INSERT INTO admins(id,username,password_hash,operator) VALUES($1,'dev','unused',true)",
+      [operator],
+    );
+    await store.pool.query(
+      "UPDATE deployment SET data=jsonb_set(jsonb_set(data,'{active}','true'),'{bot}','{\"id\":\"999\",\"username\":\"fixture\"}')",
+    );
+  });
+  afterAll(async () => {
+    await store?.pool.end();
+    await root.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
+    await root.end();
+  });
+  const original = "Fix pagination and open a draft PR";
+  const result = (
+    patch: Partial<DevelopmentResult> = {},
+  ): DevelopmentResult => ({
+    status: "intent",
+    intent: "implement",
+    evidenceRevision: 1,
+    evidence: original,
+    publishRequested: true,
+    summary: "Pagination fixed. Configured checks passed.",
+    question: null,
+    title: "Fix pagination",
+    body: "Fixed pagination and verified checks.",
+    ...patch,
+  });
+  async function fixture(text = original, chatId = "101") {
+    const w = workspace();
+    w.operatorId = operator;
+    w.github = {
+      revision: 1,
+      installationId: 501,
+      repositories: [
+        { id: 7001, full_name: "example/workspace", private: true },
+      ],
+    };
+    w.coding = {
+      revision: 1,
+      settings: {
+        enabled: true,
+        backend: "podman",
+        authMode: "provider_key",
+        repositories: [
+          {
+            repositoryId: 7001,
+            baseBranch: "develop",
+            checkCommand: "bun test",
+            maintainers: ["101", "202"],
+            development: developmentPolicy.parse({ executionMode: "direct" }),
+          },
+        ],
+      },
+    };
+    const run = createRun(w, "101", text, chatId, 3, "gpt-4.1-mini", {
+      replyTo: 10,
+      botId: "999",
+    });
+    run.status = "running";
+    const source = present(
+      w.messages.find((s) => s.runId === run.id && s.role === "user"),
+    );
+    await store.pool.query(
+      "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",
+      [w.id, operator, JSON.stringify(w)],
+    );
+    const task = await store.change(w.id, (current, sql) =>
+      startDevelopment(sql, current, run.id, "101", 7001, [source.id], "999"),
+    );
+    const starts: LocalStart[] = [],
+      publications: string[] = [],
+      cancels: string[] = [],
+      erases: string[] = [];
+    let status: LocalStatus = { state: "running" };
+    const runner: LocalRunner = {
+      async start(input) {
+        starts.push(input);
+      },
+      async status() {
+        return status;
+      },
+      async publish(_w, id) {
+        publications.push(id);
+      },
+      async cancel(_w, id) {
+        cancels.push(id);
+      },
+      async erase(_w, id) {
+        erases.push(id);
+      },
+    };
+    const fallback = githubTransport();
+    let onToken: (() => Promise<void>) | undefined;
+    let confirmUnknown = false;
+    let remoteHead = "b".repeat(40),
+      closed = false;
+    const app = new GitHubApp(githubFixtureConfig, (async (input, init) => {
+      if (String(input).endsWith("/access_tokens")) await onToken?.();
+      if (String(input).includes("/pulls?"))
+        return Response.json(
+          confirmUnknown
+            ? [
+                {
+                  number: 43,
+                  state: "open",
+                  head: {
+                    ref: `codex/repodesk-${task.id}`,
+                    sha: "b".repeat(40),
+                    repo: { full_name: "example/workspace" },
+                  },
+                  base: { ref: "develop" },
+                },
+              ]
+            : [],
+        );
+      if (String(input).endsWith("/pulls/43"))
+        return Response.json({
+          number: 43,
+          state: closed ? "closed" : "open",
+          merged: false,
+          head: {
+            ref: `codex/repodesk-${task.id}`,
+            sha: remoteHead,
+            repo: { full_name: "example/workspace" },
+          },
+        });
+      return fallback(input, init);
+    }) as typeof fetch);
+    const executor = () =>
+      new DevelopmentExecutor(
+        store,
+        new GitHubApps(store, "ab".repeat(32), app),
+        runner,
+        "ab".repeat(32),
+      );
+    const read = () => taskGet(store.pool, w.id, task.id);
+    const tick = async (next?: LocalStatus) => {
+      if (next) status = next;
+      await store.change(w.id, async (_w, sql) => {
+        const t = await read();
+        t.nextPollAt = undefined;
+        t.leaseUntil = undefined;
+        await taskSave(sql, t);
+      });
+      await executor().advance(w.id, task.id);
+      return read();
+    };
+    const append = async (
+      text: string,
+      actor = "101",
+      key: string = randomUUID(),
+    ) =>
+      store.change(w.id, async (w, sql) => {
+        const t = await taskGet(sql, w.id, task.id);
+        const source: Source = {
+          id: `${actor}:${key}`,
+          author: actor,
+          chatId: t.chatId,
+          topicId: t.topicId,
+          text,
+          directed: true,
+          role: "user",
+          at: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 86400000).toISOString(),
+        };
+        w.messages.push(source);
+        return appendDevelopment(sql, w, t, actor, source, key);
+      });
+    return {
+      w,
+      task,
+      run,
+      source,
+      starts,
+      publications,
+      cancels,
+      erases,
+      runner,
+      read,
+      tick,
+      append,
+      executor,
+      onToken: (fn: () => Promise<void>) => {
+        onToken = fn;
+      },
+      confirmUnknown: () => {
+        confirmUnknown = true;
+      },
+      close: () => {
+        closed = true;
+      },
+      head: (sha: string) => {
+        remoteHead = sha;
+      },
+    };
+  }
+  test("original message, atomic outbox, duplicates, tenant scope and rollback", async () => {
+    const f = await fixture();
+    expect((await taskInputs(store.pool, f.task))[0]?.text).toBe(original);
+    expect(
+      (
+        await store.pool.query(
+          "SELECT id FROM outbox WHERE workspace_id=$1 AND kind='delivery'",
+          [f.w.id],
+        )
+      ).rowCount,
+    ).toBe(1);
+    const duplicate = await store.change(f.w.id, (w, sql) =>
+      startDevelopment(sql, w, f.run.id, "101", 7001, [f.source.id], "999"),
+    );
+    expect(duplicate.id).toBe(f.task.id);
+    await expect(taskGet(store.pool, randomUUID(), f.task.id)).rejects.toThrow(
+      "not_found",
+    );
+    await expect(
+      store.change(f.w.id, async (w, sql) => {
+        const t = await taskGet(sql, w.id, f.task.id);
+        await cancelDevelopment(sql, w, "101", t.id);
+        throw new Error("rollback");
+      }),
+    ).rejects.toThrow("rollback");
+    expect((await f.read()).cancelRequested).toBe(false);
+    await f.append("Also handle empty pages", "101", "unique");
+    await f.append("Also handle empty pages", "101", "unique");
+    expect((await f.read()).revision).toBe(2);
+  });
+  test("question survives restart, releases attempt and answers continue the same PR", async () => {
+    const f = await fixture();
+    await f.tick();
+    expect(f.starts[0]?.issue).toBeUndefined();
+    expect(f.starts[0]?.development?.inputs[0]?.text).toBe(original);
+    await f.tick({
+      state: "succeeded",
+      tokens: 20,
+      threadId: "thread-1",
+      result: result(),
+    });
+    await f.tick();
+    const waiting = await f.tick({
+      state: "succeeded",
+      tokens: 30,
+      threadId: "thread-1",
+      result: result({
+        status: "needs_input",
+        question: "Should empty results keep page one?",
+      }),
+    });
+    expect(waiting.state).toBe("waiting");
+    expect(waiting.attemptId).toBeUndefined();
+    await f.append("Yes, keep page one.");
+    await f.tick();
+    expect(f.starts.at(-1)?.development?.mode).toBe("work");
+    expect(f.starts.at(-1)?.development?.inputs.at(-1)?.kind).toBe("answer");
+    await f.tick({
+      state: "ready",
+      tokens: 40,
+      checkPassed: true,
+      threadId: "thread-2",
+      result: result({ status: "completed" }),
+    });
+    expect(f.publications).toHaveLength(1);
+    const done = await f.tick({
+      state: "succeeded",
+      tokens: 40,
+      prUrl: "https://github.com/example/workspace/pull/43",
+      publishedSha: "b".repeat(40),
+    });
+    expect(done.state).toBe("review");
+    await f.append("Also handle negative pages.");
+    await f.tick();
+    expect(f.starts.at(-1)?.development?.pr?.number).toBe(43);
+    await f.tick({
+      state: "succeeded",
+      tokens: 20,
+      result: result({
+        evidenceRevision: 3,
+        evidence: "Also handle negative pages.",
+      }),
+    });
+    await f.tick();
+    await f.tick({
+      state: "ready",
+      tokens: 40,
+      checkPassed: true,
+      result: result({ status: "completed" }),
+    });
+    const updated = await f.tick({
+      state: "succeeded",
+      tokens: 40,
+      prUrl: present(done.pr).url,
+      publishedSha: "c".repeat(40),
+    });
+    expect(updated.pr?.number).toBe(43);
+    expect(f.publications).toHaveLength(2);
+  });
+  test("pending input blocks stale publication and is preserved in order", async () => {
+    const f = await fixture();
+    await f.tick();
+    await f.tick({ state: "succeeded", tokens: 10, result: result() });
+    await f.tick();
+    await f.append("Keep zero-based pages");
+    const pending = await f.tick({
+      state: "ready",
+      tokens: 20,
+      result: result({ status: "completed" }),
+      checkPassed: true,
+    });
+    expect(pending.state).toBe("queued");
+    expect(pending.verifiedRevision).toBe(1);
+    expect(f.publications).toHaveLength(0);
+    await f.tick();
+    expect(f.starts.at(-1)?.development?.inputs.map((i) => i.text)).toEqual([
+      original,
+      "Keep zero-based pages",
+    ]);
+  });
+  test("analysis, forged evidence, missing usage and exhausted limits cannot publish", async () => {
+    const f = await fixture("Explain pagination only");
+    await f.tick();
+    await f.tick({
+      state: "succeeded",
+      tokens: 10,
+      result: result({
+        intent: "analyze",
+        evidence: "Explain pagination only",
+        publishRequested: false,
+      }),
+    });
+    await f.tick();
+    expect(f.starts.at(-1)?.development?.mode).toBe("analysis");
+    const done = await f.tick({
+      state: "succeeded",
+      tokens: 20,
+      result: result({ status: "analysis", intent: "analyze" }),
+    });
+    expect(done.state).toBe("review");
+    expect(f.publications).toHaveLength(0);
+    const forged = await fixture();
+    await forged.tick();
+    expect(
+      (
+        await forged.tick({
+          state: "succeeded",
+          tokens: 10,
+          result: result({ evidence: "invented permission" }),
+        })
+      ).state,
+    ).toBe("failed");
+    const missing = await fixture();
+    await missing.tick();
+    await missing.tick({ state: "succeeded", result: result() });
+    expect((await missing.tick()).error).toBe("coding_budget_exhausted");
+  });
+  test("revocation cancels working task; initiator may stop after losing maintainer status", async () => {
+    const f = await fixture();
+    await f.tick();
+    await store.change(f.w.id, (w) => {
+      present(present(w.coding).settings.repositories[0]).maintainers = ["202"];
+    });
+    await store.change(f.w.id, (w, sql) =>
+      cancelDevelopment(sql, w, "101", f.task.id),
+    );
+    expect((await f.tick()).state).toBe("cancelled");
+    expect(f.cancels).toHaveLength(1);
+  });
+  test("publication acknowledgement loss never repeats the POST", async () => {
+    const f = await fixture();
+    await f.tick();
+    await f.tick({ state: "succeeded", tokens: 10, result: result() });
+    await f.tick();
+    await f.tick({
+      state: "ready",
+      tokens: 20,
+      result: result({ status: "completed" }),
+      checkPassed: true,
+    });
+    expect(
+      (
+        await f.tick({
+          state: "ready",
+          tokens: 20,
+          result: result({ status: "completed" }),
+          checkPassed: true,
+        })
+      ).state,
+    ).toBe("unknown");
+    expect(f.publications).toHaveLength(1);
+  });
+  test("current remote head is fetched and a closed PR is not recreated", async () => {
+    const f = await fixture();
+    await store.change(f.w.id, async (_w, sql) => {
+      const t = await f.read();
+      t.pr = {
+        number: 43,
+        url: "https://github.com/example/workspace/pull/43",
+        branch: `codex/repodesk-${t.id}`,
+        headSha: "a".repeat(40),
+      };
+      await taskSave(sql, t);
+    });
+    f.head("c".repeat(40));
+    await f.tick();
+    expect(f.starts[0]?.development?.pr?.headSha).toBe("c".repeat(40));
+    const closed = await fixture();
+    await store.change(closed.w.id, async (_w, sql) => {
+      const t = await closed.read();
+      t.pr = {
+        number: 43,
+        url: "https://github.com/example/workspace/pull/43",
+        branch: `codex/repodesk-${t.id}`,
+        headSha: "a".repeat(40),
+      };
+      await taskSave(sql, t);
+    });
+    closed.close();
+    expect((await closed.tick()).error).toBe("coding_pr_closed");
+    expect(closed.starts).toHaveLength(0);
+  });
+  test("soft deletion erases private relational content before remote cleanup", async () => {
+    const f = await fixture();
+    await f.tick();
+    await store.change(f.w.id, async (w, sql) => {
+      w.deletion = {
+        requestedAt: new Date().toISOString(),
+        providerState: "unknown",
+      };
+      await pruneDevelopment(sql, w);
+    });
+    expect(await taskInputs(store.pool, f.task)).toHaveLength(0);
+    expect(
+      JSON.stringify(
+        (
+          await store.pool.query(
+            "SELECT data FROM coding_task_attempts WHERE workspace_id=$1",
+            [f.w.id],
+          )
+        ).rows,
+      ),
+    ).not.toContain(original);
+    await f.executor().tick(f.w.id);
+    expect(f.erases).toHaveLength(1);
+    await expect(f.read()).rejects.toThrow("not_found");
+  });
+  test("Telegram answers, edits, duplicates and ambiguous Topics preserve authenticated inputs", async () => {
+    const f = await fixture();
+    const message = {
+      message_id: 20,
+      date: Math.floor(Date.now() / 1000),
+      from: { id: 101, is_bot: false },
+      chat: { id: 101, type: "private" as const },
+      message_thread_id: 3,
+      text: "Also handle empty pages",
+    };
+    const route = (update: {
+      update_id: number;
+      message?: typeof message;
+      edited_message?: typeof message;
+    }) =>
+      store.change(f.w.id, (w, sql) =>
+        routeDevelopment(
+          sql,
+          w,
+          update,
+          "999",
+          update.message ?? present(update.edited_message),
+          { name: "ask", args: message.text },
+        ),
+      );
+    await route({ update_id: 20, message });
+    await route({ update_id: 20, message });
+    await route({
+      update_id: 21,
+      edited_message: { ...message, text: "Keep original page numbering" },
+    });
+    expect((await f.read()).revision).toBe(3);
+    expect((await taskInputs(store.pool, f.task)).map((i) => i.text)).toEqual([
+      original,
+      message.text,
+      "Keep original page numbering",
+    ]);
+    await expect(
+      store.change(f.w.id, (w, sql) =>
+        appendDevelopment(
+          sql,
+          w,
+          f.task,
+          "303",
+          { ...f.source, author: "303" },
+          "unauthorized",
+        ),
+      ),
+    ).rejects.toThrow("destination_denied");
+    // A second task in the same Topic requires selection rather than guessing.
+    await store.change(f.w.id, async (w, sql) => {
+      const run = createRun(w, "101", "Fix sorting", "101", 3, "gpt-4.1-mini", {
+        replyTo: 30,
+        botId: "999",
+      });
+      run.status = "running";
+      const source = present(
+        w.messages.find((s) => s.runId === run.id && s.role === "user"),
+      );
+      await startDevelopment(sql, w, run.id, "101", 7001, [source.id], "999");
+    });
+    await route({ update_id: 31, message: { ...message, message_id: 31 } });
+    const w = await store.read(f.w.id);
+    const selection = present(
+      w.deliveries.find((d) => d.id === "development:selection:999:31"),
+    );
+    expect(selection.buttons).toHaveLength(2);
+    await store.change(w.id, (w) => {
+      const d = present(w.deliveries.find((d) => d.id === selection.id));
+      d.state = "sent";
+      d.remoteId = 40;
+    });
+    await store.change(w.id, (w, sql) =>
+      selectDevelopment(
+        sql,
+        w,
+        {
+          update_id: 32,
+          callback_query: {
+            id: "choice",
+            from: { id: 101, is_bot: false },
+            data: `devpick:${f.task.id}:31`,
+            message: { ...message, message_id: 40 },
+          },
+        },
+        "999",
+      ),
+    );
+    expect((await f.read()).revision).toBe(4);
+  });
+  test("two workers reserve one attempt, and revocation during token minting denies start", async () => {
+    const f = await fixture();
+    await Promise.all([
+      f.executor().advance(f.w.id, f.task.id),
+      f.executor().advance(f.w.id, f.task.id),
+    ]);
+    expect(f.starts).toHaveLength(1);
+    expect(
+      (
+        await store.pool.query(
+          "SELECT id FROM coding_task_attempts WHERE workspace_id=$1 AND state='running'",
+          [f.w.id],
+        )
+      ).rowCount,
+    ).toBe(1);
+    const revoked = await fixture();
+    revoked.onToken(async () => {
+      await store.change(revoked.w.id, (w) => {
+        present(w.coding).revision++;
+      });
+    });
+    expect((await revoked.tick()).error).toBe("coding_configuration_changed");
+    expect(revoked.starts).toHaveLength(0);
+  });
+  test("group maintainers serialize their original inputs and private context is denied", async () => {
+    const f = await fixture(original, "-100100");
+    await Promise.all([
+      f.append("Keep zero-based pages", "101"),
+      f.append("Keep one-based pages", "202"),
+    ]);
+    const inputs = await taskInputs(store.pool, f.task);
+    expect(inputs).toHaveLength(3);
+    expect(inputs.map((i) => i.revision)).toEqual([1, 2, 3]);
+    expect(new Set(inputs.slice(1).map((i) => i.actor))).toEqual(
+      new Set(["101", "202"]),
+    );
+    await expect(
+      store.change(f.w.id, async (w, sql) => {
+        const source = { ...f.source, id: "private-context", chatId: "101" };
+        w.messages.push(source);
+        return appendDevelopment(
+          sql,
+          w,
+          await taskGet(sql, w.id, f.task.id),
+          "101",
+          source,
+          "private-input",
+        );
+      }),
+    ).rejects.toThrow("coding_source_required");
+  });
+  test("read-only reconciliation confirms a lost publication without another write", async () => {
+    const f = await fixture();
+    await f.tick();
+    await f.tick({ state: "succeeded", tokens: 10, result: result() });
+    await f.tick();
+    await f.tick({
+      state: "ready",
+      tokens: 20,
+      result: result({ status: "completed" }),
+      checkPassed: true,
+    });
+    f.confirmUnknown();
+    const done = await f.tick({
+      state: "unknown",
+      tokens: 20,
+      publishedSha: "b".repeat(40),
+      error: "coding_publication_unknown",
+    });
+    expect(done.state).toBe("review");
+    expect(done.pr?.number).toBe(43);
+    expect(f.publications).toHaveLength(1);
+  });
+});

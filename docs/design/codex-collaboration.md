@@ -1,6 +1,7 @@
 # Continuous development through Telegram
 
-Status: **accepted product direction; not implemented**, 2026-10-05.
+Status: **implemented behind repository direct-execution policy; live pilot validation pending**, 2026-10-05.
+See the [implementation plan and evidence](../implementation/codex-collaboration-plan.md) for the delivered transport, limits and release gates.
 Source: the project owner's discussion on 2026-10-05: reduce repeated human
 confirmation, keep Pi responsible for requirements intake, and delegate complex
 development work and technical decisions to Codex. This is a responsibility

@@ -2123,3 +2123,19 @@ aside .field span {
 .member-table td:not(:first-child) {
   white-space: nowrap;
 }
+
+.member-table td.github-access {
+  min-width: 170px;
+  max-width: 190px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.site-domain-details dd,
+.site-domain-details a {
+  overflow-wrap: anywhere;
+}
+.site-domain-details pre,
+.site-domain-preview {
+  max-width: 100%;
+  overflow-x: auto;
+}

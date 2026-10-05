@@ -8,6 +8,7 @@ import { Store } from "./db/repositories.ts";
 import { configuredGitHubApp } from "./github/app.ts";
 import { GitHubIssues } from "./github/issues.ts";
 import { GitHubApps } from "./github/registry.ts";
+import { GitHubUsers } from "./github/users.ts";
 import { startWorker } from "./jobs/queue.ts";
 import { RuntimeLogger } from "./observability/logs.ts";
 import { SetupService } from "./setup/service.ts";
@@ -50,6 +51,7 @@ const stop = await startWorker(
       : undefined,
     cfg.ENCRYPTION_KEY,
   ),
+  new GitHubUsers(store, githubApps, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN),
 );
 log.write("worker_started");
 let stopping = false;

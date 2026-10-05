@@ -25,6 +25,14 @@ Content-Type: application/json
       "repositoryId": 7001,
       "baseBranch": "develop",
       "maintainers": ["101"],
+      "development": {
+        "executionMode": "reviewed",
+        "publishByDefault": false,
+        "maxAttempts": 8,
+        "maxRepairAttempts": 2,
+        "activeSeconds": 2700,
+        "maxTokens": 200000
+      },
       "setupCommand": "bun install --frozen-lockfile",
       "checkCommand": "bun run check && bun run typecheck && bun test && bun run build"
     }]
@@ -50,7 +58,9 @@ Content-Type: application/json
 
 {}
 
-### Stop a task; cancellation during publication is best-effort.
+### Stop a reviewed or continuous task; publication cancellation is best-effort.
+# GET returns developmentTasks separately from legacy tasks.
+# Explicitly save executionMode "direct" after your dedicated live pilot checks.
 POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding/REPLACE_TASK_UUID/cancel
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}

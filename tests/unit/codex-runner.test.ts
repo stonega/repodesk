@@ -448,3 +448,258 @@ test("device-auth tasks use only their workspace credential and remove the task 
   );
   expect(raw).not.toContain("refreshed-secret");
 });
+
+test("continuous questions checkpoint and release the runner; tenant-scoped answers reconstruct", async () => {
+  const f = await fixture();
+  const taskId = randomUUID();
+  const input = {
+    ...f.input,
+    issue: undefined,
+    development: {
+      taskId,
+      pr: {
+        number: 43,
+        url: "https://github.com/example/repo/pull/43",
+        branch: `codex/repodesk-${taskId}`,
+        headSha: "a".repeat(40),
+      },
+      revision: 1,
+      mode: "work" as const,
+      inputs: [
+        {
+          revision: 1,
+          actor: "101",
+          sourceId: "101:10",
+          text: "Fix pagination",
+          kind: "request" as const,
+        },
+      ],
+      context: "",
+      maxRepairAttempts: 2,
+      activeSeconds: 2700,
+      maxTokens: 1000,
+    },
+  };
+  const originalRead = f.engine.readText;
+  let question = true;
+  f.engine.readText = async (container, path, max) =>
+    path.endsWith("conversation.json")
+      ? JSON.stringify({
+          threadId: "thread-123",
+          tokens: 10,
+          result: {
+            status: question ? "needs_input" : "completed",
+            intent: "implement",
+            evidenceRevision: 1,
+            evidence: "Fix pagination",
+            publishRequested: false,
+            summary: "Fixed pagination",
+            question: question ? "Keep page one for empty results?" : null,
+            title: "Fix pagination",
+            body: "Configured checks passed.",
+          },
+        })
+      : originalRead(container, path, max);
+  await f.supervisor.start(input);
+  for (let i = 0; i < 3; i++)
+    await f.supervisor.status(input.workspaceId, input.taskId);
+  expect(
+    (await f.supervisor.status(input.workspaceId, input.taskId)).state,
+  ).toBe("succeeded");
+  const next = {
+    ...input,
+    taskId: randomUUID(),
+    development: {
+      ...input.development,
+      previousAttemptId: input.taskId,
+      revision: 2,
+      threadId: "thread-123",
+      inputs: [
+        ...input.development.inputs,
+        {
+          revision: 2,
+          actor: "101",
+          sourceId: "101:11",
+          text: "Yes, keep page one",
+          kind: "answer" as const,
+        },
+      ],
+    },
+  };
+  question = false;
+  await f.supervisor.start(next);
+  expect(
+    f.calls.some((c) =>
+      c.args.includes(
+        `${taskKey(next.workspaceId, next.taskId)}-prepare:/input/checkpoint.patch`,
+      ),
+    ),
+  ).toBe(true);
+  for (let i = 0; i < 4; i++)
+    await f.supervisor.status(next.workspaceId, next.taskId);
+  const ready = await f.supervisor.status(next.workspaceId, next.taskId);
+  expect(ready.state).toBe("ready");
+  expect(ready.checkPassed).toBe(true);
+  expect(ready.tokens).toBe(10);
+  await f.supervisor.erase(input.workspaceId, input.taskId);
+  const record = await readFile(
+    join(
+      f.settings.CODEX_RUNNER_STATE,
+      `${taskKey(input.workspaceId, input.taskId)}.json`,
+    ),
+    "utf8",
+  );
+  expect(record).not.toContain("Fix pagination");
+  expect(record).not.toContain("Keep page one");
+});
+
+test("failed configured checks trigger bounded repairs with sealed credentials and cumulative usage", async () => {
+  const f = await fixture();
+  const input = {
+    ...f.input,
+    providerApiKey: "panel-repair-secret",
+    issue: undefined,
+    development: {
+      taskId: randomUUID(),
+      revision: 1,
+      mode: "work" as const,
+      inputs: [
+        {
+          revision: 1,
+          actor: "101",
+          sourceId: "101:10",
+          text: "Fix pagination",
+          kind: "request" as const,
+        },
+      ],
+      context: "",
+      maxRepairAttempts: 1,
+      activeSeconds: 2700,
+      maxTokens: 1000,
+    },
+  };
+  const originalRead = f.engine.readText,
+    originalCommand = f.engine.command;
+  let checks = 0;
+  f.engine.readText = async (container, path, max) =>
+    path.endsWith("conversation.json")
+      ? JSON.stringify({
+          threadId: "thread-123",
+          tokens: 10,
+          result: {
+            status: "completed",
+            intent: "implement",
+            evidenceRevision: 1,
+            evidence: "Fix pagination",
+            publishRequested: true,
+            summary: "Fixed pagination",
+            question: null,
+            title: "Fix pagination",
+            body: "Configured checks passed.",
+          },
+        })
+      : originalRead(container, path, max);
+  f.engine.command = async (args, env) => {
+    if (args[0] === "inspect" && args.at(-1)?.endsWith("-check")) {
+      checks++;
+      return JSON.stringify({
+        Running: false,
+        Status: "exited",
+        ExitCode: checks === 1 ? 1 : 0,
+      });
+    }
+    return originalCommand(args, env);
+  };
+  await f.supervisor.start(input);
+  for (let i = 0; i < 6; i++)
+    await f.supervisor.status(input.workspaceId, input.taskId);
+  const ready = await f.supervisor.status(input.workspaceId, input.taskId);
+  expect(ready.state).toBe("ready");
+  expect(ready.tokens).toBe(20);
+  expect(checks).toBe(2);
+  expect(
+    f.calls.filter(
+      (c) =>
+        c.args[0] === "create" &&
+        c.args.includes(
+          `${taskKey(input.workspaceId, input.taskId)}-implement`,
+        ),
+    ),
+  ).toHaveLength(2);
+  const repairedInputs = f.jobInputs
+    .map((s) => JSON.parse(s))
+    .filter((j) => j.development);
+  expect(repairedInputs.some((j) => j.development.maxTokens === 990)).toBe(
+    true,
+  );
+  expect(JSON.stringify(repairedInputs)).not.toContain(input.providerApiKey);
+});
+
+test("device continuous result is captured before deleting its credentialed container", async () => {
+  const f = await fixture();
+  f.input.payload.authMode = "device_code";
+  f.input.issue = undefined;
+  f.input.development = {
+    taskId: randomUUID(),
+    revision: 1,
+    mode: "work",
+    inputs: [
+      {
+        revision: 1,
+        actor: "101",
+        sourceId: "101:10",
+        text: "Fix pagination",
+        kind: "request",
+      },
+    ],
+    context: "",
+    maxRepairAttempts: 2,
+    activeSeconds: 2700,
+    maxTokens: 1000,
+  };
+  await f.supervisor.device.save(
+    f.input.workspaceId,
+    '{"tokens":{"access_token":"account-secret"}}',
+  );
+  const read = f.engine.readText,
+    command = f.engine.command;
+  let removed = false;
+  f.engine.command = async (args, env) => {
+    if (
+      args[0] === "rm" &&
+      args.includes(`${taskKey(f.input.workspaceId, f.input.taskId)}-implement`)
+    )
+      removed = true;
+    return command(args, env);
+  };
+  f.engine.readText = async (container, path, max) => {
+    if (path === "/auth/auth.json")
+      return '{"tokens":{"access_token":"account-secret"}}';
+    if (path === "/task/conversation.json") {
+      if (removed) throw Error("Container already deleted");
+      return JSON.stringify({
+        threadId: "thread-123",
+        tokens: 10,
+        result: {
+          status: "needs_input",
+          intent: "implement",
+          evidenceRevision: 1,
+          evidence: "Fix pagination",
+          publishRequested: false,
+          summary: "Question checkpoint",
+          question: "Keep page one?",
+          title: "Pagination",
+          body: "",
+        },
+      });
+    }
+    return read(container, path, max);
+  };
+  await f.supervisor.start(f.input);
+  for (let i = 0; i < 3; i++)
+    await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  const status = await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  expect(status.state).toBe("succeeded");
+  expect(status.result?.question).toBe("Keep page one?");
+  expect(removed).toBe(true);
+});

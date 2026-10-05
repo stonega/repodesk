@@ -23,7 +23,7 @@ export function createApp(
   deviceAuth?: LocalDeviceAuth,
 ) {
   const app = new Hono();
-  const ingress = new Ingress(store, setup);
+  const ingress = new Ingress(store, setup, github.users);
   app.use(
     "*",
     secureHeaders({
@@ -79,6 +79,17 @@ export function createApp(
     const update = updateSchema.parse(await c.req.json());
     return c.json(await ingress.accept(update));
   });
+  // Telegram flows use the existing registered callback, without a panel login.
+  app.get("/api/admin/github/callback", async (c, next) => {
+    const state = c.req.query("state") ?? "";
+    if (!state.startsWith("telegram_")) return next();
+    c.header("Cache-Control", "no-store");
+    c.header("Referrer-Policy", "no-referrer");
+    await github.users.callbackResult(state, c.req.query("code"));
+    return c.text(
+      "Return to Telegram and confirm your GitHub account there. This window can be closed.",
+    );
+  });
   app.route(
     "/",
     adminRoutes(
@@ -131,6 +142,8 @@ export function createApp(
         "input",
         "output",
         "thinkingLevel",
+        "domain",
+        "revision",
       ]);
       const issues = error.issues
         .filter(
