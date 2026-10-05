@@ -981,3 +981,51 @@ test("cancellation stops Codex before capturing its last rotated credential", as
     "final-rotated",
   );
 });
+
+test("Docker task arguments preserve isolation without Podman-only flags", async () => {
+  const f = await fixture();
+  const settings = { ...f.settings, CODEX_CONTAINER_ENGINE: "docker" as const };
+  const args = containerArgs(
+    settings,
+    taskKey(f.input.workspaceId, f.input.taskId),
+    "work",
+    "implement",
+    { CODEX_JOB_TIMEOUT_SECONDS: "120" },
+    "task-auth",
+  );
+  expect(args).toContain("task-auth:/auth");
+  expect(args).toContain(
+    `${taskKey(f.input.workspaceId, f.input.taskId)}-input:/input:ro`,
+  );
+  expect(args).toContain("--cap-drop=ALL");
+  expect(args).toContain("--read-only");
+  expect(args).toContain("--user=1000:1000");
+  expect(args.some((arg) => arg.startsWith("--timeout="))).toBe(false);
+  expect(args).not.toContain("--http-proxy=false");
+  expect(args.join(" ")).not.toContain("docker.sock");
+  expect(args).not.toContain("120");
+});
+test("runner readiness requires the task image and network, while liveness remains independent", async () => {
+  const f = await fixture();
+  const app = runnerApp(f.supervisor);
+  expect((await app.request("/readyz")).status).toBe(200);
+  expect(
+    f.calls.some(
+      ({ args }) =>
+        args[0] === "image" && args.includes(f.settings.CODEX_RUNNER_IMAGE),
+    ),
+  ).toBe(true);
+  expect(
+    f.calls.some(
+      ({ args }) =>
+        args[0] === "network" && args.includes(f.settings.CODEX_RUNNER_NETWORK),
+    ),
+  ).toBe(true);
+  f.engine.command = async () => {
+    throw Error("private engine diagnostics");
+  };
+  const failed = await app.request("/readyz");
+  expect(failed.status).toBe(503);
+  expect(await failed.text()).not.toContain("private engine diagnostics");
+  expect((await app.request("/healthz")).status).toBe(200);
+});

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
+  copyFileSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -22,8 +23,16 @@ printf '%s\\n' "$*" >> "$DEPLOY_TEST_LOG"
 case "$*" in
   "info "*) echo "$DEPLOY_TEST_ARCH" ;;
   "image inspect "*)
-    [[ "$*" = "image inspect --format {{.Id}} $DEPLOY_TEST_TAG" ]] || exit 43
-    echo "$DEPLOY_TEST_IMAGE" ;;
+    case "$*" in
+      *repodesk-codex-supervisor:*) echo "sha256:${"d".repeat(64)}" ;;
+      *repodesk-codex-job:*) echo "sha256:${"e".repeat(64)}" ;;
+      *) [[ "$*" = "image inspect --format {{.Id}} $DEPLOY_TEST_TAG" ]] || exit 43
+         echo "$DEPLOY_TEST_IMAGE" ;;
+    esac ;;
+  *"--wait-timeout 180 codex-runner"*) [[ "$DEPLOY_TEST_FAILURE" != runner ]] || exit 42 ;;
+  *"codex-release-config.mjs "*)
+    CODEX_SUPERVISOR_IMAGE="sha256:${"d".repeat(64)}" CODEX_RUNNER_IMAGE="sha256:${"e".repeat(64)}" \
+      node "$DEPLOY_TEST_ROOT/releases/123-1/codex-release-config.mjs" "$DEPLOY_TEST_ROOT" "$DEPLOY_TEST_ROOT/releases/123-1" fixture ;;
   *"--entrypoint node "*) [[ "$DEPLOY_TEST_FAILURE" != secret ]] || exit 42 ;;
   *"pg_dump "*)
     [[ "$DEPLOY_TEST_FAILURE" != backup ]] || exit 42
@@ -50,7 +59,12 @@ case "$*" in
 esac
 `;
 
-function deploy(failure = "", arch = "x86_64", duplicate = false) {
+function deploy(
+  failure = "",
+  arch = "x86_64",
+  duplicate = false,
+  codex = false,
+) {
   const root = mkdtempSync(join(tmpdir(), "repodesk-deploy-test-"));
   try {
     const release = join(root, "releases/123-1");
@@ -71,6 +85,22 @@ function deploy(failure = "", arch = "x86_64", duplicate = false) {
       join(release, "image.tar.gz"),
       failure === "archive" ? "damaged" : "fixture",
     );
+    if (codex) {
+      writeFileSync(join(release, "codex-compose.yaml"), "services: {}\n");
+      writeFileSync(
+        join(release, "codex-supervisor-tag"),
+        `repodesk-codex-supervisor:release-${"b".repeat(40)}\n`,
+      );
+      if (failure !== "runner-artifact")
+        writeFileSync(
+          join(release, "codex-job-tag"),
+          `repodesk-codex-job:release-${"b".repeat(40)}\n`,
+        );
+      copyFileSync(
+        join(import.meta.dir, "../../deploy/codex/release-config.mjs"),
+        join(release, "codex-release-config.mjs"),
+      );
+    }
     writeFileSync(join(bin, "docker"), docker, { mode: 0o755 });
     writeFileSync(join(bin, "sleep"), "#!/usr/bin/env bash\nexit 0\n", {
       mode: 0o755,
@@ -86,6 +116,7 @@ function deploy(failure = "", arch = "x86_64", duplicate = false) {
         ...process.env,
         PATH: `${bin}:${process.env.PATH}`,
         DEPLOY_TEST_LOG: log,
+        DEPLOY_TEST_ROOT: root,
         DEPLOY_TEST_IMAGE: importedImageId,
         DEPLOY_TEST_TAG: imageTag,
         DEPLOY_TEST_FAILURE: failure,
@@ -98,6 +129,10 @@ function deploy(failure = "", arch = "x86_64", duplicate = false) {
       calls: readFileSync(log, "utf8"),
       current: readFileSync(join(root, ".current-release"), "utf8"),
       stderr: result.stderr.toString(),
+      codexEnvironment:
+        codex && result.exitCode === 0
+          ? readFileSync(join(release, "codex.env"), "utf8")
+          : "",
       releaseEnvironment:
         result.exitCode === 0
           ? readFileSync(join(release, "release.env"), "utf8")
@@ -208,3 +243,31 @@ describe("VPS release cutover", () => {
     expect(result.current).toBe("previous\n");
   });
 });
+
+test("Docker release starts the healthy runner before stopping writers and injects immutable images", () => {
+  const result = deploy("", "x86_64", false, true);
+  expect(result.exitCode).toBe(0);
+  expect(result.calls.indexOf("--wait-timeout 180 codex-runner")).toBeLessThan(
+    result.calls.indexOf("stop app worker"),
+  );
+  expect(result.codexEnvironment).toContain(
+    `CODEX_SUPERVISOR_IMAGE=sha256:${"d".repeat(64)}`,
+  );
+  expect(result.codexEnvironment).toContain(
+    `CODEX_RUNNER_IMAGE=sha256:${"e".repeat(64)}`,
+  );
+  expect(result.codexEnvironment).toContain(
+    "CODEX_RUNNER_NETWORK=fixture_codex_tasks",
+  );
+  const token = result.codexEnvironment.split("\n")[0]?.split("=")[1];
+  expect(token).toMatch(/^[a-f0-9]{64}$/);
+  expect(result.calls).not.toContain(token ?? "missing-token");
+});
+for (const failure of ["runner", "runner-artifact"]) {
+  test(`${failure} preflight failure leaves existing writers and release marker untouched`, () => {
+    const result = deploy(failure, "x86_64", false, true);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.calls).not.toContain("stop app worker");
+    expect(result.current).toBe("previous\n");
+  });
+}

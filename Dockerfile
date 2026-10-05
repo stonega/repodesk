@@ -24,15 +24,19 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 CMD ["node", "dist/server.js"]
 
-# Optional supervisor: only this service receives the rootless Podman socket.
+# Pinned client only; the host's existing Docker daemon runs the task containers.
+FROM docker:29-cli@sha256:b1805116a6a86cc591b5d5f60a910a0715cdcc9d18d866ad68b1457ead25c35c AS docker-client
+
+# Trusted supervisor: only this service receives the selected engine socket.
 FROM runtime AS codex-supervisor
+COPY --from=docker-client /usr/local/bin/docker /usr/local/bin/docker
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends podman \
     && npm install -g @openai/codex@0.155.1 \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
 HEALTHCHECK --interval=30s --timeout=5s \
-  CMD node -e "fetch('http://127.0.0.1:3020/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:3020/readyz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 CMD ["node", "dist/runner-server.js"]
 
 # Reused for preparation, isolated implementation, and fresh PR publication.
@@ -46,7 +50,7 @@ COPY --from=base /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /opt/deepx
 COPY --from=build /app/dist/job.js ./job.js
 COPY --from=dependencies /app/node_modules/zod ./node_modules/zod
-RUN mkdir /task /input && chown node:node /task
+RUN mkdir /task /input /auth && chown node:node /task /auth
 ENV HOME=/task/home
 USER node
 ENTRYPOINT ["node", "/opt/deepx/job.js"]

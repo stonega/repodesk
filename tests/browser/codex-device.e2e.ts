@@ -60,10 +60,19 @@ test("unavailable runner can be rechecked without losing the configuration draft
   await expect(dialog.getByRole("status")).toContainText(
     "runner is unavailable",
   );
+  await expect(dialog).toContainText(
+    "VPS releases automatically start and maintain the Codex runner",
+  );
+  await expect(
+    dialog.getByRole("link", { name: "Codex runner setup instructions" }),
+  ).toHaveAttribute("href", /codex-podman\.md#configure-the-deployment$/);
   await dialog.screenshot({
     path: "test-results/codex-configuration-desktop.png",
   });
   await dialog.getByLabel("Sign-in method").selectOption("provider_key");
+  await expect(
+    dialog.getByRole("link", { name: "Codex runner setup instructions" }),
+  ).toBeVisible();
   await dialog
     .getByLabel("Provider API key", { exact: true })
     .fill("unsaved-test-key");
@@ -204,6 +213,9 @@ test("title switch persists enablement and retains the saved state when a stale 
 }) => {
   const { data, dialog } = await fixture(page, { state: "disconnected" });
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(
+    page.getByRole("link", { name: "Codex runner setup instructions" }),
+  ).toBeVisible();
   const toggle = page.getByRole("switch", {
     name: "Enable Codex implementation",
   });
@@ -219,6 +231,11 @@ test("title switch persists enablement and retains the saved state when a stale 
   await toggle.focus();
   await toggle.press("Space");
   await expect(toggle).toBeChecked();
+  await expect(
+    page.getByLabel("Codex configuration", { exact: true }),
+  ).toContainText(
+    "VPS releases automatically start and maintain the Codex runner",
+  );
   await page.reload();
   await expect(toggle).toBeChecked();
   await page.route(`**${endpoint}`, async (route) => {

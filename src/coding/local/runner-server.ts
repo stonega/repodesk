@@ -4,6 +4,7 @@ import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import { Fault, requireThat } from "../../domain.ts";
 import { equal } from "../../setup/credentials.ts";
+import { Docker } from "./docker.ts";
 import { Podman } from "./podman.ts";
 import { localStart } from "./protocol.ts";
 import { runnerSettings } from "./settings.ts";
@@ -16,6 +17,14 @@ export function runnerApp(
   const app = new Hono();
   app.use("*", bodyLimit({ maxSize: 8 * 1024 * 1024 }));
   app.get("/healthz", (c) => c.json({ status: "ok" }));
+  app.get("/readyz", async (c) => {
+    try {
+      await supervisor.ready();
+      return c.json({ status: "ready" });
+    } catch {
+      return c.json({ status: "coding_runner_unavailable" }, 503);
+    }
+  });
   app.on("POST", ["/v1/responses", "/v1/responses/compact"], async (c) => {
     const providerApiKey = supervisor.providerKey(
       (c.req.header("authorization") ?? "").replace(/^Bearer /, ""),
@@ -145,7 +154,12 @@ export function runnerApp(
 
 if (import.meta.main) {
   const settings = runnerSettings.parse(process.env);
-  const supervisor = new RunnerSupervisor(settings, new Podman(settings));
+  const supervisor = new RunnerSupervisor(
+    settings,
+    settings.CODEX_CONTAINER_ENGINE === "docker"
+      ? new Docker(settings)
+      : new Podman(settings),
+  );
   await supervisor.initialize();
   const app = runnerApp(supervisor);
   const server = serve({ fetch: app.fetch, hostname: "0.0.0.0", port: 3020 });

@@ -1,4 +1,4 @@
-// Deterministic real-Podman smoke: fake Codex + local Git fixture, no remote calls.
+// Deterministic container-engine smoke: fake Codex + local Git fixture, no remote calls.
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -9,10 +9,19 @@ import type { LocalStatus } from "../src/coding/local/protocol.ts";
 import { taskKey } from "../src/coding/local/supervisor.ts";
 
 const exec = promisify(execFile);
-const podman = async (args: string[]) =>
-  (
-    await exec("podman", args, { timeout: 120000, maxBuffer: 1024 * 1024 })
-  ).stdout.trim();
+const engineName =
+  process.env.CODEX_SMOKE_ENGINE === "docker" ? "docker" : "podman";
+const engine = async (args: string[]) => {
+  if (engineName === "docker") {
+    args = args.filter((arg) => !["--format=docker", "--ignore"].includes(arg));
+    if (args[0] === "volume" && args[1] === "exists") args[1] = "inspect";
+  }
+  const result = await exec(engineName, args, {
+    timeout: 120000,
+    maxBuffer: 1024 * 1024,
+  });
+  return (result.stdout + (args[0] === "logs" ? result.stderr : "")).trim();
+};
 const suffix = randomUUID().slice(0, 8);
 const name = `deepx-codex-smoke-${suffix}`;
 const dir = await mkdtemp(join(tmpdir(), `${name}-`));
@@ -45,7 +54,7 @@ try {
   );
   await writeFile(
     join(dir, "Dockerfile.supervisor"),
-    `FROM ${process.env.CODEX_SMOKE_SUPERVISOR_IMAGE ?? "localhost/deepx-codex-supervisor:verify"}\nUSER root\nCOPY --chmod=755 codex /usr/local/bin/codex\n`,
+    `FROM ${process.env.CODEX_SMOKE_SUPERVISOR_IMAGE ?? "localhost/deepx-codex-supervisor:verify"}\nUSER root\nRUN rm /usr/local/bin/codex\nCOPY --chmod=755 codex /usr/local/bin/codex\n`,
   );
   await writeFile(
     join(dir, "fake-github.cjs"),
@@ -87,7 +96,8 @@ if(process.argv[2]==='login') {
  return;
 }
 if(process.env.GITHUB_TOKEN||process.env.CODEX_PROVIDER_API_KEY) process.exit(2);
-if(fs.existsSync('/run/podman/podman.sock')) process.exit(3);
+try {fs.accessSync('/input/job.json',fs.constants.W_OK);process.exit(8);} catch {}
+if(fs.existsSync('/run/podman/podman.sock')||fs.existsSync('/var/run/docker.sock')) process.exit(3);
 if(process.env.CODEX_HOME==='/auth') {
  if(!fs.existsSync('/auth/auth.json')||process.env.CODEX_TASK_TOKEN) process.exit(4);
  fs.writeFileSync('/auth/auth.json',JSON.stringify({tokens:{access_token:'refreshed-smoke-account'}}));
@@ -128,8 +138,8 @@ fs.writeFileSync('/task/verification.json',JSON.stringify([JSON.parse(fs.readFil
 console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
 `,
   );
-  await podman(["build", "--format=docker", "-t", image, dir]);
-  await podman([
+  await engine(["build", "--format=docker", "-t", image, dir]);
+  await engine([
     "build",
     "--format=docker",
     "-f",
@@ -138,11 +148,13 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     `${image}-supervisor`,
     dir,
   ]);
-  await podman(["network", "create", name]);
+  await engine(["network", "create", name]);
   const socket =
-    process.env.CODEX_SMOKE_PODMAN_SOCKET ??
-    (await podman(["info", "--format", "{{.Host.RemoteSocket.Path}}"]));
-  await podman([
+    engineName === "docker"
+      ? (process.env.CODEX_SMOKE_DOCKER_SOCKET ?? "/var/run/docker.sock")
+      : (process.env.CODEX_SMOKE_PODMAN_SOCKET ??
+        (await engine(["info", "--format", "{{.Host.RemoteSocket.Path}}"])));
+  await engine([
     "run",
     "-d",
     "--name",
@@ -150,6 +162,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     "--pull=never",
     "--read-only",
     "--cap-drop=ALL",
+    ...(engineName === "docker" ? ["--cap-add=CHOWN"] : []),
     "--security-opt=no-new-privileges",
     "--security-opt=label=disable",
     "--tmpfs=/tmp",
@@ -166,6 +179,10 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     "-e",
     `CODEX_RUNNER_TOKEN=${token}`,
     "-e",
+    `CODEX_CONTAINER_ENGINE=${engineName}`,
+    "-e",
+    "CONTAINER_HOST=unix:///run/podman/podman.sock",
+    "-e",
     "CODEX_PROVIDER_BASE_URL=https://example.invalid/v1",
     "-e",
     `CODEX_RUNNER_NETWORK=${name}`,
@@ -175,8 +192,8 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     "CODEX_RUNNER_TIMEOUT_SECONDS=120",
     `${image}-supervisor`,
   ]);
-  const port = await podman(["port", name, "3020"]);
-  const base = `http://${port}`;
+  const port = await engine(["port", name, "3020"]);
+  let base = `http://${port}`;
   const request = async (path: string, body?: unknown) => {
     const response = await fetch(`${base}${path}`, {
       method: body === undefined ? "GET" : "POST",
@@ -195,7 +212,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   };
   for (let attempt = 0; ; attempt++) {
     try {
-      await request("/healthz");
+      await request("/readyz");
       break;
     } catch {
       if (attempt > 20) throw new Error("Supervisor did not become healthy");
@@ -310,7 +327,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   if (
-    await podman(["volume", "exists", `${deviceKey}-auth`]).then(
+    await engine(["volume", "exists", `${deviceKey}-auth`]).then(
       () => true,
       () => false,
     )
@@ -551,16 +568,18 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   )
     throw Error("Expired account was not marked for sign-in");
   if (
-    await podman(["volume", "exists", `${developmentKeys[8]}-auth`]).then(
+    await engine(["volume", "exists", `${developmentKeys[8]}-auth`]).then(
       () => true,
       () => false,
     )
   )
     throw Error("Auth-paused task retained its credentials");
-  await podman(["restart", name]);
+  await engine(["restart", name]);
+  // Docker can allocate a new random published port on restart.
+  base = `http://${await engine(["port", name, "3020"])}`;
   for (let attempt = 0; ; attempt++) {
     try {
-      await request("/healthz");
+      await request("/readyz");
       break;
     } catch {
       if (attempt > 30) throw Error("Supervisor restart timed out");
@@ -587,12 +606,12 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   for (const id of developmentIds)
     await request(`/tasks/${workspaceId}/${id}/erase`, {});
   console.log(
-    "Podman smoke passed: provider/device tasks, question checkpoint/reconstruction, bounded repair, fresh/same-PR publication, remote-head fencing, device continuation, auth expiry/restart/reconnect, usage, erasure and cancellation.",
+    `${engineName} smoke passed: provider/device tasks, question checkpoint/reconstruction, bounded repair, fresh/same-PR publication, remote-head fencing, device continuation, auth expiry/restart/reconnect, usage, erasure and cancellation.`,
   );
 } catch (error) {
   for (const task of [key, failedKey, deviceKey, ...developmentKeys])
     for (const phase of phases) {
-      const state = await podman([
+      const state = await engine([
         "inspect",
         "--format",
         "{{json .State}}",
@@ -601,37 +620,41 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
       console.error(`${task.slice(-8)} ${phase}: ${state}`);
     }
   console.error(
-    await podman(["logs", name]).catch(() => "Supervisor logs unavailable"),
+    await engine(["logs", name]).catch(() => "Supervisor logs unavailable"),
   );
   throw error;
 } finally {
-  await podman([
+  await engine([
     "rm",
     "--force",
     "--ignore",
     name,
     ...[key, failedKey, deviceKey, ...developmentKeys].flatMap((taskKey) =>
-      phases.map((phase) => `${taskKey}-${phase}`),
+      [...phases, "input"].map((phase) => `${taskKey}-${phase}`),
     ),
   ]).catch(() => {});
   for (const volume of [
     `${name}-state`,
+    `${key}-input`,
     `${key}-work`,
     `${key}-publish`,
+    `${failedKey}-input`,
     `${failedKey}-work`,
     `${failedKey}-publish`,
+    `${deviceKey}-input`,
     `${deviceKey}-work`,
     `${deviceKey}-publish`,
     `${deviceKey}-auth`,
     ...developmentKeys.flatMap((key) => [
+      `${key}-input`,
       `${key}-work`,
       `${key}-publish`,
       `${key}-auth`,
     ]),
   ])
-    await podman(["volume", "rm", "--force", volume]).catch(() => {});
-  await podman(["network", "rm", name]).catch(() => {});
-  await podman(["rmi", image]).catch(() => {});
-  await podman(["rmi", `${image}-supervisor`]).catch(() => {});
+    await engine(["volume", "rm", "--force", volume]).catch(() => {});
+  await engine(["network", "rm", name]).catch(() => {});
+  await engine(["rmi", image]).catch(() => {});
+  await engine(["rmi", `${image}-supervisor`]).catch(() => {});
   await rm(dir, { recursive: true, force: true });
 }

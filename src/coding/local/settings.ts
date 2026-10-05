@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const runnerSettings = z.object({
+  CODEX_CONTAINER_ENGINE: z.enum(["podman", "docker"]).default("podman"),
   CODEX_RUNNER_TOKEN: z.string().min(32),
   CODEX_PROVIDER_API_KEY: z.string().optional(),
   CODEX_PROVIDER_NAME: z.string().min(1).max(100).default("AIAPI"),

@@ -424,6 +424,17 @@ async function exportPatch() {
     await file.close();
   }
 }
+const deadline = setTimeout(
+  () => process.exit(124),
+  z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(7200)
+    .default(2700)
+    .parse(process.env.CODEX_JOB_TIMEOUT_SECONDS) * 1000,
+);
+deadline.unref();
 try {
   const mode = process.argv[2];
   if (mode === "export") await exportPatch();
@@ -457,4 +468,6 @@ try {
   // Do not print child errors, repository output or credential-bearing commands.
   process.stderr.write("Coding container failed.\n");
   process.exitCode = 1;
+} finally {
+  clearTimeout(deadline);
 }

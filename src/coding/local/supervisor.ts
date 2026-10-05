@@ -1,5 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import {
+  chmod,
+  chown,
   mkdir,
   readdir,
   readFile,
@@ -76,6 +78,7 @@ export class RunnerSupervisor implements LocalRunner {
       recursive: true,
       mode: 0o700,
     });
+    await chmod(this.settings.CODEX_RUNNER_STATE, 0o700);
     await this.device.initialize();
     for (const name of await readdir(this.settings.CODEX_RUNNER_STATE)) {
       if (/^deepx-codex-[a-f0-9]{32}\.auth$/.test(name)) {
@@ -92,6 +95,20 @@ export class RunnerSupervisor implements LocalRunner {
       );
       this.records.set(r.key, r);
     }
+  }
+  async ready() {
+    await this.engine.command([
+      "image",
+      "inspect",
+      "--format",
+      "{{.Id}}",
+      this.settings.CODEX_RUNNER_IMAGE,
+    ]);
+    await this.engine.command([
+      "network",
+      "inspect",
+      this.settings.CODEX_RUNNER_NETWORK,
+    ]);
   }
   private serial<T>(action: () => Promise<T>): Promise<T> {
     const result = this.tail.then(action);
@@ -170,11 +187,37 @@ export class RunnerSupervisor implements LocalRunner {
     if (volumes.split("\n").includes(name))
       await this.engine.command(["volume", "rm", "--force", name]);
   }
+  private async copyInput(file: string, target: string) {
+    // Docker copies into a root-owned input volume; the job UID may only read it.
+    if (this.settings.CODEX_CONTAINER_ENGINE === "docker")
+      await chmod(file, 0o644);
+    await this.engine.command(["cp", file, target]);
+  }
   private async launch(
     r: Record,
     mode: string,
     env: { [key: string]: string } = {},
   ) {
+    if (this.settings.CODEX_CONTAINER_ENGINE === "docker")
+      env = {
+        ...env,
+        CODEX_JOB_TIMEOUT_SECONDS: String(
+          Math.max(
+            1,
+            Math.ceil(
+              (r.createdAt +
+                Math.min(
+                  this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
+                  r.input.development?.activeSeconds ??
+                    this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
+                ) *
+                  1000 -
+                Date.now()) /
+                1000,
+            ),
+          ),
+        ),
+      };
     const name = `${r.key}-${mode}`;
     const deviceRun =
       mode === "implement" && r.input.payload.authMode === "device_code";
@@ -204,6 +247,11 @@ export class RunnerSupervisor implements LocalRunner {
           })(),
           { mode: 0o600 },
         );
+        if (this.settings.CODEX_CONTAINER_ENGINE === "docker") {
+          // The root supervisor reads via its group; the job UID owns the private copy.
+          await chmod(credential, 0o640);
+          await chown(credential, 1000, 0);
+        }
         await this.engine.command([
           "cp",
           credential,
@@ -248,28 +296,22 @@ export class RunnerSupervisor implements LocalRunner {
         }),
         { mode: 0o644 },
       );
-      await this.engine.command(["cp", file, `${name}:/input/job.json`]);
+      await this.copyInput(file, `${name}:/input/job.json`);
       await rm(file);
       if (mode === "prepare" && r.checkpointId) {
         const prior = this.get(r.input.workspaceId, r.checkpointId);
-        await this.engine.command([
-          "cp",
+        await this.copyInput(
           this.path(prior, "patch"),
           `${name}:/input/checkpoint.patch`,
-        ]);
+        );
       }
       if (mode === "publish" && r.input.development)
-        await this.engine.command([
-          "cp",
+        await this.copyInput(
           this.path(r, "conversation"),
           `${name}:/input/conversation.json`,
-        ]);
+        );
       if (mode === "publish")
-        await this.engine.command([
-          "cp",
-          this.path(r, "patch"),
-          `${name}:/input/patch`,
-        ]);
+        await this.copyInput(this.path(r, "patch"), `${name}:/input/patch`);
     }
     return this.engine.command(
       mode === "export" ? ["start", "--attach", name] : ["start", name],
@@ -801,11 +843,17 @@ export class RunnerSupervisor implements LocalRunner {
         "rm",
         "--force",
         "--ignore",
-        ...["prepare", "setup", "implement", "check", "export", "publish"].map(
-          (p) => `${r.key}-${p}`,
-        ),
+        ...[
+          "prepare",
+          "setup",
+          "implement",
+          "check",
+          "export",
+          "publish",
+          "input",
+        ].map((p) => `${r.key}-${p}`),
       ]);
-      for (const volume of ["work", "publish", "auth"]) {
+      for (const volume of ["work", "publish", "auth", "input"]) {
         const names = await this.engine.command([
           "volume",
           "ls",
@@ -910,6 +958,7 @@ export class RunnerSupervisor implements LocalRunner {
               "check",
               "export",
               "publish",
+              "input",
             ].map((p) => `${r.key}-${p}`),
           ]);
           const volumes = (
@@ -927,7 +976,8 @@ export class RunnerSupervisor implements LocalRunner {
               (name) =>
                 name === `${r.key}-work` ||
                 name === `${r.key}-publish` ||
-                name === `${r.key}-auth`,
+                name === `${r.key}-auth` ||
+                name === `${r.key}-input`,
             );
           if (volumes.length)
             await this.engine.command(["volume", "rm", "--force", ...volumes]);

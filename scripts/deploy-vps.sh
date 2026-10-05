@@ -52,12 +52,39 @@ export APP_IMAGE="$image_id"
 compose=(docker compose --project-directory "$deploy_root" -p "$project"
   --env-file "$deploy_root/.env" --env-file "$release_dir/release.env"
   -f "$release_dir/compose.yaml")
+codex=false
+if [[ -f "$release_dir/codex-compose.yaml" ]]; then
+  codex=true
+  for artifact in codex-supervisor-tag codex-job-tag codex-release-config.mjs; do
+    [[ -f "$release_dir/$artifact" ]] || fail "Missing Codex release artifact: $artifact"
+  done
+  supervisor_tag="$(cat "$release_dir/codex-supervisor-tag")"
+  job_tag="$(cat "$release_dir/codex-job-tag")"
+  [[ "$supervisor_tag" =~ ^repodesk-codex-supervisor:release-[a-f0-9]{40}$ ]] || fail 'Invalid Codex supervisor image tag.'
+  [[ "$job_tag" =~ ^repodesk-codex-job:release-[a-f0-9]{40}$ ]] || fail 'Invalid Codex job image tag.'
+  supervisor_id="$(docker image inspect --format '{{.Id}}' "$supervisor_tag")"
+  job_id="$(docker image inspect --format '{{.Id}}' "$job_tag")"
+  [[ "$supervisor_id" =~ ^sha256:[a-f0-9]{64}$ && "$job_id" =~ ^sha256:[a-f0-9]{64}$ ]] || fail 'Invalid imported Codex image ID.'
+  # Generate once, never print tokens, and preserve credentials across releases.
+  docker run --rm --network none --user "$(id -u):$(id -g)" --security-opt label=disable --entrypoint node \
+    --volume "$deploy_root:/deployment" --volume "$release_dir:/release" \
+    --env "CODEX_SUPERVISOR_IMAGE=$supervisor_id" --env "CODEX_RUNNER_IMAGE=$job_id" \
+    "$image_id" /release/codex-release-config.mjs /deployment /release "$project"
+  compose=(docker compose --project-directory "$deploy_root" -p "$project"
+    --env-file "$deploy_root/.env" --env-file "$release_dir/release.env"
+    --env-file "$release_dir/codex.env" -f "$release_dir/compose.yaml"
+    -f "$release_dir/codex-compose.yaml")
+fi
 "${compose[@]}" config --quiet
 # Check the actual runtime user's secret access, including host SELinux labels.
 "${compose[@]}" run --rm --no-deps --pull never -T --entrypoint node migrate -e \
   "require('fs').accessSync(process.env.ENCRYPTION_KEY_FILE,require('fs').constants.R_OK)"
 # Pull only the pinned database image, before stopping any writers.
 "${compose[@]}" pull postgres
+if [[ "$codex" = true ]]; then
+  # Ensure the engine, private network and pinned job image work before stopping writers.
+  "${compose[@]}" up -d --no-deps --no-build --pull never --wait --wait-timeout 180 codex-runner
+fi
 
 cutover_started=false
 on_error() {

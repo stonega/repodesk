@@ -2,14 +2,16 @@
 
 The repository includes `.github/workflows/deploy.yml`. Publishing a **stable
 GitHub Release** runs the reusable verification workflow, builds and smoke-tests
-the exact release tag, and transfers the application image over verified SSH.
+the exact release tag, and transfers application, Codex supervisor and task images
+over verified SSH.
 Drafts, prereleases and tag pushes alone do not deploy. The workflow must be
 included in the released tag. No registry account or token is required.
 
-This automates the base Docker stack: app, worker, migrations and PostgreSQL.
-It does not deploy the optional Code Truth or Podman Codex services or Compose
-overlays. Use a dedicated stack; do not point it at the existing local Podman
-installation. The VPS must be Linux x86_64 with Docker Engine, Compose v2
+This automates the Docker stack: app, worker, migrations, PostgreSQL and the Codex
+runner. The runner starts automatically, with persistent state and a host-generated
+private token; workspace users only enable the plugin and connect their account.
+It does not deploy the optional Code Truth service or the local Podman overlay.
+Use a dedicated stack; do not point it at an existing local Podman installation. The VPS must be Linux x86_64 with Docker Engine, Compose v2
 (supporting `up --wait`), Bash, gzip, `sha256sum` and `flock`, and enough disk for the loaded
 images, release archive and database backup. The GitHub-hosted runner must be able
 to reach its SSH port. The deploy user needs Docker access without interactive sudo.
@@ -24,6 +26,7 @@ key in GitHub only. With that user, create a deployment directory (default
 /opt/repodesk/
   .env
   secrets/encryption-key
+  secrets/codex-runner-token # generated once on first Codex release
   releases/                 # created by the workflow
   backups/                  # protected pre-migration dumps
   .current-release          # written after a successful readiness check
@@ -87,8 +90,9 @@ configured by you, will pause the deploy job for GitHub approval.
 Commit and push the workflow and scripts before creating the release tag, then
 publish a stable release from that tag. In Actions, inspect **Deploy release to
 VPS**. Verification includes deterministic PostgreSQL and browser tests, Docker
-smokes and a backup/restore rehearsal. The deploy job builds an amd64 image and
-transfers it along with the release's Compose file and deploy script. SSH key
+smokes (including real Docker coding tasks with fake local Codex/GitHub) and a
+backup/restore rehearsal. The deploy job builds three amd64 images and transfers
+them with the base Compose file, Codex overlay and deployment helpers. SSH key
 files are temporary and removed when the step exits.
 
 The workflow transfers the image tag and archive SHA-256 checksum. The host verifies
@@ -99,17 +103,20 @@ not used as a lookup key on the VPS.
 Unlike a registry `@sha256:` manifest digest, this identifies the image imported
 by `docker image load`. It then:
 
-1. Acquires a host lock, validates Compose and checks runtime secret access before
-   touching running writers.
-2. Pulls the pinned PostgreSQL image, stops app/worker and starts the database.
-3. Writes a restrictive database dump and verifies its archive listing.
-4. Runs migrations once; starts neither writer if migration fails.
-5. Starts app/worker without building or pulling their image, waits for both
+1. Acquires a host lock, verifies the archive and imports immutable image IDs.
+2. Generates/reuses the runner token and image configuration, validates Compose
+   and runtime secret access, pulls
+   PostgreSQL, and starts the runner with a readiness check before stopping writers.
+   The daemon, prebuilt job image and private task network must be available.
+3. Stops app/worker and starts the database.
+4. Writes a restrictive database dump and verifies its archive listing.
+5. Runs migrations once; starts neither writer if migration fails.
+6. Starts app/worker without building or pulling their image, waits for both
    health checks, and retries `/readyz` inside the app container for up to two
    minutes (at most 24 attempts, five seconds between attempts). This allows the
    first Telegram long poll to finish. Failed requests report their HTTP status
    or a timeout without logging response bodies.
-6. Updates `.current-release` only on success and removes the transfer archive.
+7. Updates `.current-release` only on success and removes the transfer archive.
 
 GitHub serializes deployment workflows without cancelling an active cutover.
 An identical bundle cannot overwrite its earlier backup. To retry, use **Re-run
@@ -131,16 +138,24 @@ The workflow fails visibly; it does not automatically revert a migrated schema.
 Use the failed release directory to inspect migration status and protected
 backups. Roll forward with a corrected release. Only restart a previous image
 after verifying its schema compatibility; use the explicit project, project
-directory, Compose file and both environment files:
+directory, Compose files and all three environment files:
 
 ```sh
 cd /opt/repodesk
 release_id=$(cat .current-release)
 docker compose --project-directory "$PWD" -p repodesk \
   --env-file .env --env-file "releases/$release_id/release.env" \
+  --env-file "releases/$release_id/codex.env" \
   -f "releases/$release_id/compose.yaml" \
+  -f "releases/$release_id/codex-compose.yaml" \
   up -d --no-deps --no-build --pull never --wait app worker
 ```
+
+For releases preceding Docker runner integration, omit `codex.env` and the Codex
+overlay. Preserve `secrets/codex-runner-token` and the project's
+`codex_runner_state` volume together; replacing either breaks credential recovery.
+The runner is internal and exposes no host port. Only its trusted supervisor
+receives the Docker socket. See [container execution](codex-podman.md).
 
 Use the configured path/project if changed. Do not remove volumes or restore a
 database automatically. Follow [the recovery runbook](release-runbook.md) for

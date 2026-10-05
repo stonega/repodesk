@@ -93,12 +93,13 @@ export function containerArgs(
   env: Record<string, string> = {},
   authVolume?: string,
 ) {
+  const docker = settings.CODEX_CONTAINER_ENGINE === "docker";
   return [
     "create",
     "--name",
     name,
     "--pull=never",
-    "--http-proxy=false",
+    ...(docker ? [] : ["--http-proxy=false"]),
     "--restart=no",
     "--init",
     "--user=1000:1000",
@@ -109,13 +110,21 @@ export function containerArgs(
     `--cpus=${settings.CODEX_RUNNER_CPUS}`,
     `--memory=${settings.CODEX_RUNNER_MEMORY_MB}m`,
     `--memory-swap=${settings.CODEX_RUNNER_MEMORY_MB}m`,
-    `--timeout=${settings.CODEX_RUNNER_TIMEOUT_SECONDS}`,
+    ...(docker ? [] : [`--timeout=${settings.CODEX_RUNNER_TIMEOUT_SECONDS}`]),
     "--log-driver=none",
     "--tmpfs=/tmp:rw,nosuid,nodev,size=512m,mode=1777",
     `--network=${mode === "export" ? "none" : settings.CODEX_RUNNER_NETWORK}`,
     "--volume",
     `${volume}:/task${mode === "export" ? ":ro" : ""}`,
-    ...(authVolume ? ["--volume", `${authVolume}:/auth:U`] : []),
+    ...(authVolume
+      ? ["--volume", `${authVolume}:/auth${docker ? "" : ":U"}`]
+      : []),
+    ...(docker && mode !== "export"
+      ? [
+          "--volume",
+          `${name.replace(/-(prepare|setup|implement|check|publish)$/, "")}-input:/input:ro`,
+        ]
+      : []),
     ...Object.keys(env).flatMap((key) => ["--env", key]),
     settings.CODEX_RUNNER_IMAGE,
     mode,

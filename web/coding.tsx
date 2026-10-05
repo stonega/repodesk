@@ -69,6 +69,23 @@ const taskFailures: Record<string, string> = {
   coding_patch_empty: "Codex produced no changes to publish.",
   coding_execution_failed: "Implementation or repository verification failed.",
 };
+function RunnerSetupNotice() {
+  return (
+    <p className="muted">
+      VPS releases automatically start and maintain the Codex runner. Enable
+      this plugin, then connect your account. If the runner is unavailable,
+      check the deployment status and recheck the connection.{" "}
+      <a
+        href="https://github.com/stonega/repodesk/blob/main/docs/implementation/codex-podman.md#configure-the-deployment"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Codex runner setup instructions
+      </a>
+      .
+    </p>
+  );
+}
 export function Coding({
   request,
   workspaceId,
@@ -276,6 +293,7 @@ export function Coding({
             }}
           />
         </div>
+        {data && <RunnerSetupNotice />}
         <dl className="plugin-summary">
           <div>
             <dt>Status</dt>
@@ -291,7 +309,7 @@ export function Coding({
           </div>
           <div>
             <dt>Execution</dt>
-            <dd>Local Podman</dd>
+            <dd>Local containers</dd>
           </div>
           <div>
             <dt>Sign-in method</dt>
@@ -593,6 +611,7 @@ export function Coding({
             setError("");
           }}
         >
+          <RunnerSetupNotice />
           {error && (
             <p className="notice" role="alert">
               {error}{" "}
@@ -681,7 +700,7 @@ export function Coding({
                         : data.deviceAuth?.state === "pending"
                           ? "Waiting for you to finish sign-in."
                           : data.deviceAuth?.state === "unavailable"
-                            ? "The Codex runner is unavailable. Recheck connection after it is started."
+                            ? "The Codex runner is unavailable. Check deployment status, then recheck connection."
                             : data.deviceAuth?.state === "auth_required"
                               ? "Your account needs sign-in again. Paused tasks will continue automatically after connection."
                               : data.deviceAuth?.state === "failed"

@@ -38,6 +38,11 @@ jobs:
       - run: docker run --rm --network none deepx-code-truth:ci bun scripts/smoke.ts
       - run: docker build -t deepx-agent:ci .
       - run: docker run --rm --entrypoint node deepx-agent:ci dist/runtime-contract.js
+      - name: Docker Codex task and account lifecycle smoke
+        run: |
+          docker build --target codex-job -t localhost/deepx-codex-job:verify .
+          docker build --target codex-supervisor -t localhost/deepx-codex-supervisor:verify .
+          CODEX_SMOKE_ENGINE=docker bun scripts/codex-smoke.ts
       - name: Compose migration, smoke and restore
         env:
           POSTGRES_PASSWORD: ci-only

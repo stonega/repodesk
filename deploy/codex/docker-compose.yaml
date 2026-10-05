@@ -1,0 +1,50 @@
+# Docker VPS overlay. The release workflow imports both images before startup.
+services:
+  app:
+    environment:
+      CODEX_RUNNER_URL: http://codex-runner:3020
+      CODEX_RUNNER_TOKEN: ${CODEX_RUNNER_TOKEN:?Set CODEX_RUNNER_TOKEN}
+    depends_on:
+      codex-runner:
+        condition: service_healthy
+  worker:
+    environment:
+      CODEX_RUNNER_URL: http://codex-runner:3020
+      CODEX_RUNNER_TOKEN: ${CODEX_RUNNER_TOKEN:?Set CODEX_RUNNER_TOKEN}
+    depends_on:
+      codex-runner:
+        condition: service_healthy
+  codex-runner:
+    image: ${CODEX_SUPERVISOR_IMAGE:?Set CODEX_SUPERVISOR_IMAGE}
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp, /run]
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+    security_opt: [no-new-privileges:true, label=disable]
+    environment:
+      CODEX_CONTAINER_ENGINE: docker
+      CONTAINER_HOST: unix:///var/run/docker.sock
+      CODEX_RUNNER_TOKEN: ${CODEX_RUNNER_TOKEN:?Set CODEX_RUNNER_TOKEN}
+      CODEX_RUNNER_IMAGE: ${CODEX_RUNNER_IMAGE:?Set CODEX_RUNNER_IMAGE}
+      CODEX_RUNNER_NETWORK: ${CODEX_RUNNER_NETWORK:-repodesk_codex_tasks}
+      CODEX_RUNNER_PROXY_URL: http://codex-runner:3020
+      CODEX_PROVIDER_API_KEY: ${CODEX_PROVIDER_API_KEY:-}
+      CODEX_PROVIDER_NAME: ${CODEX_PROVIDER_NAME:-AIAPI}
+      CODEX_PROVIDER_BASE_URL: ${CODEX_PROVIDER_BASE_URL:-https://aiapi.abmatrix.cn/v1}
+      CODEX_MODEL: ${CODEX_MODEL:-gpt-6-astra}
+      CODEX_REASONING_EFFORT: ${CODEX_REASONING_EFFORT:-high}
+      CODEX_RUNNER_CPUS: ${CODEX_RUNNER_CPUS:-2}
+      CODEX_RUNNER_MEMORY_MB: ${CODEX_RUNNER_MEMORY_MB:-4096}
+      CODEX_RUNNER_TIMEOUT_SECONDS: ${CODEX_RUNNER_TIMEOUT_SECONDS:-2700}
+      CODEX_RUNNER_RETENTION_HOURS: ${CODEX_RUNNER_RETENTION_HOURS:-24}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - codex_runner_state:/var/lib/deepx-codex
+    networks: [default, codex_tasks]
+networks:
+  codex_tasks:
+    name: ${CODEX_RUNNER_NETWORK:-repodesk_codex_tasks}
+volumes:
+  codex_runner_state:

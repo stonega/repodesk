@@ -1,11 +1,68 @@
-# Local Codex execution with Podman
+# Local Codex execution with Docker or Podman
 
-The **Local Podman** runner runs policy-authorized coding tasks on the deployment
+The **Local containers** runner runs policy-authorized coding tasks on the deployment
 host. Pi still
 handles Telegram conversations; the coding service handles approval, identity,
-task state and publication. Enabling the plugin does not start a coding container.
+task state and publication. Deployment starts the supervisor; individual tasks
+start isolated containers when authorized.
+
+The Codex detail page and configuration dialog explain automatic VPS startup and
+link here for recovery. **Enabled** records workspace policy;
+it does not mean a runner is installed, reachable or authenticated. Both sign-in
+methods require the supervisor and a prebuilt task image.
 
 ## Configure the deployment
+
+### Docker VPS releases (automatic)
+
+Stable GitHub releases build and transfer the application, trusted Codex supervisor
+and task images. The deploy script applies `deploy/codex/docker-compose.yaml`,
+starts the supervisor, and waits for its engine, task-image and network readiness
+before stopping application writers. Existing Docker databases and the Compose
+project remain in place; no Podman installation or database migration is needed.
+The supervisor restarts automatically after a host restart.
+
+The first release generates a private management/encryption token at
+`secrets/codex-runner-token` (mode 600). Later releases reuse it and the
+`codex_runner_state` volume, preserving workspace account credentials. A previously
+configured `CODEX_RUNNER_TOKEN` is adopted; mismatched tokens fail preflight rather
+than silently replacing the key. Back up the token and runner volume together.
+Release-local `codex.env` records this token, imported immutable image IDs and the
+project's task-network name. It is generated on the host and never printed or
+uploaded to GitHub. The app and worker receive the same management connection.
+
+Only the trusted supervisor mounts `/var/run/docker.sock`; it can control the
+host Docker daemon. Use this deployment on a trusted dedicated VPS. The supervisor
+has `CHOWN` for preparing private auth files and disables SELinux container labeling
+for socket access. A stopped, credential-free input copier populates a separate volume, which tasks
+mount read-only. It runs no repository code and is removed after copying;
+reconciliation also removes interrupted copiers. Task containers drop all
+capabilities, receive no daemon socket,
+and cannot join the application/database network. Runner HTTP is private with no
+published port. The supervisor joins the application and separate task networks.
+
+After deployment, enable Codex in the workspace, choose **ChatGPT device code**,
+click **Sign in with device code**, and complete the displayed link/code. Existing
+open dialogs can use **Recheck connection**. No runner setup fields or commands are
+required in the panel. Manual deployments can merge the Docker overlay with the
+base Compose file, specifying the two prebuilt images and a stable private token.
+See [VPS deployment](vps-deployment.md) for release and recovery details.
+
+### A new or existing Podman application stack
+
+Install Podman and a Compose provider on the host first. Run the following as
+the account that owns the application stack, images and task containers:
+
+```sh
+systemctl --user enable --now podman.socket
+export PODMAN_SOCKET="${XDG_RUNTIME_DIR}/podman/podman.sock"
+test -S "$PODMAN_SOCKET"
+```
+
+For operation after logout and reboot, the host administrator enables lingering
+for this service account with `loginctl enable-linger ACCOUNT_NAME`. This keeps
+the socket available; it does not create a permanent Codex task container. See
+[Podman's system service documentation](https://docs.podman.io/en/latest/markdown/podman-system-service.1.html).
 
 Use a rootless Podman service with its Unix socket available to the supervisor.
 The socket grants control of that Podman account; the supervisor is trusted
@@ -79,7 +136,7 @@ Reconnect GitHub if an older repository entry
 lacks visibility metadata. Use this option only for trusted private code:
 Codex can access the account token cache while implementing. The supervisor
 encrypts the per-workspace cache at rest using a key derived from
-`CODEX_RUNNER_TOKEN`. It decrypts a copy into a short-lived per-task Podman
+`CODEX_RUNNER_TOKEN`. It decrypts a copy into a short-lived per-task container
 auth volume during the Codex phase, saves any refreshed cache on exit, and
 removes that volume. Repository setup and checks use separate containers
 without it. A disconnected workspace pauses before issue creation; no issue is created while waiting for sign-in. Rotating
@@ -116,20 +173,29 @@ fixed login expiry or a guarantee of indefinite validity. No scheduled model cal
 or permanent task container is required. See the [plan and recovery boundaries](codex-auth-plan.md).
 
 
-Validate and start when ready to deploy:
+After the shared runner token and existing application settings are configured,
+validate and start from the repository root on that same Podman engine:
 
 ```sh
-docker compose -f compose.yaml -f deploy/codex/compose.yaml config --quiet
+podman compose -f compose.yaml -f deploy/codex/compose.yaml config --quiet
 podman compose -f compose.yaml -f deploy/codex/compose.yaml up --build -d
+podman compose -f compose.yaml -f deploy/codex/compose.yaml ps codex-runner
 ```
+
+Keep `CODEX_RUNNER_TOKEN` private and stable: it authenticates the app/worker
+connection and protects saved account credentials. The overlay wires the private
+runner URL and matching token into both app and worker. Once the supervisor is
+healthy, return to **Plugins → Codex → Configuration → Edit → Recheck connection**.
+Device-code sign-in should then become available. Sign in afterward; host startup
+does not connect a ChatGPT account.
 
 The supervisor joins the app network and a separate task network. Task containers
 join only the task network, have no published ports, run as UID 1000 with a
 read-only root filesystem, dropped capabilities, process/CPU/memory limits and
 a container timeout. Outbound access is needed for GitHub, packages and the
-configured provider. The coding overlay requires a **Podman** engine even when
+configured provider. The Podman overlay requires a **Podman** engine even when
 using `docker compose` for configuration validation. The ordinary app still
-supports Docker Compose when coding tasks are disabled.
+also supports the Docker coding overlay used by VPS releases.
 
 Only the app and worker get `CODEX_RUNNER_URL` and `CODEX_RUNNER_TOKEN`. Only the supervisor
 gets the optional provider environment fallback and Podman socket. No bot, database
@@ -184,7 +250,7 @@ the connected ChatGPT account's Codex entitlements. Defaults are one active task
 documented `CODEX_RUNNER_*` environment variables in `.env.example`. Patches are
 limited to 5 MiB. Retained workspaces and sessions are removed after 24 hours
 (configurable 1–168 hours); stopped containers and volumes are also removed.
-Small task tombstones prevent replay of delayed duplicate submissions. Podman
+Small task tombstones prevent replay of delayed duplicate submissions. Container
 volumes consume host disk, so provision storage for the configured retention.
 
 Stop and access revocation cancel local execution without requiring GitHub
@@ -193,8 +259,10 @@ or PR may already exist. Workspace deletion does not undo remote writes; abandon
 local work times out and is cleaned by the supervisor. The worker also disconnects
 and removes that workspace's sealed device credential after deletion; if the
 supervisor is temporarily unavailable, it retries on the next maintenance pass.
-Keep the supervisor running
-for reconciliation and cleanup. A restart observes existing containers by their
+Docker jobs receive a watchdog for the remaining overall task deadline; the
+supervisor independently enforces expiry every five seconds. Docker lacks Podman's
+engine-level `--timeout`; keep the supervisor running for enforcement,
+reconciliation and cleanup. A restart observes existing containers by their
 deterministic names, without launching duplicate work.
 
 For an **unknown** outcome, inspect the matching task branch, issue and PR before
@@ -219,7 +287,7 @@ local fake Responses provider: structured questions, continuation, missing-sessi
 reconstruction, per-turn token accounting and cancellation. It creates a clean
 Codex home and uses no host auth or paid model calls. The fixture passed both on
 the host and bundled inside the read-only job image with no external network.
-The real Podman smoke also covers question checkpoints, automatic repair/repair
+The real Docker/Podman smoke also covers question checkpoints, automatic repair/repair
 exhaustion, fresh and same-PR publication with fake GitHub, remote-head fencing,
 device continuation and explicit private-state erasure. Waiting releases the global
 runner slot. Retained work checkpoints can seed a new isolated cycle; expired
@@ -230,10 +298,12 @@ staging journey remains a release gate.
 For a repeatable smoke test without model calls or GitHub writes, build the
 `codex-job` and `codex-supervisor` targets with the `:verify` tags, then run
 `bun scripts/codex-smoke.ts`. It substitutes a local Git fixture and fake Codex
-executable while exercising the real supervisor, Podman socket, resource limits,
+executable while exercising the real supervisor, engine socket, resource limits,
 volumes, patch export and cancellation, and removes its test resources afterward.
 `CODEX_SMOKE_JOB_IMAGE` and `CODEX_SMOKE_SUPERVISOR_IMAGE` can select other tags.
-`CODEX_SMOKE_PODMAN_SOCKET` can select an already running rootless Unix socket.
+Set `CODEX_SMOKE_ENGINE=docker` for Docker (the default remains Podman).
+`CODEX_SMOKE_DOCKER_SOCKET` or `CODEX_SMOKE_PODMAN_SOCKET` selects the engine socket.
+CI and release builds run the full Docker fixture.
 When a host HTTP proxy is configured, exempt localhost with `NO_PROXY`/`no_proxy`
 for tests; a loopback-only build proxy may need `podman build --network=host`.
 

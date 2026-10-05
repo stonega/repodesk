@@ -92,6 +92,19 @@ them.
 - **Exceptions:** Sign-in stays disabled while the runner is unavailable;
   connection recheck remains available.
 
+### Plugin enablement explains runtime availability
+
+- **Preference:** Manage required services through deployment automatically. On
+  plugin details and configuration, explain how to connect the account and recover
+  unavailable services, with a link to the operator guide. Enabling a plugin grants
+  workspace access; deployment owns service startup.
+- **Scope:** Plugins that require an independently deployed service, starting
+  with the Codex runner. Keep host commands in the linked operator guide.
+- **Source:** 2026-10-05 — user asked how to start the unavailable Codex runner
+  and why this requirement was not stated when enabling the plugin; then requested
+  automatic runner startup for the existing Docker VPS.
+- **Exceptions:** Built-in features with no separate service need no setup notice.
+
 ### Coding repository forms group fields and identify maintainers
 
 - **Preference:** Keep repository fields evenly spaced, with help text beside

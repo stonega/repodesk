@@ -27,18 +27,31 @@ jobs:
           # Match verification's event commit even if someone later moves the tag.
           ref: ${{ github.sha }}
           persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
 
       - name: Build and smoke-test release image
         run: |
           set -euo pipefail
           image="repodesk:release-$(git rev-parse HEAD)"
+          supervisor="repodesk-codex-supervisor:release-$(git rev-parse HEAD)"
+          job="repodesk-codex-job:release-$(git rev-parse HEAD)"
           docker build --platform linux/amd64 --target app -t "$image" .
           docker run --rm --network none --entrypoint node "$image" dist/runtime-contract.js
+          docker build --platform linux/amd64 --target codex-job -t "$job" .
+          docker build --platform linux/amd64 --target codex-supervisor -t "$supervisor" .
+          CODEX_SMOKE_ENGINE=docker CODEX_SMOKE_JOB_IMAGE="$job" CODEX_SMOKE_SUPERVISOR_IMAGE="$supervisor" bun scripts/codex-smoke.ts
           mkdir -p bundle
           printf '%s\n' "$image" > bundle/image-tag
-          docker image save "$image" | gzip > bundle/image.tar.gz
+          printf '%s\n' "$supervisor" > bundle/codex-supervisor-tag
+          printf '%s\n' "$job" > bundle/codex-job-tag
+          docker image save "$image" "$supervisor" "$job" | gzip > bundle/image.tar.gz
           sha256sum bundle/image.tar.gz | cut -d ' ' -f 1 > bundle/image-sha256
           cp compose.yaml scripts/deploy-vps.sh bundle/
+          cp deploy/codex/docker-compose.yaml bundle/codex-compose.yaml
+          cp deploy/codex/release-config.mjs bundle/codex-release-config.mjs
 
       - name: Transfer and deploy through verified SSH
         env:
