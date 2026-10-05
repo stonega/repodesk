@@ -77,6 +77,9 @@ it enables no new execution policy by itself. See [delivery evidence and rollout
    its key is saved per workspace (with an optional deployment fallback). Device
    code sign-in shows a link and one-time code in the panel and is available only
    for trusted private repositories. Enable the extension after signing in.
+   Starting sign-in displays progress and times out after 20 seconds if no response
+   arrives. Use **Recheck connection** to recover runner availability or an
+   uncertain sign-in response without closing the editor or losing its draft.
 4. Keep **Reviewed** for actor-bound issue/branch approval, or explicitly select
    **Direct** per repository after validating the dedicated live pilot journey.
 

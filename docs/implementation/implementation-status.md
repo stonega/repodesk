@@ -997,3 +997,20 @@ coverage includes operator-only access, Origin/CSRF, normalization, persistence,
 revision conflicts, audit deduplication, secure cookies, generated GitHub callbacks
 (including Telegram linking), explicit webhook registration and removed-origin
 rejection. Public DNS, certificate issuance and live provider changes were not run.
+
+## Codex device sign-in recovery (2026-10-05)
+
+The configuration dialog now shows progress while starting device sign-in, bounds
+the request to 20 seconds, and unlocks controls with an actionable error if it
+stalls. **Recheck connection** checks runner availability and recovers a pending
+login without closing the dialog or discarding unsaved configuration. Pending
+status polling uses bounded, sequential requests and ignores results after its
+owning effect has stopped.
+
+Lint, strict typecheck and build passed. All **352 unit/integration tests** passed
+against disposable PostgreSQL. Four deterministic browser scenarios passed:
+unavailable-runner recovery with draft preservation, code display and polling to
+connected, failed-login retry, and timeout followed by recovery of a pending code.
+The live `dev.stonegate.me` configuration dialog was inspected and reported the
+runner unavailable; no live account login, model call or deployment was performed.
+Restoring that deployment's runner and applying this UI change remain outstanding.

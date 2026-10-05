@@ -4,9 +4,16 @@ import type { CodingPage, CodingSettings } from "../src/coding/config.ts";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 
-type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
+type Request = <T>(
+  path: string,
+  method?: string,
+  body?: unknown,
+  signal?: AbortSignal,
+) => Promise<T>;
 type Repository = CodingSettings["repositories"][number];
 function message(error: unknown) {
+  if (error instanceof Error && error.name === "TimeoutError")
+    return "The connection request timed out. Recheck connection before trying sign-in again.";
   const code = (error as Error).message;
   const messages: Record<string, string> = {
     version_conflict:
@@ -23,6 +30,12 @@ function message(error: unknown) {
       "Device sign-in could not start. Check that the runner is available and device login is enabled in ChatGPT.",
     coding_device_login_busy:
       "Too many device sign-ins are pending. Finish or cancel another sign-in first.",
+    coding_runner_not_configured:
+      "The Codex runner is not configured for this deployment. Configure it, then recheck connection.",
+    coding_runner_unavailable:
+      "The Codex runner could not be reached. Recheck connection after it is available.",
+    coding_outcome_unknown:
+      "The sign-in response could not be confirmed. Recheck connection before trying again.",
     invalid_request:
       "Check the branch, repository commands and maintainer selections.",
   };
@@ -61,6 +74,7 @@ export function Coding({
   const [data, setData] = useState<CodingPage>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [deviceAction, setDeviceAction] = useState<"start" | "status">();
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<Repository>();
   const [configEditing, setConfigEditing] = useState(false);
@@ -69,13 +83,48 @@ export function Coding({
   const [removeKey, setRemoveKey] = useState(false);
   useEffect(() => {
     if (data?.deviceAuth?.state !== "pending") return;
-    const timer = setInterval(() => {
-      void request<CodingPage>(endpoint)
-        .then((page) => setData(page))
-        .catch((e) => setError(message(e)));
-    }, 3000);
-    return () => clearInterval(timer);
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const page = await request<CodingPage>(
+          endpoint,
+          "GET",
+          undefined,
+          AbortSignal.timeout(10000),
+        );
+        if (active) setData(page);
+      } catch (e) {
+        if (active) setError(message(e));
+      }
+      if (active) timer = setTimeout(poll, 3000);
+    };
+    timer = setTimeout(poll, 3000);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, [data?.deviceAuth?.state, endpoint, request]);
+  const recheckConnection = async () => {
+    setBusy(true);
+    setDeviceAction("status");
+    setError("");
+    try {
+      setData(
+        await request<CodingPage>(
+          endpoint,
+          "GET",
+          undefined,
+          AbortSignal.timeout(10000),
+        ),
+      );
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+      setDeviceAction(undefined);
+    }
+  };
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -589,16 +638,20 @@ export function Coding({
               </>
             ) : (
               <>
-                <p>
-                  {data.deviceAuth?.state === "connected"
-                    ? "Connected for this workspace."
-                    : data.deviceAuth?.state === "pending"
-                      ? "Waiting for you to finish sign-in."
-                      : data.deviceAuth?.state === "unavailable"
-                        ? "The local runner is unavailable. Check its status before signing in."
-                        : data.deviceAuth?.state === "failed"
-                          ? "Sign-in failed or expired. Start again."
-                          : "No ChatGPT account connected."}
+                <p role="status">
+                  {deviceAction === "start"
+                    ? "Requesting a sign-in link and one-time code…"
+                    : deviceAction === "status"
+                      ? "Checking connection…"
+                      : data.deviceAuth?.state === "connected"
+                        ? "Connected for this workspace."
+                        : data.deviceAuth?.state === "pending"
+                          ? "Waiting for you to finish sign-in."
+                          : data.deviceAuth?.state === "unavailable"
+                            ? "The Codex runner is unavailable. Recheck connection after it is started."
+                            : data.deviceAuth?.state === "failed"
+                              ? "Sign-in failed or expired. Start again."
+                              : "No ChatGPT account connected."}
                 </p>
                 <p className="muted">
                   Use only with trusted private repositories. Account tokens are
@@ -639,11 +692,17 @@ export function Coding({
                             }
                             onClick={async () => {
                               setBusy(true);
+                              setDeviceAction("start");
                               setError("");
                               try {
                                 const status = await request<
                                   CodingPage["deviceAuth"]
-                                >(`${endpoint}/device/start`, "POST", {});
+                                >(
+                                  `${endpoint}/device/start`,
+                                  "POST",
+                                  {},
+                                  AbortSignal.timeout(20000),
+                                );
                                 setData(
                                   (current) =>
                                     current && {
@@ -655,10 +714,13 @@ export function Coding({
                                 setError(message(cause));
                               } finally {
                                 setBusy(false);
+                                setDeviceAction(undefined);
                               }
                             }}
                           >
-                            Sign in with device code
+                            {deviceAction === "start"
+                              ? "Starting sign-in…"
+                              : "Sign in with device code"}
                           </button>
                         )}
                       {(data.deviceAuth?.state === "connected" ||
@@ -681,6 +743,7 @@ export function Coding({
                                   `${endpoint}/device/logout`,
                                   "POST",
                                   {},
+                                  AbortSignal.timeout(20000),
                                 ),
                               );
                             } catch (cause) {
@@ -693,6 +756,15 @@ export function Coding({
                           Disconnect account
                         </button>
                       )}
+                      <button
+                        type="button"
+                        disabled={busy || loading}
+                        onClick={() => void recheckConnection()}
+                      >
+                        {deviceAction === "status"
+                          ? "Checking connection…"
+                          : "Recheck connection"}
+                      </button>
                     </div>
                   </>
                 )}

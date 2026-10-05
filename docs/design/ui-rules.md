@@ -43,6 +43,17 @@ them.
 - **Exceptions:** Repository editing remains in its own dialog; task controls
   remain with their tasks.
 
+### Codex sign-in shows progress and recovery
+
+- **Preference:** Show progress while requesting a device-code sign-in. Bound the
+  wait, explain failures, and offer a connection recheck in the same dialog while
+  preserving unsaved settings.
+- **Scope:** Codex configuration and device-code sign-in.
+- **Source:** 2026-10-05 — user clicked Sign in with device code, saw no result,
+  and reported that the button became disabled.
+- **Exceptions:** Sign-in stays disabled while the runner is unavailable;
+  connection recheck remains available.
+
 ### Coding repository forms group fields and identify maintainers
 
 - **Preference:** Keep repository fields evenly spaced, with help text beside
