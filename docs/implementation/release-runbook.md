@@ -6,6 +6,12 @@ implementing the repository.
 
 ## Build and local release checks
 
+For automated deployment of stable GitHub Releases to a custom VPS, see
+[VPS release deployment](vps-deployment.md). The SSH workflow imports and pins
+the tested image by its immutable local image ID; the registry path below uses
+a manifest digest instead. Host provisioning and a live deployment remain
+separate operator steps.
+
 Run the four required commands, real PostgreSQL integration tests, browser tests,
 and `bun run test:runtime`. CI repeats these and builds/smokes the Docker image.
 The Bun, Node and PostgreSQL base images are pinned by digest in Docker/Compose.

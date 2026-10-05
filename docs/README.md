@@ -33,6 +33,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Setup](implementation/setup.md) | Local commands, validation, and configuration |
 | [Implementation evidence](implementation/implementation-status.md) | Verified behavior and remaining live release gates |
 | [Release runbook](implementation/release-runbook.md) | Staging demonstration, backup/restore and recovery |
+| [VPS release deployment](implementation/vps-deployment.md) | GitHub Release workflow, SSH secrets, host provisioning and failure recovery |
 | [Telegram experience](user/telegram-experience.md) | Proposed commands, onboarding, and example conversations |
 
 ## Evidence vocabulary

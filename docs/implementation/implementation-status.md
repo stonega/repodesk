@@ -8,6 +8,26 @@ accepted by a pilot team. Each entry states its own test scope and remaining gat
 
 ## Implemented
 
+### Release-driven VPS deployment (2026-10-05)
+
+Added a stable GitHub Release workflow that reuses CI verification, builds the
+release event's immutable commit and transfers its image over verified SSH.
+The host script locks deployment, checks runtime secret access, stops writers,
+validates a protected pre-migration backup, runs migrations and verifies both
+container health and application readiness before recording success. Failed
+cutovers stop writers and require deliberate schema-aware recovery.
+
+Validation: Biome, TypeScript, Bun build and runtime contract passed; all **317
+Bun tests** passed against disposable PostgreSQL, including seven deployment
+tests. Actionlint, Bash syntax and Compose validation passed. The application
+Docker image built and passed its isolated Node runtime contract. Disposable
+Docker stacks passed a fresh install and an upgrade to a distinct image ID;
+both app/worker changed images, database test data persisted, backups validated
+and host `/readyz` returned HTTP 200. Temporary containers and volumes were
+removed. No live VPS deployment, account connection, webhook registration or
+message sending was performed. See [VPS setup](vps-deployment.md) for required
+host provisioning and GitHub secrets.
+
 ### Local Codex runner reconciliation (2026-09-29)
 
 The live Podman supervisor was healthy with no active coding containers. Two

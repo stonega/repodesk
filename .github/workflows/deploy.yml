@@ -1,0 +1,76 @@
+name: Deploy release to VPS
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vps-production
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: ${{ !github.event.release.prerelease }}
+    uses: ./.github/workflows/check.yml
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Match verification's event commit even if someone later moves the tag.
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Build and smoke-test release image
+        run: |
+          set -euo pipefail
+          image="repodesk:release-$(git rev-parse HEAD)"
+          docker build --platform linux/amd64 --target app -t "$image" .
+          docker run --rm --network none --entrypoint node "$image" dist/runtime-contract.js
+          mkdir -p bundle
+          docker image inspect --format '{{.Id}}' "$image" > bundle/image-id
+          docker image save "$image" | gzip > bundle/image.tar.gz
+          cp compose.yaml scripts/deploy-vps.sh bundle/
+
+      - name: Transfer and deploy through verified SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          VPS_PORT: ${{ vars.VPS_PORT || '22' }}
+          VPS_PATH: ${{ vars.VPS_PATH || '/opt/repodesk' }}
+          VPS_PROJECT: ${{ vars.VPS_PROJECT || 'repodesk' }}
+        run: |
+          set -euo pipefail
+          : "${VPS_HOST:?Set VPS_HOST}" "${VPS_USER:?Set VPS_USER}"
+          : "${VPS_SSH_KEY:?Set VPS_SSH_KEY}" "${VPS_KNOWN_HOSTS:?Set VPS_KNOWN_HOSTS}"
+          [[ "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          [[ "$VPS_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]
+          [[ "$VPS_PORT" =~ ^[0-9]{1,5}$ ]] && (( 10#$VPS_PORT > 0 && 10#$VPS_PORT <= 65535 ))
+          [[ "$VPS_PATH" =~ ^/[a-zA-Z0-9/_-]+$ && "$VPS_PATH" != / ]]
+          [[ "$VPS_PROJECT" =~ ^[a-z0-9][a-z0-9_-]*$ ]]
+          release_id="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh_dir="$(mktemp -d)"
+          trap 'rm -rf "$ssh_dir"' EXIT
+          chmod 700 "$ssh_dir"
+          printf '%s\n' "$VPS_SSH_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
+          ssh_options=(-i "$ssh_dir/key" -o BatchMode=yes -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$ssh_dir/known_hosts"
+            -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+          destination="$VPS_USER@$VPS_HOST"
+          ssh "${ssh_options[@]}" -p "$VPS_PORT" "$destination" \
+            "umask 077; mkdir -p '$VPS_PATH/releases/$release_id'"
+          scp "${ssh_options[@]}" -P "$VPS_PORT" bundle/* \
+            "$destination:$VPS_PATH/releases/$release_id/"
+          ssh "${ssh_options[@]}" -p "$VPS_PORT" "$destination" \
+            "bash '$VPS_PATH/releases/$release_id/deploy-vps.sh' '$VPS_PATH' '$release_id' '$VPS_PROJECT'"

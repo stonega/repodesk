@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# Run on the provisioned VPS; configuration and secrets stay on that host.
+set -euo pipefail
+umask 077
+
+deploy_root="${1:?Usage: deploy-vps.sh DEPLOY_ROOT RELEASE_ID COMPOSE_PROJECT}"
+release_id="${2:?Missing release ID}"
+project="${3:?Missing Compose project}"
+[[ "$deploy_root" = /* && "$deploy_root" != / ]]
+[[ "$release_id" =~ ^[0-9]+-[0-9]+$ ]]
+[[ "$project" =~ ^[a-z0-9][a-z0-9_-]*$ ]]
+cd "$deploy_root"
+deploy_root="$PWD"
+release_dir="$deploy_root/releases/$release_id"
+[[ -f "$deploy_root/.env" && -f "$release_dir/compose.yaml" ]]
+backup_path="$deploy_root/backups/pre-release-$release_id.dump"
+# Refuse a repeated bundle before stopping services or overwriting its backup.
+[[ ! -e "$backup_path" ]]
+
+# Also fence deployments started directly by an operator.
+exec 9> "$deploy_root/.deploy.lock"
+flock -n 9 || { echo 'Another deployment is running.' >&2; exit 1; }
+
+image_id="$(cat "$release_dir/image-id")"
+[[ "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]
+[[ "$(docker info --format '{{.Architecture}}')" =~ ^(x86_64|amd64)$ ]] || {
+  echo 'Release images require an x86_64 VPS.' >&2
+  exit 1
+}
+docker image load --input "$release_dir/image.tar.gz"
+[[ "$(docker image inspect --format '{{.Id}}' "$image_id")" = "$image_id" ]]
+printf 'APP_IMAGE=%s\n' "$image_id" > "$release_dir/release.env"
+export APP_IMAGE="$image_id"
+compose=(docker compose --project-directory "$deploy_root" -p "$project"
+  --env-file "$deploy_root/.env" --env-file "$release_dir/release.env"
+  -f "$release_dir/compose.yaml")
+"${compose[@]}" config --quiet
+# Check the actual runtime user's secret access, including host SELinux labels.
+"${compose[@]}" run --rm --no-deps --pull never -T --entrypoint node migrate -e \
+  "require('fs').accessSync(process.env.ENCRYPTION_KEY_FILE,require('fs').constants.R_OK)"
+# Pull only the pinned database image, before stopping any writers.
+"${compose[@]}" pull postgres
+
+cutover_started=false
+on_error() {
+  status=$?
+  trap - ERR
+  if [[ "$cutover_started" = true ]]; then
+    "${compose[@]}" stop app worker || true
+    echo 'Deployment failed; app/worker stopped. Inspect migrations and the backup before recovery.' >&2
+  fi
+  exit "$status"
+}
+trap on_error ERR
+
+cutover_started=true
+"${compose[@]}" stop app worker
+"${compose[@]}" up -d --no-deps --wait --wait-timeout 120 postgres
+mkdir -p "$deploy_root/backups"
+# A rerun has a new release ID, so an earlier backup is never overwritten.
+[[ ! -e "$backup_path" ]]
+"${compose[@]}" exec -T postgres pg_dump -U deepx -d deepx --format=custom > "$backup_path"
+[[ -s "$backup_path" ]]
+"${compose[@]}" exec -T postgres pg_restore --list < "$backup_path" > /dev/null
+
+# Old writers are stopped, and migrations must succeed before either new writer starts.
+"${compose[@]}" run --rm --no-deps --pull never -T migrate
+"${compose[@]}" up -d --no-deps --no-build --pull never --wait --wait-timeout 180 app worker
+"${compose[@]}" exec -T app node -e \
+  "fetch('http://127.0.0.1:'+process.env.PORT+'/readyz',{signal:AbortSignal.timeout(10000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+
+printf '%s\n' "$release_id" > "$deploy_root/.current-release.tmp"
+mv "$deploy_root/.current-release.tmp" "$deploy_root/.current-release"
+rm "$release_dir/image.tar.gz"
+printf 'Deployed release %s (%s). Backup: %s\n' "$release_id" "$image_id" "$backup_path"
