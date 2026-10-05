@@ -34,6 +34,20 @@ export const localStatus = z.object({
     .optional(),
 });
 export type LocalStatus = z.infer<typeof localStatus>;
+export const deviceAuthStatus = z.object({
+  state: z.enum(["disconnected", "pending", "connected", "failed"]),
+  verificationUrl: z.string().url().optional(),
+  userCode: z
+    .string()
+    .regex(/^[A-Z0-9-]{4,32}$/)
+    .optional(),
+});
+export type DeviceAuthStatus = z.infer<typeof deviceAuthStatus>;
+export interface LocalDeviceAuth {
+  deviceStatus(workspaceId: string): Promise<DeviceAuthStatus>;
+  deviceStart(workspaceId: string): Promise<DeviceAuthStatus>;
+  deviceLogout(workspaceId: string): Promise<DeviceAuthStatus>;
+}
 export interface LocalRunner {
   start(input: LocalStart): Promise<void>;
   status(workspaceId: string, taskId: string): Promise<LocalStatus>;

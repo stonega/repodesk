@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import { branchName, type CodingTask } from "../../src/coding/config.ts";
-import { CodingGitHub } from "../../src/coding/github.ts";
+import { branchName } from "../../src/coding/config.ts";
 import {
   cancelCoding,
   codingDestination,
@@ -29,11 +28,13 @@ export function codingFixture() {
     revision: 1,
     settings: {
       enabled: true,
+      backend: "podman",
+      authMode: "provider_key",
       repositories: [
         {
           repositoryId: 7001,
           baseBranch: "develop",
-          workflowFile: "deepx-codex.yml",
+          checkCommand: "bun test",
           maintainers: ["101"],
         },
       ],
@@ -55,61 +56,39 @@ const input = {
   title: "Fix recap",
   body: "Include the last message. Add regression tests.",
 };
-test("coding run and PR discovery accept RepoDesk and earlier task names", async () => {
-  for (const prefix of ["repodesk", "deepx"]) {
-    const id = "task-123";
-    const branch = `codex/${prefix}-${id}`;
-    const task = {
-      id,
-      createdAt: "2026-09-26T00:00:00.000Z",
-      issue: {
-        number: 42,
-        url: "https://github.com/example/workspace/issues/42",
-      },
-      payload: {
-        repository: "example/workspace",
-        baseBranch: "develop",
-        workflowFile: `${prefix}-codex.yml`,
-      },
-    } as CodingTask;
-    const github = new CodingGitHub((async (input) => {
-      const url = new URL(String(input));
-      if (url.pathname.endsWith("/runs"))
-        return Response.json({
-          workflow_runs: [
-            {
-              id: 81,
-              display_title: `${prefix}-coding:${id}`,
-              event: "workflow_dispatch",
-              head_branch: "develop",
-              status: "completed",
-              conclusion: "success",
-            },
-          ],
-        });
-      if (url.pathname.endsWith("/pulls"))
-        return Response.json(
-          url.searchParams.get("head") === `example:${branch}`
-            ? [
-                {
-                  number: 43,
-                  body: "Implements https://github.com/example/workspace/issues/42",
-                  head: {
-                    ref: branch,
-                    repo: { full_name: "example/workspace" },
-                  },
-                  base: { ref: "develop" },
-                },
-              ]
-            : [],
-        );
-      throw new Error(`Unexpected GitHub request: ${url.pathname}`);
-    }) as typeof fetch);
-    expect((await github.run("token", task))?.id).toBe(81);
-    expect(await github.pull("token", task)).toBe(
-      "https://github.com/example/workspace/pull/43",
-    );
-  }
+test("legacy Actions settings cannot authorize a new coding task", () => {
+  const { w } = codingFixture();
+  (present(w.coding).settings as { backend: string }).backend =
+    "github-actions";
+  expect(() => codingDestination(w, "101", input)).toThrow(
+    "coding_local_configuration_required",
+  );
+});
+test("legacy settings are shown for migration and save only with local checks", () => {
+  const { w } = codingFixture();
+  const admin = { id: w.operatorId, operator: true, username: "operator" };
+  const legacy = present(w.coding).settings;
+  (legacy as { backend: string }).backend = "github-actions";
+  const target = present(legacy.repositories[0]) as {
+    workflowFile?: string;
+    checkCommand?: string;
+  };
+  target.workflowFile = "repodesk-codex.yml";
+  delete target.checkCommand;
+  const page = codingView(w, admin);
+  expect(page.legacyActionsConfiguration).toBe(true);
+  expect(page.settings.backend).toBe("podman");
+  expect(page.settings.repositories[0]).not.toHaveProperty("workflowFile");
+  expect(() =>
+    saveCoding(w, admin, { revision: page.revision, settings: page.settings }),
+  ).toThrow();
+  present(page.settings.repositories[0]).checkCommand = "bun test";
+  const saved = saveCoding(w, admin, {
+    revision: page.revision,
+    settings: page.settings,
+  });
+  expect(saved.legacyActionsConfiguration).toBe(false);
+  expect(saved.settings.backend).toBe("podman");
 });
 test("only a repository maintainer can propose; workspace admin is not an implicit grant", () => {
   const { w } = codingFixture();
@@ -123,13 +102,29 @@ test("only a repository maintainer can propose; workspace admin is not an implic
   w.policy.allowed = [];
   expect(() => codingDestination(w, "101", input)).toThrow("access_denied");
 });
-test("full reviewed payload and one workflow per approved tool call", () => {
+test("device auth is workspace-scoped and limited to known private repositories", () => {
+  const { w } = codingFixture();
+  present(w.coding).settings.authMode = "device_code";
+  expect(() => codingDestination(w, "101", input)).toThrow(
+    "coding_device_private_repository_required",
+  );
+  present(present(w.github).repositories[0]).private = true;
+  expect(codingDestination(w, "101", input).authMode).toBe("device_code");
+  const admin = { id: w.operatorId, operator: true, username: "operator" };
+  const page = saveCoding(w, admin, {
+    revision: present(w.coding).revision,
+    settings: present(w.coding).settings,
+  });
+  expect(page.settings.authMode).toBe("device_code");
+});
+test("full reviewed payload and one local task per approved tool call", () => {
   const { w, run } = codingFixture();
   const a = proposeCoding(w, "101", run.id, "call", input);
   expect(proposeCoding(w, "101", run.id, "call", input).id).toBe(a.id);
   expect(w.deliveries).toHaveLength(1);
   expect(w.deliveries[0]?.text).toContain(input.body);
   expect(w.deliveries[0]?.text).toContain("develop");
+  expect(w.deliveries[0]?.text).toContain("local Podman");
   expect(w.codingTasks).toBeUndefined();
   expect(() => decide(w, "303", a.id, true)).toThrow("approval_denied");
   decide(w, "101", a.id, true);
@@ -169,8 +164,16 @@ test("changed destination, revoked maintainer, expiry, cancellation and payload 
 });
 test("configuration is operator and tenant scoped with optimistic revision and active members", () => {
   const { w } = codingFixture();
+  const owner = w.members.find((member) => member.id === "101");
+  if (!owner) throw new Error("Missing owner fixture");
+  owner.username = "maintainer";
   const admin = { id: w.operatorId, operator: true, username: "operator" };
   const settings = present(w.coding).settings;
+  expect(codingView(w, admin).members).toContainEqual({
+    id: "101",
+    active: true,
+    username: "maintainer",
+  });
   expect(() => codingView(w, { ...admin, id: "other" })).toThrow(
     "access_denied",
   );

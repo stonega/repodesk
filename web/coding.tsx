@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { NavLink } from "react-router";
 import type { CodingPage, CodingSettings } from "../src/coding/config.ts";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
@@ -14,12 +15,22 @@ function message(error: unknown) {
       "Select maintainers who currently have workspace access.",
     github_repository_not_connected:
       "Connect the selected repository in GitHub before saving.",
+    coding_device_private_repository_required:
+      "ChatGPT device sign-in is limited to trusted private repositories. Reconnect GitHub if this repository is private but its visibility is unknown.",
+    coding_device_auth_required:
+      "Connect a ChatGPT account with device code before starting coding tasks.",
+    coding_device_login_unavailable:
+      "Device sign-in could not start. Check that the runner is available and device login is enabled in ChatGPT.",
+    coding_device_login_busy:
+      "Too many device sign-ins are pending. Finish or cancel another sign-in first.",
     invalid_request:
       "Check the branch, repository commands and maintainer selections.",
   };
   return messages[code] ?? code;
 }
 const taskFailures: Record<string, string> = {
+  coding_legacy_backend_disabled:
+    "GitHub Actions execution was removed. Inspect any existing workflow on GitHub.",
   coding_setup_failed: "Repository setup command failed.",
   coding_codex_failed: "Codex stopped before completing the implementation.",
   coding_check_failed: "The configured repository check command failed.",
@@ -40,16 +51,29 @@ export function Coding({
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<Repository>();
-  const [keyEditing, setKeyEditing] = useState(false);
+  const [configEditing, setConfigEditing] = useState(false);
+  const [configDraft, setConfigDraft] = useState<CodingSettings>();
   const [keyDraft, setKeyDraft] = useState("");
+  const [removeKey, setRemoveKey] = useState(false);
+  useEffect(() => {
+    if (data?.deviceAuth?.state !== "pending") return;
+    const timer = setInterval(() => {
+      void request<CodingPage>(endpoint)
+        .then((page) => setData(page))
+        .catch((e) => setError(message(e)));
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [data?.deviceAuth?.state, endpoint, request]);
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
       setData(await request<CodingPage>(endpoint));
       setEditing(undefined);
-      setKeyEditing(false);
+      setConfigEditing(false);
+      setConfigDraft(undefined);
       setKeyDraft("");
+      setRemoveKey(false);
     } catch (e) {
       setError(message(e));
     } finally {
@@ -57,18 +81,17 @@ export function Coding({
     }
   }, [request, endpoint]);
   useEffect(() => {
-    setKeyEditing(false);
+    setConfigEditing(false);
+    setConfigDraft(undefined);
     setKeyDraft("");
+    setRemoveKey(false);
     void load();
   }, [load]);
   const save = async (
     settings: CodingSettings,
-    optimistic = false,
     providerApiKey?: string | null,
   ) => {
     if (!data || busy) return;
-    const previous = data;
-    if (optimistic) setData({ ...data, settings });
     setBusy(true);
     setError("");
     try {
@@ -80,50 +103,40 @@ export function Coding({
         }),
       );
       setEditing(undefined);
-      setKeyEditing(false);
+      setConfigEditing(false);
+      setConfigDraft(undefined);
       setKeyDraft("");
+      setRemoveKey(false);
     } catch (e) {
-      if (optimistic) setData(previous);
       setError(message(e));
     } finally {
       setBusy(false);
     }
   };
+  const activeTasks =
+    data?.tasks.filter(
+      (task) =>
+        !["succeeded", "failed", "unknown", "cancelled"].includes(task.state),
+    ).length ?? 0;
+  const credentialStatus =
+    data?.settings.authMode === "device_code"
+      ? data.deviceAuth?.state === "connected"
+        ? "ChatGPT connected"
+        : data.deviceAuth?.state === "pending"
+          ? "Sign-in pending"
+          : "ChatGPT not connected"
+      : data?.providerApiKeyConfigured
+        ? "Workspace key configured"
+        : "No workspace key";
   return (
     <section
-      className="card"
+      className="coding-detail"
       id="coding-tasks"
       aria-label="Codex implementation"
     >
-      <div className="row plugin-toolbar">
-        <h2>Codex implementation</h2>
-        <IconButton
-          icon="add"
-          label="Add coding repository"
-          disabled={!data?.repositories.length || busy || loading}
-          onClick={() => {
-            setError("");
-            setEditing({
-              repositoryId: 0,
-              baseBranch: "develop",
-              workflowFile: "repodesk-codex.yml",
-              maintainers: [],
-            });
-          }}
-        />
-      </div>
-      <p>
-        Create an issue, implement a feature or fix with Codex, and open a draft
-        PR. Only each repository’s selected maintainers can start tasks.
-      </p>
-      <p className="muted">
-        Coding provider usage is billed separately from chat usage. Local Podman
-        uses the deployment’s custom provider configuration and the API key
-        saved for this workspace.
-      </p>
-      {error && !editing && !keyEditing && (
-        <p role="alert">
-          {error}
+      {error && !editing && !configEditing && (
+        <p className="notice" role="alert">
+          {error}{" "}
           <button
             type="button"
             disabled={busy || loading}
@@ -133,302 +146,322 @@ export function Coding({
           </button>
         </p>
       )}
+      {!data && !error && <p role="status">Loading Codex settings…</p>}
       {data && (
         <>
-          <label className="row">
-            <input
-              type="checkbox"
-              checked={data.settings.enabled}
-              disabled={busy || loading}
-              onChange={(e) =>
-                void save({ ...data.settings, enabled: e.target.checked }, true)
-              }
-            />
-            Enable Codex implementation
-          </label>
-          <label>
-            Execution backend
-            <select
-              value={data.settings.backend ?? "github-actions"}
-              disabled={busy || loading}
-              onChange={(e) =>
-                void save(
-                  {
-                    ...data.settings,
-                    backend: e.target.value as "github-actions" | "podman",
-                  },
-                  true,
-                )
-              }
-            >
-              <option value="github-actions">GitHub Actions</option>
-              <option value="podman">Local Podman</option>
-            </select>
-          </label>
-          <p className="muted">
-            {data.settings.backend === "podman"
-              ? "Each approved task runs in its own container. Configure the local runner and provider endpoint in deployment settings, save your provider API key below, and set each repository’s setup and check commands."
-              : "Install examples/coding/repodesk-codex.yml in each repository and configure its OpenAI secret and GitHub App bot login. GitHub Actions usage is billed separately."}
-          </p>
-          <p className="muted">
-            Saving settings invalidates pending approvals and requests
-            cancellation of active tasks using older settings.
-          </p>
-          {data.settings.backend === "podman" && (
-            <div className="card">
-              <h3>Provider API key</h3>
-              <p>
-                {data.providerApiKeyConfigured
-                  ? "Configured for this workspace."
-                  : "No workspace key saved. A deployment key is used if configured."}
-              </p>
-              <p className="muted">
-                The key is stored encrypted and is never displayed again. Saving
-                or removing a key invalidates pending approvals and requests
-                cancellation of active tasks.
-              </p>
-              <div className="row">
-                <button
-                  type="button"
-                  disabled={busy || loading}
-                  onClick={() => {
-                    setError("");
-                    setKeyDraft("");
-                    setKeyEditing(true);
-                  }}
-                >
-                  {data.providerApiKeyConfigured
-                    ? "Replace API key"
-                    : "Set API key"}
-                </button>
-                {data.providerApiKeyConfigured && (
-                  <button
-                    type="button"
-                    disabled={busy || loading}
-                    onClick={() => {
-                      if (
-                        confirm(
-                          "Remove the saved Codex API key? Active tasks will receive cancellation requests. A deployment key will be used if configured.",
-                        )
-                      )
-                        void save(data.settings, false, null);
-                    }}
-                  >
-                    Remove saved key
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-          {!data.repositories.length && (
-            <p>Connect a GitHub repository above to configure coding tasks.</p>
-          )}
-          {!data.settings.repositories.length && (
-            <p>No coding repositories configured.</p>
-          )}
-          {data.settings.repositories.map((repo) => (
-            <div className="row" key={repo.repositoryId}>
+          <section className="card" aria-label="Codex configuration">
+            <div className="coding-card-heading">
               <div>
-                <strong>
-                  {data.repositories.find((r) => r.id === repo.repositoryId)
-                    ?.full_name ??
-                    `Repository ${repo.repositoryId} (disconnected)`}
-                </strong>
-                <p>
-                  Base: <code>{repo.baseBranch}</code> · Maintainers:{" "}
-                  {repo.maintainers.join(", ")}
+                <h2>Configuration</h2>
+                <p className="muted">
+                  Approved coding work runs in a local Podman container.
                 </p>
               </div>
               <IconButton
                 icon="edit"
-                label={`Edit coding repository ${repo.repositoryId}`}
+                label="Edit Codex configuration"
+                showLabel
                 disabled={busy || loading}
                 onClick={() => {
                   setError("");
-                  setEditing(structuredClone(repo));
+                  setConfigDraft(structuredClone(data.settings));
+                  setKeyDraft("");
+                  setRemoveKey(false);
+                  setConfigEditing(true);
                 }}
               />
+            </div>
+            <dl className="coding-summary">
+              <div>
+                <dt>Status</dt>
+                <dd>
+                  <span
+                    className={data.settings.enabled ? "pill good" : "pill"}
+                  >
+                    {data.settings.enabled ? "Enabled" : "Disabled"}
+                  </span>
+                </dd>
+              </div>
+              <div>
+                <dt>Execution</dt>
+                <dd>Local Podman</dd>
+              </div>
+              <div>
+                <dt>Sign-in method</dt>
+                <dd>
+                  {data.settings.authMode === "device_code"
+                    ? "ChatGPT device code"
+                    : "Custom provider API key"}
+                </dd>
+              </div>
+              <div>
+                <dt>Credential</dt>
+                <dd>{credentialStatus}</dd>
+              </div>
+              <div>
+                <dt>Repositories</dt>
+                <dd>{data.settings.repositories.length}</dd>
+              </div>
+              <div>
+                <dt>Tasks</dt>
+                <dd>
+                  {data.tasks.length} total · {activeTasks} active
+                </dd>
+              </div>
+            </dl>
+            {data.legacyActionsConfiguration && (
+              <p className="notice" role="status">
+                This workspace still has a GitHub Actions configuration. Coding
+                tasks are paused until every repository has local check commands
+                saved.
+              </p>
+            )}
+          </section>
+          <section className="card" aria-label="Coding repositories">
+            <div className="coding-card-heading">
+              <div>
+                <h2>Repositories</h2>
+                <p className="muted">
+                  Choose where selected maintainers can start coding tasks.
+                </p>
+              </div>
               <IconButton
-                icon="delete"
-                label={`Remove coding repository ${repo.repositoryId}`}
-                disabled={busy || loading}
+                icon="add"
+                label="Add coding repository"
+                showLabel
+                disabled={!data.repositories.length || busy || loading}
                 onClick={() => {
-                  if (
-                    confirm(
-                      "Remove this coding repository? Active tasks will receive cancellation requests.",
-                    )
-                  )
-                    void save({
-                      ...data.settings,
-                      repositories: data.settings.repositories.filter(
-                        (r) => r.repositoryId !== repo.repositoryId,
-                      ),
-                    });
+                  setError("");
+                  setEditing({
+                    repositoryId: 0,
+                    baseBranch: "develop",
+                    maintainers: [],
+                  });
                 }}
               />
             </div>
-          ))}
-          <h3>Coding tasks</h3>
-          {data.tasks.some(
-            (task) =>
-              !["succeeded", "failed", "unknown", "cancelled"].includes(
-                task.state,
-              ),
-          ) && (
-            <button
-              type="button"
-              disabled={busy || loading || !!editing}
-              onClick={() => void load()}
-            >
-              Check progress
-            </button>
-          )}
-          <p className="muted">
-            Stop requests remote cancellation; an issue, branch or PR already
-            published remains on GitHub.
-          </p>
-          {!data.tasks.length ? (
-            <p>
-              No tasks yet. Ask the bot in Telegram to implement a feature or
-              fix a bug in a configured repository.
-            </p>
-          ) : (
-            <div className="usage-table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Task</th>
-                    <th>Repository / base</th>
-                    <th>Status</th>
-                    <th>Links</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.tasks.map((task) => (
-                    <tr key={task.id}>
-                      <td>
-                        {task.payload.title}
-                        <br />
-                        <small>
-                          {new Date(task.createdAt).toLocaleString()} ·{" "}
-                          {task.actor}
-                        </small>
-                        <br />
-                        <code>{task.id}</code>
-                      </td>
-                      <td>
-                        {task.payload.repository}
-                        <br />
-                        <code>{task.payload.baseBranch}</code>
-                      </td>
-                      <td>
-                        {task.state.replaceAll("_", " ")}
-                        {task.cancelRequested && " · stop requested"}
-                        {task.error && (
-                          <p>{taskFailures[task.error] ?? task.error}</p>
-                        )}
-                        {task.threadId && (
-                          <p>
-                            Codex thread <code>{task.threadId}</code>
-                          </p>
-                        )}
-                        {task.state === "running" && !task.threadId && (
-                          <p className="muted">
-                            Codex is running; its thread ID appears after the
-                            implementation finishes.
-                          </p>
-                        )}
-                      </td>
-                      <td>
-                        {task.issue && (
-                          <p>
-                            <a
-                              href={task.issue.url}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              Issue
-                            </a>
-                          </p>
-                        )}
-                        {task.workflowUrl && (
-                          <p>
-                            <a
-                              href={task.workflowUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              Workflow
-                            </a>
-                          </p>
-                        )}
-                        {task.prUrl && (
-                          <p>
-                            <a
-                              href={task.prUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              PR
-                            </a>
-                          </p>
-                        )}
-                      </td>
-                      <td>
-                        {![
-                          "succeeded",
-                          "failed",
-                          "unknown",
-                          "cancelled",
-                        ].includes(task.state) && (
-                          <IconButton
-                            icon="stop"
-                            label={`Stop coding task ${task.payload.title}`}
-                            disabled={busy || task.cancelRequested}
-                            onClick={async () => {
-                              setBusy(true);
-                              setError("");
-                              try {
-                                await request(
-                                  `${endpoint}/${task.id}/cancel`,
-                                  "POST",
-                                  {},
-                                );
-                                await load();
-                              } catch (e) {
-                                setError(message(e));
-                              } finally {
-                                setBusy(false);
-                              }
-                            }}
-                          />
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {!data.repositories.length && (
+              <p>
+                Use Manage GitHub on{" "}
+                <NavLink to={`/admin/overview?workspace=${workspaceId}`}>
+                  Overview
+                </NavLink>{" "}
+                to connect a repository for coding tasks.
+              </p>
+            )}
+            {!data.settings.repositories.length && (
+              <p>No coding repositories configured.</p>
+            )}
+            {data.settings.repositories.map((repo) => (
+              <div className="coding-repository" key={repo.repositoryId}>
+                <div>
+                  <strong>
+                    {data.repositories.find((r) => r.id === repo.repositoryId)
+                      ?.full_name ??
+                      `Repository ${repo.repositoryId} (disconnected)`}
+                  </strong>
+                  <p>
+                    Base: <code>{repo.baseBranch}</code> · Maintainers:{" "}
+                    {repo.maintainers.join(", ")}
+                  </p>
+                </div>
+                <div className="row">
+                  <IconButton
+                    icon="edit"
+                    label={`Edit coding repository ${repo.repositoryId}`}
+                    disabled={busy || loading}
+                    onClick={() => {
+                      setError("");
+                      setEditing(structuredClone(repo));
+                    }}
+                  />
+                  <IconButton
+                    icon="delete"
+                    label={`Remove coding repository ${repo.repositoryId}`}
+                    disabled={busy || loading}
+                    onClick={() => {
+                      if (
+                        confirm(
+                          "Remove this coding repository? Active tasks will receive cancellation requests.",
+                        )
+                      )
+                        void save({
+                          ...data.settings,
+                          repositories: data.settings.repositories.filter(
+                            (r) => r.repositoryId !== repo.repositoryId,
+                          ),
+                        });
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </section>
+          <section className="card" aria-label="Coding tasks">
+            <div className="coding-card-heading">
+              <div>
+                <h2>Coding tasks</h2>
+                <p className="muted">
+                  Stop cancels local execution. Published issues, branches and
+                  PRs remain on GitHub.
+                </p>
+              </div>
+              {data.tasks.some(
+                (task) =>
+                  !["succeeded", "failed", "unknown", "cancelled"].includes(
+                    task.state,
+                  ),
+              ) && (
+                <button
+                  type="button"
+                  disabled={busy || loading || !!editing}
+                  onClick={() => void load()}
+                >
+                  Check progress
+                </button>
+              )}
             </div>
-          )}
+            {!data.tasks.length ? (
+              <p>
+                No tasks yet. Ask the bot in Telegram to implement a feature or
+                fix a bug in a configured repository.
+              </p>
+            ) : (
+              <div className="usage-table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Task</th>
+                      <th>Repository / base</th>
+                      <th>Status</th>
+                      <th>Links</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.tasks.map((task) => (
+                      <tr key={task.id}>
+                        <td>
+                          {task.payload.title}
+                          <br />
+                          <small>
+                            {new Date(task.createdAt).toLocaleString()} ·{" "}
+                            {task.actor}
+                          </small>
+                          <br />
+                          <code>{task.id}</code>
+                        </td>
+                        <td>
+                          {task.payload.repository}
+                          <br />
+                          <code>{task.payload.baseBranch}</code>
+                        </td>
+                        <td>
+                          {task.state.replaceAll("_", " ")}
+                          {task.cancelRequested && " · stop requested"}
+                          {task.error && (
+                            <p>{taskFailures[task.error] ?? task.error}</p>
+                          )}
+                          {task.threadId && (
+                            <p>
+                              Codex thread <code>{task.threadId}</code>
+                            </p>
+                          )}
+                          {task.state === "running" && !task.threadId && (
+                            <p className="muted">
+                              Codex is running; its thread ID appears after the
+                              implementation finishes.
+                            </p>
+                          )}
+                        </td>
+                        <td>
+                          {task.issue && (
+                            <p>
+                              <a
+                                href={task.issue.url}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Issue
+                              </a>
+                            </p>
+                          )}
+                          {task.workflowUrl && (
+                            <p>
+                              <a
+                                href={task.workflowUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Workflow
+                              </a>
+                            </p>
+                          )}
+                          {task.prUrl && (
+                            <p>
+                              <a
+                                href={task.prUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                PR
+                              </a>
+                            </p>
+                          )}
+                        </td>
+                        <td>
+                          {![
+                            "succeeded",
+                            "failed",
+                            "unknown",
+                            "cancelled",
+                          ].includes(task.state) && (
+                            <IconButton
+                              icon="stop"
+                              label={`Stop coding task ${task.payload.title}`}
+                              disabled={busy || task.cancelRequested}
+                              onClick={async () => {
+                                setBusy(true);
+                                setError("");
+                                try {
+                                  await request(
+                                    `${endpoint}/${task.id}/cancel`,
+                                    "POST",
+                                    {},
+                                  );
+                                  await load();
+                                } catch (e) {
+                                  setError(message(e));
+                                } finally {
+                                  setBusy(false);
+                                }
+                              }}
+                            />
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
         </>
       )}
-      {keyEditing && data && (
+      {configEditing && data && configDraft && (
         <Modal
-          title={
-            data.providerApiKeyConfigured
-              ? "Replace Codex API key"
-              : "Set Codex API key"
-          }
+          title="Edit Codex configuration"
           busy={busy}
           onClose={() => {
-            setKeyEditing(false);
+            setConfigEditing(false);
+            setConfigDraft(undefined);
             setKeyDraft("");
+            setRemoveKey(false);
             setError("");
           }}
         >
           {error && (
-            <p role="alert">
+            <p className="notice" role="alert">
               {error}{" "}
               <button
                 type="button"
@@ -440,30 +473,199 @@ export function Coding({
             </p>
           )}
           <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (keyDraft.trim())
-                void save(data.settings, false, keyDraft.trim());
+            onSubmit={(event) => {
+              event.preventDefault();
+              void save(
+                configDraft,
+                removeKey ? null : keyDraft.trim() || undefined,
+              );
             }}
           >
-            <label>
-              Provider API key
+            <label className="plugin-check">
               <input
-                type="password"
-                autoComplete="new-password"
-                required
-                maxLength={8192}
-                value={keyDraft}
-                onChange={(e) => setKeyDraft(e.target.value)}
+                type="checkbox"
+                checked={configDraft.enabled}
+                onChange={(event) =>
+                  setConfigDraft({
+                    ...configDraft,
+                    enabled: event.target.checked,
+                  })
+                }
               />
+              <span>Enable Codex implementation</span>
             </label>
+            <label className="field">
+              <span>Sign-in method</span>
+              <select
+                value={configDraft.authMode}
+                onChange={(event) =>
+                  setConfigDraft({
+                    ...configDraft,
+                    authMode: event.target.value as CodingSettings["authMode"],
+                  })
+                }
+              >
+                <option value="provider_key">Custom provider API key</option>
+                <option value="device_code">ChatGPT device code</option>
+              </select>
+            </label>
+            {configDraft.authMode === "provider_key" ? (
+              <>
+                <p className="muted">
+                  Provider endpoint and model are set in deployment
+                  configuration.
+                  {data.providerApiKeyConfigured
+                    ? " A workspace key is configured."
+                    : " No workspace key is saved; a deployment key is used if configured."}
+                </p>
+                <label className="field">
+                  <span>Provider API key</span>
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    maxLength={8192}
+                    value={keyDraft}
+                    disabled={removeKey}
+                    placeholder={
+                      data.providerApiKeyConfigured
+                        ? "Leave blank to keep saved key"
+                        : "Optional workspace key"
+                    }
+                    onChange={(event) => setKeyDraft(event.target.value)}
+                  />
+                </label>
+                {data.providerApiKeyConfigured && (
+                  <label className="plugin-check">
+                    <input
+                      type="checkbox"
+                      checked={removeKey}
+                      onChange={(event) => {
+                        setRemoveKey(event.target.checked);
+                        if (event.target.checked) setKeyDraft("");
+                      }}
+                    />
+                    <span>Remove saved key</span>
+                  </label>
+                )}
+              </>
+            ) : (
+              <>
+                <p>
+                  {data.deviceAuth?.state === "connected"
+                    ? "Connected for this workspace."
+                    : data.deviceAuth?.state === "pending"
+                      ? "Waiting for you to finish sign-in."
+                      : data.deviceAuth?.state === "unavailable"
+                        ? "The local runner is unavailable. Check its status before signing in."
+                        : data.deviceAuth?.state === "failed"
+                          ? "Sign-in failed or expired. Start again."
+                          : "No ChatGPT account connected."}
+                </p>
+                <p className="muted">
+                  Use only with trusted private repositories. Account tokens are
+                  available to Codex while it implements a task.
+                </p>
+                {data.settings.authMode !== "device_code" ? (
+                  <p className="muted">
+                    Save this sign-in method, then reopen configuration to
+                    connect an account.
+                  </p>
+                ) : (
+                  <>
+                    {data.deviceAuth?.state === "pending" &&
+                      data.deviceAuth.verificationUrl &&
+                      data.deviceAuth.userCode && (
+                        <p>
+                          Open{" "}
+                          <a
+                            href={data.deviceAuth.verificationUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            ChatGPT device sign-in
+                          </a>
+                          , then enter code{" "}
+                          <code>{data.deviceAuth.userCode}</code>.
+                        </p>
+                      )}
+                    <div className="row">
+                      {data.deviceAuth?.state !== "connected" &&
+                        data.deviceAuth?.state !== "pending" && (
+                          <button
+                            type="button"
+                            disabled={
+                              busy ||
+                              loading ||
+                              data.deviceAuth?.state === "unavailable"
+                            }
+                            onClick={async () => {
+                              setBusy(true);
+                              setError("");
+                              try {
+                                const status = await request<
+                                  CodingPage["deviceAuth"]
+                                >(`${endpoint}/device/start`, "POST", {});
+                                setData(
+                                  (current) =>
+                                    current && {
+                                      ...current,
+                                      deviceAuth: status,
+                                    },
+                                );
+                              } catch (cause) {
+                                setError(message(cause));
+                              } finally {
+                                setBusy(false);
+                              }
+                            }}
+                          >
+                            Sign in with device code
+                          </button>
+                        )}
+                      {(data.deviceAuth?.state === "connected" ||
+                        data.deviceAuth?.state === "pending") && (
+                        <button
+                          type="button"
+                          disabled={busy || loading}
+                          onClick={async () => {
+                            if (
+                              !confirm(
+                                "Disconnect this ChatGPT account? Active coding tasks will be stopped.",
+                              )
+                            )
+                              return;
+                            setBusy(true);
+                            setError("");
+                            try {
+                              setData(
+                                await request<CodingPage>(
+                                  `${endpoint}/device/logout`,
+                                  "POST",
+                                  {},
+                                ),
+                              );
+                            } catch (cause) {
+                              setError(message(cause));
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                        >
+                          Disconnect account
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
             <p className="muted">
-              Use a key for the custom provider configured on this deployment.
-              It applies only to this workspace’s local Codex tasks.
+              Saving configuration invalidates pending approvals and requests
+              cancellation of active tasks using older settings.
             </p>
             <ModalActions>
-              <button type="submit" disabled={busy || !keyDraft.trim()}>
-                Save API key
+              <button type="submit" disabled={busy}>
+                Save configuration
               </button>
             </ModalActions>
           </form>
@@ -528,6 +730,7 @@ function RepositoryEditor({
   const [validation, setValidation] = useState("");
   return (
     <form
+      className="coding-repository-form"
       onSubmit={(e) => {
         e.preventDefault();
         if (!draft.maintainers.length) {
@@ -537,9 +740,10 @@ function RepositoryEditor({
         submit(draft);
       }}
     >
-      <label>
-        Repository
+      <div className="field">
+        <label htmlFor="coding-repository">Repository</label>
         <select
+          id="coding-repository"
           required
           value={draft.repositoryId || ""}
           onChange={(e) =>
@@ -561,96 +765,86 @@ function RepositoryEditor({
               </option>
             ))}
         </select>
-      </label>
-      <label>
-        Development / base branch
+      </div>
+      <div className="field">
+        <label htmlFor="coding-base-branch">Development / base branch</label>
         <input
+          id="coding-base-branch"
+          aria-describedby="coding-base-branch-help"
           required
           maxLength={150}
           value={draft.baseBranch}
           onChange={(e) => setDraft({ ...draft, baseBranch: e.target.value })}
         />
-      </label>
-      <p className="muted">
-        An existing branch, for example develop. Task branches and PRs use this
-        base.
-      </p>
-      {
-        <>
-          <label>
-            Local setup command (optional)
-            <textarea
-              maxLength={2000}
-              value={draft.setupCommand ?? ""}
-              placeholder="bun install --frozen-lockfile"
-              onChange={(e) =>
-                setDraft({ ...draft, setupCommand: e.target.value })
-              }
-            />
-          </label>
-          <label>
-            Local check command
-            <textarea
-              required={data.settings.backend === "podman"}
-              maxLength={2000}
-              value={draft.checkCommand ?? ""}
-              placeholder="bun run check && bun run typecheck && bun test && bun run build"
-              onChange={(e) =>
-                setDraft({ ...draft, checkCommand: e.target.value })
-              }
-            />
-          </label>
-          <p className="muted">
-            Commands run in the isolated checkout. Checks must pass before
-            publication. The standard runner includes Node, Bun, Git and Bash.
-          </p>
-        </>
-      }
-      {data.settings.backend !== "podman" && (
-        <>
-          <label>
-            Workflow filename
-            <input
-              required
-              maxLength={100}
-              value={draft.workflowFile}
-              onChange={(e) =>
-                setDraft({ ...draft, workflowFile: e.target.value })
-              }
-            />
-          </label>
-          <p className="muted">
-            A .yml or .yaml filename under .github/workflows, installed on the
-            default and base branches.
-          </p>
-        </>
-      )}
-      <fieldset>
-        <legend>Maintainers (Telegram user IDs)</legend>
-        {[
-          ...data.members,
-          ...draft.maintainers
-            .filter((id) => !data.members.some((m) => m.id === id))
-            .map((id) => ({ id, active: false })),
-        ].map((m) => (
-          <label key={m.id} className="row">
-            <input
-              type="checkbox"
-              checked={draft.maintainers.includes(m.id)}
-              onChange={(e) => {
-                setValidation("");
-                setDraft({
-                  ...draft,
-                  maintainers: e.target.checked
-                    ? [...draft.maintainers, m.id]
-                    : draft.maintainers.filter((id) => id !== m.id),
-                });
-              }}
-            />
-            {m.id}
-            {!m.active && " (access removed)"}
-          </label>
-        ))}
+        <small id="coding-base-branch-help">
+          Use an existing branch. Task branches and pull requests start here.
+        </small>
+      </div>
+      <div className="field">
+        <label htmlFor="coding-setup-command">
+          Local setup command (optional)
+        </label>
+        <textarea
+          id="coding-setup-command"
+          rows={2}
+          maxLength={2000}
+          value={draft.setupCommand ?? ""}
+          placeholder="e.g. bun install --frozen-lockfile"
+          onChange={(e) => setDraft({ ...draft, setupCommand: e.target.value })}
+        />
+      </div>
+      <div className="field">
+        <label htmlFor="coding-check-command">Local check command</label>
+        <textarea
+          id="coding-check-command"
+          aria-describedby="coding-check-command-help"
+          rows={2}
+          required
+          maxLength={2000}
+          value={draft.checkCommand ?? ""}
+          placeholder="e.g. bun run check && bun test"
+          onChange={(e) => setDraft({ ...draft, checkCommand: e.target.value })}
+        />
+        <small id="coding-check-command-help">
+          Runs in the isolated checkout and must pass before publication. Node,
+          Bun, Git and Bash are available.
+        </small>
+      </div>
+      <fieldset className="coding-maintainers">
+        <legend>Maintainers</legend>
+        <div className="coding-maintainer-list">
+          {[
+            ...data.members,
+            ...draft.maintainers
+              .filter((id) => !data.members.some((m) => m.id === id))
+              .map((id) => ({ id, active: false, username: undefined })),
+          ].map((m) => (
+            <label key={m.id} className="coding-maintainer-row">
+              <input
+                type="checkbox"
+                checked={draft.maintainers.includes(m.id)}
+                onChange={(e) => {
+                  setValidation("");
+                  setDraft({
+                    ...draft,
+                    maintainers: e.target.checked
+                      ? [...draft.maintainers, m.id]
+                      : draft.maintainers.filter((id) => id !== m.id),
+                  });
+                }}
+              />
+              <span className="coding-maintainer-identity">
+                <span>
+                  {m.username ? `@${m.username.replace(/^@/, "")}` : m.id}
+                </span>
+                <small>
+                  {m.username ? `Telegram ID ${m.id}` : "Telegram user ID"}
+                  {!m.active && " · Access removed"}
+                </small>
+              </span>
+            </label>
+          ))}
+        </div>
       </fieldset>
       {validation && <p role="alert">{validation}</p>}
       <ModalActions>

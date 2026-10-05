@@ -1,6 +1,13 @@
 # Merge with compose.yaml from the repository root. Build codex-job first;
 # dynamic task containers always use the prebuilt image (--pull=never).
 services:
+  app:
+    environment:
+      CODEX_RUNNER_URL: http://codex-runner:3020
+      CODEX_RUNNER_TOKEN: ${CODEX_RUNNER_TOKEN:?Set CODEX_RUNNER_TOKEN}
+    depends_on:
+      codex-runner:
+        condition: service_healthy
   worker:
     environment:
       CODEX_RUNNER_URL: http://codex-runner:3020

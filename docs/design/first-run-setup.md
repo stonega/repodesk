@@ -39,6 +39,12 @@ Setup resumes from saved server state. GitHub registration and authorization ret
 to the GitHub step when started there. Authorization alone does not grant repository
 access; the App must also appear under Installed GitHub Apps. Setup waits for an
 installation and verifies its repositories before showing the welcome dialog.
+The operator's New workspace action in the admin selector reuses this wizard with
+a blank workspace form. After saving, the new workspace ID stays in the URL so
+reloads and GitHub callbacks continue setup for that workspace. The Telegram bot
+is deployment-wide and can be retained when already configured. Operators can
+cancel before creating the workspace or finish GitHub connection later in the
+admin panel.
 After activation, the web administrator can share an access-request link,
 approve requests, directly allow a numeric Telegram ID, or revoke a member in
 Model settings. The bot denies ordinary use until a member is explicitly allowed.

@@ -17,6 +17,7 @@ import {
   fingerprint,
   hash,
 } from "../../setup/credentials.ts";
+import { DeviceAuth } from "./device-auth.ts";
 import { type ContainerEngine, containerArgs } from "./podman.ts";
 import {
   type LocalRunner,
@@ -30,7 +31,7 @@ interface Record extends LocalStatus {
   key: string;
   input: Omit<LocalStart, "readToken" | "providerApiKey">;
   providerApiKey?: string; // Encrypted task credential; never copied into job input.
-  phase: "prepare" | "implement" | "publish";
+  phase: "prepare" | "setup" | "implement" | "check" | "publish";
   proxyToken: string;
   createdAt: number;
   finishedAt?: number;
@@ -52,18 +53,26 @@ export const taskKey = (workspaceId: string, taskId: string) => {
 };
 
 export class RunnerSupervisor implements LocalRunner {
+  readonly device: DeviceAuth;
   private records = new Map<string, Record>();
   private tail: Promise<unknown> = Promise.resolve();
   constructor(
     readonly settings: RunnerSettings,
     private engine: ContainerEngine,
-  ) {}
+  ) {
+    this.device = new DeviceAuth(settings);
+  }
   async initialize() {
     await mkdir(this.settings.CODEX_RUNNER_STATE, {
       recursive: true,
       mode: 0o700,
     });
+    await this.device.initialize();
     for (const name of await readdir(this.settings.CODEX_RUNNER_STATE)) {
+      if (/^deepx-codex-[a-f0-9]{32}\.auth$/.test(name)) {
+        await rm(join(this.settings.CODEX_RUNNER_STATE, name), { force: true });
+        continue;
+      }
       if (!/^deepx-codex-[a-f0-9]{32}\.json$/.test(name)) continue;
       const r = JSON.parse(
         await readFile(join(this.settings.CODEX_RUNNER_STATE, name), "utf8"),
@@ -108,16 +117,66 @@ export class RunnerSupervisor implements LocalRunner {
   private volume(r: Record, mode: string) {
     return `${r.key}-${mode === "publish" ? "publish" : "work"}`;
   }
+  private authVolume(r: Record) {
+    return `${r.key}-auth`;
+  }
+  private async captureAuth(r: Record) {
+    if (r.input.payload.authMode !== "device_code") return;
+    const credential = await this.engine.readText(
+      `${r.key}-implement`,
+      "/auth/auth.json",
+      128 * 1024,
+    );
+    await this.device.save(r.input.workspaceId, credential);
+  }
+  private async removeAuthVolume(r: Record) {
+    if (r.input.payload.authMode !== "device_code") return;
+    await this.engine.command([
+      "rm",
+      "--force",
+      "--ignore",
+      `${r.key}-implement`,
+    ]);
+    await this.engine.command(["volume", "rm", "--force", this.authVolume(r)]);
+  }
   private async launch(
     r: Record,
     mode: string,
     env: { [key: string]: string } = {},
   ) {
     const name = `${r.key}-${mode}`;
+    const deviceRun =
+      mode === "implement" && r.input.payload.authMode === "device_code";
+    if (deviceRun)
+      await this.engine.command(["volume", "create", this.authVolume(r)]);
     await this.engine.command(
-      containerArgs(this.settings, name, this.volume(r, mode), mode, env),
+      containerArgs(
+        this.settings,
+        name,
+        this.volume(r, mode),
+        mode,
+        env,
+        deviceRun ? this.authVolume(r) : undefined,
+      ),
       env,
     );
+    if (deviceRun) {
+      const credential = this.path(r, "auth");
+      try {
+        await writeFile(
+          credential,
+          await this.device.read(r.input.workspaceId),
+          { mode: 0o600 },
+        );
+        await this.engine.command([
+          "cp",
+          credential,
+          `${name}:/auth/auth.json`,
+        ]);
+      } finally {
+        await rm(credential, { force: true });
+      }
+    }
     if (mode !== "export") {
       const file = this.path(r, "input");
       await writeFile(
@@ -125,7 +184,7 @@ export class RunnerSupervisor implements LocalRunner {
         JSON.stringify({
           ...r.input,
           baseSha: r.baseSha,
-          config: codexConfig(this.settings),
+          config: codexConfig(this.settings, r.input.payload.authMode),
         }),
         { mode: 0o644 },
       );
@@ -164,19 +223,23 @@ export class RunnerSupervisor implements LocalRunner {
         "coding_runner_busy",
         429,
       );
-      requireThat(
-        providerApiKey || this.settings.CODEX_PROVIDER_API_KEY,
-        "coding_provider_not_configured",
-        409,
-      );
+      if (safe.payload.authMode === "device_code")
+        await this.device.read(safe.workspaceId);
+      else
+        requireThat(
+          providerApiKey || this.settings.CODEX_PROVIDER_API_KEY,
+          "coding_provider_not_configured",
+          409,
+        );
       const r: Record = {
-        providerApiKey: providerApiKey
-          ? encrypt(
-              hash(this.settings.CODEX_RUNNER_TOKEN),
-              `coding-provider:${key}`,
-              providerApiKey,
-            )
-          : undefined,
+        providerApiKey:
+          safe.payload.authMode === "provider_key" && providerApiKey
+            ? encrypt(
+                hash(this.settings.CODEX_RUNNER_TOKEN),
+                `coding-provider:${key}`,
+                providerApiKey,
+              )
+            : undefined,
         key,
         input: safe,
         phase: "prepare",
@@ -205,6 +268,11 @@ export class RunnerSupervisor implements LocalRunner {
   private async copyResult(r: Record, filename: string) {
     return this.engine.readText(`${r.key}-${r.phase}`, `/task/${filename}`);
   }
+  private async timeout(r: Record) {
+    await this.stop(r);
+    r.error = "coding_task_timeout";
+    await this.save(r);
+  }
   private async advance(r: Record) {
     if (terminal(r.state) || r.state === "ready") return;
     try {
@@ -212,9 +280,7 @@ export class RunnerSupervisor implements LocalRunner {
         Date.now() >
         r.createdAt + this.settings.CODEX_RUNNER_TIMEOUT_SECONDS * 1000
       ) {
-        await this.stop(r);
-        r.error = "coding_task_timeout";
-        await this.save(r);
+        await this.timeout(r);
         return;
       }
       const raw = await this.engine.command([
@@ -233,13 +299,19 @@ export class RunnerSupervisor implements LocalRunner {
       if (state.Running) return;
       if (state.Status !== "exited" && state.Status !== "stopped")
         throw new Error("Incomplete container start");
+      if (r.phase === "implement" && r.input.payload.authMode === "device_code")
+        await this.captureAuth(r);
       if (state.ExitCode !== 0) {
         r.state = r.phase === "publish" ? "unknown" : "failed";
         r.error =
           r.phase === "publish"
             ? "coding_publication_unknown"
             : "coding_execution_failed";
-        if (r.phase === "implement") {
+        if (
+          r.phase === "implement" ||
+          r.phase === "check" ||
+          r.phase === "setup"
+        ) {
           try {
             const id = (await this.copyResult(r, "thread-id")).trim();
             if (/^[a-zA-Z0-9-]{1,100}$/.test(id)) r.threadId = id;
@@ -258,12 +330,34 @@ export class RunnerSupervisor implements LocalRunner {
           .string()
           .regex(/^[0-9a-f]{40}$/)
           .parse((await this.copyResult(r, "base-sha")).trim());
-        r.phase = "implement";
+        r.phase = "setup";
         r.state = "running";
         await this.save(r);
-        await this.launch(r, "implement", { CODEX_TASK_TOKEN: r.proxyToken });
+        await this.launch(r, "setup");
+      } else if (r.phase === "setup") {
+        r.phase = "implement";
+        await this.save(r);
+        await this.launch(
+          r,
+          "implement",
+          r.input.payload.authMode === "provider_key"
+            ? { CODEX_TASK_TOKEN: r.proxyToken }
+            : {},
+        );
       } else if (r.phase === "implement") {
-        // Record export reservation before creation; an interrupted export is not rerun.
+        await this.removeAuthVolume(r);
+        r.phase = "check";
+        await this.save(r);
+        await this.launch(r, "check");
+      } else if (r.phase === "check") {
+        // Export only reads the work volume and has no credentials or network.
+        // Remove a stale container before retrying an interrupted export.
+        await this.engine.command([
+          "rm",
+          "--force",
+          "--ignore",
+          `${r.key}-export`,
+        ]);
         const exported = JSON.parse(await this.launch(r, "export"));
         const artifact = z
           .object({
@@ -293,6 +387,8 @@ export class RunnerSupervisor implements LocalRunner {
         r.prUrl = result.prUrl;
         r.state = "succeeded";
       }
+      if (state.ExitCode !== 0 && r.phase === "implement")
+        await this.removeAuthVolume(r);
       await this.save(r);
     } catch {
       // Reconcile engine outages on the next poll. Container names prevent duplicate starts.
@@ -325,6 +421,13 @@ export class RunnerSupervisor implements LocalRunner {
   }
   private async stop(r: Record) {
     if (terminal(r.state)) return;
+    if (r.phase === "implement" && r.input.payload.authMode === "device_code") {
+      try {
+        await this.captureAuth(r);
+      } catch {
+        /* Preserve the last sealed credential. */
+      }
+    }
     // `rm --force --ignore` also handles a reservation that never created a container.
     await this.engine.command([
       "rm",
@@ -332,17 +435,31 @@ export class RunnerSupervisor implements LocalRunner {
       "--ignore",
       `${r.key}-${r.phase}`,
     ]);
+    if (r.phase === "implement") await this.removeAuthVolume(r);
     r.state = r.phase === "publish" ? "unknown" : "cancelled";
     await this.save(r);
   }
   async cancel(workspaceId: string, taskId: string) {
     return this.serial(() => this.stop(this.get(workspaceId, taskId)));
   }
+  async logoutDevice(workspaceId: string) {
+    return this.serial(async () => {
+      for (const r of this.records.values())
+        if (
+          r.input.workspaceId === workspaceId &&
+          r.input.payload.authMode === "device_code" &&
+          ["preparing", "running", "ready"].includes(r.state)
+        )
+          await this.stop(r);
+      return this.device.logout(workspaceId);
+    });
+  }
   providerKey(token: string): string {
     const record = [...this.records.values()].find(
       (r) =>
         r.state === "running" &&
         r.phase === "implement" &&
+        r.input.payload.authMode === "provider_key" &&
         Date.now() <
           r.createdAt + this.settings.CODEX_RUNNER_TIMEOUT_SECONDS * 1000 &&
         equal(token, r.proxyToken),
@@ -366,7 +483,7 @@ export class RunnerSupervisor implements LocalRunner {
           Date.now() >
             r.createdAt + this.settings.CODEX_RUNNER_TIMEOUT_SECONDS * 1000
         )
-          await this.stop(r);
+          await this.timeout(r);
         if (!terminal(r.state)) await this.advance(r);
         if (
           !r.cleaned &&
@@ -378,9 +495,14 @@ export class RunnerSupervisor implements LocalRunner {
             "rm",
             "--force",
             "--ignore",
-            ...["prepare", "implement", "export", "publish"].map(
-              (p) => `${r.key}-${p}`,
-            ),
+            ...[
+              "prepare",
+              "setup",
+              "implement",
+              "check",
+              "export",
+              "publish",
+            ].map((p) => `${r.key}-${p}`),
           ]);
           const volumes = (
             await this.engine.command([
@@ -394,7 +516,10 @@ export class RunnerSupervisor implements LocalRunner {
           )
             .split("\n")
             .filter(
-              (name) => name === `${r.key}-work` || name === `${r.key}-publish`,
+              (name) =>
+                name === `${r.key}-work` ||
+                name === `${r.key}-publish` ||
+                name === `${r.key}-auth`,
             );
           if (volumes.length)
             await this.engine.command(["volume", "rm", "--force", ...volumes]);

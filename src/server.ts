@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { PluginService } from "./agent/plugin-service.ts";
 import { createApp } from "./app.ts";
 import { CodeTruthClient } from "./code-truth/client.ts";
+import { LocalRunnerClient } from "./coding/local/client.ts";
 import { config } from "./config.ts";
 import { database } from "./db/pool.ts";
 import { Store } from "./db/repositories.ts";
@@ -40,6 +41,9 @@ const app = createApp(
   ),
   new GitHubService(store, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN, githubApp),
   cfg.ENCRYPTION_KEY,
+  cfg.CODEX_RUNNER_URL && cfg.CODEX_RUNNER_TOKEN
+    ? new LocalRunnerClient(cfg.CODEX_RUNNER_URL, cfg.CODEX_RUNNER_TOKEN)
+    : undefined,
 );
 const server = serve({ fetch: app.fetch, hostname: "0.0.0.0", port: cfg.PORT });
 log.write("app_started");

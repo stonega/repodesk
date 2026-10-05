@@ -6,11 +6,11 @@ import type { RunnerSettings } from "./settings.ts";
 const exec = promisify(execFile);
 export interface ContainerEngine {
   command(args: string[], env?: Record<string, string>): Promise<string>;
-  readText(container: string, path: string): Promise<string>;
+  readText(container: string, path: string, maxBytes?: number): Promise<string>;
 }
 export class Podman implements ContainerEngine {
   constructor(private settings: RunnerSettings) {}
-  async readText(container: string, path: string) {
+  async readText(container: string, path: string, maxBytes = 4096) {
     try {
       const { stdout } = await exec(
         "podman",
@@ -26,10 +26,10 @@ export class Podman implements ContainerEngine {
           env: { PATH: process.env.PATH, HOME: "/tmp" },
           encoding: "buffer",
           timeout: 60000,
-          maxBuffer: 65536,
+          maxBuffer: Math.max(65536, maxBytes + 8192),
         },
       );
-      return archiveText(stdout);
+      return archiveText(stdout, maxBytes);
     } catch {
       throw new Fault("coding_container_failed", 503);
     }
@@ -55,7 +55,7 @@ export class Podman implements ContainerEngine {
 
 // Read one tiny metadata file from `podman cp ... -` without extracting paths,
 // changing ownership, or requiring chroot capabilities in the supervisor.
-export function archiveText(archive: Buffer) {
+export function archiveText(archive: Buffer, maxBytes = 4096) {
   let result: string | undefined;
   for (let offset = 0; offset + 512 <= archive.length; ) {
     const header = archive.subarray(offset, offset + 512);
@@ -72,7 +72,7 @@ export function archiveText(archive: Buffer) {
       throw new Error("Invalid archive");
     const type = header[156];
     if (type === 0 || type === 48) {
-      if (result !== undefined || size > 4096)
+      if (result !== undefined || size > maxBytes)
         throw new Error("Invalid metadata");
       result = archive
         .subarray(offset + 512, offset + 512 + size)
@@ -91,6 +91,7 @@ export function containerArgs(
   volume: string,
   mode: string,
   env: Record<string, string> = {},
+  authVolume?: string,
 ) {
   return [
     "create",
@@ -114,6 +115,7 @@ export function containerArgs(
     `--network=${mode === "export" ? "none" : settings.CODEX_RUNNER_NETWORK}`,
     "--volume",
     `${volume}:/task${mode === "export" ? ":ro" : ""}`,
+    ...(authVolume ? ["--volume", `${authVolume}:/auth:U`] : []),
     ...Object.keys(env).flatMap((key) => ["--env", key]),
     settings.CODEX_RUNNER_IMAGE,
     mode,

@@ -8,6 +8,38 @@ accepted by a pilot team. Each entry states its own test scope and remaining gat
 
 ## Implemented
 
+### Local Codex runner reconciliation (2026-09-29)
+
+The live Podman supervisor was healthy with no active coding containers. Two
+earlier implementation jobs had failed and their work volumes remained within
+the configured 24-hour retention period. The supervisor now removes a stale
+credential-free export container before retrying a patch export, so an
+interrupted read-only export can recover after a restart. Periodic timeout
+reconciliation now records `coding_task_timeout` for the task status. The
+running supervisor image was not replaced during this check.
+
+Validation: Biome, TypeScript, Bun build, the 10 runner unit tests, coding
+integration tests, Compose configuration and a real Podman smoke with fake Codex
+and local Git passed. The full Bun suite reached 301 of 302 passes with a
+reproducible timeout in the unrelated native Telegram Stop test; the coding
+integration suite passed. The smoke resources were cleaned up.
+
+### Codex local-only execution (2026-09-29)
+
+Removed the GitHub Actions coding dispatcher, repository workflow template and
+backend selector. New approvals run only through the local Podman supervisor.
+Operators set local check commands for each coding repository; old Actions
+configuration cannot authorize new tasks. Historical Actions tasks and links stay
+visible, but the worker does not dispatch, poll or cancel them. Queued and
+issue-created tasks are cancelled locally; tasks that may have started remotely
+become unknown and require inspection in GitHub.
+
+Validation: Biome, TypeScript, Bun build, all 301 Bun tests against disposable
+PostgreSQL, Compose configuration, isolated app image build and Node runtime
+contract passed. The coding panel browser flow passed in the full browser run.
+That run stopped at a separate run-summary UI assertion after 15 passes; two
+later tests did not run. No app service was redeployed or live coding task started.
+
 ### Overview run and workflow visibility (2026-09-28)
 
 Overview count cards now open their corresponding member, assistant-run,
@@ -268,6 +300,13 @@ installed-file registrations, versions, tool/workspace grants and enable/disable
 actions. Settings, revisions and audits persist in PostgreSQL; workers recheck changes
 between execution steps. Sandboxing, arbitrary external writes and web package/code
 installation remain outside this implementation.
+
+On 2026-09-29 the Plugins landing page was reorganized into compact Installed
+and Markets cards. Code Truth, Codex and file plugin controls now open on
+dedicated detail routes. Markets shows three dated picks from Pi's package
+catalog with upstream links; packages are not installed from the panel and
+compatibility is not asserted. Browser tests cover the catalog, detail
+navigation, registration, revision conflicts and workspace isolation.
 
 Verification on 2026-09-20: lint, typecheck and build passed; 90 deterministic tests
 passed with isolated PostgreSQL and `NO_PROXY=localhost,127.0.0.1`. Both Compose
@@ -814,3 +853,59 @@ The app serves the API-key management bundle, the worker reaches the supervisor,
 and the supervisor confirms rootless Podman access. `/readyz` returns HTTP 200
 with `ready`; Telegram polling reconnected at 2026-09-22 10:02:32 UTC.
 No manual Telegram message, live model test or GitHub publication was performed.
+
+## Local-only Codex and workspace device sign-in (2026-09-29)
+
+Removed the GitHub Actions coding backend from new settings and dispatch. Existing
+Actions tasks stop locally with a migration status. The Podman supervisor remains
+the sole coding execution path. Split local work into preparation, setup, Codex,
+checks and publication phases; setup and checks receive neither model credentials
+nor GitHub write tokens. Improved timeout, patch export and cleanup handling.
+
+Added a per-workspace sign-in choice beside the custom provider API key in the
+Codex panel. ChatGPT device-code login runs in the supervisor, displays the
+OpenAI verification link and one-time code, and seals the account cache per
+workspace. Only the Codex implementation container receives a temporary copy;
+disconnect and workspace deletion remove the stored credential. Device-code
+tasks require selected private repositories and verify current GitHub visibility
+again before issue creation and before starting Codex. The custom provider mode
+and its per-workspace API key remain available.
+
+Biome, TypeScript, Bun build and Compose validation passed. Focused coding and
+device tests passed, including real Podman smoke for both sign-in modes with a
+fake Codex executable and local Git fixture. The full suite with loopback proxy
+disabled had 307 passes and two unrelated native Telegram Stop failures; the
+additional repository privacy regression test passed afterward. The coding
+panel browser scenario passed in the full browser run, while a separate run
+summary assertion failed. At this validation point, no live ChatGPT sign-in,
+model call, GitHub write or deployment was performed; the existing Podman stack
+still ran its prior `:local` images.
+
+## Local-only Codex Podman deployment (2026-09-29)
+
+Updated the existing local stack using `compose.yaml`,
+`examples/code-truth.compose.yaml` and `deploy/codex/compose.yaml`. The app and
+worker now run `localhost/deepx-agent:device-20260929` (also `:local`), image
+`2232179827b4d0cd66236d3c0ef87dd54b5ad43aee8f6ba097f8dfe6962ba46a`.
+The Codex supervisor runs `localhost/deepx-codex-supervisor:device-20260929`
+(also `:local`), image
+`20ab636b90bd51f847d64c5a8097b23830f0769ca0bf483019cd3539d9219cad`.
+The prebuilt job image is `localhost/deepx-codex-job:device-20260929` (also
+`:local`), image
+`22b9810f7af650ceef9ebed5e9b23ca4d834fe80a2d634e9a5ae2b84c8e25551`.
+
+Pre-cutover checks found no active runs, deliveries or Codex tasks. A protected
+PostgreSQL archive was created and validated at
+`backups/deepx-pre-local-device-20260929T071754Z.dump`. Previous app,
+supervisor and job images are retained under `:rollback-pre-device-20260929`.
+Migration completed without changes. PostgreSQL and Code Truth were not
+recreated.
+
+The three images built successfully. The exact job and supervisor images passed
+the real Podman smoke with fake Codex for provider-key and device-code tasks;
+the app image passed the isolated Node runtime contract. Merged Compose
+configuration validated. After cutover, app, worker and supervisor are healthy;
+`/readyz` returns HTTP 200, the served UI bundle includes both sign-in methods,
+the worker can reach the authenticated device-status endpoint, and Telegram
+polling reconnected. No live ChatGPT sign-in, model call or GitHub publication
+was performed.

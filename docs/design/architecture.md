@@ -263,11 +263,10 @@ An optional separately deployed Bun service reuses the Code Truth MCP/indexing c
 Optional repository-scoped maintainer grants permit approved issue-to-PR tasks.
 These use separate tenant `codingTasks` records and a worker polling loop, so the
 chat lease/deadline does not span remote implementation. The application reserves
-issue creation and Actions dispatch before sending; uncertain writes never replay.
-GitHub Actions isolates Codex/checks from the separate PR publication job. The
-optional [Podman backend](../implementation/codex-podman.md) uses a trusted
+issue creation and local publication before sending; uncertain writes never replay.
+The [Podman runner](../implementation/codex-podman.md) uses a trusted
 supervisor and separate preparation, implementation and publication containers.
 Workspace provider keys are encrypted in the database and sent to the supervisor
 behind a task-scoped proxy; an optional environment key provides a fallback;
 the worker rechecks authority before issuing publication. See
-[Codex workflow architecture and limits](../implementation/codex-coding.md).
+[Codex task architecture and limits](../implementation/codex-coding.md).

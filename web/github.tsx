@@ -239,10 +239,14 @@ export function GitHubConnection({
   request,
   workspaceId,
   source,
+  open,
+  onClose,
 }: {
   request: Request;
   workspaceId: string;
   source?: "setup";
+  open?: boolean;
+  onClose?: () => void;
 }) {
   const endpoint = `/api/admin/workspaces/${workspaceId}/github`;
   const [data, setData] = useState<GitHubPage>();
@@ -253,12 +257,13 @@ export function GitHubConnection({
   const [selected, setSelected] = useState<number[]>([]);
   const [showAllRepositories, setShowAllRepositories] = useState(false);
   const [params, setParams] = useSearchParams();
-  const [open, setOpen] = useState(() => params.has("github"));
+  const [internalOpen, setInternalOpen] = useState(() => params.has("github"));
   useEffect(() => {
-    if (params.has("github")) setOpen(true);
-  }, [params]);
+    if (open === undefined && params.has("github")) setInternalOpen(true);
+  }, [open, params]);
   const close = () => {
-    setOpen(false);
+    setInternalOpen(false);
+    onClose?.();
     setShowAllRepositories(false);
     if (params.has("github")) {
       const next = new URLSearchParams(params);
@@ -297,31 +302,7 @@ export function GitHubConnection({
   };
   return (
     <>
-      <section className="card" aria-label="GitHub connection">
-        <div className="row github-summary-heading">
-          <div className="row">
-            <h2>GitHub</h2>
-            <span className="pill">
-              {data?.connection?.installationId
-                ? "Connected"
-                : data
-                  ? "Not connected"
-                  : error
-                    ? "Unavailable"
-                    : "Loading"}
-            </span>
-          </div>
-          <button type="button" onClick={() => setOpen(true)}>
-            Manage GitHub
-          </button>
-        </div>
-        <p className="muted">
-          {data?.connection?.installationId
-            ? `${data.connection.account} · ${data.connection.repositories.length} ${data.connection.repositories.length === 1 ? "repository" : "repositories"}`
-            : "Connect a GitHub App to grant this workspace repository access."}
-        </p>
-      </section>
-      {open && (
+      {(open ?? internalOpen) && (
         <Modal title="Manage GitHub" onClose={close} busy={busy}>
           <div className="github-details">
             <span className="pill">

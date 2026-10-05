@@ -398,7 +398,12 @@ export interface Workspace {
     kind: "group" | "identity";
     adminId?: string;
   }[];
-  deletion?: { requestedAt: string; purgedAt?: string; providerState: string };
+  deletion?: {
+    requestedAt: string;
+    purgedAt?: string;
+    deviceAuthPurgedAt?: string;
+    providerState: string;
+  };
 }
 export interface Deployment extends ModelOptions {
   version: number;

@@ -69,8 +69,17 @@ export function codexConfig(
     | "CODEX_PROVIDER_NAME"
     | "CODEX_RUNNER_PROXY_URL"
   >,
+  authMode: "provider_key" | "device_code" = "provider_key",
 ) {
   const quote = (value: string) => JSON.stringify(value);
+  if (authMode === "device_code")
+    return [
+      `model_reasoning_effort = ${quote(settings.CODEX_REASONING_EFFORT)}`,
+      'approval_policy = "never"',
+      'sandbox_mode = "danger-full-access"',
+      'cli_auth_credentials_store = "file"',
+      "",
+    ].join("\n");
   return [
     `model = ${quote(settings.CODEX_MODEL)}`,
     'model_provider = "proxy"',

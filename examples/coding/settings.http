@@ -6,33 +6,6 @@
 GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding
 
 ### Save the current revision returned by GET. Repository IDs must be connected.
-PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding
-Origin: {{origin}}
-X-CSRF-Token: {{csrf}}
-Content-Type: application/json
-
-{
-  "revision": 0,
-  "settings": {
-    "enabled": true,
-    "repositories": [{
-      "repositoryId": 7001,
-      "baseBranch": "develop",
-      "workflowFile": "repodesk-codex.yml",
-      "maintainers": ["101"]
-    }]
-  }
-}
-
-### Stop a task; remote cancellation is best-effort.
-POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding/REPLACE_TASK_UUID/cancel
-Origin: {{origin}}
-X-CSRF-Token: {{csrf}}
-Content-Type: application/json
-
-{}
-
-### Local Podman configuration. Replace revision with the latest GET result.
 # Configure deploy/codex/compose.yaml separately. Use a fake key in checked-in examples.
 # Omit providerApiKey to preserve it; use null to remove it and restore any environment fallback.
 # Responses include providerApiKeyConfigured only, never the saved key.
@@ -42,11 +15,12 @@ X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
 {
-  "revision": 1,
+  "revision": 0,
   "providerApiKey": "REPLACE_PROVIDER_API_KEY",
   "settings": {
     "enabled": true,
     "backend": "podman",
+    "authMode": "provider_key",
     "repositories": [{
       "repositoryId": 7001,
       "baseBranch": "develop",
@@ -56,3 +30,30 @@ Content-Type: application/json
     }]
   }
 }
+
+### For per-workspace ChatGPT sign-in, save settings with authMode "device_code"
+# and omit providerApiKey. Device login must be enabled in ChatGPT settings.
+# The POST response contains the verification URL and one-time code, never tokens.
+POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding/device/start
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{}
+
+### Poll the coding GET above for deviceAuth.state = "connected".
+# Disconnect removes the workspace login and invalidates pending approvals.
+POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding/device/logout
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{}
+
+### Stop a task; cancellation during publication is best-effort.
+POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding/REPLACE_TASK_UUID/cancel
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{}

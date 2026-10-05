@@ -234,6 +234,6 @@ grant `query_model_cost`; new starter skills include it. See the
 Configured repository maintainers can ask the bot to implement a feature or fix.
 The bot proposes the exact issue and target branch; the requester approves once
 to create the issue, start Codex and open a draft PR. Each task has its own status
-and issue/workflow/PR links. Ask for status or to stop a task using its UUID.
-Remote cancellation is best-effort. Ordinary membership or administrator status
+and issue/PR links. Ask for status or to stop a task using its UUID.
+Cancellation during publication is best-effort. Ordinary membership or administrator status
 does not grant coding access. See [Codex setup](../implementation/codex-coding.md).

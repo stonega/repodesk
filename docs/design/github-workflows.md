@@ -68,7 +68,7 @@ See [GitHub App setup](../implementation/github-app.md),
   Code Truth indexes configured branches and snapshots; its result does not prove
   current issue/PR state or that an answer is semantically correct.
 - A GitHub write needs a reviewable, actor-bound approval for the exact target and
-  payload. A coding approval explicitly covers its issue, workflow and draft PR.
+  payload. A coding approval explicitly covers its issue, local execution and draft PR.
   There is no automatic merge. Unknown remote outcomes require inspection before
   a new request; automatic replay could duplicate work.
 - Repository files, issue text and tool output are untrusted input. They cannot

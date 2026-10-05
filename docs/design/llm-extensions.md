@@ -35,6 +35,15 @@ raw extension exception messages are excluded from application logs and model re
 
 ## Installation and grants
 
+The Plugins landing page shows compact Installed cards for built-in Code Truth,
+built-in Codex and workspace-registered file extensions. Clicking a card opens
+its detail route, where the existing configuration and controls live. The
+Markets section links to a small, dated selection of popular packages from
+[Pi's package catalog](https://pi.dev/packages?type=extension). These are
+external discovery entries, not installed plugins or compatibility endorsements.
+Market detail pages link to the upstream package. RepoDesk still requires
+operator review and a local entry file registered through the panel.
+
 The application registry also includes the built-in `query_model_cost` tool.
 It uses the current run's published skill grant and retained workspace accounting;
 no file plugin or external billing API is involved. It defaults to the actor's own
@@ -169,9 +178,9 @@ The worker reserves the send durably and never replays an ambiguous POST. See
 
 The optional Codex extension exposes `propose_coding_task`, `coding_task_status`
 and `cancel_coding_task`. Repository-specific Telegram maintainer grants and a
-complete approval bind issue creation and an independent GitHub Actions workflow.
-Application services own issue/dispatch writes and durable task state. Codex runs
-on a fresh GitHub runner or an isolated local Podman container, followed by
+complete approval bind issue creation and local Codex execution.
+Application services own issue/publication writes and durable task state. Codex runs
+in an isolated local Podman container, followed by
 project checks and separate draft PR publication. Local execution and its
 custom-provider configuration and workspace API keys are described in [the Podman guide](../implementation/codex-podman.md).
 See [configuration, permissions and recovery](../implementation/codex-coding.md).

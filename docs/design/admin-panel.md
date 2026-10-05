@@ -22,17 +22,17 @@ Public static assets can load before login, but contain no workspace data or sec
 | Page | P0 controls and information | Acceptance criteria |
 | --- | --- | --- |
 | First-run setup | Claim deployment, create local admin, configure workspace and bot, set up a GitHub App, enter the panel | Resumable; one initial admin; no public reinitialization. Bot remains inactive until explicit panel activation. |
-| Sign-in/workspace selector | Local admin sign-in; optional linked Telegram sign-in, authorized workspaces, operator-only New workspace entry in the selector, logout | Login does not grant a workspace role; revoked sessions stop working. New workspaces are selected after creation. |
+| Sign-in/workspace selector | Local admin sign-in; optional linked Telegram sign-in, authorized workspaces, operator-only New workspace entry in the selector, logout | Login does not grant a workspace role; revoked sessions stop working. New workspace opens a fresh setup wizard and is selected when entering the panel. |
 | Overview | Linked count cards for members, assistant runs, scheduled workflows and operator-visible coding tasks; deployment-administrator cards for the configured Telegram bot and workspace GitHub App, with token editing in a Manage bot dialog and GitHub controls in a management dialog; team card showing saved configuration with one edit dialog and versioned form; broader bot/worker, group and budget status remain planned | Loading, empty, stale and failure states are visible; tenant-scoped metrics matching their detail lists. |
 | Bot settings | Display label, timezone, base instructions, response style, directed-response mode, pause switch | Validated form, versioned save, audit entry, saved/effective version shown. |
 | Model settings | Operator-configured OpenAI-compatible base URL, write-only API key, custom model ID, thinking level and token prices; activation readiness and explicit activation | Invalid settings rejected locally; provider capabilities require evaluation. Runs pin endpoint/thinking/prices at first execution; endpoint changes stop old runs. |
 | Groups and access | Connected group/topic, owner, bot visibility, history coverage, opt-in collection, unlink | Linking verifies authority; no arbitrary chat ID can be used to obtain access. |
 | Workflows | Create/edit draft, preview schedule and destination, approve, pause/resume, run now, delete; unlinked deployment administrators can inspect read-only schedule metadata | Same policy and version checks as Telegram buttons; edits cannot bypass approval or reveal private task/destination content to unlinked administrators. |
-| Plugins | Independent workspace registry of installed Pi extensions, managed by its operator; version/path/tool editing, enable/disable/remove, file status and revision conflicts | Database-backed settings reach workers without restart; settings and revisions isolated per workspace; no code executes on API reads/saves. |
-| GitHub | Compact Plugins summary and Manage GitHub modal for guided App creation, workspace OAuth, installation/repository selection and connected repository links; Overview opens the same modal; disconnect API | Manifest state bound to operator/session/workspace; encrypted operator App credentials; one-use PKCE OAuth; verify user installation/repository access; installation tokens limited to selected repositories and Contents read. |
+| Plugins | Compact Installed and Market catalog; dedicated detail pages for Code Truth, Codex and registered file extensions; operator-managed version/path/tool editing, enable/disable/remove, file status and revision conflicts | Database-backed settings reach workers without restart; settings and revisions isolated per workspace; external market packages are discovery links and no code executes on API reads/saves. |
+| GitHub | Manage GitHub modal for guided App creation, workspace OAuth, installation/repository selection and connected repository links, opened on Overview without navigation; GitHub callbacks return to Plugins; disconnect API | Manifest state bound to operator/session/workspace; encrypted operator App credentials; one-use PKCE OAuth; verify user installation/repository access; installation tokens limited to selected repositories and Contents read. |
 | Agent skills | Create/import/edit, test, publish, enable/disable, scope, settings and version rollback | Permission-bounded skills; pinned workflow versions; disabling blocks dependent execution. |
 | Shared instructions | List, edit, scope, provenance, versions, forget | Never lists other users' personal memories by virtue of admin role. |
-| Runs | Status, authorized result, evidence references, cost, cancel/retry; unlinked deployment administrators can inspect read-only run and delivery metadata | Retry creates a traceable attempt; uncertain delivery cannot be blindly resent. Private task, result, transcript and delivery text require a linked, eligible Telegram identity. |
+| Runs | Compact run summaries open a detail dialog with an authorized message list, evidence, cost and cancel/retry; unlinked deployment administrators can inspect read-only run and delivery metadata in the dialog | Retry creates a traceable attempt; uncertain delivery cannot be blindly resent. Private task, result, transcript and delivery text require a linked, eligible Telegram identity. |
 | Usage and limits | Recorded/estimated usage, daily/monthly caps, reservations and blocked jobs | Changes apply atomically; concurrent workers cannot overspend the displayed cap. |
 | Members & access | Search Telegram names/usernames/IDs; manage membership, roles and requests; configure access mode and whitelist with impact preview | Show membership, whitelist and effective access separately in one table. Preserve last-admin protection, tenant boundaries and revocation checks. |
 | Privacy and audit | Retention settings, deletion request/status, configuration/action audit | Destructive changes show scope; logs omit credentials and raw private chat text. |
@@ -138,11 +138,13 @@ confirmation and permission checks still apply. See [UI rules](ui-rules.md).
 Routine pages, sections and the sidebar omit refresh buttons. Explicit text
 recovery actions appear after load failures or conflicting edits. Logs offer manual
 refresh when automatic updates are off or have failed; active coding tasks offer
-Check progress. The Overview team card shows the saved settings version and each
-configuration value with its explanation. One Edit button opens a single form for
-all changeable values; the fixed missed-run grace remains read-only.
+Check progress. The Overview team card shows the saved settings version and a
+compact grid of configuration labels and values. One Edit button opens a single
+form with the explanations and all changeable values; the fixed missed-run grace
+remains read-only.
 The sidebar workspace selector uses a panel-styled menu with a selected state and
-the operator-only New workspace action.
+the operator-only New workspace action, which opens the setup wizard with a blank
+workspace form.
 
 Add/Create controls open the shared native modal in `web/modal.tsx`. Related
 record editors reuse it. The background is inert, keyboard focus stays inside,

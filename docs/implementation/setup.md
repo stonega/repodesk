@@ -427,16 +427,12 @@ request is part of build/test or this implementation change.
 ## Optional Codex feature and bug implementation
 
 Configure repository development branches and Telegram maintainers under
-**Plugins → Codex implementation**. Each target repository needs the supplied
-GitHub Actions workflow, an OpenAI secret, trusted check commands and updated App
-permissions. Follow [the complete setup](codex-coding.md); installing the bot does
-not install or dispatch remote workflows.
-
-### Local Podman Codex backend
-
-For local coding execution, use [the Podman runner guide](codex-podman.md) and
+**Plugins → Codex implementation**. Each target repository needs a trusted check
+command and updated App permissions. Follow [the complete setup](codex-coding.md)
+and [the Podman runner guide](codex-podman.md) with
 `deploy/codex/compose.yaml`. Configure the custom Responses provider endpoint/model
 in deployment settings, then save the workspace API key in **Plugins → Codex
-implementation → Local Podman**. Keys are encrypted and never displayed again.
-`CODEX_PROVIDER_API_KEY` is an optional supervisor environment fallback. Existing coding configurations
-continue to use GitHub Actions until switched in the Codex panel.
+implementation**. Keys are encrypted and never displayed again.
+`CODEX_PROVIDER_API_KEY` is an optional supervisor environment fallback. Older
+GitHub Actions configurations must be updated with local check commands before
+new coding tasks can run.

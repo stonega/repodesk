@@ -20,6 +20,7 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
+import { Check } from "reicon-react";
 import {
   type ModelCapabilities,
   type ModelLimits,
@@ -55,7 +56,7 @@ import {
   workflowFields,
   workspaceOptions,
 } from "./form-fields.ts";
-import { GitHubSetup } from "./github.tsx";
+import { GitHubConnection, GitHubSetup } from "./github.tsx";
 import { type ActionIcon, IconButton } from "./icon-button.tsx";
 import { RuntimeLogs } from "./logs.tsx";
 import { CreateModal, Modal, ModalActions, ModalPending } from "./modal.tsx";
@@ -407,7 +408,8 @@ function Setup() {
   const { data, error, reload } = useData<Progress>("/api/setup/progress");
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
-  const [selected, setSelected] = useState(() => params.get("workspace") ?? "");
+  const creatingWorkspace = params.get("new") === "1";
+  const selected = params.get("workspace");
   const [completedWorkspace, setCompletedWorkspace] = useState<string | null>(
     null,
   );
@@ -419,9 +421,11 @@ function Setup() {
     return () => clearInterval(timer);
   }, [reload]);
   if (!data) return <Notice>{error || "Loading setup…"}</Notice>;
-  const workspace =
-    data.workspaces.find((w) => w.id === selected) ??
-    data.workspaces.find((w) => !w.deleted);
+  const workspace = creatingWorkspace
+    ? undefined
+    : selected
+      ? data.workspaces.find((w) => w.id === selected && !w.deleted)
+      : data.workspaces.find((w) => !w.deleted);
   const localTimeZone =
     Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const suggestedTimeZones = Array.from(
@@ -439,7 +443,7 @@ function Setup() {
     { id: "telegram", label: "Telegram bot", complete: !!data.bot },
     { id: "github", label: "GitHub App", complete: false },
   ] as const;
-  const requestedStep = params.get("step");
+  const requestedStep = creatingWorkspace ? "workspace" : params.get("step");
   const currentStep =
     steps.find((step) => step.id === requestedStep)?.id ??
     steps.find((step) => !step.complete)?.id ??
@@ -454,12 +458,15 @@ function Setup() {
   };
   return (
     <Page
-      title="Set up your team assistant"
+      title={
+        creatingWorkspace
+          ? "Set up a new workspace"
+          : "Set up your team assistant"
+      }
       description="Create a workspace, connect Telegram and set up GitHub. Configure the model and activate the bot in the admin panel."
     >
       <p className="setup-account-status">
-        Administrator account created · Step {currentIndex + 1} of{" "}
-        {steps.length}
+        Setup · Step {currentIndex + 1} of {steps.length}
       </p>
       <nav className="setup-steps" aria-label="Setup steps">
         {steps.map((step, index) => (
@@ -471,7 +478,10 @@ function Setup() {
             }
             aria-current={step.id === currentStep ? "step" : undefined}
             disabled={
-              workspaceSaving || credentialSaving || !!completedWorkspace
+              workspaceSaving ||
+              credentialSaving ||
+              !!completedWorkspace ||
+              (creatingWorkspace && step.id !== "workspace")
             }
             onClick={() => goToStep(step.id)}
           >
@@ -496,12 +506,14 @@ function Setup() {
             Create a space for your team. You can adjust budgets, retention, and
             other policies in Workspace settings later.
           </p>
-          {data.workspaces.length > 0 && (
+          {!creatingWorkspace && data.workspaces.some((w) => !w.deleted) && (
             <Field label="Workspace draft">
               <select
                 value={workspace?.id ?? ""}
                 onChange={(e) => {
-                  setSelected(e.target.value);
+                  const next = new URLSearchParams(params);
+                  next.set("workspace", e.target.value);
+                  setParams(next);
                   setWorkspaceError("");
                 }}
               >
@@ -534,10 +546,19 @@ function Setup() {
                 setWorkspaceError("");
                 try {
                   if (!workspace) {
-                    await api("/api/setup/workspaces", "POST", {
-                      name,
-                      timezone,
-                    });
+                    const created = await api<{ id: string }>(
+                      "/api/setup/workspaces",
+                      "POST",
+                      {
+                        name,
+                        timezone,
+                      },
+                    );
+                    const next = new URLSearchParams(params);
+                    next.delete("new");
+                    next.set("workspace", created.id);
+                    next.set("step", "telegram");
+                    setParams(next);
                   } else if (
                     name !== workspace.settings.name ||
                     timezone !== workspace.settings.timezone
@@ -548,7 +569,7 @@ function Setup() {
                     });
                   }
                   reload();
-                  goToStep("telegram");
+                  if (workspace) goToStep("telegram");
                 } catch (error) {
                   setWorkspaceError(
                     error instanceof Error
@@ -564,6 +585,7 @@ function Setup() {
                 <input
                   name="name"
                   required
+                  maxLength={80}
                   disabled={workspaceSaving}
                   defaultValue={workspace?.settings.name ?? "My team"}
                   onChange={() => setWorkspaceError("")}
@@ -639,6 +661,16 @@ function Setup() {
         </section>
       )}
       <div className="setup-navigation">
+        {creatingWorkspace && (
+          <button
+            type="button"
+            className="secondary"
+            disabled={workspaceSaving}
+            onClick={() => navigate("/admin")}
+          >
+            Cancel
+          </button>
+        )}
         {previousStep && (
           <button
             type="button"
@@ -668,6 +700,14 @@ function Setup() {
             aria-busy={credentialSaving}
           >
             {credentialSaving ? "Saving…" : "Continue to GitHub App"}
+          </button>
+        ) : currentStep === "github" && workspace ? (
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => navigate(`/admin?workspace=${workspace.id}`)}
+          >
+            Finish later in admin
           </button>
         ) : null}
       </div>
@@ -721,7 +761,7 @@ function SetupCelebration({ onStart }: { onStart: () => void }) {
       </div>
       <div className="setup-celebration-card">
         <span className="setup-celebration-mark" aria-hidden="true">
-          ✓
+          <Check size={28} weight="Outline" color="currentColor" />
         </span>
         <h2 id="setup-welcome-title">Welcome to RepoDesk</h2>
         <p id="setup-welcome-description">
@@ -1349,7 +1389,7 @@ function WorkspacePage({ id, resource }: { id: string; resource: string }) {
   if (resource === "skills") return <SkillsPage id={id} />;
   if (resource === "workflows") return <WorkflowsPage id={id} />;
   if (resource === "instructions") return <InstructionsPage id={id} />;
-  if (resource === "runs") return <RunsPage id={id} />;
+  if (resource === "runs") return <RunsPage key={id} id={id} />;
   if (resource === "members") return <MembersPage id={id} />;
   if (resource === "chats") return <ChatsPage id={id} />;
   if (resource === "deletion") return <PrivacyPage id={id} />;
@@ -1378,6 +1418,7 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(false);
   const [managingBot, setManagingBot] = useState(false);
+  const [managingGitHub, setManagingGitHub] = useState(false);
   const [botSaved, setBotSaved] = useState(false);
   useEffect(() => {
     if (resource === "overview" && data?.settings && data.version)
@@ -1466,9 +1507,9 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
                     ? `${data.connections.github.account ?? "GitHub App"} · ${data.connections.github.repositories} ${data.connections.github.repositories === 1 ? "repository" : "repositories"}`
                     : "Connect a GitHub App to grant repository access."}
                 </p>
-                <NavLink to={`/admin/plugins?workspace=${id}&github=manage`}>
+                <button type="button" onClick={() => setManagingGitHub(true)}>
                   Manage GitHub
-                </NavLink>
+                </button>
               </section>
             </section>
           )}
@@ -1479,6 +1520,14 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
                 setBotSaved(true);
                 reload();
               }}
+            />
+          )}
+          {managingGitHub && (
+            <GitHubConnection
+              request={api}
+              workspaceId={id}
+              open
+              onClose={() => setManagingGitHub(false)}
             />
           )}
           {botSaved && <Notice>Telegram bot token saved.</Notice>}
@@ -1507,7 +1556,6 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
                       <p className="settings-item-value">
                         {settingValue(field.key, current.settings[field.key])}
                       </p>
-                      <p className="muted">{field.help}</p>
                     </div>
                   </li>
                 ))}
@@ -2556,6 +2604,7 @@ function SkillsPage({ id }: { id: string }) {
           <IconButton
             icon="add"
             label="Add skill"
+            showLabel
             onClick={() => setCreating(true)}
           />
           <IconButton
@@ -2911,42 +2960,133 @@ function InstructionsPage({ id }: { id: string }) {
     </Page>
   );
 }
+type MemberRun = Run & { deliveries: Delivery[] };
+type OperatorRun = Pick<
+  Run,
+  | "id"
+  | "actor"
+  | "status"
+  | "at"
+  | "finishedAt"
+  | "model"
+  | "workflowId"
+  | "workflowVersion"
+  | "settingsVersion"
+> & {
+  attempts: Pick<
+    Run["attempts"][number],
+    "at" | "status" | "reserved" | "actual"
+  >[];
+  deliveries: Pick<Delivery, "state" | "at" | "attempts">[];
+};
+
+function RunCard({
+  title,
+  run,
+  detail,
+  onOpen,
+}: {
+  title: string;
+  run: MemberRun | OperatorRun;
+  detail: string;
+  onOpen: () => void;
+}) {
+  return (
+    <button className="run-card" type="button" onClick={onOpen}>
+      <span className="run-card-heading">
+        <span className="run-card-title">{title}</span>
+        <span className="pill">{run.status}</span>
+      </span>
+      <span className="run-card-line">
+        {new Date(run.at).toLocaleString()} · Actor {run.actor} · {run.model}
+      </span>
+      <span className="run-card-line">{detail}</span>
+    </button>
+  );
+}
+
+function RunMessages({ run }: { run: MemberRun }) {
+  const checkpoints = run.transcript.map((value) => {
+    const message =
+      value && typeof value === "object"
+        ? (value as Record<string, unknown>)
+        : {};
+    const content = Array.isArray(message.content) ? message.content : [];
+    const text = content
+      .filter(
+        (part): part is { type: "text"; text: string } =>
+          part?.type === "text" && typeof part.text === "string",
+      )
+      .map((part) => part.text)
+      .join("\n");
+    const calls = content
+      .filter(
+        (part): part is { type: "toolCall"; name: string } =>
+          part?.type === "toolCall" && typeof part.name === "string",
+      )
+      .map((part) => part.name);
+    const role = message.role;
+    return {
+      label:
+        role === "assistant"
+          ? "Assistant"
+          : role === "toolResult"
+            ? `Tool · ${typeof message.toolName === "string" ? message.toolName : "Result"}`
+            : role === "user"
+              ? "User"
+              : "Checkpoint",
+      text,
+      calls,
+    };
+  });
+  const lastAssistant = checkpoints.findLast(
+    (entry) => entry.label === "Assistant" && entry.text,
+  );
+  return (
+    <section className="run-message-section" aria-label="Messages">
+      <h3>Messages</h3>
+      <ol className="run-messages">
+        <li>
+          <strong>Request</strong>
+          <p className="prose">{run.task}</p>
+        </li>
+        {checkpoints.map((entry, index) => (
+          // Checkpoints are an ordered, immutable snapshot and need not have IDs.
+          // biome-ignore lint/suspicious/noArrayIndexKey: Ordered run transcript.
+          <li key={index}>
+            <strong>{entry.label}</strong>
+            {entry.text && <p className="prose">{entry.text}</p>}
+            {entry.calls.length > 0 && (
+              <p className="muted">Called {entry.calls.join(", ")}</p>
+            )}
+            {!entry.text && entry.calls.length === 0 && (
+              <p className="muted">No text content</p>
+            )}
+          </li>
+        ))}
+        {run.result && run.result.trim() !== lastAssistant?.text.trim() && (
+          <li>
+            <strong>Final answer</strong>
+            <p className="prose">{run.result}</p>
+          </li>
+        )}
+      </ol>
+    </section>
+  );
+}
+
 function RunsPage({ id }: { id: string }) {
+  const [selectedRunId, setSelectedRunId] = useState<string>();
   const { data, error, reload, loading } = useData<
-    | {
-        mode: "member";
-        items: (Run & { deliveries: Delivery[] })[];
-        total: number;
-      }
-    | {
-        mode: "operator";
-        items: {
-          id: string;
-          actor: string;
-          status: Run["status"];
-          at: string;
-          finishedAt?: string;
-          model: string;
-          workflowId?: string;
-          workflowVersion?: number;
-          settingsVersion: number;
-          attempts: {
-            at: string;
-            status: Run["attempts"][number]["status"];
-            reserved: number;
-            actual?: number;
-          }[];
-          deliveries: {
-            state: Delivery["state"];
-            at: string;
-            attempts: number;
-          }[];
-        }[];
-        total: number;
-      }
+    | { mode: "member"; items: MemberRun[]; total: number }
+    | { mode: "operator"; items: OperatorRun[]; total: number }
   >(`/api/admin/workspaces/${id}/runs`);
   const memberData = data?.mode === "member" ? data : undefined;
   const operatorData = data?.mode === "operator" ? data : undefined;
+  const memberRun = memberData?.items.find((run) => run.id === selectedRunId);
+  const operatorRun = operatorData?.items.find(
+    (run) => run.id === selectedRunId,
+  );
   return (
     <Page
       title="Runs & delivery"
@@ -3000,75 +3140,88 @@ function RunsPage({ id }: { id: string }) {
         <section className="card">No assistant runs yet.</section>
       )}
       {operatorData?.items.map((r) => (
-        <section className="card" key={r.id}>
-          <div className="row">
-            <h2>Run {r.id.slice(0, 8)}</h2>
-            <span className="pill">{r.status}</span>
-          </div>
-          <p className="mono">{r.id}</p>
-          <p>
-            Started {new Date(r.at).toLocaleString()} · Actor {r.actor} ·{" "}
-            {r.model}
-          </p>
-          {r.finishedAt && (
-            <p>Finished {new Date(r.finishedAt).toLocaleString()}</p>
-          )}
-          <p>
-            Settings v{r.settingsVersion}
-            {r.workflowId && ` · Workflow ${r.workflowId}`}
-            {r.workflowVersion && ` v${r.workflowVersion}`}
-          </p>
-          <p>
-            {r.attempts.length} model{" "}
-            {r.attempts.length === 1 ? "attempt" : "attempts"}
-            {r.attempts.length > 0 &&
-              ` · ${r.attempts.map((attempt) => attempt.status).join(", ")}`}
-          </p>
-          <p>
-            Delivery:{" "}
-            {r.deliveries.length
-              ? r.deliveries.map((delivery) => delivery.state).join(", ")
-              : "none"}
-          </p>
-        </section>
+        <RunCard
+          key={r.id}
+          title={`Run ${r.id.slice(0, 8)}`}
+          run={r}
+          detail={`${r.attempts.length} model ${r.attempts.length === 1 ? "attempt" : "attempts"} · Delivery: ${r.deliveries.length ? r.deliveries.map((delivery) => delivery.state).join(", ") : "none"}`}
+          onOpen={() => setSelectedRunId(r.id)}
+        />
       ))}
       {memberData?.items.map((r) => (
-        <section className="card" key={r.id}>
-          <div className="row">
-            <h2>{r.task.slice(0, 90)}</h2>
-            <span className="pill">{r.status}</span>
-          </div>
-          <p className="mono">{r.id}</p>
-          <p>
-            {new Date(r.at).toLocaleString()} · {r.model} · Settings v
-            {r.settingsVersion}{" "}
-            {r.workflowVersion ? `· Workflow v${r.workflowVersion}` : ""}
+        <RunCard
+          key={r.id}
+          title={r.task}
+          run={r}
+          detail={`Run ${r.id.slice(0, 8)} · Delivery: ${r.deliveries.length ? r.deliveries.map((delivery) => delivery.state).join(", ") : "none"}`}
+          onOpen={() => setSelectedRunId(r.id)}
+        />
+      ))}
+      {operatorRun && (
+        <Modal
+          title={`Run ${operatorRun.id.slice(0, 8)}`}
+          onClose={() => setSelectedRunId(undefined)}
+          cancelLabel="Close"
+        >
+          <p className="muted">
+            Link your Telegram identity in <NavLink to="/setup">Setup</NavLink>{" "}
+            to see messages for conversations you can access.
           </p>
-          {r.error && <Notice>{r.error}</Notice>}
-          <p className="prose">{r.result}</p>
-          <p className="muted">{r.coverage}</p>
+          <DataDetails
+            value={{
+              id: operatorRun.id,
+              status: operatorRun.status,
+              actor: operatorRun.actor,
+              at: operatorRun.at,
+              finishedAt: operatorRun.finishedAt,
+              model: operatorRun.model,
+              settingsVersion: operatorRun.settingsVersion,
+              workflowId: operatorRun.workflowId,
+              workflowVersion: operatorRun.workflowVersion,
+              attempts: operatorRun.attempts,
+              deliveries: operatorRun.deliveries,
+            }}
+          />
+        </Modal>
+      )}
+      {memberRun && (
+        <Modal
+          title={`Run ${memberRun.id.slice(0, 8)}`}
+          onClose={() => setSelectedRunId(undefined)}
+          cancelLabel="Close"
+        >
+          <p className="mono">{memberRun.id}</p>
+          <p className="muted">
+            {new Date(memberRun.at).toLocaleString()} · {memberRun.model} ·
+            Settings v{memberRun.settingsVersion}
+            {memberRun.workflowVersion &&
+              ` · Workflow v${memberRun.workflowVersion}`}
+          </p>
+          {memberRun.error && <Notice>{memberRun.error}</Notice>}
+          <RunMessages run={memberRun} />
+          {memberRun.coverage && <p className="muted">{memberRun.coverage}</p>}
           <details>
             <summary>Versions, usage, checkpoints & delivery</summary>
             <DataDetails
               value={{
-                skillPins: r.skillPins,
-                instructions: r.instructions.map((i) => ({
+                skillPins: memberRun.skillPins,
+                instructions: memberRun.instructions.map((i) => ({
                   id: i.id,
                   version: i.version,
                 })),
-                attempts: r.attempts,
-                transcript: r.transcript,
-                deliveries: r.deliveries,
+                attempts: memberRun.attempts,
+                transcript: memberRun.transcript,
+                deliveries: memberRun.deliveries,
               }}
             />
           </details>
-          <RunRecovery id={id} run={r} reload={reload} />
+          <RunRecovery id={id} run={memberRun} reload={reload} />
           <div className="row">
             <Action
               icon="stop"
               onClick={async () => {
                 await api(
-                  `/api/admin/workspaces/${id}/runs/${r.id}/cancel`,
+                  `/api/admin/workspaces/${id}/runs/${memberRun.id}/cancel`,
                   "POST",
                   {},
                 );
@@ -3077,11 +3230,11 @@ function RunsPage({ id }: { id: string }) {
             >
               Cancel
             </Action>
-            {["failed", "partial", "cancelled"].includes(r.status) && (
+            {["failed", "partial", "cancelled"].includes(memberRun.status) && (
               <Action
                 onClick={async () => {
                   await api(
-                    `/api/admin/workspaces/${id}/runs/${r.id}/retry`,
+                    `/api/admin/workspaces/${id}/runs/${memberRun.id}/retry`,
                     "POST",
                     {},
                   );
@@ -3092,8 +3245,8 @@ function RunsPage({ id }: { id: string }) {
               </Action>
             )}
           </div>
-        </section>
-      ))}
+        </Modal>
+      )}
     </Page>
   );
 }
@@ -3416,79 +3569,6 @@ function Operations() {
     </Page>
   );
 }
-function NewWorkspaceDialog({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void;
-  onCreated: (workspace: { id: string; name: string }) => void;
-}) {
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const localTimeZone =
-    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  const timeZones = Array.from(
-    new Set([
-      localTimeZone,
-      "UTC",
-      ...(Intl.supportedValuesOf?.("timeZone") ?? []),
-    ]),
-  );
-  return (
-    <Modal title="New workspace" onClose={onClose} busy={saving}>
-      <form
-        onSubmit={async (event) => {
-          event.preventDefault();
-          if (saving) return;
-          const values = new FormData(event.currentTarget);
-          const name = String(values.get("name") ?? "").trim();
-          const timezone = String(values.get("timezone") ?? "");
-          setSaving(true);
-          setError("");
-          try {
-            const created = await api<{ id: string }>(
-              "/api/setup/workspaces",
-              "POST",
-              { name, timezone },
-            );
-            onCreated({ id: created.id, name });
-          } catch (failure) {
-            setError(
-              failure instanceof Error
-                ? failure.message
-                : "Could not create workspace.",
-            );
-          } finally {
-            setSaving(false);
-          }
-        }}
-      >
-        <Field label="Workspace name">
-          <input name="name" required maxLength={80} autoComplete="off" />
-        </Field>
-        <Field label="Timezone">
-          <select name="timezone" defaultValue={localTimeZone} required>
-            {timeZones.map((zone) => (
-              <option key={zone} value={zone}>
-                {zone}
-              </option>
-            ))}
-          </select>
-        </Field>
-        {error && (
-          <p className="notice" role="alert">
-            {error}
-          </p>
-        )}
-        <ModalActions>
-          <button type="submit" disabled={saving}>
-            {saving ? "Creating…" : "Create workspace"}
-          </button>
-        </ModalActions>
-      </form>
-    </Modal>
-  );
-}
 function WorkspacePicker({
   workspaces,
   chosen,
@@ -3617,7 +3697,7 @@ function WorkspacePicker({
                 <span>{workspace.name}</span>
                 {workspace.id === chosen && (
                   <span className="workspace-menu-check" aria-hidden="true">
-                    ✓
+                    <Check size={20} weight="Outline" color="currentColor" />
                   </span>
                 )}
               </button>
@@ -3648,7 +3728,6 @@ function Shell() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [workspace, setWorkspace] = useState("");
-  const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [workspaces, setWorkspaces] = useState<{ id: string; name: string }[]>(
     [],
   );
@@ -3757,19 +3836,8 @@ function Shell() {
               chosen={chosen}
               operator={current.admin.operator}
               onSelect={selectWorkspace}
-              onCreate={() => setCreatingWorkspace(true)}
+              onCreate={() => navigate("/setup?new=1&step=workspace")}
             />
-            {creatingWorkspace && (
-              <NewWorkspaceDialog
-                onClose={() => setCreatingWorkspace(false)}
-                onCreated={(created) => {
-                  setWorkspaces((previous) => [...previous, created]);
-                  setWorkspace(created.id);
-                  setCreatingWorkspace(false);
-                  navigate(`/admin/settings?workspace=${created.id}`);
-                }}
-              />
-            )}
             <nav>
               {chosen &&
                 visibleNavigation.map(([path, label]) => (
@@ -3879,6 +3947,69 @@ function Shell() {
                 current.admin.operator ? (
                   chosen ? (
                     <Plugins key={chosen} request={api} workspaceId={chosen} />
+                  ) : (
+                    <Setup />
+                  )
+                ) : (
+                  <Page title="Operator access required">
+                    <p>Plugins can be managed by deployment operators.</p>
+                  </Page>
+                )
+              }
+            />
+            <Route
+              path="/admin/plugins/file/:pluginId"
+              element={
+                current.admin.operator ? (
+                  chosen ? (
+                    <Plugins
+                      key={chosen}
+                      request={api}
+                      workspaceId={chosen}
+                      view="installed"
+                    />
+                  ) : (
+                    <Setup />
+                  )
+                ) : (
+                  <Page title="Operator access required">
+                    <p>Plugins can be managed by deployment operators.</p>
+                  </Page>
+                )
+              }
+            />
+            <Route
+              path="/admin/plugins/market/:pluginId"
+              element={
+                current.admin.operator ? (
+                  chosen ? (
+                    <Plugins
+                      key={chosen}
+                      request={api}
+                      workspaceId={chosen}
+                      view="market"
+                    />
+                  ) : (
+                    <Setup />
+                  )
+                ) : (
+                  <Page title="Operator access required">
+                    <p>Plugins can be managed by deployment operators.</p>
+                  </Page>
+                )
+              }
+            />
+            <Route
+              path="/admin/plugins/:pluginId"
+              element={
+                current.admin.operator ? (
+                  chosen ? (
+                    <Plugins
+                      key={chosen}
+                      request={api}
+                      workspaceId={chosen}
+                      view="installed"
+                    />
                   ) : (
                     <Setup />
                   )

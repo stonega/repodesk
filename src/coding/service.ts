@@ -4,6 +4,7 @@ import type { Store } from "../db/repositories.ts";
 import { type Admin, Fault, requireThat, type Workspace } from "../domain.ts";
 import type { GitHubApps } from "../github/registry.ts";
 import { decrypt, encrypt } from "../setup/credentials.ts";
+import { membersWithProfiles } from "../workspaces/member-profile.ts";
 import { audit, eligible } from "../workspaces/policy.ts";
 import {
   type CodingPage,
@@ -12,8 +13,7 @@ import {
   codingTerminal,
   emptyCoding,
 } from "./config.ts";
-import { CodingGitHub } from "./github.ts";
-import type { LocalRunner } from "./local/protocol.ts";
+import type { LocalDeviceAuth, LocalRunner } from "./local/protocol.ts";
 import { checkCodingTask, notifyCoding } from "./policy.ts";
 
 function operatorWorkspace(w: Workspace, admin: Admin) {
@@ -22,14 +22,27 @@ function operatorWorkspace(w: Workspace, admin: Admin) {
 }
 export function codingView(w: Workspace, admin: Admin): CodingPage {
   operatorWorkspace(w, admin);
+  const settings = w.coding?.settings ?? emptyCoding;
   return {
     providerApiKeyConfigured: !!w.coding?.providerApiKey,
+    legacyActionsConfiguration: !!w.coding && settings.backend !== "podman",
     revision: w.coding?.revision ?? 0,
-    settings: structuredClone(w.coding?.settings ?? emptyCoding),
+    settings: {
+      enabled: settings.enabled,
+      backend: "podman",
+      authMode: settings.authMode ?? "provider_key",
+      repositories: settings.repositories.map((target) => ({
+        repositoryId: target.repositoryId,
+        baseBranch: target.baseBranch,
+        setupCommand: target.setupCommand,
+        checkCommand: target.checkCommand,
+        maintainers: [...target.maintainers],
+      })),
+    },
     repositories: w.github?.installationId ? w.github.repositories : [],
-    members: w.members
+    members: membersWithProfiles(w)
       .filter((m) => eligible(w, m.id))
-      .map(({ id, active }) => ({ id, active })),
+      .map(({ id, active, username }) => ({ id, active, username })),
     tasks: [...(w.codingTasks ?? [])].reverse(),
   };
 }
@@ -87,10 +100,19 @@ export class CodingService {
   constructor(
     private store: Store,
     private apps: GitHubApps,
-    private github = new CodingGitHub(),
     private local?: LocalRunner,
     private encryptionKey?: string,
   ) {}
+  async purgeDeletedWorkspaceAuth(workspaceId: string) {
+    const w = await this.store.read(workspaceId);
+    requireThat(w.deletion, "deletion_not_requested", 409);
+    const device = this.local as
+      | (LocalRunner & Partial<LocalDeviceAuth>)
+      | undefined;
+    if (!device?.deviceLogout) return false;
+    await device.deviceLogout(workspaceId);
+    return true;
+  }
   async tick(workspaceId: string) {
     const w = await this.store.read(workspaceId);
     for (const task of w.codingTasks ?? []) {
@@ -112,6 +134,15 @@ export class CodingService {
         Date.parse(t.nextPollAt ?? "1970-01-01") > Date.now()
       )
         return;
+      if (t.payload.backend !== "podman") {
+        t.state = ["queued", "issue_created"].includes(t.state)
+          ? "cancelled"
+          : "unknown";
+        t.error = "coding_legacy_backend_disabled";
+        t.updatedAt = new Date().toISOString();
+        notifyCoding(w, t);
+        return;
+      }
       // No worker may resume an interrupted POST, even if it died before sending it.
       if (
         ["creating_issue", "dispatching", "starting_publication"].includes(
@@ -147,12 +178,21 @@ export class CodingService {
     if (!task) return;
     let externalWriteCompleted = false;
     try {
-      if (task.payload.backend === "podman" && task.state !== "queued") {
+      requireThat(this.local, "coding_runner_not_configured", 409);
+      if (task.state === "queued" && task.payload.authMode === "device_code") {
+        const device = this.local as LocalRunner & Partial<LocalDeviceAuth>;
+        requireThat(device.deviceStatus, "coding_runner_not_configured", 409);
+        const status = await device.deviceStatus(workspaceId);
+        requireThat(
+          status.state === "connected",
+          "coding_device_auth_required",
+          409,
+        );
+      }
+      if (task.state !== "queued") {
         await this.advanceLocal(workspaceId, task, lease);
         return;
       }
-      if (task.payload.backend === "podman")
-        requireThat(this.local, "coding_runner_not_configured", 409);
       const snapshot = await this.store.read(workspaceId);
       const app = await this.apps.get(snapshot.operatorId);
       requireThat(app, "github_app_not_configured", 409);
@@ -160,105 +200,38 @@ export class CodingService {
         await app.installationToken(
           task.payload.installationId,
           [task.payload.repositoryId],
-          task.state === "queued" ? "issues" : "coding",
+          "issues",
         )
       ).token;
-      if (task.state === "queued" || task.state === "issue_created") {
-        // Authority can change during token minting. Reserve under the workspace lock.
-        const reserved = await this.store.change(
-          workspaceId,
-          async (w, sql) => {
-            const t = w.codingTasks?.find((t) => t.id === id);
-            if (!t || t.lease !== lease || t.state !== task.state) return;
-            checkCodingTask(w, t);
-            const d = await this.store.deployment(sql);
-            requireThat(d.active && !d.paused, "deployment_paused", 409);
-            t.state =
-              task.state === "queued" ? "creating_issue" : "dispatching";
-            t.updatedAt = new Date().toISOString();
-            return structuredClone(t);
-          },
+      if (task.payload.authMode === "device_code")
+        requireThat(
+          await app.repositoryPrivate(token, task.payload.repository),
+          "coding_device_private_repository_required",
+          409,
         );
-        if (!reserved) return;
-        if (reserved.state === "creating_issue") {
-          const issue = await app.createIssue(
-            token,
-            task.payload.repository,
-            task.payload.title,
-            task.payload.body,
-          );
-          externalWriteCompleted = true;
-          await this.update(workspaceId, id, lease, {
-            issue,
-            state: "issue_created",
-          });
-        } else {
-          const workflowRunId = await this.github.dispatch(token, reserved);
-          externalWriteCompleted = true;
-          await this.update(workspaceId, id, lease, {
-            state: "running",
-            workflowRunId,
-            workflowUrl: workflowRunId
-              ? `https://github.com/${task.payload.repository}/actions/runs/${workflowRunId}`
-              : undefined,
-          });
-        }
-      } else if (task.state === "running") {
-        const run = await this.github.run(token, task);
-        if (!run) {
-          if (Date.parse(task.updatedAt) + 600000 < Date.now())
-            throw new Fault("coding_run_not_found");
-          await this.update(workspaceId, id, lease, {});
-          return;
-        }
-        task.workflowRunId = run.id;
-        const patch: Partial<CodingTask> = {
-          workflowRunId: run.id,
-          workflowUrl: `https://github.com/${task.payload.repository}/actions/runs/${run.id}`,
-        };
-        // Recheck revocation after reads, including disconnect/reconfiguration.
-        const current = await this.store.read(workspaceId);
-        const latest = current.codingTasks?.find((t) => t.id === id);
-        if (!latest || latest.lease !== lease) return;
-        const d = await this.store.deployment();
-        try {
-          checkCodingTask(current, latest);
-          requireThat(d.active && !d.paused, "deployment_paused", 409);
-        } catch {
-          task.cancelRequested = true;
-        }
-        if (run.status === "completed") {
-          if (run.conclusion === "success") {
-            patch.prUrl = await this.github.pull(token, task);
-            requireThat(patch.prUrl, "coding_pr_missing", 409);
-            patch.state = "succeeded";
-          } else {
-            patch.state =
-              run.conclusion === "cancelled" ? "cancelled" : "failed";
-            patch.error = "coding_workflow_failed";
-          }
-        } else if (task.cancelRequested && !task.cancellationSent) {
-          // Cancellation is best-effort and never retried after an uncertain POST.
-          const reserved = await this.update(
-            workspaceId,
-            id,
-            lease,
-            { ...patch, cancelRequested: true, cancellationSent: true },
-            false,
-          );
-          if (!reserved) return;
-          await this.github.cancel(token, task);
-        } else if (Date.parse(task.createdAt) + 2 * 3600000 < Date.now()) {
-          requireThat(
-            !task.cancellationSent,
-            "coding_cancellation_unconfirmed",
-            409,
-          );
-          patch.cancelRequested = true;
-          patch.error = "coding_task_timeout";
-        }
-        await this.update(workspaceId, id, lease, patch);
-      }
+      // Authority can change during token minting. Reserve under the workspace lock.
+      const reserved = await this.store.change(workspaceId, async (w, sql) => {
+        const t = w.codingTasks?.find((t) => t.id === id);
+        if (!t || t.lease !== lease || t.state !== "queued") return false;
+        checkCodingTask(w, t);
+        const d = await this.store.deployment(sql);
+        requireThat(d.active && !d.paused, "deployment_paused", 409);
+        t.state = "creating_issue";
+        t.updatedAt = new Date().toISOString();
+        return true;
+      });
+      if (!reserved) return;
+      const issue = await app.createIssue(
+        token,
+        task.payload.repository,
+        task.payload.title,
+        task.payload.body,
+      );
+      externalWriteCompleted = true;
+      await this.update(workspaceId, id, lease, {
+        issue,
+        state: "issue_created",
+      });
     } catch (error) {
       const reason = code(error);
       const snapshot = await this.store.read(workspaceId);
@@ -267,12 +240,7 @@ export class CodingService {
       // Read failures can retry for up to two hours. Writes remain unknown forever.
       if (
         ["running", "publishing"].includes(current.state) &&
-        !current.cancellationSent &&
-        [
-          "coding_github_unavailable",
-          "github_unavailable",
-          "coding_runner_unavailable",
-        ].includes(reason) &&
+        ["github_unavailable", "coding_runner_unavailable"].includes(reason) &&
         Date.parse(current.createdAt) + 7200000 > Date.now()
       ) {
         await this.update(workspaceId, id, lease, {});
@@ -280,12 +248,7 @@ export class CodingService {
       }
       const uncertain =
         externalWriteCompleted ||
-        [
-          "coding_outcome_unknown",
-          "github_issue_outcome_unknown",
-          "coding_run_not_found",
-          "coding_run_ambiguous",
-        ].includes(reason) ||
+        ["github_issue_outcome_unknown"].includes(reason) ||
         ["running", "publishing", "starting_publication"].includes(
           current.state,
         );
@@ -431,13 +394,20 @@ export class CodingService {
     const w = await this.store.read(workspaceId);
     const app = await this.apps.get(w.operatorId);
     requireThat(app, "github_app_not_configured", 409);
-    return (
+    const token = (
       await app.installationToken(
         task.payload.installationId,
         [task.payload.repositoryId],
         permission,
       )
     ).token;
+    if (permission === "contents" && task.payload.authMode === "device_code")
+      requireThat(
+        await app.repositoryPrivate(token, task.payload.repository),
+        "coding_device_private_repository_required",
+        409,
+      );
+    return token;
   }
   private async reserveLocal(
     workspaceId: string,
@@ -467,13 +437,12 @@ export class CodingService {
       const task = w.codingTasks?.find((t) => t.id === id);
       if (!task || task.lease !== lease || codingTerminal(task.state)) return;
       const changed = patch.state && patch.state !== task.state;
-      const discovered = patch.workflowRunId && !task.workflowRunId;
       Object.assign(task, patch);
       if (changed) {
         task.updatedAt = new Date().toISOString();
         audit(w, task.actor, `coding.${task.state}`, task.id);
       }
-      if (changed || discovered) notifyCoding(w, task);
+      if (changed) notifyCoding(w, task);
       if (release) {
         task.lease = undefined;
         task.nextPollAt = new Date(Date.now() + 15000).toISOString();

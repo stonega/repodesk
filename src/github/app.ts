@@ -20,6 +20,7 @@ const installationSchema = z.object({
 const repositorySchema = z.object({
   id: z.number().int().positive(),
   full_name: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
+  private: z.boolean().optional(),
 });
 export type GitHubRepository = z.infer<typeof repositorySchema>;
 export interface GitHubInstallation {
@@ -67,6 +68,14 @@ export class GitHubApp {
       if (error instanceof Fault) throw error;
       throw new Fault("github_unavailable", 502);
     }
+  }
+  async repositoryPrivate(token: string, repository: string) {
+    const result = z
+      .object({ private: z.boolean() })
+      .parse(
+        await this.request(`https://api.github.com/repos/${repository}`, token),
+      );
+    return result.private;
   }
   async exchange(code: string, verifier: string, callback: string) {
     const data = await this.request(
@@ -145,7 +154,7 @@ export class GitHubApp {
   async installationToken(
     installationId: number,
     repositoryIds: number[],
-    permission: "contents" | "issues" | "coding" | "publish" = "contents",
+    permission: "contents" | "issues" | "publish" = "contents",
   ) {
     requireThat(
       repositoryIds.length > 0 && repositoryIds.length <= 12,
@@ -160,11 +169,9 @@ export class GitHubApp {
         permissions:
           permission === "issues"
             ? { issues: "write" }
-            : permission === "coding"
-              ? { actions: "write", contents: "read", pull_requests: "read" }
-              : permission === "publish"
-                ? { contents: "write", pull_requests: "write" }
-                : { contents: "read" },
+            : permission === "publish"
+              ? { contents: "write", pull_requests: "write" }
+              : { contents: "read" },
       },
     );
     return z

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { credentialsSchema } from "../agent/model-settings.ts";
 import type { PluginService } from "../agent/plugin-service.ts";
 import { modelCapabilities } from "../agent/runtime.ts";
+import type { LocalDeviceAuth } from "../coding/local/protocol.ts";
 import { codingView, saveCoding } from "../coding/service.ts";
 import { type Sql, transaction } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
@@ -86,6 +87,7 @@ export function adminRoutes(
   plugins: PluginService,
   github: GitHubService,
   encryptionKey?: string,
+  deviceAuth?: LocalDeviceAuth,
 ) {
   const app = new Hono<Env>();
   app.use("/api/*", async (c, next) => {
@@ -401,22 +403,74 @@ export function adminRoutes(
       ),
     ),
   );
-  app.get("/api/admin/workspaces/:id/plugins/coding", async (c) =>
-    c.json(
-      codingView(
-        await store.read(validId(c.req.param("id"))),
-        c.get("session").admin,
-      ),
-    ),
-  );
+  app.get("/api/admin/workspaces/:id/plugins/coding", async (c) => {
+    const id = validId(c.req.param("id"));
+    const page = codingView(await store.read(id), c.get("session").admin);
+    if (deviceAuth)
+      try {
+        page.deviceAuth = await deviceAuth.deviceStatus(id);
+      } catch {
+        page.deviceAuth = { state: "unavailable" };
+      }
+    else page.deviceAuth = { state: "unavailable" };
+    return c.json(page);
+  });
   app.put("/api/admin/workspaces/:id/plugins/coding", async (c) => {
     const input = await c.req.json();
-    return c.json(
-      await store.change(validId(c.req.param("id")), (w) =>
-        saveCoding(w, c.get("session").admin, input, encryptionKey),
-      ),
+    const id = validId(c.req.param("id"));
+    const page = await store.change(id, (w) =>
+      saveCoding(w, c.get("session").admin, input, encryptionKey),
     );
+    if (deviceAuth)
+      try {
+        page.deviceAuth = await deviceAuth.deviceStatus(id);
+      } catch {
+        page.deviceAuth = { state: "unavailable" };
+      }
+    else page.deviceAuth = { state: "unavailable" };
+    return c.json(page);
   });
+  app.post(
+    "/api/admin/workspaces/:id/plugins/coding/device/start",
+    async (c) => {
+      const id = validId(c.req.param("id"));
+      const page = codingView(await store.read(id), c.get("session").admin);
+      requireThat(
+        page.settings.authMode === "device_code",
+        "coding_device_mode_required",
+        409,
+      );
+      requireThat(deviceAuth, "coding_runner_not_configured", 409);
+      const status = await deviceAuth.deviceStart(id);
+      const current = await store.read(id);
+      if (
+        current.deletion ||
+        current.coding?.settings.authMode !== "device_code"
+      ) {
+        await deviceAuth.deviceLogout(id);
+        requireThat(false, "coding_device_mode_required", 409);
+      }
+      return c.json(status);
+    },
+  );
+  app.post(
+    "/api/admin/workspaces/:id/plugins/coding/device/logout",
+    async (c) => {
+      const id = validId(c.req.param("id"));
+      codingView(await store.read(id), c.get("session").admin);
+      requireThat(deviceAuth, "coding_runner_not_configured", 409);
+      const status = await deviceAuth.deviceLogout(id);
+      const page = await store.change(id, (w) => {
+        codingView(w, c.get("session").admin);
+        requireThat(w.coding, "coding_local_configuration_required", 409);
+        w.coding.revision++;
+        audit(w, c.get("session").admin.id, "coding.device_logged_out", id);
+        return codingView(w, c.get("session").admin);
+      });
+      page.deviceAuth = status;
+      return c.json(page);
+    },
+  );
   app.post("/api/admin/workspaces/:id/plugins/coding/:task/cancel", async (c) =>
     c.json(
       await store.change(validId(c.req.param("id")), (w) => {

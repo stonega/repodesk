@@ -76,7 +76,7 @@ export function codingExtension(
           name: cancel ? "cancel_coding_task" : "coding_task_status",
           label: cancel ? "Stop Codex task" : "Codex task status",
           description: cancel
-            ? "Request cancellation of a Codex task when the user explicitly asks to stop it. Remote cancellation is best-effort; already published changes cannot be recalled."
+            ? "Request cancellation of a Codex task when the user explicitly asks to stop it. Cancellation during publication is best-effort; already published changes cannot be recalled."
             : "Read the current status, issue and PR links for a Codex task initiated by this actor or maintained by this actor.",
           parameters: Type.Object({ taskId: Type.String() }),
           execute: async (_callId, args) =>

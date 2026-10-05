@@ -45,7 +45,6 @@ const stop = await startWorker(
   new CodingService(
     store,
     githubApps,
-    undefined,
     cfg.CODEX_RUNNER_URL && cfg.CODEX_RUNNER_TOKEN
       ? new LocalRunnerClient(cfg.CODEX_RUNNER_URL, cfg.CODEX_RUNNER_TOKEN)
       : undefined,

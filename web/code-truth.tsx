@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { NavLink } from "react-router";
 import type {
   CodeRepository,
   CodeTruthPage,
@@ -163,8 +164,11 @@ export function CodeTruth({
           </label>
           <p className="muted">
             Add HTTPS GitHub repositories for this workspace and map each
-            network to a branch. Connect this workspace to GitHub above to
-            access private repositories through your GitHub App.
+            network to a branch. Use Manage GitHub on{" "}
+            <NavLink to={`/admin/overview?workspace=${workspaceId}`}>
+              Overview
+            </NavLink>{" "}
+            to access private repositories through your GitHub App.
           </p>
           {settings.repositories.length === 0 && (
             <p>No repositories configured.</p>

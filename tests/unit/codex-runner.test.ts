@@ -78,10 +78,10 @@ async function fixture() {
       githubRevision: 1,
       configRevision: 1,
       baseBranch: "develop",
-      workflowFile: "deepx-codex.yml",
       title: "Fix bug",
       body: "Fix the bug",
       backend: "podman",
+      authMode: "provider_key",
       checkCommand: "bun test",
     },
     issue: { number: 42, url: "https://github.com/example/repo/issues/42" },
@@ -152,6 +152,8 @@ test("checks precede publication; publication uses a fresh volume and only its s
   expect(
     (await f.supervisor.status(f.input.workspaceId, f.input.taskId)).state,
   ).toBe("running");
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
   expect(
     (await f.supervisor.status(f.input.workspaceId, f.input.taskId)).state,
   ).toBe("ready");
@@ -181,9 +183,43 @@ test("checks precede publication; publication uses a fresh volume and only its s
     (await f.supervisor.status(f.input.workspaceId, f.input.taskId)).prUrl,
   ).toBe("https://github.com/example/repo/pull/43");
 });
+test("an interrupted patch export retries without rerunning implementation", async () => {
+  const f = await fixture();
+  await f.supervisor.start(f.input);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  const command = f.engine.command.bind(f.engine);
+  let interrupted = true;
+  f.engine.command = async (args, env) => {
+    if (interrupted && args[0] === "start" && args.includes("--attach")) {
+      interrupted = false;
+      throw new Error("export interrupted");
+    }
+    return command(args, env);
+  };
+  await expect(
+    f.supervisor.status(f.input.workspaceId, f.input.taskId),
+  ).rejects.toThrow("coding_runner_unavailable");
+  const restarted = new RunnerSupervisor(f.settings, f.engine);
+  await restarted.initialize();
+  expect(
+    (await restarted.status(f.input.workspaceId, f.input.taskId)).state,
+  ).toBe("ready");
+  expect(
+    f.calls.filter((c) => c.args[0] === "create" && c.args.at(-1) === "export"),
+  ).toHaveLength(2);
+  expect(
+    f.calls.filter(
+      (c) => c.args[0] === "create" && c.args.at(-1) === "implement",
+    ),
+  ).toHaveLength(1);
+});
 test("failed checks prevent publishing and cancellation cannot restart a task", async () => {
   const f = await fixture();
   await f.supervisor.start(f.input);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
   await f.supervisor.status(f.input.workspaceId, f.input.taskId);
   f.fail();
   expect(
@@ -208,6 +244,7 @@ test("failed checks prevent publishing and cancellation cannot restart a task", 
 test("management authentication and task-scoped proxy never expose the provider key", async () => {
   const f = await fixture();
   await f.supervisor.start(f.input);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
   await f.supervisor.status(f.input.workspaceId, f.input.taskId);
   let upstream: RequestInit | undefined;
   const app = runnerApp(f.supervisor, (async (_url, init) => {
@@ -273,8 +310,8 @@ test("restart enforces deadlines and retention cleans only the owning task", asy
   await restarted.initialize();
   await restarted.sweep();
   expect(
-    (await restarted.status(f.input.workspaceId, f.input.taskId)).state,
-  ).toBe("cancelled");
+    await restarted.status(f.input.workspaceId, f.input.taskId),
+  ).toMatchObject({ state: "cancelled", error: "coding_task_timeout" });
   const expired = JSON.parse(await readFile(path, "utf8"));
   expired.finishedAt = Date.now() - 48 * 3600000;
   await writeFile(path, JSON.stringify(expired));
@@ -305,6 +342,7 @@ test("panel credentials override fallback, survive restart encrypted and never e
     const restarted = new RunnerSupervisor(f.settings, f.engine);
     await restarted.initialize();
     await restarted.start({ ...f.input, providerApiKey: "duplicate-secret" });
+    await restarted.status(f.input.workspaceId, f.input.taskId);
     await restarted.status(f.input.workspaceId, f.input.taskId);
     const taskToken =
       f.calls.find((c) => c.args.at(-1) === "implement")?.env
@@ -337,10 +375,13 @@ test("panel credentials override fallback, survive restart encrypted and never e
     expect(JSON.stringify(f.calls)).not.toContain("panel-secret");
     expect(f.jobInputs.join("\n")).not.toContain("panel-secret");
     if (fallback) await restarted.cancel(f.input.workspaceId, f.input.taskId);
-    else
+    else {
+      await restarted.status(f.input.workspaceId, f.input.taskId);
+      await restarted.status(f.input.workspaceId, f.input.taskId);
       expect(
         (await restarted.status(f.input.workspaceId, f.input.taskId)).state,
       ).toBe("ready");
+    }
     expect(
       JSON.parse(await readFile(path, "utf8")).providerApiKey,
     ).toBeUndefined();
@@ -359,4 +400,51 @@ test("missing provider credentials reject start before any container is reserved
   expect(f.calls).toHaveLength(0);
   await f.supervisor.start({ ...f.input, providerApiKey: "now-configured" });
   expect(f.calls.filter((c) => c.args[0] === "create")).toHaveLength(1);
+});
+test("device-auth tasks use only their workspace credential and remove the task auth volume", async () => {
+  const f = await fixture();
+  f.input.payload.authMode = "device_code";
+  await expect(f.supervisor.start(f.input)).rejects.toThrow(
+    "coding_device_auth_required",
+  );
+  await f.supervisor.device.save(
+    f.input.workspaceId,
+    '{"tokens":{"access_token":"old-secret"}}',
+  );
+  const readText = f.engine.readText.bind(f.engine);
+  f.engine.readText = (container, path, maxBytes) =>
+    path === "/auth/auth.json"
+      ? Promise.resolve('{"tokens":{"access_token":"refreshed-secret"}}')
+      : readText(container, path, maxBytes);
+  await f.supervisor.start(f.input);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  const key = taskKey(f.input.workspaceId, f.input.taskId);
+  const implement = f.calls.find(
+    (c) => c.args[0] === "create" && c.args.at(-1) === "implement",
+  );
+  expect(implement?.args).toContain(`${key}-auth:/auth:U`);
+  expect(implement?.env).toEqual({});
+  expect(f.jobInputs.at(-1)).not.toContain("old-secret");
+  expect(f.jobInputs.at(-1)).not.toContain("refreshed-secret");
+  expect(f.jobInputs.at(-1)).not.toContain('env_key = "CODEX_TASK_TOKEN"');
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  expect(await f.supervisor.device.read(f.input.workspaceId)).toContain(
+    "refreshed-secret",
+  );
+  expect(
+    f.calls.some((c) =>
+      c.args.join(" ").includes(`volume rm --force ${key}-auth`),
+    ),
+  ).toBe(true);
+  const raw = await readFile(
+    join(
+      f.settings.CODEX_RUNNER_STATE,
+      "device-auth",
+      f.input.workspaceId,
+      "credential.json",
+    ),
+    "utf8",
+  );
+  expect(raw).not.toContain("refreshed-secret");
 });

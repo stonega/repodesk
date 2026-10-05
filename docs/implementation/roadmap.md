@@ -19,7 +19,7 @@ is the [GitHub journey](../design/github-workflows.md).
 | GitHub App | Workspace installation and selected repository connection | Live installation and permission review |
 | Code Truth | Configured repository source queries through a private local service | Live repository indexing and answer-quality evaluation |
 | Issues | Requester-approved issue draft and durable GitHub submission | Live issue creation and unknown-outcome drill |
-| Coding | Maintainer-approved issue-to-draft-PR tasks, with Actions or local Podman runner | Repository workflow setup and live end-to-end task |
+| Coding | Maintainer-approved issue-to-draft-PR tasks with local Podman runner | Runner setup and live end-to-end task |
 
 The repository uses workspace JSONB aggregates under row locks for the pilot, with
 relational inbox/outbox/binding/session constraints. Read the architecture's capacity

@@ -133,6 +133,24 @@ export async function startWorker(
         });
         // Durable rate-limit retries and ambiguous-send detection do not rely on queue retry timing.
         const current = await store.read(workspaceId);
+        if (
+          coding &&
+          current.deletion &&
+          !current.deletion.deviceAuthPurgedAt
+        ) {
+          try {
+            if (await coding.purgeDeletedWorkspaceAuth(workspaceId))
+              await store.change(workspaceId, (w) => {
+                if (w.deletion)
+                  w.deletion.deviceAuthPurgedAt = new Date().toISOString();
+              });
+          } catch (error) {
+            store.log.write("worker_maintenance_failed", {
+              workspaceId,
+              error,
+            });
+          }
+        }
         if (githubIssues && d.active && !d.paused)
           for (const approval of current.approvals)
             if (

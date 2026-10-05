@@ -27,6 +27,11 @@ export function codingDestination(
     "coding_disabled",
     409,
   );
+  requireThat(
+    w.coding.settings.backend === "podman",
+    "coding_local_configuration_required",
+    409,
+  );
   const input = codingInput.parse(value);
   const target = w.coding.settings.repositories.find(
     (r) => r.repositoryId === input.repositoryId,
@@ -37,12 +42,19 @@ export function codingDestination(
     "coding_maintainer_required",
     403,
   );
+  requireThat(target.checkCommand?.trim(), "coding_check_required", 409);
   const repo = w.github?.repositories.find((r) => r.id === input.repositoryId);
   requireThat(
     repo && w.github?.installationId,
     "github_repository_not_connected",
     409,
   );
+  if (w.coding.settings.authMode === "device_code")
+    requireThat(
+      repo.private === true,
+      "coding_device_private_repository_required",
+      409,
+    );
   return codingPayload.parse({
     ...input,
     repository: repo.full_name,
@@ -50,13 +62,10 @@ export function codingDestination(
     githubRevision: w.github.revision,
     configRevision: w.coding.revision,
     baseBranch: target.baseBranch,
-    workflowFile: target.workflowFile,
-    ...(w.coding.settings.backend
-      ? { backend: w.coding.settings.backend }
-      : {}),
-    ...(w.coding.settings.backend === "podman"
-      ? { setupCommand: target.setupCommand, checkCommand: target.checkCommand }
-      : {}),
+    backend: "podman",
+    authMode: w.coding.settings.authMode ?? "provider_key",
+    setupCommand: target.setupCommand,
+    checkCommand: target.checkCommand,
   });
 }
 export function checkCodingPayload(
@@ -127,7 +136,7 @@ export function proposeCoding(
     w,
     actor,
     run.chatId,
-    `Start Codex implementation in ${payload.repository}?\nBase branch: ${payload.baseBranch}\n${payload.backend === "podman" ? "Runner: local Podman" : `Workflow: ${payload.workflowFile}`}\n\nTitle: ${payload.title}\n\n${payload.body}\n\nApprove to create this issue, run Codex ${payload.backend === "podman" ? "in an isolated local container" : "in GitHub Actions"}, push a task branch and open a draft PR referencing the issue. Coding provider usage${payload.backend === "podman" ? "" : " and GitHub Actions"} is billed separately from chat usage.`,
+    `Start Codex implementation in ${payload.repository}?\nBase branch: ${payload.baseBranch}\nRunner: local Podman\n\nTitle: ${payload.title}\n\n${payload.body}\n\nApprove to create this issue, run Codex in an isolated local container, push a task branch and open a draft PR referencing the issue. Coding provider usage is billed separately from chat usage.`,
     {
       runId,
       topicId: run.topicId,

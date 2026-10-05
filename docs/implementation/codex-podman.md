@@ -1,7 +1,7 @@
 # Local Codex execution with Podman
 
-The optional **Local Podman** backend runs approved coding tasks on the deployment
-host. GitHub Actions remains the default for existing configurations. Pi still
+The **Local Podman** runner runs approved coding tasks on the deployment
+host. Pi still
 handles Telegram conversations; the coding service handles approval, identity,
 task state and publication. Enabling the plugin does not start a coding container.
 
@@ -38,11 +38,14 @@ The provider name, URL, model and effort above follow this device's Codex
 configuration as inspected on 2026-09-22. That configuration uses
 `model_provider = "proxy"`, `wire_api = "responses"`, and the environment key
 `AIAPI_API_KEY`. Save your provider key in the workspace web panel as described
-below. Do not copy `auth.json`, the entire host Codex home, host plugins, or
-host credentials into images or task volumes. No key was copied from the device.
+below. Do not copy an existing host `auth.json`, the entire host Codex home,
+host plugins, or host credentials into images or task volumes. No key was copied
+from the device.
 
-The workspace operator can set, replace or remove the provider API key under
-**Plugins → Codex implementation → Local Podman → Provider API key**. The app
+The workspace operator selects **Custom provider API key** or **ChatGPT device
+code** under **Plugins → Codex → Configuration → Edit**. Existing
+workspaces default to the custom provider. The operator can set, replace or
+remove that provider API key in the same panel. The app
 stores it encrypted with `ENCRYPTION_KEY` and workspace-bound authenticated data.
 The panel/API return only whether a key is configured, never its value. Saved
 workspace keys take precedence over the optional supervisor environment fallback
@@ -60,6 +63,29 @@ through the supervisor proxy and uses `env_key = "CODEX_TASK_TOKEN"`. This
 temporary token authorizes only model requests while that task is running; it
 cannot call runner management endpoints. Setup and checks do not inherit it.
 
+For **ChatGPT device code**, save the authentication method, then select
+**Sign in with device code**. Open the displayed OpenAI link, sign in and enter
+the one-time code. Device login must be enabled in the account's ChatGPT
+security settings or workspace permissions. The panel polls until connected;
+**Disconnect account** removes the local cache and stops unfinished
+implementation. The saved custom provider key stays unused in this mode.
+ChatGPT sign-in uses Codex's built-in OpenAI provider and default model rather
+than the deployment's custom provider model.
+
+Device sign-in is limited to connected repositories whose GitHub metadata
+confirms they are **private**. The worker checks visibility again through GitHub
+before issue creation and again before starting the local implementation.
+Reconnect GitHub if an older repository entry
+lacks visibility metadata. Use this option only for trusted private code:
+Codex can access the account token cache while implementing. The supervisor
+encrypts the per-workspace cache at rest using a key derived from
+`CODEX_RUNNER_TOKEN`. It decrypts a copy into a short-lived per-task Podman
+auth volume during the Codex phase, saves any refreshed cache on exit, and
+removes that volume. Repository setup and checks use separate containers
+without it. A disconnected workspace fails before issue creation. Rotating
+`CODEX_RUNNER_TOKEN` invalidates stored device logins; reconnect afterward.
+Do not copy a host `auth.json` into the deployment.
+
 Validate and start when ready to deploy:
 
 ```sh
@@ -71,11 +97,11 @@ The supervisor joins the app network and a separate task network. Task container
 join only the task network, have no published ports, run as UID 1000 with a
 read-only root filesystem, dropped capabilities, process/CPU/memory limits and
 a container timeout. Outbound access is needed for GitHub, packages and the
-configured provider. The optional overlay requires a **Podman** engine even when
+configured provider. The coding overlay requires a **Podman** engine even when
 using `docker compose` for configuration validation. The ordinary app still
-supports Docker Compose without this local backend.
+supports Docker Compose when coding tasks are disabled.
 
-Only the worker gets `CODEX_RUNNER_URL` and `CODEX_RUNNER_TOKEN`. Only the supervisor
+Only the app and worker get `CODEX_RUNNER_URL` and `CODEX_RUNNER_TOKEN`. Only the supervisor
 gets the optional provider environment fallback and Podman socket. No bot, database
 or GitHub App private key is mounted into coding containers. The supervisor HTTP port is not published.
 
@@ -84,20 +110,19 @@ or GitHub App private key is mounted into coding containers. The supervisor HTTP
 1. Connect the GitHub App and repository as described in [GitHub setup](github-app.md).
 2. For local publication, grant the App **Contents: read and write**, **Issues:
    read and write**, and **Pull requests: read and write**, then approve the
-   installation's permission update. Actions permissions are only needed when
-   also using the GitHub Actions backend.
-3. Under **Plugins → Codex implementation**, add the repository's base branch,
+   installation's permission update. No Actions permission is needed.
+3. Under **Plugins → Codex → Repositories**, add the repository's base branch,
    maintainers, optional setup command and required check command. For this repo,
    use `bun install --frozen-lockfile` and
    `bun run check && bun run typecheck && bun test && bun run build`.
-4. Select **Local Podman**, use **Set API key** to save the workspace provider key,
-   and enable the extension. When switching an already
-   enabled configuration, save local check commands for every repository first.
+4. Open **Configuration → Edit** to save the workspace provider key or complete
+   device-code sign-in, then enable Codex. Older GitHub Actions configurations require local check commands
+   for every repository before enabling coding tasks.
 
 Commands are trusted operator configuration, limited to 2,000 characters each;
 the model cannot choose them. They execute inside the task checkout. Saving
-backend/command settings or provider credentials changes the configuration revision and invalidates
-pending approvals. Local tasks do not require a repository Actions workflow.
+commands or provider credentials changes the configuration revision and invalidates
+pending approvals. Coding tasks do not require a repository Actions workflow.
 
 ## Lifecycle and recovery
 
@@ -105,10 +130,15 @@ Each approved task gets a tenant-scoped name, private work volume, checkout and
 Codex thread. The supervisor permits one active task at a time; additional
 approved tasks wait. An initial preparation container receives only a
 repository-scoped read token and pins the base commit. A separate implementation
-container runs setup, Codex and the configured checks without any GitHub token.
-The workspace and Codex session files survive container exit in the task volume.
+containers run setup, Codex and the configured checks separately without any GitHub token.
+The workspace survives container exit in the task volume. Custom provider Codex
+sessions survive there too; device-code auth and sessions in the temporary auth
+volume are removed after implementation.
 
 After checks pass, a credential-free export container reads a size-limited patch.
+An interrupted export can be recreated because it only reads the work volume and
+has no network or credentials. The runner reports timeout failures with their
+reason even when its periodic cleanup detects them first.
 The worker rechecks actor, repository, configuration and deployment permissions
 after minting a fresh repository-scoped publication token. A new container with a
 fresh volume applies the patch, rejects `.github/` changes, commits, pushes a unique
@@ -116,7 +146,8 @@ task branch and creates a draft PR. It never runs repository scripts. There is n
 automatic merge. Publication has its own durable reservation and is never blindly
 retried after an uncertain response.
 
-Provider spend is separate from Pi chat budgets. Defaults are one active task,
+Custom provider spend is separate from Pi chat budgets. Device-code runs use
+the connected ChatGPT account's Codex entitlements. Defaults are one active task,
 2 CPUs, 4 GiB RAM, 256 processes and 45 minutes including publication; tune the
 documented `CODEX_RUNNER_*` environment variables in `.env.example`. Patches are
 limited to 5 MiB. Retained workspaces and sessions are removed after 24 hours
@@ -127,7 +158,10 @@ volumes consume host disk, so provision storage for the configured retention.
 Stop and access revocation cancel local execution without requiring GitHub
 credentials. A stop during publication reports an unknown outcome because a push
 or PR may already exist. Workspace deletion does not undo remote writes; abandoned
-local work times out and is cleaned by the supervisor. Keep the supervisor running
+local work times out and is cleaned by the supervisor. The worker also disconnects
+and removes that workspace's sealed device credential after deletion; if the
+supervisor is temporarily unavailable, it retries on the next maintenance pass.
+Keep the supervisor running
 for reconciliation and cleanup. A restart observes existing containers by their
 deterministic names, without launching duplicate work.
 
@@ -153,6 +187,8 @@ volumes, patch export and cancellation, and removes its test resources afterward
 When a host HTTP proxy is configured, exempt localhost with `NO_PROXY`/`no_proxy`
 for tests; a loopback-only build proxy may need `podman build --network=host`.
 
-Official references: [Codex custom providers](https://learn.chatgpt.com/docs/config-file/config-advanced#custom-model-providers),
+Official references: [Codex device login](https://learn.chatgpt.com/docs/auth#login-on-headless-devices),
+[automation auth guidance](https://learn.chatgpt.com/docs/non-interactive-mode#authenticate-in-automation),
+[Codex custom providers](https://learn.chatgpt.com/docs/config-file/config-advanced#custom-model-providers),
 [non-interactive execution](https://learn.chatgpt.com/docs/non-interactive-mode),
 [Podman run](https://docs.podman.io/en/latest/markdown/podman-run.1.html).

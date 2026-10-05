@@ -1,7 +1,13 @@
 import { Fault } from "../../domain.ts";
-import { type LocalRunner, type LocalStart, localStatus } from "./protocol.ts";
+import {
+  deviceAuthStatus,
+  type LocalDeviceAuth,
+  type LocalRunner,
+  type LocalStart,
+  localStatus,
+} from "./protocol.ts";
 
-export class LocalRunnerClient implements LocalRunner {
+export class LocalRunnerClient implements LocalRunner, LocalDeviceAuth {
   constructor(
     private url: string,
     private token: string,
@@ -19,11 +25,26 @@ export class LocalRunnerClient implements LocalRunner {
         redirect: "error",
         signal: AbortSignal.timeout(90000),
       });
-      if (response.status === 429) throw new Fault("coding_runner_busy", 429);
+      if (response.status === 429)
+        throw new Fault(
+          path.includes("/device-auth/")
+            ? "coding_device_login_busy"
+            : "coding_runner_busy",
+          429,
+        );
       if (response.status === 409) {
         const error = (await response.json()) as { error?: string };
-        if (error.error === "coding_provider_not_configured")
+        if (
+          error.error === "coding_provider_not_configured" ||
+          error.error === "coding_device_auth_required" ||
+          error.error === "coding_device_mode_required"
+        )
           throw new Fault(error.error, 409);
+      }
+      if (response.status === 503 && path.includes("/device-auth/")) {
+        const error = (await response.json()) as { error?: string };
+        if (error.error === "coding_device_login_unavailable")
+          throw new Fault(error.error, 503);
       }
       if (!response.ok)
         throw new Fault(
@@ -59,5 +80,23 @@ export class LocalRunnerClient implements LocalRunner {
   }
   async cancel(workspaceId: string, taskId: string) {
     await this.request(`${this.path(workspaceId, taskId)}/cancel`, {});
+  }
+  private devicePath(workspaceId: string) {
+    return `/device-auth/${encodeURIComponent(workspaceId)}`;
+  }
+  async deviceStatus(workspaceId: string) {
+    return deviceAuthStatus.parse(
+      await this.request(this.devicePath(workspaceId)),
+    );
+  }
+  async deviceStart(workspaceId: string) {
+    return deviceAuthStatus.parse(
+      await this.request(`${this.devicePath(workspaceId)}/start`, {}),
+    );
+  }
+  async deviceLogout(workspaceId: string) {
+    return deviceAuthStatus.parse(
+      await this.request(`${this.devicePath(workspaceId)}/logout`, {}),
+    );
   }
 }

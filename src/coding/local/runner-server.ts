@@ -63,6 +63,32 @@ export function runnerApp(
     );
     await next();
   });
+  app.use("/device-auth/*", async (c, next) => {
+    requireThat(
+      equal(
+        c.req.header("authorization") ?? "",
+        `Bearer ${supervisor.settings.CODEX_RUNNER_TOKEN}`,
+      ),
+      "coding_runner_denied",
+      401,
+    );
+    await next();
+  });
+  app.get("/device-auth/:workspace", async (c) =>
+    c.json(
+      await supervisor.device.status(z.uuid().parse(c.req.param("workspace"))),
+    ),
+  );
+  app.post("/device-auth/:workspace/start", async (c) =>
+    c.json(
+      await supervisor.device.start(z.uuid().parse(c.req.param("workspace"))),
+    ),
+  );
+  app.post("/device-auth/:workspace/logout", async (c) =>
+    c.json(
+      await supervisor.logoutDevice(z.uuid().parse(c.req.param("workspace"))),
+    ),
+  );
   app.post("/tasks", async (c) => {
     await supervisor.start(localStart.parse(await c.req.json()));
     return c.json({ ok: true });

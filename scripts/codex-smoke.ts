@@ -21,11 +21,18 @@ const taskId = randomUUID();
 const key = taskKey(workspaceId, taskId);
 const failedTaskId = randomUUID();
 const failedKey = taskKey(workspaceId, failedTaskId);
+const deviceTaskId = randomUUID();
+const deviceKey = taskKey(workspaceId, deviceTaskId);
+const phases = ["prepare", "setup", "implement", "check", "export", "publish"];
 const token = "smoke-management-token-no-real-secrets";
 try {
   await writeFile(
     join(dir, "Dockerfile"),
     `FROM ${process.env.CODEX_SMOKE_JOB_IMAGE ?? "localhost/deepx-codex-job:verify"}\nUSER root\nRUN rm /usr/local/bin/codex\nCOPY --chmod=755 codex /usr/local/bin/codex\nCOPY --chmod=755 git /usr/local/bin/git\nUSER node\n`,
+  );
+  await writeFile(
+    join(dir, "Dockerfile.supervisor"),
+    `FROM ${process.env.CODEX_SMOKE_SUPERVISOR_IMAGE ?? "localhost/deepx-codex-supervisor:verify"}\nUSER root\nCOPY --chmod=755 codex /usr/local/bin/codex\n`,
   );
   await writeFile(
     join(dir, "git"),
@@ -46,13 +53,32 @@ if(args.includes('clone')) {
     join(dir, "codex"),
     `#!/usr/bin/env node
 const fs=require('node:fs');
+if(process.argv[2]==='login') {
+ console.log('Open this link in your browser and sign in to your account\\n   https://auth.openai.com/codex/device\\n\\nEnter this one-time code (expires in 15 minutes)\\n   ABCD-EFGH');
+ setTimeout(()=>{fs.writeFileSync(process.env.CODEX_HOME+'/auth.json',JSON.stringify({tokens:{access_token:'smoke-account'}}));},200);
+ setTimeout(()=>process.exit(0),300);
+ return;
+}
 if(process.env.GITHUB_TOKEN||process.env.CODEX_PROVIDER_API_KEY) process.exit(2);
 if(fs.existsSync('/run/podman/podman.sock')) process.exit(3);
+if(process.env.CODEX_HOME==='/auth') {
+ if(!fs.existsSync('/auth/auth.json')||process.env.CODEX_TASK_TOKEN) process.exit(4);
+ fs.writeFileSync('/auth/auth.json',JSON.stringify({tokens:{access_token:'refreshed-smoke-account'}}));
+}
 fs.writeFileSync('/task/repo/README.md','fixed\\n');
 console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
 `,
   );
   await podman(["build", "--format=docker", "-t", image, dir]);
+  await podman([
+    "build",
+    "--format=docker",
+    "-f",
+    join(dir, "Dockerfile.supervisor"),
+    "-t",
+    `${image}-supervisor`,
+    dir,
+  ]);
   await podman(["network", "create", name]);
   const socket = await podman([
     "info",
@@ -90,8 +116,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     `CODEX_RUNNER_IMAGE=${image}`,
     "-e",
     "CODEX_RUNNER_TIMEOUT_SECONDS=120",
-    process.env.CODEX_SMOKE_SUPERVISOR_IMAGE ??
-      "localhost/deepx-codex-supervisor:verify",
+    `${image}-supervisor`,
   ]);
   const port = await podman(["port", name, "3020"]);
   const base = `http://${port}`;
@@ -130,7 +155,6 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
       githubRevision: 1,
       configRevision: 1,
       baseBranch: "develop",
-      workflowFile: "unused.yml",
       title: "Smoke",
       body: "Change old to fixed",
       backend: "podman",
@@ -184,19 +208,78 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
       throw new Error(`Task did not fail its check: ${JSON.stringify(status)}`);
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
+  const login = (await request(`/device-auth/${workspaceId}/start`, {})) as {
+    state: string;
+    verificationUrl?: string;
+    userCode?: string;
+  };
+  if (
+    login.userCode !== "ABCD-EFGH" ||
+    login.verificationUrl !== "https://auth.openai.com/codex/device"
+  )
+    throw new Error(
+      `Device login instructions missing: ${JSON.stringify(login)}`,
+    );
+  for (let attempt = 0; ; attempt++) {
+    const status = (await request(`/device-auth/${workspaceId}`)) as {
+      state: string;
+    };
+    if (status.state === "connected") break;
+    if (attempt > 30) throw new Error("Device login did not complete");
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  await request("/tasks", {
+    ...input,
+    taskId: deviceTaskId,
+    payload: { ...input.payload, authMode: "device_code" },
+    providerApiKey: undefined,
+  });
+  for (let attempt = 0; ; attempt++) {
+    const status = (await request(`/tasks/${workspaceId}/${deviceTaskId}`)) as {
+      state: string;
+      threadId?: string;
+    };
+    if (status.state === "ready") {
+      if (status.threadId !== "smoke-thread")
+        throw new Error("Device task lost its thread ID");
+      break;
+    }
+    if (
+      ["failed", "unknown", "cancelled"].includes(status.state) ||
+      attempt > 30
+    )
+      throw new Error(
+        `Device task did not reach ready: ${JSON.stringify(status)}`,
+      );
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  if (
+    await podman(["volume", "exists", `${deviceKey}-auth`]).then(
+      () => true,
+      () => false,
+    )
+  )
+    throw new Error("Device task auth volume was retained");
+  await request(`/device-auth/${workspaceId}/logout`, {});
+  if (
+    ((await request(`/device-auth/${workspaceId}`)) as { state: string })
+      .state !== "disconnected"
+  )
+    throw new Error("Device logout did not clear the workspace");
   console.log(
-    "Podman smoke passed: successful patch export and failed checks both preserve thread IDs; cancellation confirmed.",
+    "Podman smoke passed: provider and device-code tasks, refreshed account auth, checks, export and cancellation.",
   );
 } catch (error) {
-  for (const phase of ["prepare", "implement", "export", "publish"]) {
-    const state = await podman([
-      "inspect",
-      "--format",
-      "{{json .State}}",
-      `${key}-${phase}`,
-    ]).catch(() => "not created");
-    console.error(`${phase}: ${state}`);
-  }
+  for (const task of [key, failedKey, deviceKey])
+    for (const phase of phases) {
+      const state = await podman([
+        "inspect",
+        "--format",
+        "{{json .State}}",
+        `${task}-${phase}`,
+      ]).catch(() => "not created");
+      console.error(`${task.slice(-8)} ${phase}: ${state}`);
+    }
   console.error(
     await podman(["logs", name]).catch(() => "Supervisor logs unavailable"),
   );
@@ -207,11 +290,8 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     "--force",
     "--ignore",
     name,
-    ...["prepare", "implement", "export", "publish"].map(
-      (phase) => `${key}-${phase}`,
-    ),
-    ...["prepare", "implement", "export", "publish"].map(
-      (phase) => `${failedKey}-${phase}`,
+    ...[key, failedKey, deviceKey].flatMap((taskKey) =>
+      phases.map((phase) => `${taskKey}-${phase}`),
     ),
   ]).catch(() => {});
   for (const volume of [
@@ -220,9 +300,13 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     `${key}-publish`,
     `${failedKey}-work`,
     `${failedKey}-publish`,
+    `${deviceKey}-work`,
+    `${deviceKey}-publish`,
+    `${deviceKey}-auth`,
   ])
     await podman(["volume", "rm", "--force", volume]).catch(() => {});
   await podman(["network", "rm", name]).catch(() => {});
   await podman(["rmi", image]).catch(() => {});
+  await podman(["rmi", `${image}-supervisor`]).catch(() => {});
   await rm(dir, { recursive: true, force: true });
 }

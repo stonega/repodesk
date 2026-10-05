@@ -1,5 +1,9 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
+import { ChevronLeft } from "reicon-react";
 import type { PluginPage, PluginSpec } from "../src/agent/plugin-config.ts";
+import type { CodeTruthPage } from "../src/code-truth/config.ts";
+import type { CodingPage } from "../src/coding/config.ts";
 import { CodeTruth } from "./code-truth.tsx";
 import { Coding } from "./coding.tsx";
 import { GitHubConnection } from "./github.tsx";
@@ -7,6 +11,47 @@ import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
+type View = "catalog" | "installed" | "market";
+type MarketEntry = {
+  id: string;
+  name: string;
+  author: string;
+  summary: string;
+  description: string;
+  url: string;
+};
+
+// Selected from Pi's package catalog, ordered by monthly downloads on 2026-09-29.
+// These are discovery links, not RepoDesk compatibility or security endorsements.
+const market: MarketEntry[] = [
+  {
+    id: "pi-mcp-adapter",
+    name: "pi-mcp-adapter",
+    author: "nicopreme",
+    summary: "Connect Pi tools to MCP servers.",
+    description: "An MCP adapter for the Pi coding agent.",
+    url: "https://pi.dev/packages/pi-mcp-adapter",
+  },
+  {
+    id: "pi-web-access",
+    name: "pi-web-access",
+    author: "nicopreme",
+    summary: "Search and fetch web content.",
+    description:
+      "Web search and fetching tools for Pi, with additional source and media integrations.",
+    url: "https://pi.dev/packages/pi-web-access",
+  },
+  {
+    id: "pi-lens",
+    name: "pi-lens",
+    author: "apmantza",
+    summary: "Get code feedback from development tools.",
+    description:
+      "Code feedback for Pi through language servers, linters, formatters, and type checking.",
+    url: "https://pi.dev/packages/pi-lens",
+  },
+];
+
 const spec = ({
   fileStatus: _status,
   ...entry
@@ -38,36 +83,85 @@ const fileLabels = {
 export function Plugins({
   request,
   workspaceId,
+  view = "catalog",
 }: {
   request: Request;
   workspaceId: string;
+  view?: View;
 }) {
   const endpoint = `/api/admin/workspaces/${workspaceId}/plugins`;
+  const { pluginId } = useParams();
+  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const [data, setData] = useState<PluginPage>();
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string>();
-  const [search, setSearch] = useState("");
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      setData(await request<PluginPage>(endpoint));
-      setEditing(undefined);
-    } catch (cause) {
-      setData(undefined);
-      setError(errorMessage(cause));
-    } finally {
-      setLoading(false);
-    }
-  }, [request, endpoint]);
+  const [builtIns, setBuiltIns] = useState<{
+    codeTruth?: boolean;
+    codex?: boolean;
+  }>({});
+  const path = (suffix = "") =>
+    `/admin/plugins${suffix}?workspace=${encodeURIComponent(workspaceId)}`;
+  const load = useCallback(
+    async (resetDraft = false) => {
+      setLoading(true);
+      setError("");
+      try {
+        setData(await request<PluginPage>(endpoint));
+        if (resetDraft) setEditing(undefined);
+      } catch (cause) {
+        setData(undefined);
+        setError(errorMessage(cause));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [request, endpoint],
+  );
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (
+      view === "catalog" ||
+      (view === "installed" &&
+        pluginId !== "code-truth" &&
+        pluginId !== "codex")
+    )
+      void load();
+  }, [load, pluginId, view]);
+  useEffect(() => {
+    if (view !== "catalog") return;
+    let active = true;
+    void Promise.allSettled([
+      request<CodeTruthPage>(`${endpoint}/code-truth`),
+      request<CodingPage>(`${endpoint}/coding`),
+    ]).then(([truth, coding]) => {
+      if (!active) return;
+      setBuiltIns({
+        codeTruth:
+          truth.status === "fulfilled"
+            ? truth.value.settings.enabled
+            : undefined,
+        codex:
+          coding.status === "fulfilled"
+            ? coding.value.settings.enabled
+            : undefined,
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, [endpoint, request, view]);
+  useEffect(() => {
+    if (view !== "catalog" || params.get("add") !== "1") return;
+    setEditing("__new");
+    const next = new URLSearchParams(params);
+    next.delete("add");
+    setParams(next, { replace: true });
+  }, [params, setParams, view]);
   const save = async (entries: PluginSpec[]) => {
-    if (!data || busy) return;
+    if (!data || busy) return false;
     setBusy(true);
     setError("");
     setNotice("");
@@ -82,193 +176,391 @@ export function Plugins({
       setNotice(
         "Plugins saved. New runs use these settings; runs with older settings stop before their next step.",
       );
+      return true;
     } catch (cause) {
       setError(errorMessage(cause));
+      return false;
     } finally {
       setBusy(false);
     }
   };
-  const selected = data?.entries.find((entry) => entry.id === editing);
-  const filtered = data?.entries.filter((entry) =>
-    `${entry.id} ${entry.tools.join(" ")}`
-      .toLowerCase()
-      .includes(search.toLowerCase()),
-  );
+  const selected = data?.entries.find((entry) => entry.id === pluginId);
+  const editorEntry = data?.entries.find((entry) => entry.id === editing);
+  const marketEntry = market.find((entry) => entry.id === pluginId);
+  const heading =
+    view === "catalog"
+      ? "Plugins"
+      : view === "market"
+        ? (marketEntry?.name ?? "Extension not found")
+        : pluginId === "code-truth"
+          ? "Code Truth"
+          : pluginId === "codex"
+            ? "Codex"
+            : (selected?.id ??
+              (loading ? "Loading plugin…" : "Plugin not found"));
+
   return (
     <>
       <header className="page-heading">
-        <p className="eyebrow">REPODESK / WORKSPACE</p>
-        <h1>Plugins</h1>
-        <p className="muted">
-          Pi extensions add tools and hooks to your assistant. Manage their
-          settings for the selected workspace.
+        <p className="eyebrow">
+          {view === "catalog" ? (
+            "REPODESK / WORKSPACE"
+          ) : (
+            <Link className="plugin-back-link" to={path()}>
+              <ChevronLeft
+                size={18}
+                weight="Outline"
+                color="currentColor"
+                aria-hidden="true"
+              />
+              <span>Plugins</span>
+            </Link>
+          )}
         </p>
+        <h1>{heading}</h1>
+        {view === "catalog" && (
+          <p className="muted">
+            Manage installed extensions and explore the Pi ecosystem.
+          </p>
+        )}
       </header>
       <GitHubConnection request={request} workspaceId={workspaceId} />
-      <CodeTruth request={request} workspaceId={workspaceId} />
-      <Coding request={request} workspaceId={workspaceId} />
-      <section className="card" aria-label="Plugin management">
-        <div className="row plugin-toolbar">
-          <h2>Registered plugins</h2>
-          <IconButton
-            icon="add"
-            label="Add plugin"
-            type="button"
-            disabled={!data || loading || busy}
-            onClick={() => {
-              setEditing("__new");
-              setError("");
-              setNotice("");
-            }}
-          />
-          {error && editing === undefined && (
-            <button
-              type="button"
-              disabled={busy || loading}
-              onClick={() => void load()}
-            >
-              Reload saved plugins
-            </button>
-          )}
-        </div>
-        <p className="muted">
-          Register reviewed files already installed on the server. Only
-          deployment operators can change these settings.
-        </p>
-        {data && (
-          <p className="muted">
-            {data.source === "panel"
-              ? `Saved revision ${data.revision}`
-              : data.source === "manifest"
-                ? "Using this workspace’s manifest grants. Your first save stores independent settings for this workspace."
-                : "No plugins configured yet."}{" "}
-            · Changes apply without a worker restart.
-          </p>
-        )}
-        {loading && <p role="status">Loading plugins…</p>}
-        {error && editing === undefined && (
-          <p className="notice" role="alert">
-            {error}
-          </p>
-        )}
-        {notice && (
-          <p className="notice" role="status">
-            {notice}
-          </p>
-        )}
-        {data?.notice && (
-          <p className="notice" role="status">
-            {data.notice}
-          </p>
-        )}
-        {!!data?.entries.length && (
-          <label className="field">
-            <span>Search plugins or tools</span>
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </label>
-        )}
-        {data?.entries.length === 0 && (
-          <div className="plugin-empty">
-            <h3>Add your first Pi extension</h3>
-            <p>
-              Install the extension file on the server, then add its path,
-              declared tools here.
-            </p>
-            <p className="muted">
-              Markdown instruction skills are managed separately on the Skills
-              page.
-            </p>
-          </div>
-        )}
-        {!!data?.entries.length && filtered?.length === 0 && (
-          <p>No plugins match your search.</p>
-        )}
-        {data &&
-          filtered?.map((entry) => (
-            <article
-              className="plugin-item"
-              key={entry.id}
-              aria-label={`Plugin ${entry.id}`}
-            >
-              <div className="row">
-                <h3>{entry.id}</h3>
-                <span className={`pill${entry.enabled ? " good" : ""}`}>
-                  {entry.enabled ? "Enabled" : "Disabled"}
-                </span>
-                <span className="muted">Version {entry.version}</span>
+      {view === "catalog" && (
+        <>
+          <section
+            className="plugin-catalog-section"
+            aria-labelledby="installed-heading"
+          >
+            <div className="plugin-section-heading">
+              <div>
+                <h2 id="installed-heading">Installed</h2>
+                <p className="muted">
+                  Available in this deployment and registered for this
+                  workspace.
+                </p>
               </div>
-              <p className="mono plugin-path">{entry.path}</p>
-              <p
-                className={
-                  entry.fileStatus === "changed" ||
-                  entry.fileStatus === "unavailable"
-                    ? "notice"
-                    : "muted"
+              <IconButton
+                icon="add"
+                label="Add plugin"
+                showLabel
+                type="button"
+                disabled={!data || loading || busy}
+                onClick={() => {
+                  setEditing("__new");
+                  setError("");
+                  setNotice("");
+                }}
+              />
+            </div>
+            {loading && <p role="status">Loading plugins…</p>}
+            {error && editing === undefined && (
+              <p className="notice" role="alert">
+                {error}{" "}
+                <button
+                  type="button"
+                  disabled={busy || loading}
+                  onClick={() => void load(true)}
+                >
+                  Reload saved plugins
+                </button>
+              </p>
+            )}
+            {notice && (
+              <p className="notice" role="status">
+                {notice}
+              </p>
+            )}
+            {data?.notice && (
+              <p className="notice" role="status">
+                {data.notice}
+              </p>
+            )}
+            <div className="plugin-catalog-grid">
+              <PluginCard
+                to={path("/code-truth")}
+                name="Code Truth"
+                summary="Ask questions about indexed source code."
+                status={
+                  builtIns.codeTruth === undefined
+                    ? "Built in"
+                    : builtIns.codeTruth
+                      ? "Enabled"
+                      : "Disabled"
                 }
-              >
-                {fileLabels[entry.fileStatus]}
-              </p>
-              <p>
-                <strong>Tools:</strong>{" "}
-                {entry.tools.length ? entry.tools.join(", ") : "Hooks only"}
-              </p>
-              <div className="row">
-                <IconButton
-                  icon="edit"
-                  label={`Edit ${entry.id}`}
-                  type="button"
-                  disabled={busy || loading}
-                  onClick={() => {
-                    setEditing(entry.id);
-                    setError("");
-                    setNotice("");
-                  }}
+              />
+              <PluginCard
+                to={path("/codex")}
+                name="Codex"
+                summary="Implement approved coding tasks and draft PRs."
+                status={
+                  builtIns.codex === undefined
+                    ? "Built in"
+                    : builtIns.codex
+                      ? "Enabled"
+                      : "Disabled"
+                }
+              />
+              {data?.entries.map((entry) => (
+                <PluginCard
+                  key={entry.id}
+                  to={path(`/file/${encodeURIComponent(entry.id)}`)}
+                  name={entry.id}
+                  summary="Local Pi extension"
+                  status={entry.enabled ? "Enabled" : "Disabled"}
                 />
-                <IconButton
-                  icon={entry.enabled ? "pause" : "play"}
-                  label={`${entry.enabled ? "Disable" : "Enable"} ${entry.id}`}
-                  type="button"
-                  disabled={busy || loading}
-                  onClick={() =>
-                    void save(
-                      data.entries.map((item) => ({
-                        ...spec(item),
-                        enabled:
-                          item.id === entry.id ? !item.enabled : item.enabled,
-                      })),
-                    )
-                  }
-                />
-                <IconButton
-                  icon="delete"
-                  label={`Remove ${entry.id}`}
-                  type="button"
-                  className="danger"
-                  disabled={busy || loading}
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        `Remove ${entry.id} from the registry? The installed file stays on the server. Active runs using the previous settings will stop.`,
-                      )
-                    )
-                      void save(
-                        data.entries
-                          .filter((item) => item.id !== entry.id)
-                          .map(spec),
-                      );
-                  }}
-                />
+              ))}
+            </div>
+          </section>
+          <section
+            className="plugin-catalog-section"
+            aria-labelledby="market-heading"
+          >
+            <div className="plugin-section-heading">
+              <div>
+                <h2 id="market-heading">Markets</h2>
+                <p className="muted">
+                  Popular extensions from Pi’s package catalog. Review each
+                  package before using it here.
+                </p>
               </div>
-            </article>
-          ))}
-      </section>
+              <a
+                href="https://pi.dev/packages?type=extension"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Browse Pi catalog ↗
+              </a>
+            </div>
+            <div className="plugin-catalog-grid">
+              {market.map((entry) => (
+                <PluginCard
+                  key={entry.id}
+                  to={path(`/market/${entry.id}`)}
+                  name={entry.name}
+                  summary={entry.summary}
+                  status="Pi package"
+                />
+              ))}
+            </div>
+            <p className="plugin-catalog-source muted">
+              Selection based on the{" "}
+              <a
+                href="https://pi.dev/packages?type=extension"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Pi package catalog
+              </a>
+              , 29 September 2026. Catalog popularity does not establish
+              RepoDesk compatibility.
+            </p>
+          </section>
+        </>
+      )}
+      {view === "installed" && pluginId === "code-truth" && (
+        <CodeTruth request={request} workspaceId={workspaceId} />
+      )}
+      {view === "installed" && pluginId === "codex" && (
+        <Coding request={request} workspaceId={workspaceId} />
+      )}
+      {view === "installed" &&
+        pluginId !== "code-truth" &&
+        pluginId !== "codex" && (
+          <>
+            {loading && <p role="status">Loading plugin…</p>}
+            {error && editing === undefined && (
+              <p className="notice" role="alert">
+                {error}{" "}
+                <button
+                  type="button"
+                  disabled={busy || loading}
+                  onClick={() => void load(true)}
+                >
+                  Reload saved plugins
+                </button>
+              </p>
+            )}
+            {notice && (
+              <p className="notice" role="status">
+                {notice}
+              </p>
+            )}
+            {data?.notice && (
+              <p className="notice" role="status">
+                {data.notice}
+              </p>
+            )}
+            {!loading && data && !selected && (
+              <section className="card">
+                <p>This plugin is not registered in the selected workspace.</p>
+                <Link to={path()}>Back to Plugins</Link>
+              </section>
+            )}
+            {selected && data && (
+              <>
+                <section className="card" aria-label={`Plugin ${selected.id}`}>
+                  <div className="row">
+                    <span className={`pill${selected.enabled ? " good" : ""}`}>
+                      {selected.enabled ? "Enabled" : "Disabled"}
+                    </span>
+                    <span className="muted">Version {selected.version}</span>
+                    <span className="muted">
+                      Saved revision {data.revision}
+                    </span>
+                  </div>
+                  <p className="muted">Registered local Pi extension</p>
+                  <dl className="plugin-details">
+                    <div>
+                      <dt>File</dt>
+                      <dd className="mono">{selected.path}</dd>
+                    </div>
+                    <div>
+                      <dt>File status</dt>
+                      <dd>{fileLabels[selected.fileStatus]}</dd>
+                    </div>
+                    <div>
+                      <dt>Tools</dt>
+                      <dd>
+                        {selected.tools.length
+                          ? selected.tools.join(", ")
+                          : "Hooks only"}
+                      </dd>
+                    </div>
+                  </dl>
+                  <div className="row">
+                    <IconButton
+                      icon="edit"
+                      label={`Edit ${selected.id}`}
+                      showLabel
+                      disabled={busy || loading}
+                      onClick={() => {
+                        setEditing(selected.id);
+                        setError("");
+                        setNotice("");
+                      }}
+                    />
+                    <button
+                      type="button"
+                      disabled={busy || loading}
+                      onClick={() =>
+                        void save(
+                          data.entries.map((item) => ({
+                            ...spec(item),
+                            enabled:
+                              item.id === selected.id
+                                ? !item.enabled
+                                : item.enabled,
+                          })),
+                        )
+                      }
+                    >
+                      {selected.enabled ? "Disable" : "Enable"} {selected.id}
+                    </button>
+                    <button
+                      type="button"
+                      className="danger"
+                      disabled={busy || loading}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Remove ${selected.id} from the registry? The installed file stays on the server. Active runs using the previous settings will stop.`,
+                          )
+                        ) {
+                          void save(
+                            data.entries
+                              .filter((item) => item.id !== selected.id)
+                              .map(spec),
+                          ).then((saved) => {
+                            if (saved) navigate(path());
+                          });
+                        }
+                      }}
+                    >
+                      Remove {selected.id}
+                    </button>
+                  </div>
+                </section>
+                <section
+                  className="card"
+                  aria-label="Pi extension compatibility"
+                >
+                  <h2>Runtime compatibility</h2>
+                  <p>
+                    RepoDesk’s headless worker supports registered tools and
+                    selected lifecycle hooks. Terminal UI, commands and provider
+                    changes are unavailable.
+                  </p>
+                  <p className="muted">
+                    File verification checks readability and content only.
+                    Runtime failures appear in Runs and Runtime logs. Install
+                    only reviewed, read-only extensions.
+                  </p>
+                </section>
+                {!!data.audit.length && (
+                  <details>
+                    <summary>Recent plugin changes</summary>
+                    <ul>
+                      {data.audit.map((entry) => (
+                        <li key={entry.id}>
+                          Plugins updated ·{" "}
+                          {new Date(entry.at).toLocaleString()}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </>
+            )}
+          </>
+        )}
+      {view === "market" &&
+        (marketEntry ? (
+          <section className="card plugin-market-detail">
+            <span className="pill">External Pi package</span>
+            <p>{marketEntry.description}</p>
+            <dl className="plugin-details">
+              <div>
+                <dt>Publisher</dt>
+                <dd>{marketEntry.author}</dd>
+              </div>
+              <div>
+                <dt>Source</dt>
+                <dd>Pi package catalog</dd>
+              </div>
+              <div>
+                <dt>RepoDesk status</dt>
+                <dd>Not installed or compatibility checked</dd>
+              </div>
+            </dl>
+            <div className="row">
+              <a
+                href={marketEntry.url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                View package on Pi ↗
+              </a>
+              <Link to={`${path()}&add=1`}>Register a reviewed local file</Link>
+            </div>
+            <p className="muted">
+              RepoDesk does not install Pi packages from this page. To use a
+              compatible extension, review its code, install its entry file on
+              the API and worker, then register the local file in this
+              workspace. The worker supports only RepoDesk’s documented headless
+              extension subset.
+            </p>
+          </section>
+        ) : (
+          <section className="card">
+            <p>This market entry is unavailable.</p>
+            <Link to={path()}>Back to Plugins</Link>
+          </section>
+        ))}
       {data && editing !== undefined && (
         <Modal
-          title={selected ? `Edit ${selected.id}` : "Register a Pi extension"}
+          title={
+            editorEntry ? `Edit ${editorEntry.id}` : "Register a Pi extension"
+          }
           busy={busy}
           onClose={() => {
             setEditing(undefined);
@@ -278,11 +570,11 @@ export function Plugins({
         >
           {error && (
             <p className="notice" role="alert">
-              {error}
+              {error}{" "}
               <button
                 type="button"
                 disabled={busy || loading}
-                onClick={() => void load()}
+                onClick={() => void load(true)}
               >
                 Reload saved plugins
               </button>
@@ -290,14 +582,14 @@ export function Plugins({
           )}
           <PluginEditor
             key={`${editing}:${data.revision}`}
-            initial={selected ? spec(selected) : undefined}
+            initial={editorEntry ? spec(editorEntry) : undefined}
             workspaceId={workspaceId}
             busy={busy}
             submit={(entry) =>
               void save(
-                selected
+                editorEntry
                   ? data.entries.map((item) =>
-                      item.id === selected.id ? entry : spec(item),
+                      item.id === editorEntry.id ? entry : spec(item),
                     )
                   : [...data.entries.map(spec), entry],
               )
@@ -305,37 +597,37 @@ export function Plugins({
           />
         </Modal>
       )}
-      <section className="card" aria-label="Pi extension compatibility">
-        <h2>Pi extension compatibility</h2>
-        <p>
-          Plugins use Pi’s extension format. The headless worker supports
-          registered tools, prompt and context hooks, tool-call vetoes, and
-          lifecycle notifications. Terminal UI, commands and provider changes
-          are unavailable.
-        </p>
-        <p className="muted">
-          File verification checks readability and content only; it does not
-          execute the plugin or prove runtime compatibility. Runtime failures
-          appear in Runs and Runtime logs.
-        </p>
-        <p className="muted">
-          Install only reviewed, read-only extensions. They run with worker
-          permissions. Uploads and package installation are not available here.
-        </p>
-      </section>
-      {!!data?.audit.length && (
-        <details>
-          <summary>Recent plugin changes</summary>
-          <ul>
-            {data.audit.map((entry) => (
-              <li key={entry.id}>
-                Plugins updated · {new Date(entry.at).toLocaleString()}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
     </>
+  );
+}
+
+function PluginCard({
+  to,
+  name,
+  summary,
+  status,
+}: {
+  to: string;
+  name: string;
+  summary: string;
+  status: string;
+}) {
+  return (
+    <Link className="plugin-catalog-card" to={to} aria-label={`Open ${name}`}>
+      <div className="plugin-card-top">
+        <span className="plugin-card-icon" aria-hidden="true">
+          {name.slice(0, 1).toUpperCase()}
+        </span>
+        <span className={`pill${status === "Enabled" ? " good" : ""}`}>
+          {status}
+        </span>
+      </div>
+      <h3>{name}</h3>
+      <p>{summary}</p>
+      <span className="plugin-card-arrow" aria-hidden="true">
+        →
+      </span>
+    </Link>
   );
 }
 

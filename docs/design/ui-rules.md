@@ -18,6 +18,59 @@ them.
 
 ## Recorded preferences
 
+### Plugin cards are a compact catalog with separate details
+
+- **Preference:** Show an Installed section with Code Truth, Codex and registered
+  local extensions, followed by a Markets section featuring popular Pi packages.
+  Keep each card to a name, short purpose and status. Open a dedicated detail
+  page from the whole card for settings, actions, file information and source
+  links.
+- **Scope:** Workspace Plugins page and its plugin detail routes. Market entries
+  are discovery links; they do not imply installation or runtime compatibility.
+- **Source:** 2026-09-29 — user requested Installed cards for Code Truth and
+  Codex, a market featuring popular Pi extensions, and simple cards that open
+  plugin detail pages.
+- **Exceptions:** Add plugin remains a labeled action in the Installed heading.
+
+### Codex details show configuration, repositories and tasks separately
+
+- **Preference:** Divide the Codex detail page into three cards: a compact
+  configuration summary with an Edit action that opens a configuration dialog,
+  a repository list with Add repository in its heading, and coding tasks.
+- **Scope:** Codex plugin detail page on desktop and mobile.
+- **Source:** 2026-09-29 — user requested three parts, a configuration summary and
+  edit dialog in the first card, and Add repository in the repository list card.
+- **Exceptions:** Repository editing remains in its own dialog; task controls
+  remain with their tasks.
+
+### Coding repository forms group fields and identify maintainers
+
+- **Preference:** Keep repository fields evenly spaced, with help text beside
+  the relevant control and a distinct maintainer choice list. Show each available
+  Telegram username with its numeric ID so an operator can identify the person
+  before granting coding access. Keep the action row separated from the list.
+- **Scope:** Add and edit coding repository dialogs in the Codex plugin.
+- **Source:** 2026-09-29 — user showed the Add coding repository dialog, asked to
+  fix its UI issues, and requested Telegram usernames in the user list.
+- **Exceptions:** When no username is known, show the numeric Telegram ID alone.
+
+### Plugin detail back links use SVG icons
+
+- **Preference:** Pair the Plugins back label with an SVG back icon.
+- **Scope:** Back links on plugin detail pages.
+- **Source:** 2026-09-29 — user requested an SVG icon for the Back to Plugins
+  control.
+- **Exceptions:** None recorded.
+
+### Selected checkmarks use SVG icons
+
+- **Preference:** Render checkmarks used for selected or completed states as SVG
+  icons instead of text symbols.
+- **Scope:** Selected-state and completion checkmarks in the web admin and setup UI.
+- **Source:** 2026-09-28 — user showed the selected workspace item and requested
+  an SVG icon in place of that symbol everywhere it appears.
+- **Exceptions:** None recorded.
+
 ### Admin UI follows TelegramUI's visual language
 
 - **Preference:** Use TelegramUI as a design reference for RepoDesk's own UI:
@@ -140,11 +193,13 @@ them.
 - **Preference:** Show Telegram bot and GitHub connection cards on the workspace
   Overview, with saved status and safe identity details. Manage bot opens a dialog
   to replace the write-only Telegram token without leaving Overview; Manage GitHub
-  opens the GitHub management dialog. Keep the cards usable on narrow screens.
+  opens the GitHub management dialog without changing the route. Keep the cards
+  usable on narrow screens.
 - **Scope:** Deployment administrator's workspace Overview.
 - **Source:** 2026-09-27 — user requested bot and GitHub cards on the Overview
   after completing setup. 2026-09-28 — user requested editing the Telegram token
-  in a dialog from Manage bot instead of navigating to Setup.
+  in a dialog from Manage bot instead of navigating to Setup. 2026-09-28 — user
+  requested that Manage GitHub open without changing the route.
 - **Exceptions:** Connection details remain limited to the workspace's deployment
   administrator; other members keep their existing Overview.
 
@@ -160,33 +215,47 @@ them.
   workflow metadata; private conversation content still requires an eligible
   linked Telegram identity.
 
+### Run summaries open message details
+
+- **Preference:** Keep each run item to a compact two or three line summary.
+  Open a detail dialog from the whole item, with the run's messages presented
+  as a readable ordered list and technical metadata below them.
+- **Scope:** Runs & delivery in the workspace admin panel, on desktop and mobile.
+- **Source:** 2026-09-28 — user showed a tall run card and asked for compact
+  items that open a detailed message list when clicked.
+- **Exceptions:** Unlinked deployment administrators can open run and delivery
+  metadata, but conversation messages remain limited to linked, eligible viewers.
+
 ### Team configuration uses one overview editor
 
 - **Preference:** Show saved workspace configuration in the Overview team card.
-  Place one Edit action on that card and edit all changeable settings together in
-  one dialog with one save action. Keep fixed policy values visible and read-only.
+  Present the labels and values in a compact responsive grid; keep explanations
+  in the editor. Place one Edit action on the card and edit all changeable settings
+  together in one dialog with one save action. Keep fixed policy values visible
+  and read-only.
 - **Scope:** Workspace Overview configuration for authorized administrators.
 - **Source:** 2026-09-28 — user showed the separate Configuration list and asked
   to show its values in the Overview team card, with one edit button and one form.
+  The user then asked to make that card more compact, suggesting a grid layout.
 - **Exceptions:** Model capacity remains on Workspace settings because it describes
   deployment model limits rather than editable team configuration.
 
 ### Connected GitHub repositories stay compact and directly accessible
 
-- **Preference:** Show a compact GitHub connection summary in Plugins. Open
-  connection details in a Manage GitHub modal, including when entered from the
-  Overview card. Show connected repositories there as a wrapping inline list of
+- **Preference:** Open connection details from the Overview card in a Manage
+  GitHub modal on Overview. Omit a second GitHub summary card from Plugins. Show
+  connected repositories in the modal as a wrapping inline list of
   compact items, each with an external link to its GitHub repository at the end.
   Show at most five by default, followed by an "N more" tag that reveals the rest
   and can collapse the list again. Keep connection-change and disconnect buttons
   out of the connected GitHub details.
-- **Scope:** Workspace GitHub App details in Plugins and the Manage GitHub link
-  on Overview.
+- **Scope:** Workspace GitHub App details in the modal and its Overview entry.
 - **Source:** 2026-09-27 — user requested an inline flex repository list with
   external links and removal of the two connection buttons shown below it.
   2026-09-28 — user requested a five-repository limit and a remaining-count tag.
   2026-09-28 — user requested moving the GitHub details into a modal opened by
-  Manage GitHub.
+  Manage GitHub. The user then asked to remove the GitHub summary card from
+  Plugins.
 - **Exceptions:** An unconnected workspace still shows Connect GitHub; failed
   loads may show Reload GitHub connection.
 
@@ -232,6 +301,15 @@ them.
 - **Source:** 2026-09-21 — user requested reorganizing the skill card, illustrated
   with the existing crowded action and rollback rows. The grouping above is the
   implementation interpretation of that request.
+- **Exceptions:** None recorded.
+
+### Skill creation has a labeled header action
+
+- **Preference:** Show the plus icon with a visible “Add skill” label in the
+  Agent skills page heading so the creation action is clear at a glance.
+- **Scope:** The Agent skills page header.
+- **Source:** 2026-09-28 — user asked to change the Add skill control to an icon
+  and label button.
 - **Exceptions:** None recorded.
 
 ### Group cards show names alongside IDs
@@ -365,6 +443,17 @@ them.
   page's raw JSON output.
 - **Exceptions:** None recorded.
 
+### New workspaces use the setup page
+
+- **Preference:** Open the existing guided setup page from New workspace in the
+  workspace selector. Start with a blank workspace form, then continue through
+  Telegram and GitHub setup for the created workspace.
+- **Scope:** Operator creation of additional workspaces in the admin panel.
+- **Source:** 2026-09-29 — user requested reusing the setup page when adding a new
+  workspace.
+- **Exceptions:** The first workspace still starts from initial setup after the
+  administrator account is created.
+
 ### Add and create flows use modals
 
 - **Preference:** Open a modal from an explicit Add/Create action instead of
@@ -374,14 +463,14 @@ them.
   focus return, mobile scrolling, and validation/errors inside the dialog.
   Cancel discards the draft; failed saves keep it open; pending saves block
   dismissal and duplicate submission.
-- **Scope:** Add/create management flows across the admin app: workspaces,
-  members, workflows, skills/imports, instructions, runs, panel accounts,
+- **Scope:** Add/create management flows across the admin app: members,
+  workflows, skills/imports, instructions, runs, panel accounts,
   plugins, repositories/networks and GitHub Apps. Related repository, plugin,
   member, workflow, skill and instruction editors also use these dialogs.
 - **Source:** 2026-09-20 — user requested preferring modals for Add actions
   across the app instead of inline forms.
 - **Exceptions:** Sign-in/bootstrap, policy forms,
-  the initial workspace form in the setup wizard, approval decisions and
+  workspace creation in the setup wizard, approval decisions and
   recovery controls stay on their pages. Field editing
   within a modal may remain inline. Applying repository/network changes edits
   a draft; the existing Save Code Truth step persists it. GitHub confirmation
@@ -542,7 +631,15 @@ Use this format for each preference:
   configuration; an environment key may serve as an optional fallback.
 - **Source:** 2026-09-22 — user requested API key configuration in the web panel,
   superseding the earlier environment-only request for this credential.
-- **Exceptions:** GitHub Actions continues using repository secrets.
+  2026-09-29 — user requested local Codex execution only.
+- **Exceptions:** None recorded.
+
+### Codex authentication is selected per workspace
+
+- **Preference:** Show custom provider API key and ChatGPT device-code sign-in as peer choices in the Codex configuration dialog. Show the device link, one-time code, connection status and disconnect action there.
+- **Scope:** Local Podman Codex credentials for each workspace. Existing workspaces retain the custom provider method until changed.
+- **Source:** 2026-09-29 — user requested device-code login at the same setting level as custom provider auth, configured through the UI for each workspace.
+- **Exceptions:** Device-code tasks require trusted private repositories; custom provider credentials retain their deployment fallback.
 
 ### First setup asks only for account credentials
 

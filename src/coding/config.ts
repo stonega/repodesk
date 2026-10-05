@@ -25,11 +25,6 @@ export const codingRepositorySchema = z
   .object({
     repositoryId: z.number().int().positive(),
     baseBranch: branchName,
-    workflowFile: z
-      .string()
-      .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*\.ya?ml$/)
-      .max(100)
-      .default("repodesk-codex.yml"),
     setupCommand: z.string().trim().max(2000).optional(),
     checkCommand: z.string().trim().max(2000).optional(),
     maintainers: z
@@ -41,7 +36,8 @@ export const codingRepositorySchema = z
 export const codingSettingsSchema = z
   .object({
     enabled: z.boolean(),
-    backend: z.enum(["github-actions", "podman"]).optional(),
+    backend: z.literal("podman"),
+    authMode: z.enum(["provider_key", "device_code"]).default("provider_key"),
     repositories: z.array(codingRepositorySchema).max(12),
   })
   .strict()
@@ -52,10 +48,7 @@ export const codingSettingsSchema = z
     "Select each repository only once",
   )
   .refine(
-    (s) =>
-      !s.enabled ||
-      s.backend !== "podman" ||
-      s.repositories.every((r) => r.checkCommand?.trim()),
+    (s) => !s.enabled || s.repositories.every((r) => r.checkCommand?.trim()),
     "Local repositories require a check command",
   );
 export const codingSaveSchema = z
@@ -71,7 +64,12 @@ export interface CodingConfig {
   revision: number;
   settings: CodingSettings;
 }
-export const emptyCoding: CodingSettings = { enabled: false, repositories: [] };
+export const emptyCoding: CodingSettings = {
+  enabled: false,
+  backend: "podman",
+  authMode: "provider_key",
+  repositories: [],
+};
 export const codingInput = z
   .object({
     repositoryId: z.number().int().positive(),
@@ -85,8 +83,8 @@ export const codingPayload = codingInput.extend({
   githubRevision: z.number().int().nonnegative(),
   configRevision: z.number().int().positive(),
   baseBranch: branchName,
-  workflowFile: codingRepositorySchema.shape.workflowFile,
-  backend: z.enum(["github-actions", "podman"]).optional(),
+  backend: z.literal("podman"),
+  authMode: z.enum(["provider_key", "device_code"]).default("provider_key"),
   setupCommand: codingRepositorySchema.shape.setupCommand,
   checkCommand: codingRepositorySchema.shape.checkCommand,
 });
@@ -122,14 +120,19 @@ export interface CodingTask {
   nextPollAt?: string;
   lease?: string;
   cancelRequested?: boolean;
-  cancellationSent?: boolean;
 }
 export interface CodingPage {
   providerApiKeyConfigured: boolean;
+  deviceAuth?: {
+    state: "disconnected" | "pending" | "connected" | "failed" | "unavailable";
+    verificationUrl?: string;
+    userCode?: string;
+  };
+  legacyActionsConfiguration: boolean;
   revision: number;
   settings: CodingSettings;
-  repositories: { id: number; full_name: string }[];
-  members: { id: string; active: boolean }[];
+  repositories: { id: number; full_name: string; private?: boolean }[];
+  members: { id: string; active: boolean; username?: string }[];
   tasks: CodingTask[];
 }
 export const codingTerminal = (state: CodingState) =>

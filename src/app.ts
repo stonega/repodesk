@@ -5,6 +5,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { ZodError } from "zod";
 import { adminRoutes } from "./admin/routes.ts";
 import { PluginService } from "./agent/plugin-service.ts";
+import type { LocalDeviceAuth } from "./coding/local/protocol.ts";
 import type { Store } from "./db/repositories.ts";
 import { Fault, requireThat } from "./domain.ts";
 import { GitHubService } from "./github/service.ts";
@@ -19,6 +20,7 @@ export function createApp(
   plugins = new PluginService(store),
   github = new GitHubService(store, "", origin),
   encryptionKey?: string,
+  deviceAuth?: LocalDeviceAuth,
 ) {
   const app = new Hono();
   const ingress = new Ingress(store, setup);
@@ -79,7 +81,15 @@ export function createApp(
   });
   app.route(
     "/",
-    adminRoutes(store, setup, origin, plugins, github, encryptionKey),
+    adminRoutes(
+      store,
+      setup,
+      origin,
+      plugins,
+      github,
+      encryptionKey,
+      deviceAuth,
+    ),
   );
   app.get("/", async (c) => {
     const row = (

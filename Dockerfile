@@ -28,6 +28,8 @@ CMD ["node", "dist/server.js"]
 FROM runtime AS codex-supervisor
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends podman \
+    && npm install -g @openai/codex@0.155.1 \
+    && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
 HEALTHCHECK --interval=30s --timeout=5s \
   CMD node -e "fetch('http://127.0.0.1:3020/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
