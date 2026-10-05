@@ -64,13 +64,14 @@ export function IconButton({
   ...props
 }: IconButtonProps) {
   const Icon = busy ? Refresh : icons[icon];
+  const actionLabel = icon === "edit" ? "Edit" : icon === "add" ? "New" : label;
   return (
     <button
       {...props}
       type={type}
       className={`icon-button${showLabel ? " with-label" : ""} ${className}`}
       aria-label={label}
-      title={busy ? `${label} — Working…` : label}
+      title={busy ? `${actionLabel} — Working…` : actionLabel}
       aria-busy={busy}
       disabled={disabled || busy}
     >
@@ -82,7 +83,7 @@ export function IconButton({
         focusable="false"
         className={busy ? "icon-spinning" : undefined}
       />
-      {showLabel && <span>{label}</span>}
+      {showLabel && <span>{actionLabel}</span>}
     </button>
   );
 }

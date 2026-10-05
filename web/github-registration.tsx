@@ -48,8 +48,12 @@ export function GitHubRegistration({
   return (
     <>
       {source === "setup" ? (
-        <button type="button" onClick={openCreation}>
-          Create GitHub App
+        <button
+          type="button"
+          aria-label="Create GitHub App"
+          onClick={openCreation}
+        >
+          New
         </button>
       ) : (
         <IconButton

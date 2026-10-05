@@ -1853,7 +1853,14 @@ test.describe
       ]) {
         await page.goto(`/admin/${path}`);
         const trigger = page.getByRole("button", { name: label, exact: true });
-        if (path === "members") await expect(trigger).toHaveText("Add member");
+        if (
+          path &&
+          ["members", "skills", "plugins", "plugins/code-truth"].includes(
+            path,
+          ) &&
+          label !== "Import skill"
+        )
+          await expect(trigger).toHaveText("New");
         await trigger.click();
         const dialog = page.getByRole("dialog", { name: title, exact: true });
         await expect(dialog).toBeVisible();

@@ -599,7 +599,9 @@ function NetworkEditor({
           />
         </label>
         <ModalActions>
-          <button type="submit">Add network</button>
+          <button type="submit" aria-label="Add network">
+            New
+          </button>
         </ModalActions>
       </form>
     </Modal>

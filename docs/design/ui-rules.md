@@ -18,6 +18,19 @@ them.
 
 ## Recorded preferences
 
+### Edit and add buttons use short labels
+
+- **Preference:** Use exactly “Edit” for edit buttons and “New” for add/create
+  entry buttons, including hover titles. Let the surrounding section or row
+  identify the object instead of repeating it in the visible label.
+- **Scope:** Admin and setup surfaces, including plugin configuration,
+  repositories, members, skills, workflows and domain configuration.
+- **Source:** 2026-10-05 — user requested “Edit” or “New” for Edit/Add buttons
+  throughout the app, instead of labels such as “Edit Codex configuration”.
+- **Exceptions:** Screen-reader names may identify the target to distinguish
+  repeated controls. Dialog headings stay descriptive; save, approval, sign-in
+  and other consequential submit actions retain their specific labels.
+
 ### Plugin cards are a compact catalog with separate details
 
 - **Preference:** Show an Installed section with Code Truth, Codex and registered
@@ -30,13 +43,13 @@ them.
 - **Source:** 2026-09-29 — user requested Installed cards for Code Truth and
   Codex, a market featuring popular Pi extensions, and simple cards that open
   plugin detail pages.
-- **Exceptions:** Add plugin remains a labeled action in the Installed heading.
+- **Exceptions:** New remains a labeled action in the Installed heading.
 
 ### Codex details show configuration, repositories and tasks separately
 
 - **Preference:** Divide the Codex detail page into three cards: a compact
   configuration summary with an Edit action that opens a configuration dialog,
-  a repository list with Add repository in its heading, and coding tasks.
+  a repository list with New in its heading, and coding tasks.
 - **Scope:** Codex plugin detail page on desktop and mobile.
 - **Source:** 2026-09-29 — user requested three parts, a configuration summary and
   edit dialog in the first card, and Add repository in the repository list card.

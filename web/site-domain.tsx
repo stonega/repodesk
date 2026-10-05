@@ -72,6 +72,7 @@ export function SiteDomain({ request }: { request: Request }) {
           <h2>Admin panel address</h2>
           <button
             type="button"
+            aria-label={site?.domain ? "Edit domain" : "Add custom domain"}
             disabled={!site}
             onClick={() => {
               if (!site) return;
@@ -80,7 +81,7 @@ export function SiteDomain({ request }: { request: Request }) {
               setEditing(true);
             }}
           >
-            {site?.domain ? "Edit domain" : "Add custom domain"}
+            {site?.domain ? "Edit" : "New"}
           </button>
         </div>
         <p>
