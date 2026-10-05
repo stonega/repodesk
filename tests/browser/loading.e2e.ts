@@ -77,7 +77,7 @@ for (const width of [1280, 390]) {
       await expect(card.locator(".skeleton").first()).toBeVisible();
     }
     await expect(
-      config.getByText("Local Podman", { exact: true }),
+      config.getByText("Local containers", { exact: true }),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Edit Codex configuration" }),

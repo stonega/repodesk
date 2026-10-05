@@ -1442,7 +1442,7 @@ test.describe
       await expect(tasks).toBeVisible();
       await expect(configuration.getByText("Disabled")).toBeVisible();
       await expect(
-        configuration.getByText("Local Podman", { exact: true }),
+        configuration.getByText("Local containers", { exact: true }),
       ).toBeVisible();
       await expect(page.locator(".plugin-back-link svg")).toBeVisible();
       await repositories
