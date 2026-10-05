@@ -424,6 +424,7 @@ async function exportPatch() {
     await file.close();
   }
 }
+// Podman supplies its own engine deadline; its fallback must allow the maximum setting.
 const deadline = setTimeout(
   () => process.exit(124),
   z.coerce
@@ -431,7 +432,7 @@ const deadline = setTimeout(
     .int()
     .min(1)
     .max(7200)
-    .default(2700)
+    .default(7200)
     .parse(process.env.CODEX_JOB_TIMEOUT_SECONDS) * 1000,
 );
 deadline.unref();
