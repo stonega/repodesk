@@ -43,3 +43,18 @@ A rerun uses the original release's workflow and cannot incorporate this code
 change. Publish the correction in a new patch release to validate the corrected
 GitHub-to-containerd deployment path. Keep runtime secret values out of incident
 logs, and preserve deployment backups and encryption keys across subsequent releases.
+
+## Live result
+
+Published the fix as `v0.1.3`, commit `c11d8c2`.
+[The corrected release workflow](https://github.com/stonega/deepx-telegram-bot/actions/runs/37263195221)
+passed all verification and deployed successfully to the VPS containerd store.
+The app, worker and PostgreSQL containers are healthy. A separate host check
+confirmed `/readyz` returned `ready` and `/setup` returned HTTP 200.
+The successful deployment marker is `37263195221-1`; the imported image ID is
+`sha256:9ec785ee72af45238e8cd7e50c8648fee8fc8e05c0638986fb0da83ed2df81e9`.
+
+Runtime configuration uses polling and loopback-only admin access through an SSH
+tunnel. Administrator creation, bot/model configuration and activation remain
+operator steps. No live Telegram message, GitHub account connection or paid model
+test was performed during recovery.
