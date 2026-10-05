@@ -28,6 +28,8 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Roadmap](implementation/roadmap.md) | Dependency-ordered milestones and release gates |
 | [GitHub App connections](implementation/github-app.md) | Register the App, connect workspace repositories, permissions and credential lifecycle |
 | [Codex coding tasks](implementation/codex-coding.md) | Maintainer-only issue-to-PR tasks, repository settings and local runner setup |
+| [Continuous Codex collaboration](design/codex-collaboration.md) | Accepted direction: Pi requirements intake, Codex decisions, scoped direct execution and ongoing Telegram tasks; not implemented |
+| [Codex collaboration implementation plan](implementation/codex-collaboration-plan.md) | Protocol proof, durable tasks, original-requirement handoff, Telegram input, repair, same-PR continuation and release gates |
 | [Local Codex runner](implementation/codex-podman.md) | Podman task isolation, custom provider environment and local publication |
 | [Local Code Truth](implementation/code-truth.md) | Predefined source-query extension, local MCP service and repository configuration |
 | [Setup](implementation/setup.md) | Local commands, validation, and configuration |

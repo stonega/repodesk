@@ -270,3 +270,16 @@ Workspace provider keys are encrypted in the database and sent to the supervisor
 behind a task-scoped proxy; an optional environment key provides a fallback;
 the worker rechecks authority before issuing publication. See
 [Codex task architecture and limits](../implementation/codex-coding.md).
+
+### Accepted direction: continuous Codex collaboration
+
+The [continuous development design](codex-collaboration.md), accepted 2026-10-05,
+is not implemented. For this workflow, Pi receives and relays requirements;
+Codex owns repository investigation, technical decisions, implementation and
+verification. Application services retain task identity, actor-bound authorization,
+ordered inputs, budgets, cancellation and publication authority. Clear authenticated
+execution instructions may authorize work under a configured repository policy
+without a duplicate approval click. Clarifications, check repairs and subsequent
+changes continue the same durable task/PR; session reuse must not be the only source
+of continuity. Existing issue-to-PR approvals and runner behavior above remain the
+current implementation until the corresponding delivery slices are completed.

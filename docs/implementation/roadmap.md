@@ -1,6 +1,6 @@
 # Implementation roadmap
 
-Status: updated 2026-09-27. The local P0 implementation is present and checked. A live pilot
+Status: updated 2026-10-05. The local P0 implementation is present and checked. A live pilot
 has not been deployed or validated. See [implementation evidence](implementation-status.md).
 This table records the original team-assistant foundation. The current product focus
 is the [GitHub journey](../design/github-workflows.md).
@@ -35,6 +35,23 @@ limits before raising budgets or inviting large groups.
    complete the [release runbook](release-runbook.md) recovery drills.
 4. Record model/provider behavior, retention policy, data-handling terms and the
    responsible operator. Invite pilot teams only after these gates pass.
+
+## Next coding delivery
+
+The [continuous Codex collaboration design](../design/codex-collaboration.md) is an
+accepted direction as of 2026-10-05, not a completed milestone. Its dependency-ordered
+slices are durable task/input/grant records and repository policy; original-requirement
+handoff and Codex investigation; ordered follow-ups and durable question/answer routing;
+bounded verification/repair and publication; and continuation on the same task/PR.
+Pi handles requirements intake and relay, while Codex makes technical decisions.
+The existing maintainer approval path remains current until these slices are implemented
+and verified. Design and local implementation can proceed before the pilot; enabling
+the new workflow for users still requires its deterministic and live release gates.
+
+The [implementation plan](codex-collaboration-plan.md) specifies M0–M6, code entry
+points, additive storage, runner compatibility proof and acceptance evidence. Start
+with the pinned-CLI protocol proof and durable task/policy foundation before changing
+the production execution path.
 
 ## After the pilot
 

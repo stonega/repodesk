@@ -184,3 +184,9 @@ in an isolated local Podman container, followed by
 project checks and separate draft PR publication. Local execution and its
 custom-provider configuration and workspace API keys are described in [the Podman guide](../implementation/codex-podman.md).
 See [configuration, permissions and recovery](../implementation/codex-coding.md).
+
+The [accepted continuous collaboration direction](codex-collaboration.md) delegates
+requirements intake and relay to Pi, and technical investigation, decisions,
+implementation and verification to Codex. It proposes durable task inputs, questions,
+scope-bound direct execution and follow-ups on the same PR. These are future
+capabilities; the three tools and approval contract above remain the current runtime.

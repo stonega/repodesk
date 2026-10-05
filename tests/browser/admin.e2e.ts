@@ -21,6 +21,16 @@ async function chooseWorkspace(page: Page, id: string) {
 }
 test.describe
   .serial("web administration", () => {
+    test.beforeEach(async () => {
+      const fixture = JSON.parse(await readFile(browserDbPath, "utf8"));
+      const pool = database(fixture.url);
+      try {
+        // Independent scenarios must not share accumulated login attempts.
+        await pool.query("DELETE FROM auth_limits");
+      } finally {
+        await pool.end();
+      }
+    });
     test("first visit follows setup into panel model settings and activation", async ({
       page,
     }) => {
@@ -2325,6 +2335,10 @@ test.describe
         .getByLabel("Password", { exact: true })
         .fill("browser test password");
       await page.getByRole("button", { name: "Sign in", exact: true }).click();
+      // Let sign-in establish the session before navigating to the mocked runs.
+      await expect(
+        page.getByRole("link", { name: "Overview", exact: true }),
+      ).toBeVisible();
       const runId = "5f6f6dbf-25df-4a05-8d75-f2669c35572f";
       let mode: "member" | "operator" = "member";
       await page.route(

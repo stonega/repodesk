@@ -6,6 +6,12 @@ authorization, task state, issue creation and publication. Setup and determinist
 tests do not start a coding task, connect an account or send a message. A live
 end-to-end GitHub/Codex staging run remains a release gate.
 
+The [continuous collaboration design](../design/codex-collaboration.md) records the
+accepted next direction: Pi requirements intake, Codex-led decisions, direct task
+authorization and ongoing task/PR conversations. Those capabilities are not yet
+implemented; the approval and one-shot execution instructions below describe
+current behavior.
+
 ## Set up
 
 1. Configure the [local Podman runner](codex-podman.md) and build its task image.

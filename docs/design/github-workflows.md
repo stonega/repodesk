@@ -1,6 +1,6 @@
 # GitHub work through Telegram
 
-Status: **product direction**, updated 2026-09-27. This page describes the main
+Status: **product direction**, updated 2026-10-05. This page describes the main
 user journey. The capability table separates local implementation from proposed
 work; [implementation evidence](../implementation/implementation-status.md) records
 what was verified and which live gates remain.
@@ -10,8 +10,10 @@ what was verified and which live gates remain.
 RepoDesk lets an authorized person work with a selected GitHub repository from a
 Telegram conversation. The person states an intent in ordinary language; the AI
 helps find relevant repository context, explains it, or drafts a concrete action.
-Application policy decides which repositories and tools are available. A person
-reviews the exact proposed GitHub write before it runs.
+Application policy decides which repositories and tools are available. In the
+current implementation, a person reviews the exact proposed GitHub write or
+coding-task scope before it runs. The accepted continuous-development direction
+below introduces scoped task authorization from clear user instructions.
 
 The first audience is a small engineering team or repository maintainer already
 using Telegram. The useful result is a repository-grounded answer or a reviewable
@@ -79,6 +81,25 @@ See [GitHub App setup](../implementation/github-app.md),
   consent and never grants GitHub access.
 
 ## Next product decisions
+
+### Accepted coding direction, 2026-10-05
+
+[Continuous Codex collaboration](codex-collaboration.md) is the accepted next coding
+direction, not an implemented capability. Pi receives and relays original requirements;
+Codex investigates code and owns technical decisions, implementation, clarification
+and verification. A clear authenticated maintainer instruction can authorize a
+bounded task under repository policy without a second approval click. The application
+records and rechecks that grant; models cannot grant themselves authority.
+Follow-ups and answers to Codex questions continue the same durable task and draft
+PR. Human input is reserved for necessary product choices, ambiguous targets and
+operations beyond the grant. Readiness and progress notices require no reply.
+
+This planned authorization contract applies to continuous coding tasks. The current
+exact-payload approvals for standalone issues and current coding proposals remain
+in force; neither this document nor existing repository access enables direct execution.
+Merge, deployment and general GitHub writes are not included in the initial task grant.
+
+### Pilot validation and later capabilities
 
 Evaluate the primary journey with a dedicated test repository and bot before a
 pilot: connect a repository, ask a source question, review a proposed issue, and
