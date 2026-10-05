@@ -3803,13 +3803,14 @@ function WorkspacePicker({
                 type="button"
                 className="workspace-menu-item workspace-menu-create"
                 role="menuitem"
+                aria-label="New workspace"
                 onClick={() => {
                   trigger.current?.focus();
                   setOpen(false);
                   onCreate();
                 }}
               >
-                + New workspace…
+                New
               </button>
             )}
           </div>

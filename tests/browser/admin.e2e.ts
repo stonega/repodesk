@@ -1040,7 +1040,12 @@ test.describe
       await expect(menu).toHaveCount(0);
       await expect(picker).toBeFocused();
       await picker.click();
-      await menu.getByRole("menuitem", { name: "+ New workspace…" }).click();
+      const newWorkspace = menu.getByRole("menuitem", {
+        name: "New workspace",
+        exact: true,
+      });
+      await expect(newWorkspace).toHaveText("New");
+      await newWorkspace.click();
       await expect(page).toHaveURL(/\/setup\?new=1&step=workspace/);
       await expect(
         page.getByRole("heading", { name: "Set up a new workspace" }),

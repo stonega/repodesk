@@ -24,7 +24,8 @@ them.
   entry buttons, including hover titles. Let the surrounding section or row
   identify the object instead of repeating it in the visible label.
 - **Scope:** Admin and setup surfaces, including plugin configuration,
-  repositories, members, skills, workflows and domain configuration.
+  repositories, members, skills, workflows, workspace creation and domain
+  configuration.
 - **Source:** 2026-10-05 — user requested “Edit” or “New” for Edit/Add buttons
   throughout the app, instead of labels such as “Edit Codex configuration”.
 - **Exceptions:** Screen-reader names may identify the target to distinguish
@@ -332,7 +333,7 @@ them.
 
 ### New workspaces start from the workspace dropdown
 
-- **Preference:** Put a New workspace entry in the admin sidebar workspace
+- **Preference:** Put a New entry in the admin sidebar workspace
   dropdown. Open a creation dialog from that entry and select the workspace
   after it is created.
 - **Scope:** Workspace creation from the signed-in admin panel.
@@ -344,7 +345,7 @@ them.
 
 - **Preference:** Use a styled, accessible dropdown in the admin sidebar for
   switching workspaces. Show the selected workspace and a clear selected state in
-  the menu, keep New workspace as its final action, and support keyboard and
+  the menu, keep New as its final action, and support keyboard and
   outside-click dismissal.
 - **Scope:** Signed-in admin sidebar workspace selector, on desktop and mobile.
 - **Source:** 2026-09-28 — user shared the native workspace select menu and asked
