@@ -35,8 +35,9 @@ jobs:
           docker build --platform linux/amd64 --target app -t "$image" .
           docker run --rm --network none --entrypoint node "$image" dist/runtime-contract.js
           mkdir -p bundle
-          docker image inspect --format '{{.Id}}' "$image" > bundle/image-id
+          printf '%s\n' "$image" > bundle/image-tag
           docker image save "$image" | gzip > bundle/image.tar.gz
+          sha256sum bundle/image.tar.gz | cut -d ' ' -f 1 > bundle/image-sha256
           cp compose.yaml scripts/deploy-vps.sh bundle/
 
       - name: Transfer and deploy through verified SSH

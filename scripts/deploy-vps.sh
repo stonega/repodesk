@@ -3,6 +3,11 @@
 set -euo pipefail
 umask 077
 
+fail() {
+  printf 'Deployment preflight failed: %s\n' "$1" >&2
+  exit 1
+}
+
 deploy_root="${1:?Usage: deploy-vps.sh DEPLOY_ROOT RELEASE_ID COMPOSE_PROJECT}"
 release_id="${2:?Missing release ID}"
 project="${3:?Missing Compose project}"
@@ -12,23 +17,36 @@ project="${3:?Missing Compose project}"
 cd "$deploy_root"
 deploy_root="$PWD"
 release_dir="$deploy_root/releases/$release_id"
-[[ -f "$deploy_root/.env" && -f "$release_dir/compose.yaml" ]]
+[[ -f "$deploy_root/.env" ]] || fail "Missing runtime configuration: $deploy_root/.env"
+for file in compose.yaml image-tag image-sha256 image.tar.gz; do
+  [[ -f "$release_dir/$file" ]] || fail "Missing release artifact: $file"
+done
+for executable in docker flock sha256sum; do
+  command -v "$executable" > /dev/null || fail "Required command is not installed: $executable"
+done
 backup_path="$deploy_root/backups/pre-release-$release_id.dump"
 # Refuse a repeated bundle before stopping services or overwriting its backup.
-[[ ! -e "$backup_path" ]]
+[[ ! -e "$backup_path" ]] || fail "This bundle already has a backup; use a new run attempt."
 
 # Also fence deployments started directly by an operator.
 exec 9> "$deploy_root/.deploy.lock"
 flock -n 9 || { echo 'Another deployment is running.' >&2; exit 1; }
 
-image_id="$(cat "$release_dir/image-id")"
-[[ "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]
+image_tag="$(cat "$release_dir/image-tag")"
+[[ "$image_tag" =~ ^repodesk:release-[a-f0-9]{40}$ ]] || fail 'Invalid release image tag.'
+expected_hash="$(cat "$release_dir/image-sha256")"
+[[ "$expected_hash" =~ ^[a-f0-9]{64}$ ]] || fail 'Invalid image archive checksum.'
+actual_hash="$(sha256sum "$release_dir/image.tar.gz")"
+[[ "${actual_hash%% *}" = "$expected_hash" ]] || fail 'Image archive checksum mismatch.'
 [[ "$(docker info --format '{{.Architecture}}')" =~ ^(x86_64|amd64)$ ]] || {
   echo 'Release images require an x86_64 VPS.' >&2
   exit 1
 }
 docker image load --input "$release_dir/image.tar.gz"
-[[ "$(docker image inspect --format '{{.Id}}' "$image_id")" = "$image_id" ]]
+# Classic and containerd stores can report different IDs for the same archive.
+# Resolve the verified archive's tag on this daemon, then pin its immutable ID.
+image_id="$(docker image inspect --format '{{.Id}}' "$image_tag")"
+[[ "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]] || fail 'Docker returned an invalid imported image ID.'
 printf 'APP_IMAGE=%s\n' "$image_id" > "$release_dir/release.env"
 export APP_IMAGE="$image_id"
 compose=(docker compose --project-directory "$deploy_root" -p "$project"

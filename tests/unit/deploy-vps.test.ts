@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import {
   mkdirSync,
   mkdtempSync,
@@ -11,6 +12,8 @@ import { join } from "node:path";
 
 const script = join(import.meta.dir, "../../scripts/deploy-vps.sh");
 const imageId = `sha256:${"a".repeat(64)}`;
+const imageTag = `repodesk:release-${"b".repeat(40)}`;
+const importedImageId = `sha256:${"c".repeat(64)}`;
 
 // No daemon, SSH connection, production database or outbound calls are involved.
 const docker = `#!/usr/bin/env bash
@@ -18,7 +21,9 @@ set -euo pipefail
 printf '%s\\n' "$*" >> "$DEPLOY_TEST_LOG"
 case "$*" in
   "info "*) echo "$DEPLOY_TEST_ARCH" ;;
-  "image inspect "*) echo "$DEPLOY_TEST_IMAGE" ;;
+  "image inspect "*)
+    [[ "$*" = "image inspect --format {{.Id}} $DEPLOY_TEST_TAG" ]] || exit 43
+    echo "$DEPLOY_TEST_IMAGE" ;;
   *"--entrypoint node "*) [[ "$DEPLOY_TEST_FAILURE" != secret ]] || exit 42 ;;
   *"pg_dump "*)
     [[ "$DEPLOY_TEST_FAILURE" != backup ]] || exit 42
@@ -37,10 +42,19 @@ function deploy(failure = "", arch = "x86_64", duplicate = false) {
     const log = join(root, "docker.log");
     mkdirSync(release, { recursive: true });
     mkdirSync(bin);
-    writeFileSync(join(root, ".env"), "POSTGRES_PASSWORD=fixture\n");
+    if (failure !== "configuration")
+      writeFileSync(join(root, ".env"), "POSTGRES_PASSWORD=fixture\n");
     writeFileSync(join(release, "compose.yaml"), "services: {}\n");
     writeFileSync(join(release, "image-id"), `${imageId}\n`);
-    writeFileSync(join(release, "image.tar.gz"), "fixture");
+    writeFileSync(join(release, "image-tag"), `${imageTag}\n`);
+    writeFileSync(
+      join(release, "image-sha256"),
+      `${createHash("sha256").update("fixture").digest("hex")}\n`,
+    );
+    writeFileSync(
+      join(release, "image.tar.gz"),
+      failure === "archive" ? "damaged" : "fixture",
+    );
     writeFileSync(join(bin, "docker"), docker, { mode: 0o755 });
     writeFileSync(log, "");
     writeFileSync(join(root, ".current-release"), "previous\n");
@@ -53,7 +67,8 @@ function deploy(failure = "", arch = "x86_64", duplicate = false) {
         ...process.env,
         PATH: `${bin}:${process.env.PATH}`,
         DEPLOY_TEST_LOG: log,
-        DEPLOY_TEST_IMAGE: imageId,
+        DEPLOY_TEST_IMAGE: importedImageId,
+        DEPLOY_TEST_TAG: imageTag,
         DEPLOY_TEST_FAILURE: failure,
         DEPLOY_TEST_ARCH: arch,
       },
@@ -62,6 +77,11 @@ function deploy(failure = "", arch = "x86_64", duplicate = false) {
       exitCode: result.exitCode,
       calls: readFileSync(log, "utf8"),
       current: readFileSync(join(root, ".current-release"), "utf8"),
+      stderr: result.stderr.toString(),
+      releaseEnvironment:
+        result.exitCode === 0
+          ? readFileSync(join(release, "release.env"), "utf8")
+          : "",
     };
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -69,6 +89,31 @@ function deploy(failure = "", arch = "x86_64", duplicate = false) {
 }
 
 describe("VPS release cutover", () => {
+  test("pins the imported daemon's ID when the runner's ID is different", () => {
+    const result = deploy();
+    expect(result.exitCode).toBe(0);
+    expect(result.releaseEnvironment).toBe(`APP_IMAGE=${importedImageId}\n`);
+    expect(result.calls).toContain(
+      `image inspect --format {{.Id}} ${imageTag}`,
+    );
+    expect(result.calls).not.toContain(imageId);
+  });
+
+  test("rejects a damaged archive before importing or stopping writers", () => {
+    const result = deploy("archive");
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("Image archive checksum mismatch");
+    expect(result.calls).toBe("");
+    expect(result.current).toBe("previous\n");
+  });
+
+  test("missing runtime configuration reports the cause before Docker is called", () => {
+    const result = deploy("configuration");
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("Missing runtime configuration");
+    expect(result.calls).toBe("");
+  });
+
   test("backs up stopped writers, migrates, checks readiness, then promotes", () => {
     const result = deploy();
     expect(result.exitCode).toBe(0);

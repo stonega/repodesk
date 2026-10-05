@@ -10,7 +10,7 @@ This automates the base Docker stack: app, worker, migrations and PostgreSQL.
 It does not deploy the optional Code Truth or Podman Codex services or Compose
 overlays. Use a dedicated stack; do not point it at the existing local Podman
 installation. The VPS must be Linux x86_64 with Docker Engine, Compose v2
-(supporting `up --wait`), Bash, gzip and `flock`, and enough disk for the loaded
+(supporting `up --wait`), Bash, gzip, `sha256sum` and `flock`, and enough disk for the loaded
 images, release archive and database backup. The GitHub-hosted runner must be able
 to reach its SSH port. The deploy user needs Docker access without interactive sudo.
 
@@ -91,7 +91,11 @@ smokes and a backup/restore rehearsal. The deploy job builds an amd64 image and
 transfers it along with the release's Compose file and deploy script. SSH key
 files are temporary and removed when the step exits.
 
-The host loads the image and selects its immutable local `sha256:` image ID.
+The workflow transfers the image tag and archive SHA-256 checksum. The host verifies
+the archive before import, loads the image and resolves the tag to that daemon's
+immutable local `sha256:` image ID. Classic Docker and containerd image stores can
+report different IDs for the same exported archive, so the runner's image ID is
+not used as a lookup key on the VPS.
 Unlike a registry `@sha256:` manifest digest, this identifies the image imported
 by `docker image load`. It then:
 
@@ -113,7 +117,9 @@ cutover; this automation does not wait for application jobs to drain.
 
 ## Failure and recovery
 
-Preflight failures leave running writers untouched. Once cutover begins, a
+Missing runtime configuration, required commands, invalid bundle metadata and
+archive checksum failures produce explicit preflight errors. Preflight failures
+leave running writers untouched. Once cutover begins, a
 backup, migration, startup or readiness failure stops app/worker and leaves the
 previous `.current-release` marker unchanged. A marker is a record of the last
 successful deployment, not evidence that those containers are still running.
