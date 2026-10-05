@@ -661,8 +661,8 @@ Use this format for each preference:
 ### Codex authentication is selected per workspace
 
 - **Preference:** Show custom provider API key and ChatGPT device-code sign-in as peer choices in the Codex configuration dialog. Show the device link, one-time code, connection status and disconnect action there.
-- **Scope:** Local Podman Codex credentials for each workspace. Existing workspaces retain the custom provider method until changed.
-- **Source:** 2026-09-29 — user requested device-code login at the same setting level as custom provider auth, configured through the UI for each workspace.
+- **Scope:** Local Podman Codex credentials for each workspace. Existing workspaces retain the custom provider method until changed. Show a clear sign-in-required state when automatic refresh cannot recover; explain that retained paused tasks continue automatically after connection. Routine task starts and token refreshes require no user confirmation.
+- **Source:** 2026-09-29 — user requested device-code login at the same setting level as custom provider auth, configured through the UI for each workspace. 2026-10-05 — user approved persistent runner auth with temporary task credentials, automatic refresh and continuation after reconnect.
 - **Exceptions:** Device-code tasks require trusted private repositories; custom provider credentials retain their deployment fallback.
 
 ### First setup asks only for account credentials

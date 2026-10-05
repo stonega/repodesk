@@ -1,4 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
   mkdir,
   readdir,
@@ -31,6 +32,12 @@ interface PendingLogin {
 export class DeviceAuth {
   private pending = new Map<string, PendingLogin>();
   private failed = new Set<string>();
+  private tail: Promise<unknown> = Promise.resolve();
+  private serial<T>(action: () => Promise<T>): Promise<T> {
+    const result = this.tail.then(action);
+    this.tail = result.catch(() => {});
+    return result;
+  }
   constructor(
     private settings: RunnerSettings,
     private binary = "codex",
@@ -57,7 +64,6 @@ export class DeviceAuth {
     }
   }
   async status(workspaceId: string): Promise<DeviceAuthStatus> {
-    if (await this.connected(workspaceId)) return { state: "connected" };
     const login = this.pending.get(workspaceId);
     if (login && !login.failed)
       return {
@@ -65,6 +71,13 @@ export class DeviceAuth {
         verificationUrl: login.verificationUrl,
         userCode: login.userCode,
       };
+    try {
+      const cache = await this.cache(workspaceId);
+      if (cache.state === "auth_required") return { state: "auth_required" };
+      if (!cache.credential) throw Error();
+      this.validate(cache.credential);
+      return { state: "connected" };
+    } catch {}
     return { state: this.failed.has(workspaceId) ? "failed" : "disconnected" };
   }
   async initialize() {
@@ -83,23 +96,60 @@ export class DeviceAuth {
       }
     }
   }
-  async read(workspaceId: string) {
+  private async cache(workspaceId: string): Promise<{
+    generation: string;
+    state: "connected" | "auth_required";
+    credential?: string;
+  }> {
+    const sealed = await readFile(this.sealed(workspaceId), "utf8");
+    const plain = decrypt(
+      hash(this.settings.CODEX_RUNNER_TOKEN),
+      this.aad(workspaceId),
+      sealed,
+    );
+    const value = JSON.parse(plain);
+    if (value.format === "repodesk-device-auth-v1") {
+      return z
+        .object({
+          generation: z.string().min(1),
+          state: z.enum(["connected", "auth_required"]),
+          credential: z.string().optional(),
+        })
+        .parse(value);
+    }
+    // Existing sealed caches acquire a stable generation without another login.
+    return { generation: hash(sealed), state: "connected", credential: plain };
+  }
+  async snapshot(workspaceId: string) {
     try {
-      return decrypt(
-        hash(this.settings.CODEX_RUNNER_TOKEN),
-        this.aad(workspaceId),
-        await readFile(this.sealed(workspaceId), "utf8"),
-      );
+      const cache = await this.cache(workspaceId);
+      if (cache.state !== "connected" || !cache.credential) throw Error();
+      this.validate(cache.credential);
+      return { generation: cache.generation, credential: cache.credential };
     } catch {
       throw new Fault("coding_device_auth_required", 409);
     }
   }
-  async save(workspaceId: string, credential: string) {
+  async read(workspaceId: string) {
+    return (await this.snapshot(workspaceId)).credential;
+  }
+  private validate(credential: string) {
     requireThat(
       credential.length > 0 && credential.length <= 128 * 1024,
       "coding_device_auth_invalid",
     );
-    z.record(z.string(), z.unknown()).parse(JSON.parse(credential));
+    z.object({ tokens: z.object({ access_token: z.string().min(1) }) }).parse(
+      JSON.parse(credential),
+    );
+  }
+  private async write(
+    workspaceId: string,
+    value: {
+      generation: string;
+      state: "connected" | "auth_required";
+      credential?: string;
+    },
+  ) {
     const home = this.home(workspaceId);
     await mkdir(home, { recursive: true, mode: 0o700 });
     const temp = join(home, "credential.tmp");
@@ -108,11 +158,44 @@ export class DeviceAuth {
       encrypt(
         hash(this.settings.CODEX_RUNNER_TOKEN),
         this.aad(workspaceId),
-        credential,
+        JSON.stringify({ format: "repodesk-device-auth-v1", ...value }),
       ),
       { mode: 0o600 },
     );
     await rename(temp, this.sealed(workspaceId));
+  }
+  async save(workspaceId: string, credential: string) {
+    this.validate(credential);
+    return this.serial(async () => {
+      const generation = randomUUID();
+      await this.write(workspaceId, {
+        generation,
+        state: "connected",
+        credential,
+      });
+      return generation;
+    });
+  }
+  async capture(workspaceId: string, generation: string, credential: string) {
+    this.validate(credential);
+    return this.serial(async () => {
+      const current = await this.cache(workspaceId).catch(() => undefined);
+      if (current?.generation !== generation || current.state !== "connected")
+        return false;
+      await this.write(workspaceId, {
+        generation,
+        state: "connected",
+        credential,
+      });
+      return true;
+    });
+  }
+  async invalidate(workspaceId: string, generation: string) {
+    return this.serial(async () => {
+      const current = await this.cache(workspaceId).catch(() => undefined);
+      if (current?.generation !== generation) return;
+      await this.write(workspaceId, { generation, state: "auth_required" });
+    });
   }
   async start(workspaceId: string): Promise<DeviceAuthStatus> {
     z.uuid().parse(workspaceId);
@@ -215,7 +298,9 @@ export class DeviceAuth {
       await login.completion;
       this.pending.delete(workspaceId);
     }
-    await rm(this.home(workspaceId), { recursive: true, force: true });
+    await this.serial(() =>
+      rm(this.home(workspaceId), { recursive: true, force: true }),
+    );
     this.failed.delete(workspaceId);
     return { state: "disconnected" };
   }

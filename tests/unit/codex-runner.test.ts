@@ -54,6 +54,8 @@ async function fixture() {
       calls.push({ args, env });
       if (args[0] === "cp" && args[1]?.endsWith(".input"))
         jobInputs.push(await readFile(args[1], "utf8"));
+      if (args[0] === "volume" && args[1] === "ls")
+        return args.at(-1)?.replace(/^name=/, "") ?? "";
       if (args[0] === "inspect")
         return JSON.stringify({
           Running: false,
@@ -774,4 +776,208 @@ test("completed work without a valid verification plan cannot become ready", asy
       ),
     ).toBe(false);
   }
+});
+
+async function authPausedFixture(continuous = true) {
+  const f = await fixture();
+  f.input.payload.authMode = "device_code";
+  if (continuous) {
+    f.input.issue = undefined;
+    f.input.development = {
+      taskId: randomUUID(),
+      revision: 1,
+      mode: "work",
+      context: "",
+      inputs: [
+        {
+          revision: 1,
+          actor: "101",
+          sourceId: "101:10",
+          text: "Fix pagination",
+          kind: "request",
+        },
+      ],
+      maxRepairAttempts: 1,
+      activeSeconds: 2700,
+      maxTokens: 1000,
+    };
+  }
+  await f.supervisor.device.save(
+    f.input.workspaceId,
+    '{"tokens":{"access_token":"old-account"}}',
+  );
+  const read = f.engine.readText,
+    command = f.engine.command;
+  let denied = true;
+  f.engine.readText = async (container, path, max) => {
+    if (path === "/auth/auth.json")
+      return '{"tokens":{"access_token":"refreshed-account"}}';
+    if (path === "/task/failure-code") return "coding_device_auth_required";
+    if (path === "/task/auth-failure.json")
+      return JSON.stringify({ tokens: 7, threadId: "auth-thread" });
+    if (path === "/task/conversation.json")
+      return JSON.stringify({
+        tokens: 10,
+        threadId: "auth-thread",
+        result: {
+          status: "completed",
+          intent: "implement",
+          evidenceRevision: 1,
+          evidence: "Fix pagination",
+          publishRequested: true,
+          summary: "Fixed",
+          question: null,
+          title: "Fix pagination",
+          body: "Checked",
+          verificationCommands: ["bun test"],
+        },
+      });
+    return read(container, path, max);
+  };
+  f.engine.command = async (args, env) => {
+    if (args[0] === "inspect" && args.at(-1)?.endsWith("-implement"))
+      return JSON.stringify({
+        Running: false,
+        Status: "exited",
+        ExitCode: denied ? 1 : 0,
+      });
+    return command(args, env);
+  };
+  await f.supervisor.start(f.input);
+  for (let n = 0; n < 3; n++)
+    await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  expect(
+    (await f.supervisor.status(f.input.workspaceId, f.input.taskId)).state,
+  ).toBe("auth_required");
+  return {
+    ...f,
+    allow: () => {
+      denied = false;
+    },
+  };
+}
+
+test("auth failure releases runner; restart and idempotent resume keep the checkout and cumulative usage", async () => {
+  for (const continuous of [true, false]) {
+    const f = await authPausedFixture(continuous);
+    expect(await f.supervisor.device.status(f.input.workspaceId)).toEqual({
+      state: "auth_required",
+    });
+    await expect(
+      f.supervisor.resumeAuth(f.input.workspaceId, f.input.taskId),
+    ).rejects.toThrow("coding_device_auth_required");
+    const other = {
+      ...f.input,
+      taskId: randomUUID(),
+      payload: { ...f.input.payload, authMode: "provider_key" as const },
+    };
+    await f.supervisor.start(other);
+    await f.supervisor.device.save(
+      f.input.workspaceId,
+      '{"tokens":{"access_token":"new-account"}}',
+    );
+    await expect(
+      f.supervisor.resumeAuth(f.input.workspaceId, f.input.taskId),
+    ).rejects.toThrow("coding_runner_busy");
+    await f.supervisor.cancel(other.workspaceId, other.taskId);
+    const key = taskKey(f.input.workspaceId, f.input.taskId);
+    const path = join(f.settings.CODEX_RUNNER_STATE, `${key}.json`);
+    const paused = JSON.parse(await readFile(path, "utf8"));
+    paused.createdAt -= 7200000;
+    paused.authPausedAt -= 7200000;
+    await writeFile(path, JSON.stringify(paused));
+    const restarted = new RunnerSupervisor(f.settings, f.engine);
+    await restarted.initialize();
+    await restarted.sweep();
+    expect(
+      (await restarted.status(f.input.workspaceId, f.input.taskId)).state,
+    ).toBe("auth_required");
+    f.allow();
+    await Promise.all([
+      restarted.resumeAuth(f.input.workspaceId, f.input.taskId),
+      restarted.resumeAuth(f.input.workspaceId, f.input.taskId),
+    ]);
+    expect(
+      f.calls.filter(
+        (c) => c.args[0] === "create" && c.args.includes(`${key}-implement`),
+      ),
+    ).toHaveLength(2);
+    expect(
+      f.calls.filter(
+        (c) => c.args[0] === "create" && c.args.includes(`${key}-prepare`),
+      ),
+    ).toHaveLength(1);
+    for (let n = 0; n < 2; n++)
+      await restarted.status(f.input.workspaceId, f.input.taskId);
+    const ready = await restarted.status(f.input.workspaceId, f.input.taskId);
+    expect(ready.state).toBe("ready");
+    if (continuous) expect(ready.tokens).toBe(17);
+    expect(await restarted.device.read(f.input.workspaceId)).toContain(
+      "refreshed-account",
+    );
+    await expect(
+      restarted.resumeAuth(randomUUID(), f.input.taskId),
+    ).rejects.toThrow("coding_task_not_found");
+  }
+});
+
+test("disconnect and retained-checkout expiry prevent automatic auth resume", async () => {
+  const f = await authPausedFixture();
+  await f.supervisor.logoutDevice(f.input.workspaceId);
+  expect(
+    (await f.supervisor.status(f.input.workspaceId, f.input.taskId)).state,
+  ).toBe("cancelled");
+  await f.supervisor.device.save(
+    f.input.workspaceId,
+    '{"tokens":{"access_token":"new-account"}}',
+  );
+  await expect(
+    f.supervisor.resumeAuth(f.input.workspaceId, f.input.taskId),
+  ).rejects.toThrow("coding_task_not_ready");
+  const g = await authPausedFixture();
+  const path = join(
+    g.settings.CODEX_RUNNER_STATE,
+    `${taskKey(g.input.workspaceId, g.input.taskId)}.json`,
+  );
+  const paused = JSON.parse(await readFile(path, "utf8"));
+  paused.finishedAt -= 48 * 3600000;
+  await writeFile(path, JSON.stringify(paused));
+  const restarted = new RunnerSupervisor(g.settings, g.engine);
+  await restarted.initialize();
+  await restarted.sweep();
+  expect(
+    await restarted.status(g.input.workspaceId, g.input.taskId),
+  ).toMatchObject({ state: "failed", error: "coding_checkpoint_expired" });
+  await expect(
+    restarted.resumeAuth(g.input.workspaceId, g.input.taskId),
+  ).rejects.toThrow("coding_checkpoint_expired");
+});
+
+test("cancellation stops Codex before capturing its last rotated credential", async () => {
+  const f = await fixture();
+  f.input.payload.authMode = "device_code";
+  await f.supervisor.device.save(
+    f.input.workspaceId,
+    '{"tokens":{"access_token":"before-stop"}}',
+  );
+  let stopped = false;
+  const command = f.engine.command,
+    read = f.engine.readText;
+  f.engine.command = async (args, env) => {
+    if (args[0] === "stop") stopped = true;
+    return command(args, env);
+  };
+  f.engine.readText = async (container, path, max) =>
+    path === "/auth/auth.json"
+      ? JSON.stringify({
+          tokens: { access_token: stopped ? "final-rotated" : "before-stop" },
+        })
+      : read(container, path, max);
+  await f.supervisor.start(f.input);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  await f.supervisor.cancel(f.input.workspaceId, f.input.taskId);
+  expect(await f.supervisor.device.read(f.input.workspaceId)).toContain(
+    "final-rotated",
+  );
 });

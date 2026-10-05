@@ -33,6 +33,7 @@ const developmentIds = [
   randomUUID(),
   randomUUID(),
   randomUUID(),
+  randomUUID(),
 ] as const;
 const developmentKeys = developmentIds.map((id) => taskKey(workspaceId, id));
 const phases = ["prepare", "setup", "implement", "check", "export", "publish"];
@@ -102,6 +103,12 @@ if(process.argv[2]==='app-server') {
   if(r.method==='turn/start') {
    const text=r.params.input[0].text; const intake=text.includes('Mode: intake.'); const answer=text.includes('"kind":"answer"');
    const question=!intake&&text.includes('Question fixture')&&!answer;
+   if(text.includes('Auth pause fixture')&&!fs.existsSync('/task/auth-denied-once')) {
+    fs.writeFileSync('/task/repo/README.md','auth-partial\\n');fs.writeFileSync('/task/auth-denied-once','yes');
+    send({id:r.id,result:{turn:{id:'smoke-turn'}}});send({method:'turn/completed',params:{threadId:'smoke-thread',turn:{id:'smoke-turn',status:'failed',error:{codexErrorInfo:'unauthorized'}}}});return;
+   }
+   if(text.includes('Auth pause fixture')&&fs.readFileSync('/task/repo/README.md','utf8')!=='auth-partial\\n')process.exit(7);
+
    if(!intake) {
     if(answer&&!text.includes('Followup fixture')&&fs.readFileSync('/task/repo/README.md','utf8')!=='partial\\n')process.exit(6);
     fs.writeFileSync('/task/repo/README.md',question?'partial\\n':text.includes('Repair fixture')&&!text.includes('Verification checks failed.')?'broken\\n':'fixed\\n');
@@ -528,11 +535,59 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   });
   await waitFor(developmentIds[7], "ready");
   await request(`/tasks/${workspaceId}/${developmentIds[7]}/cancel`, {});
+  await request("/tasks", {
+    ...deviceInput,
+    taskId: developmentIds[8],
+    payload: { ...deviceInput.payload, body: "Auth pause fixture" },
+    development: {
+      ...development,
+      inputs: [{ ...development.inputs[0], text: "Auth pause fixture" }],
+    },
+  });
+  await waitFor(developmentIds[8], "auth_required");
+  if (
+    ((await request(`/device-auth/${workspaceId}`)) as { state: string })
+      .state !== "auth_required"
+  )
+    throw Error("Expired account was not marked for sign-in");
+  if (
+    await podman(["volume", "exists", `${developmentKeys[8]}-auth`]).then(
+      () => true,
+      () => false,
+    )
+  )
+    throw Error("Auth-paused task retained its credentials");
+  await podman(["restart", name]);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await request("/healthz");
+      break;
+    } catch {
+      if (attempt > 30) throw Error("Supervisor restart timed out");
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+  await request(`/device-auth/${workspaceId}/start`, {});
+  for (let attempt = 0; ; attempt++) {
+    if (
+      ((await request(`/device-auth/${workspaceId}`)) as { state: string })
+        .state === "connected"
+    )
+      break;
+    if (attempt > 30) throw Error("Auth recovery sign-in timed out");
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  await request(`/tasks/${workspaceId}/${developmentIds[8]}/resume-auth`, {});
+  await request(`/tasks/${workspaceId}/${developmentIds[8]}/resume-auth`, {});
+  const recovered = await waitFor(developmentIds[8], "ready");
+  if (recovered.tokens !== 20) throw Error("Auth resume lost cumulative usage");
+  await request(`/tasks/${workspaceId}/${developmentIds[8]}/cancel`, {});
+
   await request(`/device-auth/${workspaceId}/logout`, {});
   for (const id of developmentIds)
     await request(`/tasks/${workspaceId}/${id}/erase`, {});
   console.log(
-    "Podman smoke passed: provider/device tasks, question checkpoint/reconstruction, bounded repair, fresh/same-PR publication, remote-head fencing, device continuation, usage, erasure and cancellation.",
+    "Podman smoke passed: provider/device tasks, question checkpoint/reconstruction, bounded repair, fresh/same-PR publication, remote-head fencing, device continuation, auth expiry/restart/reconnect, usage, erasure and cancellation.",
   );
 } catch (error) {
   for (const task of [key, failedKey, deviceKey, ...developmentKeys])

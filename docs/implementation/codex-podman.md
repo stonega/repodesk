@@ -82,9 +82,39 @@ encrypts the per-workspace cache at rest using a key derived from
 `CODEX_RUNNER_TOKEN`. It decrypts a copy into a short-lived per-task Podman
 auth volume during the Codex phase, saves any refreshed cache on exit, and
 removes that volume. Repository setup and checks use separate containers
-without it. A disconnected workspace fails before issue creation. Rotating
+without it. A disconnected workspace pauses before issue creation; no issue is created while waiting for sign-in. Rotating
 `CODEX_RUNNER_TOKEN` invalidates stored device logins; reconnect afterward.
 Do not copy a host `auth.json` into the deployment.
+
+Account auth is owned by the persistent supervisor, not by a long-lived task
+container. Sealed credentials include a generation; refreshed task copies can
+update only the generation they received. A late exit cannot overwrite a new
+login or restore a disconnected account. Existing sealed caches remain readable.
+Drain active tasks from older builds before upgrading; their in-flight credential
+copies do not carry a generation and cannot write back into the new cache.
+On cancellation the runner stops Codex before capturing its final auth cache.
+
+A final Codex authentication failure sets `deviceAuth.state` and task state to
+`auth_required`. Transient retry events, quota and network errors do not invalidate
+account auth. Tasks retain the same private checkout and fixed verification plan,
+remove their auth volume and release the runner slot. The worker sends one sign-in
+notice per pause. After reconnect, it rechecks permissions, private repository
+visibility and budgets before requesting idempotent `/resume-auth` on the same
+runner task. It creates a fresh auth volume; it does not recreate the issue, checkout
+or publication reservation. Questions and new inputs retain their original order.
+
+Sign-in waiting is excluded from active execution time. Reported token usage is
+cumulative across resumes. A denied request before observed model activity counts
+zero usage; missing usage after observed activity retains the reserved allowance
+and can exhaust the budget. Stop, disconnect, access revocation and source expiry
+prevent continuation. Local checkpoint retention still applies while waiting;
+expired checkouts report `coding_checkpoint_expired` and require a new task.
+
+Codex refreshes account tokens during normal use; the current upstream guidance
+uses roughly eight days since last refresh as a refresh threshold. This is not a
+fixed login expiry or a guarantee of indefinite validity. No scheduled model call
+or permanent task container is required. See the [plan and recovery boundaries](codex-auth-plan.md).
+
 
 Validate and start when ready to deploy:
 

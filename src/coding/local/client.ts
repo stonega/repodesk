@@ -39,7 +39,9 @@ export class LocalRunnerClient implements LocalRunner, LocalDeviceAuth {
         if (
           error.error === "coding_provider_not_configured" ||
           error.error === "coding_device_auth_required" ||
-          error.error === "coding_device_mode_required"
+          error.error === "coding_device_mode_required" ||
+          error.error === "coding_checkpoint_expired" ||
+          error.error === "coding_token_limit"
         )
           throw new Fault(error.error, 409);
       }
@@ -79,6 +81,9 @@ export class LocalRunnerClient implements LocalRunner, LocalDeviceAuth {
   }
   async publish(workspaceId: string, taskId: string, token: string) {
     await this.request(`${this.path(workspaceId, taskId)}/publish`, { token });
+  }
+  async resumeAuth(workspaceId: string, taskId: string) {
+    await this.request(`${this.path(workspaceId, taskId)}/resume-auth`, {});
   }
   async erase(workspaceId: string, taskId: string) {
     await this.request(`${this.path(workspaceId, taskId)}/erase`, {});

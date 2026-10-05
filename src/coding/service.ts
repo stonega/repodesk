@@ -167,7 +167,11 @@ export class CodingService {
         checkCodingTask(w, t);
         requireThat(d.active && !d.paused, "deployment_paused", 409);
       } catch (error) {
-        if (t.state === "running" || t.state === "publishing") {
+        if (
+          t.state === "running" ||
+          t.state === "publishing" ||
+          (t.state === "auth_required" && t.authResumeState === "running")
+        ) {
           t.cancelRequested = true;
           t.error = code(error);
         } else {
@@ -185,6 +189,29 @@ export class CodingService {
     let externalWriteCompleted = false;
     try {
       requireThat(this.local, "coding_runner_not_configured", 409);
+      if (
+        task.state === "auth_required" &&
+        task.authResumeState !== "running"
+      ) {
+        const device = this.local as LocalRunner & Partial<LocalDeviceAuth>;
+        requireThat(device.deviceStatus, "coding_runner_not_configured", 409);
+        if ((await device.deviceStatus(workspaceId)).state === "connected") {
+          await this.store.change(workspaceId, async (w, sql) => {
+            const t = w.codingTasks?.find((t) => t.id === id);
+            if (!t || t.lease !== lease) return;
+            checkCodingTask(w, t);
+            const d = await this.store.deployment(sql);
+            requireThat(d.active && !d.paused, "deployment_paused", 409);
+          });
+          await this.update(workspaceId, id, lease, {
+            state: task.authResumeState ?? "queued",
+            error: undefined,
+            authWaitMs: this.authWait(task),
+            authPausedAt: undefined,
+          });
+        } else await this.update(workspaceId, id, lease, {});
+        return;
+      }
       if (task.state === "queued" && task.payload.authMode === "device_code") {
         const device = this.local as LocalRunner & Partial<LocalDeviceAuth>;
         requireThat(device.deviceStatus, "coding_runner_not_configured", 409);
@@ -243,6 +270,30 @@ export class CodingService {
       const snapshot = await this.store.read(workspaceId);
       const current = snapshot.codingTasks?.find((t) => t.id === id);
       if (!current || current.lease !== lease) return;
+      if (
+        reason === "coding_device_auth_required" &&
+        task.payload.authMode === "device_code" &&
+        ["queued", "issue_created", "dispatching"].includes(current.state)
+      ) {
+        await this.pauseAuth(
+          workspaceId,
+          current,
+          lease,
+          current.state === "queued" ? "queued" : "issue_created",
+        );
+        return;
+      }
+      if (
+        current.state === "auth_required" &&
+        [
+          "coding_runner_busy",
+          "coding_runner_unavailable",
+          "coding_outcome_unknown",
+        ].includes(reason)
+      ) {
+        await this.update(workspaceId, id, lease, {});
+        return;
+      }
       // Read failures can retry for up to two hours. Writes remain unknown forever.
       if (
         ["running", "publishing"].includes(current.state) &&
@@ -322,7 +373,7 @@ export class CodingService {
       checkCodingTask(current, latest);
       requireThat(d.active && !d.paused, "deployment_paused", 409);
       requireThat(
-        Date.parse(task.createdAt) + 7200000 > Date.now(),
+        Date.parse(task.createdAt) + this.authWait(task) + 7200000 > Date.now(),
         "coding_task_timeout",
       );
     } catch {
@@ -339,6 +390,56 @@ export class CodingService {
       });
       return;
     }
+    if (result.state === "auth_required") {
+      requireThat(
+        task.payload.authMode === "device_code" && task.state !== "publishing",
+        "coding_result_invalid",
+        409,
+      );
+      if (task.state !== "auth_required") {
+        await this.pauseAuth(workspaceId, task, lease, "running");
+      } else {
+        const device = runner as LocalRunner & Partial<LocalDeviceAuth>;
+        requireThat(device.deviceStatus, "coding_runner_not_configured", 409);
+        if ((await device.deviceStatus(workspaceId)).state === "connected") {
+          requireThat(runner.resumeAuth, "coding_runner_not_configured", 409);
+          await this.localToken(workspaceId, task, "contents");
+          await this.store.change(workspaceId, async (w, sql) => {
+            const t = w.codingTasks?.find((t) => t.id === task.id);
+            if (!t || t.lease !== lease)
+              throw new Fault("coding_cancelled", 409);
+            checkCodingTask(w, t);
+            const deployment = await this.store.deployment(sql);
+            requireThat(
+              deployment.active && !deployment.paused,
+              "deployment_paused",
+              409,
+            );
+          });
+          await runner.resumeAuth(workspaceId, task.id);
+          await this.update(workspaceId, task.id, lease, {
+            state: "running",
+            error: undefined,
+            authPausedAt: undefined,
+            authWaitMs: this.authWait(task),
+          });
+        } else await this.update(workspaceId, task.id, lease, {});
+      }
+      return;
+    }
+    if (task.state === "auth_required")
+      await this.update(
+        workspaceId,
+        task.id,
+        lease,
+        {
+          state: "running",
+          error: undefined,
+          authPausedAt: undefined,
+          authWaitMs: this.authWait(task),
+        },
+        false,
+      );
     if (result.state === "ready") {
       const token = await this.localToken(workspaceId, task, "publish");
       try {
@@ -391,6 +492,28 @@ export class CodingService {
         threadId: result.threadId,
       });
     }
+  }
+  private authWait(task: CodingTask) {
+    return (
+      (task.authWaitMs ?? 0) +
+      (task.authPausedAt
+        ? Math.max(0, Date.now() - Date.parse(task.authPausedAt))
+        : 0)
+    );
+  }
+  private async pauseAuth(
+    workspaceId: string,
+    task: CodingTask,
+    lease: string,
+    resumeState: "queued" | "issue_created" | "running",
+  ) {
+    await this.update(workspaceId, task.id, lease, {
+      state: "auth_required",
+      error: "coding_device_auth_required",
+      authResumeState: resumeState,
+      authPausedAt: new Date().toISOString(),
+      authPauses: (task.authPauses ?? 0) + 1,
+    });
   }
   private async localToken(
     workspaceId: string,

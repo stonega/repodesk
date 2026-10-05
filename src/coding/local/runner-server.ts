@@ -113,6 +113,13 @@ export function runnerApp(
     );
     return c.json({ ok: true });
   });
+  app.post("/tasks/:workspace/:task/resume-auth", async (c) => {
+    await supervisor.resumeAuth(
+      z.uuid().parse(c.req.param("workspace")),
+      z.uuid().parse(c.req.param("task")),
+    );
+    return c.json({ ok: true });
+  });
   app.post("/tasks/:workspace/:task/erase", async (c) => {
     await supervisor.erase(
       z.uuid().parse(c.req.param("workspace")),

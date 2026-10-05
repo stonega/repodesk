@@ -21,6 +21,7 @@ export const localStart = z
 export type LocalStart = z.infer<typeof localStart>;
 export const localStatus = z.object({
   state: z.enum([
+    "auth_required",
     "preparing",
     "running",
     "ready",
@@ -53,7 +54,13 @@ export const localStatus = z.object({
 });
 export type LocalStatus = z.infer<typeof localStatus>;
 export const deviceAuthStatus = z.object({
-  state: z.enum(["disconnected", "pending", "connected", "failed"]),
+  state: z.enum([
+    "disconnected",
+    "pending",
+    "connected",
+    "auth_required",
+    "failed",
+  ]),
   verificationUrl: z.string().url().optional(),
   userCode: z
     .string()
@@ -69,6 +76,7 @@ export interface LocalDeviceAuth {
 export interface LocalRunner {
   erase?(workspaceId: string, taskId: string): Promise<void>;
   start(input: LocalStart): Promise<void>;
+  resumeAuth?(workspaceId: string, taskId: string): Promise<void>;
   status(workspaceId: string, taskId: string): Promise<LocalStatus>;
   publish(workspaceId: string, taskId: string, token: string): Promise<void>;
   cancel(workspaceId: string, taskId: string): Promise<void>;

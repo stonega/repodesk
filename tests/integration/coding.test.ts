@@ -362,7 +362,7 @@ const url = process.env.TEST_DATABASE_URL;
       });
     const { service, requests } = provider({ local: local.runner });
     await service.advance(id, taskId);
-    expect((await read(id)).state).toBe("failed");
+    expect((await read(id)).state).toBe("auth_required");
     expect((await read(id)).error).toBe("coding_device_auth_required");
     expect(requests.some((request) => request.url.endsWith("/issues"))).toBe(
       false,
@@ -589,5 +589,48 @@ const url = process.env.TEST_DATABASE_URL;
     await ready(g.id);
     await second.advance(g.id, g.taskId);
     expect(failed.calls.filter((c) => c === "publish")).toHaveLength(1);
+  });
+  test("reviewed account tasks resume the existing checkout without creating another issue", async () => {
+    const { id, taskId } = await fixture();
+    await store.change(id, (w) => {
+      present(w.coding).settings.authMode = "device_code";
+      present(present(w.github).repositories[0]).private = true;
+      present(w.codingTasks?.[0]).payload.authMode = "device_code";
+    });
+    const local = localFixture();
+    const device = local.runner as LocalRunner & LocalDeviceAuth;
+    let connected = false;
+    device.deviceStatus = async () => ({
+      state: connected ? "connected" : "auth_required",
+    });
+    const { service, requests } = provider({
+      local: device,
+      repositoryPrivate: true,
+    });
+    await service.advance(id, taskId);
+    expect((await read(id)).state).toBe("auth_required");
+    connected = true;
+    for (let n = 0; n < 3; n++) {
+      await ready(id);
+      await service.advance(id, taskId);
+    }
+    expect((await read(id)).state).toBe("running");
+    local.set({ state: "auth_required", error: "coding_device_auth_required" });
+    connected = false;
+    await ready(id);
+    await service.advance(id, taskId);
+    expect((await read(id)).state).toBe("auth_required");
+    let resumes = 0;
+    device.resumeAuth = async () => {
+      resumes++;
+      local.set({ state: "running" });
+    };
+    connected = true;
+    await ready(id);
+    await service.advance(id, taskId);
+    expect((await read(id)).state).toBe("running");
+    expect(resumes).toBe(1);
+    expect(local.calls.filter((c) => c === "start")).toHaveLength(1);
+    expect(requests.filter((r) => r.url.endsWith("/issues"))).toHaveLength(1);
   });
 });

@@ -174,6 +174,22 @@ export class DevelopmentExecutor {
         });
         return;
       }
+      if (task.state === "auth_required" && !task.attemptId) {
+        if (await this.deviceConnected(workspaceId))
+          await this.update(task, lease, async (w, sql, t) => {
+            await this.allowed(w, sql, t);
+            t.state = "queued";
+            t.error = undefined;
+            await this.notice(
+              w,
+              t,
+              "Codex account connected. Your task will continue automatically.",
+              `auth-resumed:${t.authPauses}`,
+            );
+          });
+        else await this.update(task, lease, async () => {});
+        return;
+      }
       if (task.state === "queued") {
         requireThat(
           task.attempts < task.policy.maxAttempts &&
@@ -218,6 +234,7 @@ export class DevelopmentExecutor {
             t.fence++;
             t.attempts++;
             t.attemptId = randomUUID();
+            t.authWaitMs = 0;
             t.state = "working";
             t.consumedRevision = t.revision;
             const inputs = await taskInputs(sql, t);
@@ -303,6 +320,49 @@ export class DevelopmentExecutor {
       }
       requireThat(task.attemptId, "coding_attempt_missing", 409);
       const status = await this.runner.status(workspaceId, task.attemptId);
+      if (status.state === "auth_required") {
+        requireThat(
+          task.payload.authMode === "device_code" &&
+            task.state !== "publishing",
+          "coding_result_invalid",
+          409,
+        );
+        if (task.state !== "auth_required") {
+          await this.pauseAuth(task, lease);
+        } else if (await this.deviceConnected(workspaceId)) {
+          requireThat(
+            this.runner.resumeAuth,
+            "coding_runner_not_configured",
+            409,
+          );
+          await this.token(task, "contents"); // Recheck live private visibility before any resumed code.
+          const authorized = await this.update(
+            task,
+            lease,
+            async (w, sql, t) => {
+              await this.allowed(w, sql, t);
+              requireThat(
+                t.tokens + (status.tokens ?? 0) < t.policy.maxTokens,
+                "coding_budget_exhausted",
+                409,
+              );
+              return true;
+            },
+            false,
+          );
+          if (!authorized) return;
+          await this.runner.resumeAuth(workspaceId, task.attemptId);
+          await this.resumeAuthState(task, lease);
+        } else await this.update(task, lease, async () => {});
+        return;
+      }
+      if (task.state === "auth_required")
+        await this.resumeAuthState(
+          task,
+          lease,
+          false,
+          ["preparing", "running", "ready", "succeeded"].includes(status.state),
+        );
       if (["preparing", "running", "publishing"].includes(status.state)) {
         await this.update(task, lease, async () => {});
         return;
@@ -498,6 +558,25 @@ export class DevelopmentExecutor {
         return;
       }
       if (
+        code === "coding_device_auth_required" &&
+        task.payload.authMode === "device_code" &&
+        task.state !== "publishing"
+      ) {
+        await this.pauseAuth(task, lease, dispatched);
+        return;
+      }
+      if (
+        task.state === "auth_required" &&
+        [
+          "coding_runner_busy",
+          "coding_runner_unavailable",
+          "coding_outcome_unknown",
+        ].includes(code)
+      ) {
+        await this.update(task, lease, async () => {});
+        return;
+      }
+      if (
         !dispatched &&
         task.attemptId &&
         ["coding_runner_unavailable", "coding_runner_request_failed"].includes(
@@ -539,6 +618,67 @@ export class DevelopmentExecutor {
         }
       });
     }
+  }
+  private async deviceConnected(workspaceId: string) {
+    const device = this.runner as LocalRunner & Partial<LocalDeviceAuth>;
+    requireThat(device.deviceStatus, "coding_runner_not_configured", 409);
+    return (await device.deviceStatus(workspaceId)).state === "connected";
+  }
+  private async pauseAuth(
+    task: DevelopmentTask,
+    lease: string,
+    rejectedStart = false,
+  ) {
+    await this.update(task, lease, async (w, sql, t) => {
+      if (rejectedStart) {
+        await finishAttempt(sql, t);
+        t.attemptId = undefined;
+        t.attempts--;
+      }
+      if (t.state !== "auth_required") {
+        t.authPauses = (t.authPauses ?? 0) + 1;
+        t.authPausedAt = t.attemptId ? new Date().toISOString() : undefined;
+        await this.notice(
+          w,
+          t,
+          "Codex account needs sign-in. Connect it in Plugins → Codex → Configuration. Your task is paused and will continue automatically after connection.",
+          `auth-required:${t.authPauses}`,
+        );
+      }
+      t.state = "auth_required";
+      t.error = "coding_device_auth_required";
+    });
+  }
+  private async resumeAuthState(
+    task: DevelopmentTask,
+    lease: string,
+    release = true,
+    announce = true,
+  ) {
+    await this.update(
+      task,
+      lease,
+      async (w, sql, t) => {
+        await this.allowed(w, sql, t);
+        t.authWaitMs =
+          (t.authWaitMs ?? 0) +
+          Math.max(
+            0,
+            Date.now() - Date.parse(t.authPausedAt ?? new Date().toISOString()),
+          );
+        t.authPausedAt = undefined;
+        t.state = "working";
+        t.error = undefined;
+        if (announce)
+          await this.notice(
+            w,
+            t,
+            "Codex account connected. Continuing your task from its saved checkout.",
+            `auth-resumed:${t.authPauses}`,
+          );
+      },
+      release,
+    );
   }
   private async ready(
     task: DevelopmentTask,
@@ -616,7 +756,7 @@ export class DevelopmentExecutor {
     ).rows[0];
     task.activeMs += Math.max(
       0,
-      Date.now() - (row?.data.startedAt ?? Date.now()),
+      Date.now() - (row?.data.startedAt ?? Date.now()) - (task.authWaitMs ?? 0),
     );
     task.tokens +=
       status.tokens ?? row?.data.usageReserved ?? task.policy.maxTokens;

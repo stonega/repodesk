@@ -97,6 +97,7 @@ export const developmentRun = z
   .strict();
 export type DevelopmentRun = z.infer<typeof developmentRun>;
 export type DevelopmentState =
+  | "auth_required"
   | "queued"
   | "working"
   | "waiting"
@@ -127,6 +128,9 @@ export interface DevelopmentTask {
   attempts: number;
   tokens: number;
   activeMs: number;
+  authPausedAt?: string;
+  authWaitMs?: number;
+  authPauses?: number;
   contentRemoved?: boolean;
   canImplement: boolean;
   canPublish: boolean;

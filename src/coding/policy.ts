@@ -224,14 +224,16 @@ export function notifyCoding(w: Workspace, task: CodingTask) {
     task.workflowUrl,
     task.prUrl,
     task.error ? `Reason: ${task.error}.` : "",
-    task.state === "unknown"
-      ? "Check GitHub before starting another task. This task will not be replayed automatically."
-      : "",
+    task.state === "auth_required"
+      ? "Connect your Codex account in Plugins → Codex → Configuration. Your task is paused and will continue automatically after connection."
+      : task.state === "unknown"
+        ? "Check GitHub before starting another task. This task will not be replayed automatically."
+        : "",
   ]
     .filter(Boolean)
     .join("\n");
   deliver(w, task.actor, task.chatId, text, {
     topicId: task.topicId,
-    id: `coding:${task.id}:${task.state}:${task.workflowRunId ?? ""}`,
+    id: `coding:${task.id}:${task.state}:${task.workflowRunId ?? ""}:${task.authPauses ?? 0}`,
   });
 }

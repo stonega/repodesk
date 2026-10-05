@@ -4,17 +4,30 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { CodexAuthError } from "../src/coding/local/auth-failure.ts";
 import { runConversation } from "../src/coding/local/conversation.ts";
 
 const exec = promisify(execFile);
 const root = await mkdtemp(join(tmpdir(), "repodesk-protocol-"));
 let calls = 0;
+let rejectAuth = false;
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
   fetch: async (request) => {
     if (!new URL(request.url).pathname.endsWith("/responses"))
       return new Response("unsupported", { status: 404 });
+    if (rejectAuth)
+      return Response.json(
+        {
+          error: {
+            message: "Invalid fixture account credential",
+            type: "authentication_error",
+            code: "invalid_api_key",
+          },
+        },
+        { status: 401 },
+      );
     await request.json();
     calls++;
     const text = JSON.stringify({
@@ -154,6 +167,15 @@ try {
     throw new Error(
       `Recovery or token accounting failed: ${JSON.stringify({ reconstructed: reconstructed.reconstructed, same: reconstructed.threadId === first.threadId, tokens: [first.tokens, question.tokens, answer.tokens] })}`,
     );
+  rejectAuth = true;
+  try {
+    await runConversation(options);
+    throw new Error("Authentication failure was not surfaced");
+  } catch (error) {
+    if (!(error instanceof CodexAuthError) || error.tokens !== 0)
+      throw new Error("Authentication protocol contract failed");
+  }
+  rejectAuth = false;
   const abort = new AbortController();
   abort.abort();
   try {
@@ -171,7 +193,7 @@ try {
       throw error;
   }
   console.log(
-    "Pinned Codex protocol: start, structured question, resume, missing-session reconstruction, token accounting and cancellation passed (local fake provider).",
+    "Pinned Codex protocol: start, structured question, resume, missing-session reconstruction, token accounting, authentication failure and cancellation passed (local fake provider).",
   );
 } finally {
   server.stop(true);

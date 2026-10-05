@@ -6,6 +6,7 @@ import {
 } from "../../src/coding/development.ts";
 import { DevelopmentExecutor } from "../../src/coding/executor.ts";
 import type {
+  LocalDeviceAuth,
   LocalRunner,
   LocalStart,
   LocalStatus,
@@ -24,7 +25,7 @@ import {
 import { migrate } from "../../src/db/migrate.ts";
 import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
-import type { Source } from "../../src/domain.ts";
+import { Fault, type Source } from "../../src/domain.ts";
 import { GitHubApp } from "../../src/github/app.ts";
 import { GitHubApps } from "../../src/github/registry.ts";
 import { createRun } from "../../src/workspaces/service.ts";
@@ -143,9 +144,15 @@ const url = process.env.TEST_DATABASE_URL;
     let onToken: (() => Promise<void>) | undefined;
     let confirmUnknown = false;
     let remoteHead = "b".repeat(40),
-      closed = false;
+      closed = false,
+      repositoryPrivate = true;
     const app = new GitHubApp(githubFixtureConfig, (async (input, init) => {
       if (String(input).endsWith("/access_tokens")) await onToken?.();
+      if (String(input).endsWith("/repos/example/workspace"))
+        return Response.json({
+          full_name: "example/workspace",
+          private: repositoryPrivate,
+        });
       if (String(input).includes("/pulls?"))
         return Response.json(
           confirmUnknown
@@ -238,6 +245,9 @@ const url = process.env.TEST_DATABASE_URL;
       },
       close: () => {
         closed = true;
+      },
+      makePublic: () => {
+        repositoryPrivate = false;
       },
       head: (sha: string) => {
         remoteHead = sha;
@@ -653,5 +663,149 @@ const url = process.env.TEST_DATABASE_URL;
     expect(done.state).toBe("review");
     expect(done.pr?.number).toBe(43);
     expect(f.publications).toHaveLength(1);
+  });
+  async function configureDevice(f: Awaited<ReturnType<typeof fixture>>) {
+    let connected = true;
+    const runner = f.runner as LocalRunner & LocalDeviceAuth;
+    runner.deviceStatus = async () => ({
+      state: connected ? "connected" : "auth_required",
+    });
+    await store.change(f.w.id, async (w, sql) => {
+      present(w.coding).settings.authMode = "device_code";
+      const task = await taskGet(sql, w.id, f.task.id);
+      task.payload.authMode = "device_code";
+      await taskSave(sql, task);
+    });
+    return {
+      runner,
+      connect: (value: boolean) => {
+        connected = value;
+      },
+    };
+  }
+  test("missing account pauses before reservation and reconnect queues without another confirmation", async () => {
+    const f = await fixture();
+    const device = await configureDevice(f);
+    device.connect(false);
+    expect((await f.tick()).state).toBe("auth_required");
+    expect((await f.read()).attempts).toBe(0);
+    expect(f.starts).toHaveLength(0);
+    await f.tick();
+    expect((await f.read()).authPauses).toBe(1);
+    device.connect(true);
+    expect((await f.tick()).state).toBe("queued");
+    expect((await f.tick()).state).toBe("working");
+    expect(f.starts).toHaveLength(1);
+  });
+  test("auth pause survives executor restart, deduplicates notices and excludes wait from task budget", async () => {
+    const f = await fixture();
+    const device = await configureDevice(f);
+    await f.tick();
+    const attempt = present((await f.read()).attemptId);
+    device.connect(false);
+    const paused = await f.tick({
+      state: "auth_required",
+      tokens: 7,
+      error: "coding_device_auth_required",
+    });
+    expect(paused.state).toBe("auth_required");
+    await f.tick();
+    const notices = await store.pool.query(
+      "SELECT id FROM outbox WHERE workspace_id=$1 AND target_id LIKE '%auth-required:%'",
+      [f.w.id],
+    );
+    expect(notices.rows).toHaveLength(1);
+    await f.append("Also cover empty pages");
+    expect((await f.read()).state).toBe("auth_required");
+    await store.change(f.w.id, async (_w, sql) => {
+      const task = await f.read();
+      task.authPausedAt = new Date(
+        Date.parse(present(task.authPausedAt)) - 7200000,
+      ).toISOString();
+      await taskSave(sql, task);
+      await sql.query(
+        "UPDATE coding_task_attempts SET data=jsonb_set(data,'{startedAt}',to_jsonb((data->>'startedAt')::bigint-7200000)) WHERE workspace_id=$1 AND id=$2",
+        [task.workspaceId, attempt],
+      );
+    });
+    let resumes = 0;
+    device.runner.resumeAuth = async () => {
+      resumes++;
+      throw new Fault("coding_outcome_unknown", 503);
+    };
+    device.connect(true);
+    await f.tick();
+    expect((await f.read()).state).toBe("auth_required");
+    expect((await f.tick({ state: "running" })).state).toBe("working");
+    expect(resumes).toBe(1);
+    expect(f.starts).toHaveLength(1);
+    const completed = await f.tick({
+      state: "succeeded",
+      result: result(),
+      tokens: 30,
+    });
+    expect(completed.state).toBe("queued");
+    expect(completed.tokens).toBe(30);
+    expect(completed.activeMs).toBeLessThan(5000);
+  });
+  test("Stop and permission revocation cancel an auth-paused runner before reconnect", async () => {
+    for (const revoke of [false, true]) {
+      const f = await fixture();
+      const device = await configureDevice(f);
+      await f.tick();
+      device.connect(false);
+      await f.tick({ state: "auth_required", tokens: 7 });
+      await store.change(f.w.id, async (w, sql) => {
+        if (revoke)
+          present(w.members.find((m) => m.id === "101")).active = false;
+        else await cancelDevelopment(sql, w, "101", f.task.id);
+      });
+      device.connect(true);
+      let resumes = 0;
+      device.runner.resumeAuth = async () => {
+        resumes++;
+      };
+      expect((await f.tick()).state).toBe("cancelled");
+      expect(resumes).toBe(0);
+      expect(f.cancels).toHaveLength(1);
+    }
+  });
+  test("permissions changed during auth-resume token minting prevent restarted code", async () => {
+    const f = await fixture();
+    const device = await configureDevice(f);
+    await f.tick();
+    device.connect(false);
+    await f.tick({ state: "auth_required", tokens: 7 });
+    device.connect(true);
+    let resumes = 0;
+    device.runner.resumeAuth = async () => {
+      resumes++;
+    };
+    f.onToken(() =>
+      store.change(f.w.id, (w) => {
+        present(w.members.find((m) => m.id === "101")).active = false;
+      }),
+    );
+    await f.tick();
+    expect(resumes).toBe(0);
+    expect(f.cancels).toHaveLength(1);
+  });
+  test("a repository made public during auth wait cannot resume with account credentials", async () => {
+    const f = await fixture();
+    const device = await configureDevice(f);
+    await f.tick();
+    device.connect(false);
+    await f.tick({ state: "auth_required", tokens: 7 });
+    f.makePublic();
+    device.connect(true);
+    let resumes = 0;
+    device.runner.resumeAuth = async () => {
+      resumes++;
+    };
+    expect((await f.tick()).error).toBe(
+      "coding_device_private_repository_required",
+    );
+    expect(resumes).toBe(0);
+    expect(f.cancels).toHaveLength(1);
   });
 });

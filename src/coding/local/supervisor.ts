@@ -42,9 +42,13 @@ interface Record extends LocalStatus {
   checkpointLost?: boolean;
   cleaned?: boolean;
   baseSha?: string;
+  authGeneration?: string;
+  authPausedAt?: number;
 }
 const terminal = (state: string) =>
-  ["succeeded", "failed", "cancelled", "unknown"].includes(state);
+  ["succeeded", "failed", "cancelled", "unknown", "auth_required"].includes(
+    state,
+  );
 const implementationFailures = new Set([
   "coding_setup_failed",
   "coding_codex_failed",
@@ -138,7 +142,13 @@ export class RunnerSupervisor implements LocalRunner {
       "/auth/auth.json",
       128 * 1024,
     );
-    await this.device.save(r.input.workspaceId, credential);
+    // A legacy in-flight record can finish, but cannot overwrite a newer login.
+    if (r.authGeneration)
+      await this.device.capture(
+        r.input.workspaceId,
+        r.authGeneration,
+        credential,
+      );
   }
   private async removeAuthVolume(r: Record) {
     if (r.input.payload.authMode !== "device_code") return;
@@ -148,7 +158,17 @@ export class RunnerSupervisor implements LocalRunner {
       "--ignore",
       `${r.key}-implement`,
     ]);
-    await this.engine.command(["volume", "rm", "--force", this.authVolume(r)]);
+    const name = this.authVolume(r);
+    const volumes = await this.engine.command([
+      "volume",
+      "ls",
+      "--format",
+      "{{.Name}}",
+      "--filter",
+      `name=${name}`,
+    ]);
+    if (volumes.split("\n").includes(name))
+      await this.engine.command(["volume", "rm", "--force", name]);
   }
   private async launch(
     r: Record,
@@ -176,7 +196,12 @@ export class RunnerSupervisor implements LocalRunner {
       try {
         await writeFile(
           credential,
-          await this.device.read(r.input.workspaceId),
+          await (async () => {
+            const auth = await this.device.snapshot(r.input.workspaceId);
+            r.authGeneration = auth.generation;
+            await this.save(r);
+            return auth.credential;
+          })(),
           { mode: 0o600 },
         );
         await this.engine.command([
@@ -346,6 +371,10 @@ export class RunnerSupervisor implements LocalRunner {
     await this.save(r);
   }
   private async advance(r: Record) {
+    if (r.state === "auth_required" && !r.cleaned) {
+      await this.removeAuthVolume(r);
+      return;
+    }
     if (terminal(r.state) || r.state === "ready") return;
     try {
       if (
@@ -377,8 +406,56 @@ export class RunnerSupervisor implements LocalRunner {
       if (state.Running) return;
       if (state.Status !== "exited" && state.Status !== "stopped")
         throw new Error("Incomplete container start");
-      if (r.phase === "implement" && r.input.payload.authMode === "device_code")
+      if (
+        r.phase === "implement" &&
+        r.input.payload.authMode === "device_code"
+      ) {
+        if (
+          state.ExitCode !== 0 &&
+          (await this.copyResult(r, "failure-code").catch(() => "")).trim() ===
+            "coding_device_auth_required"
+        ) {
+          if (r.input.development) {
+            let metadata: unknown;
+            try {
+              metadata = JSON.parse(
+                await this.engine.readText(
+                  `${r.key}-implement`,
+                  "/task/auth-failure.json",
+                  4096,
+                ),
+              );
+            } catch {
+              metadata = {};
+            }
+            const usage = z
+              .object({
+                threadId: z
+                  .string()
+                  .regex(/^[a-zA-Z0-9-]{1,100}$/)
+                  .optional(),
+                tokens: z.number().int().nonnegative().optional(),
+              })
+              .safeParse(metadata);
+            r.threadId = usage.success ? usage.data.threadId : r.threadId;
+            // Unknown usage retains the reservation; it cannot silently reset a budget.
+            r.tokens =
+              (r.tokens ?? 0) +
+              (usage.success
+                ? (usage.data.tokens ?? r.input.development.maxTokens)
+                : r.input.development.maxTokens);
+          }
+          if (r.authGeneration)
+            await this.device.invalidate(r.input.workspaceId, r.authGeneration);
+          r.state = "auth_required";
+          r.error = "coding_device_auth_required";
+          r.authPausedAt = Date.now();
+          await this.save(r);
+          await this.removeAuthVolume(r);
+          return;
+        }
         await this.captureAuth(r);
+      }
       if (
         state.ExitCode !== 0 &&
         r.phase === "check" &&
@@ -633,9 +710,68 @@ export class RunnerSupervisor implements LocalRunner {
       }
     });
   }
+  async resumeAuth(workspaceId: string, taskId: string) {
+    return this.serial(async () => {
+      const r = this.get(workspaceId, taskId);
+      requireThat(!r.cleaned, "coding_checkpoint_expired", 409);
+      requireThat(
+        r.input.payload.authMode === "device_code",
+        "coding_device_mode_required",
+        409,
+      );
+      if (r.state !== "auth_required") {
+        requireThat(
+          r.phase === "implement" && r.state === "running",
+          "coding_task_not_ready",
+          409,
+        );
+        return; // Repeated acknowledgements never launch a second container.
+      }
+      requireThat(
+        ![...this.records.values()].some(
+          (other) => other !== r && !terminal(other.state),
+        ),
+        "coding_runner_busy",
+        429,
+      );
+      await this.device.read(workspaceId);
+      requireThat(
+        !r.input.development || (r.tokens ?? 0) < r.input.development.maxTokens,
+        "coding_token_limit",
+        409,
+      );
+      await this.removeAuthVolume(r);
+      r.createdAt += Date.now() - (r.authPausedAt ?? Date.now());
+      r.authPausedAt = undefined;
+      r.finishedAt = undefined;
+      r.error = undefined;
+      r.state = "running";
+      await this.save(r);
+      try {
+        await this.launch(r, "implement");
+      } catch {
+        r.state = "unknown";
+        r.error = "coding_outcome_unknown";
+        await this.save(r);
+        throw new Fault("coding_outcome_unknown", 503);
+      }
+    });
+  }
   private async stop(r: Record) {
-    if (terminal(r.state)) return;
-    if (r.phase === "implement" && r.input.payload.authMode === "device_code") {
+    if (terminal(r.state) && r.state !== "auth_required") return;
+    if (
+      r.state !== "auth_required" &&
+      r.phase === "implement" &&
+      r.input.payload.authMode === "device_code"
+    ) {
+      // Stop token rotation before reading the final cache; keep the container for cp.
+      await this.engine.command([
+        "stop",
+        "--ignore",
+        "--time",
+        "0",
+        `${r.key}-implement`,
+      ]);
       try {
         await this.captureAuth(r);
       } catch {
@@ -707,7 +843,7 @@ export class RunnerSupervisor implements LocalRunner {
         if (
           r.input.workspaceId === workspaceId &&
           r.input.payload.authMode === "device_code" &&
-          ["preparing", "running", "ready"].includes(r.state)
+          ["preparing", "running", "ready", "auth_required"].includes(r.state)
         )
           await this.stop(r);
       return this.device.logout(workspaceId);
@@ -755,7 +891,8 @@ export class RunnerSupervisor implements LocalRunner {
                 1000
         )
           await this.timeout(r);
-        if (!terminal(r.state)) await this.advance(r);
+        if (!terminal(r.state) || r.state === "auth_required")
+          await this.advance(r);
         if (
           !r.cleaned &&
           r.finishedAt &&
@@ -797,6 +934,10 @@ export class RunnerSupervisor implements LocalRunner {
           for (const suffix of ["patch", "result", "input", "conversation"])
             await rm(this.path(r, suffix), { force: true });
           // Keep a small tombstone so delayed duplicate requests cannot replay the task.
+          if (r.state === "auth_required") {
+            r.state = "failed";
+            r.error = "coding_checkpoint_expired";
+          }
           r.cleaned = true;
           r.proxyToken = "";
           r.input.payload.body = "[expired]";

@@ -41,6 +41,10 @@ function message(error: unknown) {
   return messages[code] ?? code;
 }
 const taskFailures: Record<string, string> = {
+  coding_device_auth_required:
+    "Sign in to your Codex account in Configuration. This task will continue automatically.",
+  coding_checkpoint_expired:
+    "The saved checkout expired. Start a new task to continue.",
   coding_verification_invalid:
     "Codex did not provide runnable verification checks.",
   coding_budget_exhausted:
@@ -202,7 +206,9 @@ export function Coding({
         ? "ChatGPT connected"
         : data.deviceAuth?.state === "pending"
           ? "Sign-in pending"
-          : "ChatGPT not connected"
+          : data.deviceAuth?.state === "auth_required"
+            ? "ChatGPT sign-in required"
+            : "ChatGPT not connected"
       : data?.providerApiKeyConfigured
         ? "Workspace key configured"
         : "No workspace key";
@@ -441,7 +447,9 @@ export function Coding({
                           <code>{task.payload.baseBranch}</code>
                         </td>
                         <td>
-                          {task.state.replaceAll("_", " ")}
+                          {task.state === "auth_required"
+                            ? "Waiting for sign-in"
+                            : task.state.replaceAll("_", " ")}
                           {task.cancelRequested && " · stop requested"}
                           {task.questionText && <p>{task.questionText}</p>}
                           {task.error && (
@@ -648,9 +656,11 @@ export function Coding({
                           ? "Waiting for you to finish sign-in."
                           : data.deviceAuth?.state === "unavailable"
                             ? "The Codex runner is unavailable. Recheck connection after it is started."
-                            : data.deviceAuth?.state === "failed"
-                              ? "Sign-in failed or expired. Start again."
-                              : "No ChatGPT account connected."}
+                            : data.deviceAuth?.state === "auth_required"
+                              ? "Your account needs sign-in again. Paused tasks will continue automatically after connection."
+                              : data.deviceAuth?.state === "failed"
+                                ? "Sign-in failed or expired. Start again."
+                                : "No ChatGPT account connected."}
                 </p>
                 <p className="muted">
                   Use only with trusted private repositories. Account tokens are
@@ -723,7 +733,8 @@ export function Coding({
                           </button>
                         )}
                       {(data.deviceAuth?.state === "connected" ||
-                        data.deviceAuth?.state === "pending") && (
+                        data.deviceAuth?.state === "pending" ||
+                        data.deviceAuth?.state === "auth_required") && (
                         <button
                           type="button"
                           disabled={busy || loading}

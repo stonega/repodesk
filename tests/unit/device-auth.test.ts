@@ -84,3 +84,45 @@ setInterval(() => {}, 1000);
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("refresh survives restart; old task credentials cannot replace a new login or undo disconnect", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "deepx-device-fence-"));
+  const settings = runnerSettings.parse({
+    CODEX_RUNNER_STATE: dir,
+    CODEX_RUNNER_TOKEN: "management-token".repeat(3),
+    CODEX_PROVIDER_BASE_URL: "https://provider.example/v1",
+  });
+  const workspace = randomUUID();
+  const credential = (token: string) =>
+    JSON.stringify({ tokens: { access_token: token } });
+  try {
+    let auth = new DeviceAuth(settings);
+    const old = await auth.save(workspace, credential("old"));
+    expect(await auth.capture(workspace, old, credential("refreshed"))).toBe(
+      true,
+    );
+    auth = new DeviceAuth(settings);
+    await auth.initialize();
+    expect(await auth.read(workspace)).toContain("refreshed");
+    await auth.invalidate(workspace, old);
+    expect(await auth.status(workspace)).toEqual({ state: "auth_required" });
+    expect(await auth.capture(workspace, old, credential("stale"))).toBe(false);
+    await expect(auth.read(workspace)).rejects.toThrow(
+      "coding_device_auth_required",
+    );
+    const current = await auth.save(workspace, credential("new-login"));
+    await auth.invalidate(workspace, old);
+    expect(await auth.capture(workspace, old, credential("stale"))).toBe(false);
+    expect(await auth.read(workspace)).toContain("new-login");
+    await auth.logout(workspace);
+    expect(await auth.capture(workspace, current, credential("stale"))).toBe(
+      false,
+    );
+    expect(await auth.status(workspace)).toEqual({ state: "disconnected" });
+    await expect(
+      auth.save(workspace, JSON.stringify({ tokens: {} })),
+    ).rejects.toThrow();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

@@ -173,3 +173,18 @@ test("a stalled sign-in times out and can recover a pending login through rechec
     dialog.getByRole("button", { name: "Disconnect account" }),
   ).toBeEnabled();
 });
+
+test("expired account explains automatic task continuation and offers device sign-in", async ({
+  page,
+}) => {
+  const { dialog } = await fixture(page, { state: "auth_required" });
+  await expect(dialog.getByRole("status")).toContainText(
+    "Paused tasks will continue automatically",
+  );
+  await expect(
+    dialog.getByRole("button", { name: "Sign in with device code" }),
+  ).toBeEnabled();
+  await expect(
+    dialog.getByRole("button", { name: "Disconnect account" }),
+  ).toBeEnabled();
+});

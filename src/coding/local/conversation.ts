@@ -7,6 +7,7 @@ import {
   developmentOutputSchema,
   developmentResult,
 } from "../development.ts";
+import { CodexAuthError, codexAuthFailure } from "./auth-failure.ts";
 
 /** Private JSONL client. Only completed turns cross the durable application boundary. */
 export async function runConversation(options: {
@@ -45,6 +46,13 @@ export async function runConversation(options: {
   let settled = false,
     reconstructed = false;
   let turnStarted = false;
+  let authFailed = false;
+  let modelActivity = false;
+  const authFailure = () =>
+    new CodexAuthError(
+      threadId || undefined,
+      usageByTurn.get(turnId)?.tokens ?? (modelActivity ? undefined : 0),
+    );
   const usageByTurn = new Map<string, { tokens: number; total: number }>();
   const decoder = new StringDecoder("utf8");
   const pending = new Map<
@@ -103,15 +111,18 @@ export async function runConversation(options: {
           pending.delete(message.id);
           if (message.error)
             p.reject(
-              new Fault(
-                message.error.code === -32600 &&
-                  /not found|does not exist|no rollout/i.test(
-                    String(message.error.message),
-                  )
-                  ? "coding_session_missing"
-                  : "coding_conversation_failed",
-                503,
-              ),
+              codexAuthFailure(message.error) ||
+                codexAuthFailure(message.error.data)
+                ? authFailure()
+                : new Fault(
+                    message.error.code === -32600 &&
+                      /not found|does not exist|no rollout/i.test(
+                        String(message.error.message),
+                      )
+                      ? "coding_session_missing"
+                      : "coding_conversation_failed",
+                    503,
+                  ),
             );
           else p.resolve(message.result);
           continue;
@@ -130,6 +141,15 @@ export async function runConversation(options: {
         }
         const p = message.params;
         if (p?.threadId && threadId && p.threadId !== threadId) continue;
+        if (
+          (message.method === "item/started" ||
+            message.method === "item/completed") &&
+          p?.item?.type &&
+          p.item.type !== "userMessage"
+        )
+          modelActivity = true;
+        if (message.method === "error" && p?.willRetry !== true)
+          authFailed = codexAuthFailure(p?.error);
         if (
           message.method === "item/completed" &&
           p?.item?.type === "agentMessage" &&
@@ -171,7 +191,11 @@ export async function runConversation(options: {
           (!turnId || p?.turn?.id === turnId)
         ) {
           if (p?.turn?.status !== "completed") {
-            stop(failure());
+            stop(
+              codexAuthFailure(p.turn.error) || authFailed
+                ? authFailure()
+                : failure(),
+            );
             return;
           }
           turnId = p.turn.id;

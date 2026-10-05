@@ -99,6 +99,7 @@ export const codingPayload = z.preprocess(
 );
 export type CodingPayload = z.infer<typeof codingPayload>;
 export type CodingState =
+  | "auth_required"
   | "queued"
   | "creating_issue"
   | "issue_created"
@@ -129,11 +130,21 @@ export interface CodingTask {
   nextPollAt?: string;
   lease?: string;
   cancelRequested?: boolean;
+  authResumeState?: "queued" | "issue_created" | "running";
+  authPausedAt?: string;
+  authWaitMs?: number;
+  authPauses?: number;
 }
 export interface CodingPage {
   providerApiKeyConfigured: boolean;
   deviceAuth?: {
-    state: "disconnected" | "pending" | "connected" | "failed" | "unavailable";
+    state:
+      | "disconnected"
+      | "pending"
+      | "connected"
+      | "auth_required"
+      | "failed"
+      | "unavailable";
     verificationUrl?: string;
     userCode?: string;
   };

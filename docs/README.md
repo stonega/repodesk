@@ -30,6 +30,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Codex coding tasks](implementation/codex-coding.md) | Maintainer-only issue-to-PR tasks, repository settings and local runner setup |
 | [Continuous Codex collaboration](design/codex-collaboration.md) | Policy-gated continuous tasks: Pi requirements intake, Codex decisions, Telegram questions, repair and same-PR follow-ups; live pilot pending |
 | [Codex collaboration implementation plan](implementation/codex-collaboration-plan.md) | Protocol proof, durable tasks, original-requirement handoff, Telegram input, repair, same-PR continuation and release gates |
+| [Codex account authentication lifecycle](implementation/codex-auth-plan.md) | Credential generations, automatic refresh persistence, sign-in pauses and authorized continuation |
 | [Local Codex runner](implementation/codex-podman.md) | Podman task isolation, custom provider environment and local publication |
 | [Local Code Truth](implementation/code-truth.md) | Predefined source-query extension, local MCP service and repository configuration |
 | [Setup](implementation/setup.md) | Local commands, validation, and configuration |

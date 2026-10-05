@@ -162,7 +162,13 @@ export async function startDevelopment(
   requireThat(
     tasks.length < 200 &&
       tasks.filter((t) =>
-        ["queued", "working", "waiting", "publishing"].includes(t.state),
+        [
+          "queued",
+          "working",
+          "waiting",
+          "publishing",
+          "auth_required",
+        ].includes(t.state),
       ).length < 10,
     "coding_capacity_reached",
     429,
@@ -333,7 +339,10 @@ export async function cancelDevelopment(
   const task = await taskGet(sql, w.id, id);
   checkDevelopment(w, task, actor, true);
   task.cancelRequested = true;
-  if (["queued", "waiting", "review"].includes(task.state))
+  if (
+    ["queued", "waiting", "review"].includes(task.state) ||
+    (task.state === "auth_required" && !task.attemptId)
+  )
     task.state = "cancelled";
   await taskSave(sql, task);
   audit(w, actor, "coding.cancel_requested", id);
