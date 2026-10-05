@@ -8,6 +8,7 @@ import {
   submitGitHubManifest,
 } from "./github-registration.tsx";
 import { Modal } from "./modal.tsx";
+import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 function explain(error: unknown) {
@@ -202,7 +203,7 @@ export function GitHubSetup({
           {error}
         </p>
       )}
-      {!data && !error && <p role="status">Loading GitHub connection…</p>}
+      {!data && !error && <SkeletonRows label="GitHub connection" rows={1} />}
       {data?.pending && !completed.current && (
         <p className="muted" role="status">
           {needsInstallationSelection
@@ -305,9 +306,15 @@ export function GitHubConnection({
       {(open ?? internalOpen) && (
         <Modal title="Manage GitHub" onClose={close} busy={busy}>
           <div className="github-details">
-            <span className="pill">
-              {data?.connection?.installationId ? "Connected" : "Not connected"}
-            </span>
+            {data ? (
+              <span className="pill">
+                {data.connection?.installationId
+                  ? "Connected"
+                  : "Not connected"}
+              </span>
+            ) : (
+              !error && <Skeleton width="7rem" />
+            )}
             <p>
               Connect a GitHub App to give this workspace source access to
               selected repositories and submit issues after approval in
@@ -337,7 +344,9 @@ export function GitHubConnection({
                 then connect this workspace.
               </p>
             )}
-            {!data && <p role="status">Loading GitHub connection…</p>}
+            {!data && !error && (
+              <SkeletonRows label="GitHub connection" rows={2} />
+            )}
             {data?.canRegister && (
               <GitHubRegistration
                 request={request}

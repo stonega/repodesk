@@ -3,6 +3,8 @@ import { NavLink } from "react-router";
 import type { CodingPage, CodingSettings } from "../src/coding/config.ts";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
+import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
+import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 
 type Request = <T>(
   path: string,
@@ -15,9 +17,9 @@ function message(error: unknown) {
   if (error instanceof Error && error.name === "TimeoutError")
     return "The connection request timed out. Recheck connection before trying sign-in again.";
   const code = (error as Error).message;
+  if (code.startsWith("version_conflict"))
+    return "Settings changed in another session. Reload and review your edits.";
   const messages: Record<string, string> = {
-    version_conflict:
-      "Settings changed in another session. Reload and review your edits.",
     coding_maintainer_inactive:
       "Select maintainers who currently have workspace access.",
     github_repository_not_connected:
@@ -70,9 +72,11 @@ const taskFailures: Record<string, string> = {
 export function Coding({
   request,
   workspaceId,
+  backTo,
 }: {
   request: Request;
   workspaceId: string;
+  backTo?: string;
 }) {
   const endpoint = `/api/admin/workspaces/${workspaceId}/plugins/coding`;
   const [data, setData] = useState<CodingPage>();
@@ -200,6 +204,7 @@ export function Coding({
     (task) =>
       !["succeeded", "failed", "unknown", "cancelled"].includes(task.state),
   ).length;
+  const pendingValue = error ? "—" : <Skeleton width="9rem" />;
   const credentialStatus =
     data?.settings.authMode === "device_code"
       ? data.deviceAuth?.state === "connected"
@@ -218,6 +223,19 @@ export function Coding({
       id="coding-tasks"
       aria-label="Codex implementation"
     >
+      {backTo && (
+        <PluginDetailHeading title="Codex" backTo={backTo}>
+          <PluginToggle
+            name="Codex implementation"
+            enabled={data?.settings.enabled}
+            loading={!data && !error}
+            disabled={!data || busy || loading}
+            onChange={(enabled) => {
+              if (data) void save({ ...data.settings, enabled });
+            }}
+          />
+        </PluginDetailHeading>
+      )}
       {error && !editing && !configEditing && (
         <p className="notice" role="alert">
           {error}{" "}
@@ -230,319 +248,339 @@ export function Coding({
           </button>
         </p>
       )}
-      {!data && !error && <p role="status">Loading Codex settings…</p>}
-      {data && (
-        <>
-          <section className="card" aria-label="Codex configuration">
-            <div className="coding-card-heading">
-              <div>
-                <h2>Configuration</h2>
-                <p className="muted">
-                  Repository policy controls coding work in isolated local
-                  containers.
-                </p>
-              </div>
+      <section
+        className="card"
+        aria-label="Codex configuration"
+        aria-busy={!data && !error}
+      >
+        <div className="plugin-card-heading">
+          <div>
+            <h2>Configuration</h2>
+            <p className="muted">
+              Repository policy controls coding work in isolated local
+              containers.
+            </p>
+          </div>
+          <IconButton
+            icon="edit"
+            label="Edit Codex configuration"
+            showLabel
+            disabled={!data || busy || loading}
+            onClick={() => {
+              if (!data) return;
+              setError("");
+              setConfigDraft(structuredClone(data.settings));
+              setKeyDraft("");
+              setRemoveKey(false);
+              setConfigEditing(true);
+            }}
+          />
+        </div>
+        <dl className="plugin-summary">
+          <div>
+            <dt>Status</dt>
+            <dd>
+              {data ? (
+                <span className={data.settings.enabled ? "pill good" : "pill"}>
+                  {data.settings.enabled ? "Enabled" : "Disabled"}
+                </span>
+              ) : (
+                pendingValue
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>Execution</dt>
+            <dd>Local Podman</dd>
+          </div>
+          <div>
+            <dt>Sign-in method</dt>
+            <dd>
+              {data
+                ? data.settings.authMode === "device_code"
+                  ? "ChatGPT device code"
+                  : "Custom provider API key"
+                : pendingValue}
+            </dd>
+          </div>
+          <div>
+            <dt>Credential</dt>
+            <dd>{data ? credentialStatus : pendingValue}</dd>
+          </div>
+          <div>
+            <dt>Repositories</dt>
+            <dd>{data ? data.settings.repositories.length : pendingValue}</dd>
+          </div>
+          <div>
+            <dt>Tasks</dt>
+            <dd>
+              {data ? (
+                <>
+                  {tasks.length} total · {activeTasks} active
+                </>
+              ) : (
+                pendingValue
+              )}
+            </dd>
+          </div>
+        </dl>
+        {data?.legacyActionsConfiguration && (
+          <p className="notice" role="status">
+            This workspace still has a GitHub Actions configuration. Save the
+            repository configuration to use the local runner.
+          </p>
+        )}
+      </section>
+      <section
+        className="card"
+        aria-label="Coding repositories"
+        aria-busy={!data && !error}
+      >
+        <div className="plugin-card-heading">
+          <div>
+            <h2>Repositories</h2>
+            <p className="muted">
+              Choose where selected maintainers can start coding tasks.
+            </p>
+          </div>
+          <IconButton
+            icon="add"
+            label="Add coding repository"
+            showLabel
+            disabled={!data?.repositories.length || busy || loading}
+            onClick={() => {
+              setError("");
+              setEditing({
+                repositoryId: 0,
+                baseBranch: "develop",
+                maintainers: [],
+              });
+            }}
+          />
+        </div>
+        {!data && !error && (
+          <SkeletonRows label="Coding repositories" rows={2} />
+        )}
+        {data && !data.repositories.length && (
+          <p>
+            Use Manage GitHub on{" "}
+            <NavLink to={`/admin/overview?workspace=${workspaceId}`}>
+              Overview
+            </NavLink>{" "}
+            to connect a repository for coding tasks.
+          </p>
+        )}
+        {data && !data.settings.repositories.length && (
+          <p>No coding repositories configured.</p>
+        )}
+        {data?.settings.repositories.map((repo) => (
+          <div className="coding-repository" key={repo.repositoryId}>
+            <div>
+              <strong>
+                {data.repositories.find((r) => r.id === repo.repositoryId)
+                  ?.full_name ??
+                  `Repository ${repo.repositoryId} (disconnected)`}
+              </strong>
+              <p>
+                Base: <code>{repo.baseBranch}</code> · Maintainers:{" "}
+                {repo.maintainers.join(", ")}
+              </p>
+            </div>
+            <div className="row">
               <IconButton
                 icon="edit"
-                label="Edit Codex configuration"
-                showLabel
+                label={`Edit coding repository ${repo.repositoryId}`}
                 disabled={busy || loading}
                 onClick={() => {
                   setError("");
-                  setConfigDraft(structuredClone(data.settings));
-                  setKeyDraft("");
-                  setRemoveKey(false);
-                  setConfigEditing(true);
+                  setEditing(structuredClone(repo));
                 }}
               />
-            </div>
-            <dl className="coding-summary">
-              <div>
-                <dt>Status</dt>
-                <dd>
-                  <span
-                    className={data.settings.enabled ? "pill good" : "pill"}
-                  >
-                    {data.settings.enabled ? "Enabled" : "Disabled"}
-                  </span>
-                </dd>
-              </div>
-              <div>
-                <dt>Execution</dt>
-                <dd>Local Podman</dd>
-              </div>
-              <div>
-                <dt>Sign-in method</dt>
-                <dd>
-                  {data.settings.authMode === "device_code"
-                    ? "ChatGPT device code"
-                    : "Custom provider API key"}
-                </dd>
-              </div>
-              <div>
-                <dt>Credential</dt>
-                <dd>{credentialStatus}</dd>
-              </div>
-              <div>
-                <dt>Repositories</dt>
-                <dd>{data.settings.repositories.length}</dd>
-              </div>
-              <div>
-                <dt>Tasks</dt>
-                <dd>
-                  {data.tasks.length} total · {activeTasks} active
-                </dd>
-              </div>
-            </dl>
-            {data.legacyActionsConfiguration && (
-              <p className="notice" role="status">
-                This workspace still has a GitHub Actions configuration. Save
-                the repository configuration to use the local runner.
-              </p>
-            )}
-          </section>
-          <section className="card" aria-label="Coding repositories">
-            <div className="coding-card-heading">
-              <div>
-                <h2>Repositories</h2>
-                <p className="muted">
-                  Choose where selected maintainers can start coding tasks.
-                </p>
-              </div>
               <IconButton
-                icon="add"
-                label="Add coding repository"
-                showLabel
-                disabled={!data.repositories.length || busy || loading}
+                icon="delete"
+                label={`Remove coding repository ${repo.repositoryId}`}
+                disabled={busy || loading}
                 onClick={() => {
-                  setError("");
-                  setEditing({
-                    repositoryId: 0,
-                    baseBranch: "develop",
-                    maintainers: [],
-                  });
+                  if (
+                    confirm(
+                      "Remove this coding repository? Active tasks will receive cancellation requests.",
+                    )
+                  )
+                    void save({
+                      ...data.settings,
+                      repositories: data.settings.repositories.filter(
+                        (r) => r.repositoryId !== repo.repositoryId,
+                      ),
+                    });
                 }}
               />
             </div>
-            {!data.repositories.length && (
-              <p>
-                Use Manage GitHub on{" "}
-                <NavLink to={`/admin/overview?workspace=${workspaceId}`}>
-                  Overview
-                </NavLink>{" "}
-                to connect a repository for coding tasks.
-              </p>
-            )}
-            {!data.settings.repositories.length && (
-              <p>No coding repositories configured.</p>
-            )}
-            {data.settings.repositories.map((repo) => (
-              <div className="coding-repository" key={repo.repositoryId}>
-                <div>
-                  <strong>
-                    {data.repositories.find((r) => r.id === repo.repositoryId)
-                      ?.full_name ??
-                      `Repository ${repo.repositoryId} (disconnected)`}
-                  </strong>
-                  <p>
-                    Base: <code>{repo.baseBranch}</code> · Maintainers:{" "}
-                    {repo.maintainers.join(", ")}
-                  </p>
-                </div>
-                <div className="row">
-                  <IconButton
-                    icon="edit"
-                    label={`Edit coding repository ${repo.repositoryId}`}
-                    disabled={busy || loading}
-                    onClick={() => {
-                      setError("");
-                      setEditing(structuredClone(repo));
-                    }}
-                  />
-                  <IconButton
-                    icon="delete"
-                    label={`Remove coding repository ${repo.repositoryId}`}
-                    disabled={busy || loading}
-                    onClick={() => {
-                      if (
-                        confirm(
-                          "Remove this coding repository? Active tasks will receive cancellation requests.",
-                        )
-                      )
-                        void save({
-                          ...data.settings,
-                          repositories: data.settings.repositories.filter(
-                            (r) => r.repositoryId !== repo.repositoryId,
-                          ),
-                        });
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-          </section>
-          <section className="card" aria-label="Coding tasks">
-            <div className="coding-card-heading">
-              <div>
-                <h2>Coding tasks</h2>
-                <p className="muted">
-                  Stop cancels local execution. Published issues, branches and
-                  PRs remain on GitHub.
-                </p>
-              </div>
-              {tasks.some(
-                (task) =>
-                  !["succeeded", "failed", "unknown", "cancelled"].includes(
-                    task.state,
-                  ),
-              ) && (
-                <button
-                  type="button"
-                  disabled={busy || loading || !!editing}
-                  onClick={() => void load()}
-                >
-                  Check progress
-                </button>
-              )}
-            </div>
-            {!tasks.length ? (
-              <p>
-                No tasks yet. Ask the bot in Telegram to implement a feature or
-                fix a bug in a configured repository.
-              </p>
-            ) : (
-              <div className="usage-table-scroll">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Task</th>
-                      <th>Repository / base</th>
-                      <th>Status</th>
-                      <th>Links</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tasks.map((task) => (
-                      <tr key={task.id}>
-                        <td>
-                          {task.payload.title}
-                          <br />
-                          <small>
-                            {task.continuous
-                              ? "Continuous collaboration"
-                              : "Reviewed task"}
-                          </small>
-                          <br />
-                          <small>
-                            {new Date(task.createdAt).toLocaleString()} ·{" "}
-                            {task.actor}
-                          </small>
-                          <br />
-                          <code>{task.id}</code>
-                        </td>
-                        <td>
-                          {task.payload.repository}
-                          <br />
-                          <code>{task.payload.baseBranch}</code>
-                        </td>
-                        <td>
-                          {task.state === "auth_required"
-                            ? "Waiting for sign-in"
-                            : task.state.replaceAll("_", " ")}
-                          {task.cancelRequested && " · stop requested"}
-                          {task.questionText && <p>{task.questionText}</p>}
-                          {task.error && (
-                            <p>{taskFailures[task.error] ?? task.error}</p>
-                          )}
-                          {!task.continuous && task.threadId && (
-                            <p>
-                              Codex thread <code>{task.threadId}</code>
-                            </p>
-                          )}
-                          {!task.continuous &&
-                            task.state === "running" &&
-                            !task.threadId && (
-                              <p className="muted">
-                                Codex is running; its thread ID appears after
-                                the implementation finishes.
-                              </p>
-                            )}
-                        </td>
-                        <td>
-                          {task.issue && (
-                            <p>
-                              <a
-                                href={task.issue.url}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Issue
-                              </a>
-                            </p>
-                          )}
-                          {task.workflowUrl && (
-                            <p>
-                              <a
-                                href={task.workflowUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Workflow
-                              </a>
-                            </p>
-                          )}
-                          {task.prUrl && (
-                            <p>
-                              <a
-                                href={task.prUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                PR
-                              </a>
-                            </p>
-                          )}
-                        </td>
-                        <td>
-                          {![
-                            "succeeded",
-                            "failed",
-                            "unknown",
-                            "cancelled",
-                          ].includes(task.state) && (
-                            <IconButton
-                              icon="stop"
-                              label={`Stop coding task ${task.payload.title}`}
-                              disabled={busy || task.cancelRequested}
-                              onClick={async () => {
-                                setBusy(true);
-                                setError("");
-                                try {
-                                  await request(
-                                    `${endpoint}/${task.id}/cancel`,
-                                    "POST",
-                                    {},
-                                  );
-                                  await load();
-                                } catch (e) {
-                                  setError(message(e));
-                                } finally {
-                                  setBusy(false);
-                                }
-                              }}
-                            />
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        </>
-      )}
+          </div>
+        ))}
+      </section>
+      <section
+        className="card"
+        aria-label="Coding tasks"
+        aria-busy={!data && !error}
+      >
+        <div className="plugin-card-heading">
+          <div>
+            <h2>Coding tasks</h2>
+            <p className="muted">
+              Stop cancels local execution. Published issues, branches and PRs
+              remain on GitHub.
+            </p>
+          </div>
+          {tasks.some(
+            (task) =>
+              !["succeeded", "failed", "unknown", "cancelled"].includes(
+                task.state,
+              ),
+          ) && (
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy || loading || !!editing}
+              onClick={() => void load()}
+            >
+              Check progress
+            </button>
+          )}
+        </div>
+        {!data ? (
+          !error && <SkeletonRows label="Coding tasks" />
+        ) : !tasks.length ? (
+          <p>
+            No tasks yet. Ask the bot in Telegram to implement a feature or fix
+            a bug in a configured repository.
+          </p>
+        ) : (
+          <div className="usage-table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Task</th>
+                  <th>Repository / base</th>
+                  <th>Status</th>
+                  <th>Links</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tasks.map((task) => (
+                  <tr key={task.id}>
+                    <td>
+                      {task.payload.title}
+                      <br />
+                      <small>
+                        {task.continuous
+                          ? "Continuous collaboration"
+                          : "Reviewed task"}
+                      </small>
+                      <br />
+                      <small>
+                        {new Date(task.createdAt).toLocaleString()} ·{" "}
+                        {task.actor}
+                      </small>
+                      <br />
+                      <code>{task.id}</code>
+                    </td>
+                    <td>
+                      {task.payload.repository}
+                      <br />
+                      <code>{task.payload.baseBranch}</code>
+                    </td>
+                    <td>
+                      {task.state === "auth_required"
+                        ? "Waiting for sign-in"
+                        : task.state.replaceAll("_", " ")}
+                      {task.cancelRequested && " · stop requested"}
+                      {task.questionText && <p>{task.questionText}</p>}
+                      {task.error && (
+                        <p>{taskFailures[task.error] ?? task.error}</p>
+                      )}
+                      {!task.continuous && task.threadId && (
+                        <p>
+                          Codex thread <code>{task.threadId}</code>
+                        </p>
+                      )}
+                      {!task.continuous &&
+                        task.state === "running" &&
+                        !task.threadId && (
+                          <p className="muted">
+                            Codex is running; its thread ID appears after the
+                            implementation finishes.
+                          </p>
+                        )}
+                    </td>
+                    <td>
+                      {task.issue && (
+                        <p>
+                          <a
+                            href={task.issue.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Issue
+                          </a>
+                        </p>
+                      )}
+                      {task.workflowUrl && (
+                        <p>
+                          <a
+                            href={task.workflowUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Workflow
+                          </a>
+                        </p>
+                      )}
+                      {task.prUrl && (
+                        <p>
+                          <a href={task.prUrl} target="_blank" rel="noreferrer">
+                            PR
+                          </a>
+                        </p>
+                      )}
+                    </td>
+                    <td>
+                      {![
+                        "succeeded",
+                        "failed",
+                        "unknown",
+                        "cancelled",
+                      ].includes(task.state) && (
+                        <IconButton
+                          icon="stop"
+                          label={`Stop coding task ${task.payload.title}`}
+                          disabled={busy || task.cancelRequested}
+                          onClick={async () => {
+                            setBusy(true);
+                            setError("");
+                            try {
+                              await request(
+                                `${endpoint}/${task.id}/cancel`,
+                                "POST",
+                                {},
+                              );
+                              await load();
+                            } catch (e) {
+                              setError(message(e));
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                        />
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
       {configEditing && data && configDraft && (
         <Modal
           title="Edit Codex configuration"
@@ -560,6 +598,7 @@ export function Coding({
               {error}{" "}
               <button
                 type="button"
+                className="secondary"
                 disabled={busy || loading}
                 onClick={() => void load()}
               >
@@ -576,19 +615,6 @@ export function Coding({
               );
             }}
           >
-            <label className="plugin-check">
-              <input
-                type="checkbox"
-                checked={configDraft.enabled}
-                onChange={(event) =>
-                  setConfigDraft({
-                    ...configDraft,
-                    enabled: event.target.checked,
-                  })
-                }
-              />
-              <span>Enable Codex implementation</span>
-            </label>
             <label className="field">
               <span>Sign-in method</span>
               <select
@@ -694,6 +720,7 @@ export function Coding({
                         data.deviceAuth?.state !== "pending" && (
                           <button
                             type="button"
+                            className="secondary"
                             disabled={
                               busy ||
                               loading ||
@@ -737,6 +764,7 @@ export function Coding({
                         data.deviceAuth?.state === "auth_required") && (
                         <button
                           type="button"
+                          className="secondary"
                           disabled={busy || loading}
                           onClick={async () => {
                             if (
@@ -768,6 +796,7 @@ export function Coding({
                       )}
                       <button
                         type="button"
+                        className="secondary"
                         disabled={busy || loading}
                         onClick={() => void recheckConnection()}
                       >

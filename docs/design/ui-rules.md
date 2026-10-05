@@ -43,6 +43,30 @@ them.
 - **Exceptions:** Repository editing remains in its own dialog; task controls
   remain with their tasks.
 
+### Plugin details share card layouts and a title switch
+
+- **Preference:** Use the Codex detail layout as the reference for installed
+  plugins: compact configuration summaries and separate cards for repositories
+  and operational details where applicable. Place the Enable switch at the right
+  of the page title with space between them. The switch saves independently;
+  configuration editors focus on the remaining settings.
+- **Scope:** Installed plugin detail pages on desktop and mobile.
+- **Source:** 2026-10-05 — user requested consistent plugin details based on the
+  Codex screenshot and an Enable toggle to the right of the title.
+- **Exceptions:** Market discovery entries have no Enable switch. New file-plugin
+  registration can set its initial enabled state; repository drafts retain their
+  explicit save step.
+
+### Dialog support actions use secondary buttons
+
+- **Preference:** Reserve the main button theme for the dialog's save or submit
+  action. Use secondary styling for supporting sign-in, disconnect and connection
+  recheck actions so stacked action rows do not compete visually.
+- **Scope:** Plugin configuration dialogs, including Codex authentication.
+- **Source:** 2026-10-05 — user requested secondary styling for Sign in and Recheck
+  connection because two rows of primary buttons create a poor hierarchy.
+- **Exceptions:** None recorded.
+
 ### Codex sign-in shows progress and recovery
 
 - **Preference:** Show progress while requesting a device-code sign-in. Bound the
@@ -684,3 +708,19 @@ Use this format for each preference:
   site inside the admin panel.
 - **Exceptions:** DNS, certificates and host proxy routing require infrastructure
   configuration outside the panel; availability must not be implied by saving.
+
+### Loading keeps the layout visible
+
+- **Preference:** Render known headings, help text, sections and controls immediately.
+  Use skeletons only for values, fields or records that still need data, rather than
+  replacing a page with a plain “Loading…” message. Keep loaded content visible
+  during background refreshes. Disable actions that require unknown data; do not
+  present unknown settings as disabled, disconnected, zero or empty.
+- **Scope:** Admin and setup data-loading states, including Codex configuration,
+  repositories and tasks. Skeletons use accessible region names/busy states and
+  respect reduced-motion preferences.
+- **Source:** 2026-10-05 — user rejected the “Loading Codex settings” message and
+  similar text-only loaders, requesting visible elements with skeletons only where
+  needed.
+- **Exceptions:** Explicit progress for an initiated action (saving, signing in,
+  connecting GitHub) and actionable errors remain visible text.

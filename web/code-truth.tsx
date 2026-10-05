@@ -8,6 +8,8 @@ import type {
 } from "../src/code-truth/config.ts";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
+import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
+import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 const explain = (error: unknown) => {
@@ -41,9 +43,11 @@ const explain = (error: unknown) => {
 export function CodeTruth({
   request,
   workspaceId,
+  backTo,
 }: {
   request: Request;
   workspaceId: string;
+  backTo?: string;
 }) {
   const endpoint = `/api/admin/workspaces/${workspaceId}/plugins/code-truth`;
   const [data, setData] = useState<CodeTruthPage>();
@@ -89,21 +93,52 @@ export function CodeTruth({
         i === index ? repo : r,
       ),
     });
+  const save = async (value: CodeTruthSettings, preserveDraft = false) => {
+    if (!data || busy) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const page = await request<CodeTruthPage>(endpoint, "PUT", {
+        revision: data.revision,
+        settings: value,
+      });
+      setData(page);
+      if (preserveDraft) {
+        setSettings((draft) => ({ ...draft, enabled: page.settings.enabled }));
+      } else {
+        setSettings(page.settings);
+        setDirty(false);
+      }
+      setStatus(undefined);
+      setNotice(
+        "Code Truth saved. These settings apply to new runs in this workspace.",
+      );
+    } catch (error) {
+      setError(explain(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const pendingValue = error ? "—" : <Skeleton width="8rem" />;
   return (
-    <section className="card" aria-label="Predefined Code Truth extension">
-      <p className="eyebrow">PREDEFINED EXTENSION</p>
-      <div className="row">
-        <h2>Code Truth</h2>
-        <span className="pill">
-          {data?.settings.enabled ? "Enabled" : "Disabled"}
-        </span>
-        <span className="pill">Read-only code tools · v1</span>
-      </div>
-      <p>
-        Ask your assistant about indexed source code, dependencies and
-        architecture. Includes the Code Truth query skill and citations to
-        files, branches and commits.
-      </p>
+    <section
+      className="plugin-detail"
+      aria-label="Predefined Code Truth extension"
+    >
+      {backTo && (
+        <PluginDetailHeading title="Code Truth" backTo={backTo}>
+          <PluginToggle
+            name="Code Truth"
+            enabled={data?.settings.enabled}
+            loading={!data && !error}
+            disabled={busy || !data}
+            onChange={(enabled) => {
+              if (data) void save({ ...data.settings, enabled }, true);
+            }}
+          />
+        </PluginDetailHeading>
+      )}
       {!data?.serviceConfigured && data && (
         <p className="notice">
           The local service is not configured. You can save repositories now;
@@ -124,105 +159,142 @@ export function CodeTruth({
           {notice}
         </p>
       )}
-      {!data && !error && <p role="status">Loading Code Truth settings…</p>}
-      <form
-        onSubmit={async (event) => {
-          event.preventDefault();
-          if (!data || busy) return;
-          setBusy(true);
-          setError("");
-          setNotice("");
-          try {
-            const page = await request<CodeTruthPage>(endpoint, "PUT", {
-              revision: data.revision,
-              settings,
-            });
-            setData(page);
-            setSettings(page.settings);
-            setDirty(false);
-            setStatus(undefined);
-            setNotice(
-              "Code Truth saved. These settings apply to new runs in this workspace.",
-            );
-          } catch (error) {
-            setError(explain(error));
-          } finally {
-            setBusy(false);
-          }
-        }}
+      <section
+        className="card"
+        aria-label="Code Truth configuration"
+        aria-busy={!data && !error}
       >
-        <fieldset disabled={busy || !data} className="code-truth-fields">
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={settings.enabled}
-              onChange={(e) =>
-                change({ ...settings, enabled: e.target.checked })
-              }
-            />
-            Enable Code Truth
-          </label>
-          <p className="muted">
-            Add HTTPS GitHub repositories for this workspace and map each
-            network to a branch. Use Manage GitHub on{" "}
-            <NavLink to={`/admin/overview?workspace=${workspaceId}`}>
-              Overview
-            </NavLink>{" "}
-            to access private repositories through your GitHub App.
-          </p>
-          {settings.repositories.length === 0 && (
-            <p>No repositories configured.</p>
-          )}
-          {settings.repositories.map((repo, index) => (
-            <section
-              className="plugin-item"
-              key={repo.id}
-              aria-label={`Repository ${index + 1}`}
-            >
-              <div className="row">
-                <h3>{repo.id}</h3>
-                <IconButton
-                  icon="edit"
-                  label={`Edit repository ${index + 1}`}
-                  onClick={() => setEditingRepository(index)}
-                />
-                <IconButton
-                  icon="delete"
-                  label={`Remove repository ${index + 1}`}
-                  className="danger"
-                  onClick={() =>
-                    change({
-                      ...settings,
-                      repositories: settings.repositories.filter(
-                        (_, i) => i !== index,
-                      ),
-                    })
-                  }
-                />
-              </div>
-              <p className="mono">{repo.repositoryUrl}</p>
-              <ul>
-                {Object.entries(repo.networks).map(([network, branch]) => (
-                  <li key={network}>
-                    {network} → {branch}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
-          <div className="row">
-            <IconButton
-              icon="add"
-              label="Add repository"
-              disabled={settings.repositories.length >= 12}
-              onClick={() => setEditingRepository("new")}
-            />
-            <button type="submit" disabled={!dirty}>
-              Save Code Truth
-            </button>
+        <div className="plugin-card-heading">
+          <div>
+            <h2>Configuration</h2>
+            <p className="muted">
+              Query indexed source code, dependencies and architecture.
+            </p>
           </div>
-        </fieldset>
-      </form>
+        </div>
+        <dl className="plugin-summary">
+          <div>
+            <dt>Status</dt>
+            <dd>
+              {data ? (
+                <span className={data.settings.enabled ? "pill good" : "pill"}>
+                  {data.settings.enabled ? "Enabled" : "Disabled"}
+                </span>
+              ) : (
+                pendingValue
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>Execution</dt>
+            <dd>Read-only code tools · v1</dd>
+          </div>
+          <div>
+            <dt>Service</dt>
+            <dd>
+              {data
+                ? data.serviceConfigured
+                  ? "Configured"
+                  : "Not configured"
+                : pendingValue}
+            </dd>
+          </div>
+          <div>
+            <dt>Repositories</dt>
+            <dd>{data ? data.settings.repositories.length : pendingValue}</dd>
+          </div>
+          <div>
+            <dt>Saved revision</dt>
+            <dd>{data ? data.revision : pendingValue}</dd>
+          </div>
+        </dl>
+      </section>
+      <section
+        className="card"
+        aria-label="Code Truth repositories"
+        aria-busy={!data && !error}
+      >
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void save(settings);
+          }}
+        >
+          <fieldset disabled={busy || !data} className="code-truth-fields">
+            <div className="plugin-card-heading">
+              <div>
+                <h2>Repositories</h2>
+                <p className="muted">
+                  Map each repository's networks to branches.
+                </p>
+              </div>
+              <IconButton
+                icon="add"
+                label="Add repository"
+                showLabel
+                disabled={settings.repositories.length >= 12}
+                onClick={() => setEditingRepository("new")}
+              />
+            </div>
+            <p className="muted">
+              Add HTTPS GitHub repositories for this workspace and map each
+              network to a branch. Use Manage GitHub on{" "}
+              <NavLink to={`/admin/overview?workspace=${workspaceId}`}>
+                Overview
+              </NavLink>{" "}
+              to access private repositories through your GitHub App.
+            </p>
+            {!data && !error && (
+              <SkeletonRows label="Code Truth repositories" rows={2} />
+            )}
+            {data && settings.repositories.length === 0 && (
+              <p>No repositories configured.</p>
+            )}
+            {settings.repositories.map((repo, index) => (
+              <section
+                className="plugin-item"
+                key={repo.id}
+                aria-label={`Repository ${index + 1}`}
+              >
+                <div className="row">
+                  <h3>{repo.id}</h3>
+                  <IconButton
+                    icon="edit"
+                    label={`Edit repository ${index + 1}`}
+                    onClick={() => setEditingRepository(index)}
+                  />
+                  <IconButton
+                    icon="delete"
+                    label={`Remove repository ${index + 1}`}
+                    className="danger"
+                    onClick={() =>
+                      change({
+                        ...settings,
+                        repositories: settings.repositories.filter(
+                          (_, i) => i !== index,
+                        ),
+                      })
+                    }
+                  />
+                </div>
+                <p className="mono">{repo.repositoryUrl}</p>
+                <ul>
+                  {Object.entries(repo.networks).map(([network, branch]) => (
+                    <li key={network}>
+                      {network} → {branch}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+            <div className="row">
+              <button type="submit" disabled={!dirty}>
+                Save Code Truth
+              </button>
+            </div>
+          </fieldset>
+        </form>
+      </section>
       {editingRepository !== undefined && (
         <RepositoryEditor
           initial={
@@ -246,8 +318,12 @@ export function CodeTruth({
           }}
         />
       )}
-      <details className="code-truth-status">
-        <summary>Repository indexing status</summary>
+      <section className="card" aria-label="Repository indexing status">
+        <div className="plugin-card-heading">
+          <div>
+            <h2>Repository indexing status</h2>
+          </div>
+        </div>
         <p className="muted">
           Save first, then sync and check this workspace. Indexing runs locally
           and can take several minutes. Active configurations refresh on use at
@@ -256,6 +332,7 @@ export function CodeTruth({
         <div className="row">
           <button
             type="button"
+            className="secondary"
             disabled={busy || dirty || !workspaceId || !data?.settings.enabled}
             onClick={async () => {
               setBusy(true);
@@ -307,7 +384,7 @@ export function CodeTruth({
             ))}
           </div>
         )}
-      </details>
+      </section>
     </section>
   );
 }

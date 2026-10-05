@@ -60,13 +60,23 @@ test("unavailable runner can be rechecked without losing the configuration draft
   await expect(dialog.getByRole("status")).toContainText(
     "runner is unavailable",
   );
-  await dialog.getByLabel("Enable Codex implementation").check();
+  await dialog.screenshot({
+    path: "test-results/codex-configuration-desktop.png",
+  });
+  await dialog.getByLabel("Sign-in method").selectOption("provider_key");
+  await dialog
+    .getByLabel("Provider API key", { exact: true })
+    .fill("unsaved-test-key");
+  await dialog.getByLabel("Sign-in method").selectOption("device_code");
   data.deviceAuth = { state: "disconnected" };
   await dialog.getByRole("button", { name: "Recheck connection" }).click();
   await expect(
     dialog.getByRole("button", { name: "Sign in with device code" }),
   ).toBeEnabled();
-  await expect(dialog.getByLabel("Enable Codex implementation")).toBeChecked();
+  await dialog.getByLabel("Sign-in method").selectOption("provider_key");
+  await expect(
+    dialog.getByLabel("Provider API key", { exact: true }),
+  ).toHaveValue("unsaved-test-key");
   await expect(dialog).toBeVisible();
 });
 
@@ -187,4 +197,45 @@ test("expired account explains automatic task continuation and offers device sig
   await expect(
     dialog.getByRole("button", { name: "Disconnect account" }),
   ).toBeEnabled();
+});
+
+test("title switch persists enablement and retains the saved state when a stale save fails", async ({
+  page,
+}) => {
+  const { data, dialog } = await fixture(page, { state: "disconnected" });
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  const toggle = page.getByRole("switch", {
+    name: "Enable Codex implementation",
+  });
+  await page.route(`**${endpoint}`, async (route) => {
+    if (route.request().method() !== "PUT")
+      return route.fulfill({ json: data });
+    const input = route.request().postDataJSON();
+    expect(input.revision).toBe(data.revision);
+    data.settings = input.settings;
+    data.revision += 1;
+    await route.fulfill({ json: data });
+  });
+  await toggle.focus();
+  await toggle.press("Space");
+  await expect(toggle).toBeChecked();
+  await page.reload();
+  await expect(toggle).toBeChecked();
+  await page.route(`**${endpoint}`, async (route) => {
+    if (route.request().method() !== "PUT")
+      return route.fulfill({ json: data });
+    await route.fulfill({ status: 409, json: { error: "version_conflict" } });
+  });
+  await toggle.click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Settings changed in another session",
+  );
+  await expect(toggle).toBeChecked();
+  await expect(toggle).toBeEnabled();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
+  await page.screenshot({
+    path: "test-results/plugin-title-switch-mobile.png",
+    fullPage: true,
+  });
 });

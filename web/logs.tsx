@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { IconButton } from "./icon-button.tsx";
+import { SkeletonRows } from "./skeleton.tsx";
 
 type LogEntry = {
   id: string;
@@ -166,13 +167,11 @@ export function RuntimeLogs({
           />
         </div>
         <p className="muted" role="status">
-          {loading
-            ? "Loading logs…"
-            : error
-              ? "Logs unavailable."
-              : result
-                ? `Updated ${new Date(result.at).toLocaleTimeString()}. Newest entries first.`
-                : "Waiting for logs."}
+          {error
+            ? "Logs unavailable."
+            : result
+              ? `Updated ${new Date(result.at).toLocaleTimeString()}. Newest entries first.`
+              : ""}
           {before && " Viewing older entries; automatic refresh is paused."}
         </p>
         {error && (
@@ -181,7 +180,12 @@ export function RuntimeLogs({
           </p>
         )}
       </section>
-      <section className="card" aria-label="Runtime log entries">
+      <section
+        className="card"
+        aria-label="Runtime log entries"
+        aria-busy={!page && !error}
+      >
+        {!page && !error && <SkeletonRows label="Runtime log entries" />}
         {page?.items.length === 0 && (
           <p>
             No logs match these filters. New service events will appear here.

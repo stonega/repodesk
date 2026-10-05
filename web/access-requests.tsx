@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AccessRequest } from "../src/domain.ts";
 import { IconButton } from "./icon-button.tsx";
+import { SkeletonRows } from "./skeleton.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 type Requests = {
@@ -138,7 +139,9 @@ export function AccessRequests({
         </p>
       )}
       {status && <p role="status">{status}</p>}
-      {loading && !data && <p role="status">Loading access requests…</p>}
+      {loading && !data && !error && (
+        <SkeletonRows label="Access requests" rows={2} />
+      )}
       {data?.items.length === 0 && (
         <p className="muted">No pending access requests.</p>
       )}

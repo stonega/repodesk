@@ -654,7 +654,8 @@ test.describe
       await expect(page.getByRole("alert")).toContainText(
         "Usage temporarily unavailable",
       );
-      await expect(table).toHaveCount(0);
+      await expect(table).toBeVisible();
+      await expect(table.locator("tbody tr")).toHaveCount(0);
       mode = "records";
       await page
         .getByRole("button", { name: "Try again", exact: true })
@@ -835,7 +836,7 @@ test.describe
       ).toBeVisible();
       await second.getByRole("button", { name: "Edit word-count" }).click();
       await second.getByLabel("Plugin version").fill("stale-version");
-      await card.getByRole("button", { name: "Disable word-count" }).click();
+      await page.getByRole("switch", { name: "Enable word-count" }).click();
       await expect(card.getByText("Disabled", { exact: true })).toBeVisible();
       await second
         .getByRole("button", { name: "Save plugin", exact: true })
@@ -852,12 +853,9 @@ test.describe
       await page
         .getByRole("button", { name: "Save plugin", exact: true })
         .click();
-      await expect(card).toContainText("Version 2");
-      await card.getByRole("button", { name: "Edit word-count" }).click();
-      await page.getByLabel("Enable this plugin").check();
-      await page
-        .getByRole("button", { name: "Save plugin", exact: true })
-        .click();
+      await expect(card.getByText("2", { exact: true })).toBeVisible();
+      await page.getByRole("switch", { name: "Enable word-count" }).click();
+      await expect(card.getByText("Enabled", { exact: true })).toBeVisible();
       await page.setViewportSize({ width: 1280, height: 900 });
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.screenshot({
@@ -931,7 +929,21 @@ test.describe
         .getByRole("dialog", { name: "Add repository", exact: true })
         .getByRole("button", { name: "Apply repository" })
         .click();
-      await card.getByLabel("Enable Code Truth", { exact: true }).check();
+      await card
+        .getByRole("switch", { name: "Enable Code Truth", exact: true })
+        .click();
+      await expect(
+        card.getByRole("switch", { name: "Enable Code Truth" }),
+      ).toBeEnabled();
+      const savedBeforeRepositories = await page.request.get(
+        `/api/admin/workspaces/${workspaceId}/plugins/code-truth`,
+      );
+      expect(
+        (await savedBeforeRepositories.json()).settings.repositories,
+      ).toHaveLength(0);
+      await expect(
+        card.getByRole("heading", { name: "deepx-web", exact: true }),
+      ).toBeVisible();
       await card
         .getByRole("button", { name: "Save Code Truth", exact: true })
         .click();
@@ -944,11 +956,8 @@ test.describe
         card.getByText("testnet → testnet-develop", { exact: true }),
       ).toBeVisible();
       await expect(
-        card.getByLabel("Enable Code Truth", { exact: true }),
+        card.getByRole("switch", { name: "Enable Code Truth", exact: true }),
       ).toBeChecked();
-      await card
-        .getByText("Repository indexing status", { exact: true })
-        .click();
       await card
         .getByRole("button", { name: "Sync & check indexes", exact: true })
         .click();
@@ -1000,7 +1009,9 @@ test.describe
       await card
         .getByRole("button", { name: "Remove repository 1", exact: true })
         .click();
-      await card.getByLabel("Enable Code Truth", { exact: true }).uncheck();
+      await card
+        .getByRole("switch", { name: "Enable Code Truth", exact: true })
+        .click();
       await card
         .getByRole("button", { name: "Save Code Truth", exact: true })
         .click();
@@ -1094,7 +1105,9 @@ test.describe
       const plugin = page.getByRole("region", {
         name: "Plugin independent-plugin",
       });
-      await expect(plugin).toContainText("Version 1");
+      await expect(
+        plugin.getByText("1", { exact: true }).first(),
+      ).toBeVisible();
       const truth = page.getByRole("region", {
         name: "Predefined Code Truth extension",
       });
@@ -1152,9 +1165,13 @@ test.describe
         .getByRole("button", { name: "Save plugin", exact: true })
         .click();
       await page.getByRole("link", { name: "Open independent-plugin" }).click();
-      await expect(plugin).toContainText("Version 2");
+      await expect(
+        plugin.getByText("2", { exact: true }).first(),
+      ).toBeVisible();
       await chooseWorkspace(page, workspaceId);
-      await expect(plugin).toContainText("Version 1");
+      await expect(
+        plugin.getByText("1", { exact: true }).first(),
+      ).toBeVisible();
       await page.goto(`/admin/plugins/code-truth?workspace=${workspaceId}`);
       await expect(
         truth.getByRole("heading", { name: "isolated-repo", exact: true }),
@@ -1166,7 +1183,9 @@ test.describe
       await page.goto(
         `/admin/plugins/file/independent-plugin?workspace=${secondId}`,
       );
-      await expect(plugin).toContainText("Version 2");
+      await expect(
+        plugin.getByText("2", { exact: true }).first(),
+      ).toBeVisible();
     });
     test("GitHub App creation posts a manifest, restores the workspace and enables connection", async ({
       page,
@@ -1481,17 +1500,13 @@ test.describe
         .getByRole("button", { name: "Save coding repository" })
         .click();
       await expect(codingDialog).toHaveCount(0);
-      await configuration
-        .getByRole("button", { name: "Edit Codex configuration" })
+      await page
+        .getByRole("switch", { name: "Enable Codex implementation" })
         .click();
+      await expect(configuration.getByText("Enabled")).toBeVisible();
       const configDialog = page.getByRole("dialog", {
         name: "Edit Codex configuration",
       });
-      await configDialog.getByLabel("Enable Codex implementation").check();
-      await configDialog
-        .getByRole("button", { name: "Save configuration" })
-        .click();
-      await expect(configDialog).toHaveCount(0);
       await page.reload();
       await expect(configuration.getByText("Enabled")).toBeVisible();
       await expect(configuration.getByText("1", { exact: true })).toBeVisible();
@@ -1546,12 +1561,8 @@ test.describe
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await coding.screenshot({ path: "test-results/coding-mobile.png" });
-      await configuration
-        .getByRole("button", { name: "Edit Codex configuration" })
-        .click();
-      await configDialog.getByLabel("Enable Codex implementation").uncheck();
-      await configDialog
-        .getByRole("button", { name: "Save configuration" })
+      await page
+        .getByRole("switch", { name: "Enable Codex implementation" })
         .click();
       await expect(configuration.getByText("Disabled")).toBeVisible();
       await expect(coding.getByLabel("Execution backend")).toHaveCount(0);

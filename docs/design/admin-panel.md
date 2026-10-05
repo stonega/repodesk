@@ -129,6 +129,11 @@ statuses and reserved/actual USD amounts. The spend and monthly-limit summary st
 above the table. Previous/next controls use the accounting API's 100-record pages,
 with URL offsets and visible record/page counts. Loading, empty and error states
 are explicit; the table scrolls horizontally within the card on small screens.
+Data loading preserves known headings, descriptions, controls and table columns.
+Unknown values and records use skeletons; dependent actions stay disabled until
+the data arrives. Codex keeps its Configuration, Repositories and Coding tasks
+cards visible, and initial errors end the skeleton state with an actionable retry.
+Skeletons respect reduced motion and expose named regions with busy states.
 
 Common admin actions use Reicon outline icons through `web/icon-button.tsx`.
 Icon buttons are borderless and retain descriptive accessible names, hover titles,
@@ -208,3 +213,15 @@ pending GitHub flows and marks the webhook as requiring registration. Existing
 GitHub Apps need updated Homepage, Callback and Setup URLs in GitHub. Webhook
 registration is a separate explicit action after HTTPS is ready; polling requires
 no registration. See [VPS deployment](../implementation/vps-deployment.md#custom-domain-from-the-panel).
+
+
+### Consistent plugin details (implemented)
+
+Installed plugin pages use a shared title row with an Enable switch at the right,
+compact configuration summaries, and separate repository and operational cards
+where applicable. The switch saves independently with the current revision and
+shows failures without changing the saved state. Code Truth repository edits
+remain a local draft until **Save Code Truth**; toggling enablement preserves
+that draft and saves only the previously saved repositories. Codex configuration
+uses one primary **Save configuration** action; sign-in, disconnect and connection
+recheck actions use secondary buttons.

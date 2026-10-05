@@ -63,6 +63,7 @@ import { CreateModal, Modal, ModalActions, ModalPending } from "./modal.tsx";
 import { Plugins } from "./plugins.tsx";
 import { prefixFields, RecordForm } from "./record-form.tsx";
 import { workspaceFields } from "./settings-fields.ts";
+import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 import { Usage } from "./usage.tsx";
 import "./style.css";
 import { SiteDomain } from "./site-domain.tsx";
@@ -423,7 +424,42 @@ function Setup() {
     const timer = setInterval(reload, 5000);
     return () => clearInterval(timer);
   }, [reload]);
-  if (!data) return <Notice>{error || "Loading setup…"}</Notice>;
+  if (!data)
+    return (
+      <Page
+        title={
+          creatingWorkspace
+            ? "Set up a new workspace"
+            : "Set up your team assistant"
+        }
+        description="Create a workspace, connect Telegram and set up GitHub. Configure the model and activate the bot in the admin panel."
+      >
+        {error ? (
+          <Notice>{error}</Notice>
+        ) : (
+          <>
+            <nav className="setup-steps" aria-label="Setup steps">
+              {["Workspace", "Telegram bot", "GitHub App"].map(
+                (label, index) => (
+                  <button
+                    type="button"
+                    className="setup-step"
+                    disabled
+                    key={label}
+                  >
+                    <span className="setup-step-number">{index + 1}</span>
+                    <strong>{label}</strong>
+                  </button>
+                ),
+              )}
+            </nav>
+            <section className="card" aria-busy="true">
+              <SkeletonRows label="Setup details" />
+            </section>
+          </>
+        )}
+      </Page>
+    );
   const workspace = creatingWorkspace
     ? undefined
     : selected
@@ -789,7 +825,22 @@ function ModelSettings({ workspaceId }: { workspaceId: string }) {
     const timer = setInterval(reload, 5000);
     return () => clearInterval(timer);
   }, [reload]);
-  if (!data) return <Notice>{error || "Loading model settings…"}</Notice>;
+  if (!data)
+    return (
+      <Page
+        title="Model settings"
+        description="Connect your model provider, then activate the assistant when its receiver and skills are ready."
+      >
+        {error ? (
+          <Notice>{error}</Notice>
+        ) : (
+          <section className="card" aria-busy="true">
+            <h2>Model configuration</h2>
+            <SkeletonRows label="Model configuration" rows={4} />
+          </section>
+        )}
+      </Page>
+    );
   const workspace = data.workspaces.find((w) => w.id === workspaceId);
   const missing = [
     !workspace && "Create a workspace in Setup.",
@@ -3393,7 +3444,20 @@ function PrivacyPage({ id }: { id: string }) {
             )}
           </>
         ) : !error ? (
-          <p role="status">Loading privacy settings…</p>
+          <dl className="plugin-summary" aria-busy="true">
+            <div>
+              <dt>Workspace removal</dt>
+              <dd>
+                <Skeleton width="12rem" />
+              </dd>
+            </div>
+            <div>
+              <dt>Message retention</dt>
+              <dd>
+                <Skeleton width="6rem" />
+              </dd>
+            </div>
+          </dl>
         ) : null}
         <p>
           No provider-hosted sessions are created. API providers may retain
@@ -3947,7 +4011,9 @@ function Shell() {
         }
       >
         {loading ? (
-          <Notice>Connecting to your deployment…</Notice>
+          <section className="card" aria-busy="true">
+            <SkeletonRows label="Deployment connection" rows={4} />
+          </section>
         ) : error ? (
           <Notice>{error}</Notice>
         ) : !current ? (

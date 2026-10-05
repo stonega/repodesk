@@ -1,3 +1,5 @@
+import { SkeletonCells } from "./skeleton.tsx";
+
 const labels: Record<string, string> = {
   id: "ID",
   actor: "Requested by",
@@ -45,11 +47,16 @@ export function DataTable({
   columns: { key: string; label: string }[];
   label: string;
 }) {
-  if (!rows) return <p role="status">Loading {label.toLowerCase()}…</p>;
-  if (!rows.length) return <p className="muted">No {label.toLowerCase()}.</p>;
+  if (rows && !rows.length)
+    return <p className="muted">No {label.toLowerCase()}.</p>;
   return (
-    // biome-ignore lint/a11y/noNoninteractiveTabindex: Allows keyboard scrolling of overflowing tables.
-    <section className="data-table-scroll" aria-label={label} tabIndex={0}>
+    <section
+      className="data-table-scroll"
+      aria-label={label}
+      aria-busy={!rows}
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: Allows keyboard scrolling of overflowing tables.
+      tabIndex={0}
+    >
       <table>
         <thead>
           <tr>
@@ -61,16 +68,20 @@ export function DataTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: Read-only ordered API rows may not carry IDs.
-            <tr key={index}>
-              {columns.map((column) => (
-                <td key={column.key}>
-                  <DataDetails value={row[column.key]} name={column.key} />
-                </td>
-              ))}
-            </tr>
-          ))}
+          {!rows ? (
+            <SkeletonCells columns={columns.length} />
+          ) : (
+            rows.map((row, index) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: Read-only ordered API rows may not carry IDs.
+              <tr key={index}>
+                {columns.map((column) => (
+                  <td key={column.key}>
+                    <DataDetails value={row[column.key]} name={column.key} />
+                  </td>
+                ))}
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </section>

@@ -1,6 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import { ChevronLeft } from "reicon-react";
 import type { PluginPage, PluginSpec } from "../src/agent/plugin-config.ts";
 import type { CodeTruthPage } from "../src/code-truth/config.ts";
 import type { CodingPage } from "../src/coding/config.ts";
@@ -9,6 +8,8 @@ import { Coding } from "./coding.tsx";
 import { GitHubConnection } from "./github.tsx";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
+import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
+import { SkeletonRows } from "./skeleton.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 type View = "catalog" | "installed" | "market";
@@ -197,33 +198,38 @@ export function Plugins({
           : pluginId === "codex"
             ? "Codex"
             : (selected?.id ??
-              (loading ? "Loading plugin…" : "Plugin not found"));
+              (loading ? (pluginId ?? "Plugin") : "Plugin not found"));
 
   return (
     <>
-      <header className="page-heading">
-        <p className="eyebrow">
-          {view === "catalog" ? (
-            "REPODESK / WORKSPACE"
-          ) : (
-            <Link className="plugin-back-link" to={path()}>
-              <ChevronLeft
-                size={18}
-                weight="Outline"
-                color="currentColor"
-                aria-hidden="true"
-              />
-              <span>Plugins</span>
-            </Link>
-          )}
-        </p>
-        <h1>{heading}</h1>
-        {view === "catalog" && (
+      {view === "catalog" ? (
+        <header className="page-heading">
+          <p className="eyebrow">REPODESK / WORKSPACE</p>
+          <h1>{heading}</h1>
           <p className="muted">
             Manage installed extensions and explore the Pi ecosystem.
           </p>
-        )}
-      </header>
+        </header>
+      ) : (pluginId !== "code-truth" && pluginId !== "codex") ||
+        view === "market" ? (
+        <PluginDetailHeading title={heading} backTo={path()}>
+          {view === "installed" && selected && data && (
+            <PluginToggle
+              name={selected.id}
+              enabled={selected.enabled}
+              disabled={busy || loading}
+              onChange={(enabled) =>
+                void save(
+                  data.entries.map((item) => ({
+                    ...spec(item),
+                    enabled: item.id === selected.id ? enabled : item.enabled,
+                  })),
+                )
+              }
+            />
+          )}
+        </PluginDetailHeading>
+      ) : null}
       <GitHubConnection request={request} workspaceId={workspaceId} />
       {view === "catalog" && (
         <>
@@ -252,7 +258,6 @@ export function Plugins({
                 }}
               />
             </div>
-            {loading && <p role="status">Loading plugins…</p>}
             {error && editing === undefined && (
               <p className="notice" role="alert">
                 {error}{" "}
@@ -300,6 +305,9 @@ export function Plugins({
                       : "Disabled"
                 }
               />
+              {!data && loading && !error && (
+                <SkeletonRows label="Installed extensions" rows={2} />
+              )}
               {data?.entries.map((entry) => (
                 <PluginCard
                   key={entry.id}
@@ -358,16 +366,25 @@ export function Plugins({
         </>
       )}
       {view === "installed" && pluginId === "code-truth" && (
-        <CodeTruth request={request} workspaceId={workspaceId} />
+        <CodeTruth
+          request={request}
+          workspaceId={workspaceId}
+          backTo={path()}
+        />
       )}
       {view === "installed" && pluginId === "codex" && (
-        <Coding request={request} workspaceId={workspaceId} />
+        <Coding request={request} workspaceId={workspaceId} backTo={path()} />
       )}
       {view === "installed" &&
         pluginId !== "code-truth" &&
         pluginId !== "codex" && (
           <>
-            {loading && <p role="status">Loading plugin…</p>}
+            {!data && loading && !error && (
+              <section className="card" aria-busy="true">
+                <h2>Configuration</h2>
+                <SkeletonRows label="Plugin configuration" />
+              </section>
+            )}
             {error && editing === undefined && (
               <p className="notice" role="alert">
                 {error}{" "}
@@ -399,17 +416,43 @@ export function Plugins({
             {selected && data && (
               <>
                 <section className="card" aria-label={`Plugin ${selected.id}`}>
-                  <div className="row">
-                    <span className={`pill${selected.enabled ? " good" : ""}`}>
-                      {selected.enabled ? "Enabled" : "Disabled"}
-                    </span>
-                    <span className="muted">Version {selected.version}</span>
-                    <span className="muted">
-                      Saved revision {data.revision}
-                    </span>
+                  <div className="plugin-card-heading">
+                    <div>
+                      <h2>Configuration</h2>
+                      <p className="muted">Registered local Pi extension</p>
+                    </div>
+                    <IconButton
+                      icon="edit"
+                      label={`Edit ${selected.id}`}
+                      showLabel
+                      disabled={busy || loading}
+                      onClick={() => {
+                        setEditing(selected.id);
+                        setError("");
+                        setNotice("");
+                      }}
+                    />
                   </div>
-                  <p className="muted">Registered local Pi extension</p>
-                  <dl className="plugin-details">
+                  <dl className="plugin-summary">
+                    <div>
+                      <dt>Status</dt>
+                      <dd>
+                        <span
+                          className={`pill${selected.enabled ? " good" : ""}`}
+                        >
+                          {selected.enabled ? "Enabled" : "Disabled"}
+                        </span>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Version</dt>
+                      <dd>{selected.version}</dd>
+                    </div>
+                    <div>
+                      <dt>Saved revision</dt>
+                      <dd>{data.revision}</dd>
+                    </div>
+
                     <div>
                       <dt>File</dt>
                       <dd className="mono">{selected.path}</dd>
@@ -428,34 +471,6 @@ export function Plugins({
                     </div>
                   </dl>
                   <div className="row">
-                    <IconButton
-                      icon="edit"
-                      label={`Edit ${selected.id}`}
-                      showLabel
-                      disabled={busy || loading}
-                      onClick={() => {
-                        setEditing(selected.id);
-                        setError("");
-                        setNotice("");
-                      }}
-                    />
-                    <button
-                      type="button"
-                      disabled={busy || loading}
-                      onClick={() =>
-                        void save(
-                          data.entries.map((item) => ({
-                            ...spec(item),
-                            enabled:
-                              item.id === selected.id
-                                ? !item.enabled
-                                : item.enabled,
-                          })),
-                        )
-                      }
-                    >
-                      {selected.enabled ? "Disable" : "Enable"} {selected.id}
-                    </button>
                     <button
                       type="button"
                       className="danger"
@@ -717,16 +732,18 @@ function PluginEditor({
           List the exact names the extension registers, separated by commas.
           Leave empty for hooks-only extensions.
         </p>
-        <label className="plugin-check">
-          <input
-            type="checkbox"
-            checked={draft.enabled}
-            onChange={(event) =>
-              setDraft({ ...draft, enabled: event.target.checked })
-            }
-          />
-          <span>Enable this plugin</span>
-        </label>
+        {!initial && (
+          <label className="plugin-check">
+            <input
+              type="checkbox"
+              checked={draft.enabled}
+              onChange={(event) =>
+                setDraft({ ...draft, enabled: event.target.checked })
+              }
+            />
+            <span>Enable this plugin</span>
+          </label>
+        )}
         <p className="muted">
           Saving an enabled plugin grants its tools and hooks to eligible users
           in this workspace.
