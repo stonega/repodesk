@@ -105,7 +105,10 @@ by `docker image load`. It then:
 3. Writes a restrictive database dump and verifies its archive listing.
 4. Runs migrations once; starts neither writer if migration fails.
 5. Starts app/worker without building or pulling their image, waits for both
-   health checks, and checks `/readyz` inside the app container.
+   health checks, and retries `/readyz` inside the app container for up to two
+   minutes (at most 24 attempts, five seconds between attempts). This allows the
+   first Telegram long poll to finish. Failed requests report their HTTP status
+   or a timeout without logging response bodies.
 6. Updates `.current-release` only on success and removes the transfer archive.
 
 GitHub serializes deployment workflows without cancelling an active cutover.

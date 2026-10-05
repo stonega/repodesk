@@ -30,7 +30,16 @@ case "$*" in
     echo fake-custom-dump ;;
   *"pg_restore "*) cat > /dev/null ;;
   *"run --rm "*) [[ "$DEPLOY_TEST_FAILURE" != migration ]] || exit 42 ;;
-  *"exec -T app "*) [[ "$DEPLOY_TEST_FAILURE" != readiness ]] || exit 42 ;;
+  *"exec -T app "*)
+    count=0
+    [[ ! -f "$DEPLOY_TEST_READY_COUNT" ]] || count=$(cat "$DEPLOY_TEST_READY_COUNT")
+    count=$((count + 1))
+    printf '%s\\n' "$count" > "$DEPLOY_TEST_READY_COUNT"
+    if [[ "$DEPLOY_TEST_FAILURE" = readiness ]] ||
+       [[ "$DEPLOY_TEST_FAILURE" = delayed-readiness && "$count" -lt 3 ]]; then
+      echo 'Readiness HTTP 503' >&2
+      exit 42
+    fi ;;
 esac
 `;
 
@@ -56,6 +65,9 @@ function deploy(failure = "", arch = "x86_64", duplicate = false) {
       failure === "archive" ? "damaged" : "fixture",
     );
     writeFileSync(join(bin, "docker"), docker, { mode: 0o755 });
+    writeFileSync(join(bin, "sleep"), "#!/usr/bin/env bash\nexit 0\n", {
+      mode: 0o755,
+    });
     writeFileSync(log, "");
     writeFileSync(join(root, ".current-release"), "previous\n");
     if (duplicate) {
@@ -71,6 +83,7 @@ function deploy(failure = "", arch = "x86_64", duplicate = false) {
         DEPLOY_TEST_TAG: imageTag,
         DEPLOY_TEST_FAILURE: failure,
         DEPLOY_TEST_ARCH: arch,
+        DEPLOY_TEST_READY_COUNT: join(root, "readiness-count"),
       },
     });
     return {
@@ -97,6 +110,16 @@ describe("VPS release cutover", () => {
       `image inspect --format {{.Id}} ${imageTag}`,
     );
     expect(result.calls).not.toContain(imageId);
+  });
+
+  test("waits for delayed readiness before promoting without stopping healthy writers", () => {
+    const result = deploy("delayed-readiness");
+    expect(result.exitCode).toBe(0);
+    expect(result.current).toBe("123-1\n");
+    expect(result.calls.match(/exec -T app /g)?.length).toBe(3);
+    expect(result.calls.match(/stop app worker/g)?.length).toBe(1);
+    expect(result.stderr).toContain("Readiness HTTP 503");
+    expect(result.stderr).toContain("Waiting for application readiness");
   });
 
   test("rejects a damaged archive before importing or stopping writers", () => {
@@ -147,6 +170,13 @@ describe("VPS release cutover", () => {
         expect(result.calls).not.toContain(
           "run --rm --no-deps --pull never -T migrate\n",
         );
+      if (failure === "readiness") {
+        expect(result.calls.match(/exec -T app /g)?.length).toBe(24);
+        expect(result.stderr).toContain("Readiness HTTP 503");
+        expect(result.stderr).toContain(
+          "did not succeed within the startup window",
+        );
+      }
     });
   }
 

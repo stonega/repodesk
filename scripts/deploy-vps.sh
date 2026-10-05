@@ -84,8 +84,31 @@ mkdir -p "$deploy_root/backups"
 # Old writers are stopped, and migrations must succeed before either new writer starts.
 "${compose[@]}" run --rm --no-deps --pull never -T migrate
 "${compose[@]}" up -d --no-deps --no-build --pull never --wait --wait-timeout 180 app worker
-"${compose[@]}" exec -T app node -e \
-  "fetch('http://127.0.0.1:'+process.env.PORT+'/readyz',{signal:AbortSignal.timeout(10000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+# Container health can precede the first Telegram long poll. Allow startup to finish.
+readiness_deadline=$((SECONDS + 120))
+readiness_status=1
+ready=false
+for attempt in {1..24}; do
+  remaining=$((readiness_deadline - SECONDS))
+  (( remaining > 0 )) || break
+  if "${compose[@]}" exec -T app node -e \
+    "fetch('http://127.0.0.1:'+process.env.PORT+'/readyz',{signal:AbortSignal.timeout(Math.min(10000,Number(process.argv[1])*1000)))}).then(r=>{if(!r.ok){console.error('Readiness HTTP '+r.status);process.exit(1)}}).catch(()=>{console.error('Readiness request failed or timed out');process.exit(1)})" "$remaining"; then
+    ready=true
+    break
+  else
+    readiness_status=$?
+  fi
+  printf 'Waiting for application readiness (%s/24).\n' "$attempt" >&2
+  remaining=$((readiness_deadline - SECONDS))
+  if (( attempt < 24 && remaining > 0 )); then
+    sleep "$((remaining < 5 ? remaining : 5))"
+  fi
+done
+if [[ "$ready" != true ]]; then
+  echo 'Application readiness did not succeed within the startup window.' >&2
+  # Preserve the normal cutover error handler and prior release marker.
+  (exit "$readiness_status")
+fi
 
 printf '%s\n' "$release_id" > "$deploy_root/.current-release.tmp"
 mv "$deploy_root/.current-release.tmp" "$deploy_root/.current-release"
