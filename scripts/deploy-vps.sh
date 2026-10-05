@@ -92,7 +92,7 @@ for attempt in {1..24}; do
   remaining=$((readiness_deadline - SECONDS))
   (( remaining > 0 )) || break
   if "${compose[@]}" exec -T app node -e \
-    "fetch('http://127.0.0.1:'+process.env.PORT+'/readyz',{signal:AbortSignal.timeout(Math.min(10000,Number(process.argv[1])*1000)))}).then(r=>{if(!r.ok){console.error('Readiness HTTP '+r.status);process.exit(1)}}).catch(()=>{console.error('Readiness request failed or timed out');process.exit(1)})" "$remaining"; then
+    "fetch('http://127.0.0.1:'+process.env.PORT+'/readyz',{signal:AbortSignal.timeout(Math.min(10000,Number(process.argv[1])*1000))}).then(r=>{if(!r.ok){console.error('Readiness HTTP '+r.status);process.exit(1)}}).catch(()=>{console.error('Readiness request failed or timed out');process.exit(1)})" "$remaining"; then
     ready=true
     break
   else

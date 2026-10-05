@@ -35,11 +35,18 @@ case "$*" in
     [[ ! -f "$DEPLOY_TEST_READY_COUNT" ]] || count=$(cat "$DEPLOY_TEST_READY_COUNT")
     count=$((count + 1))
     printf '%s\\n' "$count" > "$DEPLOY_TEST_READY_COUNT"
+    http_status=200
     if [[ "$DEPLOY_TEST_FAILURE" = readiness ]] ||
        [[ "$DEPLOY_TEST_FAILURE" = delayed-readiness && "$count" -lt 3 ]]; then
-      echo 'Readiness HTTP 503' >&2
-      exit 42
-    fi ;;
+      http_status=503
+    fi
+    while [[ "$1" != node ]]; do shift; done
+    shift
+    [[ "$1" = -e ]] || exit 43
+    shift
+    # Execute the actual embedded readiness probe with Node, using only fake HTTP.
+    DEPLOY_TEST_HTTP_STATUS="$http_status" node -e \
+      "globalThis.fetch=async()=>({ok:process.env.DEPLOY_TEST_HTTP_STATUS==='200',status:Number(process.env.DEPLOY_TEST_HTTP_STATUS)}); $1" "$2" || exit 42 ;;
 esac
 `;
 
