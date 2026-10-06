@@ -438,14 +438,30 @@ them.
   saved list with an update notice. Newly granted repositories still require
   workspace authorization and selection.
 
-### Sidebar logout sits beside the account identity
+### Sidebar account controls stay compact and grouped
 
-- **Preference:** Place the sign-out icon at the right edge of the account row,
-  alongside the signed-in identity. Allow long identity text to wrap within its
-  column while keeping the icon accessible.
+- **Preference:** Keep the account footer short, with minimal space above and
+  below its controls. Group the sign-out icon directly beside the signed-in
+  identity, and put the theme switch at the row's right edge. Allow long identity
+  text to wrap while keeping both controls accessible with 44px touch targets.
 - **Scope:** Signed-in account area of the admin sidebar, including narrow screens.
 - **Source:** 2026-09-26 — user requested moving the logout button to the right side
-  of the account area shown in the sidebar.
+  of the account area shown in the sidebar. 2026-10-06 — user requested reducing
+  its height, grouping username and logout together, and adding a theme switch
+  on the right. This supersedes placing logout at the row's far right.
+- **Exceptions:** None recorded.
+
+### Theme choice applies throughout the panel
+
+- **Preference:** Provide a light/dark icon button in the account footer. Remember
+  the selected theme in this browser and apply it before the page paints. Start
+  with the system preference when there is no saved choice. Use the shared UI
+  tokens for surfaces, text, controls and status colors in both themes.
+- **Scope:** Admin, sign-in and setup pages; the control appears in signed-in
+  account areas. The green setup illustration retains its product palette.
+- **Source:** 2026-10-06 — user requested a theme switch on the right of the
+  sidebar account area. Persistence and the initial system default are
+  implementation choices supporting that control.
 - **Exceptions:** None recorded.
 
 ### New workspaces start from the workspace dropdown

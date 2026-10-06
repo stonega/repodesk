@@ -67,6 +67,7 @@ import { prefixFields, RecordForm } from "./record-form.tsx";
 import { RunAttempts } from "./run-attempts.tsx";
 import { workspaceFields } from "./settings-fields.ts";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
+import { ThemeSwitch } from "./theme-switch.tsx";
 import { ToastProvider, useToast } from "./toast.tsx";
 import { Usage } from "./usage.tsx";
 import "./style.css";
@@ -4257,20 +4258,23 @@ function Shell() {
               )}
             </nav>
             <div className="account">
-              <small>
-                {current.admin.username}
-                {current.admin.telegramId && ` · ${current.admin.telegramId}`}
-              </small>
-              <Action
-                icon="logout"
-                onClick={async () => {
-                  await api("/api/admin/auth/logout", "POST", {});
-                  csrf = "";
-                  setCurrent(undefined);
-                }}
-              >
-                Sign out
-              </Action>
+              <div className="account-identity">
+                <small>
+                  {current.admin.username}
+                  {current.admin.telegramId && ` · ${current.admin.telegramId}`}
+                </small>
+                <Action
+                  icon="logout"
+                  onClick={async () => {
+                    await api("/api/admin/auth/logout", "POST", {});
+                    csrf = "";
+                    setCurrent(undefined);
+                  }}
+                >
+                  Sign out
+                </Action>
+              </div>
+              <ThemeSwitch />
             </div>
           </>
         ) : (
@@ -4287,20 +4291,23 @@ function Shell() {
             <p className="auth-hero-footer">RepoDesk / Your deployment</p>
             {current && (
               <div className="account setup-account">
-                <small>
-                  {current.admin.username}
-                  {current.admin.telegramId && " · Telegram linked"}
-                </small>
-                <Action
-                  icon="logout"
-                  onClick={async () => {
-                    await api("/api/admin/auth/logout", "POST", {});
-                    csrf = "";
-                    setCurrent(undefined);
-                  }}
-                >
-                  Sign out
-                </Action>
+                <div className="account-identity">
+                  <small>
+                    {current.admin.username}
+                    {current.admin.telegramId && " · Telegram linked"}
+                  </small>
+                  <Action
+                    icon="logout"
+                    onClick={async () => {
+                      await api("/api/admin/auth/logout", "POST", {});
+                      csrf = "";
+                      setCurrent(undefined);
+                    }}
+                  >
+                    Sign out
+                  </Action>
+                </div>
+                <ThemeSwitch />
               </div>
             )}
           </>

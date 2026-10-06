@@ -21,7 +21,7 @@ const backend = await Bun.build({
 if (!backend.success)
   throw new AggregateError(backend.logs, "Backend build failed");
 const frontend = await Bun.build({
-  entrypoints: ["web/app.tsx"],
+  entrypoints: ["web/app.tsx", "web/theme-init.ts"],
   outdir: "dist/web/assets",
   target: "browser",
   minify: true,
@@ -37,7 +37,7 @@ const { version: appVersion } = JSON.parse(
   await readFile("package.json", "utf8"),
 );
 html = html.replace("__APP_VERSION__", appVersion);
-for (const asset of ["app.js", "style.css"]) {
+for (const asset of ["app.js", "theme-init.js", "style.css"]) {
   const content = await readFile(`dist/web/assets/${asset}`);
   const version = createHash("sha256")
     .update(content)

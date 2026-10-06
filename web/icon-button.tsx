@@ -11,11 +11,13 @@ import {
   DocumentUpload,
   Edit,
   Logout,
+  Moon,
   Pause,
   Play,
   Refresh,
   Search,
   Stop,
+  Sun,
   Trash6,
 } from "reicon-react";
 
@@ -54,6 +56,8 @@ const icons = {
   edit: Edit,
   import: DocumentUpload,
   logout: Logout,
+  moon: Moon,
+  sun: Sun,
   pause: Pause,
   play: Play,
   refresh: Refresh,
