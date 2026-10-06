@@ -25,6 +25,9 @@ See [polling.env](polling.env) for opt-in local Telegram reception without a web
 
 See [runtime-logs.http](runtime-logs.http) for operator log filters and cursor pagination.
 
+See [runs.http](runs.http) for workspace run history, a single run's details and
+the dedicated admin detail page URL.
+
 `pi-extension.ts` is an unchanged Pi-format extension adding `count_words`.
 `pi-extensions.json` grants it to an explicit workspace; replace the example UUID.
 Copy both to `extensions/`, name the manifest `extensions.json`, then use

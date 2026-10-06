@@ -521,6 +521,14 @@ p {
   border-radius: var(--ui-radius);
   box-shadow: 0 1px 2px #17212b08;
   font-weight: 400;
+  text-decoration: none;
+}
+.run-card:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
+}
+.run-id {
+  overflow-wrap: anywhere;
 }
 .run-card:hover:not(:disabled) {
   background: var(--ui-surface-muted);
@@ -1237,7 +1245,7 @@ li {
   padding: 10px 0;
   overflow-wrap: anywhere;
 }
-.run-message-section h3 {
+.run-message-section h2 {
   margin: 22px 0 10px;
 }
 .run-messages {
@@ -1747,16 +1755,19 @@ input.plugin-toggle-input:disabled {
   font-weight: 600;
   cursor: pointer;
 }
-.plugin-back-link {
+.plugin-back-link,
+.page-back-link {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   text-decoration: none;
 }
-.plugin-back-link:hover {
+.plugin-back-link:hover,
+.page-back-link:hover {
   text-decoration: underline;
 }
-.plugin-back-link:focus-visible {
+.plugin-back-link:focus-visible,
+.page-back-link:focus-visible {
   outline: 3px solid var(--ui-focus);
   outline-offset: 3px;
   border-radius: 4px;

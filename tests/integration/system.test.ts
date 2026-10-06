@@ -320,9 +320,26 @@ suite("PostgreSQL integration (isolated database)", () => {
           },
         ],
       });
+      const runId = runHistory.items[0].id;
+      const detail = await request(`${base}/runs/${runId}`);
+      expect(detail.status).toBe(200);
+      expect(await detail.json()).toEqual({
+        mode: "operator",
+        run: runHistory.items[0],
+      });
+      expect((await request(`${base}/runs/${randomUUID()}`)).status).toBe(404);
+      expect((await request(`${base}/runs/not-an-id`)).status).toBe(400);
+      for (const action of ["cancel", "retry", "reconcile"])
+        expect(
+          (await request(`${base}/runs/${runId}/${action}`, "POST", {})).status,
+        ).toBe(403);
       const foreign = await foreignWorkspace();
       expect(
         (await request(`/api/admin/workspaces/${foreign.id}/runs`)).status,
+      ).toBe(403);
+      expect(
+        (await request(`/api/admin/workspaces/${foreign.id}/runs/${runId}`))
+          .status,
       ).toBe(403);
       const workflows = await request(`${base}/workflows`);
       expect(workflows.status).toBe(200);
@@ -383,6 +400,10 @@ suite("PostgreSQL integration (isolated database)", () => {
       "Private request from 101",
     ]);
     const privateRun = history.items[0];
+    const detailPath = `${base}/runs/${privateRun.id}`;
+    const detail = await request(detailPath, "GET", undefined, headers);
+    expect(detail.status).toBe(200);
+    expect(await detail.json()).toEqual({ mode: "member", run: privateRun });
     expect(
       (
         await request(
@@ -399,6 +420,9 @@ suite("PostgreSQL integration (isolated database)", () => {
     expect(overview.counts.runs).toBe(2);
     expect(
       (await request(`${base}/runs`, "GET", undefined, { cookie: "" })).status,
+    ).toBe(401);
+    expect(
+      (await request(detailPath, "GET", undefined, { cookie: "" })).status,
     ).toBe(401);
     const foreign = await foreignWorkspace();
     expect(
@@ -418,13 +442,58 @@ suite("PostgreSQL integration (isolated database)", () => {
     expect(
       (await request(`${base}/runs`, "GET", undefined, headers)).status,
     ).toBe(403);
+    expect((await request(detailPath, "GET", undefined, headers)).status).toBe(
+      403,
+    );
     await store.pool.query("UPDATE admins SET telegram_id='202' WHERE id=$1", [
       id,
     ]);
     expect(
       (await request(`${base}/runs`, "GET", undefined, headers)).status,
     ).toBe(403);
+    expect((await request(detailPath, "GET", undefined, headers)).status).toBe(
+      403,
+    );
     await store.pool.query("DELETE FROM admins WHERE id=$1", [id]);
+  });
+  test("run details are independent of list pagination and stay in their workspace", async () => {
+    const w = await seed();
+    const other = await seed();
+    const first = await store.change(w.id, (saved) => {
+      const first = createRun(saved, "101", "Old run", "101", 0, "test-model");
+      first.status = "succeeded";
+      first.result = "Old answer";
+      for (let i = 0; i < 100; i++)
+        saved.runs.push({ ...structuredClone(first), id: randomUUID() });
+      saved.deliveries.push({
+        id: randomUUID(),
+        runId: first.id,
+        actor: first.actor,
+        chatId: first.chatId,
+        topicId: first.topicId,
+        text: first.result,
+        format: "rich",
+        state: "sent",
+        attempts: 1,
+        at: first.at,
+      });
+      return first;
+    });
+    const base = `/api/admin/workspaces/${w.id}/runs`;
+    const list = await (await request(base)).json();
+    expect(list.total).toBe(101);
+    expect(list.items.map((r: { id: string }) => r.id)).not.toContain(first.id);
+    const detail = await request(`${base}/${first.id}?offset=999`);
+    expect(detail.status).toBe(200);
+    expect((await detail.json()).run).toMatchObject({
+      id: first.id,
+      result: "Old answer",
+      deliveries: [{ runId: first.id, text: "Old answer" }],
+    });
+    expect(
+      (await request(`/api/admin/workspaces/${other.id}/runs/${first.id}`))
+        .status,
+    ).toBe(404);
   });
   test("operator saves compatible settings, protects keys and worker uses the saved model", async () => {
     const original = await store.deployment();

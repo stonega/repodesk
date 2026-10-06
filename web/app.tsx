@@ -12,15 +12,17 @@ import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
+  Link,
   Navigate,
   NavLink,
   Route,
   Routes,
   useLocation,
   useNavigate,
+  useParams,
   useSearchParams,
 } from "react-router";
-import { Check, Refresh } from "reicon-react";
+import { Check, ChevronLeft, Refresh } from "reicon-react";
 import {
   type ModelCapabilities,
   type ModelLimits,
@@ -3298,15 +3300,15 @@ function RunCard({
   title,
   run,
   detail,
-  onOpen,
+  to,
 }: {
   title: string;
   run: AdminRun;
   detail: string;
-  onOpen: () => void;
+  to: string;
 }) {
   return (
-    <button className="run-card" type="button" onClick={onOpen}>
+    <Link className="run-card" to={to}>
       <span className="run-card-heading">
         <span className="run-card-title">{title}</span>
         <span className="pill">{run.status}</span>
@@ -3315,7 +3317,7 @@ function RunCard({
         {new Date(run.at).toLocaleString()} · Actor {run.actor} · {run.model}
       </span>
       <span className="run-card-line">{detail}</span>
-    </button>
+    </Link>
   );
 }
 
@@ -3358,7 +3360,7 @@ function RunMessages({ run }: { run: AdminRun }) {
   );
   return (
     <section className="run-message-section" aria-label="Messages">
-      <h3>Messages</h3>
+      <h2>Messages</h2>
       <ol className="run-messages">
         <li>
           <strong>Request</strong>
@@ -3390,14 +3392,15 @@ function RunMessages({ run }: { run: AdminRun }) {
 }
 
 function RunsPage({ id }: { id: string }) {
-  const [selectedRunId, setSelectedRunId] = useState<string>();
+  const [params] = useSearchParams();
+  const detailParams = new URLSearchParams(params);
+  detailParams.set("workspace", id);
   const { data, error, reload, loading } = useData<
     | { mode: "member"; items: AdminRun[]; total: number }
     | { mode: "operator"; items: AdminRun[]; total: number }
   >(`/api/admin/workspaces/${id}/runs`);
   const memberData = data?.mode === "member" ? data : undefined;
   const operatorData = data?.mode === "operator" ? data : undefined;
-  const selectedRun = data?.items.find((run) => run.id === selectedRunId);
   return (
     <Page
       title="Runs & delivery"
@@ -3449,7 +3452,7 @@ function RunsPage({ id }: { id: string }) {
           title={`Run ${r.id.slice(0, 8)}`}
           run={r}
           detail={`${r.attempts.length} model ${r.attempts.length === 1 ? "attempt" : "attempts"} · Delivery: ${r.deliveries.length ? r.deliveries.map((delivery) => delivery.state).join(", ") : "none"}`}
-          onOpen={() => setSelectedRunId(r.id)}
+          to={`/admin/runs/${r.id}?${detailParams.toString()}`}
         />
       ))}
       {memberData?.items.map((r) => (
@@ -3458,85 +3461,138 @@ function RunsPage({ id }: { id: string }) {
           title={r.task}
           run={r}
           detail={`Run ${r.id.slice(0, 8)} · Delivery: ${r.deliveries.length ? r.deliveries.map((delivery) => delivery.state).join(", ") : "none"}`}
-          onOpen={() => setSelectedRunId(r.id)}
+          to={`/admin/runs/${r.id}?${detailParams.toString()}`}
         />
       ))}
-      {selectedRun && (
-        <Modal
-          title={`Run ${selectedRun.id.slice(0, 8)}`}
-          onClose={() => setSelectedRunId(undefined)}
-          cancelLabel="Close"
+    </Page>
+  );
+}
+function RunDetailRoute({ id }: { id: string }) {
+  const { runId = "" } = useParams();
+  return <RunDetailPage key={`${id}:${runId}`} id={id} runId={runId} />;
+}
+function RunDetailPage({ id, runId }: { id: string; runId: string }) {
+  const [params] = useSearchParams();
+  const backParams = new URLSearchParams(params);
+  backParams.set("workspace", id);
+  const { data, error, reload, loading } = useData<{
+    mode: "member" | "operator";
+    run: AdminRun;
+  }>(`/api/admin/workspaces/${id}/runs/${encodeURIComponent(runId)}`);
+  const run = data?.run;
+  return (
+    <>
+      <p>
+        <Link
+          className="page-back-link"
+          to={`/admin/runs?${backParams.toString()}`}
         >
-          <p className="mono">{selectedRun.id}</p>
-          <p className="muted">
-            {new Date(selectedRun.at).toLocaleString()} · {selectedRun.model} ·
-            Settings v{selectedRun.settingsVersion}
-            {selectedRun.workflowVersion &&
-              ` · Workflow v${selectedRun.workflowVersion}`}
-          </p>
-          {selectedRun.error && <Notice error>{selectedRun.error}</Notice>}
-          <RunMessages run={selectedRun} />
-          {selectedRun.coverage && (
-            <p className="muted">{selectedRun.coverage}</p>
-          )}
-          <details>
-            <summary>Versions, usage, checkpoints & delivery</summary>
-            <DataDetails
-              value={{
-                skillPins: selectedRun.skillPins,
-                instructions: selectedRun.instructions.map((i) => ({
-                  id: i.id,
-                  version: i.version,
-                })),
-              }}
-            />
-            <RunAttempts attempts={selectedRun.attempts} />
-            <DataDetails
-              value={{
-                transcript: selectedRun.transcript,
-                deliveries: selectedRun.deliveries,
-              }}
-            />
-          </details>
-          {memberData && (
-            <>
-              <RunRecovery id={id} run={selectedRun} reload={reload} />
-              <div className="row">
-                <Action
-                  icon="stop"
-                  onClick={async () => {
-                    await api(
-                      `/api/admin/workspaces/${id}/runs/${selectedRun.id}/cancel`,
-                      "POST",
-                      {},
-                    );
-                    reload();
-                  }}
-                >
-                  Cancel
-                </Action>
-                {["failed", "partial", "cancelled"].includes(
-                  selectedRun.status,
-                ) && (
+          <ChevronLeft
+            size={18}
+            weight="Outline"
+            color="currentColor"
+            aria-hidden="true"
+          />
+          Back to Runs
+        </Link>
+      </p>
+      <Page
+        title={`Run ${runId.slice(0, 8)}`}
+        titleBadge={run?.status}
+        actions={
+          error && (
+            <Action loading={loading} onClick={async () => reload()}>
+              Try again
+            </Action>
+          )
+        }
+      >
+        {error && (
+          <Notice error>
+            {error === "not_found"
+              ? "This run is unavailable in this workspace. It may have expired or been removed."
+              : error}
+          </Notice>
+        )}
+        {!run && loading && (
+          <section className="card" aria-label="Run details" aria-busy="true">
+            <Skeleton width="65%" />
+            <h2>Messages</h2>
+            <SkeletonRows label="Run messages" rows={3} />
+          </section>
+        )}
+        {run && data && (
+          <section
+            className="card"
+            aria-label="Run details"
+            aria-busy={loading}
+          >
+            <p className="mono run-id">{run.id}</p>
+            <p className="muted">
+              {new Date(run.at).toLocaleString()} · Actor {run.actor} ·{" "}
+              {run.model} · Settings v{run.settingsVersion}
+              {run.workflowVersion && ` · Workflow v${run.workflowVersion}`}
+            </p>
+            {run.error && <Notice error>{run.error}</Notice>}
+            <RunMessages run={run} />
+            {run.coverage && <p className="muted">{run.coverage}</p>}
+            <details>
+              <summary>Versions, usage, checkpoints & delivery</summary>
+              <DataDetails
+                value={{
+                  skillPins: run.skillPins,
+                  instructions: run.instructions.map((i) => ({
+                    id: i.id,
+                    version: i.version,
+                  })),
+                }}
+              />
+              <RunAttempts attempts={run.attempts} />
+              <DataDetails
+                value={{
+                  transcript: run.transcript,
+                  deliveries: run.deliveries,
+                }}
+              />
+            </details>
+            {data.mode === "member" && (
+              <>
+                <RunRecovery id={id} run={run} reload={reload} />
+                <div className="row">
                   <Action
+                    icon="stop"
                     onClick={async () => {
                       await api(
-                        `/api/admin/workspaces/${id}/runs/${selectedRun.id}/retry`,
+                        `/api/admin/workspaces/${id}/runs/${run.id}/cancel`,
                         "POST",
                         {},
                       );
                       reload();
                     }}
                   >
-                    Create retry (new budget)
+                    Cancel
                   </Action>
-                )}
-              </div>
-            </>
-          )}
-        </Modal>
-      )}
-    </Page>
+                  {["failed", "partial", "cancelled"].includes(run.status) && (
+                    <Action
+                      onClick={async () => {
+                        await api(
+                          `/api/admin/workspaces/${id}/runs/${run.id}/retry`,
+                          "POST",
+                          {},
+                        );
+                        reload();
+                      }}
+                    >
+                      Create retry (new budget)
+                    </Action>
+                  )}
+                </div>
+              </>
+            )}
+          </section>
+        )}
+      </Page>
+    </>
   );
 }
 function RunRecovery({
@@ -4402,6 +4458,10 @@ function Shell() {
                   replace
                 />
               }
+            />
+            <Route
+              path="/admin/runs/:runId"
+              element={chosen ? <RunDetailRoute id={chosen} /> : <Setup />}
             />
             {visibleNavigation.map(([path]) => (
               <Route

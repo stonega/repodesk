@@ -33,7 +33,7 @@ Public static assets can load before login, but contain no workspace data or sec
 | GitHub | Manage GitHub modal for guided App creation, workspace OAuth, installation/repository selection and connected repository links, opened on Overview without navigation; GitHub callbacks return to Plugins; disconnect API | Manifest state bound to operator/session/workspace; encrypted operator App credentials; one-use PKCE OAuth; verify user installation/repository access; installation tokens limited to selected repositories and Contents read. |
 | Agent skills | Create/import/edit, test, publish, enable/disable, scope, settings and version rollback | Permission-bounded skills; pinned workflow versions; disabling blocks dependent execution. |
 | Shared instructions | List, edit, scope, provenance, versions, forget | Never lists other users' personal memories by virtue of admin role. |
-| Runs | Compact run summaries open a detail dialog with all workspace run messages, evidence, cost and existing cancel/retry controls; deployment administrators can read messages without linking Telegram | Workspace owners/admins can inspect every retained run, including private requests, results, transcripts and delivery text. Access stays tenant-scoped; execution and mutations retain Telegram authorization. Retry creates a traceable attempt; uncertain delivery cannot be blindly resent. |
+| Runs | Compact run summaries link to a dedicated detail page with all workspace run messages, evidence, cost and existing cancel/retry controls; deployment administrators can read messages without linking Telegram | Direct visits and refreshes load the selected run independently of list pagination; Back to Runs retains the workspace and list offset. Workspace owners/admins can inspect every retained run, including private requests, results, transcripts and delivery text. Access stays tenant-scoped; execution and mutations retain Telegram authorization. Retry creates a traceable attempt; uncertain delivery cannot be blindly resent. |
 | Usage and limits | Recorded/estimated usage, daily/monthly caps, reservations and blocked jobs | Changes apply atomically; concurrent workers cannot overspend the displayed cap. |
 | Members & access | Search Telegram names/usernames/IDs; manage membership, roles and requests; configure access mode and whitelist with impact preview | Show membership, whitelist and effective access separately in one table. Preserve last-admin protection, tenant boundaries and revocation checks. |
 | Privacy and audit | Retention settings, deletion request/status, configuration/action audit | Destructive changes show scope; logs omit credentials and raw private chat text. |
@@ -145,7 +145,10 @@ lists and tool checkboxes. Bound IDs and concurrency versions remain in request
 payloads without becoming editable fields. Failed saves preserve drafts and show
 field errors; pending saves block modal dismissal and duplicate submission.
 
-Run detail dialogs show model attempts as a numbered horizontal timeline, with
+Run detail pages at `/admin/runs/:runId?workspace=:workspaceId` load the selected
+record from `GET /api/admin/workspaces/:id/runs/:run`. Missing or expired runs show
+an explicit error and a Back to Runs link; failed loads offer Try again.
+Run detail pages show model attempts as a numbered horizontal timeline, with
 time, status and reserved/actual USD amounts. Additional attempt metadata expands
 inside each card; overflow scrolls within the timeline on narrow screens.
 

@@ -346,16 +346,20 @@ them.
   without linking Telegram. Unlinked administrators still see only workflow metadata;
   workflow content and mutations retain their existing identity requirements.
 
-### Run summaries open message details
+### Run summaries open a dedicated detail page
 
 - **Preference:** Keep each run item to a compact two or three line summary.
-  Open a detail dialog from the whole item, with the run's messages presented
-  as a readable ordered list and technical metadata below them.
+  Open a dedicated detail page from the whole item, with the run's messages
+  presented as a readable ordered list and technical metadata below them. Give
+  each run a workspace-scoped URL that supports direct visits and refreshes, and
+  a Back to Runs link that preserves the list's pagination.
 - **Scope:** Runs & delivery in the workspace admin panel, on desktop and mobile.
 - **Source:** 2026-09-28 — user showed a tall run card and asked for compact
   items that open a detailed message list when clicked.
   2026-10-06 — user requested removing the Telegram identity/conversation access
   restriction in run details so admins can see all messages.
+  2026-10-06 — user requested a new run detail page instead of the modal,
+  superseding the earlier dialog preference.
 - **Exceptions:** Deployment administrators and eligible workspace owners/admins
   can read every retained run message in their workspace, including private runs.
   Telegram linking is unnecessary for deployment administrators to view messages;
@@ -365,8 +369,8 @@ them.
 
 - **Preference:** Present model attempts as numbered steps connected from left to
   right, with time, status and reserved/actual costs in compact cards. Use the
-  dialog's full content width and contain horizontal scrolling within the timeline.
-- **Scope:** Attempts in run detail dialogs, on desktop and mobile.
+  detail page's full content width and contain horizontal scrolling within the timeline.
+- **Scope:** Attempts in run detail pages, on desktop and mobile.
 - **Source:** 2026-10-06 — user showed the run modal's long vertical Attempts list
   and requested a horizontal timeline.
 - **Exceptions:** Other record lists keep their existing layouts.

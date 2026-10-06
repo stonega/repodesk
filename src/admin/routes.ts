@@ -684,7 +684,7 @@ export function adminRoutes(
           resource,
         ) ||
           (c.req.method === "GET" &&
-            (resource === "runs" ||
+            (/^runs(?:\/[^/]+)?$/.test(resource) ||
               (!admin.telegramId && resource === "workflows"))),
         "access_denied",
         403,
@@ -1215,6 +1215,20 @@ export function adminRoutes(
         testSkill(w, actor, c.req.param("skill"), input.sample),
       ),
     );
+  });
+  app.get("/api/admin/workspaces/:id/runs/:run", async (c) => {
+    const w = await store.read(validId(c.req.param("id")));
+    const actor = workspaceActor(w, c.get("session").admin);
+    const runId = validId(c.req.param("run"));
+    const run = w.runs.find((r) => r.id === runId);
+    requireThat(run, "not_found", 404);
+    return c.json({
+      mode: actor === w.operatorId ? "operator" : "member",
+      run: {
+        ...run,
+        deliveries: w.deliveries.filter((d) => d.runId === run.id),
+      },
+    });
   });
   app.post("/api/admin/workspaces/:id/runs", async (c) => {
     const input = z

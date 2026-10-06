@@ -1,0 +1,18 @@
+# Sign in as the workspace's deployment operator or an eligible workspace owner/admin.
+# Replace the workspace/run IDs and session cookie. These endpoints are read-only.
+@origin = http://localhost:3000
+@workspaceId = REPLACE_WITH_WORKSPACE_UUID
+@runId = REPLACE_WITH_RUN_UUID
+@session = REPLACE_WITH_SESSION
+
+### List the first 100 runs; later pages use offset=100, 200, etc.
+GET {{origin}}/api/admin/workspaces/{{workspaceId}}/runs?offset=0
+Cookie: repodesk_session={{session}}
+
+### Fetch one run, including messages, model attempts and delivery details.
+GET {{origin}}/api/admin/workspaces/{{workspaceId}}/runs/{{runId}}
+Cookie: repodesk_session={{session}}
+
+### Open the dedicated detail page; offset preserves the return list page.
+GET {{origin}}/admin/runs/{{runId}}?workspace={{workspaceId}}&offset=100
+Cookie: repodesk_session={{session}}

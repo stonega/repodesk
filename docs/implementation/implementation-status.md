@@ -1080,3 +1080,22 @@ rename/link updates, retained drafts and stale-save rejection. No dependency or
 migration was added. No live GitHub call, Telegram send or deployment was performed.
 See [behavior and limits](github-app.md#automatic-repository-updates) and the
 [manual staging check](../../examples/github-repository-sync.md).
+
+## Dedicated run detail pages (2026-10-06)
+
+Compact run cards link to `/admin/runs/:runId?workspace=:workspaceId` instead of
+opening a modal. The page retains messages, coverage, pinned versions, the model
+attempt timeline, delivery evidence and existing authorized recovery/cancel/retry
+controls. Back to Runs preserves the workspace and list offset. Direct visits and
+refreshes fetch a single run independently of list pagination through
+`GET /api/admin/workspaces/:id/runs/:run`; missing runs and failed loads show an
+explicit error with navigation and retry controls. Access remains scoped to the
+workspace, and unlinked deployment administrators retain read-only run access.
+See [the runnable requests and page URL](../../examples/runs.http).
+
+Validation: `bun run check`, `bun run typecheck`, `bun test` (415 tests against
+disposable PostgreSQL) and `bun run build` passed, with the host HTTP proxy disabled
+for local test fixtures. Four browser scenarios passed for desktop/mobile layouts,
+keyboard navigation, direct visits, refresh, back navigation, pagination, load
+recovery and switching to a missing run. Desktop and mobile screenshots were
+reviewed. No dependency or migration was added.
