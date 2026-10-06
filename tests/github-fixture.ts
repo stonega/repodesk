@@ -71,7 +71,8 @@ export function githubTransport(
     if (
       url.startsWith(
         "https://api.github.com/user/installations/501/repositories?",
-      )
+      ) ||
+      url.startsWith("https://api.github.com/installation/repositories?")
     )
       return json({
         repositories: Array.from({ length: repositoryCount }, (_, index) => ({

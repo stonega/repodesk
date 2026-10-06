@@ -137,6 +137,37 @@ Workspaces without a connection record retain legacy deployment access until con
 or disconnected. Once every private-repository workspace uses the App, remove the
 legacy `CODE_TRUTH_GITHUB_TOKEN` from `.env` and recreate Code Truth.
 
+### Automatic repository updates
+
+Manage GitHub and the Codex repository lists refresh every five seconds while
+visible, and immediately on focus or return to a visible tab. Pending Codex
+sign-in retains its three-second interval. Refresh keeps the existing list,
+expanded items and unsaved drafts visible. The repository selector retains the
+selected numeric ID through renames; background refresh also preserves the
+editor's settings revision so a concurrent settings edit still conflicts on save.
+
+The server reads current repository names and visibility from
+[GitHub's installation repository list](https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-app-installation).
+It uses an in-memory, short-lived Metadata-read token; it has no source or write
+permission and never leaves the backend. Responses are filtered to the
+workspace's selected numeric IDs. Repositories no longer available to the App
+are removed; a new repository using an old name does not gain workspace access.
+Newly granted or restored repositories require a new authorization/selection flow.
+Matching workspace Code Truth URLs follow renames, retaining their configured
+branches. Metadata changes advance the connection revision, invalidating older
+pinned approvals and runs; unchanged polls do not advance revisions. Concurrent
+refreshes share one request and successful or failed checks are cached for three
+seconds. Tokens are reused until near expiry and discarded after an upstream failure.
+
+Polling stops for hidden pages and closed GitHub dialogs. GitHub outages,
+denied access and invalid responses retain the last saved list and show an update
+notice; normal tool permission checks still apply. Reconnect, disconnect,
+ownership revocation or deletion during a request prevents that response from
+replacing newer state. Updates are near realtime while the list is open; webhooks
+remain disabled and there is no background repository sync while the panel is closed.
+No migration, new dependency or App permission change is required. See the
+[manual staging check](../../examples/github-repository-sync.md).
+
 ## Security and API
 
 POST `/api/admin/workspaces/:id/github/register` accepts

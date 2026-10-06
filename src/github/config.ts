@@ -13,6 +13,7 @@ export interface GitHubPage {
   appSlug?: string;
   installUrl?: string;
   connection?: GitHubConnection;
+  refreshError?: string;
   revision: number;
   pending: boolean;
   login?: string;

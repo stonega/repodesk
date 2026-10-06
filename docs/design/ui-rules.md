@@ -418,6 +418,22 @@ them.
 - **Exceptions:** An unconnected workspace still shows Connect GitHub; failed
   loads may show Reload GitHub connection.
 
+### GitHub repository lists update automatically
+
+- **Preference:** Refresh repository lists while visible and when returning from
+  GitHub, so renames and visibility changes appear without reloading the page.
+  Match repositories by their numeric GitHub ID. Keep loaded lists, expanded
+  items, selected repositories and unsaved form values visible during refresh.
+- **Scope:** Connected repositories in Manage GitHub and repository lists and
+  selectors in the Codex plugin.
+- **Source:** 2026-10-06 — user requested realtime repository updates because
+  users can rename or edit repositories on GitHub.
+- **Exceptions:** The current implementation polls every five seconds (three
+  seconds during pending Codex sign-in); it has no GitHub webhook receiver.
+  Hidden pages and closed dialogs stop polling. Upstream failures retain the
+  saved list with an update notice. Newly granted repositories still require
+  workspace authorization and selection.
+
 ### Sidebar logout sits beside the account identity
 
 - **Preference:** Place the sign-out icon at the right edge of the account row,

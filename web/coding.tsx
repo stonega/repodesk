@@ -6,6 +6,7 @@ import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
 import { RepositorySelect } from "./repository-select.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
+import { useRepositoryRefresh } from "./use-repository-refresh.ts";
 
 type Request = <T>(
   path: string,
@@ -102,7 +103,9 @@ export function Coding({
 }) {
   const endpoint = `/api/admin/workspaces/${workspaceId}/plugins/coding`;
   const [data, setData] = useState<CodingPage>();
-  const [error, setError] = useState("");
+  const [actionError, setError] = useState("");
+  const [refreshError, setRefreshError] = useState("");
+  const error = actionError || refreshError;
   const [busy, setBusy] = useState(false);
   const [deviceAction, setDeviceAction] = useState<"start" | "status">();
   const [loading, setLoading] = useState(false);
@@ -111,30 +114,39 @@ export function Coding({
   const [configDraft, setConfigDraft] = useState<CodingSettings>();
   const [keyDraft, setKeyDraft] = useState("");
   const [removeKey, setRemoveKey] = useState(false);
-  useEffect(() => {
-    if (data?.deviceAuth?.state !== "pending") return;
-    let active = true;
-    let timer: ReturnType<typeof setTimeout>;
-    const poll = async () => {
+  const preserveSettings = !!editing || configEditing;
+  const refresh = useCallback(
+    async (signal: AbortSignal) => {
       try {
         const page = await request<CodingPage>(
           endpoint,
           "GET",
           undefined,
-          AbortSignal.timeout(10000),
+          AbortSignal.any([signal, AbortSignal.timeout(15000)]),
         );
-        if (active) setData(page);
+        if (!signal.aborted) {
+          setData((previous) =>
+            previous && preserveSettings
+              ? {
+                  ...page,
+                  settings: previous.settings,
+                  revision: previous.revision,
+                }
+              : page,
+          );
+          setRefreshError("");
+        }
       } catch (e) {
-        if (active) setError(message(e));
+        if (!signal.aborted) setRefreshError(message(e));
       }
-      if (active) timer = setTimeout(poll, 3000);
-    };
-    timer = setTimeout(poll, 3000);
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [data?.deviceAuth?.state, endpoint, request]);
+    },
+    [endpoint, preserveSettings, request],
+  );
+  useRepositoryRefresh(
+    refresh,
+    !busy && !loading,
+    data?.deviceAuth?.state === "pending" ? 3000 : 5000,
+  );
   const recheckConnection = async () => {
     setBusy(true);
     setDeviceAction("status");
@@ -158,6 +170,7 @@ export function Coding({
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    setRefreshError("");
     try {
       setData(await request<CodingPage>(endpoint));
       setEditing(undefined);
@@ -171,13 +184,17 @@ export function Coding({
       setLoading(false);
     }
   }, [request, endpoint]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Discard data and drafts when the workspace endpoint changes.
   useEffect(() => {
+    setData(undefined);
+    setError("");
+    setRefreshError("");
+    setEditing(undefined);
     setConfigEditing(false);
     setConfigDraft(undefined);
     setKeyDraft("");
     setRemoveKey(false);
-    void load();
-  }, [load]);
+  }, [endpoint]);
   const save = async (
     settings: CodingSettings,
     providerApiKey?: string | null,
@@ -268,6 +285,12 @@ export function Coding({
           >
             Reload coding settings
           </button>
+        </p>
+      )}
+      {data?.repositoryRefreshError && (
+        <p className="notice" role="status">
+          Repository updates are temporarily unavailable. Showing the last saved
+          list. Check the GitHub App connection if this continues.
         </p>
       )}
       <section

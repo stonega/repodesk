@@ -180,6 +180,28 @@ export class GitHubApp {
     const payload = `${encode({ alg: "RS256", typ: "JWT" })}.${encode({ iat: now - 60, exp: now + 540, iss: this.config.clientId })}`;
     return `${payload}.${sign("RSA-SHA256", Buffer.from(payload), this.config.privateKey).toString("base64url")}`;
   }
+  async metadataToken(installationId: number) {
+    return z
+      .object({
+        token: z.string().min(1).max(8192),
+        expires_at: z.string().datetime(),
+      })
+      .parse(
+        await this.request(
+          `https://api.github.com/app/installations/${installationId}/access_tokens`,
+          this.jwt(),
+          { permissions: { metadata: "read" } },
+        ),
+      );
+  }
+  async installationRepositories(token: string): Promise<GitHubRepository[]> {
+    // Installation permissions describe the App, not the authorizing user's role.
+    return z
+      .array(repositorySchema.omit({ permissions: true }))
+      .parse(
+        await this.pages(token, "/installation/repositories", "repositories"),
+      );
+  }
   async installationToken(
     installationId: number,
     repositoryIds: number[],

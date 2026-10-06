@@ -30,10 +30,19 @@ async function fixture(page: Page) {
     legacyActionsConfiguration: false,
   };
   const saved: CodingSettings[] = [];
+  const attemptedRevisions: number[] = [];
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === endpoint && route.request().method() === "PUT") {
       const body = route.request().postDataJSON();
+      attemptedRevisions.push(body.revision);
+      if (body.revision !== data.revision) {
+        await route.fulfill({
+          status: 409,
+          json: { error: "version_conflict" },
+        });
+        return;
+      }
       saved.push(body.settings);
       data.settings = body.settings;
       data.revision += 1;
@@ -56,6 +65,8 @@ async function fixture(page: Page) {
   await page.goto(`/admin/plugins/codex?workspace=${workspaceId}`);
   await page.getByRole("button", { name: "Add coding repository" }).click();
   return {
+    data,
+    attemptedRevisions,
     saved,
     dialog: page.getByRole("dialog", { name: "Add coding repository" }),
   };
@@ -166,4 +177,50 @@ test("typing text requires an actual repository selection", async ({
       (element: HTMLInputElement) => element.validity.valid,
     ),
   ).toBe(false);
+});
+
+test("repository metadata refresh preserves selection and unsaved branch and maintainer edits", async ({
+  page,
+}) => {
+  const { data, saved, dialog, attemptedRevisions } = await fixture(page);
+  const search = dialog.getByRole("combobox", {
+    name: "Repository",
+    exact: true,
+  });
+  await search.fill("deepx-web");
+  await dialog.getByRole("option", { name: "stonega/deepx-web" }).click();
+  await dialog
+    .getByLabel("Development / base branch", { exact: true })
+    .fill("draft-branch");
+  await dialog.getByRole("checkbox", { name: /@maintainer/ }).check();
+  data.repositories = data.repositories.map((repo) => ({
+    ...repo,
+    full_name:
+      repo.id === 1
+        ? "stonega/renamed-configured"
+        : repo.id === 2
+          ? "stonega/renamed-web"
+          : repo.full_name,
+  }));
+  data.revision = 2;
+  data.settings.repositories = data.settings.repositories.map((repo) => ({
+    ...repo,
+    baseBranch: "remote-change",
+  }));
+  await expect(
+    page.getByText("stonega/renamed-configured", { exact: true }),
+  ).toBeVisible({ timeout: 10000 });
+  await expect(search).toHaveValue("stonega/renamed-web");
+  await expect(
+    dialog.getByLabel("Development / base branch", { exact: true }),
+  ).toHaveValue("draft-branch");
+  await expect(
+    dialog.getByRole("checkbox", { name: /@maintainer/ }),
+  ).toBeChecked();
+  await expect(dialog).toBeVisible();
+  expect(saved).toHaveLength(0);
+  await dialog.getByRole("button", { name: "Save coding repository" }).click();
+  await expect(dialog).toContainText("Settings changed in another session");
+  expect(attemptedRevisions).toEqual([1]);
+  expect(saved).toHaveLength(0);
 });

@@ -9,8 +9,14 @@ import {
 } from "./github-registration.tsx";
 import { Modal } from "./modal.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
+import { useRepositoryRefresh } from "./use-repository-refresh.ts";
 
-type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
+type Request = <T>(
+  path: string,
+  method?: string,
+  body?: unknown,
+  signal?: AbortSignal,
+) => Promise<T>;
 function explain(error: unknown) {
   const message = (error as Error).message;
   if (message.includes("version_conflict"))
@@ -254,6 +260,7 @@ export function GitHubConnection({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [installation, setInstallation] = useState("");
+  const [refreshError, setRefreshError] = useState("");
   const [repositories, setRepositories] = useState<GitHubRepository[]>([]);
   const [selected, setSelected] = useState<number[]>([]);
   const [showAllRepositories, setShowAllRepositories] = useState(false);
@@ -275,6 +282,7 @@ export function GitHubConnection({
   const load = useCallback(async () => {
     setBusy(true);
     setError("");
+    setRefreshError("");
     try {
       setData(await request<GitHubPage>(endpoint));
       setInstallation("");
@@ -287,9 +295,50 @@ export function GitHubConnection({
       setBusy(false);
     }
   }, [request, endpoint]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Discard data and drafts when the workspace endpoint changes.
   useEffect(() => {
-    void load();
-  }, [load]);
+    setData(undefined);
+    setError("");
+    setRefreshError("");
+    setInstallation("");
+    setRepositories([]);
+    setSelected([]);
+    setShowAllRepositories(false);
+  }, [endpoint]);
+  const refresh = useCallback(
+    async (signal: AbortSignal) => {
+      try {
+        const page = await request<GitHubPage>(
+          endpoint,
+          "GET",
+          undefined,
+          signal,
+        );
+        const choices =
+          installation && page.pending
+            ? await request<GitHubRepository[]>(
+                `${endpoint}/installations/${installation}/repositories`,
+                "GET",
+                undefined,
+                signal,
+              )
+            : undefined;
+        if (signal.aborted) return;
+        setData(page);
+        setRefreshError("");
+        if (choices) {
+          setRepositories(choices);
+          setSelected((ids) =>
+            ids.filter((id) => choices.some((r) => r.id === id)),
+          );
+        }
+      } catch (error) {
+        if (!signal.aborted) setRefreshError(explain(error));
+      }
+    },
+    [endpoint, installation, request],
+  );
+  useRepositoryRefresh(refresh, (open ?? internalOpen) && !busy);
   const act = async (action: () => Promise<void>) => {
     setBusy(true);
     setError("");
@@ -313,7 +362,7 @@ export function GitHubConnection({
                   : "Not connected"}
               </span>
             ) : (
-              !error && <Skeleton width="7rem" />
+              !error && !refreshError && <Skeleton width="7rem" />
             )}
             <p>
               Connect a GitHub App to give this workspace source access to
@@ -325,9 +374,15 @@ export function GitHubConnection({
                 GitHub authorization did not complete. Connect again to retry.
               </p>
             )}
-            {error && (
+            {(error || refreshError) && (
               <p className="notice" role="alert">
-                {error}
+                {error || refreshError}
+              </p>
+            )}
+            {data?.refreshError && (
+              <p className="notice" role="status">
+                Repository updates are temporarily unavailable. Showing the last
+                saved list. {explain(new Error(data.refreshError))}
               </p>
             )}
             {params.get("github") === "registration-failed" && (
@@ -344,7 +399,7 @@ export function GitHubConnection({
                 then connect this workspace.
               </p>
             )}
-            {!data && !error && (
+            {!data && !error && !refreshError && (
               <SkeletonRows label="GitHub connection" rows={2} />
             )}
             {data?.canRegister && (
@@ -459,7 +514,7 @@ export function GitHubConnection({
                   Connect GitHub
                 </button>
               )}
-              {error && (
+              {(error || refreshError) && (
                 <button
                   type="button"
                   disabled={busy}

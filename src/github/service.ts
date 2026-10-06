@@ -8,6 +8,7 @@ import { audit } from "../workspaces/policy.ts";
 import type { GitHubApp } from "./app.ts";
 import type { GitHubPage } from "./config.ts";
 import { GitHubApps, registrationInput } from "./registry.ts";
+import { RepositorySync } from "./repository-sync.ts";
 
 import { GitHubUsers } from "./users.ts";
 
@@ -36,6 +37,7 @@ export function githubAuthority(admin: Admin, w: Workspace) {
 }
 export class GitHubService {
   private apps: GitHubApps;
+  readonly repositorySync: RepositorySync;
   readonly users: GitHubUsers;
   constructor(
     private store: Store,
@@ -45,6 +47,7 @@ export class GitHubService {
   ) {
     this.apps =
       app instanceof GitHubApps ? app : new GitHubApps(store, key, app);
+    this.repositorySync = new RepositorySync(store, this.apps);
     this.users = new GitHubUsers(store, this.apps, key, origin);
   }
   private async callback() {
@@ -75,7 +78,10 @@ export class GitHubService {
     id: string,
     sessionHash: string,
   ): Promise<GitHubPage> {
-    const w = await this.workspace(admin, id);
+    const { workspace: w, refreshError } = await this.repositorySync.refresh(
+      admin,
+      id,
+    );
     const app = await this.apps.get(w.operatorId);
     await this.store.pool.query(
       "DELETE FROM github_flows WHERE expires_at<=now()",
@@ -98,6 +104,7 @@ export class GitHubService {
       appSlug: app?.config.slug,
       installUrl: app?.installUrl,
       connection: w.github,
+      refreshError,
       revision: w.github?.revision ?? 0,
       pending: !!row,
       login: row?.login,

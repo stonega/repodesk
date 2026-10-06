@@ -423,7 +423,12 @@ export function adminRoutes(
   );
   app.get("/api/admin/workspaces/:id/plugins/coding", async (c) => {
     const id = validId(c.req.param("id"));
-    const page = codingView(await store.read(id), c.get("session").admin);
+    const { workspace, refreshError } = await github.repositorySync.refresh(
+      c.get("session").admin,
+      id,
+    );
+    const page = codingView(workspace, c.get("session").admin);
+    page.repositoryRefreshError = refreshError;
     page.developmentTasks = await taskList(store.pool, id);
     if (deviceAuth)
       try {

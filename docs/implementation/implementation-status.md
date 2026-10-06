@@ -1060,3 +1060,23 @@ proxy. Coverage includes public/private reviewed and direct starts, scoped GitHu
 credentials, denied GitHub access, duplicate dispatch, maintainer boundaries and
 account recovery after repository visibility changes. No production configuration,
 account connection, GitHub write, Telegram send or deployment was performed.
+
+## Automatic repository metadata refresh (2026-10-06)
+
+Manage GitHub and Codex repository lists refresh while visible and on return from
+GitHub. Five-second polling uses Metadata-read installation tokens, matches saved
+repositories by numeric ID, updates names/visibility and matching Code Truth URLs,
+and removes IDs no longer accessible to the App. New IDs still require workspace
+authorization/selection. Expanded lists, selected IDs and unsaved editor values
+remain intact; concurrent settings edits retain their version-conflict protection.
+Failures retain saved metadata with a notice, and delayed responses cannot undo
+disconnect, reconnect or revoked ownership. Webhooks remain disabled; this is near
+realtime polling while the panel is open.
+
+Validation: `bun run check`, `bun run typecheck`, `bun test` (411 tests against
+disposable PostgreSQL) and `bun run build` passed. All 26 focused browser scenarios
+passed across repository refresh/search, Codex sign-in and loading states, including
+rename/link updates, retained drafts and stale-save rejection. No dependency or
+migration was added. No live GitHub call, Telegram send or deployment was performed.
+See [behavior and limits](github-app.md#automatic-repository-updates) and the
+[manual staging check](../../examples/github-repository-sync.md).

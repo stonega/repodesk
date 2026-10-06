@@ -136,6 +136,7 @@ export interface CodingTask {
   authPauses?: number;
 }
 export interface CodingPage {
+  repositoryRefreshError?: string;
   providerApiKeyConfigured: boolean;
   deviceAuth?: {
     state:
