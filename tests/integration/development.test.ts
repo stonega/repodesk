@@ -502,6 +502,28 @@ const url = process.env.TEST_DATABASE_URL;
       "couldn't download",
     );
   });
+  test("a transient runner restart leaves an undispatched account task queued and starts it once after recovery", async () => {
+    const f = await fixture();
+    await store.change(f.w.id, async (w, sql) => {
+      if (!w.coding) throw new Error("Missing coding fixture");
+      w.coding.settings.authMode = "device_code";
+      const task = await taskGet(sql, w.id, f.task.id);
+      task.payload.authMode = "device_code";
+      await taskSave(sql, task);
+    });
+    let calls = 0;
+    (f.runner as LocalRunner & LocalDeviceAuth).deviceStatus = async () => {
+      if (++calls === 1) throw new Fault("coding_runner_unavailable", 503);
+      return { state: "connected" };
+    };
+    const queued = await f.tick();
+    expect(queued.state).toBe("queued");
+    expect(queued.attemptId).toBeUndefined();
+    expect(queued.attempts).toBe(0);
+    expect(f.starts).toHaveLength(0);
+    expect((await f.tick()).state).toBe("working");
+    expect(f.starts).toHaveLength(1);
+  });
   test("question survives restart, releases attempt and answers continue the same PR", async () => {
     const f = await fixture();
     await f.tick();

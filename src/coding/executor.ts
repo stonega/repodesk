@@ -643,7 +643,7 @@ export class DevelopmentExecutor {
       }
       if (
         !dispatched &&
-        task.attemptId &&
+        (task.attemptId || task.state === "queued") &&
         ["coding_runner_unavailable", "coding_runner_request_failed"].includes(
           code,
         )

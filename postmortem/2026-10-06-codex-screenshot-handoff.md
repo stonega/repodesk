@@ -66,5 +66,15 @@ restart/erasure/expiry and payloads exceeding the old JSONL limit. The pinned re
 Codex 0.155.1 protocol proof confirms an image input at a local fake Responses
 endpoint. Docker container smoke verifies media during continuation and repair.
 
-The cancelled task remains cancelled. Production rollout and health verification
-are pending; no live task has been restarted for testing.
+The 0.1.22 rollout succeeded with a protected database backup and healthy services,
+despite an SSH disconnect during supervisor startup. Another task completed work
+while the supervisor was restarting and returned to intake for its pending input.
+Its account-status GET then failed with `coding_runner_unavailable`. The old
+executor treated that read failure as permanent when no attempt was reserved.
+
+The 0.1.23 correction leaves undispatched queued tasks queued on transient runner
+read failures, preserving the existing no-replay handling for uncertain POSTs.
+The regression checks that recovery starts exactly one attempt. All 436 tests,
+lint, typecheck and build pass. The affected task has no current attempt and no
+cancellation request; recovery and the final production check are pending. The
+original screenshot task remains cancelled.
