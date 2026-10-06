@@ -12,6 +12,20 @@ const chat = z.object({
   type: z.enum(["private", "group", "supergroup", "channel"]),
   title: z.string().max(256).optional(),
 });
+const file = z.object({
+  file_id: z.string().min(1).max(1024),
+  file_unique_id: z.string().max(1024).optional(),
+  file_size: z.number().int().nonnegative().safe().optional(),
+  file_name: z.string().max(1024).optional(),
+  mime_type: z.string().max(256).optional(),
+});
+const entities = z.array(
+  z.object({
+    type: z.string(),
+    offset: z.number().int(),
+    length: z.number().int(),
+  }),
+);
 const message = z.object({
   message_id: z.number().int().positive(),
   date: z.number().int(),
@@ -19,17 +33,25 @@ const message = z.object({
   from: user.optional(),
   sender_chat: chat.optional(),
   text: z.string().max(20000).optional(),
-  new_chat_title: z.string().max(256).optional(),
-  message_thread_id: z.number().int().optional(),
-  entities: z
+  caption: z.string().max(20000).optional(),
+  caption_entities: entities.optional(),
+  photo: z
     .array(
-      z.object({
-        type: z.string(),
-        offset: z.number().int(),
-        length: z.number().int(),
+      file.extend({
+        width: z.number().int().positive(),
+        height: z.number().int().positive(),
       }),
     )
+    .max(20)
     .optional(),
+  document: file.optional(),
+  audio: file.optional(),
+  video: file.optional(),
+  voice: file.optional(),
+  animation: file.optional(),
+  new_chat_title: z.string().max(256).optional(),
+  message_thread_id: z.number().int().optional(),
+  entities: entities.optional(),
   reply_to_message: z
     .object({ message_id: z.number().int(), from: user.optional() })
     .optional(),
@@ -75,10 +97,10 @@ export function command(
   bot: { id: string; username: string },
 ) {
   if (message.from?.is_bot || message.sender_chat || !message.from) return;
-  const text = message.text ?? "";
-  const entity = message.entities?.find(
-    (e) => e.type === "bot_command" && e.offset === 0,
-  );
+  const text = message.text ?? message.caption ?? "";
+  const spans =
+    message.text !== undefined ? message.entities : message.caption_entities;
+  const entity = spans?.find((e) => e.type === "bot_command" && e.offset === 0);
   if (entity) {
     const value = text.slice(0, entity.length);
     const match = /^\/([a-z_]+)(?:@([a-z0-9_]+))?$/i.exec(value);
@@ -98,7 +120,7 @@ export function command(
   )
     return { name: "ask", args: text };
   if (!["group", "supergroup"].includes(message.chat.type)) return;
-  const mention = message.entities?.find(
+  const mention = spans?.find(
     (e) =>
       e.type === "mention" &&
       e.offset >= 0 &&

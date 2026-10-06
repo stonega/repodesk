@@ -99,3 +99,5 @@ run, then disable it and confirm a dependent schedule cannot execute.
 The loader must also pass prompt-injection and no-write tests: a skill asking to
 change the whitelist, send an external message or activate a workflow cannot acquire
 those powers merely by describing them in Markdown.
+
+The `/admin/skills` heading places Import before New (user preference, 2026-10-06).

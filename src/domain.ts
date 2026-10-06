@@ -181,7 +181,16 @@ export interface Discussion extends MemoryReferences {
   messageIds: string[];
   updatedAt: string;
 }
+export interface Attachment {
+  botId: string;
+  fileId: string;
+  kind: "photo" | "document" | "audio" | "video" | "voice" | "animation";
+  name?: string;
+  mimeType?: string;
+  size?: number;
+}
 export interface Source {
+  attachments?: Attachment[];
   threadId?: string;
   runId?: string;
   role?: "user" | "assistant";

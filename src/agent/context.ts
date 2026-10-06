@@ -33,6 +33,11 @@ export function buildContext(w: Workspace, run: Run) {
       id: s.id,
       at: s.at,
       text: s.text,
+      attachments: s.attachments?.map((a) => ({
+        kind: a.kind,
+        name: a.name,
+        mimeType: a.mimeType,
+      })),
       role: s.role,
       author: s.author,
       threadId: s.threadId,

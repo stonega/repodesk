@@ -769,3 +769,11 @@ Use this format for each preference:
   needed.
 - **Exceptions:** Explicit progress for an initiated action (saving, signing in,
   connecting GitHub) and actionable errors remain visible text.
+
+### Skill import precedes creation
+
+- **Preference:** Place Import before New in the page heading's action row.
+- **Scope:** Agent skills at `/admin/skills`, on desktop and mobile.
+- **Source:** 2026-10-06 — user requested moving the Import button before New in
+  the Agent skills screenshot and named the `/admin/skills` route.
+- **Exceptions:** None recorded.

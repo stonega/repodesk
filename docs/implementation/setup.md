@@ -444,3 +444,11 @@ implementation**. Keys are encrypted and never displayed again.
 `CODEX_PROVIDER_API_KEY` is an optional supervisor environment fallback. Older
 GitHub Actions configurations must be saved with the local runner before new
 coding tasks can run.
+
+## Telegram image and attachment input
+
+The bot accepts photos, image documents, UTF-8 text/code attachments and PDFs with
+selectable text. Restart the updated API and worker together; no SQL migration or
+webhook subscription change is needed. Images require a vision-capable model. See
+[supported input and limits](telegram-attachments.md) and the
+[manual staging check](../../examples/telegram-attachments.md).

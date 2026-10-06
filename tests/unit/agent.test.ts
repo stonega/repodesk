@@ -66,6 +66,65 @@ function input(patch: Partial<AgentInput> = {}): AgentInput {
     ...patch,
   };
 }
+test("Pi sends image blocks, reserves vision input and restores images from checkpoints", async () => {
+  const images = [
+    {
+      type: "image" as const,
+      mimeType: "image/png",
+      data: "a".repeat(2000000),
+    },
+  ];
+  const checkpoint: AgentMessage[] = [];
+  let reserved = 0;
+  const runner = new PiRunner((_model, context) => {
+    const user = context.messages.find((m) => m.role === "user");
+    expect(user?.content).toEqual([
+      { type: "text", text: "do test" },
+      ...images,
+    ]);
+    return stream(message([{ type: "text", text: "Image received" }]));
+  });
+  await runner.run(
+    input({
+      images,
+      maxInputChars: undefined,
+      reserve: async (amount) => {
+        reserved = amount;
+        return "image-attempt";
+      },
+      checkpoint: async (m) => {
+        checkpoint.push(m);
+      },
+    }),
+  );
+  expect(reserved).toBeGreaterThan(
+    (32768 * selectedModel("gpt-4.1-mini").cost.input) / 1000000,
+  );
+  const user = checkpoint.find((m) => m.role === "user");
+  if (!user) throw Error("missing image checkpoint");
+  await runner.run(input({ transcript: [user], maxInputChars: undefined }));
+});
+
+test("Pi blocks images on text-only models before provider dispatch or reservation", async () => {
+  let called = false;
+  const runner = new PiRunner(() => {
+    called = true;
+    return stream(message([{ type: "text", text: "wrong" }]));
+  });
+  await expect(
+    runner.run(
+      input({
+        model: { ...selectedModel("gpt-4.1-mini"), input: ["text"] },
+        images: [{ type: "image", mimeType: "image/png", data: "a" }],
+        reserve: async () => {
+          called = true;
+          return "wrong";
+        },
+      }),
+    ),
+  ).rejects.toThrow("model_images_unsupported");
+  expect(called).toBe(false);
+});
 test("Pi previews cumulative text before completion, never thinking or tool arguments", async () => {
   const previews: string[] = [];
   const order: string[] = [];
@@ -363,13 +422,25 @@ test("compatible endpoint receives the custom model, key and exact thinking leve
         modelLimits: { contextWindow: 128000, maxOutputTokens: 16000 },
       });
       const result = await new PiRunner().run(
-        input({ model, thinkingLevel, apiKey: "local-test-key" }),
+        input({
+          model,
+          thinkingLevel,
+          apiKey: "local-test-key",
+          images:
+            thinkingLevel === "high"
+              ? [{ type: "image", mimeType: "image/png", data: "test-image" }]
+              : undefined,
+        }),
       );
       expect(result.text).toBe("Done");
       const request = requests.at(-1);
       expect(request?.path).toBe("/custom/v1/chat/completions");
       expect(request?.auth).toBe("Bearer local-test-key");
       expect(request?.body.model).toBe("team/reasoner");
+      if (thinkingLevel === "high")
+        expect(JSON.stringify(request?.body.messages)).toContain(
+          "data:image/png;base64,test-image",
+        );
       expect(request?.body.reasoning_effort).toBe(
         thinkingLevel === "off" ? undefined : thinkingLevel,
       );

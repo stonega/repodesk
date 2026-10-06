@@ -19,6 +19,7 @@ import { DEFAULT_RUN_TIMEOUT_SECONDS } from "../config.ts";
 import type { Store } from "../db/repositories.ts";
 import { Fault, requireThat } from "../domain.ts";
 import type { SetupService } from "../setup/service.ts";
+import { attachmentErrors, loadAttachments } from "../telegram/attachments.ts";
 import { TelegramDraft } from "../telegram/draft.ts";
 import { discardFollowup } from "../telegram/followup.ts";
 import { commitDiscussions } from "../workspaces/conversation-memory.ts";
@@ -406,6 +407,31 @@ export class Executor {
           claimed.settings.maxTurns - claimed.attempts.length,
         );
       }
+      if (!completed && !transcript.length) {
+        const attachments = await loadAttachments(
+          claimed,
+          deployment.bot?.id,
+          () => this.setup.client(deployment),
+          async () => {
+            await guard();
+            const current = await this.store.deployment();
+            requireThat(
+              current.bot?.id === deployment.bot?.id &&
+                current.credentials.bot === deployment.credentials.bot,
+              "run_revoked",
+              409,
+            );
+          },
+          signal,
+        );
+        if (attachments.images.length)
+          requireThat(
+            input.model.input.includes("image"),
+            "model_images_unsupported",
+          );
+        input.images = attachments.images;
+        input.prompt += attachments.prompt;
+      }
       const result = completed
         ? {
             text: tail.content
@@ -516,7 +542,8 @@ export class Executor {
             w,
             r.actor,
             r.chatId,
-            `Run ${r.id}: ${r.status} (${r.error}).${timedOut ? ` The run exceeded its ${this.timeoutMs / 1000}-second time limit.` : ""} Inspect the run in the panel.${r.attempts.some((a) => a.status === "unknown") ? " Unknown provider charges remain reserved." : ""}`,
+            attachmentErrors[r.error ?? ""] ??
+              `Run ${r.id}: ${r.status} (${r.error}).${timedOut ? ` The run exceeded its ${this.timeoutMs / 1000}-second time limit.` : ""} Inspect the run in the panel.${r.attempts.some((a) => a.status === "unknown") ? " Unknown provider charges remain reserved." : ""}`,
             {
               topicId: r.topicId,
               replyTo: r.replyTo,

@@ -19,6 +19,7 @@ export function memoryReferences(sources: Source[]): MemoryReferences {
             s.threadId,
             s.chatId,
             s.topicId,
+            ...(s.attachments ? [s.attachments] : []),
           ]),
         ),
       )

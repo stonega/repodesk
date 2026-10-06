@@ -27,6 +27,11 @@ export interface TelegramCallOptions {
   timeoutMs?: number;
 }
 export interface Telegram {
+  downloadFile?(
+    fileId: string,
+    maxBytes: number,
+    options?: TelegramCallOptions,
+  ): Promise<Uint8Array>;
   call<T>(
     method: string,
     params?: Record<string, unknown>,
@@ -38,6 +43,68 @@ export class TelegramClient implements Telegram {
     private secret: string,
     private fetcher: typeof fetch = fetch,
   ) {}
+  async downloadFile(
+    fileId: string,
+    maxBytes: number,
+    options: TelegramCallOptions = {},
+  ): Promise<Uint8Array> {
+    const signal = AbortSignal.any([
+      AbortSignal.timeout(options.timeoutMs ?? 15000),
+      ...(options.signal ? [options.signal] : []),
+    ]);
+    try {
+      const file = await this.call<{ file_path?: string; file_size?: number }>(
+        "getFile",
+        { file_id: fileId },
+        { ...options, signal },
+      );
+      if (file.file_size !== undefined && file.file_size > maxBytes)
+        throw new Fault("attachment_too_large");
+      // The Bot API supplies relative paths. Reject URLs, traversal and encoded separators.
+      if (
+        !file.file_path ||
+        !/^[a-zA-Z0-9_./-]+$/.test(file.file_path) ||
+        file.file_path.startsWith("/") ||
+        file.file_path
+          .split("/")
+          .some((part) => !part || part === "." || part === "..")
+      )
+        throw new Fault("attachment_download_failed");
+      const response = await this.fetcher(
+        `https://api.telegram.org/file/bot${this.secret}/${file.file_path}`,
+        { signal, redirect: "error" },
+      );
+      if (!response.ok || !response.body)
+        throw new Fault("attachment_download_failed");
+      const length = response.headers.get("content-length");
+      if (length && Number(length) > maxBytes) {
+        await response.body.cancel();
+        throw new Fault("attachment_too_large");
+      }
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      try {
+        for (;;) {
+          signal.throwIfAborted();
+          const { value, done } = await reader.read();
+          if (done) break;
+          size += value.byteLength;
+          if (size > maxBytes) throw new Fault("attachment_too_large");
+          chunks.push(value);
+        }
+      } finally {
+        await reader.cancel().catch(() => {});
+        reader.releaseLock();
+      }
+      return Buffer.concat(chunks, size);
+    } catch (error) {
+      options.signal?.throwIfAborted();
+      if (error instanceof Fault && error.code.startsWith("attachment_"))
+        throw error;
+      throw new Fault("attachment_download_failed");
+    }
+  }
   async call<T>(
     method: string,
     params: Record<string, unknown> = {},

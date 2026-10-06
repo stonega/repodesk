@@ -33,6 +33,7 @@ import {
   enrollOwner,
   visibleRuns,
 } from "../workspaces/service.ts";
+import { messageAttachments, messageText } from "./attachments.ts";
 import { closeGroupAttention, followupCandidate } from "./followup.ts";
 import { stopGeneration } from "./generation.ts";
 import { command, type Update } from "./router.ts";
@@ -619,6 +620,8 @@ export class Ingress {
     const chatId = String(msg.chat.id);
     const topic = msg.message_thread_id ?? 0;
     let cmd = command(msg, d.bot);
+    const attachments = messageAttachments(msg, d.bot.id);
+    const text = messageText(msg);
     const chat = w.chats.find((c) => c.id === chatId && c.active);
     if (msg.chat.type !== "private" && !chat) return;
     if (await routeDevelopment(sql, w, u, d.bot.id, msg, cmd)) return;
@@ -627,7 +630,10 @@ export class Ingress {
       const previous = w.messages.find(
         (s) => s.id === sourceId && s.author === actor,
       );
-      if (previous && msg.text) previous.text = msg.text.slice(0, 12000);
+      if (previous) {
+        previous.text = text.slice(0, 12000);
+        previous.attachments = attachments.length ? attachments : undefined;
+      }
       return;
     }
     if (
@@ -639,14 +645,21 @@ export class Ingress {
       closeGroupAttention(w, msg, d.bot.id);
     const followup = !cmd ? followupCandidate(w, msg, d.bot.id) : undefined;
     if (followup) cmd = { name: "ask", args: msg.text?.trim() ?? "" };
-    if ((eligible(w, actor) && cmd) || (chat?.collection && msg.text)) {
-      if (msg.text && !w.messages.some((s) => s.id === sourceId))
+    if (
+      (eligible(w, actor) && cmd) ||
+      (chat?.collection && (text || attachments.length))
+    ) {
+      if (
+        (text || attachments.length) &&
+        !w.messages.some((s) => s.id === sourceId)
+      )
         w.messages.push({
           id: sourceId,
           chatId,
           topicId: topic,
           author: actor,
-          text: msg.text.slice(0, 12000),
+          text: text.slice(0, 12000),
+          attachments: attachments.length ? attachments : undefined,
           at: new Date(msg.date * 1000).toISOString(),
           expiresAt: new Date(
             Date.now() + w.settings.retentionDays * 86400000,
@@ -679,7 +692,7 @@ export class Ingress {
       case "start":
       case "help":
         reply(
-          `RepoDesk · ${w.settings.name}\nTimezone: ${w.settings.timezone}\n/ask <request>, /recap, /status, /cancel <run>, /automations, /memory, /usage, /privacy\nGitHub: /github connect, /github sync, /github disconnect (private chat)\nAdmins: /linktoken, /capture on|off, /timezone <IANA>, /remember <instruction>\nIn groups, mention me or reply to start; clear follow-ups within five minutes can continue without mentioning me when Telegram delivers ordinary messages. In private Topics, just send messages to continue the topic's conversation. Use Telegram Topics to separate conversations. Outside Topics, reply to an answer or your own message to continue it; standalone messages start new conversations. For configured Codex repositories, ask for a change in your own words. Reply to the task's message or continue its Topic to answer questions and add requirements; /status checks the bound task and /cancel or stop cancels it. Direct execution follows the repository's saved policy. Context contains only received retained messages. Access is managed in the admin panel. /workspace <id> selects a workspace.`,
+          `RepoDesk · ${w.settings.name}\nTimezone: ${w.settings.timezone}\n/ask <request>, /recap, /status, /cancel <run>, /automations, /memory, /usage, /privacy\nGitHub: /github connect, /github sync, /github disconnect (private chat)\nAdmins: /linktoken, /capture on|off, /timezone <IANA>, /remember <instruction>\nIn groups, mention me or reply to start; clear follow-ups within five minutes can continue without mentioning me when Telegram delivers ordinary messages. Send photos, image files, UTF-8 text/code files or selectable-text PDFs with a caption describing your request. In private Topics, just send messages to continue the topic's conversation. Use Telegram Topics to separate conversations. Outside Topics, reply to an answer or your own message to continue it; standalone messages start new conversations. For configured Codex repositories, ask for a change in your own words. Reply to the task's message or continue its Topic to answer questions and add requirements; /status checks the bound task and /cancel or stop cancels it. Direct execution follows the repository's saved policy. Context contains only received retained messages. Access is managed in the admin panel. /workspace <id> selects a workspace.`,
         );
         break;
       case "workspace":
@@ -911,7 +924,7 @@ export class Ingress {
       }
       case "recap":
       case "ask": {
-        if (!msg.text) break;
+        if (!text && !attachments.length) break;
         const previousDelivery = w.deliveries.find(
           (d) =>
             d.chatId === chatId &&
@@ -934,7 +947,8 @@ export class Ingress {
           actor,
           cmd.name === "recap"
             ? "Create a source-grounded team recap. Include decisions, blockers and next steps. State coverage and gaps."
-            : cmd.args,
+            : cmd.args.trim() ||
+                "Describe the attached content and ask what I would like to do with it if no request is clear.",
           chatId,
           topic,
           d.model,

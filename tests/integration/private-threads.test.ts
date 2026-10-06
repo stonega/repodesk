@@ -38,7 +38,17 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     let calls: { method: string; params: Record<string, unknown> }[] = [];
     let updates: Update[] = [];
     let sequence = 70000;
+    let downloads: string[] = [];
+    let files = new Map<string, Uint8Array>();
+    let onDownload: (() => Promise<void>) | undefined;
     const telegram: Telegram = {
+      async downloadFile(fileId) {
+        downloads.push(fileId);
+        await onDownload?.();
+        const bytes = files.get(fileId);
+        if (!bytes) throw Error("missing fixture file");
+        return bytes;
+      },
       async call<T>(method: string, params = {}) {
         calls.push({ method, params });
         return (
@@ -71,6 +81,9 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     beforeEach(async () => {
       calls = [];
       updates = [];
+      downloads = [];
+      files = new Map();
+      onDownload = undefined;
       const d = await store.deployment();
       Object.assign(d, {
         active: true,
@@ -128,6 +141,233 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         },
       });
     }
+    test("captionless photos deduplicate, stay in their topic and reach the model as images", async () => {
+      const w = await seed();
+      const update = message("", undefined, 21);
+      if (!update.message) throw Error("missing message");
+      delete update.message.text;
+      update.message.photo = [{ file_id: "photo", width: 1, height: 1 }];
+      const bytes = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aNFEAAAAASUVORK5CYII=",
+        "base64",
+      );
+      files.set("photo", bytes);
+      await ingress.accept(update);
+      expect(await ingress.accept(update)).toEqual({ duplicate: true });
+      expect(downloads).toEqual([]);
+      const run = (await store.read(w.id)).runs[0];
+      if (!run) throw Error("missing photo run");
+      expect(run.sources[0]?.attachments?.[0]).toMatchObject({
+        botId: "999",
+        fileId: "photo",
+      });
+      expect(run.topicId).toBe(21);
+      let called = 0;
+      await new Executor(store, setup, {
+        async run(input) {
+          called++;
+          expect(input.images).toEqual([
+            {
+              type: "image",
+              mimeType: "image/png",
+              data: bytes.toString("base64"),
+            },
+          ]);
+          expect(input.prompt).toContain('"imageIndex":1');
+          return {
+            text: "Image received",
+            status: "succeeded",
+            turns: 1,
+            tools: 0,
+            transcript: [],
+          };
+        },
+      }).execute(w.id, run.id);
+      expect(called).toBe(1);
+      expect(downloads).toEqual(["photo"]);
+      const saved = await store.read(w.id);
+      expect(saved.runs).toHaveLength(1);
+      expect(saved.deliveries.find((d) => d.runId === run.id)?.topicId).toBe(
+        21,
+      );
+      const document = message("", undefined, 21);
+      if (!document.message) throw Error("missing document");
+      delete document.message.text;
+      document.message.caption = "/ask explain this code";
+      document.message.caption_entities = [
+        { type: "bot_command", offset: 0, length: 4 },
+      ];
+      document.message.document = {
+        file_id: "code",
+        mime_type: "text/plain",
+        file_name: "app.ts",
+      };
+      files.set("code", Buffer.from("export const answer = 42;"));
+      await ingress.accept(document);
+      const next = (await store.read(w.id)).runs[1];
+      if (!next) throw Error("missing document run");
+      expect(next.threadId).toBe(run.threadId);
+      expect(next.task).toBe("explain this code");
+      await new Executor(store, setup, {
+        async run(input) {
+          expect(input.prompt).toContain("export const answer = 42;");
+          expect(input.prompt).toContain("app.ts");
+          return {
+            text: "It exports 42",
+            status: "succeeded",
+            turns: 1,
+            tools: 0,
+            transcript: [],
+          };
+        },
+      }).execute(w.id, next.id);
+      expect((await store.read(w.id)).runs[1]?.status).toBe("succeeded");
+    });
+
+    test("media from denied actors is ignored, and queued/during-download revocation blocks model input", async () => {
+      const w = await seed();
+      const update = message("", undefined, 22);
+      if (!update.message) throw Error("missing message");
+      delete update.message.text;
+      update.message.document = { file_id: "notes", mime_type: "text/plain" };
+      files.set("notes", Buffer.from("private attachment"));
+      await store.change(w.id, (w) => {
+        w.policy.allowed = [];
+      });
+      await ingress.accept(update);
+      expect((await store.read(w.id)).runs).toHaveLength(0);
+      expect((await store.read(w.id)).messages).toHaveLength(0);
+      expect(downloads).toEqual([]);
+      await store.change(w.id, (w) => {
+        w.policy.allowed = ["101"];
+      });
+      update.update_id = ++sequence;
+      await ingress.accept(update);
+      const run = (await store.read(w.id)).runs[0];
+      if (!run) throw Error("missing run");
+      let called = false;
+      const runner: AgentRunner = {
+        async run() {
+          called = true;
+          throw Error("must not dispatch");
+        },
+      };
+      await store.change(w.id, (w) => {
+        w.policy.allowed = [];
+      });
+      await new Executor(store, setup, runner).execute(w.id, run.id);
+      expect(downloads).toEqual([]);
+      expect(called).toBe(false);
+      await store.change(w.id, (w) => {
+        w.policy.allowed = ["101"];
+      });
+      const during = message("", undefined, 23);
+      if (!during.message) throw Error("missing message");
+      delete during.message.text;
+      during.message.document = update.message.document;
+      await ingress.accept(during);
+      const next = (await store.read(w.id)).runs[1];
+      if (!next) throw Error("missing next run");
+      onDownload = async () => {
+        await store.change(w.id, (w) => {
+          w.policy.allowed = [];
+        });
+      };
+      await new Executor(store, setup, runner).execute(w.id, next.id);
+      expect(downloads).toEqual(["notes"]);
+      expect(called).toBe(false);
+      expect((await store.read(w.id)).runs[1]?.error).toBe("run_revoked");
+      expect(
+        (await store.read(w.id)).deliveries.some((d) => d.runId === next.id),
+      ).toBe(false);
+    });
+
+    test("group caption mentions retain media while unaddressed media stays quiet", async () => {
+      const w = await seed();
+      await store.pool.query(
+        "INSERT INTO chat_bindings(chat_id,workspace_id) VALUES('-100100',$1) ON CONFLICT(chat_id) DO UPDATE SET workspace_id=excluded.workspace_id",
+        [w.id],
+      );
+      const update = message("", undefined, 24);
+      if (!update.message) throw Error("missing message");
+      delete update.message.text;
+      update.message.chat = { id: -100100, type: "supergroup" };
+      update.message.document = {
+        file_id: "group-notes",
+        mime_type: "text/plain",
+      };
+      await ingress.accept(update);
+      expect((await store.read(w.id)).messages).toHaveLength(0);
+      expect((await store.read(w.id)).runs).toHaveLength(0);
+      update.update_id = ++sequence;
+      update.message.caption = "@test_bot explain this file";
+      update.message.caption_entities = [
+        { type: "mention", offset: 0, length: 9 },
+      ];
+      files.set("group-notes", Buffer.from("Group release notes"));
+      await ingress.accept(update);
+      const run = (await store.read(w.id)).runs[0];
+      if (!run) throw Error("missing group run");
+      expect(run.task).toBe("explain this file");
+      await new Executor(store, setup, {
+        async run(input) {
+          expect(input.prompt).toContain("Group release notes");
+          return {
+            text: "Release notes received",
+            status: "succeeded",
+            turns: 1,
+            tools: 0,
+            transcript: [],
+          };
+        },
+      }).execute(w.id, run.id);
+      expect((await store.read(w.id)).runs[0]?.status).toBe("succeeded");
+      expect(downloads).toEqual(["group-notes"]);
+    });
+
+    test("unsupported files get clear feedback and do not block the next topic request", async () => {
+      const w = await seed();
+      const update = message("", undefined, 25);
+      if (!update.message) throw Error("missing message");
+      delete update.message.text;
+      update.message.document = {
+        file_id: "zip",
+        mime_type: "application/zip",
+      };
+      files.set("zip", Buffer.from("PK"));
+      await ingress.accept(update);
+      const run = (await store.read(w.id)).runs[0];
+      if (!run) throw Error("missing run");
+      await new Executor(store, setup, {
+        async run() {
+          throw Error("unsupported file reached model");
+        },
+      }).execute(w.id, run.id);
+      let saved = await store.read(w.id);
+      expect(saved.runs[0]?.error).toBe("attachment_unsupported");
+      expect(saved.deliveries.find((d) => d.runId === run.id)?.text).toContain(
+        "UTF-8 text/code files",
+      );
+      expect(saved.runs[0]?.attempts).toHaveLength(0);
+      await ingress.accept(message("Hello", undefined, 25));
+      const next = (await store.read(w.id)).runs[1];
+      if (!next) throw Error("missing next run");
+      await new Executor(store, setup, {
+        async run(input) {
+          expect(input.prompt).toContain("unavailable");
+          return {
+            text: "Hello",
+            status: "succeeded",
+            turns: 1,
+            tools: 0,
+            transcript: [],
+          };
+        },
+      }).execute(w.id, next.id);
+      saved = await store.read(w.id);
+      expect(saved.runs[1]?.status).toBe("succeeded");
+    });
+
     test("ingress persists separate threads and resumes replies after restart without duplicates", async () => {
       const w = await seed();
       const first = message("Kyoto trip");

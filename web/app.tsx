@@ -2766,18 +2766,18 @@ function SkillsPage({ id }: { id: string }) {
       actions={
         <>
           <IconButton
-            icon="add"
-            label="Add skill"
-            showLabel
-            onClick={() => setCreating(true)}
-          />
-          <IconButton
             icon="import"
             label="Import skill"
             onClick={() => {
               setImported("");
               setImporting(true);
             }}
+          />
+          <IconButton
+            icon="add"
+            label="Add skill"
+            showLabel
+            onClick={() => setCreating(true)}
           />
         </>
       }

@@ -9,6 +9,7 @@ import {
   type Api,
   type AssistantMessage,
   createModels,
+  type ImageContent,
   type Model,
 } from "@earendil-works/pi-ai";
 import { streamSimple as streamCompletions } from "@earendil-works/pi-ai/api/openai-completions";
@@ -66,7 +67,7 @@ export function selectedModel(
     baseUrl: options.modelBaseUrl ?? DEFAULT_MODEL_BASE_URL,
     reasoning:
       options.thinkingLevel !== undefined && options.thinkingLevel !== "off",
-    input: ["text"],
+    input: catalog?.input ?? ["text", "image"],
     cost,
     thinkingLevelMap: { xhigh: "xhigh", max: "max" },
     contextWindow: capabilities.limits.contextWindow,
@@ -90,6 +91,7 @@ export interface AgentInput {
   thinkingLevel?: ThinkingLevel;
   system: string;
   prompt: string;
+  images?: ImageContent[];
   transcript: AgentMessage[];
   tools: AgentTool[];
   maxTurns: number;
@@ -239,6 +241,32 @@ export class PiRunner implements AgentRunner {
         }
         requireThat(turns < input.maxTurns, "turn_limit");
         const bytes = Buffer.byteLength(JSON.stringify(context));
+        let imageAllowance = 0;
+        const budgetContext = {
+          ...context,
+          messages: context.messages.map((message) => {
+            if (
+              (message.role !== "user" && message.role !== "toolResult") ||
+              typeof message.content === "string"
+            )
+              return message;
+            return {
+              ...message,
+              content: message.content.map((part) => {
+                if (part.type !== "image") return part;
+                requireThat(
+                  model.input.includes("image"),
+                  "model_images_unsupported",
+                );
+                // Reserve conservatively for vision input, independently of base64 wire size.
+                imageAllowance += 32768;
+                return { ...part, data: "" };
+              }),
+            };
+          }),
+        };
+        const inputTokens =
+          Buffer.byteLength(JSON.stringify(budgetContext)) + imageAllowance;
         requireThat(
           input.maxOutputTokens === undefined ||
             input.maxOutputTokens <= model.maxTokens,
@@ -250,14 +278,14 @@ export class PiRunner implements AgentRunner {
         );
         let maxTokens =
           input.maxOutputTokens ??
-          Math.min(model.maxTokens, model.contextWindow - bytes);
+          Math.min(model.maxTokens, model.contextWindow - inputTokens);
         requireThat(
-          maxTokens > 0 && bytes + maxTokens <= model.contextWindow,
+          maxTokens > 0 && inputTokens + maxTokens <= model.contextWindow,
           "model_context_limit_exceeded",
         );
-        // Serialized bytes conservatively estimate input tokens. Automatic output also
+        // Text bytes and the image allowance conservatively estimate input tokens. Output also
         // respects financial headroom; the atomic reservation below remains authoritative.
-        const inputCost = (bytes * model.cost.input) / 1_000_000;
+        const inputCost = (inputTokens * model.cost.input) / 1_000_000;
         const outputCost = model.cost.output / 1_000_000;
         if (input.remainingBudget) {
           const budgets = await input.remainingBudget();
@@ -431,7 +459,11 @@ export class PiRunner implements AgentRunner {
     try {
       input.signal.throwIfAborted();
       if (input.transcript.length) await agent.continue();
-      else await agent.prompt(input.prompt);
+      else
+        await agent.prompt(
+          input.prompt,
+          input.purpose ? undefined : input.images,
+        );
     } finally {
       input.signal.removeEventListener("abort", abort);
     }
