@@ -61,6 +61,10 @@ with AES-256-GCM; the database does not contain the runtime encryption key.
 `GET /healthz` reports process liveness. `GET /readyz` also requires a recent
 worker heartbeat. `/admin/*` deep links load the SPA; `/api/*` failures remain JSON.
 
+The web pages show the application version at the bottom right. The build reads
+it from `package.json`; update its `version` when preparing a release and rebuild
+the assets or Docker image to display the new version.
+
 ## Local Telegram polling (no public URL)
 
 Set these values in `.env` and restart **both** app and worker:

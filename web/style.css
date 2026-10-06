@@ -31,6 +31,16 @@
 body {
   margin: 0;
 }
+.app-version {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(8px, env(safe-area-inset-bottom));
+  color: var(--ui-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
 a {
   color: var(--ui-accent);
 }
@@ -1534,6 +1544,9 @@ aside .field span {
   font-size: 14px;
 }
 @media (max-width: 800px) {
+  .app-version {
+    right: max(8px, env(safe-area-inset-right));
+  }
   .layout {
     grid-template-columns: 1fr;
   }

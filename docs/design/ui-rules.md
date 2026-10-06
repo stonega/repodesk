@@ -18,6 +18,15 @@ them.
 
 ## Recorded preferences
 
+### Application version stays at the bottom right
+
+- **Preference:** Show the application version as small, muted text at the
+  bottom-right of the viewport, with space for mobile safe areas.
+- **Scope:** Shared web page shell, including admin, sign-in and setup pages.
+- **Source:** 2026-10-06 — user requested adding a version number at the right
+  bottom of the page.
+- **Exceptions:** Toasts and dialogs may cover the label while open.
+
 ### Workspace pause belongs in Settings with confirmation
 
 - **Preference:** Use Workspace settings for a dedicated Pause workspace action

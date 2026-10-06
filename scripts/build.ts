@@ -33,6 +33,10 @@ await mkdir("dist/web", { recursive: true });
 await cp("web/style.css", "dist/web/assets/style.css");
 await cp("web/assets/repodesk-mark.svg", "dist/web/assets/repodesk-mark.svg");
 let html = await readFile("web/index.html", "utf8");
+const { version: appVersion } = JSON.parse(
+  await readFile("package.json", "utf8"),
+);
+html = html.replace("__APP_VERSION__", appVersion);
 for (const asset of ["app.js", "style.css"]) {
   const content = await readFile(`dist/web/assets/${asset}`);
   const version = createHash("sha256")
