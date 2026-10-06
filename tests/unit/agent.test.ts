@@ -206,6 +206,24 @@ test("invalid tool arguments never reach executor and bounded loop stops", async
   expect(executed).toBe(0);
   expect(calls).toBe(2);
   expect(result.status).toBe("partial");
+  expect(result.reason).toBe("turn_limit");
+});
+test("empty final answers and output truncation retain distinct partial reasons", async () => {
+  for (const [text, stop, reason] of [
+    [" \n", "stop", "empty_response"],
+    ["", "length", "output_limit"],
+    ["Some answer", "length", "output_limit"],
+  ] as const) {
+    const runner = new PiRunner(() =>
+      stream(message([{ type: "text", text }], stop)),
+    );
+    expect(await runner.run(input())).toMatchObject({
+      text,
+      status: "partial",
+      reason,
+      turns: 1,
+    });
+  }
 });
 test("restored tool-result boundary continues without re-executing a completed tool", async () => {
   let calls = 0;

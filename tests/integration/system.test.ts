@@ -1125,6 +1125,140 @@ suite("PostgreSQL integration (isolated database)", () => {
     );
     expect(sent?.parse_mode).toBeUndefined();
   });
+  test("tool-only turn exhaustion delivers one notice to the original chat and topic", async () => {
+    const w = await seed();
+    const r = await store.change(w.id, (v) => {
+      v.settings.maxTurns = 3;
+      return createRun(v, "101", "Investigate", "-100100", 7, "gpt-4.1-mini", {
+        replyTo: 42,
+      });
+    });
+    let modelCalls = 0;
+    const runner = new PiRunner((model) => {
+      const stream = new AssistantMessageEventStream();
+      const message = {
+        role: "assistant" as const,
+        content: [
+          {
+            type: "toolCall" as const,
+            id: `read-${++modelCalls}`,
+            name: "read_chat_context",
+            arguments: {},
+          },
+        ],
+        api: model.api,
+        provider: model.provider,
+        model: model.id,
+        stopReason: "toolUse" as const,
+        timestamp: Date.now(),
+        usage: {
+          input: 10,
+          output: 10,
+          totalTokens: 20,
+          cacheRead: 0,
+          cacheWrite: 0,
+          cost: {
+            input: 0.000004,
+            output: 0.000016,
+            cacheRead: 0,
+            cacheWrite: 0,
+            total: 0.00002,
+          },
+        },
+      };
+      stream.push({ type: "done", reason: "toolUse", message });
+      stream.end(message);
+      return stream;
+    });
+    const executor = new Executor(store, setup, runner);
+    await executor.execute(w.id, r.id);
+    await executor.execute(w.id, r.id);
+    const saved = await store.read(w.id);
+    expect(modelCalls).toBe(3);
+    expect(saved.runs[0]).toMatchObject({
+      status: "partial",
+      result: "",
+      error: "turn_limit",
+    });
+    expect(saved.runs[0]?.attempts.every((a) => a.status === "settled")).toBe(
+      true,
+    );
+    expect(saved.deliveries).toHaveLength(1);
+    const intent = saved.deliveries[0];
+    expect(intent).toMatchObject({
+      actor: "101",
+      chatId: "-100100",
+      topicId: 7,
+      replyTo: 42,
+      runId: r.id,
+      state: "pending",
+    });
+    expect(intent?.text).toContain("3 model-turn limit");
+    const before = calls.length;
+    const delivery = new DeliveryWorker(store, setup);
+    await delivery.send(w.id, intent?.id ?? "");
+    await delivery.send(w.id, intent?.id ?? "");
+    expect(
+      calls.slice(before).filter((c) => c.method === "sendRichMessage"),
+    ).toHaveLength(1);
+    expect((await store.read(w.id)).deliveries[0]?.state).toBe("sent");
+  });
+  test("blank runner results produce a notice unless an approval already awaits the user", async () => {
+    for (const mode of [
+      "partial",
+      "succeeded",
+      "approval",
+      "revoked",
+    ] as const) {
+      const w = await seed();
+      const r = await store.change(w.id, (v) =>
+        createRun(v, "101", "test", "101", 0, "gpt-4.1-mini"),
+      );
+      const runner: AgentRunner = {
+        async run() {
+          if (mode === "approval")
+            await store.change(w.id, (v) => {
+              const approval = proposeInstruction(
+                v,
+                "101",
+                "Use bullets",
+                "personal",
+                "test",
+              );
+              approval.runId = r.id;
+            });
+          if (mode === "revoked")
+            await store.change(w.id, (v) => {
+              v.policy.allowed = [];
+            });
+          return {
+            text: " \n",
+            status: mode === "partial" ? "partial" : "succeeded",
+            turns: 1,
+            tools: 0,
+            transcript: [],
+          };
+        },
+      };
+      const executor = new Executor(store, setup, runner);
+      await executor.execute(w.id, r.id);
+      await executor.execute(w.id, r.id);
+      const saved = await store.read(w.id);
+      if (mode === "approval" || mode === "revoked") {
+        expect(saved.deliveries).toHaveLength(0);
+        if (mode === "approval")
+          expect(saved.runs[0]?.status).toBe("awaiting_approval");
+      } else {
+        expect(saved.runs[0]).toMatchObject({
+          status: "partial",
+          result: "",
+          error: "empty_response",
+        });
+        expect(saved.deliveries).toHaveLength(1);
+        expect(saved.deliveries[0]?.text).toContain("model returned no answer");
+      }
+    }
+  });
   test("private runs preview, finalize durably and deduplicate; group runs do not preview", async () => {
     for (const chatId of ["101", "-100100"]) {
       const w = await seed();

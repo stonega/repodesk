@@ -431,19 +431,39 @@ export class Executor {
             a.runId === r.id &&
             Date.parse(a.expiresAt) > Date.now(),
         );
-        r.status = proposals ? "awaiting_approval" : result.status;
-        r.result = result.text;
+        const text = result.text.trim() ? result.text : "";
+        r.status = proposals
+          ? "awaiting_approval"
+          : text
+            ? result.status
+            : "partial";
+        r.error = proposals
+          ? undefined
+          : "reason" in result
+            ? result.reason
+            : undefined;
+        if (!proposals && !text) r.error ??= "empty_response";
+        r.result = text;
         r.finishedAt = new Date().toISOString();
         r.leaseUntil = undefined;
         recordThreadAnswer(w, r);
-        if (result.text) commitDiscussions(w, r);
+        if (text) commitDiscussions(w, r);
         else delete r.discussionUpdates;
-        if (result.text)
+        if (text || !proposals) {
+          const limitation =
+            r.error === "turn_limit"
+              ? ` within the ${r.settings.maxTurns} model-turn limit`
+              : r.error === "output_limit"
+                ? " within the model output limit"
+                : " because the model returned no answer";
+          const response = text
+            ? `${text.slice(0, 2700)}${result.status === "partial" ? "\n\nI couldn’t finish this response within the available limits." : ""}`
+            : `I couldn’t finish this request${limitation}. Inspect run ${r.id} in the panel for details.`;
           deliver(
             w,
             r.actor,
             r.chatId,
-            `${r.threadNotice ? `${r.threadNotice}\n\n` : ""}${result.text.slice(0, 2700)}${result.status === "partial" ? "\n\nI couldn’t finish this response within the available limits." : ""}`,
+            `${r.threadNotice ? `${r.threadNotice}\n\n` : ""}${response}`,
             {
               topicId: r.topicId,
               replyTo: r.replyTo,
@@ -452,6 +472,7 @@ export class Executor {
               format: "rich",
             },
           );
+        }
         audit(w, r.actor, `run.${r.status}`, r.id);
       });
       this.store.log.write("run_completed", { workspaceId, runId });

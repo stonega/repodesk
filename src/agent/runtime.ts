@@ -114,6 +114,11 @@ export interface AgentInput {
 export interface AgentResult {
   text: string;
   status: "succeeded" | "partial";
+  reason?:
+    | "turn_limit"
+    | "output_limit"
+    | "incomplete_response"
+    | "empty_response";
   turns: number;
   tools: number;
   transcript: AgentMessage[];
@@ -446,7 +451,18 @@ export class PiRunner implements AgentRunner {
       .join("\n");
     return {
       text,
-      status: last.stopReason === "stop" ? "succeeded" : "partial",
+      status:
+        last.stopReason === "stop" && text.trim() ? "succeeded" : "partial",
+      reason:
+        last.stopReason === "length"
+          ? "output_limit"
+          : last.stopReason !== "stop"
+            ? turns >= input.maxTurns
+              ? "turn_limit"
+              : "incomplete_response"
+            : text.trim()
+              ? undefined
+              : "empty_response",
       turns,
       tools: toolCount,
       transcript: agent.state.messages.map(sanitizeMessage),
