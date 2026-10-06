@@ -334,6 +334,16 @@ them.
   Telegram linking is unnecessary for deployment administrators to view messages;
   execution and mutation controls retain their existing authorization requirements.
 
+### Run attempts use a horizontal timeline
+
+- **Preference:** Present model attempts as numbered steps connected from left to
+  right, with time, status and reserved/actual costs in compact cards. Use the
+  dialog's full content width and contain horizontal scrolling within the timeline.
+- **Scope:** Attempts in run detail dialogs, on desktop and mobile.
+- **Source:** 2026-10-06 — user showed the run modal's long vertical Attempts list
+  and requested a horizontal timeline.
+- **Exceptions:** Other record lists keep their existing layouts.
+
 ### Team configuration uses one overview editor
 
 - **Preference:** Show saved workspace configuration in the Overview team card.

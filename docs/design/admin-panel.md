@@ -140,6 +140,10 @@ lists and tool checkboxes. Bound IDs and concurrency versions remain in request
 payloads without becoming editable fields. Failed saves preserve drafts and show
 field errors; pending saves block modal dismissal and duplicate submission.
 
+Run detail dialogs show model attempts as a numbered horizontal timeline, with
+time, status and reserved/actual USD amounts. Additional attempt metadata expands
+inside each card; overflow scrolls within the timeline on narrow screens.
+
 Usage & budget displays a table of attempt times, models/run IDs, reservation
 statuses and reserved/actual USD amounts. The spend and monthly-limit summary stays
 above the table. Previous/next controls use the accounting API's 100-record pages,

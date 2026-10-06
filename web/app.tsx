@@ -62,6 +62,7 @@ import { RuntimeLogs } from "./logs.tsx";
 import { CreateModal, Modal, ModalActions, ModalPending } from "./modal.tsx";
 import { Plugins } from "./plugins.tsx";
 import { prefixFields, RecordForm } from "./record-form.tsx";
+import { RunAttempts } from "./run-attempts.tsx";
 import { workspaceFields } from "./settings-fields.ts";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 import { ToastProvider, useToast } from "./toast.tsx";
@@ -3352,7 +3353,11 @@ function RunsPage({ id }: { id: string }) {
                   id: i.id,
                   version: i.version,
                 })),
-                attempts: selectedRun.attempts,
+              }}
+            />
+            <RunAttempts attempts={selectedRun.attempts} />
+            <DataDetails
+              value={{
                 transcript: selectedRun.transcript,
                 deliveries: selectedRun.deliveries,
               }}
