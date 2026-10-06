@@ -125,6 +125,14 @@ implementing forms; call domain services rather than duplicating Telegram logic.
 
 ## UI acceptance and testing
 
+Sign-in keeps its form and entered values visible while authenticating and loading
+the session and authorized workspaces. Its disabled submit button shows a spinner
+and **Signing in…** until home opens. Errors preserve the form and allow retry.
+First-account creation uses the same transition before opening setup.
+Opening or refreshing the app shows only a neutral startup screen until deployment,
+session and workspace checks finish. Startup failures stay on that screen with
+**Try again**; only an unauthorized session opens sign-in.
+
 Structured responses use labeled details and lists with readable dates, statuses,
 booleans and currency rather than JSON dumps. Setup, workflow, skill, instruction,
 run, reconciliation and operator forms use explicit labeled controls, selection

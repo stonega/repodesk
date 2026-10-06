@@ -20,7 +20,7 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
-import { Check } from "reicon-react";
+import { Check, Refresh } from "reicon-react";
 import {
   type ModelCapabilities,
   type ModelLimits,
@@ -74,6 +74,7 @@ class ApiError extends Error {
   constructor(
     message: string,
     public issues: { path: string; message: string }[] = [],
+    public status = 0,
   ) {
     super(message);
   }
@@ -118,6 +119,7 @@ async function api<T>(
                     ? "Enter the custom model's context window and maximum output tokens."
                     : (data.error ?? "Request failed"),
       data.issues ?? [],
+      response.status,
     );
   return data;
 }
@@ -327,13 +329,21 @@ function Page({
     </>
   );
 }
-function Auth({ claim, onDone }: { claim: boolean; onDone: () => void }) {
+function Auth({
+  claim,
+  onDone,
+}: {
+  claim: boolean;
+  onDone: () => Promise<void>;
+}) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const values = Object.fromEntries(new FormData(event.currentTarget));
     setBusy(true);
+    setError("");
     try {
       const result = await api<{ csrf: string }>(
         claim ? "/api/setup/claim" : "/api/admin/auth/login",
@@ -341,7 +351,7 @@ function Auth({ claim, onDone }: { claim: boolean; onDone: () => void }) {
         values,
       );
       csrf = result.csrf;
-      onDone();
+      await onDone();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -363,6 +373,7 @@ function Auth({ claim, onDone }: { claim: boolean; onDone: () => void }) {
         <Field label="Username">
           <input
             name="username"
+            disabled={busy}
             required
             autoComplete="username"
             pattern="[a-zA-Z0-9_.-]{3,64}"
@@ -371,6 +382,7 @@ function Auth({ claim, onDone }: { claim: boolean; onDone: () => void }) {
         <Field label="Password">
           <input
             name="password"
+            disabled={busy}
             type="password"
             minLength={12}
             maxLength={256}
@@ -379,8 +391,28 @@ function Auth({ claim, onDone }: { claim: boolean; onDone: () => void }) {
           />
         </Field>
         {error && <Notice error>{error}</Notice>}
-        <button className="auth-submit" type="submit" disabled={busy}>
-          {busy ? "Please wait…" : claim ? "Create administrator" : "Sign in"}
+        <button
+          className="auth-submit"
+          type="submit"
+          disabled={busy}
+          aria-busy={busy}
+          aria-live="polite"
+        >
+          {busy && (
+            <Refresh
+              className="icon-spinning"
+              size={18}
+              weight="Outline"
+              aria-hidden="true"
+            />
+          )}
+          {busy
+            ? claim
+              ? "Creating administrator…"
+              : "Signing in…"
+            : claim
+              ? "Create administrator"
+              : "Sign in"}
         </button>
       </form>
     </div>
@@ -3875,15 +3907,20 @@ function Shell() {
   }, [requestedWorkspace, workspaces]);
   const load = useCallback(async () => {
     setLoading(true);
+    setError("");
     try {
       const status = await api<{ initialized: boolean }>("/api/setup/status");
       setInitialized(status.initialized);
       try {
         const s = await api<Session>("/api/admin/auth/session");
+        const available = await api<{ id: string; name: string }[]>(
+          "/api/admin/workspaces",
+        );
         csrf = s.csrf;
+        setWorkspaces(available);
         setCurrent(s);
-        setWorkspaces(await api("/api/admin/workspaces"));
-      } catch {
+      } catch (e) {
+        if (!(e instanceof ApiError) || e.status !== 401) throw e;
         setCurrent(undefined);
       }
     } catch (e) {
@@ -3939,6 +3976,35 @@ function Shell() {
         ].includes(path),
       )
     : navigation;
+  if (loading || error)
+    return (
+      <main className="app-loading">
+        <div className="brand">
+          <img
+            className="brand-mark"
+            src="/assets/repodesk-mark.svg"
+            width="42"
+            height="42"
+            alt=""
+          />
+          <div>
+            RepoDesk<span>GITHUB ASSISTANT</span>
+          </div>
+        </div>
+        <section className="card" aria-busy={loading}>
+          {error ? (
+            <>
+              <Notice error>{error}</Notice>
+              <button type="button" onClick={() => void load()}>
+                Try again
+              </button>
+            </>
+          ) : (
+            <SkeletonRows label="Opening RepoDesk" rows={3} />
+          )}
+        </section>
+      </main>
+    );
   return (
     <div
       className={
@@ -4045,18 +4111,19 @@ function Shell() {
           setupLayout ? "setup-main" : !current ? "auth-main" : undefined
         }
       >
-        {loading ? (
-          <section className="card" aria-busy="true">
-            <SkeletonRows label="Deployment connection" rows={4} />
-          </section>
-        ) : error ? (
-          <Notice error>{error}</Notice>
-        ) : !current ? (
+        {!current ? (
           <Auth
             claim={!initialized}
-            onDone={() => {
-              void load();
-              navigate(initialized ? "/admin" : "/setup");
+            onDone={async () => {
+              const session = await api<Session>("/api/admin/auth/session");
+              const available = await api<{ id: string; name: string }[]>(
+                "/api/admin/workspaces",
+              );
+              csrf = session.csrf;
+              setInitialized(true);
+              setWorkspaces(available);
+              setCurrent(session);
+              navigate(initialized ? "/admin" : "/setup", { replace: true });
             }}
           />
         ) : (

@@ -216,6 +216,15 @@ a:focus-visible {
   outline: 3px solid var(--ui-focus);
   outline-offset: 2px;
 }
+.app-loading {
+  display: grid;
+  align-content: center;
+  gap: 24px;
+  width: min(100%, 420px);
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 24px;
+}
 .layout {
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
@@ -1515,6 +1524,10 @@ aside .field span {
   overflow-wrap: anywhere;
 }
 .auth-submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   width: 100%;
   min-height: 48px;
   margin-top: 6px;

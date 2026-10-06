@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, SVGProps } from "react";
 import {
   Add,
   Archive,
@@ -7,7 +7,6 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  CloseCircle,
   Copy,
   DocumentUpload,
   Edit,
@@ -17,15 +16,39 @@ import {
   Refresh,
   Search,
   Stop,
-  Trash,
+  Trash6,
 } from "reicon-react";
+
+function CloseIcon({
+  size = 20,
+  weight: _weight,
+  ...props
+}: SVGProps<SVGSVGElement> & { size?: number; weight?: "Outline" }) {
+  return (
+    <svg
+      {...props}
+      aria-hidden="true"
+      focusable="false"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m6 6 12 12M6 18 18 6" />
+    </svg>
+  );
+}
 
 const icons = {
   add: Add,
   archive: Archive,
   previous: ChevronLeft,
   next: ChevronRight,
-  close: CloseCircle,
+  close: CloseIcon,
   copy: Copy,
   done: Check,
   edit: Edit,
@@ -36,7 +59,7 @@ const icons = {
   refresh: Refresh,
   search: Search,
   stop: Stop,
-  delete: Trash,
+  delete: Trash6,
   latest: ArrowUp,
   older: ArrowDown,
 };
@@ -69,7 +92,7 @@ export function IconButton({
     <button
       {...props}
       type={type}
-      className={`icon-button${showLabel ? " with-label" : ""} ${className}`}
+      className={`icon-button${showLabel ? " with-label" : ""}${icon === "delete" ? " danger" : ""} ${className}`}
       aria-label={label}
       title={busy ? `${actionLabel} — Working…` : actionLabel}
       aria-busy={busy}

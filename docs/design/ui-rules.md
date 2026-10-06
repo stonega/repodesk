@@ -515,6 +515,17 @@ them.
 - **Exceptions:** Respect reduced-motion preferences by retaining static busy
   feedback instead of continuous rotation.
 
+### Modal close controls use a plain X
+
+- **Preference:** Use a plain X-shaped SVG icon without an enclosing circle for
+  the modal header close button. Preserve the accessible name, hover title,
+  keyboard focus, 44px hit target and pending-save dismissal lock.
+- **Scope:** All admin modal header close controls, including nested dialogs.
+- **Source:** 2026-10-05 — user requested an X-like SVG for modal close buttons,
+  without a circle.
+- **Exceptions:** The close glyph uses a simple inline SVG because the current
+  Reicon set offers enclosed close icons. Other actions retain Reicon icons.
+
 ### Modal Cancel follows the primary action
 
 - **Preference:** Place Cancel immediately after the main action in the same action
@@ -533,6 +544,17 @@ them.
 - **Scope:** All icon buttons in the admin web app.
 - **Source:** 2026-09-21 — user requested borderless icon buttons throughout the app.
 - **Exceptions:** None recorded. Text buttons retain their existing styling.
+
+### Remove actions use a simple bin and a warning color
+
+- **Preference:** Use a simple outline bin without a patterned basket for remove
+  and delete icons. Use the existing red danger color and soft red hover background
+  to make the destructive action clear.
+- **Scope:** Admin remove/delete icon buttons, including coding repository rows.
+- **Source:** 2026-10-05 — user requested a simpler bin and warning color for the
+  coding repository remove icon.
+- **Exceptions:** Preserve existing confirmations, accessible names and disabled
+  states. Non-destructive actions keep their existing colors.
 
 ### Application screens use readable details and forms
 
@@ -783,6 +805,18 @@ Use this format for each preference:
 - **Exceptions:** DNS, certificates and host proxy routing require infrastructure
   configuration outside the panel; availability must not be implied by saving.
 
+### Sign-in keeps the form visible until home is ready
+
+- **Preference:** Keep the login card's heading, fields and entered values visible
+  after submission. Disable duplicate submissions and show a spinner with
+  “Signing in…” on the button through authentication, session and workspace
+  loading, then enter home. Failures keep the form visible and allow retry.
+- **Scope:** Admin sign-in; first-account creation uses the same pending-form
+  behavior before entering setup.
+- **Source:** 2026-10-06 — user reported an empty login card after clicking Sign in
+  and requested button loading feedback followed by home.
+- **Exceptions:** None recorded.
+
 ### Loading keeps the layout visible
 
 - **Preference:** Render known headings, help text, sections and controls immediately.
@@ -796,7 +830,15 @@ Use this format for each preference:
 - **Source:** 2026-10-05 — user rejected the “Loading Codex settings” message and
   similar text-only loaders, requesting visible elements with skeletons only where
   needed.
-- **Exceptions:** Explicit progress for an initiated action (saving, signing in,
+- **Exceptions:** App startup uses a neutral RepoDesk brand and skeleton while
+  deployment status, session and workspaces are unknown; show setup or sign-in
+  only after those checks finish. 2026-10-05 — user reported that a completed
+  installation briefly shows the setup page when opening the app.
+  2026-10-06 — user rejected the login illustration and empty card flashing on
+  refresh. Keep the entire auth layout absent until startup resolves; startup
+  failures use the neutral screen with retry rather than implying a signed-out
+  session.
+  Explicit progress for an initiated action (saving, signing in,
   connecting GitHub) and actionable errors remain visible text.
 
 ### Skill import precedes creation

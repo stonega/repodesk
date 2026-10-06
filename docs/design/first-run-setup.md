@@ -11,6 +11,10 @@ for external gates. Optional web login and live model evaluation are not complet
 admin with incomplete configuration sees a resumable setup checklist after login.
 Other visitors see login, never another create-admin form.
 
+While the initial deployment, session and workspace checks are pending, show a
+neutral RepoDesk brand with skeletons. Render setup, sign-in or the admin panel
+only after the checks finish so initialized deployments do not flash onboarding.
+
 The setup page is visible before login and asks only for a username and password.
 The first successful submission creates the deployment administrator and a session.
 The server locks the deployment row and atomically checks its unclaimed state,
