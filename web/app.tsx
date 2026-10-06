@@ -1556,7 +1556,15 @@ function ModelCredentialForm({
     </form>
   );
 }
-function WorkspacePage({ id, resource }: { id: string; resource: string }) {
+function WorkspacePage({
+  id,
+  resource,
+  admin,
+}: {
+  id: string;
+  resource: string;
+  admin: Session["admin"];
+}) {
   if (resource === "usage") return <Usage id={id} request={api} />;
   if (resource === "settings") return <SettingsPage key={id} id={id} />;
   if (resource === "skills") return <SkillsPage id={id} />;
@@ -1566,9 +1574,24 @@ function WorkspacePage({ id, resource }: { id: string; resource: string }) {
   if (resource === "members") return <MembersPage id={id} />;
   if (resource === "chats") return <ChatsPage id={id} />;
   if (resource === "deletion") return <PrivacyPage id={id} />;
-  return <ReadPage key={`${id}:${resource}`} id={id} resource={resource} />;
+  return (
+    <ReadPage
+      key={`${id}:${resource}`}
+      id={id}
+      resource={resource}
+      admin={admin}
+    />
+  );
 }
-function ReadPage({ id, resource }: { id: string; resource: string }) {
+function ReadPage({
+  id,
+  resource,
+  admin,
+}: {
+  id: string;
+  resource: string;
+  admin: Session["admin"];
+}) {
   const { data, error, reload, loading } = useData<{
     settings?: Settings;
     version?: number;
@@ -1592,6 +1615,12 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
   const notify = useToast();
   const [managingBot, setManagingBot] = useState(false);
   const [managingGitHub, setManagingGitHub] = useState(false);
+  const counts = data?.counts ?? {
+    members: undefined,
+    runs: undefined,
+    workflows: undefined,
+    ...(admin.operator && !admin.telegramId ? { codingTasks: undefined } : {}),
+  };
   useEffect(() => {
     if (resource === "overview" && data?.settings && data.version)
       setCurrent({ version: data.version, settings: data.settings });
@@ -1614,39 +1643,57 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
     >
       {error && <Notice error>{error}</Notice>}
       <Pager data={data} />
-      {data?.counts ? (
+      {resource === "overview" ? (
         <>
-          <div className="stats">
-            {Object.entries(data.counts).map(([key, value]) => (
+          <section
+            className="stats"
+            aria-label="Workspace counts"
+            aria-busy={loading}
+          >
+            {Object.entries(counts).map(([key, value]) => (
               <NavLink
                 key={key}
                 to={`/admin/${key === "codingTasks" ? "plugins" : key}?workspace=${id}${key === "codingTasks" ? "#coding-tasks" : ""}`}
-                aria-label={`${value} ${key === "codingTasks" ? "coding tasks" : key}. View details`}
+                aria-label={`${value !== undefined ? `${value} ` : loading ? "" : "Unavailable "}${key === "codingTasks" ? "coding tasks" : key}. View details`}
               >
-                <strong>{value}</strong>
+                <strong>
+                  {value ??
+                    (loading ? <Skeleton width="64px" height="35px" /> : "—")}
+                </strong>
                 <span>{key === "codingTasks" ? "Coding tasks" : key}</span>
               </NavLink>
             ))}
-          </div>
-          {data.connections && (
+          </section>
+          {(data?.connections || (!data && admin.operator)) && (
             <section className="overview-connections" aria-label="Connections">
               <section
                 className="card overview-connection-card"
                 aria-label="Telegram bot"
+                aria-busy={loading}
               >
                 <div className="row overview-connection-heading">
                   <h2>Telegram bot</h2>
-                  <span
-                    className={`pill${data.connections.bot.configured ? " good" : ""}`}
-                  >
-                    {data.connections.bot.configured
-                      ? "Configured"
-                      : "Not configured"}
-                  </span>
+                  {data?.connections ? (
+                    <span
+                      className={`pill${data.connections.bot.configured ? " good" : ""}`}
+                    >
+                      {data.connections.bot.configured
+                        ? "Configured"
+                        : "Not configured"}
+                    </span>
+                  ) : loading ? (
+                    <Skeleton width="7em" />
+                  ) : null}
                 </div>
                 <p>
-                  {data.connections.bot.configured &&
-                  data.connections.bot.username ? (
+                  {!data?.connections ? (
+                    loading ? (
+                      <Skeleton width="65%" />
+                    ) : (
+                      "Unavailable"
+                    )
+                  ) : data.connections.bot.configured &&
+                    data.connections.bot.username ? (
                     <a
                       href={`https://t.me/${encodeURIComponent(data.connections.bot.username)}`}
                       target="_blank"
@@ -1660,6 +1707,7 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
                 </p>
                 <button
                   type="button"
+                  disabled={!data?.connections || loading || !!error}
                   onClick={() => {
                     setManagingBot(true);
                   }}
@@ -1670,19 +1718,30 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
               <section
                 className="card overview-connection-card"
                 aria-label="GitHub"
+                aria-busy={loading}
               >
                 <div className="row overview-connection-heading">
                   <h2>GitHub</h2>
-                  <span
-                    className={`pill${data.connections.github.connected ? " good" : ""}`}
-                  >
-                    {data.connections.github.connected
-                      ? "Connected"
-                      : "Not connected"}
-                  </span>
+                  {data?.connections ? (
+                    <span
+                      className={`pill${data.connections.github.connected ? " good" : ""}`}
+                    >
+                      {data.connections.github.connected
+                        ? "Connected"
+                        : "Not connected"}
+                    </span>
+                  ) : loading ? (
+                    <Skeleton width="7em" />
+                  ) : null}
                 </div>
                 <p>
-                  {data.connections.github.connected ? (
+                  {!data?.connections ? (
+                    loading ? (
+                      <Skeleton width="65%" />
+                    ) : (
+                      "Unavailable"
+                    )
+                  ) : data.connections.github.connected ? (
                     <>
                       {data.connections.github.account ? (
                         <a
@@ -1701,7 +1760,11 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
                     "Connect a GitHub App to grant repository access."
                   )}
                 </p>
-                <button type="button" onClick={() => setManagingGitHub(true)}>
+                <button
+                  type="button"
+                  disabled={!data?.connections || loading || !!error}
+                  onClick={() => setManagingGitHub(true)}
+                >
                   Manage GitHub
                 </button>
               </section>
@@ -1724,36 +1787,44 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
               onClose={() => setManagingGitHub(false)}
             />
           )}
-          {current && (
-            <section className="card" aria-label="Team">
-              <div className="row team-card-heading">
-                <div>
-                  <h2>{current.settings.name}</h2>
-                  <p className="muted">Settings version {current.version}</p>
-                </div>
-                <IconButton
-                  icon="edit"
-                  label="Edit team configuration"
-                  disabled={loading}
-                  onClick={() => {
-                    setEditing(true);
-                  }}
-                />
+          <section className="card" aria-label="Team" aria-busy={loading}>
+            <div className="row team-card-heading">
+              <div>
+                <h2>{current?.settings.name ?? "Team configuration"}</h2>
+                <p className="muted">
+                  Settings version{" "}
+                  {current?.version ??
+                    (loading ? <Skeleton width="2em" /> : "Unavailable")}
+                </p>
               </div>
-              <ul className="settings-list">
-                {workspaceFields.map((field) => (
-                  <li className="settings-item" key={field.key}>
-                    <div className="settings-item-details">
-                      <h3>{field.label}</h3>
-                      <p className="settings-item-value">
-                        {settingValue(field.key, current.settings[field.key])}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+              <IconButton
+                icon="edit"
+                label="Edit team configuration"
+                disabled={!current || loading || !!error}
+                onClick={() => {
+                  setEditing(true);
+                }}
+              />
+            </div>
+            <ul className="settings-list">
+              {workspaceFields.map((field) => (
+                <li className="settings-item" key={field.key}>
+                  <div className="settings-item-details">
+                    <h3>{field.label}</h3>
+                    <p className="settings-item-value">
+                      {current ? (
+                        settingValue(field.key, current.settings[field.key])
+                      ) : loading ? (
+                        <Skeleton width="60%" />
+                      ) : (
+                        "Unavailable"
+                      )}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
           {editing && current && (
             <WorkspaceSettingsEditor
               id={id}
@@ -4048,7 +4119,12 @@ function Shell() {
   if (loading || error)
     return (
       <main className="app-loading">
-        <div className="brand">
+        <div
+          className="brand"
+          role="status"
+          aria-label={loading ? "Opening RepoDesk" : "RepoDesk"}
+          aria-busy={loading}
+        >
           <img
             className="brand-mark"
             src="/assets/repodesk-mark.svg"
@@ -4060,18 +4136,14 @@ function Shell() {
             RepoDesk<span>GITHUB ASSISTANT</span>
           </div>
         </div>
-        <section className="card" aria-busy={loading}>
-          {error ? (
-            <>
-              <Notice error>{error}</Notice>
-              <button type="button" onClick={() => void load()}>
-                Try again
-              </button>
-            </>
-          ) : (
-            <SkeletonRows label="Opening RepoDesk" rows={3} />
-          )}
-        </section>
+        {error && (
+          <section className="card">
+            <Notice error>{error}</Notice>
+            <button type="button" onClick={() => void load()}>
+              Try again
+            </button>
+          </section>
+        )}
       </main>
     );
   return (
@@ -4341,6 +4413,7 @@ function Shell() {
                       key={`${chosen}:${path}`}
                       id={chosen}
                       resource={path ?? "overview"}
+                      admin={current.admin}
                     />
                   ) : (
                     <Setup />
@@ -4352,7 +4425,11 @@ function Shell() {
               path="*"
               element={
                 chosen ? (
-                  <WorkspacePage id={chosen} resource="overview" />
+                  <WorkspacePage
+                    id={chosen}
+                    resource="overview"
+                    admin={current.admin}
+                  />
                 ) : current.admin.operator ? (
                   <Setup />
                 ) : (

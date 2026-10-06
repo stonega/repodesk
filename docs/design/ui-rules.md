@@ -857,25 +857,34 @@ Use this format for each preference:
 
 ### Loading keeps the layout visible
 
-- **Preference:** Render known headings, help text, sections and controls immediately.
+- **Preference:** Show as much of the actual page as possible immediately: known
+  headings, help text, sections, field labels, navigation and controls.
   Use skeletons only for values, fields or records that still need data, rather than
   replacing a page with a plain “Loading…” message. Keep loaded content visible
   during background refreshes. Disable actions that require unknown data; do not
   present unknown settings as disabled, disconnected, zero or empty.
-- **Scope:** Admin and setup data-loading states, including Codex configuration,
-  repositories and tasks. Skeletons use accessible region names/busy states and
-  respect reduced-motion preferences.
+- **Scope:** Admin and setup data-loading states, including the home Overview,
+  Codex configuration, repositories and tasks. Skeletons use accessible region
+  names/busy states and respect reduced-motion preferences.
 - **Source:** 2026-10-05 — user rejected the “Loading Codex settings” message and
   similar text-only loaders, requesting visible elements with skeletons only where
   needed.
-- **Exceptions:** App startup uses a neutral RepoDesk brand and skeleton while
-  deployment status, session and workspaces are unknown; show setup or sign-in
+  2026-10-06 — user showed the home loader displaying an empty audit table and
+  requested showing all known page elements, with skeletons only where loading is
+  required. Select the page layout from the route and established permissions,
+  independent of whether its data has arrived. Overview keeps its count cards,
+  available connection cards and team configuration labels visible while loading.
+- **Exceptions:** App startup uses only the centered RepoDesk logo and brand text
+  while deployment status, session and workspaces are unknown; show setup or sign-in
   only after those checks finish. 2026-10-05 — user reported that a completed
   installation briefly shows the setup page when opening the app.
   2026-10-06 — user rejected the login illustration and empty card flashing on
   refresh. Keep the entire auth layout absent until startup resolves; startup
   failures use the neutral screen with retry rather than implying a signed-out
   session.
+  2026-10-06 — user requested removing the startup skeleton card and keeping only
+  the logo and text. This applies to the startup loader on desktop and mobile;
+  data-loading skeletons within admin and setup pages retain the preference above.
   Explicit progress for an initiated action (saving, signing in,
   connecting GitHub) and actionable errors remain visible text.
 

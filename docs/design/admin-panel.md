@@ -134,9 +134,9 @@ Sign-in keeps its form and entered values visible while authenticating and loadi
 the session and authorized workspaces. Its disabled submit button shows a spinner
 and **Signing in…** until home opens. Errors preserve the form and allow retry.
 First-account creation uses the same transition before opening setup.
-Opening or refreshing the app shows only a neutral startup screen until deployment,
-session and workspace checks finish. Startup failures stay on that screen with
-**Try again**; only an unauthorized session opens sign-in.
+Opening or refreshing the app shows only the centered RepoDesk logo and brand text
+until deployment, session and workspace checks finish. Startup failures stay on
+that screen with **Try again**; only an unauthorized session opens sign-in.
 
 Structured responses use labeled details and lists with readable dates, statuses,
 booleans and currency rather than JSON dumps. Setup, workflow, skill, instruction,
@@ -155,6 +155,10 @@ above the table. Previous/next controls use the accounting API's 100-record page
 with URL offsets and visible record/page counts. Loading, empty and error states
 are explicit; the table scrolls horizontally within the card on small screens.
 Data loading preserves known headings, descriptions, controls and table columns.
+Overview immediately shows its count cards, connection cards when the session
+permits them, and team configuration labels, with skeletons for unknown counts,
+connection details and saved settings. Select the layout by route; pending Overview
+data must never show the audit table. Keep saved values visible during refreshes.
 Unknown values and records use skeletons; dependent actions stay disabled until
 the data arrives. Codex keeps its Configuration, Repositories and Coding tasks
 cards visible, and initial errors end the skeleton state with an actionable retry.

@@ -235,6 +235,9 @@ a:focus-visible {
   margin: 0 auto;
   padding: 24px;
 }
+:where(.app-loading) > .brand {
+  justify-self: center;
+}
 .layout {
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
