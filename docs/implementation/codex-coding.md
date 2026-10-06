@@ -12,6 +12,13 @@ remain **Reviewed** when the new policy is omitted. The reviewed issue-to-PR
 workflow below is preserved; direct tasks use original received messages and do
 not require creating an issue.
 
+Pi receives `start_development_task` only when at least one repository explicitly
+uses **Direct** policy, and its target list includes only those repositories.
+**Reviewed** repositories, including older configurations without a development
+policy, use `propose_coding_task` and an actor-bound Telegram approval. A rejected
+direct start reports `coding_direct_execution_disabled`; it is a policy rejection
+before any GitHub checkout, not evidence of repository reachability failure.
+
 ## Continuous collaboration
 
 In the repository editor, select **Direct** to allow a current maintainer's clear
@@ -74,6 +81,10 @@ it enables no new execution policy by itself. See [delivery evidence and rollout
 2. Connect the workspace GitHub App and select each target repository. For local
    publication, grant **Contents: read and write**, **Issues: read and write** and
    **Pull requests: read and write** to the App installation.
+   A read-only Contents grant can read a checkout but cannot support the complete
+   coding workflow. GitHub token permission rejections report
+   `github_app_permissions_missing`; update the App permissions and accept the
+   installation permission update in GitHub before retrying.
 3. Under **Plugins → Codex implementation**, add each repository with a base
    branch and active Telegram maintainer IDs. Codex handles environment preparation
    and verification automatically; neither Add nor Edit asks for commands.

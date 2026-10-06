@@ -33,6 +33,11 @@ and unsupported event names fail explicitly. There is no blanket claim that ever
 Pi community extension works. Hook failures stop the run with a fixed error code;
 raw extension exception messages are excluded from application logs and model results.
 
+Application-owned built-ins may explicitly allowlist stable tool fault codes for
+model-visible policy feedback. The host reconstructs the fault from its code;
+exception messages remain private. File extensions and unlisted built-in faults
+continue to return `extension_tool_failed`.
+
 ## Installation and grants
 
 The Plugins landing page shows compact Installed cards for built-in Code Truth,
@@ -185,8 +190,12 @@ project checks and separate draft PR publication. Local execution and its
 custom-provider configuration and workspace API keys are described in [the Podman guide](../implementation/codex-podman.md).
 See [configuration, permissions and recovery](../implementation/codex-coding.md).
 
-The [accepted continuous collaboration direction](codex-collaboration.md) delegates
-requirements intake and relay to Pi, and technical investigation, decisions,
-implementation and verification to Codex. It proposes durable task inputs, questions,
-scope-bound direct execution and follow-ups on the same PR. These are future
-capabilities; the three tools and approval contract above remain the current runtime.
+The [continuous collaboration workflow](codex-collaboration.md) also provides
+durable task inputs, questions, scoped direct execution and follow-ups on the same
+PR. Pi relays original requirements; Codex owns investigation, technical decisions,
+implementation and verification. `start_development_task` is exposed only when a
+configured repository explicitly uses Direct policy, and advertises only Direct
+targets. Reviewed targets retain `propose_coding_task` and Telegram approval.
+`send_development_input`, `development_task_status` and
+`cancel_development_task` handle existing continuous tasks. Live pilot validation
+remains pending.

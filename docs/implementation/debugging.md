@@ -36,6 +36,18 @@ Interpret the states separately:
 - No matching connected repository means the coding request has no resolved
   target. Use its full connected repository name; confirm workspace selection and
   actor grants. Do not assume a coding task started.
+- A `start_development_task` failure with no task record can be a policy mismatch,
+  before GitHub is contacted. **Reviewed** (also the default when omitted) needs
+  `propose_coding_task` and Telegram approval; only **Direct** supports the start
+  tool. Older builds hide `coding_direct_execution_disabled` as
+  `extension_tool_failed`. See the [routing incident](../../postmortem/2026-10-06-codex-reviewed-direct-routing.md).
+- `github_app_permissions_missing` means GitHub rejected a scoped installation
+  token because its requested permissions are not granted. Verify the App and
+  installation both allow Contents and Pull requests read/write for Codex
+  publication, plus Issues write for the Reviewed issue workflow. Contents read
+  alone can read the checkout while a Direct token (also requesting Pull requests
+  read) or publication token still fails. Older builds report this as
+  `github_unavailable`. Changing execution policy does not add GitHub permissions.
 - A pending delivery is queued separately from generation. A failed delivery has
   a Telegram or policy error. An unknown delivery must be inspected before any
   resend, because Telegram might already have accepted it.

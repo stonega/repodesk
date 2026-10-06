@@ -23,6 +23,7 @@ import type { AgentInput } from "./runtime.ts";
 type Entry = PluginSpec & { hash: string };
 export type BuiltinExtension = Entry & {
   factory: (input: AgentInput) => ExtensionFactory;
+  toolErrorCodes?: readonly string[];
 };
 const digest = (value: string | Buffer) =>
   createHash("sha256").update(value).digest("hex");
@@ -177,7 +178,18 @@ export class ExtensionCatalog {
         "extension_load_failed",
         409,
       );
-      return new ExtensionHost(loaded, entries, cwd, input);
+      return new ExtensionHost(
+        loaded,
+        entries,
+        cwd,
+        input,
+        new Map(
+          this.builtins.map((entry) => [
+            entry.path,
+            entry.toolErrorCodes ?? [],
+          ]),
+        ),
+      );
     } catch (error) {
       loaded?.runtime.invalidate();
       await rm(cwd, { recursive: true, force: true });
@@ -199,6 +211,7 @@ export class ExtensionHost {
     entries: Entry[],
     private cwd: string,
     private input: AgentInput,
+    builtinErrorCodes: ReadonlyMap<string, readonly string[]> = new Map(),
   ) {
     this.system = input.system;
     this.context = {
@@ -287,7 +300,13 @@ export class ExtensionHost {
                 signal?.throwIfAborted();
                 await input.guard();
                 return result;
-              } catch {
+              } catch (error) {
+                if (
+                  error instanceof Fault &&
+                  builtinErrorCodes.get(entry.path)?.includes(error.code)
+                )
+                  // Reconstruct from the allowlisted code, excluding exception text.
+                  throw new Fault(error.code, error.status);
                 // Pi turns thrown tool errors into model-visible messages.
                 throw new Fault("extension_tool_failed", 409);
               }

@@ -6,12 +6,16 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { Type } from "typebox";
-import { ExtensionCatalog } from "../../src/agent/extensions.ts";
+import {
+  type BuiltinExtension,
+  ExtensionCatalog,
+} from "../../src/agent/extensions.ts";
 import {
   type AgentInput,
   PiRunner,
   selectedModel,
 } from "../../src/agent/runtime.ts";
+import { Fault } from "../../src/domain.ts";
 
 const workspaceId = "00000000-0000-4000-8000-000000000001";
 const dirs: string[] = [];
@@ -99,6 +103,67 @@ const call = {
   name: "count_words",
   arguments: { text: "two words" },
 };
+
+test("only allowlisted built-in fault codes reach the model and raw exception text stays private", async () => {
+  for (const error of [
+    new Fault("coding_direct_execution_disabled", 409),
+    new Fault("unlisted_private_code", 409),
+    new Error("private secret"),
+  ]) {
+    error.message += ": private secret";
+    const builtin: BuiltinExtension = {
+      id: "builtin-test",
+      version: "1",
+      path: "<inline:builtin-test>",
+      tools: ["count_words"],
+      execution: "read-only",
+      enabled: true,
+      workspaces: [workspaceId],
+      hash: "fixture",
+      toolErrorCodes: ["coding_direct_execution_disabled"],
+      factory: () => async (pi) => {
+        pi.registerTool({
+          name: "count_words",
+          label: "Test",
+          description: "Test",
+          parameters: Type.Object({ text: Type.String() }),
+          execute: async () => {
+            throw error;
+          },
+        });
+      },
+    };
+    const runner = new PiRunner(
+      () => stream([call], "toolUse"),
+      ExtensionCatalog.fromSnapshot([], [builtin]),
+    );
+    const result = await runner.run(input({ maxTurns: 1 }));
+    const tool = result.transcript.find((m) => m.role === "toolResult");
+    expect(tool?.isError).toBe(true);
+    expect(tool?.content).toEqual([
+      {
+        type: "text",
+        text:
+          error instanceof Fault &&
+          error.code === "coding_direct_execution_disabled"
+            ? error.code
+            : "extension_tool_failed",
+      },
+    ]);
+    expect(JSON.stringify(tool)).not.toContain("private secret");
+  }
+  const { catalog: filePlugin } = await catalog(
+    `import { Type } from "@sinclair/typebox";
+     export default pi => pi.registerTool({name:"count_words",label:"Test",description:"Test",parameters:Type.Object({text:Type.String()}),execute:async()=>{throw Error("coding_direct_execution_disabled: private secret");}});`,
+  );
+  const result = await new PiRunner(
+    () => stream([call], "toolUse"),
+    filePlugin,
+  ).run(input({ maxTurns: 1 }));
+  expect(
+    result.transcript.find((m) => m.role === "toolResult")?.content,
+  ).toEqual([{ type: "text", text: "extension_tool_failed" }]);
+});
 
 test("loads an unchanged Pi extension, runs its hook and validated tool, and checkpoints results", async () => {
   const { catalog: plugins } = await catalog();

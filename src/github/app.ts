@@ -71,6 +71,20 @@ export class GitHubApp {
       });
       if ([401, 403, 404].includes(response.status))
         throw new Fault("github_access_denied", 403);
+      if (
+        response.status === 422 &&
+        url.startsWith("https://api.github.com/app/installations/") &&
+        url.endsWith("/access_tokens")
+      ) {
+        const error = z
+          .object({ message: z.string() })
+          .safeParse(await response.json());
+        if (
+          error.success &&
+          /permissions requested.*not granted/i.test(error.data.message)
+        )
+          throw new Fault("github_app_permissions_missing", 409);
+      }
       requireThat(response.ok, "github_unavailable", 502);
       return await response.json();
     } catch (error) {

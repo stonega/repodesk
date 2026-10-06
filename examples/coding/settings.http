@@ -9,6 +9,10 @@ GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding
 # Configure deploy/codex/compose.yaml separately. Use a fake key in checked-in examples.
 # Omit providerApiKey to preserve it; use null to remove it and restore any environment fallback.
 # Responses include providerApiKeyConfigured only, never the saved key.
+# Reviewed (also the default when development is omitted) uses propose_coding_task
+# and Telegram approval. Only explicit Direct targets support start_development_task.
+# coding_direct_execution_disabled is a policy rejection before GitHub checkout;
+# do not retry the direct start or treat it as a repository access failure.
 PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { ExtensionCatalog } from "../../src/agent/extensions.ts";
 import { type AgentInput, selectedModel } from "../../src/agent/runtime.ts";
+import { developmentPolicy } from "../../src/coding/development.ts";
 import { codingExtension } from "../../src/coding/extension.ts";
 import type {
   LocalDeviceAuth,
@@ -45,7 +46,7 @@ const url = process.env.TEST_DATABASE_URL;
       [operatorId],
     );
     await store.pool.query(
-      "UPDATE deployment SET data=jsonb_set(data,'{active}','true')",
+      "UPDATE deployment SET data=jsonb_set(jsonb_set(data,'{active}','true'),'{bot}','{\"id\":\"999\",\"username\":\"fixture\"}')",
     );
   });
   afterAll(async () => {
@@ -97,6 +98,42 @@ const url = process.env.TEST_DATABASE_URL;
   }
   async function read(id: string) {
     return present((await store.read(id)).codingTasks?.[0]);
+  }
+  async function codingHost(id: string, actor = "101") {
+    const run = await store.change(id, (w) => {
+      const run = createRun(
+        w,
+        actor,
+        "Implement fix",
+        actor,
+        0,
+        "gpt-4.1-mini",
+      );
+      run.status = "running";
+      return structuredClone(run);
+    });
+    const input: AgentInput = {
+      workspaceId: id,
+      actor,
+      runId: run.id,
+      model: selectedModel("gpt-4.1-mini"),
+      apiKey: "fake",
+      system: "",
+      prompt: "",
+      transcript: [],
+      tools: [],
+      maxTurns: 2,
+      maxTools: 3,
+      signal: new AbortController().signal,
+      guard: async () => {},
+      reserve: async () => "attempt",
+      checkpoint: async () => {},
+    };
+    const catalog = ExtensionCatalog.fromSnapshot(
+      [],
+      [codingExtension(store, await store.read(id))],
+    );
+    return { run, input, host: present(await catalog.open(input)) };
   }
   function provider(
     options: {
@@ -174,40 +211,7 @@ const url = process.env.TEST_DATABASE_URL;
   test("real Pi extension registers coding tools and enforces maintainer identity", async () => {
     const { id } = await fixture();
     for (const actor of ["101", "202"]) {
-      const run = await store.change(id, (w) => {
-        const run = createRun(
-          w,
-          actor,
-          "Implement fix",
-          actor,
-          0,
-          "gpt-4.1-mini",
-        );
-        run.status = "running";
-        return structuredClone(run);
-      });
-      const input: AgentInput = {
-        workspaceId: id,
-        actor,
-        runId: run.id,
-        model: selectedModel("gpt-4.1-mini"),
-        apiKey: "fake",
-        system: "",
-        prompt: "",
-        transcript: [],
-        tools: [],
-        maxTurns: 2,
-        maxTools: 3,
-        signal: new AbortController().signal,
-        guard: async () => {},
-        reserve: async () => "attempt",
-        checkpoint: async () => {},
-      };
-      const catalog = ExtensionCatalog.fromSnapshot(
-        [],
-        [codingExtension(store, await store.read(id))],
-      );
-      const host = present(await catalog.open(input));
+      const { run, input, host } = await codingHost(id, actor);
       try {
         const tool = present(
           host.tools.find((t) => t.name === "propose_coding_task"),
@@ -232,7 +236,7 @@ const url = process.env.TEST_DATABASE_URL;
           expect(w.approvals.filter((a) => a.runId === run.id)).toHaveLength(1);
           expect(w.codingTasks).toHaveLength(1); // Only the previously approved fixture task.
         } else {
-          await expect(action).rejects.toThrow("extension_tool_failed");
+          await expect(action).rejects.toThrow("coding_maintainer_required");
           expect(
             (await store.read(id)).approvals.filter((a) => a.runId === run.id),
           ).toHaveLength(0);
@@ -240,6 +244,94 @@ const url = process.env.TEST_DATABASE_URL;
       } finally {
         await host.close();
       }
+    }
+  });
+  test("implicit and explicit Reviewed repositories expose the approval flow without direct starts", async () => {
+    for (const explicit of [false, true]) {
+      const { id } = await fixture();
+      if (explicit)
+        await store.change(id, (w) => {
+          present(present(w.coding).settings.repositories[0]).development =
+            developmentPolicy.parse({ executionMode: "reviewed" });
+        });
+      const { host } = await codingHost(id);
+      try {
+        expect(
+          host.tools.some((t) => t.name === "start_development_task"),
+        ).toBe(false);
+        const proposal = present(
+          host.tools.find((t) => t.name === "propose_coding_task"),
+        );
+        expect(proposal.description).toContain('"mode":"reviewed"');
+        expect(proposal.description).toContain("Use this approval flow");
+      } finally {
+        await host.close();
+      }
+    }
+  });
+  test("mixed policies advertise only Direct targets and preserve policy errors before reviewed fallback", async () => {
+    const { id } = await fixture();
+    await store.change(id, (w) => {
+      present(w.github).repositories.push({
+        id: 7002,
+        full_name: "example/direct",
+      });
+      present(w.coding).settings.repositories.push({
+        repositoryId: 7002,
+        baseBranch: "main",
+        maintainers: ["101"],
+        development: developmentPolicy.parse({ executionMode: "direct" }),
+      });
+    });
+    const { host, input, run } = await codingHost(id);
+    try {
+      const start = present(
+        host.tools.find((t) => t.name === "start_development_task"),
+      );
+      expect(start.description).toContain("example/direct");
+      expect(start.description).not.toContain("example/workspace");
+      const source = present(
+        (await store.read(id)).messages.find((s) => s.runId === run.id),
+      );
+      await expect(
+        start.execute(
+          "rejected-start",
+          { repositoryId: 7001, sourceIds: [source.id] },
+          input.signal,
+        ),
+      ).rejects.toThrow("coding_direct_execution_disabled");
+      expect(
+        (
+          await store.pool.query(
+            "SELECT id FROM coding_tasks WHERE workspace_id=$1",
+            [id],
+          )
+        ).rowCount,
+      ).toBe(0);
+      const proposal = present(
+        host.tools.find((t) => t.name === "propose_coding_task"),
+      );
+      const approvedFlow = await proposal.execute(
+        "reviewed-proposal",
+        { repositoryId: 7001, title: "Implement fix", body: "Implement fix" },
+        input.signal,
+      );
+      expect(approvedFlow.content).toEqual([
+        {
+          type: "text",
+          text: expect.stringContaining('"status":"awaiting_approval"'),
+        },
+      ]);
+      const task = await start.execute(
+        "direct-start",
+        { repositoryId: 7002, sourceIds: [source.id] },
+        input.signal,
+      );
+      expect(task.content).toEqual([
+        { type: "text", text: expect.stringContaining('"state":"queued"') },
+      ]);
+    } finally {
+      await host.close();
     }
   });
   test("permission changes during token minting prevent issue creation", async () => {
