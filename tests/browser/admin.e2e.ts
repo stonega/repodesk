@@ -437,10 +437,42 @@ test.describe
         path: "test-results/workspace-settings-mobile.png",
         fullPage: true,
       });
+      await page.clock.install();
       await callsDialog
         .getByRole("button", { name: "Save configuration" })
         .click();
       await expect(callsDialog).toHaveCount(0);
+      const toast = page.getByRole("region", {
+        name: "Notification",
+        exact: true,
+      });
+      await expect(toast.getByRole("status")).toHaveText(
+        "Team configuration saved.",
+      );
+      await expect(toast).toHaveCSS("position", "fixed");
+      await expect(teamCard.getByText("Team configuration saved.")).toHaveCount(
+        0,
+      );
+      const toastBounds = await toast.boundingBox();
+      expect(toastBounds).not.toBeNull();
+      expect(toastBounds?.x).toBeGreaterThanOrEqual(0);
+      expect(
+        (toastBounds?.x ?? 0) + (toastBounds?.width ?? 0),
+      ).toBeLessThanOrEqual(390);
+      await page.screenshot({
+        path: "test-results/configuration-toast-mobile.png",
+        fullPage: true,
+      });
+      await toast.hover();
+      await page.clock.fastForward(7000);
+      await expect(toast).toBeVisible();
+      await toast.getByRole("button", { name: "Dismiss notification" }).focus();
+      await page.mouse.move(0, 0);
+      await page.clock.fastForward(7000);
+      await expect(toast).toBeVisible();
+      await toast.getByRole("button", { name: "Dismiss notification" }).blur();
+      await page.clock.fastForward(6000);
+      await expect(toast).toHaveCount(0);
       await expect(
         teamCard
           .getByRole("listitem")
@@ -487,6 +519,15 @@ test.describe
         .getByRole("button", { name: "Save configuration", exact: true })
         .click();
       await expect(teamCard).toContainText("Settings version 3");
+      await expect(toast.getByRole("status")).toHaveText(
+        "Team configuration saved.",
+      );
+      await page.screenshot({
+        path: "test-results/configuration-toast-desktop.png",
+        fullPage: true,
+      });
+      await toast.getByRole("button", { name: "Dismiss notification" }).click();
+      await expect(toast).toHaveCount(0);
       await second
         .getByRole("button", { name: "Save configuration", exact: true })
         .click();
@@ -1022,7 +1063,9 @@ test.describe
       await card
         .getByRole("button", { name: "Save Code Truth", exact: true })
         .click();
-      await expect(card.getByRole("status")).toContainText("Code Truth saved");
+      await expect(page.locator(".toast").getByRole("status")).toContainText(
+        "Code Truth saved",
+      );
       await page.reload();
       await expect(
         card.getByRole("heading", { name: "deepx-web", exact: true }),
@@ -1066,6 +1109,10 @@ test.describe
       await card
         .getByRole("button", { name: "Sync & check indexes", exact: true })
         .click();
+      await expect(page.locator(".toast").getByRole("status")).toHaveText(
+        "Index status refreshed.",
+      );
+      await expect(card.getByText("Index status refreshed.")).toHaveCount(0);
       await expect(
         card.getByText(/devnet → devnet-develop · ready/),
       ).toBeVisible();
@@ -1090,7 +1137,9 @@ test.describe
       await card
         .getByRole("button", { name: "Save Code Truth", exact: true })
         .click();
-      await expect(card.getByRole("status")).toContainText("Code Truth saved");
+      await expect(page.locator(".toast").getByRole("status")).toContainText(
+        "Code Truth saved",
+      );
       await page.reload();
       await expect(card.getByText("No repositories configured.")).toBeVisible();
     });
@@ -1211,7 +1260,9 @@ test.describe
       await truth
         .getByRole("button", { name: "Save Code Truth", exact: true })
         .click();
-      await expect(truth.getByRole("status")).toContainText("Code Truth saved");
+      await expect(page.locator(".toast").getByRole("status")).toContainText(
+        "Code Truth saved",
+      );
       await page.goto(
         `/admin/plugins/file/independent-plugin?workspace=${workspaceId}`,
       );
@@ -1998,7 +2049,7 @@ test.describe
       await page.keyboard.press("Escape");
       await expect(memberDialog).toBeVisible();
       release();
-      await expect(memberDialog.getByRole("status")).toContainText(
+      await expect(memberDialog.getByRole("alert")).toContainText(
         "version_conflict",
       );
       await expect(
@@ -2158,7 +2209,7 @@ test.describe
         await applicant
           .getByRole("button", { name: "Approve access", exact: true })
           .click();
-        await expect(requests.getByRole("status")).toContainText(
+        await expect(page.locator(".toast").getByRole("status")).toContainText(
           "Access approved for Access applicant.",
         );
         await expect(
@@ -2320,7 +2371,7 @@ test.describe
         await policy
           .getByRole("button", { name: "Apply reviewed policy" })
           .click();
-        await expect(policy.getByRole("status")).toContainText(
+        await expect(policy.getByRole("alert")).toContainText(
           "last_admin_lockout",
         );
         await page.reload();

@@ -29,6 +29,24 @@ them.
   search support for the repository selector.
 - **Exceptions:** Other form selectors retain their existing behavior.
 
+### Routine action confirmations use toasts
+
+- **Preference:** Show successful saves and comparable action confirmations in a
+  compact floating toast instead of an inline banner. Auto-dismiss after six
+  seconds, pause dismissal while hovered or focused, and provide a close button
+  and polite screen-reader announcement. Repeated actions show a fresh toast.
+- **Scope:** Web admin confirmations, including team/model configuration,
+  Telegram bot tokens, plugins, site settings and access decisions. Keep the
+  toast within the viewport on desktop and mobile without shifting page content.
+  Index refresh confirmations use the same toast; retain index results on the page.
+- **Source:** 2026-10-06 — user showed the inline “Team configuration saved.”
+  banner and requested a toast for this kind of notification, then requested a
+  sweep of the remaining inline notifications.
+- **Exceptions:** Validation errors, readiness warnings, ongoing progress and
+  guidance requiring action stay beside their relevant controls. Copy-link
+  feedback retains its brief check icon as specified below.
+  Errors use alert semantics and error styling, distinct from informational notices.
+
 ### Edit and add buttons use short labels
 
 - **Preference:** Use exactly “Edit” for edit buttons and “New” for add/create

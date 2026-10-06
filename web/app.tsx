@@ -64,6 +64,7 @@ import { Plugins } from "./plugins.tsx";
 import { prefixFields, RecordForm } from "./record-form.tsx";
 import { workspaceFields } from "./settings-fields.ts";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
+import { ToastProvider, useToast } from "./toast.tsx";
 import { Usage } from "./usage.tsx";
 import "./style.css";
 import { SiteDomain } from "./site-domain.tsx";
@@ -190,9 +191,15 @@ function Pager({ data }: { data: unknown }) {
     </div>
   );
 }
-function Notice({ children }: { children: ReactNode }) {
+function Notice({
+  children,
+  error = false,
+}: {
+  children: ReactNode;
+  error?: boolean;
+}) {
   return (
-    <p className="notice" role="status">
+    <p className="notice" role={error ? "alert" : "status"}>
       {children}
     </p>
   );
@@ -274,7 +281,7 @@ function Action({
           {busy || loading ? `${children}: Working…` : ""}
         </span>
       )}
-      {error && <Notice>{error}</Notice>}
+      {error && <Notice error>{error}</Notice>}
       {error.includes("version_conflict") && onConflict && (
         <button
           type="button"
@@ -371,7 +378,7 @@ function Auth({ claim, onDone }: { claim: boolean; onDone: () => void }) {
             autoComplete={claim ? "new-password" : "current-password"}
           />
         </Field>
-        {error && <Notice>{error}</Notice>}
+        {error && <Notice error>{error}</Notice>}
         <button className="auth-submit" type="submit" disabled={busy}>
           {busy ? "Please wait…" : claim ? "Create administrator" : "Sign in"}
         </button>
@@ -435,7 +442,7 @@ function Setup() {
         description="Create a workspace, connect Telegram and set up GitHub. Configure the model and activate the bot in the admin panel."
       >
         {error ? (
-          <Notice>{error}</Notice>
+          <Notice error>{error}</Notice>
         ) : (
           <>
             <nav className="setup-steps" aria-label="Setup steps">
@@ -821,7 +828,7 @@ function ModelSettings({ workspaceId }: { workspaceId: string }) {
   );
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<Progress>();
-  const [saved, setSaved] = useState(false);
+  const notify = useToast();
   const [identity, setIdentity] = useState<{ url: string; command: string }>();
   useEffect(() => {
     const timer = setInterval(reload, 5000);
@@ -834,7 +841,7 @@ function ModelSettings({ workspaceId }: { workspaceId: string }) {
         description="Connect your model provider, then activate the assistant when its receiver and skills are ready."
       >
         {error ? (
-          <Notice>{error}</Notice>
+          <Notice error>{error}</Notice>
         ) : (
           <ModelConfigurationCard loading onEdit={() => {}} />
         )}
@@ -864,11 +871,9 @@ function ModelSettings({ workspaceId }: { workspaceId: string }) {
         progress={data}
         loading={loading}
         onEdit={() => {
-          setSaved(false);
           setEditing(data);
         }}
       />
-      {saved && <p role="status">Model settings saved.</p>}
       {editing && (
         <Modal
           title="Edit model configuration"
@@ -885,7 +890,7 @@ function ModelSettings({ workspaceId }: { workspaceId: string }) {
             setSaving={setSaving}
             onSaved={() => {
               setEditing(undefined);
-              setSaved(true);
+              notify("Model settings saved.");
               reload();
             }}
           />
@@ -1078,7 +1083,7 @@ function SetupAccess({ workspaceId }: { workspaceId: string }) {
         Share the request link with teammates and approve them here, or add a
         known Telegram user ID directly. Only approved members can use the bot.
       </p>
-      {error && <Notice>{error}</Notice>}
+      {error && <Notice error>{error}</Notice>}
       {data?.requestUrl && (
         <Field label="Request access link">
           <input
@@ -1551,10 +1556,9 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
     settings: Settings;
   }>();
   const [editing, setEditing] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const notify = useToast();
   const [managingBot, setManagingBot] = useState(false);
   const [managingGitHub, setManagingGitHub] = useState(false);
-  const [botSaved, setBotSaved] = useState(false);
   useEffect(() => {
     if (resource === "overview" && data?.settings && data.version)
       setCurrent({ version: data.version, settings: data.settings });
@@ -1575,7 +1579,7 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
         )
       }
     >
-      {error && <Notice>{error}</Notice>}
+      {error && <Notice error>{error}</Notice>}
       <Pager data={data} />
       {data?.counts ? (
         <>
@@ -1616,7 +1620,6 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
                 <button
                   type="button"
                   onClick={() => {
-                    setBotSaved(false);
                     setManagingBot(true);
                   }}
                 >
@@ -1652,7 +1655,7 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
             <TelegramBotDialog
               onClose={() => setManagingBot(false)}
               onSaved={() => {
-                setBotSaved(true);
+                notify("Telegram bot token saved.");
                 reload();
               }}
             />
@@ -1665,7 +1668,6 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
               onClose={() => setManagingGitHub(false)}
             />
           )}
-          {botSaved && <Notice>Telegram bot token saved.</Notice>}
           {current && (
             <section className="card" aria-label="Team">
               <div className="row team-card-heading">
@@ -1678,7 +1680,6 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
                   label="Edit team configuration"
                   disabled={loading}
                   onClick={() => {
-                    setSaved(false);
                     setEditing(true);
                   }}
                 />
@@ -1695,7 +1696,6 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
                   </li>
                 ))}
               </ul>
-              {saved && <Notice>Team configuration saved.</Notice>}
             </section>
           )}
           {editing && current && (
@@ -1710,7 +1710,7 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
               onSaved={(updated) => {
                 setCurrent(updated);
                 setEditing(false);
-                setSaved(true);
+                notify("Team configuration saved.");
                 reload();
               }}
             />
@@ -1790,7 +1790,7 @@ function TelegramBotDialog({
       >
         {loadError && (
           <>
-            <Notice>{loadError}</Notice>
+            <Notice error>{loadError}</Notice>
             <Action loading={loading} onClick={async () => reload()}>
               Try again
             </Action>
@@ -1858,7 +1858,7 @@ function SettingsPage({ id }: { id: string }) {
         )
       }
     >
-      {error && <Notice>{error}</Notice>}
+      {error && <Notice error>{error}</Notice>}
       {!error && data && (
         <>
           <section className="card">
@@ -2197,7 +2197,7 @@ function MembersPage({ id }: { id: string }) {
         </>
       }
     >
-      {error && <Notice>{error}</Notice>}
+      {error && <Notice error>{error}</Notice>}
       <section className="card" aria-label="Workspace members">
         <h2>Members</h2>
         <Field label="Search members by name, username or ID">
@@ -2417,7 +2417,7 @@ function ChatsPage({ id }: { id: string }) {
       title="Group access"
       description="One explicitly connected group per workspace. Send /linktoken privately to the bot, then /link TOKEN in a group where you are an admin."
     >
-      {error && <Notice>{error}</Notice>}
+      {error && <Notice error>{error}</Notice>}
       <Pager data={data} />
       {data?.items.map((chat) => (
         <section className="card" key={chat.id}>
@@ -2493,7 +2493,7 @@ function ApprovalList({
   return (
     <section className="card">
       <h2>Awaiting your approval</h2>
-      {error && <Notice>{error}</Notice>}
+      {error && <Notice error>{error}</Notice>}
       {error && (
         <Action loading={loading} onClick={async () => reload()}>
           Try again
@@ -2604,7 +2604,7 @@ function WorkflowsPage({ id }: { id: string }) {
         </>
       }
     >
-      {error && <Notice>{error}</Notice>}
+      {error && <Notice error>{error}</Notice>}
       <Pager data={data} />
       {operatorData && (
         <p className="muted">
@@ -2782,7 +2782,7 @@ function SkillsPage({ id }: { id: string }) {
         </>
       }
     >
-      {error && <Notice>{error}</Notice>}
+      {error && <Notice error>{error}</Notice>}
       <Pager data={data} />
       <div className="row">
         <Field label="Search skills">
@@ -3055,7 +3055,7 @@ function InstructionsPage({ id }: { id: string }) {
         />
       }
     >
-      {error && <Notice>{error}</Notice>}
+      {error && <Notice error>{error}</Notice>}
       <Pager data={data} />
       {data?.items.map((i) => (
         <section className="card" key={i.id}>
@@ -3270,7 +3270,7 @@ function RunsPage({ id }: { id: string }) {
         </>
       }
     >
-      {error && <Notice>{error}</Notice>}
+      {error && <Notice error>{error}</Notice>}
       <Pager data={data} />
       {data?.total === 0 && (
         <section className="card">No assistant runs yet.</section>
@@ -3306,7 +3306,7 @@ function RunsPage({ id }: { id: string }) {
             {selectedRun.workflowVersion &&
               ` · Workflow v${selectedRun.workflowVersion}`}
           </p>
-          {selectedRun.error && <Notice>{selectedRun.error}</Notice>}
+          {selectedRun.error && <Notice error>{selectedRun.error}</Notice>}
           <RunMessages run={selectedRun} />
           {selectedRun.coverage && (
             <p className="muted">{selectedRun.coverage}</p>
@@ -3452,7 +3452,7 @@ function PrivacyPage({ id }: { id: string }) {
       title="Privacy & removal"
       description="Deletion revokes access immediately, cancels pending work, and purges stored content on the worker sweep."
     >
-      {error && <Notice>{error}</Notice>}
+      {error && <Notice error>{error}</Notice>}
       <section className="card">
         {data ? (
           <>
@@ -3536,7 +3536,7 @@ function Operations() {
       title="Operations"
       description="Service health and deployment controls. Operator privileges do not grant access to private conversations."
     >
-      {error && <Notice>{error}</Notice>}
+      {error && <Notice error>{error}</Notice>}
       <p>
         <NavLink to="/admin/logs">View runtime logs</NavLink>
       </p>
@@ -4050,7 +4050,7 @@ function Shell() {
             <SkeletonRows label="Deployment connection" rows={4} />
           </section>
         ) : error ? (
-          <Notice>{error}</Notice>
+          <Notice error>{error}</Notice>
         ) : !current ? (
           <Auth
             claim={!initialized}
@@ -4236,6 +4236,8 @@ const root = document.getElementById("root");
 if (root)
   createRoot(root).render(
     <BrowserRouter>
-      <Shell />
+      <ToastProvider>
+        <Shell />
+      </ToastProvider>
     </BrowserRouter>,
   );

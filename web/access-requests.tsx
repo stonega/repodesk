@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { AccessRequest } from "../src/domain.ts";
 import { IconButton } from "./icon-button.tsx";
 import { SkeletonRows } from "./skeleton.tsx";
+import { useToast } from "./toast.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 type Requests = {
@@ -24,7 +25,7 @@ export function AccessRequests({
   const endpoint = `/api/admin/workspaces/${id}/access-requests`;
   const [data, setData] = useState<Requests>();
   const [error, setError] = useState("");
-  const [status, setStatus] = useState("");
+  const notify = useToast();
   const [copyStatus, setCopyStatus] = useState<"copied" | "failed" | null>(
     null,
   );
@@ -60,14 +61,13 @@ export function AccessRequests({
     if (!data || busy) return;
     setBusy(true);
     setError("");
-    setStatus("");
     setCopyStatus(null);
     try {
       await request(`${endpoint}/${entry.id}/decision`, "POST", {
         decision,
         version: data.version,
       });
-      setStatus(`Access ${decision} for ${entry.name || entry.actor}.`);
+      notify(`Access ${decision} for ${entry.name || entry.actor}.`);
       onChange();
       await load();
     } catch (error) {
@@ -138,7 +138,6 @@ export function AccessRequests({
           {error}
         </p>
       )}
-      {status && <p role="status">{status}</p>}
       {loading && !data && !error && (
         <SkeletonRows label="Access requests" rows={2} />
       )}

@@ -74,6 +74,11 @@ Escape output content; do not render generated HTML as trusted UI.
 
 ## Configuration behavior
 
+Successful saves and routine action confirmations appear in a shared floating
+toast, announced politely and dismissible manually or after six seconds. Hover
+and keyboard focus pause dismissal. Validation errors, readiness warnings and
+ongoing progress remain beside the relevant controls.
+
 Store typed, validated settings with monotonically increasing versions. UI reads the
 current version and writes with an expected version; stale writes return a conflict
 with a diff/reload choice. Persist setting changes and audit entries atomically.

@@ -10,6 +10,7 @@ import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
 import { SkeletonRows } from "./skeleton.tsx";
+import { useToast } from "./toast.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 type View = "catalog" | "installed" | "market";
@@ -96,7 +97,7 @@ export function Plugins({
   const navigate = useNavigate();
   const [data, setData] = useState<PluginPage>();
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const notify = useToast();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string>();
@@ -165,7 +166,6 @@ export function Plugins({
     if (!data || busy) return false;
     setBusy(true);
     setError("");
-    setNotice("");
     try {
       setData(
         await request<PluginPage>(endpoint, "PUT", {
@@ -174,7 +174,7 @@ export function Plugins({
         }),
       );
       setEditing(undefined);
-      setNotice(
+      notify(
         "Plugins saved. New runs use these settings; runs with older settings stop before their next step.",
       );
       return true;
@@ -254,7 +254,6 @@ export function Plugins({
                 onClick={() => {
                   setEditing("__new");
                   setError("");
-                  setNotice("");
                 }}
               />
             </div>
@@ -268,11 +267,6 @@ export function Plugins({
                 >
                   Reload saved plugins
                 </button>
-              </p>
-            )}
-            {notice && (
-              <p className="notice" role="status">
-                {notice}
               </p>
             )}
             {data?.notice && (
@@ -397,11 +391,6 @@ export function Plugins({
                 </button>
               </p>
             )}
-            {notice && (
-              <p className="notice" role="status">
-                {notice}
-              </p>
-            )}
             {data?.notice && (
               <p className="notice" role="status">
                 {data.notice}
@@ -429,7 +418,6 @@ export function Plugins({
                       onClick={() => {
                         setEditing(selected.id);
                         setError("");
-                        setNotice("");
                       }}
                     />
                   </div>

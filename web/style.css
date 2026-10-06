@@ -821,6 +821,35 @@ button.github-repository-more:hover:not(:disabled) {
   background: var(--ui-danger-soft);
   color: var(--ui-danger);
 }
+.toast {
+  position: fixed;
+  right: max(20px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: max-content;
+  max-width: min(440px, calc(100vw - 40px));
+  padding: 12px 8px 12px 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  box-shadow: 0 8px 32px #17212b26;
+}
+.toast p {
+  margin: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.toast-icon {
+  flex: 0 0 auto;
+  color: var(--ui-success);
+}
+.toast .icon-button {
+  color: var(--ui-muted);
+}
 .pill {
   font-size: 12px;
   display: inline-block;

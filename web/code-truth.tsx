@@ -10,6 +10,7 @@ import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
+import { useToast } from "./toast.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 const explain = (error: unknown) => {
@@ -56,7 +57,7 @@ export function CodeTruth({
     repositories: [],
   });
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const notify = useToast();
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [editingRepository, setEditingRepository] = useState<number | "new">();
@@ -64,7 +65,6 @@ export function CodeTruth({
   const load = useCallback(async () => {
     setBusy(true);
     setError("");
-    setNotice("");
     try {
       const page = await request<CodeTruthPage>(endpoint);
       setData(page);
@@ -83,7 +83,6 @@ export function CodeTruth({
   const change = (value: CodeTruthSettings) => {
     setSettings(value);
     setDirty(true);
-    setNotice("");
     setStatus(undefined);
   };
   const update = (index: number, repo: CodeRepository) =>
@@ -97,7 +96,6 @@ export function CodeTruth({
     if (!data || busy) return;
     setBusy(true);
     setError("");
-    setNotice("");
     try {
       const page = await request<CodeTruthPage>(endpoint, "PUT", {
         revision: data.revision,
@@ -111,7 +109,7 @@ export function CodeTruth({
         setDirty(false);
       }
       setStatus(undefined);
-      setNotice(
+      notify(
         "Code Truth saved. These settings apply to new runs in this workspace.",
       );
     } catch (error) {
@@ -152,11 +150,6 @@ export function CodeTruth({
           <button type="button" disabled={busy} onClick={() => void load()}>
             Reload Code Truth
           </button>
-        </p>
-      )}
-      {notice && (
-        <p role="status" className="notice">
-          {notice}
         </p>
       )}
       <section
@@ -338,13 +331,13 @@ export function CodeTruth({
               setBusy(true);
               setError("");
               try {
-                setStatus(
-                  await request<CodeTruthStatus>(
-                    `${endpoint}/status`,
-                    "POST",
-                    {},
-                  ),
+                const result = await request<CodeTruthStatus>(
+                  `${endpoint}/status`,
+                  "POST",
+                  {},
                 );
+                setStatus(result);
+                if (!result.syncing) notify("Index status refreshed.");
               } catch (error) {
                 setError(explain(error));
               } finally {
@@ -356,12 +349,10 @@ export function CodeTruth({
           </button>
         </div>
         {status && (
-          <div role="status">
-            <p>
-              {status.syncing
-                ? "Indexing in progress. Check again shortly."
-                : "Index status refreshed."}
-            </p>
+          <div>
+            {status.syncing && (
+              <p role="status">Indexing in progress. Check again shortly.</p>
+            )}
             {status.targets.map((t) => (
               <div key={t.target}>
                 <h3>{t.target}</h3>

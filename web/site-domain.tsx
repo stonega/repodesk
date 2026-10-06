@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { SiteView } from "../src/admin/site.ts";
 import { Modal, ModalActions } from "./modal.tsx";
 import { Skeleton } from "./skeleton.tsx";
+import { useToast } from "./toast.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 const endpoint = "/api/admin/operator/site";
@@ -13,7 +14,7 @@ export function SiteDomain({ request }: { request: Request }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [formError, setFormError] = useState("");
-  const [message, setMessage] = useState("");
+  const notify = useToast();
   const [reload, setReload] = useState(0);
   useEffect(() => {
     void reload;
@@ -35,7 +36,6 @@ export function SiteDomain({ request }: { request: Request }) {
     if (!site || busy) return;
     setBusy(true);
     setFormError("");
-    setMessage("");
     try {
       const saved = await request<SiteView>(endpoint, "PUT", {
         revision: site.revision,
@@ -43,7 +43,7 @@ export function SiteDomain({ request }: { request: Request }) {
       });
       setSite(saved);
       setEditing(false);
-      setMessage(
+      notify(
         "Site address saved. Sign in at the new address after DNS and HTTPS are ready.",
       );
     } catch (error) {
@@ -66,7 +66,6 @@ export function SiteDomain({ request }: { request: Request }) {
           </button>
         </p>
       )}
-      {message && <p role="status">{message}</p>}
       <section className="card" aria-busy={!site && !error}>
         <div className="row">
           <h2>Admin panel address</h2>
@@ -217,7 +216,7 @@ export function SiteDomain({ request }: { request: Request }) {
                 try {
                   await request("/api/setup/webhook", "POST", {});
                   setSite(await request<SiteView>(endpoint));
-                  setMessage("Telegram webhook registered.");
+                  notify("Telegram webhook registered.");
                 } catch (error) {
                   setError((error as Error).message);
                 } finally {
