@@ -98,9 +98,10 @@ export function GitHubRegistration({
             }}
           >
             <p>
-              Confirm creation on GitHub with source read access and permission
-              to create issues. Your App will be available to your workspaces;
-              each workspace chooses its own repositories.
+              Confirm creation on GitHub with read and write access to
+              repository code, issues and pull requests for coding tasks. Your
+              App will be available to your workspaces; each workspace chooses
+              its own repositories.
             </p>
             <fieldset disabled={busy} className="plugin-fields">
               <label className="field">

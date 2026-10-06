@@ -6,6 +6,13 @@ import { Fault, requireThat } from "../domain.ts";
 import { decrypt, encrypt } from "../setup/credentials.ts";
 import { GitHubApp, type GitHubAppConfig } from "./app.ts";
 
+export const githubAppPermissions = {
+  contents: "write",
+  metadata: "read",
+  issues: "write",
+  pull_requests: "write",
+} as const;
+
 const account = z
   .string()
   .regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/);
@@ -114,12 +121,10 @@ export class GitHubApps {
         400,
       );
       requireThat(
-        data.permissions.contents === "read" &&
-          data.permissions.issues === "write" &&
-          Object.entries(data.permissions).every(
-            ([name, level]) =>
-              (name === "issues" && level === "write") ||
-              (["contents", "metadata"].includes(name) && level === "read"),
+        Object.keys(data.permissions).length ===
+          Object.keys(githubAppPermissions).length &&
+          Object.entries(githubAppPermissions).every(
+            ([name, level]) => data.permissions[name] === level,
           ),
         "github_registration_failed",
         400,

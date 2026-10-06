@@ -1401,9 +1401,10 @@ test.describe
           );
           expect(manifest.public).toBe(false);
           expect(manifest.default_permissions).toEqual({
-            contents: "read",
+            contents: "write",
             metadata: "read",
             issues: "write",
+            pull_requests: "write",
           });
           expect(manifest.hook_attributes).toEqual({
             url: "https://example.com/github/webhook",

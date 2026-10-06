@@ -187,9 +187,10 @@ const url = process.env.TEST_DATABASE_URL;
     expect(result.manifest).toMatchObject({
       public: false,
       default_permissions: {
-        contents: "read",
+        contents: "write",
         metadata: "read",
         issues: "write",
+        pull_requests: "write",
       },
       default_events: [],
       hook_attributes: {
@@ -199,6 +200,12 @@ const url = process.env.TEST_DATABASE_URL;
       callback_urls: [`${origin}/api/admin/github/callback`],
       redirect_url: `${origin}/api/admin/github/app/callback`,
     });
+    expect(result.manifest.default_permissions).toEqual({
+      contents: "write",
+      metadata: "read",
+      issues: "write",
+      pull_requests: "write",
+    });
     expect(JSON.stringify(result)).not.toContain("secret");
     const personal = await service.register(admin, id, hash(auth.raw), {
       owner: "personal",
@@ -207,6 +214,9 @@ const url = process.env.TEST_DATABASE_URL;
     });
     expect(new URL(personal.url).pathname).toBe("/settings/apps/new");
     expect(personal.manifest.public).toBe(true);
+    expect(personal.manifest.default_permissions).toEqual(
+      result.manifest.default_permissions,
+    );
     expect(personal.manifest.hook_attributes).toEqual({
       url: "https://example.com/github/webhook",
       active: false,
@@ -415,8 +425,21 @@ const url = process.env.TEST_DATABASE_URL;
   });
   test("invalid permission/owner/key responses are rejected without persisting secrets", async () => {
     const upstream = githubTransport();
+    const permissions = {
+      contents: "write",
+      metadata: "read",
+      issues: "write",
+      pull_requests: "write",
+    };
     for (const override of [
       { permissions: { contents: "write" } },
+      { permissions: { contents: "read", metadata: "read", issues: "write" } },
+      { permissions: { ...permissions, contents: "read" } },
+      { permissions: { ...permissions, pull_requests: "read" } },
+      { permissions: { ...permissions, metadata: "write" } },
+      { permissions: { ...permissions, actions: "write" } },
+      { permissions: { ...permissions, workflows: "write" } },
+      { permissions: { ...permissions, members: "read" } },
       { owner: { login: "wrong-org" } },
       { pem: "not-a-private-key" },
     ]) {

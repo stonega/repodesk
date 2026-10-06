@@ -7,7 +7,11 @@ import { decrypt, encrypt, hash, token } from "../setup/credentials.ts";
 import { audit } from "../workspaces/policy.ts";
 import type { GitHubApp } from "./app.ts";
 import type { GitHubPage } from "./config.ts";
-import { GitHubApps, registrationInput } from "./registry.ts";
+import {
+  GitHubApps,
+  githubAppPermissions,
+  registrationInput,
+} from "./registry.ts";
 import { RepositorySync } from "./repository-sync.ts";
 
 import { GitHubUsers } from "./users.ts";
@@ -229,11 +233,7 @@ export class GitHubService {
         },
         public: input.public,
         request_oauth_on_install: false,
-        default_permissions: {
-          contents: "read",
-          metadata: "read",
-          issues: "write",
-        },
+        default_permissions: { ...githubAppPermissions },
         default_events: [],
       },
     };

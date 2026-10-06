@@ -1,0 +1,27 @@
+# Use the existing workspace operator's session; never commit real session cookies.
+@origin = http://localhost:3000
+@workspace = REPLACE_WORKSPACE_UUID
+@csrf = REPLACE_CSRF_TOKEN
+
+### Inspect the existing App/connection. Existing Apps require GitHub permission approval.
+GET {{origin}}/api/admin/workspaces/{{workspace}}/github
+
+### For a workspace whose operator has no registered App, prepare creation.
+# Returns the manifest/form destination; confirm App creation on GitHub separately.
+# Expected default_permissions: contents=write, issues=write,
+# pull_requests=write, metadata=read. No extra permissions or webhook events.
+# Existing Apps return github_app_already_configured and are never replaced.
+POST {{origin}}/api/admin/workspaces/{{workspace}}/github/register
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "owner": "personal",
+  "name": "RepoDesk",
+  "public": false
+}
+
+### Inspect configured coding targets after accepting the installation update on GitHub.
+# This GET does not start a task or publish code.
+GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding

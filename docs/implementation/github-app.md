@@ -18,8 +18,11 @@ repository-scoped issue submission. No personal token is accepted by the web pan
    organization, or when supporting other accounts.
 3. Setup sends the manifest when you click **Connect GitHub**. In Plugins, click
    **Continue to GitHub**. Confirm creation on GitHub. The manifest preconfigures
-   Contents/Metadata read access, Issues write access, no webhook events, and the
-   deployment's callbacks.
+   Contents, Issues and Pull requests read/write access, Metadata read access,
+   no webhook events, and the deployment's callbacks. These permissions support
+   Codex checkout and draft PR publication; coding policies and task authorization
+   still control each operation. The callback accepts exactly this permission set
+   and rejects missing grants or additional permissions.
    GitHub requires a publicly addressable webhook URL even when delivery is disabled.
    The inactive hook uses `https://example.com/github/webhook` as a reserved-domain
    placeholder. It receives no events; local browser callback URLs remain unchanged.
@@ -74,9 +77,11 @@ its pending registration flows but retains the operator's shared App credentials
    `PUBLIC_ORIGIN/api/admin/github/callback`, for example
    `http://localhost:3000/api/admin/github/callback` for this local deployment.
    A production origin uses HTTPS. The URL must match exactly; no extra query parameters.
-3. Grant **Repository permissions → Contents: Read-only**. Metadata read access is
-   included by GitHub. Grant **Issues: Read and write** for issue submission. No
-   Contents write or organization permissions are required.
+3. For the full coding workflow, grant **Repository permissions → Contents: Read
+   and write**, **Issues: Read and write** and **Pull requests: Read and write**.
+   Metadata read access is included by GitHub. Code Truth alone uses Contents-read
+   tokens; issue submission uses Issues-write tokens. Organization and Actions
+   permissions are unnecessary for these workflows.
 4. A setup URL is unnecessary: the panel authorizes the user first, then lists their
    App installations. Leave webhooks disabled for this implementation; there is no
    webhook receiver. Installation suspension/removal is checked when minting tokens.
@@ -217,7 +222,33 @@ The guided creation flow uses [GitHub App Manifests](https://docs.github.com/en/
 Reference inspected: Coolify commit `89e8506023af83016e3ccd64dc1327f51a7f8674`,
 [manifest form](https://github.com/coollabsio/coolify/blob/89e8506023af83016e3ccd64dc1327f51a7f8674/resources/views/livewire/source/github/change.blade.php#L345)
 and [server-side conversion](https://github.com/coollabsio/coolify/blob/89e8506023af83016e3ccd64dc1327f51a7f8674/app/Http/Controllers/Webhook/Github.php#L509).
-RepoDesk requests source-read and issue-write permissions and keeps its own session/tenant checks.
+RepoDesk requests Contents, Issues and Pull requests write permissions plus Metadata
+read, and keeps its own session/tenant checks. Installation tokens remain scoped to
+the selected repository and operation; Code Truth receives only source-read tokens.
+
+## Update an existing App for Codex
+
+Changing RepoDesk's new-App manifest does not update Apps already registered on
+GitHub. For an existing App, open its **Permissions & events → Repository
+permissions** and set Contents and Pull requests to **Read and write**, retaining
+Issues **Read and write** and mandatory Metadata **Read-only**. Save changes.
+At [Installed GitHub Apps](https://github.com/settings/installations), open
+**Review request** for the matching installation and choose **Accept new
+permissions**. Organization owners may need to approve organization installations.
+The new permissions apply only after installation approval; reconnecting RepoDesk
+does not grant them. See [GitHub's permission-update guidance](https://docs.github.com/en/apps/maintaining-github-apps/modifying-a-github-app-registration#changing-the-permissions-of-a-github-app).
+
+Keep the existing repository selection unless intentionally changing it. An
+installation configured for **All repositories** receives the accepted write
+permissions for all repositories it can access; application task checks still
+restrict RepoDesk's operations to selected workspace repositories.
+
+Validate both a Contents-read/Pull-requests-read token (Direct preparation) and a
+Contents-write/Pull-requests-write token (publication) scoped to the configured
+repository. A Contents-read checkout alone does not prove the publication grant.
+`github_app_permissions_missing` means the requested scope is still unavailable.
+This check requires neither a model call nor a push, issue or PR. See the
+[registration request example](../../examples/github-app-permissions.http).
 
 ## Submit an issue from Telegram
 
