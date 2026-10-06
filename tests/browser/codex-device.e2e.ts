@@ -256,3 +256,33 @@ test("title switch persists enablement and retains the saved state when a stale 
     fullPage: true,
   });
 });
+
+test("device-login network failures explain server connectivity and preserve retry", async ({
+  page,
+}) => {
+  const { dialog } = await fixture(page, { state: "disconnected" });
+  await page.route(`**${endpoint}/device/start`, (route) =>
+    route.fulfill({
+      status: 503,
+      json: {
+        error: "coding_device_login_network_failed",
+        detail: "private-token-fixture",
+      },
+    }),
+  );
+  await dialog
+    .getByRole("button", { name: "Sign in with device code" })
+    .click();
+  await expect(dialog.getByRole("alert")).toContainText(
+    "secure connection to OpenAI",
+  );
+  await expect(dialog.getByRole("alert")).not.toContainText(
+    "private-token-fixture",
+  );
+  await expect(
+    dialog.getByRole("button", { name: "Sign in with device code" }),
+  ).toBeEnabled();
+  await expect(
+    dialog.getByRole("button", { name: "Recheck connection" }),
+  ).toBeEnabled();
+});

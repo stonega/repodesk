@@ -120,6 +120,20 @@ through the supervisor proxy and uses `env_key = "CODEX_TASK_TOKEN"`. This
 temporary token authorizes only model requests while that task is running; it
 cannot call runner management endpoints. Setup and checks do not inherit it.
 
+The supervisor explicitly installs system CA certificates for native Codex HTTPS
+requests; its build and health checks verify the bundle. See the
+[device-login incident](../../postmortem/2026-10-06-codex-device-auth-ca.md).
+Login transport errors are reported separately from rejected or unavailable device
+login, without exposing raw CLI output. Failed reauthentication preserves sealed
+auth-required state for paused tasks. Cancellation terminates both the npm launcher
+and native CLI in that login's isolated process group.
+
+Operators can run **Actions → Diagnose Codex device login → Run workflow** to
+probe the deployed runner's actual CLI and OpenAI auth connectivity. It uses a
+fresh temporary Codex home, cancels the pending request, and removes that home.
+It never reads existing account caches or prints device codes, credentials or
+raw CLI output; logs contain only status codes and diagnostic flags.
+
 For **ChatGPT device code**, save the authentication method, then select
 **Sign in with device code**. Open the displayed OpenAI link, sign in and enter
 the one-time code. Device login must be enabled in the account's ChatGPT

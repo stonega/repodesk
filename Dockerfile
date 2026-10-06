@@ -31,12 +31,13 @@ FROM docker:29-cli@sha256:b1805116a6a86cc591b5d5f60a910a0715cdcc9d18d866ad68b145
 FROM runtime AS codex-supervisor
 COPY --from=docker-client /usr/local/bin/docker /usr/local/bin/docker
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends podman \
+RUN apt-get update && apt-get install -y --no-install-recommends podman ca-certificates \
+    && test -s /etc/ssl/certs/ca-certificates.crt \
     && npm install -g @openai/codex@0.155.1 \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
 HEALTHCHECK --interval=30s --timeout=5s \
-  CMD node -e "fetch('http://127.0.0.1:3020/readyz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+  CMD node -e "require('fs').accessSync('/etc/ssl/certs/ca-certificates.crt');fetch('http://127.0.0.1:3020/readyz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 CMD ["node", "dist/runner-server.js"]
 
 # Reused for preparation, isolated implementation, and fresh PR publication.

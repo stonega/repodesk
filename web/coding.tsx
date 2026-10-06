@@ -29,7 +29,13 @@ function message(error: unknown) {
     coding_device_auth_required:
       "Connect a ChatGPT account with device code before starting coding tasks.",
     coding_device_login_unavailable:
-      "Device sign-in could not start. Check that the runner is available and device login is enabled in ChatGPT.",
+      "Device sign-in could not start. Retry, or check the runner's connection to OpenAI.",
+    coding_device_login_network_failed:
+      "Codex could not establish a secure connection to OpenAI. Check the runner's network and certificates, then retry.",
+    coding_device_login_rejected:
+      "OpenAI refused the server's device sign-in request. Check the deployment's access to OpenAI, then retry.",
+    coding_device_login_disabled:
+      "Device-code sign-in is unavailable. Enable device login in your ChatGPT security settings or ask your workspace administrator.",
     coding_device_login_busy:
       "Too many device sign-ins are pending. Finish or cancel another sign-in first.",
     coding_runner_not_configured:

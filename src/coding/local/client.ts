@@ -47,7 +47,15 @@ export class LocalRunnerClient implements LocalRunner, LocalDeviceAuth {
       }
       if (response.status === 503 && path.includes("/device-auth/")) {
         const error = (await response.json()) as { error?: string };
-        if (error.error === "coding_device_login_unavailable")
+        if (
+          error.error &&
+          [
+            "coding_device_login_unavailable",
+            "coding_device_login_network_failed",
+            "coding_device_login_rejected",
+            "coding_device_login_disabled",
+          ].includes(error.error)
+        )
           throw new Fault(error.error, 503);
       }
       if (!response.ok)

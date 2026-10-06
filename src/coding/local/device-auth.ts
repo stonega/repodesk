@@ -213,12 +213,13 @@ export class DeviceAuth {
     const child = spawn(this.binary, ["login", "--device-auth"], {
       env: { PATH: process.env.PATH, HOME: "/tmp", CODEX_HOME: home },
       stdio: ["pipe", "pipe", "pipe"],
+      detached: process.platform !== "win32",
     });
     const closed = new Promise<void>((resolve) => {
       child.once("close", resolve);
       child.once("error", resolve);
     });
-    const timer = setTimeout(() => child.kill("SIGKILL"), 16 * 60 * 1000);
+    const timer = setTimeout(() => this.killLogin(child), 16 * 60 * 1000);
     timer.unref();
     const login: PendingLogin = {
       child,
@@ -284,20 +285,48 @@ export class DeviceAuth {
     }
     if (login.verificationUrl && login.userCode)
       return this.status(workspaceId);
-    await this.logout(workspaceId);
-    throw new Fault("coding_device_login_unavailable", 503);
+    const failure = /device code login is not enabled/i.test(login.output)
+      ? "coding_device_login_disabled"
+      : /device code request failed with status (?:401|403)\b/i.test(
+            login.output,
+          )
+        ? "coding_device_login_rejected"
+        : /error sending request|certificate|dns error|connect error/i.test(
+              login.output,
+            )
+          ? "coding_device_login_network_failed"
+          : "coding_device_login_unavailable";
+    await this.cancelLogin(workspaceId);
+    await rm(join(home, "auth.json"), { force: true });
+    this.failed.add(workspaceId);
+    throw new Fault(failure, 503);
   }
-  async logout(workspaceId: string): Promise<DeviceAuthStatus> {
-    z.uuid().parse(workspaceId);
+  private killLogin(child: ChildProcessWithoutNullStreams) {
+    // npm launches a native child; killing only the JS launcher leaves its pipes open.
+    if (child.pid && process.platform !== "win32") {
+      try {
+        process.kill(-child.pid, "SIGKILL");
+        return;
+      } catch {
+        // A child that already exited has no process group to signal.
+      }
+    }
+    child.kill("SIGKILL");
+  }
+  private async cancelLogin(workspaceId: string) {
     const login = this.pending.get(workspaceId);
     if (login) {
       login.cancelled = true;
       clearTimeout(login.timer);
-      login.child.kill("SIGKILL");
+      this.killLogin(login.child);
       await login.closed;
       await login.completion;
       this.pending.delete(workspaceId);
     }
+  }
+  async logout(workspaceId: string): Promise<DeviceAuthStatus> {
+    z.uuid().parse(workspaceId);
+    await this.cancelLogin(workspaceId);
     await this.serial(() =>
       rm(this.home(workspaceId), { recursive: true, force: true }),
     );
