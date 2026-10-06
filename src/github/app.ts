@@ -78,14 +78,6 @@ export class GitHubApp {
       throw new Fault("github_unavailable", 502);
     }
   }
-  async repositoryPrivate(token: string, repository: string) {
-    const result = z
-      .object({ private: z.boolean() })
-      .parse(
-        await this.request(`https://api.github.com/repos/${repository}`, token),
-      );
-    return result.private;
-  }
   async exchange(code: string, verifier: string, callback: string) {
     const data = await this.request(
       "https://github.com/login/oauth/access_token",

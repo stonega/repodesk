@@ -50,12 +50,6 @@ export function codingDestination(
     "github_repository_not_connected",
     409,
   );
-  if (w.coding.settings.authMode === "device_code")
-    requireThat(
-      repo.private === true,
-      "coding_device_private_repository_required",
-      409,
-    );
   return codingPayload.parse({
     ...input,
     repository: repo.full_name,

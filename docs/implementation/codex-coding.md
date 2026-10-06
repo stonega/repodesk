@@ -80,8 +80,9 @@ it enables no new execution policy by itself. See [delivery evidence and rollout
    Choose **Custom provider API key** or **ChatGPT device code**
    in the panel. The custom provider endpoint and model are deployment settings;
    its key is saved per workspace (with an optional deployment fallback). Device
-   code sign-in shows a link and one-time code in the panel and is available only
-   for trusted private repositories. Enable the extension after signing in.
+   code sign-in shows a link and one-time code in the panel. Both authentication
+   methods support connected public and private repositories; repository access
+   uses the workspace GitHub App. Enable the extension after signing in.
    Starting sign-in displays progress and times out after 20 seconds if no response
    arrives. Use **Recheck connection** to recover runner availability or an
    uncertain sign-in response without closing the editor or losing its draft.
@@ -119,9 +120,10 @@ branch, issue title and body. A Telegram approval binds the initiating actor to
 creating the issue, running Codex locally, pushing a task branch and opening a
 draft PR. Approval expires after 15 minutes. Another actor cannot approve it.
 
-Before reserving issue creation, the worker checks GitHub's current repository
-visibility to block device-code tasks if a selected repository has become public.
-It checks again before starting Codex.
+Model authentication does not grant repository access. The worker uses the
+connected GitHub App to mint a fresh installation token scoped to the selected
+repository and the current operation, for both public and private repositories.
+Maintainer, connected-repository and approval/direct-policy checks still apply.
 The worker creates the issue after a durable reservation. The supervisor uses
 separate preparation, environment initialization, implementation, verification and publication containers. Only the
 preparation container gets a repository read token; Codex and checks run without a

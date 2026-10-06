@@ -144,15 +144,9 @@ const url = process.env.TEST_DATABASE_URL;
     let onToken: (() => Promise<void>) | undefined;
     let confirmUnknown = false;
     let remoteHead = "b".repeat(40),
-      closed = false,
-      repositoryPrivate = true;
+      closed = false;
     const app = new GitHubApp(githubFixtureConfig, (async (input, init) => {
       if (String(input).endsWith("/access_tokens")) await onToken?.();
-      if (String(input).endsWith("/repos/example/workspace"))
-        return Response.json({
-          full_name: "example/workspace",
-          private: repositoryPrivate,
-        });
       if (String(input).includes("/pulls?"))
         return Response.json(
           confirmUnknown
@@ -246,9 +240,10 @@ const url = process.env.TEST_DATABASE_URL;
       close: () => {
         closed = true;
       },
-      makePublic: () => {
-        repositoryPrivate = false;
-      },
+      makePublic: () =>
+        store.change(w.id, (current) => {
+          present(present(current.github).repositories[0]).private = false;
+        }),
       head: (sha: string) => {
         remoteHead = sha;
       },
@@ -683,6 +678,19 @@ const url = process.env.TEST_DATABASE_URL;
       },
     };
   }
+  for (const visibility of ["private", "public"]) {
+    test(`account-auth direct tasks use the connected GitHub App for ${visibility} repositories`, async () => {
+      const f = await fixture();
+      await configureDevice(f);
+      if (visibility === "public") await f.makePublic();
+      expect((await f.tick()).state).toBe("working");
+      expect(f.starts).toHaveLength(1);
+      expect(f.starts[0]?.readToken).toBe("ghs_fixture_installation_secret");
+      expect(f.starts[0]?.payload.authMode).toBe("device_code");
+      await f.tick();
+      expect(f.starts).toHaveLength(1);
+    });
+  }
   test("missing account pauses before reservation and reconnect queues without another confirmation", async () => {
     const f = await fixture();
     const device = await configureDevice(f);
@@ -790,22 +798,21 @@ const url = process.env.TEST_DATABASE_URL;
     expect(resumes).toBe(0);
     expect(f.cancels).toHaveLength(1);
   });
-  test("a repository made public during auth wait cannot resume with account credentials", async () => {
+  test("a connected repository made public during auth wait resumes with account credentials", async () => {
     const f = await fixture();
     const device = await configureDevice(f);
     await f.tick();
     device.connect(false);
     await f.tick({ state: "auth_required", tokens: 7 });
-    f.makePublic();
+    await f.makePublic();
     device.connect(true);
     let resumes = 0;
     device.runner.resumeAuth = async () => {
       resumes++;
     };
-    expect((await f.tick()).error).toBe(
-      "coding_device_private_repository_required",
-    );
-    expect(resumes).toBe(0);
-    expect(f.cancels).toHaveLength(1);
+    expect((await f.tick()).state).toBe("working");
+    expect(resumes).toBe(1);
+    expect(f.cancels).toHaveLength(0);
+    expect(f.starts[0]?.readToken).toBe("ghs_fixture_installation_secret");
   });
 });

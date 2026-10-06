@@ -25,8 +25,6 @@ function message(error: unknown) {
       "Select maintainers who currently have workspace access.",
     github_repository_not_connected:
       "Connect the selected repository in GitHub before saving.",
-    coding_device_private_repository_required:
-      "ChatGPT device sign-in is limited to trusted private repositories. Reconnect GitHub if this repository is private but its visibility is unknown.",
     coding_device_auth_required:
       "Connect a ChatGPT account with device code before starting coding tasks.",
     coding_device_login_unavailable:
@@ -715,8 +713,10 @@ export function Coding({
                                 : "No ChatGPT account connected."}
                 </p>
                 <p className="muted">
-                  Use only with trusted private repositories. Account tokens are
-                  available to Codex while it implements a task.
+                  Repository access uses your connected GitHub App for public
+                  and private repositories. ChatGPT sign-in authenticates Codex.
+                  Use trusted code: account tokens are available during
+                  implementation.
                 </p>
                 {data.settings.authMode !== "device_code" ? (
                   <p className="muted">

@@ -49,7 +49,8 @@ Content-Type: application/json
 
 ### Poll the coding GET above for deviceAuth.state = "connected".
 # auth_required means reconnect using device/start above. Retained paused tasks
-# resume automatically after current authority/private visibility checks; no task-start POST is needed.
+# resume automatically after current authority/GitHub access checks; no task-start POST is needed.
+# Public and private repositories use the connected GitHub App for repository access.
 # Stop or disconnect prevents this continuation. Checkpoint retention still applies.
 # Disconnect removes the workspace login and invalidates pending approvals.
 POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding/device/logout

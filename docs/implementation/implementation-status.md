@@ -1040,3 +1040,23 @@ connected, failed-login retry, and timeout followed by recovery of a pending cod
 The live `dev.stonegate.me` configuration dialog was inspected and reported the
 runner unavailable; no live account login, model call or deployment was performed.
 Restoring that deployment's runner and applying this UI change remain outstanding.
+
+## Codex repository access through the connected GitHub App (2026-10-06)
+
+Both Codex model authentication methods now support selected public and private
+repositories. The connected workspace GitHub App supplies fresh installation
+tokens scoped to the repository and operation, including private checkout access.
+ChatGPT account authentication no longer adds a repository-visibility restriction.
+Maintainer grants, connected-repository checks, account sign-in, reviewed approvals,
+explicit Direct execution policy and publication fencing remain enforced.
+
+Removed the private-only checks during proposal, reviewed issue creation, runner
+start and continuous-task authentication recovery. Updated panel guidance and
+operator examples. Historical private-only behavior above describes older builds.
+
+Validation: lint, strict typecheck and build passed. All 400 deterministic tests
+passed against disposable PostgreSQL with loopback traffic excluded from the host
+proxy. Coverage includes public/private reviewed and direct starts, scoped GitHub
+credentials, denied GitHub access, duplicate dispatch, maintainer boundaries and
+account recovery after repository visibility changes. No production configuration,
+account connection, GitHub write, Telegram send or deployment was performed.

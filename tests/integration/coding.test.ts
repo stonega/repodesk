@@ -101,7 +101,7 @@ const url = process.env.TEST_DATABASE_URL;
   function provider(
     options: {
       issueStatus?: number;
-      repositoryPrivate?: boolean;
+      tokenStatus?: number;
       onToken?: () => Promise<void>;
       local?: LocalRunner;
     } = {},
@@ -114,9 +114,14 @@ const url = process.env.TEST_DATABASE_URL;
     ) => {
       const url = String(input);
       requests.push({ url, init });
-      if (url.endsWith("/access_tokens")) await options.onToken?.();
-      if (url.endsWith("/repos/example/workspace"))
-        return Response.json({ private: options.repositoryPrivate ?? true });
+      if (url.endsWith("/access_tokens")) {
+        await options.onToken?.();
+        if (options.tokenStatus)
+          return Response.json(
+            { message: "denied" },
+            { status: options.tokenStatus },
+          );
+      }
       if (url.endsWith("/issues"))
         return Response.json(
           { number: 42 },
@@ -322,9 +327,11 @@ const url = process.env.TEST_DATABASE_URL;
 
   function localFixture() {
     const calls: string[] = [];
+    const starts: LocalStart[] = [];
     let state: LocalStatus = { state: "running" };
     const runner: LocalRunner = {
-      async start() {
+      async start(input) {
+        starts.push(input);
         calls.push("start");
       },
       async status() {
@@ -343,6 +350,7 @@ const url = process.env.TEST_DATABASE_URL;
     return {
       runner,
       calls,
+      starts,
       set: (value: LocalStatus) => {
         state = value;
       },
@@ -368,55 +376,58 @@ const url = process.env.TEST_DATABASE_URL;
       false,
     );
   });
-  test("device auth rejects a repository that became public before issue creation", async () => {
+  for (const privateRepository of [true, false]) {
+    test(`account-auth tasks use GitHub App credentials for ${privateRepository ? "private" : "public"} repositories`, async () => {
+      const { id, taskId } = await fixture();
+      await store.change(id, (w) => {
+        present(w.coding).settings.authMode = "device_code";
+        present(present(w.github).repositories[0]).private = privateRepository;
+        present(w.codingTasks?.[0]).payload.authMode = "device_code";
+      });
+      const local = localFixture();
+      (local.runner as LocalRunner & LocalDeviceAuth).deviceStatus =
+        async () => ({ state: "connected" });
+      const { service, requests } = provider({ local: local.runner });
+      await service.advance(id, taskId);
+      expect((await read(id)).state).toBe("issue_created");
+      await ready(id);
+      await service.advance(id, taskId);
+      expect((await read(id)).state).toBe("running");
+      expect(local.starts).toHaveLength(1);
+      expect(local.starts[0]?.readToken).toBe(
+        "ghs_fixture_installation_secret",
+      );
+      expect(local.starts[0]?.payload.authMode).toBe("device_code");
+      const tokens = requests.filter((r) => r.url.endsWith("/access_tokens"));
+      expect(tokens.map((r) => JSON.parse(String(r.init.body)))).toEqual([
+        { repository_ids: [7001], permissions: { issues: "write" } },
+        { repository_ids: [7001], permissions: { contents: "read" } },
+      ]);
+      const issue = present(requests.find((r) => r.url.endsWith("/issues")));
+      expect(new Headers(issue.init.headers).get("authorization")).toBe(
+        "Bearer ghs_fixture_installation_secret",
+      );
+      await service.advance(id, taskId);
+      expect(local.starts).toHaveLength(1);
+    });
+  }
+  test("account auth cannot bypass denied GitHub App repository access", async () => {
     const { id, taskId } = await fixture();
     await store.change(id, (w) => {
       present(w.coding).settings.authMode = "device_code";
-      present(present(w.github).repositories[0]).private = true;
       present(w.codingTasks?.[0]).payload.authMode = "device_code";
     });
     const local = localFixture();
     (local.runner as LocalRunner & LocalDeviceAuth).deviceStatus =
-      async () => ({
-        state: "connected",
-      });
+      async () => ({ state: "connected" });
     const { service, requests } = provider({
       local: local.runner,
-      repositoryPrivate: false,
+      tokenStatus: 403,
     });
     await service.advance(id, taskId);
-    expect((await read(id)).error).toBe(
-      "coding_device_private_repository_required",
-    );
-    expect(requests.some((request) => request.url.endsWith("/issues"))).toBe(
-      false,
-    );
-    expect(local.calls).toHaveLength(0);
-  });
-  test("device auth rechecks privacy before starting the local container", async () => {
-    const { id, taskId } = await fixture();
-    await store.change(id, (w) => {
-      present(w.coding).settings.authMode = "device_code";
-      present(present(w.github).repositories[0]).private = true;
-      present(w.codingTasks?.[0]).payload.authMode = "device_code";
-    });
-    const local = localFixture();
-    (local.runner as LocalRunner & LocalDeviceAuth).deviceStatus =
-      async () => ({
-        state: "connected",
-      });
-    await provider({ local: local.runner }).service.advance(id, taskId);
-    expect((await read(id)).state).toBe("issue_created");
-    await ready(id);
-    const { service } = provider({
-      local: local.runner,
-      repositoryPrivate: false,
-    });
-    await service.advance(id, taskId);
-    expect((await read(id)).error).toBe(
-      "coding_device_private_repository_required",
-    );
-    expect(local.calls).toHaveLength(0);
+    expect((await read(id)).error).toBe("github_access_denied");
+    expect(requests.some((r) => r.url.endsWith("/issues"))).toBe(false);
+    expect(local.starts).toHaveLength(0);
   });
   test("deleted workspace clears its runner account credential", async () => {
     const { id } = await fixture();
@@ -605,7 +616,6 @@ const url = process.env.TEST_DATABASE_URL;
     });
     const { service, requests } = provider({
       local: device,
-      repositoryPrivate: true,
     });
     await service.advance(id, taskId);
     expect((await read(id)).state).toBe("auth_required");

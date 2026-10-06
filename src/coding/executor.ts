@@ -103,12 +103,6 @@ export class DevelopmentExecutor {
         permission === "contents" ? "coding_read" : permission,
       )
     ).token;
-    if (task.payload.authMode === "device_code")
-      requireThat(
-        await app.repositoryPrivate(token, task.payload.repository),
-        "coding_device_private_repository_required",
-        409,
-      );
     return { token, app };
   }
   async advance(workspaceId: string, id: string) {

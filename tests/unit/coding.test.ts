@@ -113,14 +113,19 @@ test("only a repository maintainer can propose; workspace admin is not an implic
   w.policy.allowed = [];
   expect(() => codingDestination(w, "101", input)).toThrow("access_denied");
 });
-test("device auth is workspace-scoped and limited to known private repositories", () => {
+test("device auth uses connected repositories regardless of visibility", () => {
   const { w } = codingFixture();
   present(w.coding).settings.authMode = "device_code";
-  expect(() => codingDestination(w, "101", input)).toThrow(
-    "coding_device_private_repository_required",
+  for (const visibility of [true, false, undefined]) {
+    present(present(w.github).repositories[0]).private = visibility;
+    expect(codingDestination(w, "101", input).authMode).toBe("device_code");
+  }
+  expect(() => codingDestination(w, "202", input)).toThrow(
+    "coding_maintainer_required",
   );
-  present(present(w.github).repositories[0]).private = true;
-  expect(codingDestination(w, "101", input).authMode).toBe("device_code");
+  expect(() =>
+    codingDestination(w, "101", { ...input, repositoryId: 7002 }),
+  ).toThrow();
   const admin = { id: w.operatorId, operator: true, username: "operator" };
   const page = saveCoding(w, admin, {
     revision: present(w.coding).revision,

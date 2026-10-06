@@ -236,12 +236,6 @@ export class CodingService {
           "issues",
         )
       ).token;
-      if (task.payload.authMode === "device_code")
-        requireThat(
-          await app.repositoryPrivate(token, task.payload.repository),
-          "coding_device_private_repository_required",
-          409,
-        );
       // Authority can change during token minting. Reserve under the workspace lock.
       const reserved = await this.store.change(workspaceId, async (w, sql) => {
         const t = w.codingTasks?.find((t) => t.id === id);
@@ -530,12 +524,6 @@ export class CodingService {
         permission,
       )
     ).token;
-    if (permission === "contents" && task.payload.authMode === "device_code")
-      requireThat(
-        await app.repositoryPrivate(token, task.payload.repository),
-        "coding_device_private_repository_required",
-        409,
-      );
     return token;
   }
   private async reserveLocal(

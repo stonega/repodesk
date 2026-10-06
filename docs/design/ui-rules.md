@@ -793,7 +793,8 @@ Use this format for each preference:
 - **Preference:** Show custom provider API key and ChatGPT device-code sign-in as peer choices in the Codex configuration dialog. Show the device link, one-time code, connection status and disconnect action there.
 - **Scope:** Local Podman Codex credentials for each workspace. Existing workspaces retain the custom provider method until changed. Show a clear sign-in-required state when automatic refresh cannot recover; explain that retained paused tasks continue automatically after connection. Routine task starts and token refreshes require no user confirmation.
 - **Source:** 2026-09-29 — user requested device-code login at the same setting level as custom provider auth, configured through the UI for each workspace. 2026-10-05 — user approved persistent runner auth with temporary task credentials, automatic refresh and continuation after reconnect.
-- **Exceptions:** Device-code tasks require trusted private repositories; custom provider credentials retain their deployment fallback.
+- **Exceptions:** Use trusted repository code with account credentials. Public and private repositories use the connected GitHub App for repository access independently of model authentication; custom provider credentials retain their deployment fallback.
+- **Updated scope:** 2026-10-06 — user requested using the existing GitHub App connection for private repository access. Repository visibility does not select the model authentication method.
 
 ### First setup asks only for account credentials
 

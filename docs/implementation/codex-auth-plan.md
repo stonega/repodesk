@@ -37,7 +37,7 @@ regardless of how the operating system batches output.
    its temporary auth volume, and release the runner slot. The app notifies the
    existing authorized audience once per pause. No raw auth errors are published.
 4. After device login succeeds, the worker rechecks current task authorization,
-   private repository visibility and budget, then requests an idempotent resume.
+   connected GitHub repository access and budget, then requests an idempotent resume.
    Resume reuses the existing work volume with a fresh temporary auth volume.
    Exclude sign-in waiting from execution time; preserve cumulative usage and
    repair limits. Publication reservations are never resumed or replayed by auth.
@@ -56,7 +56,8 @@ describes refresh during normal use, preservation of the refreshed auth cache,
 and a serialized stream per cache. About eight days is a current refresh
 threshold, not a guaranteed session expiry. A revoked/expired refresh token may
 require sign-in. API keys remain the upstream recommendation for automation;
-account mode is limited here to trusted private repositories.
+account mode supports trusted public and private repositories selected through
+the connected GitHub App. Model authentication and repository access are independent.
 
 No scheduled model call is needed to keep a persistent container alive. Normal
 runs perform refresh. This change does not implement concurrent runners sharing

@@ -143,11 +143,13 @@ implementation. The saved custom provider key stays unused in this mode.
 ChatGPT sign-in uses Codex's built-in OpenAI provider and default model rather
 than the deployment's custom provider model.
 
-Device sign-in is limited to connected repositories whose GitHub metadata
-confirms they are **private**. The worker checks visibility again through GitHub
-before issue creation and again before starting the local implementation.
-Reconnect GitHub if an older repository entry
-lacks visibility metadata. Use this option only for trusted private code:
+Both model authentication methods support connected public and private
+repositories. Repository access uses fresh GitHub App installation tokens scoped
+to the selected repository: read-only for preparation, issue-write for reviewed
+issue creation, and contents/pull-request write for authorized publication.
+ChatGPT account authentication does not grant GitHub access. Existing maintainer,
+connected-repository and execution-policy checks apply independently of visibility.
+Use this option only for trusted code:
 Codex can access the account token cache while implementing. The supervisor
 encrypts the per-workspace cache at rest using a key derived from
 `CODEX_RUNNER_TOKEN`. It decrypts a copy into a short-lived per-task container
@@ -169,8 +171,8 @@ A final Codex authentication failure sets `deviceAuth.state` and task state to
 `auth_required`. Transient retry events, quota and network errors do not invalidate
 account auth. Tasks retain the same private checkout and fixed verification plan,
 remove their auth volume and release the runner slot. The worker sends one sign-in
-notice per pause. After reconnect, it rechecks permissions, private repository
-visibility and budgets before requesting idempotent `/resume-auth` on the same
+notice per pause. After reconnect, it rechecks permissions, connected GitHub
+repository access and budgets before requesting idempotent `/resume-auth` on the same
 runner task. It creates a fresh auth volume; it does not recreate the issue, checkout
 or publication reservation. Questions and new inputs retain their original order.
 
