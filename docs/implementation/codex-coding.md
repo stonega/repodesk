@@ -88,6 +88,11 @@ it enables no new execution policy by itself. See [delivery evidence and rollout
 4. Keep **Reviewed** for actor-bound issue/branch approval, or explicitly select
    **Direct** per repository after validating the dedicated live pilot journey.
 
+The Add and Edit repository selectors search connected repositories by owner or
+name, ignoring case. Use Arrow keys and Enter or select a result directly; Escape
+closes the results before dismissing the dialog. Configured repositories are
+excluded from Add, and Edit keeps its current repository available.
+
 The repository editor shows a saved Telegram username when available, alongside
 the numeric user ID. Maintainer grants remain bound to numeric IDs.
 

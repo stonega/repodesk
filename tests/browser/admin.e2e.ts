@@ -1535,7 +1535,10 @@ test.describe
       await expect(codingDialog.getByLabel("Workflow filename")).toHaveCount(0);
       await codingDialog
         .getByRole("combobox", { name: "Repository", exact: true })
-        .selectOption("7001");
+        .fill("example/workspace");
+      await codingDialog
+        .getByRole("option", { name: "example/workspace", exact: true })
+        .click();
       await codingDialog
         .getByLabel("Development / base branch")
         .fill("develop");

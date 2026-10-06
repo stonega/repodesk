@@ -4,6 +4,7 @@ import type { CodingPage, CodingSettings } from "../src/coding/config.ts";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
+import { RepositorySelect } from "./repository-select.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 
 type Request = <T>(
@@ -923,32 +924,15 @@ function RepositoryEditor({
         submit(draft);
       }}
     >
-      <div className="field">
-        <label htmlFor="coding-repository">Repository</label>
-        <select
-          id="coding-repository"
-          required
-          value={draft.repositoryId || ""}
-          onChange={(e) =>
-            setDraft({ ...draft, repositoryId: Number(e.target.value) })
-          }
-        >
-          <option value="">Select a connected repository</option>
-          {data.repositories
-            .filter(
-              (r) =>
-                r.id === initial.repositoryId ||
-                !data.settings.repositories.some(
-                  (s) => s.repositoryId === r.id,
-                ),
-            )
-            .map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.full_name}
-              </option>
-            ))}
-        </select>
-      </div>
+      <RepositorySelect
+        repositories={data.repositories.filter(
+          (r) =>
+            r.id === initial.repositoryId ||
+            !data.settings.repositories.some((s) => s.repositoryId === r.id),
+        )}
+        value={draft.repositoryId}
+        onChange={(repositoryId) => setDraft({ ...draft, repositoryId })}
+      />
       <div className="field">
         <label htmlFor="coding-base-branch">Development / base branch</label>
         <input

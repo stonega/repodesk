@@ -18,6 +18,17 @@ them.
 
 ## Recorded preferences
 
+### Coding repository selectors support search
+
+- **Preference:** Search connected repositories by owner or repository name inside
+  the selector, with a bounded results list and keyboard selection. Preserve the
+  selected repository when dismissing a search; require an actual list selection.
+- **Scope:** Add and Edit coding repository dialogs in the Codex plugin, on desktop
+  and mobile.
+- **Source:** 2026-10-06 — user showed the long native repository menu and requested
+  search support for the repository selector.
+- **Exceptions:** Other form selectors retain their existing behavior.
+
 ### Edit and add buttons use short labels
 
 - **Preference:** Use exactly “Edit” for edit buttons and “New” for add/create
