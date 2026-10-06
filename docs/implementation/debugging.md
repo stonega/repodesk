@@ -63,6 +63,9 @@ Interpret the states separately:
   rejected requests, context overflow, sandbox errors and missing/invalid results
   are distinct; raw provider messages are never recorded. See the
   [implementation failure incident](../../postmortem/2026-10-06-codex-implementation-failure.md).
+  An operator-authorized live VPS retest on 0.1.21 completed the same wallshader
+  request with 694350 reported tokens and passing repository checks; this workload
+  would exceed the removed 200000-token guard.
 - A pending delivery is queued separately from generation. A failed delivery has
   a Telegram or policy error. An unknown delivery must be inspected before any
   resend, because Telegram might already have accepted it.

@@ -47,7 +47,32 @@ old caps, long-running task recovery, cancellation, tenant-isolated migration an
 closed repository dropdowns on desktop/mobile. Local PostgreSQL checks pass.
 
 No stopped production task was replayed, no Telegram message was sent manually,
-and no live Codex/model call was made during investigation. A new authenticated
-live request after rollout is needed to identify the remaining execution cause
-or establish that implementation completes. Do not describe the old failure as
-fixed solely because deterministic tests pass.
+and no live Codex/model call was made during the initial investigation.
+
+## Authorized VPS reproduction and successful retest
+
+The user subsequently authorized direct VPS code deployment and live testing of
+the exact request: "check shaders update for wallshader. if new shaders in paper
+shaders, add it". The update was deployed directly as application version 0.1.21,
+with a protected pre-migration backup and the existing account credentials intact.
+A fresh task was created through the application coding service under the
+configured maintainer, with operator-command provenance and normal current-policy,
+source, tenant and publication checks. No Telegram update was forged.
+
+The task completed with consumed and verified revision 1. It reported 56631 tokens
+for intake and 637719 for implementation: 694350 total, with complete reported
+usage. This workload exceeds the old 200000-token task quota. The old conversation
+guard would abort it, and its exception would be hidden by the job's generic
+failure handling. This establishes a matching failure mechanism; the old turn's
+discarded error itself remains unavailable.
+
+Codex found that Wallshader already includes every shader in the latest published
+Paper release it checked, 0.0.81. It updated the review record in
+`docs/implementation/update-paper-shaders.md`. Build, lint, all 49 repository tests
+and patch-integrity checks passed. Native checks were not run because only
+documentation changed and GJS is unavailable on the execution image.
+
+The verified 1274-byte patch is retained for review. The repository's publication
+default is disabled, so no GitHub PR or repository write was made. The application
+released the runner slot after completion; its task is in review, while the local
+container record is cancelled as resource cleanup rather than a task failure.
