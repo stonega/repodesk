@@ -298,12 +298,15 @@ them.
   Overview, with saved status and safe identity details. Manage bot opens a dialog
   to replace the write-only Telegram token without leaving Overview; Manage GitHub
   opens the GitHub management dialog without changing the route. Keep the cards
-  usable on narrow screens.
+  usable on narrow screens. Link the configured bot handle to its Telegram profile
+  and the connected GitHub account name to its GitHub profile, opening in a new tab.
+  Show these links only when the corresponding identity is available.
 - **Scope:** Deployment administrator's workspace Overview.
 - **Source:** 2026-09-27 — user requested bot and GitHub cards on the Overview
   after completing setup. 2026-09-28 — user requested editing the Telegram token
   in a dialog from Manage bot instead of navigating to Setup. 2026-09-28 — user
   requested that Manage GitHub open without changing the route.
+  2026-10-06 — user requested Telegram and GitHub links in these cards.
 - **Exceptions:** Connection details remain limited to the workspace's deployment
   administrator; other members keep their existing Overview.
 

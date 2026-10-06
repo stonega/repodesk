@@ -1646,9 +1646,17 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
                 </div>
                 <p>
                   {data.connections.bot.configured &&
-                  data.connections.bot.username
-                    ? `@${data.connections.bot.username}`
-                    : "Connect a Telegram bot to use this workspace in chat."}
+                  data.connections.bot.username ? (
+                    <a
+                      href={`https://t.me/${encodeURIComponent(data.connections.bot.username)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      @{data.connections.bot.username}
+                    </a>
+                  ) : (
+                    "Connect a Telegram bot to use this workspace in chat."
+                  )}
                 </p>
                 <button
                   type="button"
@@ -1674,9 +1682,24 @@ function ReadPage({ id, resource }: { id: string; resource: string }) {
                   </span>
                 </div>
                 <p>
-                  {data.connections.github.connected
-                    ? `${data.connections.github.account ?? "GitHub App"} · ${data.connections.github.repositories} ${data.connections.github.repositories === 1 ? "repository" : "repositories"}`
-                    : "Connect a GitHub App to grant repository access."}
+                  {data.connections.github.connected ? (
+                    <>
+                      {data.connections.github.account ? (
+                        <a
+                          href={`https://github.com/${encodeURIComponent(data.connections.github.account)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {data.connections.github.account}
+                        </a>
+                      ) : (
+                        "GitHub App"
+                      )}
+                      {` · ${data.connections.github.repositories} ${data.connections.github.repositories === 1 ? "repository" : "repositories"}`}
+                    </>
+                  ) : (
+                    "Connect a GitHub App to grant repository access."
+                  )}
                 </p>
                 <button type="button" onClick={() => setManagingGitHub(true)}>
                   Manage GitHub

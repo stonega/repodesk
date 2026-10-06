@@ -167,6 +167,9 @@ Check progress. The Overview team card shows the saved settings version and a
 compact grid of configuration labels and values. One Edit button opens a single
 form with the explanations and all changeable values; the fixed missed-run grace
 remains read-only.
+The Overview connection cards link the configured Telegram bot handle and connected
+GitHub account name to their respective profiles in new tabs when those identities
+are available. The Manage buttons continue to open their existing dialogs.
 Model settings uses the same compact grid for saved provider configuration, key
 status, thinking level, effective capacity and price overrides. One Edit icon opens
 the model configuration modal; basic fields and advanced settings retain their
