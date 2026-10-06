@@ -315,6 +315,20 @@ them.
 - **Exceptions:** Model capacity remains on Workspace settings because it describes
   deployment model limits rather than editable team configuration.
 
+### Model configuration uses a summary card and one editor
+
+- **Preference:** Show saved model configuration as a compact responsive grid of
+  labels and values, matching the Overview team card. Place one Edit icon at the
+  top right to open a single modal containing credentials, model selection and
+  advanced settings. Keep explanations and validation in the editor; show only
+  configured/missing status for the write-only API key. Cancel discards the draft;
+  successful saves close the modal and refresh the summary.
+- **Scope:** Model settings in the admin panel.
+- **Source:** 2026-10-06 — user showed the inline model form and requested the
+  Overview team-card layout with an edit modal.
+- **Exceptions:** Activation readiness and bot activation remain separate from
+  model configuration. Setup steps retain their guided forms.
+
 ### Connected GitHub repositories stay compact and directly accessible
 
 - **Preference:** Open connection details from the Overview card in a Manage

@@ -820,6 +820,8 @@ function ModelSettings({ workspaceId }: { workspaceId: string }) {
     "/api/setup/progress",
   );
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<Progress>();
+  const [saved, setSaved] = useState(false);
   const [identity, setIdentity] = useState<{ url: string; command: string }>();
   useEffect(() => {
     const timer = setInterval(reload, 5000);
@@ -834,10 +836,7 @@ function ModelSettings({ workspaceId }: { workspaceId: string }) {
         {error ? (
           <Notice>{error}</Notice>
         ) : (
-          <section className="card" aria-busy="true">
-            <h2>Model configuration</h2>
-            <SkeletonRows label="Model configuration" rows={4} />
-          </section>
+          <ModelConfigurationCard loading onEdit={() => {}} />
         )}
       </Page>
     );
@@ -861,19 +860,37 @@ function ModelSettings({ workspaceId }: { workspaceId: string }) {
       title="Model settings"
       description="Connect your model provider, then activate the assistant when its receiver and skills are ready."
     >
-      <section className="card" aria-labelledby="model-settings-heading">
-        <h2 id="model-settings-heading">Model configuration</h2>
-        <p className="muted">
-          Enter an OpenAI-compatible base URL, API key, and model ID. Saving
-          does not make a model request.
-        </p>
-        <ModelCredentialForm
-          progress={data}
-          reload={reload}
-          saving={saving}
-          setSaving={setSaving}
-        />
-      </section>
+      <ModelConfigurationCard
+        progress={data}
+        loading={loading}
+        onEdit={() => {
+          setSaved(false);
+          setEditing(data);
+        }}
+      />
+      {saved && <p role="status">Model settings saved.</p>}
+      {editing && (
+        <Modal
+          title="Edit model configuration"
+          busy={saving}
+          onClose={() => setEditing(undefined)}
+        >
+          <p className="muted">
+            Enter an OpenAI-compatible base URL, API key, and model ID. Saving
+            does not make a model request.
+          </p>
+          <ModelCredentialForm
+            progress={editing}
+            saving={saving}
+            setSaving={setSaving}
+            onSaved={() => {
+              setEditing(undefined);
+              setSaved(true);
+              reload();
+            }}
+          />
+        </Modal>
+      )}
       <section className="card" aria-label="Activation">
         <h2>Activate the bot</h2>
         <p>
@@ -972,6 +989,72 @@ function ModelSettings({ workspaceId }: { workspaceId: string }) {
         )}
       </section>
     </Page>
+  );
+}
+function ModelConfigurationCard({
+  progress: p,
+  loading,
+  onEdit,
+}: {
+  progress?: Progress;
+  loading: boolean;
+  onEdit: () => void;
+}) {
+  const fields = [
+    ["Model API key", p?.credentials.model ? "Configured" : "Missing"],
+    ["Model base URL", p?.modelBaseUrl],
+    ["Model", p?.model],
+    ["Thinking level", p?.thinkingLevel],
+    [
+      "Context window (tokens)",
+      p?.modelCapabilities?.limits.contextWindow.toLocaleString() ??
+        "Not configured",
+    ],
+    [
+      "Maximum output (tokens)",
+      p?.modelCapabilities?.limits.maxOutputTokens.toLocaleString() ??
+        "Not configured",
+    ],
+    [
+      "Input price (USD / million tokens)",
+      p?.modelPricing ? `$${p.modelPricing.input}` : "No override",
+    ],
+    [
+      "Output price (USD / million tokens)",
+      p?.modelPricing ? `$${p.modelPricing.output}` : "No override",
+    ],
+  ];
+  return (
+    <section
+      className="card"
+      aria-labelledby="model-settings-heading"
+      aria-busy={loading}
+    >
+      <div className="row team-card-heading">
+        <div>
+          <h2 id="model-settings-heading">Model configuration</h2>
+          <p className="muted">
+            {p ? `Settings version ${p.version}` : <Skeleton />}
+          </p>
+        </div>
+        <IconButton
+          icon="edit"
+          label="Edit model configuration"
+          disabled={!p || loading}
+          onClick={onEdit}
+        />
+      </div>
+      <ul className="settings-list">
+        {fields.map(([label, value]) => (
+          <li className="settings-item" key={label}>
+            <div className="settings-item-details">
+              <h3>{label}</h3>
+              <p className="settings-item-value">{p ? value : <Skeleton />}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 type SetupAccessData = {
@@ -1175,12 +1258,12 @@ function TelegramCredentialForm({
 }
 function ModelCredentialForm({
   progress: p,
-  reload,
+  onSaved,
   saving,
   setSaving,
 }: {
   progress: Progress;
-  reload: () => void;
+  onSaved: () => void;
   saving: boolean;
   setSaving: (saving: boolean) => void;
 }) {
@@ -1202,13 +1285,11 @@ function ModelCredentialForm({
   );
   const [limitErrors, setLimitErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
   return (
     <form
       aria-busy={saving}
       onChangeCapture={() => {
         setError("");
-        setSaved(false);
       }}
       onSubmit={async (event) => {
         event.preventDefault();
@@ -1271,9 +1352,8 @@ function ModelCredentialForm({
                   : undefined,
             });
             setKey("");
-            reload();
           }
-          setSaved(true);
+          onSaved();
         } catch (cause) {
           setError(
             cause instanceof Error
@@ -1327,7 +1407,7 @@ function ModelCredentialForm({
         <summary>Advanced model settings</summary>
         <p className="muted">
           Set thinking, capacity, and token prices when your provider needs
-          them. You can return to this page later. Custom models require
+          them. You can return to this editor later. Custom models require
           capacity and prices.
         </p>
         <div className="columns">
@@ -1430,10 +1510,11 @@ function ModelCredentialForm({
           {error}
         </p>
       )}
-      {saved && <p role="status">Model settings saved.</p>}
-      <button type="submit" disabled={saving}>
-        {saving ? "Saving…" : "Save model configuration"}
-      </button>
+      <ModalActions>
+        <button type="submit" disabled={saving}>
+          {saving ? "Saving…" : "Save model configuration"}
+        </button>
+      </ModalActions>
     </form>
   );
 }

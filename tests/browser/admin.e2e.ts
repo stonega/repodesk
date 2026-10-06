@@ -193,6 +193,22 @@ test.describe
       await expect(
         page.getByRole("button", { name: "Activate bot", exact: true }),
       ).toBeDisabled();
+      const modelCard = page.getByRole("region", {
+        name: "Model configuration",
+      });
+      await expect(modelCard.locator(".settings-item")).toHaveCount(8);
+      await expect(
+        modelCard.getByText("Missing", { exact: true }),
+      ).toBeVisible();
+      await expect(page.getByLabel("Model base URL")).toHaveCount(0);
+      await modelCard
+        .getByRole("button", { name: "Edit model configuration" })
+        .click();
+      const modelDialog = page.getByRole("dialog", {
+        name: "Edit model configuration",
+      });
+      await expect(modelDialog).toBeVisible();
+      await expect(modelDialog.getByLabel(/Model API key/)).toBeFocused();
       await page
         .getByRole("button", { name: "Save model configuration" })
         .click();
@@ -225,7 +241,28 @@ test.describe
         .getByRole("button", { name: "Save model configuration" })
         .click();
       await expect(page.getByText("Model settings saved.")).toBeVisible();
+      await expect(modelDialog).toHaveCount(0);
+      await expect(
+        modelCard.getByText("Configured", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        modelCard.getByText("team/custom-model", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        modelCard.getByText("128,000", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        modelCard.getByText("16,000", { exact: true }),
+      ).toBeVisible();
+      await expect(modelCard).not.toContainText("fake-provider-key");
+      await page.screenshot({
+        path: "test-results/model-summary-desktop.png",
+        fullPage: true,
+      });
       await page.reload();
+      await modelCard
+        .getByRole("button", { name: "Edit model configuration" })
+        .click();
       await expect(page.getByLabel(/Model API key/)).toHaveValue("");
       await expect(page.getByLabel("Model base URL")).toHaveValue(
         "https://models.example.test/v1",
@@ -235,6 +272,44 @@ test.describe
       );
       await page.getByText("Advanced model settings").click();
       await expect(page.getByLabel("Thinking level")).toHaveValue("high");
+      await page.screenshot({
+        path: "test-results/model-editor-desktop.png",
+        fullPage: true,
+      });
+      await page
+        .getByLabel("Model", { exact: true })
+        .fill("discard-this-draft");
+      await modelDialog
+        .getByRole("button", { name: "Cancel", exact: true })
+        .click();
+      await expect(modelDialog).toHaveCount(0);
+      await expect(
+        modelCard.getByRole("button", { name: "Edit model configuration" }),
+      ).toBeFocused();
+      await modelCard
+        .getByRole("button", { name: "Edit model configuration" })
+        .click();
+      await expect(page.getByLabel("Model", { exact: true })).toHaveValue(
+        "team/custom-model",
+      );
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.getByText("Advanced model settings").click();
+      await expect(modelDialog).toBeVisible();
+      await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
+      await expect
+        .poll(() =>
+          modelDialog.evaluate(
+            (dialog) => dialog.scrollWidth <= dialog.clientWidth,
+          ),
+        )
+        .toBe(true);
+      await page.screenshot({
+        path: "test-results/model-editor-mobile.png",
+        fullPage: true,
+      });
+      await page.keyboard.press("Escape");
+      await expect(modelDialog).toHaveCount(0);
+      await page.setViewportSize({ width: 1280, height: 900 });
       if (process.env.BROWSER_TELEGRAM_TRANSPORT === "polling") {
         await expect(page.getByText(/Polling: ready/)).toBeVisible({
           timeout: 10000,

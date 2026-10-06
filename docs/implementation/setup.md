@@ -165,10 +165,13 @@ outside the whitelist, and does not import old history.
 The setup wizard saves Telegram credentials before moving to GitHub. The admin
 panel's **Model settings** page saves model credentials separately and shows
 activation requirements. Errors leave entered values in place. A saved credential
-can be retained by leaving its write-only field blank. Model settings initially show
-the key, base URL and model ID. Open **Advanced model settings** for thinking level,
-capacity overrides and token prices, including the required values for custom models.
-You can return to those controls later. Activation never displays credentials.
+can be retained by leaving its write-only field blank. Model settings shows saved
+values in a compact summary card, with only configured/missing status for the API
+key. Click **Edit** to open the model configuration modal. Open **Advanced model
+settings** inside it for thinking level, capacity overrides and token prices,
+including the required values for custom models. Cancel discards the draft; saving
+closes the modal and updates the summary. You can return to those controls later.
+Activation never displays credentials.
 
 Only deployment operators can change these settings. The base URL includes the API
 prefix (usually `/v1`); requests go to its `/chat/completions` endpoint using streaming

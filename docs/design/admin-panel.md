@@ -147,6 +147,11 @@ Check progress. The Overview team card shows the saved settings version and a
 compact grid of configuration labels and values. One Edit button opens a single
 form with the explanations and all changeable values; the fixed missed-run grace
 remains read-only.
+Model settings uses the same compact grid for saved provider configuration, key
+status, thinking level, effective capacity and price overrides. One Edit icon opens
+the model configuration modal; basic fields and advanced settings retain their
+validation and write-only key behavior. Cancel discards changes, failed saves keep
+the draft, and successful saves close the modal and refresh the summary.
 The sidebar workspace selector uses a panel-styled menu with a selected state and
 the operator-only New workspace action, which opens the setup wizard with a blank
 workspace form.
