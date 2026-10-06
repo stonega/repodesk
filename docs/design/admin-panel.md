@@ -24,6 +24,7 @@ Public static assets can load before login, but contain no workspace data or sec
 | First-run setup | Claim deployment, create local admin, configure workspace and bot, set up a GitHub App, enter the panel | Resumable; one initial admin; no public reinitialization. Bot remains inactive until explicit panel activation. |
 | Sign-in/workspace selector | Local admin sign-in; optional linked Telegram sign-in, authorized workspaces, operator-only New workspace entry in the selector, logout | Login does not grant a workspace role; revoked sessions stop working. New workspace opens a fresh setup wizard and is selected when entering the panel. |
 | Overview | Linked count cards for members, assistant runs, scheduled workflows and operator-visible coding tasks; deployment-administrator cards for the configured Telegram bot and workspace GitHub App, with token editing in a Manage bot dialog and GitHub controls in a management dialog; team card showing saved configuration with one edit dialog and versioned form; broader bot/worker, group and budget status remain planned | Loading, empty, stale and failure states are visible; tenant-scoped metrics matching their detail lists. |
+| Workspace settings | Workspace activity status and Pause/Resume action; Settings follows Plugins in the sidebar | Confirmation dialog explains the consequences; Cancel makes no change; versioned saves preserve other configuration and show conflicts. Pause is absent from the Overview team editor. |
 | Bot settings | Display label, timezone, base instructions, response style, directed-response mode, pause switch | Validated form, versioned save, audit entry, saved/effective version shown. |
 | Model settings | Operator-configured OpenAI-compatible base URL, write-only API key, custom model ID, thinking level and token prices; activation readiness and explicit activation | Invalid settings rejected locally; provider capabilities require evaluation. Runs pin endpoint/thinking/prices at first execution; endpoint changes stop old runs. |
 | Groups and access | Connected group/topic, owner, bot visibility, history coverage, opt-in collection, unlink | Linking verifies authority; no arbitrary chat ID can be used to obtain access. |
@@ -87,6 +88,10 @@ Notify workers through version refresh, not in-memory mutations in the API proce
 At run start, snapshot model, instruction and workflow versions. Routine edits apply
 to future runs. Emergency pause, membership revocation, budget restrictions and
 deletion are checked again before each costly/action step and before delivery.
+Workspace pause and resume are confirmed in a dedicated dialog on Settings.
+Pausing cancels queued/running assistant work and pending run deliveries; resuming
+allows new work and does not restart cancelled runs or deliveries. Model capacity
+is shown in deployment Model settings.
 
 The first-run wizard accepts bot credentials; Model settings accepts provider
 credentials as write-only inputs in P0, encrypting them with a Docker-injected

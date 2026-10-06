@@ -18,6 +18,21 @@ them.
 
 ## Recorded preferences
 
+### Workspace pause belongs in Settings with confirmation
+
+- **Preference:** Use Workspace settings for a dedicated Pause workspace action
+  and saved activity status. Open a confirmation dialog before pausing, with
+  explicit consequences and Cancel. Provide Resume workspace when paused. Keep
+  pause out of the Overview team configuration editor and place Settings directly
+  below Plugins in the sidebar.
+- **Scope:** Workspace administration on desktop and mobile.
+- **Source:** 2026-10-06 — user requested replacing the model-capacity content with
+  pause controls, removing pause from the workspace edit modal, confirming pause
+  in a modal, and moving Settings below Plugins.
+- **Exceptions:** Model capacity remains available in deployment Model settings.
+  When Plugins is unavailable to an administrator, Settings follows the remaining
+  workspace navigation.
+
 ### Coding repository selectors support search
 
 - **Preference:** Search connected repositories by owner or repository name inside
@@ -358,8 +373,8 @@ them.
 - **Source:** 2026-09-28 — user showed the separate Configuration list and asked
   to show its values in the Overview team card, with one edit button and one form.
   The user then asked to make that card more compact, suggesting a grid layout.
-- **Exceptions:** Model capacity remains on Workspace settings because it describes
-  deployment model limits rather than editable team configuration.
+- **Exceptions:** Pause is managed separately on Workspace settings with
+  confirmation. Model capacity is available in deployment Model settings.
 
 ### Model configuration uses a summary card and one editor
 

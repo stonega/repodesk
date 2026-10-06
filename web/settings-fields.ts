@@ -52,9 +52,4 @@ export const workspaceFields: {
     max: 5,
     step: 1,
   },
-  {
-    key: "paused",
-    label: "Pause workspace",
-    help: "Stops workspace execution immediately.",
-  },
 ];

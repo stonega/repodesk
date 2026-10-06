@@ -583,7 +583,7 @@ function Setup() {
           <h2>Workspace</h2>
           <p className="muted">
             Create a space for your team. You can adjust budgets, retention, and
-            other policies in Workspace settings later.
+            other policies in the Overview team editor later.
           </p>
           {!creatingWorkspace && data.workspaces.some((w) => !w.deleted) && (
             <Field label="Workspace draft">
@@ -1899,13 +1899,21 @@ function TelegramBotDialog({
 }
 function SettingsPage({ id }: { id: string }) {
   const { data, error, reload, loading } = useData<{
-    model: string;
-    capabilities: ModelCapabilities | null;
+    version: number;
+    settings: Settings;
   }>(`/api/admin/workspaces/${id}/settings`);
+  const [current, setCurrent] = useState<typeof data>();
+  const [confirming, setConfirming] = useState(false);
+  const notify = useToast();
+  useEffect(() => {
+    if (data) setCurrent(data);
+  }, [data]);
+  const paused = current?.settings.paused;
+  const action = paused ? "Resume workspace" : "Pause workspace";
   return (
     <Page
       title="Workspace settings"
-      description="Model capacity and workspace configuration."
+      description="Pause or resume work in this workspace."
       actions={
         error && (
           <Action loading={loading} onClick={async () => reload()}>
@@ -1915,37 +1923,70 @@ function SettingsPage({ id }: { id: string }) {
       }
     >
       {error && <Notice error>{error}</Notice>}
-      {!error && data && (
-        <>
-          <section className="card">
-            <h2>Model capacity</h2>
-            <p>
-              {data.model} ·{" "}
-              {data.capabilities
-                ? `${data.capabilities.limits.contextWindow.toLocaleString()} context tokens · ${data.capabilities.limits.maxOutputTokens.toLocaleString()} maximum output tokens`
-                : "Limits not configured"}
-            </p>
-            <p className="muted">
-              {data.capabilities?.source === "catalog"
-                ? "Source: bundled Pi model catalog."
-                : data.capabilities
-                  ? "Source: deployment operator."
-                  : "Ask the deployment operator to configure model limits in Model settings."}{" "}
-              Response language follows the model. Input and output capacity are
-              managed automatically within model limits and your dollar budgets.
-            </p>
-          </section>
+      <section
+        className="card"
+        aria-label="Workspace activity"
+        aria-busy={loading}
+      >
+        <h2>Pause workspace</h2>
+        <p>
+          {current ? (
+            <span className="pill">{paused ? "Paused" : "Active"}</span>
+          ) : (
+            <Skeleton />
+          )}
+        </p>
+        <p className="muted">
+          Pause assistant runs, scheduled work and pending run deliveries in
+          this workspace. You can resume work here when you are ready.
+        </p>
+        <button
+          type="button"
+          className={paused ? undefined : "danger"}
+          disabled={!current || loading || !!error}
+          onClick={() => setConfirming(true)}
+        >
+          {action}
+        </button>
+      </section>
+      {confirming && current && (
+        <Modal title={`${action}?`} onClose={() => setConfirming(false)}>
           <p>
-            Edit team configuration on the{" "}
-            <NavLink to={`/admin/overview?workspace=${id}`}>Overview</NavLink>.
+            {paused
+              ? `Resume work in ${current.settings.name}? New assistant runs and scheduled work will be allowed again. Cancelled runs and deliveries will not restart.`
+              : `Pause ${current.settings.name}? This stops workspace execution and cancels queued or running assistant work and pending run deliveries. You can resume the workspace later.`}
           </p>
-        </>
+          <ModalActions>
+            <Action
+              danger={!paused}
+              onConflict={() => {
+                setConfirming(false);
+                reload();
+              }}
+              onClick={async () => {
+                const updated = await api<NonNullable<typeof current>>(
+                  `/api/admin/workspaces/${id}/settings`,
+                  "PUT",
+                  {
+                    version: current.version,
+                    settings: { ...current.settings, paused: !paused },
+                  },
+                );
+                setCurrent(updated);
+                setConfirming(false);
+                notify(paused ? "Workspace resumed." : "Workspace paused.");
+                reload();
+              }}
+            >
+              {action}
+            </Action>
+          </ModalActions>
+        </Modal>
       )}
     </Page>
   );
 }
 function settingValue(key: keyof Settings, value: Settings[keyof Settings]) {
-  if (key === "paused") return value ? "Paused" : "Not paused";
   if (key === "runBudgetUsd" || key === "monthlyBudgetUsd")
     return `$${String(value)}`;
   const units: Partial<Record<keyof Settings, string>> = {
@@ -3980,7 +4021,6 @@ function Shell() {
   const setupLayout = !!current && location.pathname === "/setup";
   const navigation: [string, string][] = [
     ["overview", "Overview"],
-    ["settings", "Settings"],
     ["members", "Members & access"],
     ["chats", "Group access"],
     ["workflows", "Workflows"],
@@ -3990,17 +4030,18 @@ function Shell() {
     ["usage", "Usage"],
     ["audit", "Audit"],
     ["deletion", "Privacy"],
+    ["settings", "Settings"],
   ];
   const operatorOnly = !!current?.admin.operator && !current.admin.telegramId;
   const visibleNavigation = operatorOnly
     ? navigation.filter(([path]) =>
         [
           "overview",
-          "settings",
           "members",
           "workflows",
           "skills",
           "runs",
+          "settings",
         ].includes(path),
       )
     : navigation;
@@ -4065,14 +4106,17 @@ function Shell() {
             />
             <nav>
               {chosen &&
-                visibleNavigation.map(([path, label]) => (
-                  <NavLink key={path} to={`/admin/${path}`}>
-                    {label}
-                  </NavLink>
-                ))}
+                visibleNavigation
+                  .filter(([path]) => path !== "settings")
+                  .map(([path, label]) => (
+                    <NavLink key={path} to={`/admin/${path}`}>
+                      {label}
+                    </NavLink>
+                  ))}
               {chosen && current.admin.operator && (
                 <NavLink to="/admin/plugins">Plugins</NavLink>
               )}
+              {chosen && <NavLink to="/admin/settings">Settings</NavLink>}
               {current.admin.operator && (
                 <>
                   <p className="nav-label">DEPLOYMENT</p>

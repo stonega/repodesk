@@ -45,7 +45,7 @@ GitHub App. Create the workspace with a name and timezone;
 **Continue to Telegram** saves it and keeps you on Workspace if validation fails.
 The timezone selector starts with your browser's IANA timezone and also offers UTC
 and other available IANA zones.
-Adjust budgets and retention later in Workspace settings. You can revisit steps.
+Adjust budgets and retention later in the Overview team editor. You can revisit steps.
 The GitHub step has one **Connect GitHub** button. It creates a personal App when
 needed, then asks GitHub for user authorization and installation. Choose the
 repositories in GitHub. Setup verifies one accessible installation, connects its
@@ -220,8 +220,14 @@ Set `modelLimits: null` to return to catalog values. Omitted overrides persist f
 same model/endpoint; changing either clears them unless explicitly supplied again.
 Model limits are pinned at first execution, alongside endpoint, thinking and pricing.
 
-Workspace settings show model capacity and its source. Response language follows the
-model; there is no workspace language override. Input byte and output token budgets
+Deployment Model settings show model capacity. Workspace settings contain the
+workspace Pause/Resume action and saved status; Settings follows Plugins in the
+sidebar. Confirm the action in its dialog, or Cancel to leave the workspace
+unchanged. Pause cancels queued/running assistant work and pending run deliveries;
+resuming allows new work without restarting cancelled work. The Overview team
+editor manages the remaining workspace configuration and has no pause checkbox.
+Response language follows the model; there is no workspace language override.
+Input byte and output token budgets
 are managed automatically, with no workspace controls or hidden saved overrides.
 The API discards the retired `language`, `maxInputChars` and `maxOutputTokens` keys
 from older clients; migration `010_automatic_response_settings.sql` removes them from
