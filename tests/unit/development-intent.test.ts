@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   type DevelopmentRun,
-  developmentOutputSchema,
   developmentSchema,
 } from "../../src/coding/development.ts";
 import { runConversation } from "../../src/coding/local/conversation.ts";
@@ -32,9 +31,6 @@ function retry(text = "Try again"): DevelopmentRun {
       },
     ],
     context: "Reference context may describe the previous request.",
-    maxRepairAttempts: 2,
-    maxTokens: 10000,
-    activeSeconds: 60,
   };
 }
 
@@ -57,10 +53,12 @@ test("intake binds evidence to the consumed authenticated input, including short
   expect(() => developmentSchema(missing)).toThrow(
     "coding_input_revision_missing",
   );
-  for (const mode of ["analysis", "work"] as const)
-    expect(developmentSchema({ ...retry(), mode })).toBe(
-      developmentOutputSchema,
-    );
+  expect(
+    developmentSchema({ ...retry(), mode: "analysis" }).properties.status.enum,
+  ).toEqual(["analysis", "needs_input"]);
+  expect(
+    developmentSchema({ ...retry(), mode: "work" }).properties.status.enum,
+  ).toEqual(["completed", "needs_input"]);
 });
 
 test("the Codex turn receives the intake schema and returns current retry evidence", async () => {

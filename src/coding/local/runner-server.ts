@@ -41,9 +41,7 @@ export function runnerApp(
       {
         method: "POST",
         redirect: "error",
-        signal: AbortSignal.timeout(
-          settings.CODEX_RUNNER_TIMEOUT_SECONDS * 1000,
-        ),
+        signal: c.req.raw.signal,
         headers: {
           authorization: `Bearer ${providerApiKey}`,
           "content-type": "application/json",

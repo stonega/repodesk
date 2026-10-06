@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { NavLink } from "react-router";
 import type { CodingPage, CodingSettings } from "../src/coding/config.ts";
+import { codingFailureMessage } from "../src/coding/failure-messages.ts";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
@@ -543,7 +544,10 @@ export function Coding({
                       {task.cancelRequested && " · stop requested"}
                       {task.questionText && <p>{task.questionText}</p>}
                       {task.error && (
-                        <p>{taskFailures[task.error] ?? task.error}</p>
+                        <p>
+                          {taskFailures[task.error] ??
+                            codingFailureMessage(task.error)}
+                        </p>
                       )}
                       {!task.continuous && task.threadId && (
                         <p>
@@ -930,10 +934,6 @@ function RepositoryEditor({
   const policy = draft.development ?? {
     executionMode: "reviewed",
     publishByDefault: false,
-    maxAttempts: 8,
-    maxRepairAttempts: 2,
-    activeSeconds: 2700,
-    maxTokens: 200000,
   };
   return (
     <form
@@ -1012,37 +1012,10 @@ function RepositoryEditor({
           />
           <span>Publish verified implementations as draft PRs by default</span>
         </label>
-        {(
-          [
-            ["maxAttempts", "Maximum execution cycles", 1, 20],
-            ["maxRepairAttempts", "Automatic check repairs per cycle", 0, 5],
-            ["activeSeconds", "Active execution time (seconds)", 60, 7200],
-            ["maxTokens", "Codex token limit", 1000, 2000000],
-          ] as const
-        ).map(([key, label, min, max]) => (
-          <label className="field" key={key} htmlFor={`coding-${key}`}>
-            <span>{label}</span>
-            <input
-              id={`coding-${key}`}
-              type="number"
-              required
-              min={min}
-              max={max}
-              step={1}
-              value={policy[key]}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  development: { ...policy, [key]: Number(e.target.value) },
-                })
-              }
-            />
-          </label>
-        ))}
         <small>
-          Waiting for an answer releases the runner slot. Unreported model usage
-          keeps its full reservation; device account billing is not a dollar
-          budget.
+          Codex continues implementation and check repairs until the task is
+          complete, needs your input, or is stopped. Waiting for an answer
+          releases the runner slot.
         </small>
       </fieldset>
       <fieldset className="coding-maintainers">

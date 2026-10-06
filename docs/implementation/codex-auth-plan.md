@@ -37,10 +37,11 @@ regardless of how the operating system batches output.
    its temporary auth volume, and release the runner slot. The app notifies the
    existing authorized audience once per pause. No raw auth errors are published.
 4. After device login succeeds, the worker rechecks current task authorization,
-   connected GitHub repository access and budget, then requests an idempotent resume.
+   connected GitHub repository access, then requests an idempotent resume.
    Resume reuses the existing work volume with a fresh temporary auth volume.
-   Exclude sign-in waiting from execution time; preserve cumulative usage and
-   repair limits. Publication reservations are never resumed or replayed by auth.
+   Preserve cumulative reported usage and mark unavailable usage explicitly.
+   Application execution quotas were removed on 2026-10-06; publication
+   reservations are never resumed or replayed by auth.
 5. Show a clear sign-in-required status and automatic-resume explanation in the
    panel. Disconnect and Stop cancel paused work. Retention still expires local
    checkpoints; expired work must not silently restart.

@@ -110,7 +110,6 @@ export function containerArgs(
     `--cpus=${settings.CODEX_RUNNER_CPUS}`,
     `--memory=${settings.CODEX_RUNNER_MEMORY_MB}m`,
     `--memory-swap=${settings.CODEX_RUNNER_MEMORY_MB}m`,
-    ...(docker ? [] : [`--timeout=${settings.CODEX_RUNNER_TIMEOUT_SECONDS}`]),
     "--log-driver=none",
     "--tmpfs=/tmp:rw,nosuid,nodev,size=512m,mode=1777",
     `--network=${mode === "export" ? "none" : settings.CODEX_RUNNER_NETWORK}`,

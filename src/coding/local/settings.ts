@@ -35,12 +35,6 @@ export const runnerSettings = z.object({
     .default("deepx_codex_tasks"),
   CODEX_RUNNER_PROXY_URL: z.string().url().default("http://codex-runner:3020"),
   CODEX_RUNNER_STATE: z.string().default("/var/lib/deepx-codex"),
-  CODEX_RUNNER_TIMEOUT_SECONDS: z.coerce
-    .number()
-    .int()
-    .min(60)
-    .max(7200)
-    .default(2700),
   CODEX_RUNNER_RETENTION_HOURS: z.coerce
     .number()
     .int()

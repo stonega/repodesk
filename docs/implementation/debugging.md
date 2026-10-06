@@ -54,6 +54,15 @@ Interpret the states separately:
   error. Older runner builds allowed a narrative evidence field, causing short
   retries to stop. Updated intake schemas pin the current text and revision while
   preserving the guard. See the [evidence incident](../../postmortem/2026-10-06-codex-intent-evidence.md).
+- `coding_execution_failed` on v0.1.20 can hide an implementation app-server or
+  completed-result error. The old device-auth cleanup removed its session logs
+  without persisting a safe failure marker. A task's token total equaling its old
+  quota can represent missing usage, not an actual provider token-limit error.
+  The updated adapter records a specific safe code plus reported usage and thread
+  identity before cleanup. Provider usage/rate limits, connection failures,
+  rejected requests, context overflow, sandbox errors and missing/invalid results
+  are distinct; raw provider messages are never recorded. See the
+  [implementation failure incident](../../postmortem/2026-10-06-codex-implementation-failure.md).
 - A pending delivery is queued separately from generation. A failed delivery has
   a Telegram or policy error. An unknown delivery must be inspected before any
   resend, because Telegram might already have accepted it.

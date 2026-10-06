@@ -83,6 +83,7 @@ for (const width of [1280, 390]) {
       exact: true,
     });
     await expect(search).toBeFocused();
+    await expect(search).toHaveAttribute("aria-expanded", "false");
     await expect(
       dialog.getByRole("option", { name: "stonega/configured" }),
     ).toHaveCount(0);
@@ -139,6 +140,9 @@ for (const width of [1280, 390]) {
       name: "Repository",
       exact: true,
     });
+    await expect(editSearch).toHaveValue("stonega/deepx-web");
+    await expect(editSearch).toHaveAttribute("aria-expanded", "false");
+    await editSearch.click();
     await expect(
       edit.getByRole("option", { name: "stonega/deepx-web" }),
     ).toHaveAttribute("aria-selected", "true");
@@ -178,6 +182,61 @@ test("typing text requires an actual repository selection", async ({
     ),
   ).toBe(false);
 });
+
+for (const width of [1280, 390]) {
+  test(`Edit opens with the saved repository and no execution quota fields at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const f = await fixture(page);
+    await f.dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Edit coding repository 1", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: "Edit coding repository",
+      exact: true,
+    });
+    const search = dialog.getByRole("combobox", {
+      name: "Repository",
+      exact: true,
+    });
+    await expect(search).toBeFocused();
+    await expect(search).toHaveValue("stonega/configured");
+    await expect(search).toHaveAttribute("aria-expanded", "false");
+    await expect(dialog.getByRole("listbox")).toHaveCount(0);
+    for (const label of [
+      "Maximum execution cycles",
+      "Automatic check repairs per cycle",
+      "Active execution time (seconds)",
+      "Codex token limit",
+    ])
+      await expect(dialog.getByLabel(label, { exact: true })).toHaveCount(0);
+    await expect(dialog).not.toContainText("full reservation");
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: `test-results/coding-repository-edit-${width}.png`,
+    });
+    await search.press("ArrowDown");
+    await expect(search).toHaveAttribute("aria-expanded", "true");
+    await search.press("Enter");
+    await expect(search).toHaveValue("stonega/configured");
+    await dialog.getByLabel("Execution policy").selectOption("direct");
+    await dialog
+      .getByRole("button", { name: "Save coding repository", exact: true })
+      .click();
+    await expect(dialog).toHaveCount(0);
+    expect(f.saved.at(-1)?.repositories[0]?.repositoryId).toBe(1);
+    expect(f.saved.at(-1)?.repositories[0]?.development).toEqual({
+      executionMode: "direct",
+      publishByDefault: false,
+    });
+  });
+}
 
 test("repository metadata refresh preserves selection and unsaved branch and maintainer edits", async ({
   page,

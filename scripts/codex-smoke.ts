@@ -188,8 +188,6 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     `CODEX_RUNNER_NETWORK=${name}`,
     "-e",
     `CODEX_RUNNER_IMAGE=${image}`,
-    "-e",
-    "CODEX_RUNNER_TIMEOUT_SECONDS=120",
     `${image}-supervisor`,
   ]);
   const port = await engine(["port", name, "3020"]);
@@ -354,9 +352,6 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
       },
     ],
     context: "",
-    maxRepairAttempts: 2,
-    activeSeconds: 120,
-    maxTokens: 1000,
   };
   const waitFor = async (id: string, expected: string) => {
     for (let attempt = 0; attempt < 50; attempt++) {
@@ -424,7 +419,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   });
   const repaired = await waitFor(developmentIds[2], "ready");
   if (repaired.tokens !== 40 || !repaired.checkPassed)
-    throw Error("Bounded repair or usage accounting failed");
+    throw Error("Check repair or usage accounting failed");
   await request(`/tasks/${workspaceId}/${developmentIds[2]}/cancel`, {});
   await request("/tasks", {
     ...input,
@@ -436,19 +431,19 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
       inputs: [
         { ...development.inputs[0], text: "Repair fixture Exhaust fixture" },
       ],
-      maxRepairAttempts: 1,
     },
   });
   for (let attempt = 0; attempt < 50; attempt++) {
-    const failed = (await request(
+    const repairing = (await request(
       `/tasks/${workspaceId}/${developmentIds[3]}`,
     )) as LocalStatus;
-    if (failed.state === "failed") {
-      if (failed.error !== "coding_check_failed" || failed.tokens !== 40)
-        throw Error("Repair limit failed");
+    if (repairing.state === "failed")
+      throw Error("Repair stopped at a retired execution quota");
+    if ((repairing.tokens ?? 0) >= 100) {
+      await request(`/tasks/${workspaceId}/${developmentIds[3]}/cancel`, {});
       break;
     }
-    if (attempt === 49) throw Error("Repair limit timed out");
+    if (attempt === 49) throw Error("Repeated repair fixture timed out");
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
   const pr = {
@@ -606,7 +601,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   for (const id of developmentIds)
     await request(`/tasks/${workspaceId}/${id}/erase`, {});
   console.log(
-    `${engineName} smoke passed: provider/device tasks, question checkpoint/reconstruction, bounded repair, fresh/same-PR publication, remote-head fencing, device continuation, auth expiry/restart/reconnect, usage, erasure and cancellation.`,
+    `${engineName} smoke passed: provider/device tasks, question checkpoint/reconstruction, repeated repair, fresh/same-PR publication, remote-head fencing, device continuation, auth expiry/restart/reconnect, usage, erasure and cancellation.`,
   );
 } catch (error) {
   for (const task of [key, failedKey, deviceKey, ...developmentKeys])

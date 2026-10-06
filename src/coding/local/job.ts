@@ -11,6 +11,7 @@ import {
 } from "../development.ts";
 import { CodexAuthError, codexAuthFailure } from "./auth-failure.ts";
 import { runConversation } from "./conversation.ts";
+import { CodexConversationError } from "./conversation-failure.ts";
 import { localStart } from "./protocol.ts";
 
 const jobSchema = localStart
@@ -136,6 +137,7 @@ async function implement(job: Job) {
   // A resumed execution must not reuse the prior failure marker.
   await rm("/task/failure-code", { force: true });
   await rm("/task/auth-failure.json", { force: true });
+  await rm("/task/conversation-failure.json", { force: true });
   if (job.development) {
     let diagnostics: string | undefined;
     try {
@@ -164,9 +166,7 @@ async function implement(job: Job) {
           job.payload.authMode === "device_code"
             ? undefined
             : job.development.threadId,
-        maxTokens: job.development.maxTokens,
         readOnly: job.development.mode !== "work",
-        timeoutMs: job.development.activeSeconds * 1000,
       });
     } catch (error) {
       if (
@@ -181,6 +181,17 @@ async function implement(job: Job) {
           }),
         );
         await writeFile("/task/failure-code", "coding_device_auth_required");
+      } else if (error instanceof CodexConversationError) {
+        await writeFile(
+          "/task/conversation-failure.json",
+          JSON.stringify({
+            code: error.code,
+            threadId: error.threadId,
+            tokens: error.tokens,
+          }),
+          { mode: 0o600 },
+        );
+        await writeFile("/task/failure-code", error.code);
       }
       throw error;
     }
@@ -429,18 +440,6 @@ async function exportPatch() {
     await file.close();
   }
 }
-// Podman supplies its own engine deadline; its fallback must allow the maximum setting.
-const deadline = setTimeout(
-  () => process.exit(124),
-  z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(7200)
-    .default(7200)
-    .parse(process.env.CODEX_JOB_TIMEOUT_SECONDS) * 1000,
-);
-deadline.unref();
 try {
   const mode = process.argv[2];
   if (mode === "export") await exportPatch();
@@ -474,6 +473,4 @@ try {
   // Do not print child errors, repository output or credential-bearing commands.
   process.stderr.write("Coding container failed.\n");
   process.exitCode = 1;
-} finally {
-  clearTimeout(deadline);
 }

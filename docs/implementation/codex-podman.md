@@ -172,14 +172,14 @@ A final Codex authentication failure sets `deviceAuth.state` and task state to
 account auth. Tasks retain the same private checkout and fixed verification plan,
 remove their auth volume and release the runner slot. The worker sends one sign-in
 notice per pause. After reconnect, it rechecks permissions, connected GitHub
-repository access and budgets before requesting idempotent `/resume-auth` on the same
+repository access before requesting idempotent `/resume-auth` on the same
 runner task. It creates a fresh auth volume; it does not recreate the issue, checkout
 or publication reservation. Questions and new inputs retain their original order.
 
-Sign-in waiting is excluded from active execution time. Reported token usage is
-cumulative across resumes. A denied request before observed model activity counts
-zero usage; missing usage after observed activity retains the reserved allowance
-and can exhaust the budget. Stop, disconnect, access revocation and source expiry
+Reported token usage is cumulative across resumes. A denied request before observed
+model activity counts zero usage; missing reports after observed activity are marked
+as unknown usage. They are not replaced with a configured allowance and do not
+block authorized continuation. Stop, disconnect, access revocation and source expiry
 prevent continuation. Local checkpoint retention still applies while waiting;
 expired checkouts report `coding_checkpoint_expired` and require a new task.
 
@@ -207,8 +207,8 @@ does not connect a ChatGPT account.
 
 The supervisor joins the app network and a separate task network. Task containers
 join only the task network, have no published ports, run as UID 1000 with a
-read-only root filesystem, dropped capabilities, process/CPU/memory limits and
-a container timeout. Outbound access is needed for GitHub, packages and the
+read-only root filesystem, dropped capabilities and process/CPU/memory limits.
+Outbound access is needed for GitHub, packages and the
 configured provider. The Podman overlay requires a **Podman** engine even when
 using `docker compose` for configuration validation. The ordinary app still
 also supports the Docker coding overlay used by VPS releases.
@@ -229,7 +229,7 @@ or GitHub App private key is mounted into coding containers. The supervisor HTTP
 4. Open **Configuration → Edit** to save the workspace provider key or complete
    device-code sign-in, then enable Codex.
 
-Repository identity, maintainers and budgets are operator configuration. Codex
+Repository identity, maintainers and publication policy are operator configuration. Codex
 chooses a bounded verification plan (one to eight commands, at most 2000 characters
 each), including required preparation for credential-free replay. The runner freezes
 that plan for repairs and runs it in the check container without model/GitHub
@@ -251,8 +251,7 @@ volume are removed after implementation.
 
 After checks pass, a credential-free export container reads a size-limited patch.
 An interrupted export can be recreated because it only reads the work volume and
-has no network or credentials. The runner reports timeout failures with their
-reason even when its periodic cleanup detects them first.
+has no network or credentials.
 The worker rechecks actor, repository, configuration and deployment permissions
 after minting a fresh repository-scoped publication token. A new container with a
 fresh volume applies the patch, rejects `.github/` changes, commits, pushes a unique
@@ -262,7 +261,7 @@ retried after an uncertain response.
 
 Custom provider spend is separate from Pi chat budgets. Device-code runs use
 the connected ChatGPT account's Codex entitlements. Defaults are one active task,
-2 CPUs, 4 GiB RAM, 256 processes and 45 minutes including publication; tune the
+2 CPUs, 4 GiB RAM and 256 processes; tune the
 documented `CODEX_RUNNER_*` environment variables in `.env.example`. Patches are
 limited to 5 MiB. Retained workspaces and sessions are removed after 24 hours
 (configurable 1–168 hours); stopped containers and volumes are also removed.
@@ -272,18 +271,19 @@ volumes consume host disk, so provision storage for the configured retention.
 Stop and access revocation cancel local execution without requiring GitHub
 credentials. A stop during publication reports an unknown outcome because a push
 or PR may already exist. Workspace deletion does not undo remote writes; abandoned
-local work times out and is cleaned by the supervisor. The worker also disconnects
+local work is cancelled and cleaned by the supervisor. The worker also disconnects
 and removes that workspace's sealed device credential after deletion; if the
 supervisor is temporarily unavailable, it retries on the next maintenance pass.
-Docker jobs receive a watchdog for the remaining overall task deadline; the
-supervisor independently enforces expiry every five seconds. Docker lacks Podman's
-engine-level `--timeout`; keep the supervisor running for enforcement,
-reconciliation and cleanup. A restart observes existing containers by their
+Codex tasks have no execution-cycle, repair-count, active-time or token quotas.
+Docker and Podman jobs have no application deadline or container watchdog.
+Keep the supervisor running for cancellation, reconciliation and cleanup.
+A restart observes existing containers by their
 deterministic names, without launching duplicate work.
 
 For an **unknown** outcome, inspect the matching task branch, issue and PR before
-starting another request. A container reserved but never started expires at the
-task deadline. Encrypted active-task credentials, temporary task tokens and reviewed
+starting another request. A reserved container with an uncertain start is reconciled
+by its deterministic identity; it is not recreated blindly.
+Encrypted active-task credentials, temporary task tokens and reviewed
 task content are private supervisor state. Replacing the
 supervisor state volume loses recovery information and must not be used to retry
 tasks automatically.

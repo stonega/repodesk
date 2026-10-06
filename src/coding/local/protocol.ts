@@ -37,6 +37,7 @@ export const localStatus = z.object({
     .optional(),
   result: developmentResult.optional(),
   tokens: z.number().int().nonnegative().optional(),
+  usageUnknown: z.boolean().optional(),
   baseSha: z
     .string()
     .regex(/^[0-9a-f]{40}$/)

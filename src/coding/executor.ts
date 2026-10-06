@@ -9,6 +9,7 @@ import {
   type DevelopmentTask,
   developmentStopped,
 } from "./development.ts";
+import { codingFailureMessage } from "./failure-messages.ts";
 import type {
   LocalDeviceAuth,
   LocalRunner,
@@ -185,13 +186,6 @@ export class DevelopmentExecutor {
         return;
       }
       if (task.state === "queued") {
-        requireThat(
-          task.attempts < task.policy.maxAttempts &&
-            task.activeMs < task.policy.activeSeconds * 1000 &&
-            task.tokens < task.policy.maxTokens,
-          "coding_budget_exhausted",
-          409,
-        );
         if (task.payload.authMode === "device_code") {
           const device = this.runner as LocalRunner & Partial<LocalDeviceAuth>;
           requireThat(
@@ -258,12 +252,6 @@ export class DevelopmentExecutor {
               previousAttemptId: t.previousAttemptId,
               threadId: t.threadId,
               pr,
-              maxRepairAttempts: t.policy.maxRepairAttempts,
-              activeSeconds: Math.max(
-                1,
-                Math.floor(t.policy.activeSeconds - t.activeMs / 1000),
-              ),
-              maxTokens: t.policy.maxTokens - t.tokens,
             };
             await sql.query(
               "INSERT INTO coding_task_attempts(workspace_id,id,task_id,fence,state,data) VALUES($1,$2,$3,$4,'reserved',$5)",
@@ -276,7 +264,6 @@ export class DevelopmentExecutor {
                   revision: t.revision,
                   startedAt: Date.now(),
                   run,
-                  usageReserved: run.maxTokens,
                 }),
               ],
             );
@@ -335,11 +322,6 @@ export class DevelopmentExecutor {
             lease,
             async (w, sql, t) => {
               await this.allowed(w, sql, t);
-              requireThat(
-                t.tokens + (status.tokens ?? 0) < t.policy.maxTokens,
-                "coding_budget_exhausted",
-                409,
-              );
               return true;
             },
             false,
@@ -537,7 +519,7 @@ export class DevelopmentExecutor {
           await this.notice(
             w,
             t,
-            `Codex stopped: ${t.error}${t.pr ? `\n${t.pr.url}` : ""}`,
+            `Codex stopped: ${codingFailureMessage(t.error)}${t.pr ? `\n${t.pr.url}` : ""}`,
             `stopped:${t.fence}`,
           );
         }
@@ -606,7 +588,7 @@ export class DevelopmentExecutor {
           await this.notice(
             w,
             t,
-            `Codex stopped: ${code}${t.pr ? `\n${t.pr.url}` : ""}`,
+            `Codex stopped: ${codingFailureMessage(code)}${t.pr ? `\n${t.pr.url}` : ""}`,
             `stopped:${t.fence}`,
           );
         }
@@ -752,8 +734,8 @@ export class DevelopmentExecutor {
       0,
       Date.now() - (row?.data.startedAt ?? Date.now()) - (task.authWaitMs ?? 0),
     );
-    task.tokens +=
-      status.tokens ?? row?.data.usageReserved ?? task.policy.maxTokens;
+    task.tokens += status.tokens ?? 0;
+    task.usageUnknown ||= status.usageUnknown || status.tokens === undefined;
     task.threadId = status.threadId;
     task.previousAttemptId = task.attemptId;
     await finishAttempt(
@@ -763,6 +745,7 @@ export class DevelopmentExecutor {
       {
         endedAt: Date.now(),
         tokens: status.tokens,
+        usageUnknown: status.usageUnknown || status.tokens === undefined,
         checkPassed: status.checkPassed,
       },
     );

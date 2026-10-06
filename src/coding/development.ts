@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { requireThat } from "../domain.ts";
 import { branchName, type codingPayload } from "./config.ts";
-import type { DevelopmentPolicy } from "./development-policy.ts";
+import {
+  type DevelopmentPolicy,
+  withoutDevelopmentLimits,
+} from "./development-policy.ts";
 
 export { developmentPolicy } from "./development-policy.ts";
 export const developmentInput = z.object({
@@ -71,34 +74,47 @@ export const developmentOutputSchema = {
     },
   },
 };
-export const developmentRun = z
-  .object({
-    taskId: z.uuid(),
-    revision: z.number().int().positive(),
-    mode: z.enum(["intake", "work", "analysis"]),
-    inputs: z.array(developmentInput).min(1).max(100),
-    context: z.string().max(40000).default(""),
-    previousAttemptId: z.uuid().optional(),
-    threadId: z
-      .string()
-      .regex(/^[a-zA-Z0-9-]{1,100}$/)
-      .optional(),
-    maxRepairAttempts: z.number().int().min(0).max(5),
-    activeSeconds: z.number().int().min(1).max(7200),
-    maxTokens: z.number().int().positive(),
-    pr: z
-      .object({
-        number: z.number().int().positive(),
-        url: z.string().url(),
-        branch: branchName,
-        headSha: z.string().regex(/^[0-9a-f]{40}$/),
-      })
-      .optional(),
-  })
-  .strict();
+export const developmentRun = z.preprocess(
+  withoutDevelopmentLimits,
+  z
+    .object({
+      taskId: z.uuid(),
+      revision: z.number().int().positive(),
+      mode: z.enum(["intake", "work", "analysis"]),
+      inputs: z.array(developmentInput).min(1).max(100),
+      context: z.string().max(40000).default(""),
+      previousAttemptId: z.uuid().optional(),
+      threadId: z
+        .string()
+        .regex(/^[a-zA-Z0-9-]{1,100}$/)
+        .optional(),
+      pr: z
+        .object({
+          number: z.number().int().positive(),
+          url: z.string().url(),
+          branch: branchName,
+          headSha: z.string().regex(/^[0-9a-f]{40}$/),
+        })
+        .optional(),
+    })
+    .strict(),
+);
 export type DevelopmentRun = z.infer<typeof developmentRun>;
 export function developmentSchema(run: DevelopmentRun) {
-  if (run.mode !== "intake") return developmentOutputSchema;
+  if (run.mode !== "intake")
+    return {
+      ...developmentOutputSchema,
+      properties: {
+        ...developmentOutputSchema.properties,
+        status: {
+          type: "string",
+          enum:
+            run.mode === "work"
+              ? ["completed", "needs_input"]
+              : ["analysis", "needs_input"],
+        },
+      },
+    };
   const input = run.inputs.find((input) => input.revision === run.revision);
   requireThat(input, "coding_input_revision_missing", 409);
   return {
@@ -142,6 +158,7 @@ export interface DevelopmentTask {
   previousAttemptId?: string;
   attempts: number;
   tokens: number;
+  usageUnknown?: boolean;
   activeMs: number;
   authPausedAt?: string;
   authWaitMs?: number;

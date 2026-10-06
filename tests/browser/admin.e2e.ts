@@ -1623,14 +1623,13 @@ test.describe
       await codingDialog
         .getByLabel("Publish verified implementations as draft PRs by default")
         .check();
-      await codingDialog.getByLabel("Maximum execution cycles").fill("6");
-      await codingDialog
-        .getByLabel("Automatic check repairs per cycle")
-        .fill("1");
-      await codingDialog
-        .getByLabel("Active execution time (seconds)")
-        .fill("1800");
-      await codingDialog.getByLabel("Codex token limit").fill("150000");
+      for (const label of [
+        "Maximum execution cycles",
+        "Automatic check repairs per cycle",
+        "Active execution time (seconds)",
+        "Codex token limit",
+      ])
+        await expect(codingDialog.getByLabel(label)).toHaveCount(0);
       await codingDialog
         .getByRole("button", { name: "Save coding repository" })
         .click();
@@ -1664,18 +1663,16 @@ test.describe
           "Publish verified implementations as draft PRs by default",
         ),
       ).toBeChecked();
+      for (const label of [
+        "Maximum execution cycles",
+        "Automatic check repairs per cycle",
+        "Active execution time (seconds)",
+        "Codex token limit",
+      ])
+        await expect(codingEdit.getByLabel(label)).toHaveCount(0);
       await expect(
-        codingEdit.getByLabel("Maximum execution cycles"),
-      ).toHaveValue("6");
-      await expect(
-        codingEdit.getByLabel("Automatic check repairs per cycle"),
-      ).toHaveValue("1");
-      await expect(
-        codingEdit.getByLabel("Active execution time (seconds)"),
-      ).toHaveValue("1800");
-      await expect(codingEdit.getByLabel("Codex token limit")).toHaveValue(
-        "150000",
-      );
+        codingEdit.getByRole("combobox", { name: "Repository", exact: true }),
+      ).toHaveAttribute("aria-expanded", "false");
       await codingEdit.screenshot({
         path: "test-results/coding-policy-desktop.png",
       });

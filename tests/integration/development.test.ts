@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import {
   type DevelopmentResult,
   developmentPolicy,
@@ -369,7 +370,7 @@ const url = process.env.TEST_DATABASE_URL;
       "Keep zero-based pages",
     ]);
   });
-  test("analysis, forged evidence, missing usage and exhausted limits cannot publish", async () => {
+  test("analysis and forged evidence cannot publish; missing usage is explicit and does not block authorized work", async () => {
     const f = await fixture("Explain pagination only");
     await f.tick();
     await f.tick({
@@ -403,8 +404,120 @@ const url = process.env.TEST_DATABASE_URL;
     ).toBe("failed");
     const missing = await fixture();
     await missing.tick();
-    await missing.tick({ state: "succeeded", result: result() });
-    expect((await missing.tick()).error).toBe("coding_budget_exhausted");
+    const unknown = await missing.tick({
+      state: "succeeded",
+      result: result(),
+    });
+    expect(unknown.tokens).toBe(0);
+    expect(unknown.usageUnknown).toBe(true);
+    expect((await missing.tick()).state).toBe("working");
+    expect(missing.starts.at(-1)?.development?.mode).toBe("work");
+  });
+
+  test("cycles, elapsed time and reported token counts do not impose execution quotas", async () => {
+    const f = await fixture();
+    await store.change(f.w.id, async (_w, sql) => {
+      const task = await taskGet(sql, f.w.id, f.task.id);
+      task.attempts = 100;
+      task.activeMs = 30 * 86400000;
+      task.tokens = 3000000;
+      await taskSave(sql, task);
+    });
+    expect((await f.tick()).state).toBe("working");
+    expect(f.starts).toHaveLength(1);
+    expect(f.publications).toHaveLength(0);
+    const run = f.starts[0]?.development;
+    for (const key of [
+      "maxAttempts",
+      "maxRepairAttempts",
+      "activeSeconds",
+      "maxTokens",
+    ])
+      expect(run).not.toHaveProperty(key);
+    await store.change(f.w.id, async (w, sql) => {
+      await cancelDevelopment(sql, w, "101", f.task.id);
+    });
+    expect((await f.tick()).state).toBe("cancelled");
+    expect(f.cancels).toHaveLength(1);
+  });
+
+  test("retired limits migration preserves authority, separates tenant usage and is repeatable", async () => {
+    const first = await fixture();
+    const second = await fixture();
+    const policy = {
+      executionMode: "direct",
+      publishByDefault: false,
+      maxAttempts: 1,
+      maxRepairAttempts: 0,
+      activeSeconds: 60,
+      maxTokens: 200000,
+    };
+    for (const [f, tokens] of [
+      [first, 17],
+      [second, 33],
+    ] as const) {
+      await store.pool.query(
+        "UPDATE workspaces SET data=jsonb_set(data,'{coding,settings,repositories,0,development}',$2::jsonb) WHERE id=$1",
+        [f.w.id, JSON.stringify(policy)],
+      );
+      await store.pool.query(
+        "UPDATE coding_tasks SET data=jsonb_set(jsonb_set(data,'{policy}',$3::jsonb),'{tokens}','200000') WHERE workspace_id=$1 AND id=$2",
+        [f.w.id, f.task.id, JSON.stringify(policy)],
+      );
+      await store.pool.query(
+        "INSERT INTO coding_task_attempts(workspace_id,task_id,id,fence,state,data) VALUES($1,$2,$3,1,'done',$4)",
+        [
+          f.w.id,
+          f.task.id,
+          randomUUID(),
+          JSON.stringify({ tokens, endedAt: 1 }),
+        ],
+      );
+    }
+    await store.pool.query(
+      "INSERT INTO coding_task_attempts(workspace_id,task_id,id,fence,state,data) VALUES($1,$2,$3,2,'done',$4)",
+      [
+        first.w.id,
+        first.task.id,
+        randomUUID(),
+        JSON.stringify({ usageReserved: 199983, endedAt: 2 }),
+      ],
+    );
+    const grants = (
+      await store.pool.query(
+        "SELECT data FROM coding_task_grants WHERE workspace_id=$1 AND task_id=$2",
+        [first.w.id, first.task.id],
+      )
+    ).rows;
+    const sql = await readFile(
+      new URL("../../migrations/014_remove_coding_limits.sql", import.meta.url),
+      "utf8",
+    );
+    for (let pass = 0; pass < 2; pass++) {
+      await store.pool.query(sql);
+      expect((await first.read()).policy).toEqual({
+        executionMode: "direct",
+        publishByDefault: false,
+      });
+      expect((await first.read()).tokens).toBe(17);
+      expect((await first.read()).usageUnknown).toBe(true);
+      expect((await second.read()).tokens).toBe(33);
+      expect((await second.read()).usageUnknown).toBe(false);
+      const w = await store.read(first.w.id);
+      expect(w.coding?.revision).toBe(1);
+      expect(w.coding?.settings.repositories[0]?.development).toEqual({
+        executionMode: "direct",
+        publishByDefault: false,
+      });
+      expect(
+        (
+          await store.pool.query(
+            "SELECT data FROM coding_task_grants WHERE workspace_id=$1 AND task_id=$2",
+            [first.w.id, first.task.id],
+          )
+        ).rows,
+      ).toEqual(grants);
+    }
   });
   test("retry intake accepts current verbatim evidence and rejects narrative or earlier requirements", async () => {
     for (const evidence of [

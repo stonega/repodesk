@@ -301,7 +301,7 @@ test("metadata archives reject links and oversized entries without filesystem ex
   expect(() => archiveText(archive)).toThrow();
 });
 
-test("restart enforces deadlines and retention cleans only the owning task", async () => {
+test("restart preserves old active tasks without a deadline and retention cleans only stopped tasks", async () => {
   const f = await fixture();
   await f.supervisor.start(f.input);
   const key = taskKey(f.input.workspaceId, f.input.taskId);
@@ -314,7 +314,9 @@ test("restart enforces deadlines and retention cleans only the owning task", asy
   await restarted.sweep();
   expect(
     await restarted.status(f.input.workspaceId, f.input.taskId),
-  ).toMatchObject({ state: "cancelled", error: "coding_task_timeout" });
+  ).toMatchObject({ state: "running", phase: "implement" });
+  expect(f.calls.some((c) => c.args[0] === "stop")).toBe(false);
+  await restarted.cancel(f.input.workspaceId, f.input.taskId);
   const expired = JSON.parse(await readFile(path, "utf8"));
   expired.finishedAt = Date.now() - 48 * 3600000;
   await writeFile(path, JSON.stringify(expired));
@@ -478,9 +480,6 @@ test("continuous questions checkpoint and release the runner; tenant-scoped answ
         },
       ],
       context: "",
-      maxRepairAttempts: 2,
-      activeSeconds: 2700,
-      maxTokens: 1000,
     },
   };
   const originalRead = f.engine.readText;
@@ -557,7 +556,7 @@ test("continuous questions checkpoint and release the runner; tenant-scoped answ
   expect(record).not.toContain("Keep page one");
 });
 
-test("failed automatic checks trigger bounded repairs with sealed credentials and cumulative usage", async () => {
+test("failed automatic checks continue repair beyond old quotas with sealed credentials and cumulative usage", async () => {
   const f = await fixture();
   const input = {
     ...f.input,
@@ -577,9 +576,6 @@ test("failed automatic checks trigger bounded repairs with sealed credentials an
         },
       ],
       context: "",
-      maxRepairAttempts: 1,
-      activeSeconds: 2700,
-      maxTokens: 1000,
     },
   };
   const originalRead = f.engine.readText,
@@ -610,18 +606,18 @@ test("failed automatic checks trigger bounded repairs with sealed credentials an
       return JSON.stringify({
         Running: false,
         Status: "exited",
-        ExitCode: checks === 1 ? 1 : 0,
+        ExitCode: checks <= 4 ? 1 : 0,
       });
     }
     return originalCommand(args, env);
   };
   await f.supervisor.start(input);
-  for (let i = 0; i < 6; i++)
+  for (let i = 0; i < 12; i++)
     await f.supervisor.status(input.workspaceId, input.taskId);
   const ready = await f.supervisor.status(input.workspaceId, input.taskId);
   expect(ready.state).toBe("ready");
-  expect(ready.tokens).toBe(20);
-  expect(checks).toBe(2);
+  expect(ready.tokens).toBe(50);
+  expect(checks).toBe(5);
   expect(
     f.calls.filter(
       (c) =>
@@ -630,13 +626,13 @@ test("failed automatic checks trigger bounded repairs with sealed credentials an
           `${taskKey(input.workspaceId, input.taskId)}-implement`,
         ),
     ),
-  ).toHaveLength(2);
+  ).toHaveLength(5);
   const repairedInputs = f.jobInputs
     .map((s) => JSON.parse(s))
     .filter((j) => j.development);
-  expect(repairedInputs.some((j) => j.development.maxTokens === 990)).toBe(
-    true,
-  );
+  for (const j of repairedInputs)
+    for (const key of ["maxRepairAttempts", "activeSeconds", "maxTokens"])
+      expect(j.development).not.toHaveProperty(key);
   expect(JSON.stringify(repairedInputs)).not.toContain(input.providerApiKey);
   const checkInputs = repairedInputs.filter((j) => j.verificationCommands);
   expect(checkInputs.length).toBeGreaterThanOrEqual(2);
@@ -666,9 +662,6 @@ test("device continuous result is captured before deleting its credentialed cont
       },
     ],
     context: "",
-    maxRepairAttempts: 2,
-    activeSeconds: 2700,
-    maxTokens: 1000,
   };
   await f.supervisor.device.save(
     f.input.workspaceId,
@@ -726,9 +719,6 @@ test("completed work without a valid verification plan cannot become ready", asy
       revision: 1,
       mode: "work",
       context: "",
-      maxRepairAttempts: 1,
-      activeSeconds: 2700,
-      maxTokens: 1000,
       inputs: [
         {
           revision: 1,
@@ -797,9 +787,6 @@ async function authPausedFixture(continuous = true) {
           kind: "request",
         },
       ],
-      maxRepairAttempts: 1,
-      activeSeconds: 2700,
-      maxTokens: 1000,
     };
   }
   await f.supervisor.device.save(
@@ -982,6 +969,78 @@ test("cancellation stops Codex before capturing its last rotated credential", as
   );
 });
 
+test("safe implementation failures preserve reported usage before temporary account cleanup", async () => {
+  const f = await fixture();
+  f.input.issue = undefined;
+  f.input.payload.authMode = "device_code";
+  f.input.development = {
+    taskId: randomUUID(),
+    revision: 1,
+    mode: "work",
+    context: "",
+    inputs: [
+      {
+        revision: 1,
+        actor: "101",
+        sourceId: "101:10",
+        text: "Fix pagination",
+        kind: "request",
+      },
+    ],
+  };
+  await f.supervisor.device.save(
+    f.input.workspaceId,
+    '{"tokens":{"access_token":"fixture-account"}}',
+  );
+  const originalRead = f.engine.readText,
+    originalCommand = f.engine.command;
+  const events: string[] = [];
+  f.engine.readText = async (container, path, max) => {
+    if (path === "/auth/auth.json")
+      return '{"tokens":{"access_token":"fixture-account"}}';
+    if (path === "/task/failure-code") return "coding_provider_usage_limit";
+    if (path === "/task/conversation-failure.json") {
+      events.push("safe-failure-read");
+      return JSON.stringify({
+        code: "coding_provider_usage_limit",
+        threadId: "thread-123",
+        tokens: 654321,
+        message: "bearer private-value",
+      });
+    }
+    return originalRead(container, path, max);
+  };
+  f.engine.command = async (args, env) => {
+    if (args[0] === "inspect" && args.at(-1)?.endsWith("-implement"))
+      return JSON.stringify({ Running: false, Status: "exited", ExitCode: 1 });
+    if (args[0] === "rm" && args.at(-1)?.endsWith("-implement"))
+      events.push("credentials-removed");
+    return originalCommand(args, env);
+  };
+  await f.supervisor.start(f.input);
+  for (let i = 0; i < 3; i++)
+    await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  const status = await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  expect(status).toMatchObject({
+    state: "failed",
+    error: "coding_provider_usage_limit",
+    tokens: 654321,
+    threadId: "thread-123",
+    usageUnknown: false,
+  });
+  expect(events.indexOf("safe-failure-read")).toBeLessThan(
+    events.indexOf("credentials-removed"),
+  );
+  const record = await readFile(
+    join(
+      f.settings.CODEX_RUNNER_STATE,
+      `${taskKey(f.input.workspaceId, f.input.taskId)}.json`,
+    ),
+    "utf8",
+  );
+  expect(record).not.toContain("private-value");
+});
+
 test("Docker task arguments preserve isolation without Podman-only flags", async () => {
   const f = await fixture();
   const settings = { ...f.settings, CODEX_CONTAINER_ENGINE: "docker" as const };
@@ -990,7 +1049,7 @@ test("Docker task arguments preserve isolation without Podman-only flags", async
     taskKey(f.input.workspaceId, f.input.taskId),
     "work",
     "implement",
-    { CODEX_JOB_TIMEOUT_SECONDS: "120" },
+    { CODEX_TASK_TOKEN: "temporary-task-token" },
     "task-auth",
   );
   expect(args).toContain("task-auth:/auth");
@@ -1003,7 +1062,7 @@ test("Docker task arguments preserve isolation without Podman-only flags", async
   expect(args.some((arg) => arg.startsWith("--timeout="))).toBe(false);
   expect(args).not.toContain("--http-proxy=false");
   expect(args.join(" ")).not.toContain("docker.sock");
-  expect(args).not.toContain("120");
+  expect(args).not.toContain("temporary-task-token");
 });
 test("runner readiness requires the task image and network, while liveness remains independent", async () => {
   const f = await fixture();

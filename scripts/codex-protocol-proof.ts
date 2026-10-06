@@ -171,9 +171,6 @@ try {
       ],
       context:
         "Earlier messages explain the retry but do not replace its evidence.",
-      maxRepairAttempts: 2,
-      maxTokens: 10000,
-      activeSeconds: 60,
     }),
   });
   const question = await runConversation({

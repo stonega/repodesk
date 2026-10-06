@@ -91,12 +91,6 @@ rl.on('line', (line) => {
       expect(auth.threadId).toBe("auth-thread");
       expect(auth.tokens).toBe(7);
     }
-    try {
-      await runConversation({ ...options, maxTokens: 6 });
-      throw Error("Expected token limit");
-    } catch (error) {
-      expect((error as { code: string }).code).toBe("coding_token_limit");
-    }
     for (const partial of ["no", "yes"]) {
       try {
         await runConversation({

@@ -22,9 +22,11 @@ before any GitHub checkout, not evidence of repository reachability failure.
 ## Continuous collaboration
 
 In the repository editor, select **Direct** to allow a current maintainer's clear
-instruction to authorize a bounded task. Set whether verified implementations
-publish a draft PR by default, execution cycles (default 8), repairs per cycle
-(default 2), active seconds (default 2700) and token allowance (default 200000).
+instruction to authorize a task. Set whether verified implementations
+publish a draft PR by default. Codex has no application-imposed execution-cycle,
+repair-count, active-time or token quotas. It continues authorized work until
+completion, a necessary question, cancellation or failure. Provider/account
+limits, container isolation, retention and current permissions still apply.
 Pi selects the requested repository and relays source IDs. Codex investigates,
 interprets the original instruction, decides the solution and handles checks.
 Analysis-only requests receive investigation answers and cannot publish changes.
@@ -53,12 +55,12 @@ project manifests, scripts and CI. No setup/check commands are configured in the
 panel. Its bounded verification plan is captured by the runner and replayed
 without model or GitHub credentials; patch integrity is also checked. The first
 plan stays fixed during automatic repair. Failed checks return
-bounded private diagnostics to Codex for automatic repair within the same cycle's
-limits. New requirements received before publication reservation block the older
+bounded private diagnostics to Codex for automatic repair. New requirements
+received before publication reservation block the older
 patch until they are consumed and checked. Inputs arriving after reservation
-become the next cycle. Unknown usage retains the whole token reservation; this
-allowance is not an exact provider-dollar ceiling. Waiting does not consume active
-execution time; retention still applies.
+become the next cycle. Missing token reports are marked as unknown usage rather
+than charged as a retired allowance. Reported tokens are not a provider-dollar
+ceiling. Retention still applies.
 
 A follow-up fetches the existing PR and current branch head, then updates that
 branch using non-force publication from a fresh container. Closed/merged PRs are
@@ -77,10 +79,14 @@ stop execution. Source expiry and soft deletion scrub relational private content
 immediately and retry idempotent container/volume erasure until confirmed.
 
 GET additionally returns `developmentTasks`; repository settings accept optional
-`development: { executionMode, publishByDefault, maxAttempts, maxRepairAttempts,
-activeSeconds, maxTokens }`. The existing cancellation route handles continuous
+`development: { executionMode, publishByDefault }`.
+The existing cancellation route handles continuous
 task IDs. The migration creates tenant-scoped task/input/grant/attempt/event tables;
 it enables no new execution policy by itself. See [delivery evidence and rollout](codex-collaboration-plan.md).
+
+Migration `014_remove_coding_limits.sql` removes old limits from repository and
+current task policies, preserves historical grants and attempt envelopes, and
+rebuilds token totals from reported usage. It does not restart stopped tasks.
 
 ## Set up
 

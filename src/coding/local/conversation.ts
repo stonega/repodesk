@@ -8,6 +8,11 @@ import {
   developmentResult,
 } from "../development.ts";
 import { CodexAuthError, codexAuthFailure } from "./auth-failure.ts";
+import {
+  CodexConversationError,
+  conversationFailureCode,
+  conversationFailureCodes,
+} from "./conversation-failure.ts";
 
 /** Private JSONL client. Only completed turns cross the durable application boundary. */
 export async function runConversation(options: {
@@ -20,13 +25,13 @@ export async function runConversation(options: {
   readOnly?: boolean;
   signal?: AbortSignal;
   timeoutMs?: number;
-  maxTokens?: number;
   outputSchema?: typeof developmentOutputSchema;
 }): Promise<{
   threadId: string;
   turnId: string;
   result: DevelopmentResult;
   tokens: number;
+  usageUnknown: boolean;
   reconstructed: boolean;
 }> {
   const child = spawn(
@@ -49,6 +54,7 @@ export async function runConversation(options: {
   let turnStarted = false;
   let authFailed = false;
   let modelActivity = false;
+  let turnError: unknown;
   const authFailure = () =>
     new CodexAuthError(
       threadId || undefined,
@@ -71,7 +77,14 @@ export async function runConversation(options: {
   });
   // Observe early failures even while the handshake awaits its response.
   void completion.catch(() => {});
-  const failure = () => new Fault("coding_conversation_failed", 503);
+  const failure = (
+    code: (typeof conversationFailureCodes)[number] = "coding_conversation_failed",
+  ) =>
+    new CodexConversationError(
+      code,
+      threadId || undefined,
+      usageByTurn.get(turnId)?.tokens,
+    );
   const stop = (error: Error) => {
     if (settled) return;
     settled = true;
@@ -131,7 +144,9 @@ export async function runConversation(options: {
                         String(message.error.message),
                       )
                       ? "coding_session_missing"
-                      : "coding_conversation_failed",
+                      : conversationFailureCode(
+                          message.error.data ?? message.error,
+                        ),
                     503,
                   ),
             );
@@ -159,8 +174,10 @@ export async function runConversation(options: {
           p.item.type !== "userMessage"
         )
           modelActivity = true;
-        if (message.method === "error" && p?.willRetry !== true)
+        if (message.method === "error" && p?.willRetry !== true) {
           authFailed = codexAuthFailure(p?.error);
+          turnError = p?.error;
+        }
         if (
           message.method === "item/completed" &&
           p?.item?.type === "agentMessage" &&
@@ -190,8 +207,6 @@ export async function runConversation(options: {
               total,
             });
             tokens = usageByTurn.get(turnId)?.tokens ?? 0;
-            if (options.maxTokens && tokens > options.maxTokens)
-              stop(new Fault("coding_token_limit", 409));
           }
         }
         if (message.method === "turn/started" && turnStarted)
@@ -205,7 +220,7 @@ export async function runConversation(options: {
             stop(
               codexAuthFailure(p.turn.error) || authFailed
                 ? authFailure()
-                : failure(),
+                : failure(conversationFailureCode(p.turn.error ?? turnError)),
             );
             return;
           }
@@ -219,10 +234,13 @@ export async function runConversation(options: {
     }
   });
   const abort = () => stop(new Fault("coding_cancelled", 409));
-  const timer = setTimeout(
-    () => stop(new Fault("coding_task_timeout", 409)),
-    options.timeoutMs ?? 2700000,
-  );
+  const timer =
+    options.timeoutMs === undefined
+      ? undefined
+      : setTimeout(
+          () => stop(new Fault("coding_task_timeout", 409)),
+          options.timeoutMs,
+        );
   options.signal?.addEventListener("abort", abort, { once: true });
   try {
     if (options.signal?.aborted) throw new Fault("coding_cancelled", 409);
@@ -266,11 +284,36 @@ export async function runConversation(options: {
       .turn.id;
     await completion;
     tokens = usageByTurn.get(turnId)?.tokens ?? 0;
-    const result = developmentResult.parse(JSON.parse(final));
+    if (!final.trim()) throw failure("coding_result_missing");
+    let value: unknown;
+    try {
+      value = JSON.parse(final);
+    } catch {
+      throw failure("coding_result_json_invalid");
+    }
+    const parsed = developmentResult.safeParse(value);
+    if (!parsed.success) throw failure("coding_result_invalid");
+    const result = parsed.data;
     settled = true;
-    return { threadId, turnId, result, tokens, reconstructed };
+    return {
+      threadId,
+      turnId,
+      result,
+      tokens,
+      usageUnknown: !usageByTurn.has(turnId),
+      reconstructed,
+    };
   } catch (error) {
-    if (error instanceof Fault) throw error;
+    if (
+      error instanceof CodexAuthError ||
+      error instanceof CodexConversationError
+    )
+      throw error;
+    if (
+      error instanceof Fault &&
+      conversationFailureCodes.some((code) => code === error.code)
+    )
+      throw failure(error.code as (typeof conversationFailureCodes)[number]);
     throw failure();
   } finally {
     clearTimeout(timer);

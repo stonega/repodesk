@@ -6,6 +6,15 @@ Current baseline: [coding tasks](codex-coding.md) and [Podman runner](codex-podm
 
 ## Delivered implementation and validation
 
+Updated 2026-10-06: the user removed execution-cycle, repair-count, active-time
+and token quotas from settings and runtime enforcement. Migration 014 strips
+old overrides and separates reported token usage from unknown usage. Current
+repository policy contains only execution mode and default PR publication.
+The earlier quota/budget clauses in the original delivery sequence below are
+superseded; authority, cancellation, isolation, retention and verification gates
+remain required. Edit opens with the current repository selected and its search
+dropdown closed until the user interacts with it.
+
 Updated 2026-10-05: the user removed setup/check configuration entirely. Codex
 prepares the environment and returns a bounded repository verification plan. The
 runner freezes that plan during repair and replays it without model/GitHub credentials,
@@ -23,13 +32,13 @@ Migration `011_coding_collaboration.sql` adds tenant-scoped task/input/grant/
 attempt/event records. Direct mode is opt-in per repository; omitted policy retains
 reviewed approvals. Pi's tools resolve original source IDs. Source-bound intent
 interpretations append execution-grant events; model output cannot change repository
-identity, policy, limits or publication credentials. Application services recheck
+identity, policy or publication credentials. Application services recheck
 all participating maintainers, audience, source retention, configuration and bot
 identity before execution/publication.
 
 Check repair reacquires task credentials within the same isolated work volume and
-reserves each bounded repair before launch. Usage is accumulated by turn ID, excluding
-replayed events from earlier turns. Unknown usage keeps its reservation. A verified
+records each repair before launch. Usage is accumulated by turn ID, excluding
+replayed events from earlier turns. Missing usage is marked as unknown. A verified
 revision cannot publish while an earlier-arriving input remains unconsumed. Fresh
 publication preserves one branch/PR, checks current state and expected head, uses
 non-force push, and returns to work on confirmed non-fast-forward rejection.
@@ -48,16 +57,16 @@ Reproducible local evidence:
 - `tests/integration/development.test.ts`: disposable real PostgreSQL tests for
   atomic input/outbox records, rollback, duplicate updates, edits, tenant/audience
   boundaries, ordered collaborators, two-worker fencing, intent evidence, questions,
-  pending inputs, revocation during token minting, conservative budgets, same-PR
+  pending inputs, revocation during token minting, incomplete usage, same-PR
   follow-up, closed PR, unknown-publication reconciliation and private-state erasure.
 - `tests/unit/codex-runner.test.ts`: legacy compatibility plus checkpoint/slot release,
-  bounded repair with sealed credentials and cumulative usage.
+  repair beyond the retired quotas with sealed credentials and cumulative usage.
 - `bun scripts/codex-smoke.ts`: real rootless Podman with fake Codex/GitHub, local Git,
-  provider/device credentials, checkpoint recovery, check repair/exhaustion, fresh
+  provider/device credentials, checkpoint recovery, repeated check repair, fresh
   and same-PR publication, remote-head fencing, device continuation and erasure.
   Set `CODEX_SMOKE_PODMAN_SOCKET` when using a temporary rootless service socket.
 - The existing admin browser journey verifies reviewed defaults, explicit direct
-  policy, publication default/limits persistence and desktop/mobile form layout.
+  policy, publication default persistence and desktop/mobile form layout.
 
 Biome, TypeScript, Bun build, all 351 Bun tests, all 19 browser journeys,
 application Node runtime contract, all three image builds and Compose configuration

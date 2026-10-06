@@ -19,7 +19,12 @@ import {
   fingerprint,
   hash,
 } from "../../setup/credentials.ts";
-import { developmentResult, verificationCommands } from "../development.ts";
+import {
+  developmentResult,
+  developmentRun,
+  verificationCommands,
+} from "../development.ts";
+import { conversationFailureCodes } from "./conversation-failure.ts";
 import { DeviceAuth } from "./device-auth.ts";
 import { type ContainerEngine, containerArgs } from "./podman.ts";
 import {
@@ -52,6 +57,7 @@ const terminal = (state: string) =>
     state,
   );
 const implementationFailures = new Set([
+  ...conversationFailureCodes,
   "coding_setup_failed",
   "coding_codex_failed",
   "coding_check_failed",
@@ -89,6 +95,8 @@ export class RunnerSupervisor implements LocalRunner {
       const r = JSON.parse(
         await readFile(join(this.settings.CODEX_RUNNER_STATE, name), "utf8"),
       ) as Record;
+      if (r.input.development)
+        r.input.development = developmentRun.parse(r.input.development);
       requireThat(
         r.key === taskKey(r.input.workspaceId, r.input.taskId),
         "coding_state_invalid",
@@ -141,6 +149,7 @@ export class RunnerSupervisor implements LocalRunner {
       phase: r.phase,
       result: r.result,
       tokens: r.tokens,
+      usageUnknown: r.usageUnknown,
       baseSha: r.baseSha,
       publishedSha: r.publishedSha,
       checkPassed: r.checkPassed,
@@ -198,26 +207,6 @@ export class RunnerSupervisor implements LocalRunner {
     mode: string,
     env: { [key: string]: string } = {},
   ) {
-    if (this.settings.CODEX_CONTAINER_ENGINE === "docker")
-      env = {
-        ...env,
-        CODEX_JOB_TIMEOUT_SECONDS: String(
-          Math.max(
-            1,
-            Math.ceil(
-              (r.createdAt +
-                Math.min(
-                  this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
-                  r.input.development?.activeSeconds ??
-                    this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
-                ) *
-                  1000 -
-                Date.now()) /
-                1000,
-            ),
-          ),
-        ),
-      };
     const name = `${r.key}-${mode}`;
     const deviceRun =
       mode === "implement" && r.input.payload.authMode === "device_code";
@@ -278,15 +267,6 @@ export class RunnerSupervisor implements LocalRunner {
                         40000,
                       )
                     : r.input.development.context,
-                  maxTokens: Math.max(
-                    1,
-                    r.input.development.maxTokens - (r.tokens ?? 0),
-                  ),
-                  activeSeconds: Math.max(
-                    1,
-                    r.input.development.activeSeconds -
-                      Math.ceil((Date.now() - r.createdAt) / 1000),
-                  ),
                 },
               }
             : {}),
@@ -407,11 +387,6 @@ export class RunnerSupervisor implements LocalRunner {
   private async copyResult(r: Record, filename: string) {
     return this.engine.readText(`${r.key}-${r.phase}`, `/task/${filename}`);
   }
-  private async timeout(r: Record) {
-    await this.stop(r);
-    r.error = "coding_task_timeout";
-    await this.save(r);
-  }
   private async advance(r: Record) {
     if (r.state === "auth_required" && !r.cleaned) {
       await this.removeAuthVolume(r);
@@ -419,19 +394,6 @@ export class RunnerSupervisor implements LocalRunner {
     }
     if (terminal(r.state) || r.state === "ready") return;
     try {
-      if (
-        Date.now() >
-        r.createdAt +
-          Math.min(
-            this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
-            r.input.development?.activeSeconds ??
-              this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
-          ) *
-            1000
-      ) {
-        await this.timeout(r);
-        return;
-      }
       const raw = await this.engine.command([
         "inspect",
         "--format",
@@ -480,12 +442,10 @@ export class RunnerSupervisor implements LocalRunner {
               })
               .safeParse(metadata);
             r.threadId = usage.success ? usage.data.threadId : r.threadId;
-            // Unknown usage retains the reservation; it cannot silently reset a budget.
             r.tokens =
-              (r.tokens ?? 0) +
-              (usage.success
-                ? (usage.data.tokens ?? r.input.development.maxTokens)
-                : r.input.development.maxTokens);
+              (r.tokens ?? 0) + (usage.success ? (usage.data.tokens ?? 0) : 0);
+            r.usageUnknown ||=
+              !usage.success || usage.data.tokens === undefined;
           }
           if (r.authGeneration)
             await this.device.invalidate(r.input.workspaceId, r.authGeneration);
@@ -498,13 +458,7 @@ export class RunnerSupervisor implements LocalRunner {
         }
         await this.captureAuth(r);
       }
-      if (
-        state.ExitCode !== 0 &&
-        r.phase === "check" &&
-        r.input.development &&
-        (r.repairs ?? 0) < r.input.development.maxRepairAttempts &&
-        (r.tokens ?? 0) < r.input.development.maxTokens
-      ) {
+      if (state.ExitCode !== 0 && r.phase === "check" && r.input.development) {
         r.repairs = (r.repairs ?? 0) + 1; // Reserve before the repair launch.
         await this.engine.command([
           "rm",
@@ -553,6 +507,28 @@ export class RunnerSupervisor implements LocalRunner {
           r.phase === "check" ||
           r.phase === "setup"
         ) {
+          if (r.phase === "implement" && r.input.development) {
+            const failure = z
+              .object({
+                code: z.enum(conversationFailureCodes),
+                threadId: z
+                  .string()
+                  .regex(/^[a-zA-Z0-9-]{1,100}$/)
+                  .optional(),
+                tokens: z.number().int().nonnegative().optional(),
+              })
+              .safeParse(
+                await this.copyResult(r, "conversation-failure.json")
+                  .then((text) => JSON.parse(text))
+                  .catch(() => null),
+              );
+            if (failure.success) {
+              r.error = failure.data.code;
+              r.threadId = failure.data.threadId ?? r.threadId;
+              r.tokens = (r.tokens ?? 0) + (failure.data.tokens ?? 0);
+              r.usageUnknown ||= failure.data.tokens === undefined;
+            }
+          }
           try {
             const id = (await this.copyResult(r, "thread-id")).trim();
             if (/^[a-zA-Z0-9-]{1,100}$/.test(id)) r.threadId = id;
@@ -624,6 +600,7 @@ export class RunnerSupervisor implements LocalRunner {
             .object({
               result: developmentResult,
               tokens: z.number().int().nonnegative(),
+              usageUnknown: z.boolean().optional(),
               threadId: z.string().regex(/^[a-zA-Z0-9-]{1,100}$/),
             })
             .safeParse(value);
@@ -636,18 +613,11 @@ export class RunnerSupervisor implements LocalRunner {
           const turn = parsed.data;
           r.result = turn.result;
           r.threadId = turn.threadId;
-          // No usage report preserves the entire reservation rather than inventing zero usage.
-          r.tokens =
-            (r.tokens ?? 0) + (turn.tokens || r.input.development.maxTokens);
+          r.tokens = (r.tokens ?? 0) + turn.tokens;
+          r.usageUnknown ||= turn.usageUnknown;
           await writeFile(this.path(r, "conversation"), JSON.stringify(turn), {
             mode: 0o600,
           });
-          if (r.tokens > r.input.development.maxTokens) {
-            r.state = "failed";
-            r.error = "coding_token_limit";
-            await this.save(r);
-            return;
-          }
           await this.exportArtifact(r);
           if (
             r.input.development.mode !== "work" ||
@@ -726,19 +696,7 @@ export class RunnerSupervisor implements LocalRunner {
     return this.serial(async () => {
       const r = this.get(workspaceId, taskId);
       if (r.phase === "publish") return;
-      requireThat(
-        r.state === "ready" &&
-          Date.now() <
-            r.createdAt +
-              Math.min(
-                this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
-                r.input.development?.activeSeconds ??
-                  this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
-              ) *
-                1000,
-        "coding_task_not_ready",
-        409,
-      );
+      requireThat(r.state === "ready", "coding_task_not_ready", 409);
       r.state = "publishing";
       r.phase = "publish";
       await this.save(r);
@@ -777,13 +735,7 @@ export class RunnerSupervisor implements LocalRunner {
         429,
       );
       await this.device.read(workspaceId);
-      requireThat(
-        !r.input.development || (r.tokens ?? 0) < r.input.development.maxTokens,
-        "coding_token_limit",
-        409,
-      );
       await this.removeAuthVolume(r);
-      r.createdAt += Date.now() - (r.authPausedAt ?? Date.now());
       r.authPausedAt = undefined;
       r.finishedAt = undefined;
       r.error = undefined;
@@ -903,14 +855,6 @@ export class RunnerSupervisor implements LocalRunner {
         r.state === "running" &&
         r.phase === "implement" &&
         r.input.payload.authMode === "provider_key" &&
-        Date.now() <
-          r.createdAt +
-            Math.min(
-              this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
-              r.input.development?.activeSeconds ??
-                this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
-            ) *
-              1000 &&
         equal(token, r.proxyToken),
     );
     requireThat(record, "coding_proxy_denied", 401);
@@ -927,18 +871,6 @@ export class RunnerSupervisor implements LocalRunner {
   async sweep() {
     return this.serial(async () => {
       for (const r of this.records.values()) {
-        if (
-          !terminal(r.state) &&
-          Date.now() >
-            r.createdAt +
-              Math.min(
-                this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
-                r.input.development?.activeSeconds ??
-                  this.settings.CODEX_RUNNER_TIMEOUT_SECONDS,
-              ) *
-                1000
-        )
-          await this.timeout(r);
         if (!terminal(r.state) || r.state === "auth_required")
           await this.advance(r);
         if (

@@ -70,7 +70,6 @@ export function RepositorySelect({
           open && activeOption ? `${id}-option-${activeOption.id}` : undefined
         }
         value={open ? query : (selected?.full_name ?? "")}
-        onFocus={show}
         onClick={() => {
           if (!open) show();
         }}

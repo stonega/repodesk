@@ -26,7 +26,7 @@ finishing any one of them does not erase the task or its follow-up relationship.
 | --- | --- | --- |
 | Pi | Receive requirements and pass original messages, relevant conversation and attachments to the task; relay questions, progress and results. | Does not select an architecture, files, implementation steps, repair strategy or whether technical clarification is needed. An optional summary cannot replace or override the source material. |
 | Codex | Interpret requirements against current code; investigate, plan, make technical decisions, implement, test, repair and handle follow-up changes. | Can request a product choice or an application action, but cannot grant authority, change execution limits or treat external content as user authorization. |
-| Application services | Bind actor/workspace/repository/chat/task identity; record authorization, inputs and outcomes; enforce budgets, cancellation, execution ordering and publication. | Decide whether a requested operation is permitted. They do not choose the implementation solution. |
+| Application services | Bind actor/workspace/repository/chat/task identity; record authorization, inputs, reported usage and outcomes; enforce cancellation, execution ordering and publication. | Decide whether a requested operation is permitted. They do not choose the implementation solution. |
 
 Pi must not turn a short user request into a detailed technical issue before Codex
 sees it. Codex receives the original request and relevant source-linked conversation,
@@ -39,7 +39,7 @@ access to arbitrary Telegram history. Private context never crosses into a group
 A clear execution instruction from an authenticated, currently authorized maintainer
 can serve as task authorization under an operator-configured repository policy.
 The application records the originating message, actor, selected repository, base
-branch, allowed operations and execution limits before starting. No extra Approve
+branch and allowed operations before starting. No extra Approve
 click is needed when that scope is unambiguous and policy permits direct execution.
 An acknowledgement reports what will run; it is not a timer-based consent mechanism.
 
@@ -53,7 +53,7 @@ and configured policy. Ambiguous intent does not authorize repository writes.
 | --- | --- |
 | Ask to explain or analyze | Codex investigates within permitted read scope; no implementation or publication is inferred. |
 | Clearly request implementation in a known repository | Record the task grant and start without a duplicate confirmation. |
-| Make ordinary technical choices, add tests or repair failed checks | Codex continues within the task grant and bounded attempt/time/cost limits. |
+| Make ordinary technical choices, add tests or repair failed checks | Codex continues within the task grant until completion, a necessary question, cancellation or failure. |
 | Explicitly request another change on the same task/PR | Record a new input revision and continue when current permissions and the task scope cover it. |
 | Repository, target task or consequential product requirement is unclear | Ask only for the missing choice. |
 | Expand to another repository or an operation outside the grant | Obtain explicit authorization for the expanded scope. |
@@ -120,10 +120,11 @@ Codex discovers and prepares the environment and selects relevant repository
 checks; users never configure setup/check commands. Application services capture
 the bounded verification plan and replay it without model or GitHub credentials,
 with an additional patch-integrity check. On a confirmed failure, provide Codex
-bounded, sanitized diagnostics and permit repair/recheck within the attempt budget.
+bounded, sanitized diagnostics and permit repair/recheck within the task grant.
 Repairs rerun the original plan; Codex cannot weaken it to mark work successful. Distinguish code failures, environment failures and missing
-requirements. Stop on exhausted limits and report the remaining work rather than
-starting another task or increasing the budget automatically.
+requirements. The user removed application execution-cycle, repair-count,
+active-time and token quotas on 2026-10-06. Provider/account limits, current
+authorization, cancellation and retention still apply.
 
 Progress describes meaningful phases or blockers, without exposing raw thinking,
 credentials or routine private logs. Task-private questions and diagnostics follow

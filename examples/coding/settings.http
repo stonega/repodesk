@@ -31,11 +31,7 @@ Content-Type: application/json
       "maintainers": ["101"],
       "development": {
         "executionMode": "reviewed",
-        "publishByDefault": false,
-        "maxAttempts": 8,
-        "maxRepairAttempts": 2,
-        "activeSeconds": 2700,
-        "maxTokens": 200000
+        "publishByDefault": false
       }
     }]
   }

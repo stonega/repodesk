@@ -53,6 +53,28 @@ them.
   search support for the repository selector.
 - **Exceptions:** Other form selectors retain their existing behavior.
 
+### Codex tasks have no configurable execution quotas
+
+- **Preference:** Remove maximum execution cycles, automatic check repairs,
+  active execution time and token limits from both Codex settings and execution.
+  Remove saved overrides instead of retaining hidden limits. Continue authorized
+  work and repair until completion, a necessary question, cancellation or failure.
+- **Scope:** Codex repository forms, policy storage and local task execution.
+- **Source:** 2026-10-06 — user requested removing all four displayed settings
+  and explicitly confirmed removal of their execution limits too.
+- **Exceptions:** Actor/repository/publication permissions, cancellation,
+  retention, container isolation and provider/account limits remain applicable.
+
+### Editing a repository starts with the saved selection
+
+- **Preference:** Opening Edit shows the saved repository and keeps its dropdown
+  closed. Open search on a click, typing or arrow-key interaction, rather than
+  automatically when the modal focuses the input.
+- **Scope:** Coding repository selectors, including Add and Edit dialogs.
+- **Source:** 2026-10-06 — user requested automatic selection of the current
+  repository and a closed dropdown when opening Edit.
+- **Exceptions:** None recorded.
+
 ### Routine action confirmations use toasts
 
 - **Preference:** Show successful saves and comparable action confirmations in a
@@ -180,7 +202,7 @@ them.
   clarified that these commands should require no configuration at all. This
   supersedes the interpretation that command configuration moves to Edit.
 - **Exceptions:** Application services still enforce isolated verification,
-  publication permissions and task budgets; failed verification blocks publication.
+  publication permissions; failed verification blocks publication.
 
 ### Plugin detail back links use SVG icons
 
@@ -797,6 +819,24 @@ Use this format for each preference:
 - **Exceptions:** Explicit status/cancel and troubleshooting flows may show run IDs;
   incomplete responses still need a short, readable explanation. Source citations
   remain supported.
+
+### Telegram tasks show clear progress and outcomes
+
+- **Preference:** Make it clear whether an accepted request is working, waiting
+  for input, stopping, complete or failed. Longer coding tasks use short progress
+  notices based on confirmed application/runner stages. Explain failures with a
+  useful next step and identify when an administrator must act. Acknowledge a stop
+  request separately from confirmed termination when execution is still active.
+- **Scope:** Telegram assistant requests and Reviewed/Direct coding tasks for the
+  invite-only friend and colleague beta; apply the same wording principles to
+  corresponding admin task status.
+- **Source:** 2026-10-06 — user endorsed clear progress, cancellation and failure
+  feedback and requested an implementation plan before inviting friends/colleagues.
+- **Exceptions:** Keep short private replies on native thinking previews without
+  an extra immediate queued acknowledgement. Unaddressed group traffic stays
+  silent. Revocation and destination policy can prevent a notification. Unknown
+  remote outcomes require truthful uncertainty rather than a success or stopped
+  claim. Execution quotas remain governed by the existing Codex preference.
 
 ### Prefer native Telegram Topics for conversations
 
