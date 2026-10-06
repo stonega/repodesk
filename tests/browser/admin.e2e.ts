@@ -10,6 +10,7 @@ import { decrypt } from "../../src/setup/credentials.ts";
 import { decide, proposeWorkflow } from "../../src/workflows/service.ts";
 import { requestAccess } from "../../src/workspaces/access-requests.ts";
 import { enrollOwner } from "../../src/workspaces/service.ts";
+import { chooseOption } from "./dropdown-helpers.ts";
 
 let workspaceId = "";
 const browserDbPath = join(tmpdir(), "repodesk-browser-3107-db.json");
@@ -87,11 +88,11 @@ test.describe
       await expect(
         page.getByRole("heading", { name: "Connect Telegram" }),
       ).toHaveCount(0);
-      await expect(page.getByLabel("Timezone")).toHaveJSProperty(
-        "tagName",
-        "SELECT",
+      await expect(page.getByLabel("Timezone")).toHaveAttribute(
+        "role",
+        "combobox",
       );
-      await page.getByLabel("Timezone").selectOption("America/New_York");
+      await chooseOption(page.getByLabel("Timezone"), "America/New_York");
       await page.getByLabel("Workspace name").fill("Browser team");
       await page.getByRole("button", { name: "Continue to Telegram" }).click();
       await expect(
@@ -222,7 +223,7 @@ test.describe
         .getByLabel("Model base URL")
         .fill("https://models.example.test/v1");
       await page.getByLabel("Model", { exact: true }).fill("team/custom-model");
-      await page.getByLabel("Thinking level").selectOption("high");
+      await chooseOption(page.getByLabel("Thinking level"), "high");
       await page.getByLabel("Model context window (tokens)").fill("128000");
       await page.getByLabel("Model maximum output (tokens)").fill("128000");
       await page.getByLabel("Input price (USD / million tokens)").fill("1");
@@ -271,7 +272,10 @@ test.describe
         "team/custom-model",
       );
       await page.getByText("Advanced model settings").click();
-      await expect(page.getByLabel("Thinking level")).toHaveValue("high");
+      await expect(page.getByLabel("Thinking level")).toHaveAttribute(
+        "value",
+        "high",
+      );
       await page.screenshot({
         path: "test-results/model-editor-desktop.png",
         fullPage: true,
@@ -606,14 +610,15 @@ test.describe
       await card
         .getByText("Restore a published version", { exact: true })
         .click();
-      await card.getByLabel("Rollback source version").selectOption("2");
+      await chooseOption(card.getByLabel("Rollback source version"), "2");
       const recap = page.locator(".skill-card").filter({
         has: page.getByRole("heading", { name: "Team recap", exact: true }),
       });
       await recap
         .getByText("Restore a published version", { exact: true })
         .click();
-      await expect(recap.getByLabel("Rollback source version")).toHaveValue(
+      await expect(recap.getByLabel("Rollback source version")).toHaveAttribute(
+        "value",
         "1",
       );
       await card
@@ -816,12 +821,14 @@ test.describe
         await page
           .getByRole("button", { name: "Latest logs", exact: true })
           .click();
-        await page
-          .getByRole("combobox", { name: "Log level", exact: true })
-          .selectOption("warn");
-        await page
-          .getByRole("combobox", { name: "Service", exact: true })
-          .selectOption("worker");
+        await chooseOption(
+          page.getByRole("combobox", { name: "Log level", exact: true }),
+          "warn",
+        );
+        await chooseOption(
+          page.getByRole("combobox", { name: "Service", exact: true }),
+          "worker",
+        );
         await expect(page.locator("tbody tr")).toHaveCount(1);
         await page
           .getByLabel("Search event, error code or run ID")
@@ -1176,7 +1183,7 @@ test.describe
       ).toBeVisible();
       await expect(page.getByLabel("Workspace draft")).toHaveCount(0);
       await page.getByLabel("Workspace name").fill("Independent team");
-      await page.getByLabel("Timezone").selectOption("America/New_York");
+      await chooseOption(page.getByLabel("Timezone"), "America/New_York");
       await page.getByRole("button", { name: "Continue to Telegram" }).click();
       await expect(
         page.getByRole("heading", { name: "Connect Telegram" }),
@@ -1365,24 +1372,28 @@ test.describe
         page
           .getByRole("dialog", { name: "Create GitHub App", exact: true })
           .getByRole("combobox", { name: "App owner", exact: true }),
-      ).toHaveValue("personal");
+      ).toHaveAttribute("value", "personal");
       await expect(
         page
           .getByRole("dialog", { name: "Create GitHub App", exact: true })
           .getByLabel("GitHub organization", { exact: true }),
       ).toHaveCount(0);
-      await page
-        .getByRole("dialog", { name: "Create GitHub App", exact: true })
-        .getByRole("combobox", { name: "App owner", exact: true })
-        .selectOption("organization");
+      await chooseOption(
+        page
+          .getByRole("dialog", { name: "Create GitHub App", exact: true })
+          .getByRole("combobox", { name: "App owner", exact: true }),
+        "organization",
+      );
       await page
         .getByRole("dialog", { name: "Create GitHub App", exact: true })
         .getByLabel("GitHub organization", { exact: true })
         .fill("example");
-      await page
-        .getByRole("dialog", { name: "Create GitHub App", exact: true })
-        .getByRole("combobox", { name: "App owner", exact: true })
-        .selectOption("personal");
+      await chooseOption(
+        page
+          .getByRole("dialog", { name: "Create GitHub App", exact: true })
+          .getByRole("combobox", { name: "App owner", exact: true }),
+        "personal",
+      );
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await page.screenshot({
@@ -1501,7 +1512,7 @@ test.describe
       await expect(
         manage.getByText("Choose repositories for this workspace"),
       ).toBeVisible();
-      await manage.getByLabel("GitHub installation").selectOption("501");
+      await chooseOption(manage.getByLabel("GitHub installation"), "501");
       await manage.getByLabel("example/workspace", { exact: true }).check();
       await manage
         .getByRole("button", { name: "Connect selected repositories" })
@@ -1616,10 +1627,11 @@ test.describe
         "Select at least one maintainer.",
       );
       await codingDialog.getByRole("checkbox", { name: /@maintainer/ }).check();
-      await expect(codingDialog.getByLabel("Execution policy")).toHaveValue(
+      await expect(codingDialog.getByLabel("Execution policy")).toHaveAttribute(
+        "value",
         "reviewed",
       );
-      await codingDialog.getByLabel("Execution policy").selectOption("direct");
+      await chooseOption(codingDialog.getByLabel("Execution policy"), "direct");
       await codingDialog
         .getByLabel("Publish verified implementations as draft PRs by default")
         .check();
@@ -1655,7 +1667,8 @@ test.describe
         codingEdit.getByLabel("Local setup command (optional)"),
       ).toHaveCount(0);
       await expect(codingEdit.getByLabel("Local check command")).toHaveCount(0);
-      await expect(codingEdit.getByLabel("Execution policy")).toHaveValue(
+      await expect(codingEdit.getByLabel("Execution policy")).toHaveAttribute(
+        "value",
         "direct",
       );
       await expect(
@@ -1784,9 +1797,10 @@ test.describe
       await configuration
         .getByRole("button", { name: "Edit Codex configuration" })
         .click();
-      await configDialog
-        .getByLabel("Sign-in method")
-        .selectOption("device_code");
+      await chooseOption(
+        configDialog.getByLabel("Sign-in method"),
+        "device_code",
+      );
       await configDialog
         .getByRole("button", { name: "Save configuration" })
         .click();
@@ -1804,12 +1818,14 @@ test.describe
       await configuration
         .getByRole("button", { name: "Edit Codex configuration" })
         .click();
-      await expect(configDialog.getByLabel("Sign-in method")).toHaveValue(
+      await expect(configDialog.getByLabel("Sign-in method")).toHaveAttribute(
+        "value",
         "device_code",
       );
-      await configDialog
-        .getByLabel("Sign-in method")
-        .selectOption("provider_key");
+      await chooseOption(
+        configDialog.getByLabel("Sign-in method"),
+        "provider_key",
+      );
       await configDialog
         .getByRole("button", { name: "Save configuration" })
         .click();
@@ -2327,7 +2343,7 @@ test.describe
           name: "Access policy",
           exact: true,
         });
-        await policy.getByLabel("Access mode").selectOption("members");
+        await chooseOption(policy.getByLabel("Access mode"), "members");
         await policy
           .getByRole("button", { name: "Preview affected work" })
           .click();
@@ -2344,12 +2360,12 @@ test.describe
         await expect(
           dialog.getByLabel("Telegram user ID", { exact: true }),
         ).toHaveAttribute("readonly", "");
-        await dialog.getByLabel("Role", { exact: true }).selectOption("admin");
+        await chooseOption(dialog.getByLabel("Role", { exact: true }), "admin");
         await dialog.getByRole("button", { name: "Save membership" }).click();
         await expect(dialog).toHaveCount(0);
         await expect(row("808")).toContainText("admin");
         await expect(row("808")).toContainText("@applicant");
-        await policy.getByLabel("Access mode").selectOption("whitelist");
+        await chooseOption(policy.getByLabel("Access mode"), "whitelist");
         await policy.getByText(/^Manage whitelist IDs/).click();
         const ids = policy.getByLabel(
           "Telegram user IDs (one per line or comma separated)",
@@ -2427,7 +2443,7 @@ test.describe
       await dialog
         .getByLabel("Workflow name", { exact: true })
         .fill("Revised recap");
-      await dialog.getByLabel("Repeat", { exact: true }).selectOption("daily");
+      await chooseOption(dialog.getByLabel("Repeat", { exact: true }), "daily");
       await expect(
         dialog.getByLabel("Day of week", { exact: true }),
       ).toHaveCount(0);
@@ -2482,9 +2498,10 @@ test.describe
       await instruction
         .getByLabel("Instruction", { exact: true })
         .fill("Keep decisions separate from suggestions.");
-      await instruction
-        .getByLabel("Applies to", { exact: true })
-        .selectOption("personal");
+      await chooseOption(
+        instruction.getByLabel("Applies to", { exact: true }),
+        "personal",
+      );
       await instruction
         .getByRole("button", { name: "Create approval proposal" })
         .click();

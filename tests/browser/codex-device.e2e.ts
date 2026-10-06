@@ -1,5 +1,6 @@
 import { expect, type Page, type Route, test } from "@playwright/test";
 import type { CodingPage } from "../../src/coding/config.ts";
+import { chooseOption } from "./dropdown-helpers.ts";
 
 const workspaceId = "d2ce2eab-3b09-4e8e-858e-75c20d832517";
 const endpoint = `/api/admin/workspaces/${workspaceId}/plugins/coding`;
@@ -69,20 +70,20 @@ test("unavailable runner can be rechecked without losing the configuration draft
   await dialog.screenshot({
     path: "test-results/codex-configuration-desktop.png",
   });
-  await dialog.getByLabel("Sign-in method").selectOption("provider_key");
+  await chooseOption(dialog.getByLabel("Sign-in method"), "provider_key");
   await expect(
     dialog.getByRole("link", { name: "Codex runner setup instructions" }),
   ).toBeVisible();
   await dialog
     .getByLabel("Provider API key", { exact: true })
     .fill("unsaved-test-key");
-  await dialog.getByLabel("Sign-in method").selectOption("device_code");
+  await chooseOption(dialog.getByLabel("Sign-in method"), "device_code");
   data.deviceAuth = { state: "disconnected" };
   await dialog.getByRole("button", { name: "Recheck connection" }).click();
   await expect(
     dialog.getByRole("button", { name: "Sign in with device code" }),
   ).toBeEnabled();
-  await dialog.getByLabel("Sign-in method").selectOption("provider_key");
+  await chooseOption(dialog.getByLabel("Sign-in method"), "provider_key");
   await expect(
     dialog.getByLabel("Provider API key", { exact: true }),
   ).toHaveValue("unsaved-test-key");

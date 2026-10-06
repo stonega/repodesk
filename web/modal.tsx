@@ -61,7 +61,7 @@ export function Modal({
     element?.showModal();
     element
       ?.querySelector<HTMLElement>(
-        "input:enabled, textarea:enabled, select:enabled",
+        "input:enabled, textarea:enabled, select:enabled:not([hidden]), button[role=combobox]:enabled",
       )
       ?.focus();
     return () => {
@@ -93,7 +93,10 @@ export function Modal({
           event.currentTarget.querySelectorAll<HTMLElement>(
             'button:enabled, input:enabled, textarea:enabled, select:enabled, a[href], [tabindex]:not([tabindex="-1"])',
           ),
-        ).filter((control) => control.getClientRects().length > 0);
+        ).filter(
+          (control) =>
+            control.tabIndex >= 0 && control.getClientRects().length > 0,
+        );
         const first = controls[0];
         const last = controls.at(-1);
         if (!first || !last) {

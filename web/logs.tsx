@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { IconButton } from "./icon-button.tsx";
+import { Select } from "./select.tsx";
 import { SkeletonRows } from "./skeleton.tsx";
 
 type LogEntry = {
@@ -98,9 +99,10 @@ export function RuntimeLogs({
             setRevision((value) => value + 1);
           }}
         >
-          <label className="field">
+          <label className="field" htmlFor="logs-level">
             <span>Log level</span>
-            <select
+            <Select
+              id="logs-level"
               value={level}
               onChange={(event) => {
                 setLevel(event.target.value);
@@ -111,11 +113,12 @@ export function RuntimeLogs({
               <option value="info">Info</option>
               <option value="warn">Warning</option>
               <option value="error">Error</option>
-            </select>
+            </Select>
           </label>
-          <label className="field">
+          <label className="field" htmlFor="logs-service">
             <span>Service</span>
-            <select
+            <Select
+              id="logs-service"
               value={service}
               onChange={(event) => {
                 setService(event.target.value);
@@ -125,7 +128,7 @@ export function RuntimeLogs({
               <option value="">All services</option>
               <option value="app">API</option>
               <option value="worker">Worker</option>
-            </select>
+            </Select>
           </label>
           <label className="field">
             <span>Search event, error code or run ID</span>
