@@ -75,6 +75,15 @@ executor treated that read failure as permanent when no attempt was reserved.
 The 0.1.23 correction leaves undispatched queued tasks queued on transient runner
 read failures, preserving the existing no-replay handling for uncertain POSTs.
 The regression checks that recovery starts exactly one attempt. All 436 tests,
-lint, typecheck and build pass. The affected task has no current attempt and no
-cancellation request; recovery and the final production check are pending. The
-original screenshot task remains cancelled.
+lint, typecheck and build pass; Node runtime checks, the pinned Codex image protocol
+proof, Docker and Podman coding smoke, and Compose configuration validation pass.
+
+Production now runs app/worker 0.1.23 under release `1791298562-1`, retaining the
+compatible 0.1.22 supervisor/task images to avoid another runner interruption.
+All four services are healthy and application readiness returns HTTP 200. The
+release has a protected pre-migration backup. The affected task was requeued only
+after confirming no current or uncertain attempt, no cancellation request and
+unchanged retained input text, actor, destination and expiry. Recovery was recorded
+in the operator audit. It resumed its pending revision 2 in analysis mode without
+repeating the finished revision or a publication. The original screenshot task
+remains cancelled.
