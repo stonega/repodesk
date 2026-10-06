@@ -30,14 +30,17 @@ them.
 ### Workspace pause belongs in Settings with confirmation
 
 - **Preference:** Use Workspace settings for a dedicated Pause workspace action
-  and saved activity status. Open a confirmation dialog before pausing, with
-  explicit consequences and Cancel. Provide Resume workspace when paused. Keep
+  and saved activity status. Place the Active/Paused badge immediately after the
+  Pause workspace card title in the same row. Open a confirmation dialog before
+  pausing, with explicit consequences and Cancel. Provide Resume workspace when paused. Keep
   pause out of the Overview team configuration editor and place Settings directly
   below Plugins in the sidebar.
 - **Scope:** Workspace administration on desktop and mobile.
 - **Source:** 2026-10-06 — user requested replacing the model-capacity content with
   pause controls, removing pause from the workspace edit modal, confirming pause
   in a modal, and moving Settings below Plugins.
+  2026-10-06 — user requested moving the Active badge after the Pause workspace
+  title.
 - **Exceptions:** Model capacity remains available in deployment Model settings.
   When Plugins is unavailable to an administrator, Settings follows the remaining
   workspace navigation.
@@ -64,6 +67,18 @@ them.
   and explicitly confirmed removal of their execution limits too.
 - **Exceptions:** Actor/repository/publication permissions, cancellation,
   retention, container isolation and provider/account limits remain applicable.
+
+### Coding task Stop is labeled and confirmed
+
+- **Preference:** Use a visible Stop text button in task rows. Open a confirmation
+  modal identifying the task and repository, explaining cancellation and retained
+  GitHub artifacts, with Stop followed by Cancel. Send cancellation only after
+  confirmation; lock dismissal while pending and keep failures in the modal.
+- **Scope:** Reviewed and continuous coding tasks in the Codex plugin, on desktop
+  and mobile.
+- **Source:** 2026-10-06 — user requested a Stop label button and a confirmation
+  modal for the coding task action shown in the screenshot.
+- **Exceptions:** Telegram Stop controls retain their existing behavior.
 
 ### Editing a repository starts with the saved selection
 
@@ -762,6 +777,7 @@ them.
 - **Exceptions:** Keep visible text for primary form submission, sign-in,
   authorization, approval, publication, deployment-wide controls, destructive
   workspace confirmation and other actions whose consequences need explanation.
+  Coding task Stop uses a text button and confirmation modal as specified above.
   Telegram controls are outside the web icon-library scope.
 
 Use this format for each preference:

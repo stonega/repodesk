@@ -115,6 +115,12 @@ export function Coding({
   const [configDraft, setConfigDraft] = useState<CodingSettings>();
   const [keyDraft, setKeyDraft] = useState("");
   const [removeKey, setRemoveKey] = useState(false);
+  const [stopping, setStopping] = useState<{
+    id: string;
+    title: string;
+    repository: string;
+  }>();
+  const [stopError, setStopError] = useState("");
   const preserveSettings = !!editing || configEditing;
   const refresh = useCallback(
     async (signal: AbortSignal) => {
@@ -195,6 +201,8 @@ export function Coding({
     setConfigDraft(undefined);
     setKeyDraft("");
     setRemoveKey(false);
+    setStopping(undefined);
+    setStopError("");
   }, [endpoint]);
   const save = async (
     settings: CodingSettings,
@@ -240,6 +248,25 @@ export function Coding({
         })),
       ]
     : [];
+  const stopTask = tasks.find((task) => task.id === stopping?.id);
+  const canStop =
+    !!stopTask &&
+    !stopTask.cancelRequested &&
+    !["succeeded", "failed", "unknown", "cancelled"].includes(stopTask.state);
+  const stop = async () => {
+    if (!stopping || !canStop || busy || loading) return;
+    setBusy(true);
+    setStopError("");
+    try {
+      await request(`${endpoint}/${stopping.id}/cancel`, "POST", {});
+      setStopping(undefined);
+      await load();
+    } catch (e) {
+      setStopError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   const activeTasks = tasks.filter(
     (task) =>
       !["succeeded", "failed", "unknown", "cancelled"].includes(task.state),
@@ -601,27 +628,22 @@ export function Coding({
                         "unknown",
                         "cancelled",
                       ].includes(task.state) && (
-                        <IconButton
-                          icon="stop"
-                          label={`Stop coding task ${task.payload.title}`}
+                        <button
+                          type="button"
+                          className="danger"
+                          aria-label={`Stop coding task ${task.payload.title}`}
                           disabled={busy || task.cancelRequested}
-                          onClick={async () => {
-                            setBusy(true);
-                            setError("");
-                            try {
-                              await request(
-                                `${endpoint}/${task.id}/cancel`,
-                                "POST",
-                                {},
-                              );
-                              await load();
-                            } catch (e) {
-                              setError(message(e));
-                            } finally {
-                              setBusy(false);
-                            }
+                          onClick={() => {
+                            setStopError("");
+                            setStopping({
+                              id: task.id,
+                              title: task.payload.title,
+                              repository: task.payload.repository,
+                            });
                           }}
-                        />
+                        >
+                          Stop
+                        </button>
                       )}
                     </td>
                   </tr>
@@ -631,6 +653,44 @@ export function Coding({
           </div>
         )}
       </section>
+      {stopping && (
+        <Modal
+          title="Stop coding task?"
+          busy={busy}
+          onClose={() => {
+            setStopping(undefined);
+            setStopError("");
+          }}
+        >
+          <p>
+            <strong>{stopping.title}</strong>
+            <br />
+            <span className="muted">{stopping.repository}</span>
+          </p>
+          <p>
+            Stopping cancels local execution. Published issues, branches and PRs
+            remain on GitHub.
+          </p>
+          {!canStop && (
+            <p role="status">This task is no longer available to stop.</p>
+          )}
+          {stopError && (
+            <p className="notice" role="alert">
+              {stopError}
+            </p>
+          )}
+          <ModalActions>
+            <button
+              type="button"
+              className="danger"
+              disabled={busy || loading || !canStop}
+              onClick={() => void stop()}
+            >
+              {busy ? "Stopping…" : "Stop"}
+            </button>
+          </ModalActions>
+        </Modal>
+      )}
       {configEditing && data && configDraft && (
         <Modal
           title="Edit Codex configuration"

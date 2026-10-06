@@ -2002,14 +2002,14 @@ function SettingsPage({ id }: { id: string }) {
         aria-label="Workspace activity"
         aria-busy={loading}
       >
-        <h2>Pause workspace</h2>
-        <p>
+        <div className="row">
+          <h2>Pause workspace</h2>
           {current ? (
             <span className="pill">{paused ? "Paused" : "Active"}</span>
           ) : (
             <Skeleton />
           )}
-        </p>
+        </div>
         <p className="muted">
           Pause assistant runs, scheduled work and pending run deliveries in
           this workspace. You can resume work here when you are ready.
