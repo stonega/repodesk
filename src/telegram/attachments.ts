@@ -1,6 +1,12 @@
 import type { ImageContent } from "@earendil-works/pi-ai";
 import { getDocumentProxy } from "unpdf";
-import { type Attachment, Fault, type Run, requireThat } from "../domain.ts";
+import {
+  type Attachment,
+  Fault,
+  type Run,
+  requireThat,
+  type Source,
+} from "../domain.ts";
 import { contextSources } from "../workspaces/conversation-memory.ts";
 import type { Telegram } from "./client.ts";
 import type { Message } from "./router.ts";
@@ -178,6 +184,25 @@ export async function loadAttachments(
   guard: () => Promise<void>,
   signal: AbortSignal,
 ) {
+  return loadSourceAttachments(
+    contextSources(run),
+    (source) =>
+      source.runId === run.id || source.id.endsWith(`:${run.replyTo}`),
+    botId,
+    client,
+    guard,
+    signal,
+  );
+}
+
+export async function loadSourceAttachments(
+  retained: Source[],
+  current: (source: Source) => boolean,
+  botId: string | undefined,
+  client: () => Promise<Telegram>,
+  guard: () => Promise<void>,
+  signal: AbortSignal,
+) {
   const images: ImageContent[] = [];
   const content: {
     sourceId: string;
@@ -190,10 +215,8 @@ export async function loadAttachments(
   let totalBytes = 0;
   let telegram: Telegram | undefined;
   // Prioritize the current request over older context when the bounded media budget fills.
-  const sources = contextSources(run).toSorted(
-    (a, b) =>
-      Number(b.runId === run.id || b.id.endsWith(`:${run.replyTo}`)) -
-      Number(a.runId === run.id || a.id.endsWith(`:${run.replyTo}`)),
+  const sources = retained.toSorted(
+    (a, b) => Number(current(b)) - Number(current(a)),
   );
   for (const source of sources) {
     for (const attachment of source.attachments ?? []) {
@@ -241,8 +264,7 @@ export async function loadAttachments(
           !Object.hasOwn(attachmentErrors, error.code)
         )
           throw error;
-        if (source.runId === run.id || source.id.endsWith(`:${run.replyTo}`))
-          throw error;
+        if (current(source)) throw error;
         content.push({
           sourceId: source.id,
           name: attachment.name,

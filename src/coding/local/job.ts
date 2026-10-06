@@ -156,11 +156,13 @@ async function implement(job: Job) {
             ? { CODEX_TASK_TOKEN: process.env.CODEX_TASK_TOKEN }
             : {}),
         },
-        prompt: developmentPrompt(
-          job.development,
-          diagnostics,
-          job.verificationCommands,
-        ),
+        prompt:
+          developmentPrompt(
+            job.development,
+            diagnostics,
+            job.verificationCommands,
+          ) + (job.development.media?.prompt ?? ""),
+        images: job.development.media?.images,
         outputSchema: developmentSchema(job.development),
         threadId:
           job.payload.authMode === "device_code"

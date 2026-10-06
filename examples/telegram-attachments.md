@@ -21,6 +21,14 @@ use fixtures. See [supported formats and limits](../docs/implementation/telegram
    interrupt pending work and suppress the final reply.
 7. With a catalog text-only model, send an image and confirm clear feedback rather
    than an answer that pretends to have seen it.
+8. In a staging repository with Direct execution enabled, send a screenshot with
+   a specific implementation request. Confirm Codex refers to the image rather
+   than asking for the already-supplied screenshot. If it asks for a necessary
+   reference, reply with a photo without a caption. Confirm the existing task
+   consumes that answer instead of starting a separate Pi conversation. Repeat
+   with a captioned image document, a runner restart and multiple tasks in one
+   Topic; the latter must offer task selection. Cancel the staging task afterward
+   unless publishing its verified draft PR is part of the authorized check.
 
 The bot does not combine album updates into a single request or copy files into a
 Codex task checkout. Send one file per request for predictable results.

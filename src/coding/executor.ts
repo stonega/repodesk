@@ -1,12 +1,21 @@
 import { randomUUID } from "node:crypto";
 import type { Sql } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
-import { Fault, requireThat, type Workspace } from "../domain.ts";
+import {
+  type Deployment,
+  Fault,
+  requireThat,
+  type Workspace,
+} from "../domain.ts";
 import type { GitHubApps } from "../github/registry.ts";
-import { decrypt } from "../setup/credentials.ts";
+import { decrypt, fingerprint } from "../setup/credentials.ts";
+import { loadSourceAttachments } from "../telegram/attachments.ts";
+import { type Telegram, TelegramClient } from "../telegram/client.ts";
 import {
   type DevelopmentRun,
   type DevelopmentTask,
+  developmentEvidence,
+  developmentMedia,
   developmentStopped,
 } from "./development.ts";
 import { codingFailureMessage } from "./failure-messages.ts";
@@ -34,6 +43,7 @@ export class DevelopmentExecutor {
     private apps: GitHubApps,
     private runner?: LocalRunner,
     private key?: string,
+    private telegram?: (deployment: Deployment) => Promise<Telegram>,
   ) {}
   async tick(workspaceId: string) {
     for (const task of await taskList(this.store.pool, workspaceId)) {
@@ -81,6 +91,7 @@ export class DevelopmentExecutor {
             (s) =>
               s.id === i.sourceId &&
               s.author === i.actor &&
+              (!i.hasAttachments || !!s.attachments?.length) &&
               s.chatId === task.chatId &&
               s.topicId === task.topicId &&
               Date.parse(s.expiresAt) > Date.now(),
@@ -89,6 +100,7 @@ export class DevelopmentExecutor {
       "coding_source_expired",
       409,
     );
+    return deployment;
   }
   private async token(
     task: DevelopmentTask,
@@ -217,7 +229,7 @@ export class DevelopmentExecutor {
           task,
           lease,
           async (w, sql, t) => {
-            await this.allowed(w, sql, t);
+            const deployment = await this.allowed(w, sql, t);
             t.pr = pr;
             t.fence++;
             t.attempts++;
@@ -277,11 +289,87 @@ export class DevelopmentExecutor {
                   : "Codex is implementing and checking the change.",
               `phase:${t.fence}`,
             );
-            return { attemptId: t.attemptId, run };
+            const sourceIds = new Set([
+              ...inputs.map((input) => input.sourceId),
+              ...(events?.sources ?? []).map(
+                (source: { id: string }) => source.id,
+              ),
+            ]);
+            return {
+              attemptId: t.attemptId,
+              run,
+              deployment,
+              sources: w.messages.filter((source) => sourceIds.has(source.id)),
+            };
           },
           false,
         );
         if (!reserved) return;
+        const guard = async () => {
+          const checked = await this.update(
+            task,
+            lease,
+            async (w, sql, t) => {
+              requireThat(
+                t.attemptId === reserved.attemptId &&
+                  !t.cancelRequested &&
+                  Date.parse(t.leaseUntil ?? "") > Date.now(),
+                "coding_task_stopped",
+                409,
+              );
+              const deployment = await this.allowed(w, sql, t);
+              requireThat(
+                deployment.bot?.id === reserved.deployment.bot?.id &&
+                  deployment.credentials.bot ===
+                    reserved.deployment.credentials.bot,
+                "coding_bot_changed",
+                409,
+              );
+              requireThat(
+                reserved.sources.every((source) => {
+                  const retained = w.messages.find((s) => s.id === source.id);
+                  return (
+                    retained &&
+                    retained.text === source.text &&
+                    fingerprint(retained.attachments ?? []) ===
+                      fingerprint(source.attachments ?? [])
+                  );
+                }),
+                "coding_source_changed",
+                409,
+              );
+              return true;
+            },
+            false,
+          );
+          requireThat(checked, "coding_task_stopped", 409);
+        };
+        if (reserved.sources.some((source) => source.attachments?.length)) {
+          const currentId = reserved.run.inputs.find(
+            (input) => input.revision === reserved.run.revision,
+          )?.sourceId;
+          reserved.run.media = developmentMedia.parse(
+            await loadSourceAttachments(
+              reserved.sources,
+              (source) => source.id === currentId,
+              task.botId,
+              async () => {
+                if (this.telegram) return this.telegram(reserved.deployment);
+                requireThat(
+                  this.key && reserved.deployment.credentials.bot,
+                  "bot_not_configured",
+                  409,
+                );
+                return new TelegramClient(
+                  decrypt(this.key, "bot", reserved.deployment.credentials.bot),
+                );
+              },
+              guard,
+              AbortSignal.timeout(60000),
+            ),
+          );
+        }
+        await guard();
         dispatched = true;
         await this.runner.start({
           workspaceId,
@@ -451,9 +539,10 @@ export class DevelopmentExecutor {
               `question:${t.question.id}`,
             );
           } else if (t.phase === "intake") {
-            const input = (await taskInputs(sql, t)).find(
-              (i) => i.revision === t.consumedRevision,
-            );
+            const input = developmentEvidence({
+              inputs: await taskInputs(sql, t),
+              revision: t.consumedRevision,
+            });
             const result = status.result;
             requireThat(
               input &&
@@ -574,11 +663,13 @@ export class DevelopmentExecutor {
           t.attempts--;
         } else {
           t.state =
-            dispatched ||
-            t.state === "publishing" ||
-            code === "coding_task_not_found"
-              ? "unknown"
-              : "failed";
+            t.cancelRequested && !dispatched
+              ? "cancelled"
+              : dispatched ||
+                  t.state === "publishing" ||
+                  code === "coding_task_not_found"
+                ? "unknown"
+                : "failed";
           t.error = code;
           await finishAttempt(
             sql,

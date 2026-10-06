@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   type DevelopmentRun,
+  developmentMedia,
   developmentSchema,
 } from "../../src/coding/development.ts";
 import { runConversation } from "../../src/coding/local/conversation.ts";
@@ -59,6 +60,108 @@ test("intake binds evidence to the consumed authenticated input, including short
   expect(
     developmentSchema({ ...retry(), mode: "work" }).properties.status.enum,
   ).toEqual(["completed", "needs_input"]);
+});
+
+test("captionless media answers pin preceding text evidence; empty follow-ups do not inherit authority", () => {
+  const run = retry();
+  const current = run.inputs[1];
+  const original = run.inputs[0];
+  if (!current || !original) throw new Error("Missing fixture input");
+  current.text = "";
+  current.hasAttachments = true;
+  current.kind = "answer";
+  expect(developmentSchema(run).properties.evidenceRevision).toEqual({
+    type: "integer",
+    enum: [1],
+  });
+  expect(developmentSchema(run).properties.evidence).toEqual({
+    type: "string",
+    enum: [original.text],
+  });
+  current.kind = "followup";
+  expect(developmentSchema(run).properties.evidenceRevision).toEqual({
+    type: "integer",
+    enum: [2],
+  });
+  expect(developmentSchema(run).properties.evidence).toEqual({
+    type: "string",
+    enum: [""],
+  });
+});
+
+test("Codex receives image data URLs and handles echoed media larger than the former protocol buffer", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "repodesk-image-protocol-"));
+  try {
+    const script = join(dir, "server.cjs");
+    await writeFile(
+      script,
+      `
+const fs=require('node:fs');
+const rl=require('node:readline').createInterface({input:process.stdin});
+const send=v=>process.stdout.write(JSON.stringify(v)+'\\n');
+rl.on('line',line=>{
+ const m=JSON.parse(line);if(m.id==null)return;
+ if(m.method==='initialize')send({id:m.id,result:{}});
+ if(m.method==='thread/start')send({id:m.id,result:{thread:{id:'image-thread'}}});
+ if(m.method==='turn/start'){
+  fs.writeFileSync(process.env.PAYLOAD_PATH,JSON.stringify(m.params.input));
+  send({id:m.id,result:{turn:{id:'image-turn'}}});
+  send({method:'item/started',params:{threadId:'image-thread',item:{type:'userMessage',content:m.params.input}}});
+  const result={status:'intent',intent:'implement',evidenceRevision:2,evidence:'Try again',publishRequested:false,summary:'Image received',question:null,title:'Style update',body:'',verificationCommands:[]};
+  send({method:'item/completed',params:{threadId:'image-thread',item:{type:'agentMessage',text:JSON.stringify(result)}}});
+  send({method:'turn/completed',params:{threadId:'image-thread',turn:{id:'image-turn',status:'completed'}}});
+ }
+});
+`,
+    );
+    const media = developmentMedia.parse({
+      images: [
+        {
+          type: "image",
+          mimeType: "image/png",
+          data: Buffer.alloc(4 * 1024 * 1024, 1).toString("base64"),
+        },
+      ],
+      prompt: "Image 1 comes from the original request.",
+    });
+    const payload = join(dir, "payload.json");
+    const result = await runConversation({
+      binary: process.execPath,
+      args: [script],
+      cwd: dir,
+      env: { ...process.env, PAYLOAD_PATH: payload },
+      prompt: media.prompt,
+      images: media.images,
+      timeoutMs: 10000,
+    });
+    expect(result.result.summary).toBe("Image received");
+    const input = JSON.parse(await readFile(payload, "utf8"));
+    expect(input[0].text).toBe(media.prompt);
+    expect(input[1]).toEqual({
+      type: "image",
+      url: `data:image/png;base64,${media.images[0]?.data}`,
+    });
+    expect(
+      developmentMedia.safeParse({
+        ...media,
+        images: [{ ...media.images[0], mimeType: "image/svg+xml" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      developmentMedia.safeParse({
+        ...media,
+        images: Array(5).fill(media.images[0]),
+      }).success,
+    ).toBe(false);
+    expect(
+      developmentMedia.safeParse({
+        ...media,
+        images: Array(3).fill(media.images[0]),
+      }).success,
+    ).toBe(false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("the Codex turn receives the intake schema and returns current retry evidence", async () => {

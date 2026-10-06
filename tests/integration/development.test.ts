@@ -63,6 +63,16 @@ const url = process.env.TEST_DATABASE_URL;
     await root.end();
   });
   const original = "Fix pagination and open a draft PR";
+  const image = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEUlEQVR4nGP4z8DwnwEEQAwAG/ID/U0/Ov8AAAAASUVORK5CYII=",
+    "base64",
+  );
+  const photo = {
+    botId: "999",
+    fileId: "screenshot",
+    kind: "photo" as const,
+    size: image.length,
+  };
   const result = (
     patch: Partial<DevelopmentResult> = {},
   ): DevelopmentResult => ({
@@ -78,7 +88,11 @@ const url = process.env.TEST_DATABASE_URL;
     verificationCommands: ["bun test"],
     ...patch,
   });
-  async function fixture(text = original, chatId = "101") {
+  async function fixture(
+    text = original,
+    chatId = "101",
+    attachments?: Source["attachments"],
+  ) {
     const w = workspace();
     w.operatorId = operator;
     w.github = {
@@ -112,6 +126,7 @@ const url = process.env.TEST_DATABASE_URL;
     const source = present(
       w.messages.find((s) => s.runId === run.id && s.role === "user"),
     );
+    source.attachments = attachments;
     await store.pool.query(
       "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",
       [w.id, operator, JSON.stringify(w)],
@@ -143,6 +158,9 @@ const url = process.env.TEST_DATABASE_URL;
     };
     const fallback = githubTransport();
     let onToken: (() => Promise<void>) | undefined;
+    let onDownload: (() => Promise<void>) | undefined;
+    const downloads: string[] = [];
+    let downloadError: string | undefined;
     let confirmUnknown = false;
     let remoteHead = "b".repeat(40),
       closed = false;
@@ -184,6 +202,18 @@ const url = process.env.TEST_DATABASE_URL;
         new GitHubApps(store, "ab".repeat(32), app),
         runner,
         "ab".repeat(32),
+        async () => ({
+          async call() {
+            throw new Error("Unexpected Telegram call");
+          },
+          async downloadFile(id, _max, options) {
+            downloads.push(id);
+            await onDownload?.();
+            options?.signal?.throwIfAborted();
+            if (downloadError) throw new Fault(downloadError);
+            return image;
+          },
+        }),
       );
     const read = () => taskGet(store.pool, w.id, task.id);
     const tick = async (next?: LocalStatus) => {
@@ -232,6 +262,13 @@ const url = process.env.TEST_DATABASE_URL;
       tick,
       append,
       executor,
+      downloads,
+      onDownload: (fn: () => Promise<void>) => {
+        onDownload = fn;
+      },
+      failDownload: (code: string) => {
+        downloadError = code;
+      },
       onToken: (fn: () => Promise<void>) => {
         onToken = fn;
       },
@@ -279,6 +316,191 @@ const url = process.env.TEST_DATABASE_URL;
     await f.append("Also handle empty pages", "101", "unique");
     await f.append("Also handle empty pages", "101", "unique");
     expect((await f.read()).revision).toBe(2);
+  });
+  test("initial screenshots reach the runner without persisting image bytes in application attempts", async () => {
+    const f = await fixture(original, "101", [photo]);
+    await f.tick();
+    const run = present(f.starts[0]?.development);
+    expect(f.downloads).toEqual(["screenshot"]);
+    expect(run.inputs[0]?.text).toBe(original);
+    expect(run.inputs[0]?.hasAttachments).toBe(true);
+    expect(run.media?.images[0]?.data).toBe(image.toString("base64"));
+    expect(run.media?.images[0]?.mimeType).toBe("image/png");
+    expect(run.media?.prompt).toContain(f.source.id);
+    expect(run.media?.prompt).not.toContain('"fileId"');
+    const persisted = await store.pool.query(
+      "SELECT data FROM coding_task_attempts WHERE workspace_id=$1",
+      [f.w.id],
+    );
+    expect(JSON.stringify(persisted.rows)).not.toContain(
+      image.toString("base64"),
+    );
+    // The original retained source rebuilds media for the next isolated attempt.
+    await f.tick({
+      state: "succeeded",
+      result: result(),
+      threadId: "image-thread",
+    });
+    await f.tick();
+    expect(f.starts.at(-1)?.development?.media?.images).toEqual(
+      run.media?.images,
+    );
+    expect(f.downloads).toHaveLength(2);
+  });
+  test("captionless screenshot answers survive waiting and duplicates while quoting the original instruction", async () => {
+    const f = await fixture();
+    await f.tick();
+    await f.tick({
+      state: "succeeded",
+      result: result({
+        status: "needs_input",
+        question: "Attach the screenshot.",
+      }),
+    });
+    const msg = {
+      message_id: 20,
+      date: Math.floor(Date.now() / 1000),
+      from: { id: 101, is_bot: false },
+      chat: { id: 101, type: "private" as const },
+      message_thread_id: 3,
+      photo: [
+        {
+          file_id: "answer-photo",
+          width: 10,
+          height: 10,
+          file_size: image.length,
+        },
+      ],
+    };
+    const route = () =>
+      store.change(f.w.id, (w, sql) =>
+        routeDevelopment(sql, w, { update_id: 20, message: msg }, "999", msg, {
+          name: "ask",
+          args: "",
+        }),
+      );
+    expect(await route()).toBe(true);
+    expect(await route()).toBe(true);
+    expect((await f.read()).revision).toBe(2);
+    const input = present((await taskInputs(store.pool, f.task)).at(-1));
+    expect(input.text).toBe("");
+    expect(input.kind).toBe("answer");
+    expect(input.hasAttachments).toBe(true);
+    expect((await store.read(f.w.id)).runs).toHaveLength(1);
+    await f.tick();
+    expect(f.starts.at(-1)?.development?.media?.images).toHaveLength(1);
+    expect(f.downloads).toEqual(["answer-photo"]);
+    const classified = await f.tick({
+      state: "succeeded",
+      result: result({ evidenceRevision: 1, evidence: original }),
+    });
+    expect(classified.canImplement).toBe(true);
+    expect(classified.phase).toBe("work");
+  });
+  test("captioned image documents and edited media become ordered task inputs; unauthorized users cannot append", async () => {
+    const f = await fixture();
+    const msg = {
+      message_id: 20,
+      date: Math.floor(Date.now() / 1000),
+      from: { id: 101, is_bot: false },
+      chat: { id: 101, type: "private" as const },
+      message_thread_id: 3,
+      caption: "Match this style",
+      document: {
+        file_id: "document-photo",
+        mime_type: "image/png",
+        file_size: image.length,
+      },
+    };
+    await store.change(f.w.id, (w, sql) =>
+      routeDevelopment(sql, w, { update_id: 20, message: msg }, "999", msg),
+    );
+    const edited = {
+      ...msg,
+      caption: "Keep the existing colors",
+      document: { ...msg.document, file_id: "edited-photo" },
+    };
+    await store.change(f.w.id, (w, sql) =>
+      routeDevelopment(
+        sql,
+        w,
+        { update_id: 21, edited_message: edited },
+        "999",
+        edited,
+      ),
+    );
+    const denied = { ...msg, from: { id: 303, is_bot: false } };
+    expect(
+      await store.change(f.w.id, (w, sql) =>
+        routeDevelopment(
+          sql,
+          w,
+          { update_id: 22, message: denied },
+          "999",
+          denied,
+        ),
+      ),
+    ).toBe(false);
+    const inputs = await taskInputs(store.pool, f.task);
+    expect(inputs.map((input) => input.text)).toEqual([
+      original,
+      "Match this style",
+      "Keep the existing colors",
+    ]);
+    await f.tick();
+    expect(f.downloads[0]).toBe("edited-photo");
+    expect(f.starts[0]?.development?.media?.images).toHaveLength(2);
+  });
+  test("media is not dispatched after permission, cancellation, source or bot credential changes during download", async () => {
+    for (const change of [
+      "permission",
+      "cancel",
+      "source",
+      "credential",
+      "expiry",
+    ] as const) {
+      const f = await fixture(original, "101", [photo]);
+      const deployment = await store.deployment();
+      f.onDownload(async () => {
+        if (change === "credential") {
+          await store.pool.query(
+            "UPDATE deployment SET data=jsonb_set(data,'{credentials,bot}','\"rotated-fixture\"')",
+          );
+        } else
+          await store.change(f.w.id, async (w, sql) => {
+            if (change === "permission")
+              present(w.coding?.settings.repositories[0]).maintainers = [];
+            if (change === "cancel")
+              await cancelDevelopment(sql, w, "101", f.task.id);
+            const source = present(
+              w.messages.find((s) => s.id === f.source.id),
+            );
+            if (change === "source")
+              source.attachments = [{ ...photo, fileId: "replaced" }];
+            if (change === "expiry")
+              source.expiresAt = new Date(0).toISOString();
+          });
+      });
+      const stopped = await f.tick();
+      expect(f.downloads).toHaveLength(1);
+      expect(f.starts).toHaveLength(0);
+      if (change === "cancel") expect(stopped.state).toBe("cancelled");
+      if (change === "credential")
+        await store.pool.query(
+          "UPDATE deployment SET data=jsonb_set(data,'{credentials}',$1::jsonb)",
+          [JSON.stringify(deployment.credentials)],
+        );
+    }
+  });
+  test("unavailable current media stops before model dispatch with readable feedback", async () => {
+    const f = await fixture(original, "101", [photo]);
+    f.failDownload("attachment_download_failed");
+    const failed = await f.tick();
+    expect(failed.state).toBe("failed");
+    expect(f.starts).toHaveLength(0);
+    expect((await store.read(f.w.id)).deliveries.at(-1)?.text).toContain(
+      "couldn't download",
+    );
   });
   test("question survives restart, releases attempt and answers continue the same PR", async () => {
     const f = await fixture();
@@ -731,6 +953,52 @@ const url = process.env.TEST_DATABASE_URL;
       ),
     );
     expect((await f.read()).revision).toBe(4);
+    const photoMessage = {
+      ...message,
+      message_id: 41,
+      text: undefined,
+      photo: [{ file_id: "selection-photo", width: 10, height: 10 }],
+    };
+    expect(
+      await store.change(f.w.id, (w, sql) =>
+        routeDevelopment(
+          sql,
+          w,
+          { update_id: 41, message: photoMessage },
+          "999",
+          photoMessage,
+        ),
+      ),
+    ).toBe(true);
+    expect((await f.read()).revision).toBe(4);
+    await store.change(f.w.id, (w) => {
+      const selection = present(
+        w.deliveries.find((d) => d.id === "development:selection:999:41"),
+      );
+      expect(selection.buttons).toHaveLength(2);
+      selection.state = "sent";
+      selection.remoteId = 42;
+    });
+    await store.change(f.w.id, (w, sql) =>
+      selectDevelopment(
+        sql,
+        w,
+        {
+          update_id: 42,
+          callback_query: {
+            id: "image-choice",
+            from: { id: 101, is_bot: false },
+            data: `devpick:${f.task.id}:41`,
+            message: { ...message, message_id: 42 },
+          },
+        },
+        "999",
+      ),
+    );
+    expect((await f.read()).revision).toBe(5);
+    expect((await taskInputs(store.pool, f.task)).at(-1)?.hasAttachments).toBe(
+      true,
+    );
   });
   test("two workers reserve one attempt, and revocation during token minting denies start", async () => {
     const f = await fixture();

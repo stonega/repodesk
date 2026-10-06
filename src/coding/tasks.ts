@@ -214,6 +214,7 @@ export async function startDevelopment(
     sourceId: source.id,
     text: source.text,
     kind: "request",
+    hasAttachments: source.attachments?.length ? true : undefined,
   };
   await sql.query(
     "INSERT INTO coding_task_inputs(workspace_id,task_id,revision,source_key,data) VALUES($1,$2,1,$3,$4)",
@@ -266,6 +267,7 @@ export async function appendDevelopment(
   requireThat(!developmentStopped(task.state), "coding_task_stopped", 409);
   requireThat(
     source.author === actor &&
+      !!(source.text || source.attachments?.length) &&
       source.chatId === task.chatId &&
       source.topicId === task.topicId &&
       source.role !== "assistant" &&
@@ -294,6 +296,7 @@ export async function appendDevelopment(
     sourceId: source.id,
     text: source.text,
     kind: answering ? "answer" : "followup",
+    hasAttachments: source.attachments?.length ? true : undefined,
   };
   await sql.query(
     "INSERT INTO coding_task_inputs(workspace_id,task_id,revision,source_key,data) VALUES($1,$2,$3,$4,$5)",

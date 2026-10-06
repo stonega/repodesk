@@ -24,6 +24,73 @@ afterEach(async () => {
   for (const dir of dirs.splice(0))
     await rm(dir, { recursive: true, force: true });
 });
+
+test("task media survives runner restart and is scrubbed with task erasure", async () => {
+  const f = await fixture();
+  f.input.issue = undefined;
+  const media = {
+    images: [
+      {
+        type: "image" as const,
+        mimeType: "image/png" as const,
+        data: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEUlEQVR4nGP4z8DwnwEEQAwAG/ID/U0/Ov8AAAAASUVORK5CYII=",
+      },
+    ],
+    prompt: "Attachment reference data from the authenticated request.",
+  };
+  f.input.development = {
+    taskId: randomUUID(),
+    revision: 1,
+    mode: "intake",
+    context: "",
+    media,
+    inputs: [
+      {
+        revision: 1,
+        actor: "101",
+        sourceId: "source",
+        text: "Match the screenshot",
+        kind: "request",
+        hasAttachments: true,
+      },
+    ],
+  };
+  await f.supervisor.start(f.input);
+  expect(JSON.parse(f.jobInputs[0] ?? "{}").development.media).toEqual(media);
+  const restarted = new RunnerSupervisor(f.settings, f.engine);
+  await restarted.initialize();
+  await restarted.start(f.input);
+  expect(f.calls.filter((call) => call.args[0] === "create")).toHaveLength(1);
+  await restarted.erase(f.input.workspaceId, f.input.taskId);
+  const state = await readFile(
+    join(
+      f.settings.CODEX_RUNNER_STATE,
+      `${taskKey(f.input.workspaceId, f.input.taskId)}.json`,
+    ),
+    "utf8",
+  );
+  expect(state).not.toContain(media.images[0]?.data ?? "");
+  expect(JSON.parse(state).input.development).toBeUndefined();
+  const g = await fixture();
+  g.input.issue = undefined;
+  g.input.development = f.input.development;
+  await g.supervisor.start(g.input);
+  const path = join(
+    g.settings.CODEX_RUNNER_STATE,
+    `${taskKey(g.input.workspaceId, g.input.taskId)}.json`,
+  );
+  const expired = JSON.parse(await readFile(path, "utf8"));
+  expired.state = "succeeded";
+  expired.finishedAt = Date.now() - 48 * 3600000;
+  await writeFile(path, JSON.stringify(expired));
+  const cleaner = new RunnerSupervisor(g.settings, g.engine);
+  await cleaner.initialize();
+  await cleaner.sweep();
+  const tombstone = await readFile(path, "utf8");
+  expect(tombstone).not.toContain(media.images[0]?.data ?? "");
+  expect(JSON.parse(tombstone).input.development.media).toBeUndefined();
+  await new RunnerSupervisor(g.settings, g.engine).initialize();
+});
 async function fixture() {
   const dir = await mkdtemp(join(tmpdir(), "deepx-codex-test-"));
   dirs.push(dir);

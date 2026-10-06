@@ -95,7 +95,7 @@ export class RunnerSupervisor implements LocalRunner {
       const r = JSON.parse(
         await readFile(join(this.settings.CODEX_RUNNER_STATE, name), "utf8"),
       ) as Record;
-      if (r.input.development)
+      if (r.input.development && !r.cleaned)
         r.input.development = developmentRun.parse(r.input.development);
       requireThat(
         r.key === taskKey(r.input.workspaceId, r.input.taskId),
@@ -929,6 +929,7 @@ export class RunnerSupervisor implements LocalRunner {
           if (r.input.development) {
             r.input.development.inputs = [];
             r.input.development.context = "";
+            delete r.input.development.media;
           }
           await this.save(r);
         }

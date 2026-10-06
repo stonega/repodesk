@@ -3,6 +3,7 @@ import { StringDecoder } from "node:string_decoder";
 import { z } from "zod";
 import { Fault } from "../../domain.ts";
 import {
+  type DevelopmentMedia,
   type DevelopmentResult,
   developmentOutputSchema,
   developmentResult,
@@ -21,6 +22,7 @@ export async function runConversation(options: {
   cwd: string;
   env: NodeJS.ProcessEnv;
   prompt: string;
+  images?: DevelopmentMedia["images"];
   threadId?: string;
   readOnly?: boolean;
   signal?: AbortSignal;
@@ -112,7 +114,7 @@ export async function runConversation(options: {
   });
   child.stdout.on("data", (bytes: Buffer) => {
     buffer += decoder.write(bytes);
-    if (Buffer.byteLength(buffer) > 4 * 1024 * 1024) {
+    if (Buffer.byteLength(buffer) > 20 * 1024 * 1024) {
       stop(failure());
       return;
     }
@@ -277,7 +279,13 @@ export async function runConversation(options: {
     turnStarted = true;
     const begun = await request("turn/start", {
       threadId,
-      input: [{ type: "text", text: options.prompt, text_elements: [] }],
+      input: [
+        { type: "text", text: options.prompt, text_elements: [] },
+        ...(options.images ?? []).map((image) => ({
+          type: "image",
+          url: `data:${image.mimeType};base64,${image.data}`,
+        })),
+      ],
       outputSchema: options.outputSchema ?? developmentOutputSchema,
     });
     turnId = z.object({ turn: z.object({ id: z.string() }) }).parse(begun)

@@ -54,6 +54,14 @@ Interpret the states separately:
   error. Older runner builds allowed a narrative evidence field, causing short
   retries to stop. Updated intake schemas pin the current text and revision while
   preserving the guard. See the [evidence incident](../../postmortem/2026-10-06-codex-intent-evidence.md).
+- Repeated Codex requests for a screenshot can indicate the text-only task
+  handoff, even when Pi has received the image. Check source attachment metadata,
+  Pi transcript image-block counts and the task's persisted attempt inputs without
+  dumping image data. In the incident's 0.1.21 build, initial task inputs omit attachments, Codex turns
+  contain only text, and photo-only or captioned task answers bypass task routing.
+  The 0.1.22 correction passes authorized media to Codex and routes photo-only
+  answers to the bound task. Update app, worker, supervisor and task image together. See the
+  [screenshot incident](../../postmortem/2026-10-06-codex-screenshot-handoff.md).
 - `coding_execution_failed` on v0.1.20 can hide an implementation app-server or
   completed-result error. The old device-auth cleanup removed its session logs
   without persisting a safe failure marker. A task's token total equaling its old

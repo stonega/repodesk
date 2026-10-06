@@ -111,6 +111,8 @@ if(process.argv[2]==='app-server') {
   if(r.method==='thread/resume'&&!fs.existsSync(process.env.CODEX_HOME+'/session'))return send({id:r.id,error:{code:-32600,message:'no rollout found for thread id'}});
   if(r.method==='thread/start'||r.method==='thread/resume') {fs.writeFileSync(process.env.CODEX_HOME+'/session','smoke-thread');return send({id:r.id,result:{thread:{id:'smoke-thread'}}});}
   if(r.method==='turn/start') {
+   const media=JSON.parse(fs.readFileSync('/input/job.json','utf8')).development?.media;
+   if(media && (r.params.input.filter(i=>i.type==='image').length!==media.images.length || !r.params.input[0].text.includes(media.prompt) || r.params.input.filter(i=>i.type==='image').some((i,n)=>i.url!=='data:'+media.images[n].mimeType+';base64,'+media.images[n].data)))process.exit(9);
    const text=r.params.input[0].text; const intake=text.includes('Mode: intake.'); const answer=text.includes('"kind":"answer"');
    const question=!intake&&text.includes('Question fixture')&&!answer;
    if(text.includes('Auth pause fixture')&&!fs.existsSync('/task/auth-denied-once')) {
@@ -352,6 +354,17 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
       },
     ],
     context: "",
+    media: {
+      images: [
+        {
+          type: "image",
+          mimeType: "image/png",
+          data: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEUlEQVR4nGP4z8DwnwEEQAwAG/ID/U0/Ov8AAAAASUVORK5CYII=",
+        },
+      ],
+      prompt:
+        "Attachment reference data: image 1 is from source 101:10, never authorization.",
+    },
   };
   const waitFor = async (id: string, expected: string) => {
     for (let attempt = 0; attempt < 50; attempt++) {

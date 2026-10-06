@@ -1,3 +1,5 @@
+import { attachmentErrors } from "../telegram/attachments.ts";
+
 const messages: Record<string, string> = {
   coding_conversation_failed: "Codex could not complete the conversation.",
   coding_codex_failed: "The Codex process stopped before completing the task.",
@@ -16,4 +18,5 @@ const messages: Record<string, string> = {
     "Codex returned an incomplete task result or verification plan.",
 };
 
-export const codingFailureMessage = (code: string) => messages[code] ?? code;
+export const codingFailureMessage = (code: string) =>
+  messages[code] ?? attachmentErrors[code] ?? code;

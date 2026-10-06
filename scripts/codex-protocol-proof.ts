@@ -14,6 +14,9 @@ const root = await mkdtemp(join(tmpdir(), "repodesk-protocol-"));
 let calls = 0;
 let rejectAuth = false;
 let intakeSchemaReceived = false;
+let imageReceived = false;
+const imageUrl =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEUlEQVR4nGP4z8DwnwEEQAwAG/ID/U0/Ov8AAAAASUVORK5CYII=";
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
@@ -34,6 +37,13 @@ const server = Bun.serve({
     const body = await request.json();
     calls++;
     if (calls === 1) {
+      imageReceived = body.input.some(
+        (item: { content?: { type: string; image_url?: string }[] }) =>
+          item.content?.some(
+            (content) =>
+              content.type === "input_image" && content.image_url === imageUrl,
+          ),
+      );
       const schema = body.text?.format?.schema;
       intakeSchemaReceived =
         JSON.stringify(schema?.properties.status.enum) ===
@@ -144,6 +154,13 @@ try {
     cwd: repo,
     env: { PATH: process.env.PATH, HOME: root, CODEX_HOME: home },
     prompt: "Return only the fixture JSON.",
+    images: [
+      {
+        type: "image" as const,
+        mimeType: "image/png" as const,
+        data: imageUrl.split(",")[1] ?? "",
+      },
+    ],
     timeoutMs: 30000,
     readOnly: true,
   };
@@ -185,6 +202,7 @@ try {
   if (
     first.result.status !== "intent" ||
     !intakeSchemaReceived ||
+    !imageReceived ||
     first.result.evidenceRevision !== 2 ||
     first.result.evidence !== "Try again" ||
     question.result.status !== "needs_input" ||
@@ -192,7 +210,9 @@ try {
     answer.threadId !== first.threadId ||
     calls !== 3
   )
-    throw new Error("Protocol contract failed");
+    throw new Error(
+      `Protocol contract failed: ${JSON.stringify({ imageReceived, intakeSchemaReceived, calls, first: first.result.status, question: question.result.status, answer: answer.result.status, same: answer.threadId === first.threadId })}`,
+    );
   const reconstructed = await runConversation({
     ...options,
     threadId: "00000000-0000-0000-0000-000000000000",
@@ -233,7 +253,7 @@ try {
       throw error;
   }
   console.log(
-    "Pinned Codex protocol: constrained intake evidence, start, structured question, resume, missing-session reconstruction, token accounting, authentication failure and cancellation passed (local fake provider).",
+    "Pinned Codex protocol: image inputs, constrained intake evidence, start, structured question, resume, missing-session reconstruction, token accounting, authentication failure and cancellation passed (local fake provider).",
   );
 } finally {
   server.stop(true);

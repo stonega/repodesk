@@ -15,7 +15,8 @@ export function runnerApp(
   transport: typeof fetch = fetch,
 ) {
   const app = new Hono();
-  app.use("*", bodyLimit({ maxSize: 8 * 1024 * 1024 }));
+  // Ten MiB of decoded media needs room for base64 and the original task text.
+  app.use("*", bodyLimit({ maxSize: 20 * 1024 * 1024 }));
   app.get("/healthz", (c) => c.json({ status: "ok" }));
   app.get("/readyz", async (c) => {
     try {

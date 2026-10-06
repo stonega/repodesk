@@ -1,5 +1,6 @@
 import type { Sql } from "../db/pool.ts";
 import { requireThat, type Source, type Workspace } from "../domain.ts";
+import { messageAttachments, messageText } from "../telegram/attachments.ts";
 import type { Message, Update } from "../telegram/router.ts";
 import { eligible } from "../workspaces/policy.ts";
 import { deliver } from "../workspaces/service.ts";
@@ -19,11 +20,13 @@ export async function routeDevelopment(
   msg: Message,
   cmd?: { name: string; args: string },
 ) {
+  const text = messageText(msg);
+  const attachments = messageAttachments(msg, botId);
   if (
     !msg.from ||
     msg.from.is_bot ||
     msg.sender_chat ||
-    !msg.text ||
+    (!text && !attachments.length) ||
     !eligible(w, String(msg.from.id))
   )
     return false;
@@ -89,7 +92,8 @@ export async function routeDevelopment(
     author: actor,
     chatId,
     topicId,
-    text: msg.text,
+    text,
+    attachments: attachments.length ? attachments : undefined,
     directed: true,
     at: new Date(msg.date * 1000).toISOString(),
     expiresAt: new Date(
@@ -120,7 +124,7 @@ export async function routeDevelopment(
   requireThat(task, "coding_task_not_found", 404);
   if (
     cmd?.name === "cancel" ||
-    /^(?:stop|cancel|停止|取消)[.!。！]?$/i.test(msg.text.trim())
+    /^(?:stop|cancel|停止|取消)[.!。！]?$/i.test(text.trim())
   ) {
     await cancelDevelopment(sql, w, actor, task.id);
     deliver(w, actor, chatId, "Codex cancellation recorded.", {

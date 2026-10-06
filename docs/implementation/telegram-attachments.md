@@ -47,15 +47,37 @@ plus a conservative allowance of 32,768 input tokens per image, rather than coun
 base64 as text tokens. Actual usage settles through the existing accounting path.
 Existing dollar budgets, context limits and cancellation still apply.
 
-Downloaded bytes remain in memory; no attachment directory or public file endpoint
+Pi downloads remain in memory; no attachment directory or public file endpoint
 is created. User transcript checkpoints retain supplied image blocks and extracted
 text for safe resumption, under the existing tenant retention/deletion policy.
 Source metadata changes invalidate derived memory hashes. No SQL migration or new
 Telegram update subscription is needed; restart updated API and worker together.
 
-This implements media input for the Pi conversation runtime. The separate Codex
-implementation runner still accepts text requirements; original file bytes are not
-copied into its checkout or relayed as Codex image inputs.
+## Codex task media
+
+Direct Codex tasks also receive authorized source images as app-server image input
+blocks, with source IDs and image order identified in reference text. Text/code
+files and selectable PDF text use the same guarded decoder and media limits as Pi.
+The worker resolves original sources for both initial requirements and follow-ups;
+it checks current task access, source retention and bot credential generation before
+and after downloads and immediately before runner dispatch. Application attempt
+records retain source references without copying image bytes.
+
+Photo-only and captioned answers use the same task reply/Topic bindings and task
+selection as text. A photo-only answer retains its empty caption. During intake,
+its preceding authenticated text supplies the schema-pinned intent evidence;
+images remain reference data and cannot grant new actions. A standalone image
+follow-up does not inherit this answer exception. Legacy reviewed issue tasks
+still accept text issue requirements.
+
+The private runner record retains bounded image content for repairs, authentication
+pauses and restart recovery. New isolated attempts reload authorized retained
+sources, including when the old Codex session is unavailable. Runner expiry and
+task erasure scrub this media with the other task content. Images are not added to
+the repository checkout or patch. The runner accepts bounded data URLs and uses
+larger bounded HTTP and JSONL buffers to accommodate base64 media. Update app,
+worker, supervisor and task image together; no SQL migration is required. Existing
+cancelled tasks are not restarted.
 
 ## Local verification
 
@@ -65,3 +87,8 @@ checkpoint restoration, vision reservations and text-only model rejection.
 Isolated PostgreSQL integration tests cover deduplicated photo-only input, captioned
 code files, Topics, group routing, denied actors, queued/during-download revocation
 and recovery after unsupported files. Tests use fake Telegram/model transports.
+Codex tests cover original screenshot handoff, captioned image documents, photo-only
+answers, edits, selection between tasks, duplicates, guarded downloads, runner
+restart/erasure and image payloads larger than the old JSONL limit. The pinned real
+Codex protocol proof checks image delivery at a local fake Responses endpoint;
+container smoke checks image forwarding through continuation and repair.
