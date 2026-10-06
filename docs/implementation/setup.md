@@ -309,6 +309,23 @@ PostgreSQL service. Browser fixtures and fake transports exist only in `tests/`;
 they are excluded from the Docker image. If your host configures an HTTP proxy,
 set `NO_PROXY=localhost,127.0.0.1` for tests (including the local model HTTP fixture).
 
+GitHub's **Verify** workflow runs quality/database checks, four browser shards,
+application/Code Truth container checks, and Codex lifecycle smoke checks concurrently.
+Each browser shard uses one worker and its own PostgreSQL service, preserving serial
+test groups and avoiding shared fixture state. The final `checks` job requires every
+job to succeed, including when verification is called by the release workflow.
+Browser installation downloads only Chromium's headless shell. Docker builds cache
+all stages in GitHub Actions with a separate scope per image; Compose reuses the
+smoke-tested application image instead of building it again. Supervisor tool
+installation is cached independently of application source changes.
+
+The [sequential run on 2026-10-06](https://github.com/stonega/repodesk/actions/runs/37424202425)
+took 7m08s, including 2m40s for browser tests and 1m39s for Codex image builds/smoke.
+The target is about two minutes with warm caches and available runners; fresh caches,
+dependency updates and runner queues can take longer. Confirm actual wall time in
+GitHub after the workflow lands.
+Parallel jobs reduce waiting time but can increase total billed runner minutes.
+
 The skill **Test draft policy** control is a deterministic validation/preview,
 not a claim that a live model obeyed the skill. The Pi fake-provider tests exercise
 actual validated tool execution, pause/continuation boundaries and cancellation.

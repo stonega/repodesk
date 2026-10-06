@@ -3,9 +3,15 @@ on:
   push:
   pull_request:
   workflow_call:
+
+permissions:
+  contents: read
+
 jobs:
-  checks:
+  quality:
+    name: Quality and database tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     services:
       postgres:
         image: postgres:17-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
@@ -32,27 +38,132 @@ jobs:
       - run: bun test
       - run: bun run build
       - run: bun run test:runtime
-      - run: bunx playwright install --with-deps chromium
-      - run: bun run test:browser
-      - run: docker build -t deepx-code-truth:ci services/code-truth
-      - run: docker run --rm --network none deepx-code-truth:ci bun scripts/smoke.ts
-      - run: docker build -t deepx-agent:ci .
-      - run: docker run --rm --entrypoint node deepx-agent:ci dist/runtime-contract.js
-      - name: Docker Codex task and account lifecycle smoke
-        run: |
-          docker build --target codex-job -t localhost/deepx-codex-job:verify .
-          docker build --target codex-supervisor -t localhost/deepx-codex-supervisor:verify .
-          CODEX_SMOKE_ENGINE=docker bun scripts/codex-smoke.ts
-      - name: Compose migration, smoke and restore
+
+  browser:
+    name: Browser (${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      postgres:
+        image: postgres:17-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
         env:
-          POSTGRES_PASSWORD: ci-only
-          COMPOSE_PROJECT_NAME: deepx-ci
-          ENCRYPTION_KEY_FILE: /tmp/deepx-ci-key
+          POSTGRES_PASSWORD: test-only
+        ports: [5432:5432]
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:test-only@localhost:5432/postgres
+      NO_PROXY: localhost,127.0.0.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bunx playwright install --with-deps --only-shell chromium
+      # Each shard has its own server/database; keep one worker per shard.
+      - run: bun run test:browser --shard=${{ matrix.shard }}/4
+
+  containers:
+    name: Application and Code Truth containers
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      POSTGRES_PASSWORD: ci-only
+      COMPOSE_PROJECT_NAME: deepx-ci
+      ENCRYPTION_KEY_FILE: /tmp/deepx-ci-key
+      APP_IMAGE: deepx-agent:ci
+      NO_PROXY: localhost,127.0.0.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build Code Truth image
+        uses: docker/build-push-action@v6
+        with:
+          context: services/code-truth
+          load: true
+          tags: deepx-code-truth:ci
+          cache-from: type=gha,scope=verify-code-truth
+          cache-to: type=gha,scope=verify-code-truth,mode=max
+      - run: docker run --rm --network none deepx-code-truth:ci bun scripts/smoke.ts
+      - name: Build application image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: app
+          load: true
+          tags: deepx-agent:ci
+          cache-from: type=gha,scope=verify-app
+          cache-to: type=gha,scope=verify-app,mode=max
+      - run: docker run --rm --network none --entrypoint node deepx-agent:ci dist/runtime-contract.js
+      - name: Compose migration, smoke and restore
         run: |
           node -e "require('fs').writeFileSync('/tmp/deepx-ci-key', require('crypto').randomBytes(32).toString('hex'))"
           docker compose config --quiet
-          docker compose up --build -d --wait
+          docker compose up --no-build -d --wait
           curl --retry 10 --retry-connrefused --retry-delay 2 --fail http://localhost:3000/readyz
           bash scripts/backup.sh
           bash scripts/restore-rehearsal.sh "$(find backups -name '*.dump' -print -quit)"
-          docker compose down
+      - name: Clean up disposable stack
+        if: ${{ always() }}
+        run: |
+          docker compose down --volumes
+          rm -f /tmp/deepx-ci-key
+
+  codex:
+    name: Codex task and account lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NO_PROXY: localhost,127.0.0.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - uses: docker/setup-buildx-action@v3
+      - name: Build Codex job image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: codex-job
+          load: true
+          tags: localhost/deepx-codex-job:verify
+          cache-from: type=gha,scope=verify-codex-job
+          cache-to: type=gha,scope=verify-codex-job,mode=max
+      - name: Build Codex supervisor image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: codex-supervisor
+          load: true
+          tags: localhost/deepx-codex-supervisor:verify
+          cache-from: type=gha,scope=verify-codex-supervisor
+          cache-to: type=gha,scope=verify-codex-supervisor,mode=max
+      - name: Docker Codex task and account lifecycle smoke
+        run: CODEX_SMOKE_ENGINE=docker bun scripts/codex-smoke.ts
+
+  # Preserve the existing required check and fail if any job fails or is skipped.
+  checks:
+    if: ${{ always() }}
+    needs: [quality, browser, containers, codex]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every verification job to pass
+        env:
+          CHECK_RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $CHECK_RESULTS; do
+            if [[ "$result" != success ]]; then
+              echo "Verification failed: $CHECK_RESULTS"
+              exit 1
+            fi
+          done

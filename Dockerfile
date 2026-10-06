@@ -10,9 +10,10 @@ COPY src ./src
 COPY web ./web
 COPY scripts ./scripts
 RUN bun run build
-FROM node:24-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS runtime
+FROM node:24-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS runtime-base
 ENV NODE_ENV=production PORT=3000
 WORKDIR /app
+FROM runtime-base AS runtime
 COPY --from=dependencies --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --chown=node:node migrations ./migrations
@@ -27,15 +28,17 @@ CMD ["node", "dist/server.js"]
 # Pinned client only; the host's existing Docker daemon runs the task containers.
 FROM docker:29-cli@sha256:b1805116a6a86cc591b5d5f60a910a0715cdcc9d18d866ad68b1457ead25c35c AS docker-client
 
-# Trusted supervisor: only this service receives the selected engine socket.
-FROM runtime AS codex-supervisor
+# Install supervisor tools before application files so code changes reuse this layer.
+FROM runtime-base AS codex-supervisor-dependencies
 COPY --from=docker-client /usr/local/bin/docker /usr/local/bin/docker
-USER root
 RUN apt-get update && apt-get install -y --no-install-recommends podman ca-certificates \
     && test -s /etc/ssl/certs/ca-certificates.crt \
     && npm install -g @openai/codex@0.155.1 \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
+# Trusted supervisor: only this service receives the selected engine socket.
+FROM codex-supervisor-dependencies AS codex-supervisor
+COPY --from=runtime --chown=node:node /app /app
 HEALTHCHECK --interval=30s --timeout=5s \
   CMD node -e "require('fs').accessSync('/etc/ssl/certs/ca-certificates.crt');fetch('http://127.0.0.1:3020/readyz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 CMD ["node", "dist/runner-server.js"]
