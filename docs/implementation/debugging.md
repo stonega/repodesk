@@ -48,6 +48,12 @@ Interpret the states separately:
   alone can read the checkout while a Direct token (also requesting Pull requests
   read) or publication token still fails. Older builds report this as
   `github_unavailable`. Changing execution policy does not add GitHub permissions.
+- `coding_intent_unverified` means the completed intake result did not quote the
+  consumed authenticated input at its recorded revision. This occurs after
+  repository preparation and Codex execution; it is not a GitHub reachability
+  error. Older runner builds allowed a narrative evidence field, causing short
+  retries to stop. Updated intake schemas pin the current text and revision while
+  preserving the guard. See the [evidence incident](../../postmortem/2026-10-06-codex-intent-evidence.md).
 - A pending delivery is queued separately from generation. A failed delivery has
   a Telegram or policy error. An unknown delivery must be inspected before any
   resend, because Telegram might already have accepted it.

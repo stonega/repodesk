@@ -21,6 +21,7 @@ export async function runConversation(options: {
   signal?: AbortSignal;
   timeoutMs?: number;
   maxTokens?: number;
+  outputSchema?: typeof developmentOutputSchema;
 }): Promise<{
   threadId: string;
   turnId: string;
@@ -259,7 +260,7 @@ export async function runConversation(options: {
     const begun = await request("turn/start", {
       threadId,
       input: [{ type: "text", text: options.prompt, text_elements: [] }],
-      outputSchema: developmentOutputSchema,
+      outputSchema: options.outputSchema ?? developmentOutputSchema,
     });
     turnId = z.object({ turn: z.object({ id: z.string() }) }).parse(begun)
       .turn.id;

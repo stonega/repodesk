@@ -31,6 +31,13 @@ Analysis-only requests receive investigation answers and cannot publish changes.
 Implementation needs a source-grounded Codex intent result; uncertain intent waits
 for a product clarification. Semantic intent quality remains a live pilot gate.
 
+Intake output constrains evidence to the exact current authenticated input and
+its revision, including short retries. Codex can use reference context to
+understand a retry, but must not substitute an explanation or earlier message for
+that evidence. Intake returns only `intent` or `needs_input`; the application
+still rejects unmatched evidence with `coding_intent_unverified` before granting
+implementation or publication. Analysis and work retain their result contracts.
+
 Task-bound messages reach Codex at the next completed turn boundary. Reply to its
 question or task update, or continue the same private/linked-group Topic. A Topic
 with several tasks offers a selection; private conversations and unaddressed group

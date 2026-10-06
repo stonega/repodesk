@@ -1,9 +1,11 @@
 // Local fake Responses endpoint + the pinned real Codex app-server. No live model calls.
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { developmentSchema } from "../src/coding/development.ts";
 import { CodexAuthError } from "../src/coding/local/auth-failure.ts";
 import { runConversation } from "../src/coding/local/conversation.ts";
 
@@ -11,6 +13,7 @@ const exec = promisify(execFile);
 const root = await mkdtemp(join(tmpdir(), "repodesk-protocol-"));
 let calls = 0;
 let rejectAuth = false;
+let intakeSchemaReceived = false;
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
@@ -28,14 +31,23 @@ const server = Bun.serve({
         },
         { status: 401 },
       );
-    await request.json();
+    const body = await request.json();
     calls++;
+    if (calls === 1) {
+      const schema = body.text?.format?.schema;
+      intakeSchemaReceived =
+        JSON.stringify(schema?.properties.status.enum) ===
+          JSON.stringify(["intent", "needs_input"]) &&
+        JSON.stringify(schema?.properties.evidenceRevision.enum) === "[2]" &&
+        JSON.stringify(schema?.properties.evidence.enum) === '["Try again"]';
+    }
     const text = JSON.stringify({
       status:
         calls === 1 ? "intent" : calls === 2 ? "needs_input" : "completed",
       intent: "implement",
-      evidenceRevision: 1,
-      evidence: "Fix pagination and open a draft PR",
+      evidenceRevision: calls === 1 ? 2 : 1,
+      evidence:
+        calls === 1 ? "Try again" : "Fix pagination and open a draft PR",
       publishRequested: true,
       summary: "Local protocol fixture completed.",
       question: calls === 2 ? "Should empty results keep page one?" : null,
@@ -135,7 +147,35 @@ try {
     timeoutMs: 30000,
     readOnly: true,
   };
-  const first = await runConversation(options);
+  const first = await runConversation({
+    ...options,
+    outputSchema: developmentSchema({
+      taskId: randomUUID(),
+      revision: 2,
+      mode: "intake",
+      inputs: [
+        {
+          revision: 1,
+          actor: "101",
+          sourceId: "request",
+          text: "Fix pagination and open a draft PR",
+          kind: "request",
+        },
+        {
+          revision: 2,
+          actor: "101",
+          sourceId: "retry",
+          text: "Try again",
+          kind: "followup",
+        },
+      ],
+      context:
+        "Earlier messages explain the retry but do not replace its evidence.",
+      maxRepairAttempts: 2,
+      maxTokens: 10000,
+      activeSeconds: 60,
+    }),
+  });
   const question = await runConversation({
     ...options,
     threadId: first.threadId,
@@ -147,6 +187,9 @@ try {
   });
   if (
     first.result.status !== "intent" ||
+    !intakeSchemaReceived ||
+    first.result.evidenceRevision !== 2 ||
+    first.result.evidence !== "Try again" ||
     question.result.status !== "needs_input" ||
     answer.result.status !== "completed" ||
     answer.threadId !== first.threadId ||
@@ -193,7 +236,7 @@ try {
       throw error;
   }
   console.log(
-    "Pinned Codex protocol: start, structured question, resume, missing-session reconstruction, token accounting, authentication failure and cancellation passed (local fake provider).",
+    "Pinned Codex protocol: constrained intake evidence, start, structured question, resume, missing-session reconstruction, token accounting, authentication failure and cancellation passed (local fake provider).",
   );
 } finally {
   server.stop(true);

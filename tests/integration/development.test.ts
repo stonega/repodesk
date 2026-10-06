@@ -406,6 +406,39 @@ const url = process.env.TEST_DATABASE_URL;
     await missing.tick({ state: "succeeded", result: result() });
     expect((await missing.tick()).error).toBe("coding_budget_exhausted");
   });
+  test("retry intake accepts current verbatim evidence and rejects narrative or earlier requirements", async () => {
+    for (const evidence of [
+      "The user requested another attempt at the original pagination fix.",
+      original,
+    ]) {
+      const rejected = await fixture("Try again");
+      await rejected.tick();
+      const stopped = await rejected.tick({
+        state: "succeeded",
+        tokens: 10,
+        result: result({ evidence }),
+      });
+      expect(stopped.state).toBe("failed");
+      expect(stopped.error).toBe("coding_intent_unverified");
+      expect(stopped.canImplement).toBe(false);
+      expect(stopped.canPublish).toBe(false);
+      expect(rejected.publications).toHaveLength(0);
+    }
+    const accepted = await fixture("Try again");
+    await accepted.tick();
+    const queued = await accepted.tick({
+      state: "succeeded",
+      tokens: 10,
+      result: result({ evidence: "Try again", publishRequested: false }),
+    });
+    expect(queued.state).toBe("queued");
+    expect(queued.phase).toBe("work");
+    expect(queued.canImplement).toBe(true);
+    expect(queued.canPublish).toBe(false);
+    await accepted.tick();
+    expect(accepted.starts.at(-1)?.development?.mode).toBe("work");
+    expect(accepted.publications).toHaveLength(0);
+  });
   test("revocation cancels working task; initiator may stop after losing maintainer status", async () => {
     const f = await fixture();
     await f.tick();

@@ -299,7 +299,8 @@ JSONL frames are capped at 4 MiB and final envelopes at 60000 UTF-8 bytes. Model
 reasoning and raw protocol streams are not routine logs.
 
 Run `bun scripts/codex-protocol-proof.ts` to verify the pinned real CLI against a
-local fake Responses provider: structured questions, continuation, missing-session
+local fake Responses provider: current-input intake evidence constraints,
+structured questions, continuation, missing-session
 reconstruction, per-turn token accounting and cancellation. It creates a clean
 Codex home and uses no host auth or paid model calls. The fixture passed both on
 the host and bundled inside the read-only job image with no external network.

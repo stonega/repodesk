@@ -4,7 +4,11 @@ import { constants } from "node:fs";
 import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { z } from "zod";
-import { developmentPrompt, verificationCommands } from "../development.ts";
+import {
+  developmentPrompt,
+  developmentSchema,
+  verificationCommands,
+} from "../development.ts";
 import { CodexAuthError, codexAuthFailure } from "./auth-failure.ts";
 import { runConversation } from "./conversation.ts";
 import { localStart } from "./protocol.ts";
@@ -155,6 +159,7 @@ async function implement(job: Job) {
           diagnostics,
           job.verificationCommands,
         ),
+        outputSchema: developmentSchema(job.development),
         threadId:
           job.payload.authMode === "device_code"
             ? undefined
