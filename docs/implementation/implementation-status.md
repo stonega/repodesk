@@ -105,10 +105,20 @@ later tests did not run. No app service was redeployed or live coding task start
 
 Overview count cards now open their corresponding member, assistant-run,
 scheduled-workflow and Codex-task views. Counts match the records in those views.
-An unlinked deployment administrator can inspect read-only run and workflow
-metadata without receiving private prompts, results, transcripts, destinations or
-delivery text. Linked, eligible members retain their existing authorized details
-and actions. The Codex task table also shows a recorded thread ID when available.
+Initially, unlinked deployment administrators could inspect only read-only run and
+workflow metadata. As of 2026-10-06, the workspace deployment administrator and
+eligible workspace owners/admins can read every retained run's request, result,
+transcript and delivery text, including other users' private runs. Deployment
+administrators need no linked Telegram identity for this view. Access remains
+workspace-scoped; Telegram execution and mutation checks remain in effect.
+Workflow content keeps its existing identity restrictions. The Codex task table
+also shows a recorded thread ID when available.
+
+Validation for the 2026-10-06 run-message change: Biome, TypeScript and build
+passed; all 385 Bun tests passed against disposable PostgreSQL. The setup and
+run-message browser checks passed for linked and unlinked administrators, with
+mobile dialog inspection. Permission tests cover tenant boundaries, ordinary
+members, revoked workspace admins and unchanged private-run cancellation checks.
 
 Validation: Biome, TypeScript and build passed; all 301 Bun tests passed against
 disposable PostgreSQL, and all 17 browser tests passed with fake external services.

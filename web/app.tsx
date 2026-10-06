@@ -3124,25 +3124,7 @@ function InstructionsPage({ id }: { id: string }) {
     </Page>
   );
 }
-type MemberRun = Run & { deliveries: Delivery[] };
-type OperatorRun = Pick<
-  Run,
-  | "id"
-  | "actor"
-  | "status"
-  | "at"
-  | "finishedAt"
-  | "model"
-  | "workflowId"
-  | "workflowVersion"
-  | "settingsVersion"
-> & {
-  attempts: Pick<
-    Run["attempts"][number],
-    "at" | "status" | "reserved" | "actual"
-  >[];
-  deliveries: Pick<Delivery, "state" | "at" | "attempts">[];
-};
+type AdminRun = Run & { deliveries: Delivery[] };
 
 function RunCard({
   title,
@@ -3151,7 +3133,7 @@ function RunCard({
   onOpen,
 }: {
   title: string;
-  run: MemberRun | OperatorRun;
+  run: AdminRun;
   detail: string;
   onOpen: () => void;
 }) {
@@ -3169,7 +3151,7 @@ function RunCard({
   );
 }
 
-function RunMessages({ run }: { run: MemberRun }) {
+function RunMessages({ run }: { run: AdminRun }) {
   const checkpoints = run.transcript.map((value) => {
     const message =
       value && typeof value === "object"
@@ -3242,15 +3224,12 @@ function RunMessages({ run }: { run: MemberRun }) {
 function RunsPage({ id }: { id: string }) {
   const [selectedRunId, setSelectedRunId] = useState<string>();
   const { data, error, reload, loading } = useData<
-    | { mode: "member"; items: MemberRun[]; total: number }
-    | { mode: "operator"; items: OperatorRun[]; total: number }
+    | { mode: "member"; items: AdminRun[]; total: number }
+    | { mode: "operator"; items: AdminRun[]; total: number }
   >(`/api/admin/workspaces/${id}/runs`);
   const memberData = data?.mode === "member" ? data : undefined;
   const operatorData = data?.mode === "operator" ? data : undefined;
-  const memberRun = memberData?.items.find((run) => run.id === selectedRunId);
-  const operatorRun = operatorData?.items.find(
-    (run) => run.id === selectedRunId,
-  );
+  const selectedRun = data?.items.find((run) => run.id === selectedRunId);
   return (
     <Page
       title="Runs & delivery"
@@ -3293,13 +3272,6 @@ function RunsPage({ id }: { id: string }) {
     >
       {error && <Notice>{error}</Notice>}
       <Pager data={data} />
-      {operatorData && (
-        <p className="muted">
-          This read-only view shows workspace run status and delivery metadata.
-          Link your Telegram identity in <NavLink to="/setup">Setup</NavLink> to
-          see conversations you can access.
-        </p>
-      )}
       {data?.total === 0 && (
         <section className="card">No assistant runs yet.</section>
       )}
@@ -3321,94 +3293,75 @@ function RunsPage({ id }: { id: string }) {
           onOpen={() => setSelectedRunId(r.id)}
         />
       ))}
-      {operatorRun && (
+      {selectedRun && (
         <Modal
-          title={`Run ${operatorRun.id.slice(0, 8)}`}
+          title={`Run ${selectedRun.id.slice(0, 8)}`}
           onClose={() => setSelectedRunId(undefined)}
           cancelLabel="Close"
         >
+          <p className="mono">{selectedRun.id}</p>
           <p className="muted">
-            Link your Telegram identity in <NavLink to="/setup">Setup</NavLink>{" "}
-            to see messages for conversations you can access.
+            {new Date(selectedRun.at).toLocaleString()} · {selectedRun.model} ·
+            Settings v{selectedRun.settingsVersion}
+            {selectedRun.workflowVersion &&
+              ` · Workflow v${selectedRun.workflowVersion}`}
           </p>
-          <DataDetails
-            value={{
-              id: operatorRun.id,
-              status: operatorRun.status,
-              actor: operatorRun.actor,
-              at: operatorRun.at,
-              finishedAt: operatorRun.finishedAt,
-              model: operatorRun.model,
-              settingsVersion: operatorRun.settingsVersion,
-              workflowId: operatorRun.workflowId,
-              workflowVersion: operatorRun.workflowVersion,
-              attempts: operatorRun.attempts,
-              deliveries: operatorRun.deliveries,
-            }}
-          />
-        </Modal>
-      )}
-      {memberRun && (
-        <Modal
-          title={`Run ${memberRun.id.slice(0, 8)}`}
-          onClose={() => setSelectedRunId(undefined)}
-          cancelLabel="Close"
-        >
-          <p className="mono">{memberRun.id}</p>
-          <p className="muted">
-            {new Date(memberRun.at).toLocaleString()} · {memberRun.model} ·
-            Settings v{memberRun.settingsVersion}
-            {memberRun.workflowVersion &&
-              ` · Workflow v${memberRun.workflowVersion}`}
-          </p>
-          {memberRun.error && <Notice>{memberRun.error}</Notice>}
-          <RunMessages run={memberRun} />
-          {memberRun.coverage && <p className="muted">{memberRun.coverage}</p>}
+          {selectedRun.error && <Notice>{selectedRun.error}</Notice>}
+          <RunMessages run={selectedRun} />
+          {selectedRun.coverage && (
+            <p className="muted">{selectedRun.coverage}</p>
+          )}
           <details>
             <summary>Versions, usage, checkpoints & delivery</summary>
             <DataDetails
               value={{
-                skillPins: memberRun.skillPins,
-                instructions: memberRun.instructions.map((i) => ({
+                skillPins: selectedRun.skillPins,
+                instructions: selectedRun.instructions.map((i) => ({
                   id: i.id,
                   version: i.version,
                 })),
-                attempts: memberRun.attempts,
-                transcript: memberRun.transcript,
-                deliveries: memberRun.deliveries,
+                attempts: selectedRun.attempts,
+                transcript: selectedRun.transcript,
+                deliveries: selectedRun.deliveries,
               }}
             />
           </details>
-          <RunRecovery id={id} run={memberRun} reload={reload} />
-          <div className="row">
-            <Action
-              icon="stop"
-              onClick={async () => {
-                await api(
-                  `/api/admin/workspaces/${id}/runs/${memberRun.id}/cancel`,
-                  "POST",
-                  {},
-                );
-                reload();
-              }}
-            >
-              Cancel
-            </Action>
-            {["failed", "partial", "cancelled"].includes(memberRun.status) && (
-              <Action
-                onClick={async () => {
-                  await api(
-                    `/api/admin/workspaces/${id}/runs/${memberRun.id}/retry`,
-                    "POST",
-                    {},
-                  );
-                  reload();
-                }}
-              >
-                Create retry (new budget)
-              </Action>
-            )}
-          </div>
+          {memberData && (
+            <>
+              <RunRecovery id={id} run={selectedRun} reload={reload} />
+              <div className="row">
+                <Action
+                  icon="stop"
+                  onClick={async () => {
+                    await api(
+                      `/api/admin/workspaces/${id}/runs/${selectedRun.id}/cancel`,
+                      "POST",
+                      {},
+                    );
+                    reload();
+                  }}
+                >
+                  Cancel
+                </Action>
+                {["failed", "partial", "cancelled"].includes(
+                  selectedRun.status,
+                ) && (
+                  <Action
+                    onClick={async () => {
+                      await api(
+                        `/api/admin/workspaces/${id}/runs/${selectedRun.id}/retry`,
+                        "POST",
+                        {},
+                      );
+                      reload();
+                    }}
+                  >
+                    Create retry (new budget)
+                  </Action>
+                )}
+              </div>
+            </>
+          )}
         </Modal>
       )}
     </Page>

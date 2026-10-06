@@ -286,9 +286,9 @@ them.
 - **Scope:** Workspace Overview for deployment administrators and linked members.
 - **Source:** 2026-09-28 — user showed zero Runs and Workflows cards despite live
   bot work and asked for pages with details.
-- **Exceptions:** An unlinked deployment administrator sees read-only run and
-  workflow metadata; private conversation content still requires an eligible
-  linked Telegram identity.
+- **Exceptions:** Deployment administrators can read all workspace run messages
+  without linking Telegram. Unlinked administrators still see only workflow metadata;
+  workflow content and mutations retain their existing identity requirements.
 
 ### Run summaries open message details
 
@@ -298,8 +298,12 @@ them.
 - **Scope:** Runs & delivery in the workspace admin panel, on desktop and mobile.
 - **Source:** 2026-09-28 — user showed a tall run card and asked for compact
   items that open a detailed message list when clicked.
-- **Exceptions:** Unlinked deployment administrators can open run and delivery
-  metadata, but conversation messages remain limited to linked, eligible viewers.
+  2026-10-06 — user requested removing the Telegram identity/conversation access
+  restriction in run details so admins can see all messages.
+- **Exceptions:** Deployment administrators and eligible workspace owners/admins
+  can read every retained run message in their workspace, including private runs.
+  Telegram linking is unnecessary for deployment administrators to view messages;
+  execution and mutation controls retain their existing authorization requirements.
 
 ### Team configuration uses one overview editor
 

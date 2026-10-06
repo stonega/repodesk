@@ -2514,7 +2514,7 @@ test.describe
         fullPage: true,
       });
     });
-    test("run summaries open messages only for authorized viewers", async ({
+    test("run summaries show messages for linked and unlinked administrators", async ({
       page,
     }) => {
       await page.goto("/admin/runs");
@@ -2557,23 +2557,19 @@ test.describe
               mode,
               total: 1,
               items: [
-                mode === "member"
-                  ? {
-                      ...shared,
-                      task: "Summarize this issue",
-                      result: "The fix is ready.",
-                      transcript: [
-                        {
-                          role: "assistant",
-                          content: [
-                            { type: "text", text: "The fix is ready." },
-                          ],
-                        },
-                      ],
-                      instructions: [],
-                      skillPins: [],
-                    }
-                  : shared,
+                {
+                  ...shared,
+                  task: "Summarize this issue",
+                  result: "The fix is ready.",
+                  transcript: [
+                    {
+                      role: "assistant",
+                      content: [{ type: "text", text: "The fix is ready." }],
+                    },
+                  ],
+                  instructions: [],
+                  skillPins: [],
+                },
               ],
             }),
           });
@@ -2598,10 +2594,28 @@ test.describe
       await page.reload();
       await page.getByRole("button", { name: /Run 5f6f6dbf/ }).click();
       const metadata = page.getByRole("dialog", { name: "Run 5f6f6dbf" });
+      await expect(
+        metadata.getByRole("region", { name: "Messages" }),
+      ).toContainText("Summarize this issue");
+      await expect(
+        metadata.getByRole("region", { name: "Messages" }),
+      ).toContainText("The fix is ready.");
+      await expect(
+        page.getByText("Link your Telegram identity", { exact: false }),
+      ).toHaveCount(0);
+      await expect(
+        metadata.getByRole("button", { name: "Cancel", exact: true }),
+      ).toHaveCount(0);
+      await metadata
+        .getByText("Versions, usage, checkpoints & delivery")
+        .click();
       await expect(metadata).toContainText("Deliveries");
-      await expect(metadata).toContainText("Link your Telegram identity");
-      await expect(metadata).not.toContainText("Summarize this issue");
-      await expect(metadata).not.toContainText("The fix is ready.");
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
+      await page.screenshot({
+        path: "test-results/admin-run-messages-mobile.png",
+        fullPage: true,
+      });
     });
     test("routine pages have no refresh controls", async ({ page }) => {
       await page.goto("/admin/overview");

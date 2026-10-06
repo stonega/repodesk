@@ -271,19 +271,25 @@ suite("PostgreSQL integration (isolated database)", () => {
       (await request("/api/admin/not-a-resource")).headers.get("content-type"),
     ).toContain("json");
   });
-  test("unlinked deployment operator sees accurate read-only run and workflow history", async () => {
+  test("unlinked deployment operator sees all run messages and read-only workflow history", async () => {
     const w = await seed();
     await store.change(w.id, (saved) => {
       const run = createRun(
         saved,
         "101",
-        "Private request that must stay hidden",
+        "Private request visible to admins",
         "101",
         0,
         "test-model",
       );
       run.status = "succeeded";
-      run.result = "Private response that must stay hidden";
+      run.result = "Private response visible to admins";
+      run.transcript = [
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "Saved checkpoint" }],
+        },
+      ];
       proposeWorkflow(saved, "101", spec(saved));
     });
     await store.pool.query("UPDATE admins SET telegram_id=NULL WHERE id=$1", [
@@ -303,10 +309,21 @@ suite("PostgreSQL integration (isolated database)", () => {
         status: "succeeded",
         model: "test-model",
       });
-      expect(JSON.stringify(runHistory)).not.toContain("Private request");
-      expect(JSON.stringify(runHistory)).not.toContain("Private response");
-      expect(runHistory.items[0]).not.toHaveProperty("chatId");
-      expect(runHistory.items[0]).not.toHaveProperty("transcript");
+      expect(runHistory.items[0]).toMatchObject({
+        task: "Private request visible to admins",
+        result: "Private response visible to admins",
+        chatId: "101",
+        transcript: [
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "Saved checkpoint" }],
+          },
+        ],
+      });
+      const foreign = await foreignWorkspace();
+      expect(
+        (await request(`/api/admin/workspaces/${foreign.id}/runs`)).status,
+      ).toBe(403);
       const workflows = await request(`${base}/workflows`);
       expect(workflows.status).toBe(200);
       const workflowHistory = await workflows.json();
@@ -325,6 +342,89 @@ suite("PostgreSQL integration (isolated database)", () => {
         [operatorId],
       );
     }
+  });
+  test("workspace admins see every run while members and revoked admins are denied", async () => {
+    const w = await seed();
+    await store.change(w.id, (saved) => {
+      saved.members.push({ id: "404", role: "admin", active: true });
+      saved.policy.allowed.push("404");
+      for (const actor of ["101", "202"])
+        createRun(
+          saved,
+          actor,
+          `Private request from ${actor}`,
+          actor,
+          0,
+          "test-model",
+        );
+    });
+    const id = randomUUID();
+    const username = `viewer-${id}`;
+    const password = "a long viewer password";
+    await store.pool.query(
+      "INSERT INTO admins(id,username,password_hash,telegram_id,operator) VALUES($1,$2,$3,'404',false)",
+      [id, username, await passwordHash(password)],
+    );
+    const viewer = await login(store.pool, username, password);
+    const headers = {
+      cookie: `repodesk_session=${viewer.raw}`,
+      "x-csrf-token": viewer.csrf,
+    };
+    const base = `/api/admin/workspaces/${w.id}`;
+    const history = await (
+      await request(`${base}/runs`, "GET", undefined, headers)
+    ).json();
+    const ownerHistory = await (await request(`${base}/runs`)).json();
+    expect(ownerHistory.total).toBe(2);
+    expect(history.mode).toBe("member");
+    expect(history.total).toBe(2);
+    expect(history.items.map((r: { task: string }) => r.task)).toEqual([
+      "Private request from 202",
+      "Private request from 101",
+    ]);
+    const privateRun = history.items[0];
+    expect(
+      (
+        await request(
+          `${base}/runs/${privateRun.id}/cancel`,
+          "POST",
+          {},
+          headers,
+        )
+      ).status,
+    ).toBe(404);
+    const overview = await (
+      await request(`${base}/overview`, "GET", undefined, headers)
+    ).json();
+    expect(overview.counts.runs).toBe(2);
+    expect(
+      (await request(`${base}/runs`, "GET", undefined, { cookie: "" })).status,
+    ).toBe(401);
+    const foreign = await foreignWorkspace();
+    expect(
+      (
+        await request(
+          `/api/admin/workspaces/${foreign.id}/runs`,
+          "GET",
+          undefined,
+          headers,
+        )
+      ).status,
+    ).toBe(403);
+    await store.change(w.id, (saved) => {
+      const admin = saved.members.find((m) => m.id === "404");
+      if (admin) admin.active = false;
+    });
+    expect(
+      (await request(`${base}/runs`, "GET", undefined, headers)).status,
+    ).toBe(403);
+    await store.pool.query("UPDATE admins SET telegram_id='202' WHERE id=$1", [
+      id,
+    ]);
+    expect(
+      (await request(`${base}/runs`, "GET", undefined, headers)).status,
+    ).toBe(403);
+    await store.pool.query("DELETE FROM admins WHERE id=$1", [id]);
   });
   test("operator saves compatible settings, protects keys and worker uses the saved model", async () => {
     const original = await store.deployment();
@@ -1217,7 +1317,7 @@ suite("PostgreSQL integration (isolated database)", () => {
     telegramFailure = undefined;
     expect((await store.read(w.id)).deliveries[0]?.state).toBe("failed");
   });
-  test("revoked session and queued run cannot call the model", async () => {
+  test("revoked Telegram identity blocks queued execution while the deployment admin can inspect runs", async () => {
     const w = await seed();
     const r = await store.change(w.id, (v) =>
       createRun(v, "101", "hello", "-100100", 0, "gpt-4.1-mini"),
@@ -1226,7 +1326,7 @@ suite("PostgreSQL integration (isolated database)", () => {
       setPolicy(v, "303", v.policy.version, "whitelist", ["303"]),
     );
     expect((await request(`/api/admin/workspaces/${w.id}/runs`)).status).toBe(
-      403,
+      200,
     );
     let called = false;
     const runner: AgentRunner = {

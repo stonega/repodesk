@@ -679,8 +679,8 @@ export function adminRoutes(
           resource,
         ) ||
           (c.req.method === "GET" &&
-            !admin.telegramId &&
-            /^(runs|workflows)$/.test(resource)),
+            (resource === "runs" ||
+              (!admin.telegramId && resource === "workflows"))),
         "access_denied",
         403,
       );
@@ -710,7 +710,7 @@ export function adminRoutes(
           version: w.version,
           counts: {
             members: w.members.filter((m) => m.active).length,
-            runs: operatorView ? w.runs.length : visibleRuns(w, actor).length,
+            runs: w.runs.length,
             workflows: operatorView
               ? w.workflows.filter((f) => f.status !== "deleted").length
               : visibleWorkflows(w, actor).length,
@@ -830,45 +830,13 @@ export function adminRoutes(
           ),
         );
       case "runs":
-        if (actor === w.operatorId)
-          return c.json({
-            mode: "operator",
-            ...take(
-              w.runs.toReversed().map((r) => ({
-                id: r.id,
-                actor: r.actor,
-                status: r.status,
-                at: r.at,
-                finishedAt: r.finishedAt,
-                model: r.model,
-                workflowId: r.workflowId,
-                workflowVersion: r.workflowVersion,
-                settingsVersion: r.settingsVersion,
-                attempts: r.attempts.map((attempt) => ({
-                  at: attempt.at,
-                  status: attempt.status,
-                  reserved: attempt.reserved,
-                  actual: attempt.actual,
-                })),
-                deliveries: w.deliveries
-                  .filter((delivery) => delivery.runId === r.id)
-                  .map((delivery) => ({
-                    state: delivery.state,
-                    at: delivery.at,
-                    attempts: delivery.attempts,
-                  })),
-              })),
-            ),
-          });
         return c.json({
-          mode: "member",
+          mode: actor === w.operatorId ? "operator" : "member",
           ...take(
-            visibleRuns(w, actor)
-              .toReversed()
-              .map((r) => ({
-                ...r,
-                deliveries: w.deliveries.filter((d) => d.runId === r.id),
-              })),
+            w.runs.toReversed().map((r) => ({
+              ...r,
+              deliveries: w.deliveries.filter((d) => d.runId === r.id),
+            })),
           ),
         });
       case "usage": {

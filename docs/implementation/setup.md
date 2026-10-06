@@ -143,7 +143,11 @@ Webhook remains the default transport; polling starts only when explicitly confi
    activation; an empty allowlist means the bot denies ordinary use. Share the
    request-access link there and approve a user, or allow a known numeric ID.
    The web administrator can also manage workspace settings, skills and access in
-   the admin panel before linking a personal Telegram account.
+   the admin panel before linking a personal Telegram account. Runs & delivery
+   shows every retained workspace run's request, response, transcript and delivery
+   text to its deployment administrator and eligible workspace owners/admins.
+   Viewing these messages does not require the deployment administrator to link
+   Telegram; sending, retrying and cancellation retain their existing checks.
    Once Telegram updates are being received, the request-access link can collect
    requests before activation; approval does not enable ordinary bot work.
 6. If owner actions in Telegram are needed, generate the optional identity link

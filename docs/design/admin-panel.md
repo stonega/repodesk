@@ -32,7 +32,7 @@ Public static assets can load before login, but contain no workspace data or sec
 | GitHub | Manage GitHub modal for guided App creation, workspace OAuth, installation/repository selection and connected repository links, opened on Overview without navigation; GitHub callbacks return to Plugins; disconnect API | Manifest state bound to operator/session/workspace; encrypted operator App credentials; one-use PKCE OAuth; verify user installation/repository access; installation tokens limited to selected repositories and Contents read. |
 | Agent skills | Create/import/edit, test, publish, enable/disable, scope, settings and version rollback | Permission-bounded skills; pinned workflow versions; disabling blocks dependent execution. |
 | Shared instructions | List, edit, scope, provenance, versions, forget | Never lists other users' personal memories by virtue of admin role. |
-| Runs | Compact run summaries open a detail dialog with an authorized message list, evidence, cost and cancel/retry; unlinked deployment administrators can inspect read-only run and delivery metadata in the dialog | Retry creates a traceable attempt; uncertain delivery cannot be blindly resent. Private task, result, transcript and delivery text require a linked, eligible Telegram identity. |
+| Runs | Compact run summaries open a detail dialog with all workspace run messages, evidence, cost and existing cancel/retry controls; deployment administrators can read messages without linking Telegram | Workspace owners/admins can inspect every retained run, including private requests, results, transcripts and delivery text. Access stays tenant-scoped; execution and mutations retain Telegram authorization. Retry creates a traceable attempt; uncertain delivery cannot be blindly resent. |
 | Usage and limits | Recorded/estimated usage, daily/monthly caps, reservations and blocked jobs | Changes apply atomically; concurrent workers cannot overspend the displayed cap. |
 | Members & access | Search Telegram names/usernames/IDs; manage membership, roles and requests; configure access mode and whitelist with impact preview | Show membership, whitelist and effective access separately in one table. Preserve last-admin protection, tenant boundaries and revocation checks. |
 | Privacy and audit | Retention settings, deletion request/status, configuration/action audit | Destructive changes show scope; logs omit credentials and raw private chat text. |
@@ -62,8 +62,11 @@ membership, roles and the allowed-user policy remain separate from authenticatio
 [Telegram web login](https://core.telegram.org/bots/features#web-login)
 
 The local deployment admin may configure credentials, initial workspaces and recovery.
-Bot execution and private conversation access require a linked, eligible Telegram
-identity. Workspace admins cannot modify another workspace or deployment-wide secrets.
+Workspace run history is visible in full to its deployment administrator and eligible
+workspace owners/admins, regardless of the run author or conversation. The deployment
+administrator does not need a linked Telegram identity to read these messages. Bot
+execution and run mutations still require a linked, eligible Telegram identity.
+Workspace admins cannot modify another workspace or deployment-wide secrets.
 
 Require CSRF tokens/origin checks for mutations, rate-limit authentication and expensive
 actions, rotate sessions after login and privilege changes, and support logout/revocation.
