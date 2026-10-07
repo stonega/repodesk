@@ -5,8 +5,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 verify_phase="${1:-all}"
 case "$verify_phase" in
-  all|quality|browser) ;;
-  *) echo "Usage: bash scripts/verify-skills.sh [all|quality|browser]" >&2; exit 2 ;;
+  all|quality|browser|release-browser) ;;
+  *) echo "Usage: bash scripts/verify-skills.sh [all|quality|browser|release-browser]" >&2; exit 2 ;;
 esac
 bun install --frozen-lockfile
 bun install --cwd services/code-truth --frozen-lockfile
@@ -59,16 +59,18 @@ initdb -D "$verify_db/data" -U postgres -A trust --no-locale >/dev/null
 pg_ctl -D "$verify_db/data" -l "$verify_db/postgres.log" \
   -o "-h 127.0.0.1 -p 55439 -k $verify_db" -w start
 export TEST_DATABASE_URL="postgres://postgres@127.0.0.1:55439/postgres"
-if [[ "$verify_phase" != browser ]]; then
+if [[ "$verify_phase" != *browser ]]; then
   bun run --cwd services/code-truth typecheck
   bun run check
   bun run typecheck
   bun test
 fi
 bun run build
-if [[ "$verify_phase" != browser ]]; then
+if [[ "$verify_phase" != *browser ]]; then
   bun run test:runtime
 fi
-if [[ "$verify_phase" != quality ]]; then
+if [[ "$verify_phase" == release-browser ]]; then
+  bun run test:browser
+elif [[ "$verify_phase" != quality ]]; then
   bun run test:browser tests/browser/skills-search.e2e.ts tests/browser/team-workflows.e2e.ts tests/browser/admin.e2e.ts
 fi
