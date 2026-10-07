@@ -5,6 +5,11 @@ import {
   requireThat,
   type Workspace,
 } from "../domain.ts";
+import {
+  githubReadAllowed,
+  workflowRepositoriesAllowed,
+} from "../github/metadata-policy.ts";
+import { repositoryAccess } from "../github/user-access.ts";
 import { validMemory } from "./conversation-memory.ts";
 export function eligible(w: Workspace, actor: string, admin = false) {
   const member = w.members.find((m) => m.id === actor && m.active);
@@ -45,11 +50,52 @@ export function audit(
   };
   w.audit.push(entry);
 }
-export function runAllowed(w: Workspace, run: Run) {
-  return (
+export function runAllowed(w: Workspace, run: Run): boolean {
+  return allowedRun(w, run, new Set(), new Map());
+}
+function allowedRun(
+  w: Workspace,
+  run: Run,
+  seen: Set<string>,
+  cache: Map<string, boolean>,
+): boolean {
+  const cached = cache.get(run.id);
+  if (cached !== undefined) return cached;
+  if (seen.has(run.id) || seen.size > 100) return false;
+  const dependencies = new Set([...seen, run.id]);
+  if (
+    run.handoffRead?.runIds?.some((id) => {
+      const source = w.runs.find((r) => r.id === id);
+      return !source || !allowedRun(w, source, dependencies, cache);
+    })
+  ) {
+    cache.set(run.id, false);
+    return false;
+  }
+  const result =
     eligible(w, run.actor) &&
     !w.settings.paused &&
     !run.cancelled &&
+    githubReadAllowed(w, run) &&
+    (!run.handoffRead ||
+      (validMemory(run.handoffRead.references, w.messages) &&
+        run.handoffRead.chatIds.every(
+          (id) =>
+            id === run.actor || w.chats.some((c) => c.id === id && c.active),
+        ) &&
+        run.handoffRead.repositoryIds.every(
+          (id) =>
+            repositoryAccess(w, run.actor, id) &&
+            w.github?.repositories.some((repo) => repo.id === id) &&
+            w.coding?.settings.enabled &&
+            w.coding.settings.repositories.some(
+              (repo) =>
+                repo.repositoryId === id &&
+                repo.maintainers.includes(run.actor),
+            ),
+        ) &&
+        (run.handoffRead.codingRevision === undefined ||
+          run.handoffRead.codingRevision === w.coding?.revision))) &&
     (!run.followup ||
       run.followup.decision === "reply" ||
       (Date.parse(run.followup.expiresAt) > Date.now() &&
@@ -82,9 +128,17 @@ export function runAllowed(w: Workspace, run: Run) {
         (f) =>
           f.id === run.workflowId &&
           f.status === "active" &&
-          eligible(w, f.owner),
-      ))
-  );
+          eligible(w, f.owner) &&
+          (!f.spec.github ||
+            workflowRepositoriesAllowed(
+              w,
+              f.owner,
+              f.spec.chatId,
+              f.spec.github,
+            )),
+      ));
+  cache.set(run.id, result);
+  return result;
 }
 export function revokeWork(w: Workspace, now = new Date()) {
   for (const approval of w.approvals)
@@ -96,7 +150,14 @@ export function revokeWork(w: Workspace, now = new Date()) {
       (!eligible(w, workflow.owner) ||
         !w.skills.some(
           (s) => s.id === workflow.spec.skillId && s.enabled && !s.archived,
-        ))
+        ) ||
+        (workflow.spec.github &&
+          !workflowRepositoriesAllowed(
+            w,
+            workflow.owner,
+            workflow.spec.chatId,
+            workflow.spec.github,
+          )))
     ) {
       workflow.status = "suspended";
       workflow.reason = "owner_or_skill_revoked";

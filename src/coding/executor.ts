@@ -54,7 +54,12 @@ export class DevelopmentExecutor {
   ) {}
   async tick(workspaceId: string) {
     for (const task of await taskList(this.store.pool, workspaceId)) {
-      if (developmentStopped(task.state) && !task.contentRemoved) continue;
+      if (
+        developmentStopped(task.state) &&
+        !task.contentRemoved &&
+        !task.cleanupAttemptId
+      )
+        continue;
       await this.advance(workspaceId, task.id);
     }
   }
@@ -130,7 +135,9 @@ export class DevelopmentExecutor {
     const task = await this.store.change(workspaceId, async (w, sql) => {
       const t = await taskGet(sql, workspaceId, id);
       if (
-        (developmentStopped(t.state) && !t.contentRemoved) ||
+        (developmentStopped(t.state) &&
+          !t.contentRemoved &&
+          !t.cleanupAttemptId) ||
         Date.parse(t.leaseUntil ?? "1970-01-01") > Date.now() ||
         Date.parse(t.nextPollAt ?? "1970-01-01") > Date.now()
       )
@@ -141,14 +148,24 @@ export class DevelopmentExecutor {
         t.cancelRequested = true;
         t.error = reason(error);
       }
-      if (t.cancelRequested && !t.attemptId && !t.contentRemoved) {
+      if (
+        t.cancelRequested &&
+        !t.attemptId &&
+        !t.contentRemoved &&
+        !t.cleanupAttemptId
+      ) {
         t.state = "cancelled";
         clearProgress(w, "development", t.id);
         notifyDevelopment(w, t, "Your task has stopped.", "cancel:stopped");
         await taskSave(sql, t);
         return;
       }
-      if (!t.cancelRequested && ["review", "waiting"].includes(t.state)) return;
+      if (
+        !t.cancelRequested &&
+        !t.cleanupAttemptId &&
+        ["review", "waiting"].includes(t.state)
+      )
+        return;
       t.lease = lease;
       t.leaseUntil = new Date(Date.now() + 120000).toISOString();
       await taskSave(sql, t);
@@ -172,6 +189,10 @@ export class DevelopmentExecutor {
             [workspaceId, id],
           );
         });
+        return;
+      }
+      if (task.cleanupAttemptId) {
+        await this.releaseCheckpoint(task, lease, task.cleanupAttemptId);
         return;
       }
       if (task.cancelRequested) {
@@ -797,6 +818,7 @@ export class DevelopmentExecutor {
           await this.settle(sql, t, status);
           t.state = t.revision > t.verifiedRevision ? "queued" : "review";
           t.phase = "intake";
+          t.cleanupAttemptId = t.attemptId;
           t.attemptId = undefined;
           if (t.state === "review")
             await this.notice(
@@ -824,8 +846,7 @@ export class DevelopmentExecutor {
       false,
     );
     if (!publish) {
-      await this.runner.cancel(task.workspaceId, task.attemptId);
-      await this.update(task, lease, async () => {});
+      await this.releaseCheckpoint(task, lease, task.attemptId);
       return;
     }
     requireThat(credentials, "coding_publication_denied", 409);
@@ -840,6 +861,38 @@ export class DevelopmentExecutor {
       /* Reservation survives: subsequent polls inspect the existing runner attempt. */
     }
     await this.update(task, lease, async () => {});
+  }
+  private async releaseCheckpoint(
+    task: DevelopmentTask,
+    lease: string,
+    attemptId: string,
+  ) {
+    requireThat(this.runner, "coding_runner_not_configured", 409);
+    try {
+      // A completed attempt releases its slot idempotently, even after a lost ACK.
+      await this.runner.cancel(task.workspaceId, attemptId);
+    } catch (error) {
+      const code = reason(error);
+      if (code !== "coding_task_not_found") {
+        if (
+          ![
+            "coding_runner_unavailable",
+            "coding_runner_request_failed",
+            "coding_outcome_unknown",
+          ].includes(code)
+        )
+          throw error;
+        await this.update(task, lease, async (w, _sql, t) => {
+          markRunnerUnavailable(t);
+          clearProgress(w, "development", t.id);
+        });
+        return;
+      }
+    }
+    await this.update(task, lease, async (_w, _sql, t) => {
+      if (t.cleanupAttemptId === attemptId) t.cleanupAttemptId = undefined;
+      if (t.progress) t.progress.unavailable = false;
+    });
   }
   private async settle(sql: Sql, task: DevelopmentTask, status: LocalStatus) {
     const row = (

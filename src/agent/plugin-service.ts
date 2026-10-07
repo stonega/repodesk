@@ -20,6 +20,7 @@ import {
 } from "../domain.ts";
 import type { GitHubApp } from "../github/app.ts";
 import { githubExtension } from "../github/extension.ts";
+import { GitHubMetadata } from "../github/metadata.ts";
 import { GitHubApps } from "../github/registry.ts";
 import { repositoryAccess } from "../github/user-access.ts";
 import { audit } from "../workspaces/policy.ts";
@@ -284,7 +285,16 @@ export class PluginService {
       workspace.github?.installationId &&
       workspace.github.repositories.length
     )
-      builtins.push(githubExtension(this.store, workspaceId, workspace.github));
+      builtins.push(
+        githubExtension(
+          this.store,
+          workspaceId,
+          workspace.github,
+          this.githubApp
+            ? new GitHubMetadata(this.store, this.githubApp)
+            : undefined,
+        ),
+      );
     if (targets.length) {
       requireThat(this.codeTruth, "code_truth_unavailable", 503);
       builtins.push(

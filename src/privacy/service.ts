@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { type Approval, requireThat, type Workspace } from "../domain.ts";
 import { fingerprint } from "../setup/credentials.ts";
+import { pruneSkillSources } from "../skills/proposals.ts";
 import { discardFollowup } from "../telegram/followup.ts";
 import { validMemory } from "../workspaces/conversation-memory.ts";
 import { audit, authorize } from "../workspaces/policy.ts";
@@ -88,6 +89,7 @@ export function sweep(w: Workspace, now = new Date()) {
       if (
         r.sources.some((s) => !retained.has(s.id)) ||
         (r.contextSummary && !validMemory(r.contextSummary, w.messages)) ||
+        (r.handoffRead && !validMemory(r.handoffRead.references, w.messages)) ||
         (r.followup?.references &&
           !validMemory(r.followup.references, w.messages))
       ) {
@@ -105,6 +107,7 @@ export function sweep(w: Workspace, now = new Date()) {
           delete r.followup.references;
         }
         delete r.discussionUpdates;
+        delete r.handoffRead;
         const count = w.messages.length;
         w.messages = w.messages.filter(
           (m) => !(m.runId === r.id && m.role === "assistant"),
@@ -113,6 +116,7 @@ export function sweep(w: Workspace, now = new Date()) {
       }
     }
   } while (removed);
+  pruneSkillSources(w, now.getTime());
   w.runs = w.runs.filter(
     (r) =>
       Date.parse(r.at) > cutoff ||

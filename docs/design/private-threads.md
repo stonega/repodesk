@@ -118,6 +118,12 @@ maximum). Compaction starts at 80% of the remaining capacity and selects older
 messages toward a 40% target, always retaining the two most recent runs. Additional
 extension context/tools remain subject to the final runtime capacity guard.
 
+After a bounded summary finishes in the same run, the retrigger threshold is 85%
+(2026-10-07). This leaves headroom while avoiding an immediate second summary when
+the first batch lands just above the original trigger because tool schemas grew.
+Larger retained history still requires another bounded batch. Provider capacity,
+output, turn and dollar checks remain in force.
+
 The same configured model summarizes older sources and the previous frozen summary
 using a dedicated tool-free Pi execution. It preserves subjects, goals, constraints,
 decisions, proposed versus confirmed work, questions and todos. Each summary call

@@ -624,6 +624,109 @@ const url = process.env.TEST_DATABASE_URL;
       "Keep zero-based pages",
     ]);
   });
+  test("a lost checkpoint release acknowledgement preserves verified work and retries the same cleanup", async () => {
+    const f = await fixture();
+    await f.tick();
+    await f.tick({ state: "succeeded", tokens: 10, result: result() });
+    await f.tick();
+    const attemptId = present((await f.read()).attemptId);
+    await f.append("Keep zero-based pages");
+    let unavailable = true;
+    f.runner.cancel = async (_workspace, id) => {
+      f.cancels.push(id);
+      if (unavailable) throw new Fault("coding_outcome_unknown", 503);
+    };
+    const verified = await f.tick({
+      state: "ready",
+      tokens: 20,
+      checkPassed: true,
+      result: result({ status: "completed" }),
+    });
+    expect(verified.state).toBe("queued");
+    expect(verified.cleanupAttemptId).toBe(attemptId);
+    expect(verified.previousAttemptId).toBe(attemptId);
+    expect(verified.verifiedRevision).toBe(1);
+    expect(verified.tokens).toBe(30);
+    expect(verified.attemptId).toBeUndefined();
+    await f.tick();
+    expect(f.starts).toHaveLength(2);
+    expect((await f.read()).cleanupAttemptId).toBe(attemptId);
+    unavailable = false;
+    await f.tick();
+    expect((await f.read()).cleanupAttemptId).toBeUndefined();
+    expect((await f.read()).tokens).toBe(30);
+    expect(f.cancels).toEqual([attemptId, attemptId, attemptId]);
+    await f.tick();
+    expect(f.starts).toHaveLength(3);
+    expect(f.starts.at(-1)?.development?.previousAttemptId).toBe(attemptId);
+    expect(f.starts.at(-1)?.development?.revision).toBe(2);
+    expect(f.publications).toHaveLength(0);
+    expect(
+      (await store.read(f.w.id)).deliveries.some((d) =>
+        d.id.startsWith(`development:${f.task.id}:stopped:`),
+      ),
+    ).toBe(false);
+  });
+  test("a checkpoint awaiting review releases its runner slot after an executor restart", async () => {
+    const f = await fixture();
+    await f.tick();
+    await f.tick({
+      state: "succeeded",
+      tokens: 10,
+      result: result({ publishRequested: false }),
+    });
+    await f.tick();
+    const attemptId = present((await f.read()).attemptId);
+    f.runner.cancel = async () => {
+      throw new Fault("coding_runner_unavailable", 503);
+    };
+    const review = await f.tick({
+      state: "ready",
+      tokens: 20,
+      checkPassed: true,
+      result: result({ status: "completed", publishRequested: false }),
+    });
+    expect(review.state).toBe("review");
+    expect(review.cleanupAttemptId).toBe(attemptId);
+    f.runner.cancel = async (_workspace, id) => {
+      f.cancels.push(id);
+    };
+    await store.change(f.w.id, async (_w, sql) => {
+      const task = await f.read();
+      task.nextPollAt = undefined;
+      await taskSave(sql, task);
+    });
+    await f.executor().tick(f.w.id);
+    expect((await f.read()).state).toBe("review");
+    expect((await f.read()).cleanupAttemptId).toBeUndefined();
+    expect(f.cancels).toEqual([attemptId]);
+    expect(f.starts).toHaveLength(2);
+    expect(f.publications).toHaveLength(0);
+  });
+  test("runner outages before dispatch leave an account-auth task queued without reserving an attempt", async () => {
+    const f = await fixture();
+    const device = await configureDevice(f);
+    device.runner.deviceStatus = async () => {
+      throw new Fault("coding_runner_unavailable", 503);
+    };
+    for (let n = 0; n < 2; n++) {
+      const queued = await f.tick();
+      expect(queued.state).toBe("queued");
+      expect(queued.attemptId).toBeUndefined();
+      expect(queued.attempts).toBe(0);
+    }
+    expect(f.starts).toHaveLength(0);
+    expect(f.cancels).toHaveLength(0);
+    device.runner.deviceStatus = async () => ({ state: "connected" });
+    const running = await f.tick();
+    expect(running.state).toBe("working");
+    expect(f.starts).toHaveLength(1);
+    expect(
+      (await store.read(f.w.id)).deliveries.some((d) =>
+        d.id.startsWith(`development:${f.task.id}:stopped:`),
+      ),
+    ).toBe(false);
+  });
   test("analysis and forged evidence cannot publish; missing usage is explicit and does not block authorized work", async () => {
     const f = await fixture("Explain pagination only");
     await f.tick();

@@ -8,6 +8,25 @@ Executable **plugins** are [Pi extensions](llm-extensions.md), a separate capabi
 from instruction skills. Operators install reviewed extension tools and hooks and
 manage their registry through **Workspace → Plugins**.
 
+## Conversation-created drafts (2026-10-07)
+
+Users can ask to preserve a successful assistant procedure as a reusable skill.
+The bot reads a retained successful run owned by that actor, proposes sanitized
+inputs/steps/output conventions and an example, and shows the complete draft for
+approval. Approval shares it with admins as a disabled, unpublished catalog entry.
+Current admin controls handle editing, publication and enablement. Source run,
+actor, sharing time and source hashes are retained as provenance.
+
+Private inputs cannot be selected from another person's chat or imported into a
+group. Group sources stay in their topic. Source changes/removal block pending
+proposals and unpublished drafts, and cleanup removes derived draft content.
+Admin publication approves a standalone procedure with its own lifecycle, like
+other approved instructions; it survives source expiry until edited/archived.
+Workspace deletion removes it. Tool requests never carry the original user's
+credentials or repository grants. Existing schedules retain their pinned versions.
+See [implementation plan](../implementation/team-workflows-plan.md) and
+[examples](../../examples/team-workflows.md).
+
 ## Pi integration boundary
 
 Pi's coding-agent documentation describes skills as `SKILL.md` packages with metadata,

@@ -1,5 +1,29 @@
 import { Temporal } from "@js-temporal/polyfill";
-import { type Recurrence, recurrenceSchema } from "../domain.ts";
+import {
+  type Recurrence,
+  recurrenceSchema,
+  type WorkflowSpec,
+} from "../domain.ts";
+/** Previous complete local calendar days, including 23/25-hour DST days. */
+export function repositoryReportWindow(
+  at: string,
+  spec: Pick<WorkflowSpec, "recurrence" | "windowDays">,
+) {
+  const date = Temporal.Instant.from(at)
+    .toZonedDateTimeISO(spec.recurrence.timezone)
+    .toPlainDate();
+  return {
+    since: date
+      .subtract({ days: spec.windowDays })
+      .toZonedDateTime(spec.recurrence.timezone)
+      .toInstant()
+      .toString(),
+    until: date
+      .toZonedDateTime(spec.recurrence.timezone)
+      .toInstant()
+      .toString(),
+  };
+}
 /** One occurrence per local date; gaps are skipped and folds use the earlier instant. */
 export function nextOccurrences(
   input: Recurrence,

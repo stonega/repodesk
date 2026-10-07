@@ -214,6 +214,7 @@ export interface DevelopmentTask {
   fence: number;
   attemptId?: string;
   previousAttemptId?: string;
+  cleanupAttemptId?: string;
   attempts: number;
   tokens: number;
   usageUnknown?: boolean;

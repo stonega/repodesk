@@ -7,7 +7,7 @@ import { runAllowed } from "../workspaces/policy.ts";
 import { deliver } from "../workspaces/service.ts";
 import type { GitHubConnection } from "./config.ts";
 import { issueApproval, issueInput } from "./issues.ts";
-
+import type { GitHubMetadata } from "./metadata.ts";
 import { repositoryAccess } from "./user-access.ts";
 
 /** No external writes: the application submits only after a human approves. */
@@ -15,17 +15,61 @@ export function githubExtension(
   store: Store,
   workspaceId: string,
   connection: GitHubConnection,
+  metadata?: GitHubMetadata,
 ): BuiltinExtension {
   return {
     id: "github",
-    version: "2",
+    version: "3",
     path: "<inline:github>",
-    tools: ["find_connected_repository", "propose_github_issue"],
+    tools: [
+      "find_connected_repository",
+      "propose_github_issue",
+      ...(metadata ? ["query_github_metadata"] : []),
+    ],
     execution: "read-only",
     enabled: true,
     workspaces: [workspaceId],
-    hash: fingerprint({ version: 2, connection }),
+    hash: fingerprint({ version: 3, connection, metadata: !!metadata }),
     factory: (input) => async (pi) => {
+      if (metadata)
+        pi.registerTool({
+          name: "query_github_metadata",
+          label: "Read GitHub status",
+          description:
+            "Read current PR/issue metadata from a connected repository. No writes. Resolve repositoryId with find_connected_repository. state merged uses merged_at; issues exclude PRs. Supply ISO since/until for time windows and follow nextPage until complete; disclose incomplete coverage if stopped. number reads one item; bodyTruncated discloses a bounded description excerpt. Private repository ad-hoc queries require private chat; group schedules may read only their approved repository sources. Metadata does not prove CI, review approval or user impact.",
+          parameters: Type.Object(
+            {
+              repositoryId: Type.Integer({ minimum: 1 }),
+              kind: Type.Union([Type.Literal("pulls"), Type.Literal("issues")]),
+              number: Type.Optional(Type.Integer({ minimum: 1 })),
+              state: Type.Optional(
+                Type.Union([
+                  Type.Literal("open"),
+                  Type.Literal("closed"),
+                  Type.Literal("all"),
+                  Type.Literal("merged"),
+                ]),
+              ),
+              since: Type.Optional(Type.String({ format: "date-time" })),
+              until: Type.Optional(Type.String({ format: "date-time" })),
+              page: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+            },
+            { additionalProperties: false },
+          ),
+          execute: async (_callId, args, signal) => {
+            const result = await metadata.read(
+              workspaceId,
+              input.runId,
+              args,
+              AbortSignal.any([input.signal, ...(signal ? [signal] : [])]),
+              input.guard,
+            );
+            return {
+              content: [{ type: "text", text: JSON.stringify(result) }],
+              details: {},
+            };
+          },
+        });
       pi.registerTool({
         name: "find_connected_repository",
         label: "Find connected repository",

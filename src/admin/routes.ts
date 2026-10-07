@@ -23,6 +23,7 @@ import {
 } from "../domain.ts";
 import type { GitHubMember } from "../github/app.ts";
 import { assignGitHubAccount } from "../github/member-account.ts";
+import { repositoryAccess } from "../github/user-access.ts";
 import { reconcileCharge, resolveDelivery } from "../jobs/recovery.ts";
 import { logQuery, readRuntimeLogs } from "../observability/logs.ts";
 import { requestDeletion } from "../privacy/service.ts";
@@ -789,6 +790,18 @@ export function adminRoutes(
           });
         return c.json({
           mode: "member",
+          repositorySources: {
+            revision: w.github?.revision ?? 0,
+            repositories: w.github?.installationId
+              ? w.github.repositories
+                  .filter((repo) => repositoryAccess(w, actor, repo.id))
+                  .map((repo) => ({
+                    id: repo.id,
+                    full_name: repo.full_name,
+                    private: repo.private,
+                  }))
+              : [],
+          },
           ...take(
             visibleWorkflows(w, actor).map((f) => ({
               ...f,

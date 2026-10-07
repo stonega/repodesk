@@ -105,10 +105,12 @@ by `docker image load`. It then:
 
 1. Acquires a host lock, verifies the archive and imports immutable image IDs.
 2. Generates/reuses the runner token and image configuration, validates Compose
-   and runtime secret access, pulls
-   PostgreSQL, and starts the runner with a readiness check before stopping writers.
-   The daemon, prebuilt job image and private task network must be available.
-3. Stops app/worker and starts the database.
+   and runtime secret access, and pulls PostgreSQL. Keeps the current bot and
+   runner available while existing coding attempts reach a durable checkpoint.
+3. Stops app/worker, then checks the existing runner again to catch an attempt
+   started just before shutdown. Task containers and the provider proxy continue
+   under the old runner until implementation, checks or publication finish. Only
+   then replaces the runner, checks readiness, and starts the database.
 4. Writes a restrictive database dump and verifies its archive listing.
 5. Runs migrations once; starts neither writer if migration fails.
 6. Starts app/worker without building or pulling their image, waits for both
@@ -122,14 +124,28 @@ GitHub serializes deployment workflows without cancelling an active cutover.
 An identical bundle cannot overwrite its earlier backup. To retry, use **Re-run
 all jobs**: the run attempt receives a fresh release directory and backup name.
 Deployment includes a brief outage while writers stop, backup and migrations run.
-Stop workers only after active work has drained if a release needs a clean
-cutover; this automation does not wait for application jobs to drain.
+Coding attempts at `ready`, terminal outcomes or an authentication pause are safe
+checkpoints; their private volumes, patch, usage and attempt identity survive the
+runner replacement. Running preparation, model turns, checks and publication are
+never cancelled to accelerate a release. The task image is imported alongside
+the supervisor; task containers already running keep their original image.
+
+The checkpoint wait defaults to 1800 seconds across both checks. A timeout defers
+the release and leaves the old runner and tasks intact. If writers have already
+stopped for the second check, the script restarts only the existing writer services
+that were running before shutdown; no image or schema has changed yet. Operators
+can shorten the wait by exporting `CODEX_DEPLOY_CHECKPOINT_TIMEOUT_SECONDS` (1–1800)
+when invoking the deployment script. This is a deployment wait, not a task execution
+limit. Retry the release after its active attempts reach checkpoints.
+Other application/provider jobs still follow the worker's normal shutdown policy.
 
 ## Failure and recovery
 
 Missing runtime configuration, required commands, invalid bundle metadata and
 archive checksum failures produce explicit preflight errors. Preflight failures
-leave running writers untouched. Once cutover begins, a
+leave running writers untouched. Checkpoint deferral preserves the current runner
+and restores previously running writers if needed. Once the runner replacement
+or database cutover begins, a
 backup, migration, startup or readiness failure stops app/worker and leaves the
 previous `.current-release` marker unchanged. A marker is a record of the last
 successful deployment, not evidence that those containers are still running.
@@ -156,6 +172,12 @@ overlay. Preserve `secrets/codex-runner-token` and the project's
 `codex_runner_state` volume together; replacing either breaks credential recovery.
 The runner is internal and exposes no host port. Only its trusted supervisor
 receives the Docker socket. See [container execution](codex-podman.md).
+
+Temporary runner connection failures leave queued and active coding tasks
+retryable. A verified attempt awaiting slot cleanup has a durable cleanup identity;
+the worker retries that idempotent cleanup after restart without erasing the result,
+charging its usage twice, or dropping ordered follow-ups. Uncertain publication
+still reconciles the existing reservation and never blindly repeats a GitHub write.
 
 Use the configured path/project if changed. Do not remove volumes or restore a
 database automatically. Follow [the recovery runbook](release-runbook.md) for

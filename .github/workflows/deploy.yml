@@ -52,6 +52,7 @@ jobs:
           cp compose.yaml scripts/deploy-vps.sh bundle/
           cp deploy/codex/docker-compose.yaml bundle/codex-compose.yaml
           cp deploy/codex/release-config.mjs bundle/codex-release-config.mjs
+          cp deploy/codex/wait-checkpoint.mjs bundle/codex-wait-checkpoint.mjs
 
       - name: Transfer and deploy through verified SSH
         env:

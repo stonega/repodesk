@@ -48,7 +48,10 @@ export function compactionPlan(
       parameters: t.parameters,
     })),
   });
-  if (size < available * 0.8) return;
+  // A bounded summary batch may land just above the original trigger when tool
+  // definitions grow. Keep headroom without immediately consuming another turn.
+  const threshold = r.compaction?.state === "done" ? 0.85 : 0.8;
+  if (size < available * threshold) return;
   const sources = contextSources(r);
   // Keep complete recent turns, including the current request, even if a turn has no answer.
   const lastRuns = new Set([...new Set(sources.map((s) => s.runId))].slice(-2));

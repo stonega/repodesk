@@ -188,6 +188,9 @@ export function createRun(
     at: now.toISOString(),
     workflowId: workflow?.id,
     workflowVersion: workflow?.version,
+    githubRead: workflow?.spec.github
+      ? structuredClone(workflow.spec.github)
+      : undefined,
     settings: structuredClone(w.settings),
     settingsVersion: w.version,
     model,

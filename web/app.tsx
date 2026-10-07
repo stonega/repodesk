@@ -2614,6 +2614,10 @@ function WorkflowsPage({ id }: { id: string }) {
     | {
         mode: "member";
         items: (Workflow & { next: string[] })[];
+        repositorySources?: {
+          revision: number;
+          repositories: { id: number; full_name: string }[];
+        };
         total: number;
       }
     | {
@@ -2633,6 +2637,10 @@ function WorkflowsPage({ id }: { id: string }) {
       }
   >(`/api/admin/workspaces/${id}/workflows`);
   const memberData = data?.mode === "member" ? data : undefined;
+  const repositorySources = memberData?.repositorySources ?? {
+    revision: 0,
+    repositories: [],
+  };
   const operatorData = data?.mode === "operator" ? data : undefined;
   const skills = useData<{ items: Skill[] }>(
     `/api/admin/workspaces/${id}/skills`,
@@ -2727,6 +2735,19 @@ function WorkflowsPage({ id }: { id: string }) {
             Source/destination {f.spec.chatId}, topic {f.spec.topicId} · $
             {f.spec.budgetUsd}/run
           </p>
+          {f.spec.github && (
+            <p>
+              Repositories:{" "}
+              {f.spec.github.repositoryIds
+                .map(
+                  (repoId) =>
+                    repositorySources.repositories.find(
+                      (repo) => repo.id === repoId,
+                    )?.full_name ?? `Unavailable repository ${repoId}`,
+                )
+                .join(", ")}
+            </p>
+          )}
           <div className="row">
             <IconButton
               icon="edit"
@@ -2776,15 +2797,47 @@ function WorkflowsPage({ id }: { id: string }) {
           <RecordForm
             fields={prefixFields(
               editing ? "spec." : "",
-              workflowFields(skills.data?.items ?? []),
+              workflowFields(skills.data?.items ?? [], [
+                ...repositorySources.repositories,
+                ...(editing?.spec.github?.repositoryIds
+                  .filter(
+                    (repoId) =>
+                      !repositorySources.repositories.some(
+                        (repo) => repo.id === repoId,
+                      ),
+                  )
+                  .map((repoId) => ({
+                    id: repoId,
+                    full_name: `Unavailable repository ${repoId}`,
+                  })) ?? []),
+              ]),
             )}
             value={
               editing
-                ? { version: editing.version, spec: editing.spec }
-                : initial
+                ? {
+                    version: editing.version,
+                    spec: {
+                      ...editing.spec,
+                      repositoryIds: editing.spec.github?.repositoryIds ?? [],
+                    },
+                  }
+                : { ...initial, repositoryIds: [] }
             }
             label="Preview approval proposal"
             save={async (value) => {
+              const record = value as Record<string, unknown>;
+              const spec = (editing ? record.spec : record) as Record<
+                string,
+                unknown
+              >;
+              const repositoryIds = spec.repositoryIds as number[];
+              delete spec.repositoryIds;
+              if (repositoryIds?.length)
+                spec.github = {
+                  revision: repositorySources.revision,
+                  repositoryIds,
+                };
+              else delete spec.github;
               const result = await api(
                 `/api/admin/workspaces/${id}/workflows${editing ? `/${editing.id}` : ""}`,
                 editing ? "PUT" : "POST",
@@ -2926,6 +2979,15 @@ function SkillsPage({ id }: { id: string }) {
               </div>
             </div>
             <p className="skill-card-description">{s.draft.description}</p>
+            {s.origin && (
+              <p className="muted">
+                Saved from a conversation by {s.origin.actor} on{" "}
+                {new Date(s.origin.sharedAt).toLocaleDateString()}.{" "}
+                {s.published.length
+                  ? "Approved reusable instruction skill."
+                  : "Review before publishing. Publication saves this procedure independently of conversation retention; enable it for team use."}
+              </p>
+            )}
             <div className="skill-card-meta">
               <span>Revision {s.version}</span>
               <span>

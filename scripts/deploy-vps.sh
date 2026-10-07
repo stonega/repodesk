@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run on the provisioned VPS; configuration and secrets stay on that host.
-set -euo pipefail
+set -Eeuo pipefail
 umask 077
 
 fail() {
@@ -55,7 +55,7 @@ compose=(docker compose --project-directory "$deploy_root" -p "$project"
 codex=false
 if [[ -f "$release_dir/codex-compose.yaml" ]]; then
   codex=true
-  for artifact in codex-supervisor-tag codex-job-tag codex-release-config.mjs; do
+  for artifact in codex-supervisor-tag codex-job-tag codex-release-config.mjs codex-wait-checkpoint.mjs; do
     [[ -f "$release_dir/$artifact" ]] || fail "Missing Codex release artifact: $artifact"
   done
   supervisor_tag="$(cat "$release_dir/codex-supervisor-tag")"
@@ -81,25 +81,57 @@ fi
   "require('fs').accessSync(process.env.ENCRYPTION_KEY_FILE,require('fs').constants.R_OK)"
 # Pull only the pinned database image, before stopping any writers.
 "${compose[@]}" pull postgres
-if [[ "$codex" = true ]]; then
-  # Ensure the engine, private network and pinned job image work before stopping writers.
-  "${compose[@]}" up -d --no-deps --no-build --pull never --wait --wait-timeout 180 codex-runner
-fi
 
 cutover_started=false
+writers_stopped=false
+running_writers=()
 on_error() {
   status=$?
   trap - ERR
   if [[ "$cutover_started" = true ]]; then
     "${compose[@]}" stop app worker || true
     echo 'Deployment failed; app/worker stopped. Inspect migrations and the backup before recovery.' >&2
+  elif [[ "$writers_stopped" = true && "${#running_writers[@]}" -gt 0 ]]; then
+    # No images or schema have changed. Restart only services that were running.
+    "${compose[@]}" start "${running_writers[@]}" || true
+    echo 'Deployment deferred before cutover; existing writers restarted and the runner was preserved.' >&2
   fi
   exit "$status"
 }
 trap on_error ERR
 
-cutover_started=true
+checkpoint_timeout="${CODEX_DEPLOY_CHECKPOINT_TIMEOUT_SECONDS:-1800}"
+[[ "$checkpoint_timeout" =~ ^[1-9][0-9]{0,3}$ ]] && (( checkpoint_timeout <= 1800 )) || fail 'Checkpoint wait must be 1–1800 seconds.'
+checkpoint_deadline=$((SECONDS + checkpoint_timeout))
+wait_for_coding_checkpoint() {
+  [[ "$codex" = true ]] || return 0
+  local runner_id remaining
+  runner_id="$("${compose[@]}" ps --status running --quiet codex-runner)"
+  [[ -n "$runner_id" ]] || return 0
+  remaining=$((checkpoint_deadline - SECONDS))
+  (( remaining > 0 )) || remaining=1
+  "${compose[@]}" exec -T codex-runner node --input-type=module - "$remaining" \
+    < "$release_dir/codex-wait-checkpoint.mjs"
+}
+# Keep the current bot and provider proxy available while existing turns finish.
+wait_for_coding_checkpoint
+active_writers="$("${compose[@]}" ps --status running --services app worker)"
+while IFS= read -r service; do
+  case "$service" in
+    app|worker) running_writers+=("$service") ;;
+    '') ;;
+    *) fail 'Unexpected running service.' ;;
+  esac
+done <<< "$active_writers"
+writers_stopped=true
 "${compose[@]}" stop app worker
+# Close the race with an attempt started just before the writers stopped.
+# Task containers keep running under the old supervisor until a saved checkpoint.
+wait_for_coding_checkpoint
+cutover_started=true
+if [[ "$codex" = true ]]; then
+  "${compose[@]}" up -d --no-deps --no-build --pull never --wait --wait-timeout 180 codex-runner
+fi
 "${compose[@]}" up -d --no-deps --wait --wait-timeout 120 postgres
 mkdir -p "$deploy_root/backups"
 # A rerun has a new release ID, so an earlier backup is never overwritten.

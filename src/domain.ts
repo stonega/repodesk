@@ -72,6 +72,14 @@ export const recurrenceSchema = z
     "Weekly schedules need a weekday (Monday=1)",
   );
 export type Recurrence = z.infer<typeof recurrenceSchema>;
+export const repositorySourcesSchema = z
+  .object({
+    revision: z.number().int().nonnegative(),
+    repositoryIds: z.array(z.number().int().positive().safe()).min(1).max(6),
+  })
+  .strict()
+  .refine((s) => new Set(s.repositoryIds).size === s.repositoryIds.length);
+export type RepositorySources = z.infer<typeof repositorySourcesSchema>;
 export const workflowSchema = z
   .object({
     name: z.string().trim().min(1).max(80),
@@ -86,6 +94,7 @@ export const workflowSchema = z
     budgetUsd: z.number().min(0.001).max(5),
     skillId: z.string().min(1),
     windowDays: z.number().int().min(1).max(30).default(7),
+    github: repositorySourcesSchema.optional(),
   })
   .strict();
 export type WorkflowSpec = z.infer<typeof workflowSchema>;
@@ -97,6 +106,9 @@ export const TOOLS = [
   "propose_workflow",
   "propose_instruction",
   "load_skill",
+  "read_skill_source",
+  "propose_skill",
+  "query_work_handoff",
 ] as const;
 export const skillSchema = z
   .object({
@@ -217,6 +229,13 @@ export interface Instruction {
   provenance: string;
 }
 export interface Skill {
+  origin?: {
+    runId: string;
+    actor: string;
+    references: MemoryReferences;
+    sharedAt: string;
+    sourceRemovedAt?: string;
+  };
   id: string;
   version: number;
   enabled: boolean;
@@ -245,7 +264,8 @@ export interface Approval {
     | "instruction"
     | "deletion"
     | "github_issue"
-    | "coding_task";
+    | "coding_task"
+    | "skill";
   target: string;
   version: number;
   hash: string;
@@ -261,6 +281,14 @@ export interface Approval {
   };
 }
 export interface Run {
+  githubRead?: RepositorySources;
+  handoffRead?: {
+    references: MemoryReferences;
+    runIds?: string[];
+    chatIds: string[];
+    repositoryIds: number[];
+    codingRevision?: number;
+  };
   codingTaskId?: string;
   stopConfirmed?: boolean;
   id: string;

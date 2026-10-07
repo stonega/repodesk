@@ -1,6 +1,7 @@
 # Product documentation
 
-Research date: **2026-09-18**. Product name: **RepoDesk**.
+Research baseline: **2026-09-18**; Every Agent public launch follow-up: **2026-10-07**.
+Product name: **RepoDesk**.
 
 RepoDesk's main journey is working with selected GitHub repositories from Telegram,
 with AI helping interpret questions and draft scoped actions. Start with
@@ -10,7 +11,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 
 | Document | Purpose |
 | --- | --- |
-| [Every Agent feature inventory](research/every-agent-features.md) | Detailed public features, evidence strength, pricing conflict, and unknowns |
+| [Every Agent feature inventory](research/every-agent-features.md) | September baseline, October launch update, RepoDesk feature recommendations, evidence strength and unknowns |
 | [Source register](reference/sources.md) | URLs, retrieval method, scope, and research limitations |
 | [Product requirements](design/product-requirements.md) | Proposed features, priorities, acceptance criteria, permissions, and success measures |
 | [GitHub work through Telegram](design/github-workflows.md) | Main user journey, current GitHub capabilities, boundaries and next decisions |
@@ -27,6 +28,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Workspace membership and access](design/access-control.md) | Active membership, roles, enforcement and revocation |
 | [Pi + Docker implementation plan](implementation/bot-plan.md) | Concrete engineering tasks, architecture decisions, tests and rollout |
 | [Roadmap](implementation/roadmap.md) | Dependency-ordered milestones and release gates |
+| [Repository reports, skills and handoffs](implementation/team-workflows-plan.md) | Accepted R01–R03 plan, permission contracts, implementation and verification |
 | [Telegram feedback beta plan](implementation/telegram-feedback-plan.md) | Readable progress, task status, cancellation and failures for friends and colleagues |
 | [GitHub App connections](implementation/github-app.md) | Register the App, connect workspace repositories, permissions and credential lifecycle |
 | [Codex coding tasks](implementation/codex-coding.md) | Maintainer-only issue-to-PR tasks, repository settings and local runner setup |

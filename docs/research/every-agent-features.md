@@ -1,12 +1,15 @@
 # Every Agent: detailed public feature inventory
 
-Reviewed **2026-09-18**. See the [source register](../reference/sources.md) for methods
-and limitations. “Documented” means publicly claimed, not tested by us. Telegram
-equivalents below are proposed, not features of Every or this scaffold.
+Baseline reviewed **2026-09-18**; public launch follow-up reviewed **2026-10-07**.
+Read the [launch follow-up](#launch-follow-up-2026-10-07) for current findings and
+RepoDesk recommendations. The original inventory below preserves the September
+snapshot. See the [source register](../reference/sources.md) for methods and
+limitations. “Documented” means publicly claimed, not tested by us. Telegram
+equivalents are proposals, not implementation claims.
 
 ## Product model
 
-Every Agent is a beta AI coworker embedded in Slack. Its target champion is someone
+At the September review, Every Agent was a beta AI coworker embedded in Slack. Its target champion was someone
 who introduces AI to colleagues through useful, repeatable team work. The central
 loop is to delegate a recurring task, reuse it, correct it in conversation, and let
 the team benefit from that accumulated context. The interface spans chat and a web
@@ -127,7 +130,9 @@ Sources: [FAQ](https://agent.every.to/install/slack), [privacy](https://agent.ev
 [support](https://agent.every.to/support). Privacy text has both broad retention language
 and more specific Slack deletion rules; do not collapse them into one universal TTL.
 
-## Pricing: unresolved conflict
+## Pricing: unresolved conflict at the September review
+
+The [October follow-up](#pricing-update) supersedes this historical pricing finding.
 
 | Source | Public statement on research date |
 | --- | --- |
@@ -153,3 +158,153 @@ Our initial beta should expose usage and enforce budgets; commercial terms remai
 10. Actual pricing and trial/membership treatment of multi-workspace users.
 
 These are design questions for us, not negative findings about Every.
+
+## Launch follow-up (2026-10-07)
+
+Scope: the current [product page](https://every.to/agent), the
+[October 6 launch announcement](https://every.to/on-every/introducing-the-every-agent),
+and refreshed [pricing](https://agent.every.to/pricing) and
+[installation FAQ](https://agent.every.to/install/slack). See source records E9–E12.
+No account, Slack installation or authenticated product test was performed.
+These are newly verified or newly emphasized claims; we cannot establish that
+every capability was introduced on launch day.
+
+### Current public evidence
+
+| Finding | Evidence strength | Source |
+| --- | --- | --- |
+| Public launch on October 6; a shared company agent in Slack | Documented | [Announcement](https://every.to/on-every/introducing-the-every-agent) |
+| Built-in skills; successful workflows can become team skills; corrections can persist | Documented | [Announcement](https://every.to/on-every/introducing-the-every-agent) |
+| Frontier Alerts recommend developments relevant to current tools/workflows | Documented; relevance and frequency untested | [Announcement](https://every.to/on-every/introducing-the-every-agent) |
+| Named business integrations and a claim of over 1,000 tools | Documented claim; operation-level availability unknown | [Announcement](https://every.to/on-every/introducing-the-every-agent) |
+| Claude Managed Agents powers the shared agent | Documented; internal architecture unknown | [Announcement](https://every.to/on-every/introducing-the-every-agent) |
+| Coding and PR creation for review; merged-PR reports; feedback saved to workflows | Coding documented, report and feedback examples demonstrated | [Product page](https://every.to/agent) |
+| Temporary access requests and approval controls in task results | Demonstrated; exact grant lifecycle unknown | [Product page](https://every.to/agent) |
+| Connections shared with selected teammates; opened files retained across conversations | Documented | [Installation FAQ](https://agent.every.to/install/slack) |
+
+The change in emphasis is toward making one person's useful process reusable by
+colleagues. That is our interpretation of the launch materials, not a claim that
+the earlier product lacked team reuse. The September inventory already recorded
+scheduling, corrections, shared learning, approvals and connector sharing.
+
+### RepoDesk already has much of the foundation
+
+The comparison uses the current working tree and
+[implementation evidence](../implementation/implementation-status.md), including
+October 5–6 entries. Some older design/roadmap passages still describe continuous
+coding as planned; the newer implementation evidence takes precedence for this
+research. Local implementation does not establish live pilot acceptance.
+
+| Capability | Current RepoDesk evidence | Actual remaining opportunity |
+| --- | --- | --- |
+| Recurring work | Approved daily/weekly schedules, timezone handling, unique occurrences and lifecycle controls in [workflow services](../../src/workflows/service.ts) | Add useful repository inputs and templates; weekdays-only recurrence would need an extension beyond the current schema |
+| Corrections and memory | Approved personal/workspace/workflow instructions; retained discussion summaries, decisions and todos | Connect feedback to skill drafts and evaluation examples; avoid describing basic memory as a missing feature |
+| Skills | Admin create/import, publish, enable and rollback; `load_skill` in [agent tools](../../src/agent/tools.ts) | Conversational extraction and discovery; built-in tools currently offer instruction proposals, not skill-creation proposals |
+| Coding collaboration | Durable tasks, product questions, bounded repair and same-task/PR continuation | Better handoff summaries and reusable engineering procedures |
+| Task feedback | Readable progress, scoped status/cancellation and rich Telegram replies | Consistent outcome summaries linking changes, checks, remaining decisions and PRs |
+| GitHub | App connection, verified user access, Code Truth, issue submission and coding tasks | General read-only issue/PR metadata and digests remain proposed |
+| Media | Guarded images, text/code and selectable PDF input in [attachment support](../implementation/telegram-attachments.md) | Durable generated artifacts and selected documentation connectors |
+
+The current skill Test action is a deterministic policy preview, as
+[the catalog implementation](../../src/skills/catalog.ts) and
+[skills design](../design/agent-skills.md) explain. It does not evaluate whether a
+model follows the skill or produces a useful answer. A future quality evaluation
+must be a separate, budgeted capability.
+
+### Recommended additions
+
+At the research date these were **our proposals**. The user subsequently authorized
+R01–R03 on 2026-10-07; see their [local implementation plan](../implementation/team-workflows-plan.md).
+Other items remain proposals. Order reflects
+fit with the [GitHub product journey](../design/github-workflows.md), reuse of
+existing infrastructure and likely reviewability. Effort is relative, not a date
+commitment.
+
+| ID | Priority / effort | Proposed addition | Useful Telegram request | Increment beyond current behavior |
+| --- | --- | --- | --- | --- |
+| R01 | Next / medium | GitHub status and repository digest | “Every morning, summarize yesterday's merged PRs and outstanding reviews in this topic.” | Authorized issue/PR metadata tools, freshness, paging and cited links, composed with existing schedules |
+| R02 | Next / medium | Save a successful conversation as a skill | “Save this bug-triage process so the team can use it.” | Draft extraction with inputs, output conventions, examples, source references and requested tools; explicit publication by an authorized admin |
+| R03 | Next / small–medium | Work handoff and unfinished-task brief | “Where did we leave off, and what needs my answer or review?” | Aggregate accessible durable tasks and retained discussion records into next actions across the user's permitted conversations |
+| R04 | With R01/R02 / small–medium | Curated engineering skills | “Use our release-note format for this week's changes.” | Ready-to-use release notes, issue triage, source explanations and coding handoffs; tools still need independent grants |
+| R05 | After R01 / medium | Proactive blocker and review follow-up | “Tell me when a PR has waited for review for two days.” | Opt-in observation, thresholds, suppression and quiet hours; extend [F07](../design/product-requirements.md#f07--observation-suggestions-and-blocker-triage-p1) |
+| R06 | Later / medium–large | One documentation connector | “Use this approved specification to prepare the implementation task.” | Start with either Notion or Google Drive based on pilot demand; read-only selection, per-user access and provenance |
+| R07 | Later / medium | Generated engineering artifacts | “Give me the implementation plan and test report as downloadable files.” | Tenant-scoped artifacts, source references, expiry and authorized downloads; current attachment input is not an output library |
+| R08 | Later / medium | Workflow-relevant frontier alerts | “Which new model or tool is worth testing for our current tasks?” | Official release feeds, relevance to declared tools/skills, restrained cadence and links to evidence; no automatic model/configuration changes |
+
+R01 is the clearest missing repository capability. R02 makes the existing skills
+system easier to use. R03 can provide value from application records before new
+connectors are available. R04 packages the first three into workflows people can
+discover and repeat. Do not count separate templates as separate platform features.
+
+### Concrete scope for the first additions
+
+**R01 — begin with reads, then compose the report.** Support questions about open
+PRs, merged PRs in a time window, pending review and issue status. Return repository,
+item URL, retrieval time and coverage. Keep metadata facts separate from inferred
+user impact; explaining a change may need additional authorized source/diff context.
+Scheduling currently fixes source/destination to the execution chat/topic, so adding
+repository inputs needs an explicit workflow scope contract. For a group digest,
+authorize the audience as well as the task owner. Grant loss blocks future reads
+and delivery. Partial paging or provider failure must appear as incomplete coverage,
+not “no changes.” Unique occurrence and delivery controls must survive restarts.
+
+**R02 — create a draft from a chosen successful run.** Extract a named procedure
+and a sanitized example, show the scope and difference from an existing version,
+then use the catalog's publication controls. Ordinary members can propose; admins
+publish shared skills. Preserve original source references and exclude private
+conversation content from shared examples unless sharing is authorized. A saved
+skill never inherits the original user's credentials, repository grants or coding
+authority. Keep an existing workflow's pinned version until an explicit upgrade.
+Start with instruction skills and registered tools, not executable bundle generation.
+Approved corrections can later propose a new draft plus a regression example;
+evaluate usefulness separately from the existing policy preview.
+
+**R03 — summarize state, not guessed agent internals.** Show the original goal,
+last confirmed checkpoint, waiting question, next action, verification status and
+PR link when present. Use app-managed task records and authorized discussion
+summaries; do not scan developers' personal Codex/Claude directories. Existing
+records can support a manual brief first, followed by an optional personal schedule.
+Cross-topic aggregation needs an explicit read policy; group briefs must not include
+private tasks. Every's session-log testimonial is a customer anecdote, not proof of
+a general session-sync integration.
+
+For acceptance, evaluate factual/source accuracy and digest usefulness for R01,
+whether a colleague successfully reuses a skill for R02, and whether R03 identifies
+the right next action. Include denied audiences, revoked access, duplicate events
+and scheduling failures when these proposals become implementation work.
+
+### Other ideas and tradeoffs
+
+- Resource-specific access requests could improve denial handling later. RepoDesk
+  already has workspace enrollment requests; the addition would be a repository/tool
+  request with scope, expiry and an auditable decision. An app-level grant cannot
+  bypass the person's GitHub permissions. This is separate from R01–R08.
+- A consistent result summary can accompany R03/R04: what changed, evidence/checks,
+  remaining questions and the artifact/PR link. Existing rich replies and progress
+  controls provide the delivery foundation.
+- Broad CRM, finance, hiring and purchasing integrations have weak fit with the
+  current repository-focused pilot. Select the first documentation connector from
+  actual demand instead of pursuing the advertised integration count.
+- Automatic merging, deployment, external outreach and auto-installing tools would
+  expand current authorization contracts. They are not implied by a shared skill or
+  a competitor demonstration.
+- Keep Pi plus the existing application services and Codex runner for these proposals.
+  The competitor's runtime choice alone supplies no reason to migrate ours.
+- Slack channel discovery/history behavior does not transfer to Telegram. Work from
+  connected chats and delivered, retained messages; disclose missing coverage.
+
+Recommended sequence: establish the live GitHub pilot; add R01 and a release-note
+template; add R02 and correction-derived skill drafts; add R03; then evaluate R05
+and one R06 connector. R03's app-record-only prototype can proceed independently
+of the metadata tool. R07/R08 should follow evidence of repeated use.
+
+### Pricing update
+
+The current [product pricing section](https://every.to/agent#pricing) gives
+$30/user/month or $24/user/month billed annually, plus provider token costs without
+markup. The [pricing page](https://agent.every.to/pricing) now includes membership,
+initial credits and workspace balance/refill rules. The September membership-versus-
+usage-only conflict is therefore no longer the current finding.
+
+This is a product-pricing observation, not a proposal for RepoDesk billing or a
+vendor quote. We have not tested purchase flows or measured all-in cost.

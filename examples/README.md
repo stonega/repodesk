@@ -3,12 +3,15 @@
 See [github-members.http](github-members.http) for automatically fetched GitHub
 account choices and versioned member profile associations.
 
+See [team-workflows.md](team-workflows.md) for repository status/daily reports,
+conversation-created skill drafts, work handoffs and manual pilot acceptance.
+
 `health.http` checks a configured local API. `model-settings.http` shows an
 operator saving an OpenAI-compatible endpoint, custom model and thinking level. `workflow-proposal.json` matches the
 implemented proposal schema; replace its destination with your linked group (or
 verified private Telegram ID) and its skill ID with an enabled published workspace skill.
 
-In the admin panel's Workflows editor, paste the JSON and select **Preview approval
+In the admin panel's Workflows editor, fill the structured fields and select **Preview approval
 proposal**. Review the resulting immutable payload and next runs, then approve it.
 The proposal alone never activates a schedule.
 

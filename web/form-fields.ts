@@ -3,6 +3,7 @@ import { detailLabel } from "./data-details.tsx";
 import type { FormField } from "./record-form.tsx";
 export function workflowFields(
   skills: { id: string; draft: { name: string } }[],
+  repositories: { id: number; full_name: string }[] = [],
 ): FormField[] {
   return [
     { path: "name", label: "Workflow name", required: true, maxLength: 80 },
@@ -110,6 +111,21 @@ export function workflowFields(
       step: 1,
       required: true,
     },
+    ...(repositories.length
+      ? [
+          {
+            path: "repositoryIds",
+            label: "Repository sources",
+            kind: "choices" as const,
+            numeric: true,
+            help: "Optional, up to six repositories. Private repository reports to a group require an admin's approval.",
+            options: repositories.map((repo) => ({
+              value: String(repo.id),
+              label: repo.full_name,
+            })),
+          },
+        ]
+      : []),
   ];
 }
 export const skillFields: FormField[] = [

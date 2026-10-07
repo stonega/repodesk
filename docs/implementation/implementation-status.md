@@ -8,6 +8,34 @@ accepted by a pilot team. Each entry states its own test scope and remaining gat
 
 ## Implemented
 
+### Repository reports, conversation skill drafts and work handoffs (2026-10-07)
+
+Implemented the [accepted R01–R03 plan](team-workflows-plan.md). GitHub reads use
+repository-scoped Issues/Pull requests read tokens, bounded pages, canonical links,
+retrieval times and merge-time windows. Repository schedules pin source IDs and
+connection revision; private group reports require admin audience approval.
+Previous complete local calendar days include 23/25-hour DST transitions.
+Access changes block reads and queued delivery, including indirect evidence from
+older assistant reports.
+
+An owned successful assistant run can produce a sanitized skill proposal. Requester
+approval creates a disabled admin-visible draft; existing admin publish/enable
+controls make it reusable. Unpublished drafts depend on retained sources; published
+procedures have an independent approved-instruction lifecycle. Handoffs batch-read
+durable task inputs/context, preserve questions/checkpoints/verification uncertainty,
+and include permitted discussion notes. Personal and group/topic boundaries remain
+distinct. Added tool context is covered by a compaction regression fix and test.
+
+Validation: Biome, strict TypeScript, build and **502 deterministic tests across 61
+files** passed with disposable PostgreSQL. **19 browser scenarios** passed, including
+two new desktop/mobile feature checks with visual inspection. The built host Node
+runtime contract passed. Added 30 unit/integration tests and two browser scenarios;
+these features add no dependency or SQL migration. The final pass includes concurrent
+membership/GitHub account edits without reverting them. External services were fake; no deployment,
+account connection, live Telegram send, model call or GitHub write was performed.
+Live report usefulness, teammate reuse and handoff quality remain pilot checks in
+[the runnable examples](../../examples/team-workflows.md).
+
 ### Telegram progress and cancellation feedback (2026-10-06)
 
 Implemented the [friend beta feedback plan](telegram-feedback-plan.md). Telegram

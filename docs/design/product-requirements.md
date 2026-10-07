@@ -203,8 +203,10 @@ The local read path queries indexed source from configured branches. The local w
 paths are a requester-approved issue and a maintainer-approved coding task that can
 create an issue, start Codex and open a draft PR. The latter requires a separate
 repository maintainer grant and runtime setup. AI output is never authorization.
-Read-only issue/PR metadata and digests, broader GitHub actions and other providers
-remain proposals. Do not describe them as available tools.
+Read-only issue/PR metadata and scoped digests are implemented locally as of
+2026-10-07; live usefulness remains unverified. See the
+[reports, skills and handoff plan](../implementation/team-workflows-plan.md).
+Broader GitHub actions and other providers remain proposals.
 
 The browser connection flow binds authorization to the operator session and
 workspace. Store secrets encrypted and mint short-lived tokens restricted to the

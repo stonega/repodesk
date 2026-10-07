@@ -1,7 +1,7 @@
 // Deterministic container-engine smoke: fake Codex + local Git fixture, no remote calls.
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -210,6 +210,20 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
       );
     return response.json();
   };
+  const restartSupervisor = async () => {
+    await engine(["restart", name]);
+    // Docker can allocate a new random published port on restart.
+    base = `http://${await engine(["port", name, "3020"])}`;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await request("/readyz");
+        return;
+      } catch {
+        if (attempt > 30) throw Error("Supervisor restart timed out");
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+    }
+  };
   for (let attempt = 0; ; attempt++) {
     try {
       await request("/readyz");
@@ -411,6 +425,28 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   const answered = await waitFor(developmentIds[1], "ready");
   if (!answered.checkPassed || answered.result?.status !== "completed")
     throw Error("Answer/checkpoint reconstruction failed");
+  await engine([
+    "exec",
+    name,
+    "node",
+    "--input-type=module",
+    "-e",
+    await readFile(
+      join(import.meta.dir, "../deploy/codex/wait-checkpoint.mjs"),
+      "utf8",
+    ),
+    "wait-checkpoint",
+    "5",
+  ]);
+  await restartSupervisor();
+  const afterDeployment = await waitFor(developmentIds[1], "ready");
+  if (
+    !afterDeployment.checkPassed ||
+    afterDeployment.tokens !== answered.tokens ||
+    afterDeployment.threadId !== answered.threadId ||
+    afterDeployment.baseSha !== answered.baseSha
+  )
+    throw Error("Deployment lost a verified checkpoint or its usage");
   await request(`/tasks/${workspaceId}/${developmentIds[1]}/publish`, {
     token: "fake-write-token",
   });
@@ -582,18 +618,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     )
   )
     throw Error("Auth-paused task retained its credentials");
-  await engine(["restart", name]);
-  // Docker can allocate a new random published port on restart.
-  base = `http://${await engine(["port", name, "3020"])}`;
-  for (let attempt = 0; ; attempt++) {
-    try {
-      await request("/readyz");
-      break;
-    } catch {
-      if (attempt > 30) throw Error("Supervisor restart timed out");
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-  }
+  await restartSupervisor();
   await request(`/device-auth/${workspaceId}/start`, {});
   for (let attempt = 0; ; attempt++) {
     if (
@@ -614,7 +639,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   for (const id of developmentIds)
     await request(`/tasks/${workspaceId}/${id}/erase`, {});
   console.log(
-    `${engineName} smoke passed: provider/device tasks, question checkpoint/reconstruction, repeated repair, fresh/same-PR publication, remote-head fencing, device continuation, auth expiry/restart/reconnect, usage, erasure and cancellation.`,
+    `${engineName} smoke passed: provider/device tasks, question checkpoint/reconstruction, deployment checkpoint/restart, repeated repair, fresh/same-PR publication, remote-head fencing, device continuation, auth expiry/restart/reconnect, usage, erasure and cancellation.`,
   );
 } catch (error) {
   for (const task of [key, failedKey, deviceKey, ...developmentKeys])

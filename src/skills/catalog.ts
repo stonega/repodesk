@@ -7,6 +7,7 @@ import {
 } from "../domain.ts";
 import { hash } from "../setup/credentials.ts";
 import { audit, authorize, revokeWork } from "../workspaces/policy.ts";
+import { skillSourcesPresent } from "./provenance.ts";
 export function validateSkill(value: unknown) {
   const spec = skillSchema.parse(value);
   requireThat(
@@ -104,10 +105,24 @@ export function changeSkill(
   requireThat(skill, "not_found", 404);
   requireThat(skill.version === version, "version_conflict", 409);
   if (action === "publish") {
+    requireThat(
+      !skill.origin ||
+        skill.published.length > 0 ||
+        skillSourcesPresent(w, skill.origin.references),
+      "skill_source_changed",
+      409,
+    );
     validateSkill(skill.draft);
     skill.published.push(structuredClone(skill.draft));
   }
   if (action === "enable") {
+    requireThat(
+      !skill.origin ||
+        skill.published.length > 0 ||
+        skillSourcesPresent(w, skill.origin.references),
+      "skill_source_changed",
+      409,
+    );
     requireThat(skill.published.length && !skill.archived, "publish_first");
     skill.enabled = true;
   }

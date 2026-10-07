@@ -29,6 +29,17 @@ case "$*" in
       *) [[ "$*" = "image inspect --format {{.Id}} $DEPLOY_TEST_TAG" ]] || exit 43
          echo "$DEPLOY_TEST_IMAGE" ;;
     esac ;;
+  *"ps --status running --quiet codex-runner"*)
+    [[ "$DEPLOY_TEST_FAILURE" = first-run ]] || echo existing-runner ;;
+  *"ps --status running --services app worker"*)
+    [[ "$DEPLOY_TEST_FAILURE" = checkpoint-race-paused ]] || printf 'app\\nworker\\n' ;;
+  *"exec -T codex-runner node --input-type=module"*)
+    count=0
+    [[ ! -f "$DEPLOY_TEST_CHECKPOINT_COUNT" ]] || count=$(cat "$DEPLOY_TEST_CHECKPOINT_COUNT")
+    count=$((count + 1))
+    printf '%s\\n' "$count" > "$DEPLOY_TEST_CHECKPOINT_COUNT"
+    [[ "$DEPLOY_TEST_FAILURE" != checkpoint ]] || exit 42
+    if [[ "$DEPLOY_TEST_FAILURE" = checkpoint-race* && "$count" = 2 ]]; then exit 42; fi ;;
   *"--wait-timeout 180 codex-runner"*) [[ "$DEPLOY_TEST_FAILURE" != runner ]] || exit 42 ;;
   *"codex-release-config.mjs "*)
     CODEX_SUPERVISOR_IMAGE="sha256:${"d".repeat(64)}" CODEX_RUNNER_IMAGE="sha256:${"e".repeat(64)}" \
@@ -100,6 +111,10 @@ function deploy(
         join(import.meta.dir, "../../deploy/codex/release-config.mjs"),
         join(release, "codex-release-config.mjs"),
       );
+      copyFileSync(
+        join(import.meta.dir, "../../deploy/codex/wait-checkpoint.mjs"),
+        join(release, "codex-wait-checkpoint.mjs"),
+      );
     }
     writeFileSync(join(bin, "docker"), docker, { mode: 0o755 });
     writeFileSync(join(bin, "sleep"), "#!/usr/bin/env bash\nexit 0\n", {
@@ -122,6 +137,7 @@ function deploy(
         DEPLOY_TEST_FAILURE: failure,
         DEPLOY_TEST_ARCH: arch,
         DEPLOY_TEST_READY_COUNT: join(root, "readiness-count"),
+        DEPLOY_TEST_CHECKPOINT_COUNT: join(root, "checkpoint-count"),
       },
     });
     return {
@@ -244,12 +260,19 @@ describe("VPS release cutover", () => {
   });
 });
 
-test("Docker release starts the healthy runner before stopping writers and injects immutable images", () => {
+test("Docker release fences writers before replacing the runner and injects immutable images", () => {
   const result = deploy("", "x86_64", false, true);
   expect(result.exitCode).toBe(0);
-  expect(result.calls.indexOf("--wait-timeout 180 codex-runner")).toBeLessThan(
-    result.calls.indexOf("stop app worker"),
-  );
+  const checkpoints = [...result.calls.matchAll(/exec -T codex-runner node/g)];
+  expect(checkpoints).toHaveLength(2);
+  const stop = result.calls.indexOf("stop app worker");
+  const replace = result.calls.indexOf("--wait-timeout 180 codex-runner");
+  expect(checkpoints[0]?.index).toBeLessThan(stop);
+  expect(checkpoints[1]?.index).toBeGreaterThan(stop);
+  expect(replace).toBeGreaterThan(checkpoints[1]?.index ?? -1);
+  expect(result.calls.indexOf("pg_dump")).toBeGreaterThan(replace);
+  expect(result.calls).not.toContain("down");
+  expect(result.calls).not.toContain("stop codex-runner");
   expect(result.codexEnvironment).toContain(
     `CODEX_SUPERVISOR_IMAGE=sha256:${"d".repeat(64)}`,
   );
@@ -263,7 +286,7 @@ test("Docker release starts the healthy runner before stopping writers and injec
   expect(token).toMatch(/^[a-f0-9]{64}$/);
   expect(result.calls).not.toContain(token ?? "missing-token");
 });
-for (const failure of ["runner", "runner-artifact"]) {
+for (const failure of ["runner-artifact", "checkpoint"]) {
   test(`${failure} preflight failure leaves existing writers and release marker untouched`, () => {
     const result = deploy(failure, "x86_64", false, true);
     expect(result.exitCode).not.toBe(0);
@@ -271,3 +294,37 @@ for (const failure of ["runner", "runner-artifact"]) {
     expect(result.current).toBe("previous\n");
   });
 }
+
+test("a task starting during the cutover race defers deployment and restarts existing writers", () => {
+  const result = deploy("checkpoint-race", "x86_64", false, true);
+  expect(result.exitCode).toBe(42);
+  expect(result.current).toBe("previous\n");
+  expect(result.calls).toContain("stop app worker");
+  expect(result.calls.trim().endsWith("start app worker")).toBe(true);
+  expect(result.calls).not.toContain("--wait-timeout 180 codex-runner");
+  expect(result.calls).not.toContain("pg_dump");
+});
+
+test("checkpoint deferral preserves intentionally stopped writers", () => {
+  const result = deploy("checkpoint-race-paused", "x86_64", false, true);
+  expect(result.exitCode).toBe(42);
+  expect(result.calls).not.toContain("start app worker");
+  expect(result.calls).not.toContain("--wait-timeout 180 codex-runner");
+});
+
+test("a first Codex deployment starts the runner after writers stop without waiting for an absent runner", () => {
+  const result = deploy("first-run", "x86_64", false, true);
+  expect(result.exitCode).toBe(0);
+  expect(result.calls).not.toContain("exec -T codex-runner");
+  expect(
+    result.calls.indexOf("--wait-timeout 180 codex-runner"),
+  ).toBeGreaterThan(result.calls.indexOf("stop app worker"));
+});
+
+test("runner startup failure preserves the prior marker and leaves writers stopped after cutover", () => {
+  const result = deploy("runner", "x86_64", false, true);
+  expect(result.exitCode).toBe(42);
+  expect(result.current).toBe("previous\n");
+  expect(result.calls.trim().endsWith("stop app worker")).toBe(true);
+  expect(result.calls).not.toContain("pg_dump");
+});

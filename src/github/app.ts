@@ -67,7 +67,12 @@ export class GitHubApp {
   get installUrl() {
     return `https://github.com/apps/${this.config.slug}/installations/new`;
   }
-  private async request(url: string, token?: string, body?: unknown) {
+  private async request(
+    url: string,
+    token?: string,
+    body?: unknown,
+    signal?: AbortSignal,
+  ) {
     try {
       const response = await this.transport(url, {
         method: body === undefined ? "GET" : "POST",
@@ -79,7 +84,10 @@ export class GitHubApp {
         },
         body: body === undefined ? undefined : JSON.stringify(body),
         redirect: "error",
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.any([
+          AbortSignal.timeout(10000),
+          ...(signal ? [signal] : []),
+        ]),
       });
       if ([401, 403, 404].includes(response.status))
         throw new Fault("github_access_denied", 403);
@@ -314,7 +322,13 @@ export class GitHubApp {
   async installationToken(
     installationId: number,
     repositoryIds: number[],
-    permission: "contents" | "issues" | "publish" | "coding_read" = "contents",
+    permission:
+      | "contents"
+      | "issues"
+      | "publish"
+      | "coding_read"
+      | "issues_read"
+      | "pulls_read" = "contents",
   ) {
     requireThat(
       repositoryIds.length > 0 && repositoryIds.length <= 12,
@@ -327,13 +341,17 @@ export class GitHubApp {
       {
         repository_ids: repositoryIds,
         permissions:
-          permission === "issues"
-            ? { issues: "write" }
-            : permission === "publish"
-              ? { contents: "write", pull_requests: "write" }
-              : permission === "coding_read"
-                ? { contents: "read", pull_requests: "read" }
-                : { contents: "read" },
+          permission === "issues_read"
+            ? { issues: "read" }
+            : permission === "pulls_read"
+              ? { pull_requests: "read" }
+              : permission === "issues"
+                ? { issues: "write" }
+                : permission === "publish"
+                  ? { contents: "write", pull_requests: "write" }
+                  : permission === "coding_read"
+                    ? { contents: "read", pull_requests: "read" }
+                    : { contents: "read" },
       },
     );
     return z
@@ -373,6 +391,30 @@ export class GitHubApp {
       branch: pr.head.ref,
       headSha: pr.head.sha,
     };
+  }
+  async repositoryMetadata(
+    token: string,
+    repository: string,
+    kind: "pulls" | "issues",
+    parameters: URLSearchParams,
+    number?: number,
+    signal?: AbortSignal,
+  ) {
+    requireThat(
+      /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository),
+      "github_repository_not_connected",
+      409,
+    );
+    requireThat(
+      number === undefined || (Number.isSafeInteger(number) && number > 0),
+      "invalid_github_item",
+    );
+    return this.request(
+      `https://api.github.com/repos/${repository}/${kind}${number ? `/${number}` : `?${parameters}`}`,
+      token,
+      undefined,
+      signal,
+    );
   }
   async codingPublishedPull(
     token: string,

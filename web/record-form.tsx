@@ -163,7 +163,11 @@ export function RecordForm({
                           type="checkbox"
                           checked={
                             Array.isArray(current) &&
-                            current.includes(option.value)
+                            current.includes(
+                              field.numeric
+                                ? Number(option.value)
+                                : option.value,
+                            )
                           }
                           onChange={(event) =>
                             change(
@@ -171,12 +175,20 @@ export function RecordForm({
                               event.target.checked
                                 ? [
                                     ...(Array.isArray(current) ? current : []),
-                                    option.value,
+                                    field.numeric
+                                      ? Number(option.value)
+                                      : option.value,
                                   ]
                                 : (Array.isArray(current)
                                     ? current
                                     : []
-                                  ).filter((v) => v !== option.value),
+                                  ).filter(
+                                    (v) =>
+                                      v !==
+                                      (field.numeric
+                                        ? Number(option.value)
+                                        : option.value),
+                                  ),
                             )
                           }
                         />

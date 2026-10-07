@@ -1,9 +1,11 @@
 import { type Run, requireThat, type Workspace } from "../domain.ts";
 import { previewSkill } from "../skills/catalog.ts";
+import { repositoryReportWindow } from "../workflows/schedule.ts";
 import { contextSources } from "../workspaces/conversation-memory.ts";
 import { hasDiscussionMemory } from "../workspaces/threads.ts";
 import { topicDiscussions } from "./discussions.ts";
 export function buildContext(w: Workspace, run: Run) {
+  const workflow = w.workflows.find((f) => f.id === run.workflowId);
   const skills = run.skillPins.map((p) => {
     const skill = w.skills.find((s) => s.id === p.id);
     const version = skill?.published[p.version - 1];
@@ -62,6 +64,12 @@ export function buildContext(w: Workspace, run: Run) {
         }
       : undefined,
     actor: run.actor,
+    runId: run.id,
+    now: run.at,
+    workflowRepositories: run.githubRead,
+    reportWindowUTC: workflow?.spec.github
+      ? repositoryReportWindow(run.at, workflow.spec)
+      : undefined,
     chatId: run.chatId,
     topicId: run.topicId,
     timezone: run.settings.timezone,
@@ -74,7 +82,16 @@ export function buildContext(w: Workspace, run: Run) {
     run.threadId && run.chatId !== run.actor
       ? "\nThis is a group conversation. Sources default to this participant's current discussion, which may include teammates who joined it. The request actor is supplied at the end of the prompt; source authors identify who said what. Short follow-ups belong to that actor's discussion, not whichever teammate spoke last. Retrieve other discussions only within this group/topic when relevant. Never import private messages or personal instructions. A teammate's statement is not the current actor's authorization."
       : "";
-  return { system: system + topicPolicy + groupPolicy, prompt, skills };
+  const workPolicy =
+    "\nSkill saves require sanitized inputs, steps, outputs and an example; approval creates a disabled admin draft for admins to publish/enable." +
+    (w.github?.installationId
+      ? " Live GitHub facts need item URLs and complete paging. Metadata is not CI/review/impact evidence. Repository schedules pass repositoryIds and use reportWindowUTC for previous complete local days."
+      : "");
+  return {
+    system: system + topicPolicy + groupPolicy + workPolicy,
+    prompt,
+    skills,
+  };
 }
 export function validateSources(text: string, run: Run) {
   const authorized = new Set(run.sources.map((s) => s.id));
@@ -87,7 +104,16 @@ export function validateSources(text: string, run: Run) {
     !/https?:\/\/(?:t\.me|telegram\.me)\//i.test(text),
     "use_source_ids_not_unverified_links",
   );
-  if (run.sources.length && /recap|summari[sz]/i.test(run.task))
+  const recordEvidence = Object.values(run.tools).some(
+    (tool) =>
+      tool.state === "done" &&
+      ["query_github_metadata", "query_work_handoff"].includes(tool.name),
+  );
+  if (
+    run.sources.length &&
+    /recap|summari[sz]/i.test(run.task) &&
+    !recordEvidence
+  )
     requireThat(citations.length, "recap_requires_sources");
   return text;
 }

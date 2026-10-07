@@ -74,6 +74,15 @@ Interpret the states separately:
   An operator-authorized live VPS retest on 0.1.21 completed the same wallshader
   request with 694350 reported tokens and passing repository checks; this workload
   would exceed the removed 200000-token guard.
+- `coding_runner_unavailable` means runner communication or engine reconciliation
+  failed; it does not establish an implementation failure. During the 2026-10-06
+  release, the old worker remained active while the runner was replaced and marked
+  an already verified task failed before its queued follow-up could start. Check
+  attempt `checkPassed`, saved checkpoint and container creation times before
+  starting another task. The updated deployment waits for checkpoints and stops
+  writers before replacing the runner; temporary outages and checkpoint cleanup
+  acknowledgements remain retryable. See the
+  [deployment handoff incident](../../postmortem/2026-10-06-codex-deployment-handoff.md).
 - A pending delivery is queued separately from generation. A failed delivery has
   a Telegram or policy error. An unknown delivery must be inspected before any
   resend, because Telegram might already have accepted it.

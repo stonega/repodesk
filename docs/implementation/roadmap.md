@@ -1,6 +1,6 @@
 # Implementation roadmap
 
-Status: updated 2026-10-05. The local P0 implementation is present and checked. A live pilot
+Status: updated 2026-10-07. The local P0 implementation is present and checked. A live pilot
 has not been deployed or validated. See [implementation evidence](implementation-status.md).
 This table records the original team-assistant foundation. The current product focus
 is the [GitHub journey](../design/github-workflows.md).
@@ -19,6 +19,7 @@ is the [GitHub journey](../design/github-workflows.md).
 | GitHub App | Workspace installation and selected repository connection | Live installation and permission review |
 | Code Truth | Configured repository source queries through a private local service | Live repository indexing and answer-quality evaluation |
 | Issues | Requester-approved issue draft and durable GitHub submission | Live issue creation and unknown-outcome drill |
+| Reports/skills/handoffs | Read-only GitHub metadata and approved repository schedules; conversation skill drafts; scoped work briefs (2026-10-07) | Live report accuracy, teammate reuse and handoff usefulness; [plan](team-workflows-plan.md) |
 | Coding | Maintainer-approved issue-to-draft-PR tasks with local Podman runner | Runner setup and live end-to-end task |
 
 The repository uses workspace JSONB aggregates under row locks for the pilot, with
@@ -55,8 +56,8 @@ the production execution path.
 
 ## After the pilot
 
-Prioritize a read-only issue/PR metadata tool if the GitHub pilot supports it; define
-the user questions, freshness and App permissions before implementation. Multiple
+Evaluate the locally implemented issue/PR metadata, report, skill and handoff paths
+in the GitHub pilot before widening access. Multiple
 group sources, files, proactive suggestions, executable skill bundles, other
 connectors, Telegram web login, Mini App, voice, payments and broader GitHub writes
 remain later work. Competitor research remains source-linked research, not a

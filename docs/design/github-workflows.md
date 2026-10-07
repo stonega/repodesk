@@ -1,6 +1,6 @@
 # GitHub work through Telegram
 
-Status: **product direction**, updated 2026-10-05. This page describes the main
+Status: **product direction with local implementation**, updated 2026-10-07. This page describes the main
 user journey. The capability table separates local implementation from proposed
 work; [implementation evidence](../implementation/implementation-status.md) records
 what was verified and which live gates remain.
@@ -50,7 +50,9 @@ or turn text found in a repository into instructions with authority.
 | Ask how selected code works | Code Truth indexes configured branches and exposes source-query tools with commit provenance and workspace grants. It requires its optional service and plugin setup. | Implemented locally; live repository/model evaluation remains |
 | File a GitHub issue | AI drafts repository, title and full body; the requester approves before the GitHub App creates it. | Implemented locally; live GitHub submission remains unverified |
 | Delegate a feature or fix | A configured repository maintainer approves issue creation, Codex execution and a draft PR; task status and links return to Telegram. | Implemented locally; repository setup and live execution remain |
-| Ask for PR/issue status or a PR digest | Read selected GitHub metadata and cite item URLs, with permissions and freshness visible. | Proposed; the current source-query tool is not a general PR/issue reader |
+| Ask for PR/issue status or a PR digest | Read-only selected repository metadata with numbered items, reviewers, merge windows, dates, links and explicit paging coverage. Approved daily/weekly workflows pin repository sources and destination. | Implemented locally; live GitHub/model report evaluation remains |
+| Save an assistant procedure as a team skill | Requester approves a sanitized draft from an owned completed run; admins publish and enable it through Skills. | Implemented locally; usefulness/reuse evaluation remains |
+| Get a work handoff | Personal task/checkpoint/question/PR and discussion summary; group queries remain in the current topic. | Implemented locally; live usefulness evaluation remains |
 | Review, comment, merge or modify arbitrary repository content | Separate, narrowly scoped actions with distinct approvals and recovery rules. | Proposed; no general GitHub write tool is available |
 
 See [GitHub App setup](../implementation/github-app.md),
@@ -84,8 +86,8 @@ See [GitHub App setup](../implementation/github-app.md),
 
 ### Accepted coding direction, 2026-10-05
 
-[Continuous Codex collaboration](codex-collaboration.md) is the accepted next coding
-direction, not an implemented capability. Pi receives and relays original requirements;
+[Continuous Codex collaboration](codex-collaboration.md) was implemented locally
+on 2026-10-05; live acceptance remains pending. Pi receives and relays original requirements;
 Codex investigates code and owns technical decisions, implementation, clarification
 and verification. A clear authenticated maintainer instruction can authorize a
 bounded task under repository policy without a second approval click. The application
@@ -94,9 +96,9 @@ Follow-ups and answers to Codex questions continue the same durable task and dra
 PR. Human input is reserved for necessary product choices, ambiguous targets and
 operations beyond the grant. Readiness and progress notices require no reply.
 
-This planned authorization contract applies to continuous coding tasks. The current
-exact-payload approvals for standalone issues and current coding proposals remain
-in force; neither this document nor existing repository access enables direct execution.
+This authorization contract applies to opt-in continuous coding tasks. Exact-payload
+approvals for standalone issues and reviewed coding proposals remain in force;
+direct execution requires the configured repository policy and an actor-bound grant.
 Merge, deployment and general GitHub writes are not included in the initial task grant.
 
 ### Pilot validation and later capabilities
@@ -105,7 +107,8 @@ Evaluate the primary journey with a dedicated test repository and bot before a
 pilot: connect a repository, ask a source question, review a proposed issue, and
 complete one maintainer-approved coding task through a draft PR. Measure answer
 usefulness and source accuracy, approval clarity, task completion and recovery from
-unknown outcomes. Add read-only issue/PR metadata only after this journey is useful;
-choose its exact questions and GitHub App permissions from pilot demand. Keep
+unknown outcomes. The [repository reports, skills and handoff plan](../implementation/team-workflows-plan.md)
+was authorized for local implementation on 2026-10-07. Evaluate those paths using
+[the runnable journeys](../../examples/team-workflows.md). Keep
 recaps, schedules and general team assistance available, but prioritize work that
 improves this repository journey.

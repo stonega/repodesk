@@ -1,7 +1,8 @@
 # Source register
 
-All pages below were reviewed on **2026-09-18**. Site content and beta pricing may
-change. Links use canonical URLs without the supplied tracking parameter.
+The baseline table was reviewed on **2026-09-18**. The
+[launch follow-up](#every-agent-launch-follow-up-2026-10-07) records a later review.
+Site content and pricing may change. Links use canonical URLs without tracking parameters.
 
 | ID | Source | What it supports / how reviewed |
 | --- | --- | --- |
@@ -38,6 +39,26 @@ editorial articles and its other products were excluded from the core feature in
 This repository stores original research notes and product requirements rather than
 copies of the site's HTML, marketing assets, or source code.
 
+## Every Agent launch follow-up (2026-10-07)
+
+Read public pages using the web retrieval tool. The original E1–E8 records remain
+historical; E9–E12 support the
+[October findings and recommendations](../research/every-agent-features.md#launch-follow-up-2026-10-07).
+
+| ID | Source | What it supports / how reviewed |
+| --- | --- | --- |
+| E9 | [Current product page](https://every.to/agent) | Coding, workflow examples, permissions and current per-user pricing. Navigation to Connections, Use cases and Pricing stays on this page; these are not three independently verified catalogs. |
+| E10 | [Introducing the Every Agent](https://every.to/on-every/introducing-the-every-agent) | Published 2026-10-06. Public release, shared skills, Frontier Alerts, runtime disclosure and integration-count claim. First-party announcement, not independent execution evidence. |
+| E11 | [Current pricing](https://agent.every.to/pricing) | Membership, trial credits, workspace balance and refill rules; supersedes the September usage-only reading of the same URL. |
+| E12 | [Current installation FAQ](https://agent.every.to/install/slack) | Refreshed connector-sharing, retained-file and onboarding claims. Legacy scope guidance should be read alongside the newer product page, not treated as an expanded Telegram capability. |
+
+No authenticated UI, purchase or connector operation was tested. The launch
+announcement is included because it directly describes the product release;
+unrelated editorial articles and other Every products remain outside this inventory.
+Search snippets still surfaced the old beta homepage, so current page retrieval and
+the dated announcement were used for launch status. The tour URL returned only
+a minimal public shell on this review and supplied no new verified detail.
+
 ## Implementation-plan sources (2026-09-18)
 
 - [Pi upstream](https://github.com/earendil-works/pi) and its agent/AI package README
@@ -54,3 +75,14 @@ copies of the site's HTML, marketing assets, or source code.
 
 Pi, PostgreSQL, pg-boss and the web panel remain planned. The Node/Docker scaffold
 was built and smoke-tested locally; no production deployment occurred.
+
+## Repository reports implementation sources (2026-10-07)
+
+- [GitHub REST pull requests](https://docs.github.com/en/rest/pulls/pulls) and
+  [installation-token endpoints](https://docs.github.com/en/rest/authentication/endpoints-available-for-github-app-installation-access-tokens): retrieved with Context7; repository item reads and PR metadata.
+- [GitHub REST API description](https://github.com/github/rest-api-description):
+  Context7 schema excerpts for issue/PR distinctions, reviewer requests and fields.
+  The implementation requests read-only permissions and constructs canonical URLs.
+- [Temporal PlainDate implementation](https://github.com/js-temporal/temporal-polyfill/blob/main/lib/plaindate.ts):
+  Context7 verified named-zone start-of-day conversion. The existing pinned 0.5.1
+  dependency is used for calendar report windows, with 23/25-hour DST fixtures.

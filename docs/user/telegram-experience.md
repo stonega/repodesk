@@ -8,6 +8,23 @@ GitHub actions from Telegram. The AI helps interpret the request; repository acc
 tool grants and write approvals come from the application. See the
 [GitHub journey and capability status](../design/github-workflows.md).
 
+## Repository reports, team skills and handoffs
+
+Locally implemented on 2026-10-07. In private chat, ask for current PR/issue status
+with links, or request a daily repository report with a time and timezone. Review
+its repository sources and audience before approving. Private repository group
+reports require a workspace admin; ad-hoc private reads stay in private chat.
+
+After a successful assistant conversation, ask to save the procedure as a team
+skill. Review the sanitized instructions, then approve a disabled admin-visible
+draft. An admin publishes and enables it through Skills. Published procedures have
+their own lifecycle; unpublished drafts depend on retained source conversations.
+
+Ask “昨天做到哪里了，哪些任务等我回答或审核？” for a personal work brief.
+In groups, briefs stay in the current topic. Results use recorded tasks, questions,
+verification and discussion notes, with PR links when available; they do not merge
+PRs or change tasks. See [examples and pilot checks](../../examples/team-workflows.md).
+
 ## Get started
 
 The operator first creates the local admin, configures the bot, registers the

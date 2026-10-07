@@ -9,7 +9,9 @@ import {
   workflowSchema,
 } from "../domain.ts";
 import { checkIssueApproval } from "../github/issues.ts";
+import { workflowRepositoriesAllowed } from "../github/metadata-policy.ts";
 import { fingerprint } from "../setup/credentials.ts";
+import { approveSkill } from "../skills/proposals.ts";
 import {
   audience,
   audit,
@@ -29,6 +31,12 @@ export function proposeWorkflow(
   authorize(w, actor);
   const spec = workflowSchema.parse(input);
   audience(w, actor, spec.chatId);
+  requireThat(
+    !spec.github ||
+      workflowRepositoriesAllowed(w, actor, spec.chatId, spec.github),
+    "github_workflow_scope_denied",
+    403,
+  );
   requireThat(
     spec.budgetUsd <= w.settings.runBudgetUsd,
     "budget_exceeds_workspace_limit",
@@ -166,6 +174,7 @@ export function decide(
     409,
   );
   if (accept && approval.kind === "coding_task") approveCoding(w, approval);
+  if (accept && approval.kind === "skill") approveSkill(w, approval);
   if (accept && approval.kind === "github_issue")
     checkIssueApproval(w, approval);
   if (accept && approval.kind === "workflow") {
@@ -188,6 +197,17 @@ export function decide(
       409,
     );
     audience(w, actor, workflow.spec.chatId);
+    requireThat(
+      !workflow.spec.github ||
+        workflowRepositoriesAllowed(
+          w,
+          actor,
+          workflow.spec.chatId,
+          workflow.spec.github,
+        ),
+      "github_workflow_scope_denied",
+      403,
+    );
     requireThat(
       w.skills.some(
         (s) => s.id === workflow.spec.skillId && s.enabled && !s.archived,
@@ -255,6 +275,12 @@ export function workflowAction(
   if (action === "resume") {
     requireThat(f.status === "paused", "new_approval_required", 409);
     audience(w, actor, f.spec.chatId);
+    requireThat(
+      !f.spec.github ||
+        workflowRepositoriesAllowed(w, actor, f.spec.chatId, f.spec.github),
+      "github_workflow_scope_denied",
+      403,
+    );
     requireThat(
       w.skills.some((s) => s.id === f.spec.skillId && s.enabled && !s.archived),
       "skill_unavailable",
