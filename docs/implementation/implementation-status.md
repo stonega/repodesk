@@ -8,6 +8,34 @@ accepted by a pilot team. Each entry states its own test scope and remaining gat
 
 ## Implemented
 
+### Parallel Codex task execution (2026-10-07)
+
+Replaced the single global active-task guard with `CODEX_RUNNER_CONCURRENCY`
+(default four, range 1–32), wired through Docker and Podman Compose. Capacity is
+reserved before container launch, restored from durable records after restart and
+shared across repositories/workspaces. Independent API-key tasks run Codex in
+parallel; attempts for the same continuous task remain serialized. User-input and
+authentication pauses still release capacity, while excess tasks use the existing
+queued retry paths.
+
+Tasks sharing one workspace's managed ChatGPT cache serialize implementation,
+repair and auth resume to preserve refreshed credentials. Preparation, setup,
+checks and publication can overlap; separate workspace caches run independently.
+Queued repairs do not consume an attempt before they can launch. See the
+[runner guide](codex-podman.md#lifecycle-and-recovery) for configuration and per-task
+resource limits.
+
+Validation: Biome, strict TypeScript, build and **517 deterministic tests across
+62 files** passed with disposable PostgreSQL. Six added runner tests cover capacity,
+duplicate starts, restart/cancellation, task and tenant isolation, credential-stream
+ordering, auth resume and repair scheduling. App, task and supervisor Docker images
+built; host/container Node runtime contracts and all three Compose configurations
+passed. Docker and rootless Podman smoke verified two simultaneous implementation
+containers, capacity rejection and supervisor restart, plus the existing task/auth/
+publication lifecycle. External services were fake; no live account, model call,
+GitHub write, Telegram send or deployment was performed. No dependency or migration
+was added.
+
 ### Repository reports, conversation skill drafts and work handoffs (2026-10-07)
 
 Implemented the [accepted R01–R03 plan](team-workflows-plan.md). GitHub reads use

@@ -6,8 +6,12 @@ import {
   type DevelopmentMedia,
   type DevelopmentResult,
   developmentOutputSchema,
-  developmentResult,
+  developmentResultByteLimit,
 } from "../development.ts";
+import {
+  parseDevelopmentResult,
+  type ResultIssues,
+} from "../result-validation.ts";
 import { CodexAuthError, codexAuthFailure } from "./auth-failure.ts";
 import {
   CodexConversationError,
@@ -35,6 +39,7 @@ export async function runConversation(options: {
   tokens: number;
   usageUnknown: boolean;
   reconstructed: boolean;
+  resultIssues?: ResultIssues;
 }> {
   const child = spawn(
     options.binary ?? "codex",
@@ -48,9 +53,11 @@ export async function runConversation(options: {
   let sequence = 0,
     buffer = "",
     final = "",
-    tokens = 0,
     threadId = "",
     turnId = "";
+  let priorTokens = 0,
+    priorUsageUnknown = false;
+  let validationIssues: ResultIssues | undefined;
   let settled = false,
     reconstructed = false;
   let turnStarted = false;
@@ -60,9 +67,21 @@ export async function runConversation(options: {
   const authFailure = () =>
     new CodexAuthError(
       threadId || undefined,
-      usageByTurn.get(turnId)?.tokens ?? (modelActivity ? undefined : 0),
+      usageSummary(!modelActivity).tokens,
+      usageSummary(!modelActivity).usageUnknown,
     );
   const usageByTurn = new Map<string, { tokens: number; total: number }>();
+  const usageSummary = (deniedBeforeActivity = false) => {
+    const current =
+      usageByTurn.get(turnId)?.tokens ?? (deniedBeforeActivity ? 0 : undefined);
+    return {
+      tokens:
+        current !== undefined || priorTokens > 0
+          ? priorTokens + (current ?? 0)
+          : undefined,
+      usageUnknown: priorUsageUnknown || current === undefined,
+    };
+  };
   const decoder = new StringDecoder("utf8");
   const pending = new Map<
     number,
@@ -73,7 +92,7 @@ export async function runConversation(options: {
     }
   >();
   let complete!: () => void, fail!: (e: Error) => void;
-  const completion = new Promise<void>((resolve, reject) => {
+  let completion = new Promise<void>((resolve, reject) => {
     complete = resolve;
     fail = reject;
   });
@@ -85,7 +104,9 @@ export async function runConversation(options: {
     new CodexConversationError(
       code,
       threadId || undefined,
-      usageByTurn.get(turnId)?.tokens,
+      usageSummary().tokens,
+      validationIssues,
+      usageSummary().usageUnknown,
     );
   const stop = (error: Error) => {
     if (settled) return;
@@ -169,6 +190,7 @@ export async function runConversation(options: {
         }
         const p = message.params;
         if (p?.threadId && threadId && p.threadId !== threadId) continue;
+        if (p?.turnId && turnId && p.turnId !== turnId) continue;
         if (
           (message.method === "item/started" ||
             message.method === "item/completed") &&
@@ -186,7 +208,8 @@ export async function runConversation(options: {
           (!p.item.phase || p.item.phase === "final_answer")
         ) {
           final = String(p.item.text);
-          if (Buffer.byteLength(final) > 60000) stop(failure());
+          if (Buffer.byteLength(final) > developmentResultByteLimit)
+            stop(failure());
         }
         if (
           message.method === "thread/tokenUsage/updated" &&
@@ -208,7 +231,6 @@ export async function runConversation(options: {
                 (prior ? Math.max(0, total - prior.total) : usage.totalTokens),
               total,
             });
-            tokens = usageByTurn.get(turnId)?.tokens ?? 0;
           }
         }
         if (message.method === "turn/started" && turnStarted)
@@ -276,41 +298,57 @@ export async function runConversation(options: {
     threadId = z.object({ thread: z.object({ id: z.string() }) }).parse(started)
       .thread.id;
     if (!/^[a-zA-Z0-9-]{1,100}$/.test(threadId)) throw failure();
-    turnStarted = true;
-    const begun = await request("turn/start", {
-      threadId,
-      input: [
-        { type: "text", text: options.prompt, text_elements: [] },
-        ...(options.images ?? []).map((image) => ({
-          type: "image",
-          url: `data:${image.mimeType};base64,${image.data}`,
-        })),
-      ],
-      outputSchema: options.outputSchema ?? developmentOutputSchema,
-    });
-    turnId = z.object({ turn: z.object({ id: z.string() }) }).parse(begun)
-      .turn.id;
-    await completion;
-    tokens = usageByTurn.get(turnId)?.tokens ?? 0;
-    if (!final.trim()) throw failure("coding_result_missing");
-    let value: unknown;
-    try {
-      value = JSON.parse(final);
-    } catch {
-      throw failure("coding_result_json_invalid");
+    let prompt = options.prompt;
+    // One result-only correction stays in this thread/checkout. This does not
+    // retry failed execution, authentication, verification or external writes.
+    for (let correction = 0; correction <= 1; correction++) {
+      final = "";
+      turnId = "";
+      authFailed = false;
+      turnError = undefined;
+      modelActivity = false;
+      completion = new Promise<void>((resolve, reject) => {
+        complete = resolve;
+        fail = reject;
+      });
+      void completion.catch(() => {});
+      turnStarted = true;
+      const begun = await request("turn/start", {
+        threadId,
+        input: [
+          { type: "text", text: prompt, text_elements: [] },
+          ...(correction === 0 ? (options.images ?? []) : []).map((image) => ({
+            type: "image",
+            url: `data:${image.mimeType};base64,${image.data}`,
+          })),
+        ],
+        ...(correction ? { sandboxPolicy: { type: "readOnly" } } : {}),
+        outputSchema: options.outputSchema ?? developmentOutputSchema,
+      });
+      turnId = z.object({ turn: z.object({ id: z.string() }) }).parse(begun)
+        .turn.id;
+      await completion;
+      const parsed = parseDevelopmentResult(final);
+      if (parsed.success) {
+        const usage = usageSummary();
+        settled = true;
+        return {
+          threadId,
+          turnId,
+          result: parsed.result,
+          tokens: usage.tokens ?? 0,
+          usageUnknown: usage.usageUnknown,
+          reconstructed,
+          resultIssues: validationIssues,
+        };
+      }
+      validationIssues = parsed.issues;
+      if (correction) throw failure(parsed.code);
+      priorTokens += usageByTurn.get(turnId)?.tokens ?? 0;
+      priorUsageUnknown ||= !usageByTurn.has(turnId);
+      prompt = `Your previous turn completed, but its task result failed local validation. Correct only the final JSON using the same thread and existing checkout. Do not redo implementation, run commands, modify files, publish, or weaken any fixed verification plan. Preserve original authorization and schema-pinned evidence. For completed, return one to eight nonblank verification commands including necessary preparation. For needs_input, return a nonblank question. Follow the supplied schema's field bounds. Safe validation issues: ${JSON.stringify(validationIssues)}. Return only the corrected JSON.`;
     }
-    const parsed = developmentResult.safeParse(value);
-    if (!parsed.success) throw failure("coding_result_invalid");
-    const result = parsed.data;
-    settled = true;
-    return {
-      threadId,
-      turnId,
-      result,
-      tokens,
-      usageUnknown: !usageByTurn.has(turnId),
-      reconstructed,
-    };
+    throw failure();
   } catch (error) {
     if (
       error instanceof CodexAuthError ||

@@ -35,6 +35,7 @@ export class CodexAuthError extends Fault {
   constructor(
     readonly threadId?: string,
     readonly tokens?: number,
+    readonly usageUnknown?: boolean,
   ) {
     super("coding_device_auth_required", 409);
   }

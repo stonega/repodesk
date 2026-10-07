@@ -74,6 +74,16 @@ Interpret the states separately:
   An operator-authorized live VPS retest on 0.1.21 completed the same wallshader
   request with 694350 reported tokens and passing repository checks; this workload
   would exceed the removed 200000-token guard.
+- `coding_result_invalid` means the final JSON failed application validation.
+  The updated runner generates field constraints from the validator and allows
+  one read-only result correction before stopping. Inspect `resultIssues` in the
+  runner status/state or the task's tenant-scoped `coding_task_attempts.data`.
+  `too_big` identifies an overlong field, `invalid_type` a missing/wrong type,
+  and `custom` on `verificationCommands` or `question` an unmet status-specific
+  requirement. Diagnostics contain only known field paths and issue codes, never
+  rejected text. Old attempts without these details cannot identify the exact
+  rejected field after temporary session cleanup. See the
+  [final-result incident](../../postmortem/2026-10-07-codex-final-result-validation.md).
 - `coding_runner_unavailable` means runner communication or engine reconciliation
   failed; it does not establish an implementation failure. During the 2026-10-06
   release, the old worker remained active while the runner was replaced and marked

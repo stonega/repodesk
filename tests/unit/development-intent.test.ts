@@ -40,11 +40,11 @@ test("intake binds evidence to the consumed authenticated input, including short
     const run = retry(text);
     const schema = developmentSchema(run);
     expect(schema.properties.status.enum).toEqual(["intent", "needs_input"]);
-    expect(schema.properties.evidenceRevision).toEqual({
+    expect(schema.properties.evidenceRevision).toMatchObject({
       type: "integer",
       enum: [2],
     });
-    expect(schema.properties.evidence).toEqual({
+    expect(schema.properties.evidence).toMatchObject({
       type: "string",
       enum: [text],
     });
@@ -70,20 +70,20 @@ test("captionless media answers pin preceding text evidence; empty follow-ups do
   current.text = "";
   current.hasAttachments = true;
   current.kind = "answer";
-  expect(developmentSchema(run).properties.evidenceRevision).toEqual({
+  expect(developmentSchema(run).properties.evidenceRevision).toMatchObject({
     type: "integer",
     enum: [1],
   });
-  expect(developmentSchema(run).properties.evidence).toEqual({
+  expect(developmentSchema(run).properties.evidence).toMatchObject({
     type: "string",
     enum: [original.text],
   });
   current.kind = "followup";
-  expect(developmentSchema(run).properties.evidenceRevision).toEqual({
+  expect(developmentSchema(run).properties.evidenceRevision).toMatchObject({
     type: "integer",
     enum: [2],
   });
-  expect(developmentSchema(run).properties.evidence).toEqual({
+  expect(developmentSchema(run).properties.evidence).toMatchObject({
     type: "string",
     enum: [""],
   });

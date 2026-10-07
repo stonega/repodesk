@@ -876,6 +876,33 @@ const url = process.env.TEST_DATABASE_URL;
       ).toEqual(grants);
     }
   });
+  test("failed result-validation issues persist in the fenced tenant attempt without publication", async () => {
+    const f = await fixture();
+    await f.tick();
+    const issues: NonNullable<LocalStatus["resultIssues"]> = [
+      { path: ["verificationCommands"], code: "custom" },
+    ];
+    const stopped = await f.tick({
+      state: "failed",
+      error: "coding_result_invalid",
+      tokens: 32,
+      usageUnknown: false,
+      resultIssues: issues,
+    });
+    expect(stopped.state).toBe("failed");
+    expect(stopped.error).toBe("coding_result_invalid");
+    expect(f.publications).toHaveLength(0);
+    const data = (
+      await store.pool.query(
+        "SELECT data FROM coding_task_attempts WHERE workspace_id=$1 AND id=$2",
+        [f.w.id, stopped.previousAttemptId],
+      )
+    ).rows[0]?.data;
+    expect(data.resultIssues).toEqual(issues);
+    expect(data.tokens).toBe(32);
+    expect(data.checkPassed).not.toBe(true);
+  });
+
   test("retry intake accepts current verbatim evidence and rejects narrative or earlier requirements", async () => {
     for (const evidence of [
       "The user requested another attempt at the original pagination fix.",

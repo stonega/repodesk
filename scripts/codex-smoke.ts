@@ -29,6 +29,8 @@ const image = `localhost/${name}:local`;
 const workspaceId = randomUUID();
 const taskId = randomUUID();
 const key = taskKey(workspaceId, taskId);
+const parallelTaskId = randomUUID();
+const parallelKey = taskKey(workspaceId, parallelTaskId);
 const failedTaskId = randomUUID();
 const failedKey = taskKey(workspaceId, failedTaskId);
 const deviceTaskId = randomUUID();
@@ -135,6 +137,13 @@ if(process.argv[2]==='app-server') {
   send({id:r.id,error:{code:-32601,message:'unsupported'}});
  });return;
 }
+if(JSON.parse(fs.readFileSync('/input/job.json','utf8')).payload.body==='Parallel fixture') {
+ const deadline=Date.now()+60000;
+ while(!fs.existsSync('/task/release-model')) {
+  if(Date.now()>deadline)process.exit(10);
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100);
+ }
+}
 fs.writeFileSync('/task/repo/README.md','fixed\\n');
 fs.writeFileSync('/task/verification.json',JSON.stringify([JSON.parse(fs.readFileSync('/input/job.json','utf8')).payload.body==='Fail verification fixture'?'false':'test -z "$CODEX_TASK_TOKEN" && test -z "$GITHUB_TOKEN" && test "$(cat README.md)" = fixed']));
 console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
@@ -186,6 +195,8 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     "CONTAINER_HOST=unix:///run/podman/podman.sock",
     "-e",
     "CODEX_PROVIDER_BASE_URL=https://example.invalid/v1",
+    "-e",
+    "CODEX_RUNNER_CONCURRENCY=2",
     "-e",
     `CODEX_RUNNER_NETWORK=${name}`,
     "-e",
@@ -251,7 +262,76 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     readToken: "fake-read-token",
     providerApiKey: "fake-panel-provider-key",
   };
-  await request("/tasks", input);
+  const parallelInputs = [
+    { ...input, payload: { ...input.payload, body: "Parallel fixture" } },
+    {
+      ...input,
+      taskId: parallelTaskId,
+      payload: { ...input.payload, body: "Parallel fixture" },
+    },
+  ];
+  await Promise.all(parallelInputs.map((task) => request("/tasks", task)));
+  await request("/tasks", parallelInputs[0]);
+  const assertFull = async () => {
+    const full = await fetch(`${base}/tasks`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ ...input, taskId: randomUUID() }),
+      signal: AbortSignal.timeout(90000),
+    });
+    if (full.status !== 429)
+      throw Error(`Runner capacity was not enforced: ${full.status}`);
+  };
+  await assertFull();
+  for (let attempt = 0; ; attempt++) {
+    const statuses = await Promise.all(
+      parallelInputs.map((task) =>
+        request(`/tasks/${workspaceId}/${task.taskId}`),
+      ),
+    );
+    if (
+      statuses.every(
+        (status) => status.state === "running" && status.phase === "implement",
+      )
+    )
+      break;
+    if (
+      attempt > 60 ||
+      statuses.some((status) =>
+        ["failed", "unknown", "cancelled"].includes(status.state),
+      )
+    )
+      throw Error(
+        `Parallel tasks did not enter implementation: ${JSON.stringify(statuses)}`,
+      );
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  await restartSupervisor();
+  await assertFull();
+  for (const task of parallelInputs) {
+    const container = `${taskKey(workspaceId, task.taskId)}-implement`;
+    if (
+      (await engine([
+        "inspect",
+        "--format",
+        "{{.State.Running}}",
+        container,
+      ])) !== "true"
+    )
+      throw Error(
+        "Parallel implementation container did not survive supervisor restart",
+      );
+    await engine([
+      "exec",
+      container,
+      "node",
+      "-e",
+      "require('node:fs').writeFileSync('/task/release-model','yes')",
+    ]);
+  }
   for (let attempt = 0; ; attempt++) {
     const status = (await request(`/tasks/${workspaceId}/${taskId}`)) as {
       state: string;
@@ -270,6 +350,19 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   await request(`/tasks/${workspaceId}/${taskId}/cancel`, {});
+  for (let attempt = 0; ; attempt++) {
+    const status = await request(`/tasks/${workspaceId}/${parallelTaskId}`);
+    if (status.state === "ready") break;
+    if (
+      attempt > 30 ||
+      ["failed", "unknown", "cancelled"].includes(status.state)
+    )
+      throw Error(
+        `Parallel task did not reach ready: ${JSON.stringify(status)}`,
+      );
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  await request(`/tasks/${workspaceId}/${parallelTaskId}/cancel`, {});
   await request("/tasks", {
     ...input,
     taskId: failedTaskId,
@@ -639,10 +732,16 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   for (const id of developmentIds)
     await request(`/tasks/${workspaceId}/${id}/erase`, {});
   console.log(
-    `${engineName} smoke passed: provider/device tasks, question checkpoint/reconstruction, deployment checkpoint/restart, repeated repair, fresh/same-PR publication, remote-head fencing, device continuation, auth expiry/restart/reconnect, usage, erasure and cancellation.`,
+    `${engineName} smoke passed: parallel tasks/capacity/restart, provider/device tasks, question checkpoint/reconstruction, deployment checkpoint/restart, repeated repair, fresh/same-PR publication, remote-head fencing, device continuation, auth expiry/restart/reconnect, usage, erasure and cancellation.`,
   );
 } catch (error) {
-  for (const task of [key, failedKey, deviceKey, ...developmentKeys])
+  for (const task of [
+    key,
+    parallelKey,
+    failedKey,
+    deviceKey,
+    ...developmentKeys,
+  ])
     for (const phase of phases) {
       const state = await engine([
         "inspect",
@@ -662,8 +761,8 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     "--force",
     "--ignore",
     name,
-    ...[key, failedKey, deviceKey, ...developmentKeys].flatMap((taskKey) =>
-      [...phases, "input"].map((phase) => `${taskKey}-${phase}`),
+    ...[key, parallelKey, failedKey, deviceKey, ...developmentKeys].flatMap(
+      (taskKey) => [...phases, "input"].map((phase) => `${taskKey}-${phase}`),
     ),
   ]).catch(() => {});
   for (const volume of [
@@ -671,6 +770,9 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     `${key}-input`,
     `${key}-work`,
     `${key}-publish`,
+    `${parallelKey}-input`,
+    `${parallelKey}-work`,
+    `${parallelKey}-publish`,
     `${failedKey}-input`,
     `${failedKey}-work`,
     `${failedKey}-publish`,

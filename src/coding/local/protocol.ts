@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { codingPayload } from "../config.ts";
 import { developmentResult, developmentRun } from "../development.ts";
+import { resultIssues } from "../result-validation.ts";
 
 export const localStart = z
   .object({
@@ -38,6 +39,7 @@ export const localStatus = z.object({
   result: developmentResult.optional(),
   tokens: z.number().int().nonnegative().optional(),
   usageUnknown: z.boolean().optional(),
+  resultIssues: resultIssues.optional(),
   baseSha: z
     .string()
     .regex(/^[0-9a-f]{40}$/)

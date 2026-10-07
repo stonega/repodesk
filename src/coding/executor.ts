@@ -918,6 +918,7 @@ export class DevelopmentExecutor {
         tokens: status.tokens,
         usageUnknown: status.usageUnknown || status.tokens === undefined,
         checkPassed: status.checkPassed,
+        resultIssues: status.resultIssues,
       },
     );
   }

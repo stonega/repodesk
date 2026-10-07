@@ -180,6 +180,7 @@ async function implement(job: Job) {
           JSON.stringify({
             threadId: error.threadId,
             tokens: error.tokens,
+            usageUnknown: error.usageUnknown,
           }),
         );
         await writeFile("/task/failure-code", "coding_device_auth_required");
@@ -190,6 +191,8 @@ async function implement(job: Job) {
             code: error.code,
             threadId: error.threadId,
             tokens: error.tokens,
+            usageUnknown: error.usageUnknown,
+            resultIssues: error.resultIssues,
           }),
           { mode: 0o600 },
         );

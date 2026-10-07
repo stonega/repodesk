@@ -61,5 +61,10 @@ account mode supports trusted public and private repositories selected through
 the connected GitHub App. Model authentication and repository access are independent.
 
 No scheduled model call is needed to keep a persistent container alive. Normal
-runs perform refresh. This change does not implement concurrent runners sharing
-an account credential or server-side account-wide revocation.
+runs perform refresh. Updated 2026-10-07: configurable task concurrency allows
+preparation, checks and publication to overlap. Codex implementation, repair and
+auth resume share one serialized stream per workspace credential cache; separate
+workspace caches and API-key tasks run independently. Each implementation copies
+the latest saved cache, and queued repairs do not consume attempts before launch.
+This does not implement concurrent Codex processes sharing a managed account
+credential or server-side account-wide revocation.

@@ -92,7 +92,7 @@ rl.on('line',line=>{
         const failure = error as CodexConversationError;
         expect(failure.code).toBe(code);
         expect(failure.threadId).toBe("safe-thread");
-        expect(failure.tokens).toBe(234567);
+        expect(failure.tokens).toBe(scenario === "provider" ? 234567 : 469134);
         expect(JSON.stringify(failure)).not.toContain("private-value");
         expect(JSON.stringify(failure)).not.toContain("private prompt");
       }

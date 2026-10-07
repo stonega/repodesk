@@ -12,6 +12,12 @@ remain **Reviewed** when the new policy is omitted. The reviewed issue-to-PR
 workflow below is preserved; direct tasks use original received messages and do
 not require creating an issue.
 
+The runner defaults to four active tasks. Set `CODEX_RUNNER_CONCURRENCY` (1–32) in
+the deployment environment to change capacity. API-key tasks execute Codex in
+parallel; tasks sharing one workspace's ChatGPT login serialize Codex phases while
+preparation, checks and publication can overlap. See the
+[runner guide](codex-podman.md#lifecycle-and-recovery) for resource limits and recovery.
+
 Pi receives `start_development_task` only when at least one repository explicitly
 uses **Direct** policy, and its target list includes only those repositories.
 **Reviewed** repositories, including older configurations without a development
@@ -72,6 +78,18 @@ patch until they are consumed and checked. Inputs arriving after reservation
 become the next cycle. Missing token reports are marked as unknown usage rather
 than charged as a retired allowance. Reported tokens are not a provider-dollar
 ceiling. Retention still applies.
+
+The final-result field schema is generated from the application validator.
+Status-specific rules still require a nonblank question for `needs_input` and
+a nonempty verification plan for `completed`. A completed turn with missing,
+invalid JSON or invalid result fields gets one read-only correction turn in the
+same Codex thread and checkout, using the same output schema. This corrects only
+the result; independent repository checks still run afterward, and any fixed
+verification plan stays unchanged. Cancellation and sign-in failures retain
+their normal handling. Reported usage includes both turns, with missing reports
+marked unknown. Safe issue codes and known field paths survive account-volume
+cleanup in runner state and the tenant-scoped attempt record. Historical stopped
+tasks are not automatically retried by this correction.
 
 A follow-up fetches the existing PR and current branch head, then updates that
 branch using non-force publication from a fresh container. Closed/merged PRs are

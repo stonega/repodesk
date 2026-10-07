@@ -240,8 +240,21 @@ verification prevents publication. Old command overrides are discarded; migratio
 ## Lifecycle and recovery
 
 Each approved task gets a tenant-scoped name, private work volume, checkout and
-Codex thread. The supervisor permits one active task at a time; additional
-approved tasks wait. An initial preparation container receives only a
+Codex thread. The supervisor permits four active tasks by default, shared across
+workspaces and repositories. Set `CODEX_RUNNER_CONCURRENCY` (1–32) in the deployment
+environment to change capacity; additional approved tasks wait and retry. Capacity
+reservations survive supervisor restarts, and repeated submissions never allocate
+another slot. Attempts for the same continuous task remain serialized.
+
+API-key tasks can run Codex concurrently. Device-code tasks sharing one workspace
+credential cache serialize their Codex implementation and repair phases to preserve
+refresh-token rotation. Their preparation, setup, checks and publication can overlap;
+separate workspace login caches can run independently. Waiting for an account stream
+does not discard the checkout or consume a repair attempt. The next implementation
+copies the latest saved credentials. This follows OpenAI's
+[serialized auth-cache guidance](https://learn.chatgpt.com/docs/auth/ci-cd-auth).
+
+An initial preparation container receives only a
 repository-scoped read token and pins the base commit. The implementation
 container lets Codex prepare the environment and implement without a GitHub token.
 A separate container replays the captured verification plan without model or GitHub credentials.
@@ -260,8 +273,9 @@ automatic merge. Publication has its own durable reservation and is never blindl
 retried after an uncertain response.
 
 Custom provider spend is separate from Pi chat budgets. Device-code runs use
-the connected ChatGPT account's Codex entitlements. Defaults are one active task,
-2 CPUs, 4 GiB RAM and 256 processes; tune the
+the connected ChatGPT account's Codex entitlements. Defaults are four active tasks,
+with 2 CPUs, 4 GiB RAM and 256 processes **per task**; provision host resources for
+the selected concurrency and tune the
 documented `CODEX_RUNNER_*` environment variables in `.env.example`. Patches are
 limited to 5 MiB. Retained workspaces and sessions are removed after 24 hours
 (configurable 1–168 hours); stopped containers and volumes are also removed.
@@ -306,8 +320,8 @@ Codex home and uses no host auth or paid model calls. The fixture passed both on
 the host and bundled inside the read-only job image with no external network.
 The real Docker/Podman smoke also covers question checkpoints, automatic repair/repair
 exhaustion, fresh and same-PR publication with fake GitHub, remote-head fencing,
-device continuation and explicit private-state erasure. Waiting releases the global
-runner slot. Retained work checkpoints can seed a new isolated cycle; expired
+device continuation and explicit private-state erasure. Waiting for user input or
+sign-in releases the task's runner slot. Retained work checkpoints can seed a new isolated cycle; expired
 checkpoints reconstruct from authorized context. See [continuous setup](codex-coding.md).
 Local checks do not establish live model intent quality or live publication; the
 staging journey remains a release gate.

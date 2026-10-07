@@ -1,4 +1,5 @@
 import { Fault } from "../../domain.ts";
+import type { ResultIssues } from "../result-validation.ts";
 
 export const conversationFailureCodes = [
   "coding_conversation_failed",
@@ -22,6 +23,8 @@ export class CodexConversationError extends Fault {
     code: ConversationFailureCode,
     readonly threadId?: string,
     readonly tokens?: number,
+    readonly resultIssues?: ResultIssues,
+    readonly usageUnknown?: boolean,
   ) {
     super(code, 503);
   }

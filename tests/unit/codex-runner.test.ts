@@ -91,11 +91,12 @@ test("task media survives runner restart and is scrubbed with task erasure", asy
   expect(JSON.parse(tombstone).input.development.media).toBeUndefined();
   await new RunnerSupervisor(g.settings, g.engine).initialize();
 });
-async function fixture() {
+async function fixture(concurrency = 4) {
   const dir = await mkdtemp(join(tmpdir(), "deepx-codex-test-"));
   dirs.push(dir);
   const settings = runnerSettings.parse({
     CODEX_RUNNER_STATE: dir,
+    CODEX_RUNNER_CONCURRENCY: concurrency,
     CODEX_RUNNER_TOKEN: "management-token".repeat(3),
     CODEX_PROVIDER_API_KEY: "provider-secret",
     CODEX_PROVIDER_BASE_URL: "https://provider.example/v1",
@@ -193,7 +194,7 @@ test("task names are tenant-scoped; container boundary excludes host and bot acc
   expect(codexConfig(f.settings)).not.toContain("provider-secret");
 });
 test("duplicate submission and supervisor restart preserve one isolated task", async () => {
-  const f = await fixture();
+  const f = await fixture(1);
   await Promise.all([f.supervisor.start(f.input), f.supervisor.start(f.input)]);
   expect(f.calls.filter((c) => c.args[0] === "create")).toHaveLength(1);
   const state = await readFile(
@@ -216,6 +217,314 @@ test("duplicate submission and supervisor restart preserve one isolated task", a
     "coding_task_not_found",
   );
 });
+function holdImplementations(f: Awaited<ReturnType<typeof fixture>>) {
+  const completed = new Set<string>();
+  const authCopies = new Map<string, string>();
+  const command = f.engine.command;
+  const read = f.engine.readText;
+  f.engine.command = async (args, env) => {
+    const name = args.at(-1) ?? "";
+    if (
+      args[0] === "inspect" &&
+      name.endsWith("-implement") &&
+      !completed.has(name)
+    )
+      return JSON.stringify({ Running: true, Status: "running", ExitCode: 0 });
+    if (args[0] === "cp" && args[1] && name.endsWith(":/auth/auth.json"))
+      authCopies.set(name.split(":")[0] ?? "", await readFile(args[1], "utf8"));
+    return command(args, env);
+  };
+  f.engine.readText = async (container, path, max) =>
+    path === "/auth/auth.json"
+      ? JSON.stringify({ tokens: { access_token: `rotated-${container}` } })
+      : read(container, path, max);
+  return { completed, authCopies };
+}
+
+test("parallel starts respect global capacity, remain idempotent at capacity and recover after restart", async () => {
+  const f = await fixture();
+  holdImplementations(f);
+  const inputs = Array.from({ length: 5 }, (_, n) => ({
+    ...f.input,
+    workspaceId: n === 2 ? randomUUID() : f.input.workspaceId,
+    taskId: randomUUID(),
+    payload: {
+      ...f.input.payload,
+      repositoryId: n + 1,
+      repository: `example/repo${n}`,
+    },
+  }));
+  const starts = await Promise.allSettled(
+    inputs.map((input) => f.supervisor.start(input)),
+  );
+  expect(starts.filter((r) => r.status === "fulfilled")).toHaveLength(4);
+  expect(starts[4]).toMatchObject({
+    status: "rejected",
+    reason: { code: "coding_runner_busy", status: 429 },
+  });
+  const active = inputs.slice(0, 4);
+  for (const input of active) {
+    await f.supervisor.start(input);
+    await f.supervisor.status(input.workspaceId, input.taskId);
+    expect(
+      await f.supervisor.status(input.workspaceId, input.taskId),
+    ).toMatchObject({ state: "running", phase: "implement" });
+  }
+  expect(
+    f.calls.filter(
+      (c) =>
+        c.args[0] === "create" &&
+        c.args.some((arg) => arg.endsWith("-implement")),
+    ),
+  ).toHaveLength(4);
+  const restarted = new RunnerSupervisor(f.settings, f.engine);
+  await restarted.initialize();
+  const [first, second] = active;
+  const overflow = inputs[4];
+  if (!first || !second || !overflow)
+    throw Error("Missing concurrency fixture");
+  await restarted.start(first);
+  await expect(restarted.start(overflow)).rejects.toThrow("coding_runner_busy");
+  await expect(restarted.cancel(randomUUID(), first.taskId)).rejects.toThrow(
+    "coding_task_not_found",
+  );
+  await restarted.cancel(first.workspaceId, first.taskId);
+  await restarted.start(overflow);
+  expect(
+    await restarted.status(second.workspaceId, second.taskId),
+  ).toMatchObject({ state: "running", phase: "implement" });
+});
+
+test("a continuing task keeps one active attempt while independent tasks share the runner", async () => {
+  const f = await fixture();
+  const input: LocalStart = {
+    ...f.input,
+    issue: undefined,
+    development: {
+      taskId: randomUUID(),
+      revision: 1,
+      mode: "work",
+      context: "",
+      inputs: [
+        {
+          revision: 1,
+          actor: "101",
+          sourceId: "source",
+          text: "Fix pagination",
+          kind: "request",
+        },
+      ],
+    },
+  };
+  await f.supervisor.start(input);
+  await expect(
+    f.supervisor.start({ ...input, taskId: randomUUID() }),
+  ).rejects.toThrow("coding_runner_busy");
+  await f.supervisor.start({
+    ...input,
+    taskId: randomUUID(),
+    workspaceId: randomUUID(),
+  });
+  await f.supervisor.start({ ...f.input, taskId: randomUUID() });
+  expect(f.calls.filter((c) => c.args[0] === "create")).toHaveLength(3);
+});
+
+test("shared account implementations serialize while preparation, checks and other credentials run in parallel", async () => {
+  const f = await fixture();
+  const { completed, authCopies } = holdImplementations(f);
+  const first: LocalStart = {
+    ...f.input,
+    payload: { ...f.input.payload, authMode: "device_code" },
+  };
+  const second = { ...first, taskId: randomUUID() };
+  const independent = {
+    ...first,
+    workspaceId: randomUUID(),
+    taskId: randomUUID(),
+  };
+  const provider = { ...f.input, taskId: randomUUID() };
+  await f.supervisor.device.save(
+    first.workspaceId,
+    '{"tokens":{"access_token":"workspace-one"}}',
+  );
+  await f.supervisor.device.save(
+    independent.workspaceId,
+    '{"tokens":{"access_token":"workspace-two"}}',
+  );
+  const inputs = [first, second, independent, provider];
+  await Promise.all(inputs.map((input) => f.supervisor.start(input)));
+  for (const input of inputs)
+    await f.supervisor.status(input.workspaceId, input.taskId);
+  for (const input of inputs)
+    await f.supervisor.status(input.workspaceId, input.taskId);
+  const firstName = `${taskKey(first.workspaceId, first.taskId)}-implement`;
+  const secondName = `${taskKey(second.workspaceId, second.taskId)}-implement`;
+  expect(authCopies.get(firstName)).toContain("workspace-one");
+  expect(authCopies.has(secondName)).toBe(false);
+  expect(
+    authCopies.get(
+      `${taskKey(independent.workspaceId, independent.taskId)}-implement`,
+    ),
+  ).toContain("workspace-two");
+  const restarted = new RunnerSupervisor(f.settings, f.engine);
+  await restarted.initialize();
+  expect(
+    await restarted.status(second.workspaceId, second.taskId),
+  ).toMatchObject({ state: "running", phase: "setup" });
+  completed.add(firstName);
+  expect(await restarted.status(first.workspaceId, first.taskId)).toMatchObject(
+    { phase: "check" },
+  );
+  expect(
+    await restarted.status(second.workspaceId, second.taskId),
+  ).toMatchObject({ phase: "implement" });
+  expect(authCopies.get(secondName)).toContain(`rotated-${firstName}`);
+  expect(await restarted.status(first.workspaceId, first.taskId)).toMatchObject(
+    { state: "ready" },
+  );
+  expect(
+    await restarted.status(independent.workspaceId, independent.taskId),
+  ).toMatchObject({ state: "running", phase: "implement" });
+  expect(
+    await restarted.status(provider.workspaceId, provider.taskId),
+  ).toMatchObject({ state: "running", phase: "implement" });
+});
+
+test("auth resume competes for its account stream even when global slots remain", async () => {
+  const f = await authPausedFixture();
+  const { completed } = holdImplementations(f);
+  await f.supervisor.device.save(
+    f.input.workspaceId,
+    '{"tokens":{"access_token":"reconnected"}}',
+  );
+  const other: LocalStart = {
+    ...f.input,
+    taskId: randomUUID(),
+    issue: { number: 43, url: "https://github.com/example/repo/issues/43" },
+    development: undefined,
+  };
+  await f.supervisor.start(other);
+  await f.supervisor.status(other.workspaceId, other.taskId);
+  await f.supervisor.status(other.workspaceId, other.taskId);
+  await expect(
+    f.supervisor.resumeAuth(f.input.workspaceId, f.input.taskId),
+  ).rejects.toThrow("coding_runner_busy");
+  f.allow();
+  completed.add(`${taskKey(other.workspaceId, other.taskId)}-implement`);
+  await f.supervisor.status(other.workspaceId, other.taskId);
+  await Promise.all([
+    f.supervisor.resumeAuth(f.input.workspaceId, f.input.taskId),
+    f.supervisor.resumeAuth(f.input.workspaceId, f.input.taskId),
+  ]);
+  expect(
+    await f.supervisor.status(f.input.workspaceId, f.input.taskId),
+  ).toMatchObject({ state: "running", phase: "implement" });
+  expect(
+    f.calls.filter(
+      (c) =>
+        c.args[0] === "create" &&
+        c.args.includes(
+          `${taskKey(f.input.workspaceId, f.input.taskId)}-implement`,
+        ),
+    ),
+  ).toHaveLength(2);
+});
+
+test("device check repairs wait for the account stream without consuming repair attempts", async () => {
+  const f = await fixture();
+  const { completed, authCopies } = holdImplementations(f);
+  f.input.payload.authMode = "device_code";
+  f.input.issue = undefined;
+  f.input.development = {
+    taskId: randomUUID(),
+    revision: 1,
+    mode: "work",
+    context: "",
+    inputs: [
+      {
+        revision: 1,
+        actor: "101",
+        sourceId: "source",
+        text: "Fix pagination",
+        kind: "request",
+      },
+    ],
+  };
+  const read = f.engine.readText,
+    command = f.engine.command;
+  f.engine.readText = async (container, path, max) =>
+    path.endsWith("conversation.json")
+      ? JSON.stringify({
+          threadId: "repair-thread",
+          tokens: 10,
+          result: {
+            status: "completed",
+            intent: "implement",
+            evidenceRevision: 1,
+            evidence: "Fix pagination",
+            publishRequested: true,
+            summary: "Fixed",
+            question: null,
+            title: "Pagination",
+            body: "Checked",
+            verificationCommands: ["bun test"],
+          },
+        })
+      : read(container, path, max);
+  f.engine.command = async (args, env) =>
+    args[0] === "inspect" && args.at(-1)?.endsWith("-check")
+      ? JSON.stringify({ Running: false, Status: "exited", ExitCode: 1 })
+      : command(args, env);
+  await f.supervisor.device.save(
+    f.input.workspaceId,
+    '{"tokens":{"access_token":"initial"}}',
+  );
+  const other: LocalStart = {
+    ...f.input,
+    taskId: randomUUID(),
+    development: undefined,
+    issue: { number: 43, url: "https://github.com/example/repo/issues/43" },
+  };
+  await f.supervisor.start(f.input);
+  await f.supervisor.start(other);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  const ownName = `${taskKey(f.input.workspaceId, f.input.taskId)}-implement`;
+  completed.add(ownName);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  await f.supervisor.status(other.workspaceId, other.taskId);
+  await f.supervisor.status(other.workspaceId, other.taskId);
+  for (let n = 0; n < 2; n++)
+    expect(
+      await f.supervisor.status(f.input.workspaceId, f.input.taskId),
+    ).toMatchObject({ phase: "check", repairCount: undefined });
+  expect(
+    f.calls.filter((c) => c.args[0] === "create" && c.args.includes(ownName)),
+  ).toHaveLength(1);
+  await f.supervisor.cancel(other.workspaceId, other.taskId);
+  expect(
+    await f.supervisor.status(f.input.workspaceId, f.input.taskId),
+  ).toMatchObject({ phase: "implement", repairCount: 1 });
+  expect(authCopies.get(ownName)).toContain(
+    `rotated-${taskKey(other.workspaceId, other.taskId)}-implement`,
+  );
+  expect(
+    f.calls.filter((c) => c.args[0] === "create" && c.args.includes(ownName)),
+  ).toHaveLength(2);
+});
+
+test("runner concurrency accepts deployment strings and rejects unsafe capacities", async () => {
+  const f = await fixture();
+  expect(
+    runnerSettings.parse({ ...f.settings, CODEX_RUNNER_CONCURRENCY: "8" })
+      .CODEX_RUNNER_CONCURRENCY,
+  ).toBe(8);
+  for (const value of [0, -1, 1.5, 33, "invalid"])
+    expect(() =>
+      runnerSettings.parse({ ...f.settings, CODEX_RUNNER_CONCURRENCY: value }),
+    ).toThrow();
+});
+
 test("checks precede publication; publication uses a fresh volume and only its scoped token", async () => {
   const f = await fixture();
   await f.supervisor.start(f.input);
@@ -522,7 +831,7 @@ test("device-auth tasks use only their workspace credential and remove the task 
 });
 
 test("continuous questions checkpoint and release the runner; tenant-scoped answers reconstruct", async () => {
-  const f = await fixture();
+  const f = await fixture(1);
   const taskId = randomUUID();
   const input = {
     ...f.input,
@@ -835,8 +1144,8 @@ test("completed work without a valid verification plan cannot become ready", asy
   }
 });
 
-async function authPausedFixture(continuous = true) {
-  const f = await fixture();
+async function authPausedFixture(continuous = true, concurrency = 4) {
+  const f = await fixture(concurrency);
   f.input.payload.authMode = "device_code";
   if (continuous) {
     f.input.issue = undefined;
@@ -913,7 +1222,7 @@ async function authPausedFixture(continuous = true) {
 
 test("auth failure releases runner; restart and idempotent resume keep the checkout and cumulative usage", async () => {
   for (const continuous of [true, false]) {
-    const f = await authPausedFixture(continuous);
+    const f = await authPausedFixture(continuous, 1);
     expect(await f.supervisor.device.status(f.input.workspaceId)).toEqual({
       state: "auth_required",
     });
@@ -1106,6 +1415,67 @@ test("safe implementation failures preserve reported usage before temporary acco
     "utf8",
   );
   expect(record).not.toContain("private-value");
+});
+
+test("result-validation diagnostics survive runner restart and are erased with the task", async () => {
+  const f = await fixture();
+  f.input.issue = undefined;
+  f.input.development = {
+    taskId: randomUUID(),
+    revision: 1,
+    mode: "work",
+    inputs: [
+      {
+        revision: 1,
+        actor: "101",
+        sourceId: "source",
+        text: "Fix bug",
+        kind: "request",
+      },
+    ],
+    context: "",
+  };
+  const read = f.engine.readText,
+    command = f.engine.command;
+  const issues = [{ path: ["verificationCommands"], code: "custom" }];
+  f.engine.readText = async (container, path, max) => {
+    if (path === "/task/conversation-failure.json")
+      return JSON.stringify({
+        code: "coding_result_invalid",
+        threadId: "thread-123",
+        tokens: 25,
+        usageUnknown: true,
+        resultIssues: issues,
+        message: "private rejected value",
+      });
+    if (path === "/task/failure-code") return "coding_result_invalid";
+    return read(container, path, max);
+  };
+  f.engine.command = async (args, env) =>
+    args[0] === "inspect" && args.at(-1)?.endsWith("-implement")
+      ? JSON.stringify({ Running: false, Status: "exited", ExitCode: 1 })
+      : command(args, env);
+  await f.supervisor.start(f.input);
+  for (let i = 0; i < 3; i++)
+    await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  const restarted = new RunnerSupervisor(f.settings, f.engine);
+  await restarted.initialize();
+  expect(
+    await restarted.status(f.input.workspaceId, f.input.taskId),
+  ).toMatchObject({
+    state: "failed",
+    error: "coding_result_invalid",
+    tokens: 25,
+    usageUnknown: true,
+    resultIssues: issues,
+  });
+  const path = join(
+    f.settings.CODEX_RUNNER_STATE,
+    `${taskKey(f.input.workspaceId, f.input.taskId)}.json`,
+  );
+  expect(await readFile(path, "utf8")).not.toContain("private rejected");
+  await restarted.erase(f.input.workspaceId, f.input.taskId);
+  expect(JSON.parse(await readFile(path, "utf8")).resultIssues).toBeUndefined();
 });
 
 test("Docker task arguments preserve isolation without Podman-only flags", async () => {

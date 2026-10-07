@@ -21,9 +21,11 @@ import {
 } from "../../setup/credentials.ts";
 import {
   developmentResult,
+  developmentResultByteLimit,
   developmentRun,
   verificationCommands,
 } from "../development.ts";
+import { resultIssues, safeResultIssues } from "../result-validation.ts";
 import { conversationFailureCodes } from "./conversation-failure.ts";
 import { DeviceAuth } from "./device-auth.ts";
 import { type ContainerEngine, containerArgs } from "./podman.ts";
@@ -140,6 +142,36 @@ export class RunnerSupervisor implements LocalRunner {
     requireThat(r, "coding_task_not_found", 404);
     return r;
   }
+  private hasCapacity() {
+    return (
+      [...this.records.values()].filter((r) => !terminal(r.state)).length <
+      this.settings.CODEX_RUNNER_CONCURRENCY
+    );
+  }
+  private canRunTask(input: Record["input"]) {
+    return ![...this.records.values()].some(
+      (r) =>
+        !terminal(r.state) &&
+        r.input.workspaceId === input.workspaceId &&
+        input.development &&
+        r.input.development?.taskId === input.development.taskId,
+    );
+  }
+  private canImplement(r: Record) {
+    // Codex rotates managed account credentials. Each workspace cache needs one
+    // implementation stream; preparation, checks and publication can overlap.
+    return (
+      r.input.payload.authMode !== "device_code" ||
+      ![...this.records.values()].some(
+        (other) =>
+          other !== r &&
+          !terminal(other.state) &&
+          other.phase === "implement" &&
+          other.input.payload.authMode === "device_code" &&
+          other.input.workspaceId === r.input.workspaceId,
+      )
+    );
+  }
   private view(r: Record): LocalStatus {
     return {
       state: r.state,
@@ -150,6 +182,7 @@ export class RunnerSupervisor implements LocalRunner {
       result: r.result,
       tokens: r.tokens,
       usageUnknown: r.usageUnknown,
+      resultIssues: r.resultIssues,
       baseSha: r.baseSha,
       publishedSha: r.publishedSha,
       checkPassed: r.checkPassed,
@@ -317,7 +350,7 @@ export class RunnerSupervisor implements LocalRunner {
         return; // A repeated request never launches a second container.
       }
       requireThat(
-        ![...this.records.values()].some((r) => !terminal(r.state)),
+        this.hasCapacity() && this.canRunTask(safe),
         "coding_runner_busy",
         429,
       );
@@ -440,13 +473,16 @@ export class RunnerSupervisor implements LocalRunner {
                   .regex(/^[a-zA-Z0-9-]{1,100}$/)
                   .optional(),
                 tokens: z.number().int().nonnegative().optional(),
+                usageUnknown: z.boolean().optional(),
               })
               .safeParse(metadata);
             r.threadId = usage.success ? usage.data.threadId : r.threadId;
             r.tokens =
               (r.tokens ?? 0) + (usage.success ? (usage.data.tokens ?? 0) : 0);
             r.usageUnknown ||=
-              !usage.success || usage.data.tokens === undefined;
+              !usage.success ||
+              usage.data.tokens === undefined ||
+              !!usage.data.usageUnknown;
           }
           if (r.authGeneration)
             await this.device.invalidate(r.input.workspaceId, r.authGeneration);
@@ -460,6 +496,7 @@ export class RunnerSupervisor implements LocalRunner {
         await this.captureAuth(r);
       }
       if (state.ExitCode !== 0 && r.phase === "check" && r.input.development) {
+        if (!this.canImplement(r)) return;
         r.repairs = (r.repairs ?? 0) + 1; // Reserve before the repair launch.
         await this.engine.command([
           "rm",
@@ -517,6 +554,8 @@ export class RunnerSupervisor implements LocalRunner {
                   .regex(/^[a-zA-Z0-9-]{1,100}$/)
                   .optional(),
                 tokens: z.number().int().nonnegative().optional(),
+                usageUnknown: z.boolean().optional(),
+                resultIssues: resultIssues.optional(),
               })
               .safeParse(
                 await this.copyResult(r, "conversation-failure.json")
@@ -527,7 +566,10 @@ export class RunnerSupervisor implements LocalRunner {
               r.error = failure.data.code;
               r.threadId = failure.data.threadId ?? r.threadId;
               r.tokens = (r.tokens ?? 0) + (failure.data.tokens ?? 0);
-              r.usageUnknown ||= failure.data.tokens === undefined;
+              r.usageUnknown ||=
+                failure.data.tokens === undefined ||
+                !!failure.data.usageUnknown;
+              r.resultIssues = failure.data.resultIssues;
             }
           }
           try {
@@ -553,6 +595,7 @@ export class RunnerSupervisor implements LocalRunner {
         await this.save(r);
         await this.launch(r, "setup");
       } else if (r.phase === "setup") {
+        if (!this.canImplement(r)) return;
         r.phase = "implement";
         await this.save(r);
         await this.launch(
@@ -567,7 +610,7 @@ export class RunnerSupervisor implements LocalRunner {
           ? await this.engine.readText(
               `${r.key}-implement`,
               "/task/conversation.json",
-              64000,
+              developmentResultByteLimit,
             )
           : undefined;
         if (!r.input.development && !r.verificationCommands) {
@@ -602,12 +645,19 @@ export class RunnerSupervisor implements LocalRunner {
               result: developmentResult,
               tokens: z.number().int().nonnegative(),
               usageUnknown: z.boolean().optional(),
+              resultIssues: resultIssues.optional(),
               threadId: z.string().regex(/^[a-zA-Z0-9-]{1,100}$/),
             })
             .safeParse(value);
           if (!parsed.success) {
             r.state = "failed";
             r.error = "coding_result_invalid";
+            r.resultIssues = safeResultIssues(
+              parsed.error.issues.map((issue) => ({
+                ...issue,
+                path: issue.path[0] === "result" ? issue.path.slice(1) : [],
+              })),
+            );
             await this.save(r);
             return;
           }
@@ -616,6 +666,7 @@ export class RunnerSupervisor implements LocalRunner {
           r.threadId = turn.threadId;
           r.tokens = (r.tokens ?? 0) + turn.tokens;
           r.usageUnknown ||= turn.usageUnknown;
+          r.resultIssues = turn.resultIssues;
           await writeFile(this.path(r, "conversation"), JSON.stringify(turn), {
             mode: 0o600,
           });
@@ -729,9 +780,7 @@ export class RunnerSupervisor implements LocalRunner {
         return; // Repeated acknowledgements never launch a second container.
       }
       requireThat(
-        ![...this.records.values()].some(
-          (other) => other !== r && !terminal(other.state),
-        ),
+        this.hasCapacity() && this.canRunTask(r.input) && this.canImplement(r),
         "coding_runner_busy",
         429,
       );
@@ -828,6 +877,7 @@ export class RunnerSupervisor implements LocalRunner {
       r.cleaned = true;
       r.proxyToken = "";
       r.result = undefined;
+      r.resultIssues = undefined;
       r.verificationCommands = undefined;
       r.threadId = undefined;
       r.input.development = undefined;

@@ -26,7 +26,11 @@ The original delivery sequence below remains the acceptance contract. The select
 transport is a private Codex app-server JSONL client in the existing container,
 using CLI 0.155.1. Questions are validated completed-turn envelopes, and inputs
 queue at confirmed turn boundaries. Native connection-local questions/live steering
-are not used for durable delivery. Waiting frees the single global runner slot.
+are not used for durable delivery. Waiting frees the task's runner slot. As of
+2026-10-07 the runner defaults to four active tasks, configurable through
+`CODEX_RUNNER_CONCURRENCY`; one task's attempts stay serialized. Tasks sharing a
+workspace device-login cache serialize their Codex phases while other phases can
+overlap. See [runner concurrency and resource limits](codex-podman.md#lifecycle-and-recovery).
 
 Migration `011_coding_collaboration.sql` adds tenant-scoped task/input/grant/
 attempt/event records. Direct mode is opt-in per repository; omitted policy retains

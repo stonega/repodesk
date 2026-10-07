@@ -57,10 +57,10 @@ export const developmentMedia = z
   );
 export type DevelopmentMedia = z.infer<typeof developmentMedia>;
 export const verificationCommands = z
-  .array(z.string().trim().min(1).max(2000))
+  .array(z.string().trim().min(1).max(2000).regex(/\S/))
   .min(1)
   .max(8);
-export const developmentResult = z
+const developmentResultObject = z
   .object({
     status: z.enum(["intent", "needs_input", "completed", "analysis"]),
     intent: z.enum(["implement", "analyze", "uncertain"]),
@@ -68,51 +68,43 @@ export const developmentResult = z
     evidence: z.string().max(20000),
     publishRequested: z.boolean(),
     summary: z.string().min(1).max(12000),
-    question: z.string().max(3000).nullable(),
+    question: z
+      .string()
+      .max(3000)
+      .nullable()
+      .describe("A nonblank question is required when status is needs_input."),
     title: z.string().min(1).max(200),
     body: z.string().max(12000),
     verificationCommands: z
       .array(verificationCommands.element)
       .max(8)
-      .optional(),
+      .optional()
+      .describe(
+        "For completed, return one to eight commands that rerun the required checks, including necessary preparation. Other statuses may return an empty array. Preserve any fixed verification plan.",
+      ),
   })
-  .strict()
-  .refine((v) => v.status !== "needs_input" || !!v.question?.trim())
-  .refine((v) => v.status !== "completed" || !!v.verificationCommands?.length);
+  .strict();
+export const developmentResult = developmentResultObject
+  .refine((v) => v.status !== "needs_input" || !!v.question?.trim(), {
+    path: ["question"],
+  })
+  .refine((v) => v.status !== "completed" || !!v.verificationCommands?.length, {
+    path: ["verificationCommands"],
+  });
 export type DevelopmentResult = z.infer<typeof developmentResult>;
+// Covers the bounded fields even when Unicode/JSON escaping expands their bytes.
+export const developmentResultByteLimit = 512 * 1024;
+const generatedOutput = z.toJSONSchema(developmentResultObject, {
+  target: "draft-7",
+});
+// Keep historical non-work results without commands readable, but require every
+// field in newly generated output. Cross-field rules remain validated locally.
 export const developmentOutputSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: [
-    "status",
-    "intent",
-    "evidenceRevision",
-    "evidence",
-    "publishRequested",
-    "summary",
-    "question",
-    "title",
-    "body",
-    "verificationCommands",
-  ],
-  properties: {
-    status: {
-      type: "string",
-      enum: ["intent", "needs_input", "completed", "analysis"],
-    },
-    intent: { type: "string", enum: ["implement", "analyze", "uncertain"] },
-    evidenceRevision: { type: "integer" },
-    evidence: { type: "string" },
-    publishRequested: { type: "boolean" },
-    summary: { type: "string" },
-    question: { type: ["string", "null"] },
-    title: { type: "string" },
-    body: { type: "string" },
-    verificationCommands: {
-      type: "array",
-      items: { type: "string" },
-      maxItems: 8,
-    },
+  type: "object" as const,
+  additionalProperties: false as const,
+  required: Object.keys(developmentResultObject.shape),
+  properties: generatedOutput.properties as {
+    [K in keyof typeof developmentResultObject.shape]: z.core.JSONSchema.JSONSchema;
   },
 };
 export const developmentRun = z.preprocess(
@@ -158,13 +150,16 @@ export function developmentEvidence(
         .at(-1) ?? current)
     : current;
 }
-export function developmentSchema(run: DevelopmentRun) {
+export function developmentSchema(
+  run: DevelopmentRun,
+): typeof developmentOutputSchema {
   if (run.mode !== "intake")
     return {
       ...developmentOutputSchema,
       properties: {
         ...developmentOutputSchema.properties,
         status: {
+          ...developmentOutputSchema.properties.status,
           type: "string",
           enum:
             run.mode === "work"
@@ -179,8 +174,14 @@ export function developmentSchema(run: DevelopmentRun) {
     properties: {
       ...developmentOutputSchema.properties,
       status: { type: "string", enum: ["intent", "needs_input"] },
-      evidenceRevision: { type: "integer", enum: [input.revision] },
-      evidence: { type: "string", enum: [input.text] },
+      evidenceRevision: {
+        ...developmentOutputSchema.properties.evidenceRevision,
+        enum: [input.revision],
+      },
+      evidence: {
+        ...developmentOutputSchema.properties.evidence,
+        enum: [input.text],
+      },
     },
   };
 }

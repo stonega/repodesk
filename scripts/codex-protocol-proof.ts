@@ -15,6 +15,8 @@ let calls = 0;
 let rejectAuth = false;
 let intakeSchemaReceived = false;
 let imageReceived = false;
+let invalidResult = false;
+let schemaBoundsReceived = false;
 const imageUrl =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEUlEQVR4nGP4z8DwnwEEQAwAG/ID/U0/Ov8AAAAASUVORK5CYII=";
 const server = Bun.serve({
@@ -51,6 +53,10 @@ const server = Bun.serve({
         JSON.stringify(schema?.properties.evidenceRevision.enum) === "[2]" &&
         JSON.stringify(schema?.properties.evidence.enum) === '["Try again"]';
     }
+    const schema = body.text?.format?.schema;
+    schemaBoundsReceived ||=
+      schema?.properties.title.maxLength === 200 &&
+      schema?.properties.verificationCommands.items.maxLength === 2000;
     const text = JSON.stringify({
       status:
         calls === 1 ? "intent" : calls === 2 ? "needs_input" : "completed",
@@ -63,8 +69,10 @@ const server = Bun.serve({
       question: calls === 2 ? "Should empty results keep page one?" : null,
       title: "Fix pagination",
       body: "Local fixture only.",
-      verificationCommands: calls > 2 ? ["git diff --check"] : [],
+      verificationCommands:
+        calls > 2 && !invalidResult ? ["git diff --check"] : [],
     });
+    invalidResult = false;
     const item = {
       type: "message",
       id: "msg_fixture",
@@ -227,6 +235,24 @@ try {
     throw new Error(
       `Recovery or token accounting failed: ${JSON.stringify({ reconstructed: reconstructed.reconstructed, same: reconstructed.threadId === first.threadId, tokens: [first.tokens, question.tokens, answer.tokens] })}`,
     );
+  invalidResult = true;
+  const beforeCorrection = calls;
+  const corrected = await runConversation({
+    ...options,
+    readOnly: false,
+    prompt: "Return the completed result with a nonempty verification plan.",
+  });
+  if (
+    corrected.result.status !== "completed" ||
+    corrected.tokens !== 40 ||
+    corrected.usageUnknown ||
+    calls !== beforeCorrection + 2 ||
+    !schemaBoundsReceived ||
+    !corrected.resultIssues?.some(
+      (issue) => issue.path[0] === "verificationCommands",
+    )
+  )
+    throw new Error("Result correction or generated output constraints failed");
   rejectAuth = true;
   try {
     await runConversation(options);
@@ -253,7 +279,7 @@ try {
       throw error;
   }
   console.log(
-    "Pinned Codex protocol: image inputs, constrained intake evidence, start, structured question, resume, missing-session reconstruction, token accounting, authentication failure and cancellation passed (local fake provider).",
+    "Pinned Codex protocol: image inputs, generated schema constraints, constrained intake evidence, start, structured question, resume, missing-session reconstruction, read-only result correction, cumulative usage, authentication failure and cancellation passed (local fake provider).",
   );
 } finally {
   server.stop(true);
