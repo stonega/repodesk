@@ -31,3 +31,9 @@ and `bash scripts/verify-skills.sh browser` separately. Each phase prepares its 
 environment and database; together they run the same checks as the default command.
 Temporary subprocess fixtures use the checkout cache because `/tmp` may be mounted
 with execution disabled.
+
+For a release, run `bash scripts/verify-skills.sh quality` and
+`bash scripts/verify-skills.sh release-browser`. The latter prepares the same
+environment and runs the entire browser suite instead of only the skills-related
+suites. Container builds, Compose smoke/restore and Codex lifecycle smoke checks
+still require Docker, as described in the release runbook and verification workflow.
