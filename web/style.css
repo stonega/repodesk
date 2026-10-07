@@ -2457,6 +2457,59 @@ input.plugin-toggle-input:disabled {
   overflow-x: auto;
 }
 
+.connected-service {
+  padding-top: 16px;
+}
+.connected-service + .connected-service {
+  margin-top: 20px;
+  border-top: 1px solid var(--ui-border);
+}
+.connected-service h3,
+.connected-service > :last-child {
+  margin: 0;
+}
+.service-urls {
+  margin: 16px 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface-muted);
+}
+.service-url {
+  padding: 12px 16px;
+}
+.service-url + .service-url {
+  border-top: 1px solid var(--ui-border);
+}
+.service-url dt {
+  font-size: 13px;
+  font-weight: 650;
+}
+.service-url dd {
+  margin: 0;
+}
+.service-url-value {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+}
+.service-url-value > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.service-url-value code {
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.service-url-value .icon-button {
+  flex-shrink: 0;
+}
+.service-url .error {
+  margin: 4px 0 0;
+}
+
 /* Reserve space for unknown values while keeping the surrounding UI visible. */
 .skeleton {
   display: inline-block;

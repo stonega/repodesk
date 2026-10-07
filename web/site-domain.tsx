@@ -1,11 +1,73 @@
 import { useEffect, useState } from "react";
 import type { SiteView } from "../src/admin/site.ts";
+import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { Skeleton } from "./skeleton.tsx";
 import { useToast } from "./toast.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 const endpoint = "/api/admin/operator/site";
+
+function ServiceUrl({
+  label,
+  value,
+  loading,
+}: {
+  label: string;
+  value?: string;
+  loading: boolean;
+}) {
+  const [copyStatus, setCopyStatus] = useState<"copied" | "failed" | null>(
+    null,
+  );
+  const [copying, setCopying] = useState(false);
+  useEffect(() => {
+    if (copyStatus !== "copied") return;
+    const timer = setTimeout(() => setCopyStatus(null), 1000);
+    return () => clearTimeout(timer);
+  }, [copyStatus]);
+
+  return (
+    <div className="service-url">
+      <dt>{label}</dt>
+      <dd>
+        <div className="service-url-value">
+          {value ? (
+            <code>{value}</code>
+          ) : loading ? (
+            <Skeleton width="20rem" />
+          ) : (
+            "—"
+          )}
+          <IconButton
+            icon={copyStatus === "copied" ? "done" : "copy"}
+            label={`${copyStatus === "copied" ? "Copied" : "Copy"} ${label}`}
+            disabled={!value || copyStatus === "copied"}
+            busy={copying}
+            onClick={async () => {
+              if (!value) return;
+              setCopying(true);
+              setCopyStatus(null);
+              try {
+                await navigator.clipboard.writeText(value);
+                setCopyStatus("copied");
+              } catch {
+                setCopyStatus("failed");
+              } finally {
+                setCopying(false);
+              }
+            }}
+          />
+        </div>
+        {copyStatus === "failed" && (
+          <p className="error" role="alert">
+            Could not copy. Select the URL to copy it manually.
+          </p>
+        )}
+      </dd>
+    </div>
+  );
+}
 
 export function SiteDomain({ request }: { request: Request }) {
   const [site, setSite] = useState<SiteView>();
@@ -156,78 +218,96 @@ export function SiteDomain({ request }: { request: Request }) {
           provider or on your server.
         </p>
       </section>
-      <section className="card site-domain-details">
-        <h2>Update connected services</h2>
-        <p>
-          For an existing GitHub App, update its Homepage URL, Callback URL and
-          Setup URL in GitHub before starting another connection. Changing
-          domains cancels pending GitHub connections.
-        </p>
-        <dl>
-          <dt>Homepage URL</dt>
-          <dd>
-            {site ? site.origin : error ? "—" : <Skeleton width="20rem" />}
-          </dd>
-          <dt>Callback URL</dt>
-          <dd>
-            {site ? (
-              site.githubCallbackUrl
-            ) : error ? (
-              "—"
-            ) : (
-              <Skeleton width="20rem" />
-            )}
-          </dd>
-          <dt>Setup URL</dt>
-          <dd>
-            {site ? (
-              site.githubSetupUrl
-            ) : error ? (
-              "—"
-            ) : (
-              <Skeleton width="20rem" />
-            )}
-          </dd>
-        </dl>
-        {!site ? (
-          !error && <Skeleton width="24rem" />
-        ) : site.telegramTransport === "polling" ? (
-          <p>Telegram uses polling. No webhook update is needed.</p>
-        ) : (
-          <>
-            <p>
-              After the HTTPS address is reachable, register Telegram’s webhook
-              at the new address.
+      <section
+        className="card connected-services"
+        aria-labelledby="connected-services-title"
+        aria-busy={!site && !error}
+      >
+        <h2 id="connected-services-title">Update connected services</h2>
+        <section
+          className="connected-service"
+          aria-labelledby="github-service-title"
+        >
+          <h3 id="github-service-title">GitHub App</h3>
+          <p className="muted">
+            For an existing GitHub App, copy these URLs into its settings in
+            GitHub before starting another connection.
+          </p>
+          <dl className="service-urls">
+            {[
+              { label: "Homepage URL", value: site?.origin },
+              { label: "Callback URL", value: site?.githubCallbackUrl },
+              { label: "Setup URL", value: site?.githubSetupUrl },
+            ].map(({ label, value }) => (
+              <ServiceUrl
+                key={`${label}:${value ?? ""}`}
+                label={label}
+                value={value}
+                loading={!site && !error}
+              />
+            ))}
+          </dl>
+          <p className="notice">
+            Changing domains cancels pending GitHub connections.
+          </p>
+        </section>
+        <section
+          className="connected-service"
+          aria-labelledby="telegram-service-title"
+        >
+          <h3 id="telegram-service-title">Telegram</h3>
+          {!site ? (
+            <p className="muted">
+              {error ? (
+                "Connection details unavailable."
+              ) : (
+                <Skeleton width="24rem" />
+              )}
             </p>
-            <dl>
-              <dt>Telegram webhook</dt>
-              <dd>{site.telegramWebhookUrl}</dd>
-              <dt>Status</dt>
-              <dd>
+          ) : site.telegramTransport === "polling" ? (
+            <p className="muted">
+              Telegram uses polling. No webhook update is needed.
+            </p>
+          ) : (
+            <>
+              <p className="muted">
+                After the HTTPS address is reachable, register Telegram’s
+                webhook at the new address.
+              </p>
+              <dl className="service-urls">
+                <ServiceUrl
+                  key={site.telegramWebhookUrl}
+                  label="Telegram webhook"
+                  value={site.telegramWebhookUrl}
+                  loading={false}
+                />
+              </dl>
+              <p className="muted">
+                Status:{" "}
                 {site.webhookReady ? "Registered" : "Registration required"}
-              </dd>
-            </dl>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                setError("");
-                try {
-                  await request("/api/setup/webhook", "POST", {});
-                  setSite(await request<SiteView>(endpoint));
-                  notify("Telegram webhook registered.");
-                } catch (error) {
-                  setError((error as Error).message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              {busy ? "Working…" : "Register Telegram webhook"}
-            </button>
-          </>
-        )}
+              </p>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setError("");
+                  try {
+                    await request("/api/setup/webhook", "POST", {});
+                    setSite(await request<SiteView>(endpoint));
+                    notify("Telegram webhook registered.");
+                  } catch (error) {
+                    setError((error as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                {busy ? "Working…" : "Register Telegram webhook"}
+              </button>
+            </>
+          )}
+        </section>
       </section>
       {editing && site && (
         <Modal

@@ -1111,6 +1111,16 @@ revision conflicts, audit deduplication, secure cookies, generated GitHub callba
 (including Telegram linking), explicit webhook registration and removed-origin
 rejection. Public DNS, certificate issuance and live provider changes were not run.
 
+2026-10-07 card update: **Update connected services** groups GitHub App URLs into
+labeled, copyable rows and separates Telegram guidance. Copy controls briefly show
+a check on success and provide manual-copy guidance if clipboard access fails.
+Long URLs wrap on narrow screens in both themes. Before settings load, labels stay
+visible and copy controls remain disabled, including after a failed initial request.
+Polling needs no webhook update; webhook mode retains its status and explicit
+registration action. Deterministic browser coverage in
+`tests/browser/connected-services.e2e.ts` checks copying, clipboard failure,
+loading/retry, both Telegram modes, and light/dark layouts at 1280px and 390px.
+
 ## Codex device sign-in recovery (2026-10-05)
 
 The configuration dialog now shows progress while starting device sign-in, bounds
