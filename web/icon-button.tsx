@@ -25,7 +25,7 @@ function CloseIcon({
   size = 20,
   weight: _weight,
   ...props
-}: SVGProps<SVGSVGElement> & { size?: number; weight?: "Outline" }) {
+}: SVGProps<SVGSVGElement> & { size?: number; weight?: "Outline" | "Filled" }) {
   return (
     <svg
       {...props}
@@ -104,7 +104,7 @@ export function IconButton({
     >
       <Icon
         size={20}
-        weight="Outline"
+        weight={icon === "stop" && !busy ? "Filled" : "Outline"}
         color="currentColor"
         aria-hidden="true"
         focusable="false"

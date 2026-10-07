@@ -110,7 +110,7 @@ them.
 
 ### Coding task Stop uses an icon and confirmation
 
-- **Preference:** Use the shared Stop icon button in task rows with an accessible
+- **Preference:** Use the shared solid Stop icon button in task rows with an accessible
   task-specific label and hover title. Open a confirmation modal identifying the
   task and repository, explaining cancellation and retained GitHub artifacts,
   with visible Stop followed by Cancel. Send cancellation only after confirmation;
@@ -121,6 +121,7 @@ them.
   modal for the coding task action shown in the screenshot.
   2026-10-07 — user requested changing the task-row Stop button to an icon button,
   superseding the earlier visible text preference for that control.
+  2026-10-07 — user requested a solid Stop icon instead of the outlined square.
 - **Exceptions:** Telegram Stop controls retain their existing behavior.
 
 ### Editing a repository starts with the saved selection
@@ -829,7 +830,7 @@ them.
 - **Exceptions:** Keep visible text for primary form submission, sign-in,
   authorization, approval, publication, deployment-wide controls, destructive
   workspace confirmation and other actions whose consequences need explanation.
-  Coding task rows use a Stop icon; their confirmation modal keeps visible text
+  Coding task rows use a solid Stop icon; their confirmation modal keeps visible text
   as specified above.
   Telegram controls are outside the web icon-library scope.
 
