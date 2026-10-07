@@ -3,7 +3,11 @@ import type { Member } from "../../src/domain.ts";
 import { workspace } from "../fixtures.ts";
 import { chooseOption } from "./dropdown-helpers.ts";
 
-async function fixture(page: Page, missingPermission = false) {
+async function fixture(
+  page: Page,
+  missingPermission = false,
+  beforeDirectory?: (call: number) => Promise<void>,
+) {
   const w = workspace();
   let version = w.memberVersion;
   const member: Member = {
@@ -21,6 +25,7 @@ async function fixture(page: Page, missingPermission = false) {
     const path = url.pathname;
     if (path.endsWith("/members/github")) {
       directoryCalls++;
+      await beforeDirectory?.(directoryCalls);
       if (missingPermission) {
         await route.fulfill({
           status: 409,
@@ -80,7 +85,14 @@ async function fixture(page: Page, missingPermission = false) {
                 : {},
     });
   });
-  return { w, saved: () => saved, calls: () => directoryCalls };
+  return {
+    w,
+    saved: () => saved,
+    calls: () => directoryCalls,
+    recover: () => {
+      missingPermission = false;
+    },
+  };
 }
 
 for (const width of [1280, 390]) {
@@ -140,8 +152,87 @@ test("missing GitHub permission explains recovery and leaves membership editing 
   await expect(
     dialog.getByRole("combobox", { name: "GitHub account" }),
   ).toBeDisabled();
+  f.recover();
   await dialog.getByRole("button", { name: "Try again", exact: true }).click();
   await expect.poll(() => f.calls()).toBe(2);
+  await expect(
+    dialog.getByRole("combobox", { name: "GitHub account" }),
+  ).toBeEnabled();
+  await expect(dialog.getByRole("alert")).not.toBeVisible();
+  await dialog.getByRole("button", { name: "Save membership" }).click();
+  await expect(dialog).not.toBeVisible();
+  expect(f.saved()).not.toHaveProperty("githubId");
+});
+
+test("stalled member lookups time out and retry without losing the membership draft", async ({
+  page,
+}) => {
+  const release = Promise.withResolvers<void>();
+  const f = await fixture(page, false, (call) =>
+    call === 1 ? release.promise : Promise.resolve(),
+  );
+  await page.clock.install();
+  await page.goto(`/admin/members?workspace=${f.w.id}`);
+  await page.getByRole("button", { name: "Edit member 202" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit member" });
+  const selector = dialog.getByRole("combobox", { name: "GitHub account" });
+  try {
+    await expect(dialog.getByText("Fetching GitHub members…")).toBeVisible();
+    await expect.poll(() => f.calls()).toBe(1);
+    await chooseOption(dialog.getByRole("combobox", { name: "Role" }), "admin");
+    await dialog.getByRole("switch", { name: "Active membership" }).uncheck();
+    await page.clock.runFor(65000);
+    await expect(dialog.getByRole("alert")).toContainText(
+      "GitHub is taking too long",
+    );
+    await expect(
+      dialog.getByText("Fetching GitHub members…"),
+    ).not.toBeVisible();
+    await expect(selector).toBeDisabled();
+    await expect(
+      dialog.getByRole("combobox", { name: "Role" }),
+    ).toHaveAttribute("value", "admin");
+    await expect(
+      dialog.getByRole("switch", { name: "Active membership" }),
+    ).not.toBeChecked();
+    await dialog
+      .getByRole("button", { name: "Try again", exact: true })
+      .click();
+    await expect(selector).toBeEnabled();
+    expect(f.calls()).toBe(2);
+    await expect(dialog.getByRole("alert")).not.toBeVisible();
+    await chooseOption(selector, "42");
+    release.resolve();
+    await dialog.getByRole("button", { name: "Save membership" }).click();
+    await expect(dialog).not.toBeVisible();
+    expect(f.saved()).toMatchObject({
+      role: "admin",
+      active: false,
+      githubId: 42,
+      githubRevision: 7,
+    });
+  } finally {
+    release.resolve();
+  }
+});
+
+test("server lookup timeouts end loading with actionable recovery", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  await page.route("**/members/github", (route) =>
+    route.fulfill({ status: 504, json: { error: "github_members_timeout" } }),
+  );
+  await page.goto(`/admin/members?workspace=${f.w.id}`);
+  await page.getByRole("button", { name: "Edit member 202" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit member" });
+  await expect(dialog.getByRole("alert")).toContainText(
+    "GitHub is taking too long",
+  );
+  await expect(dialog.getByText("Fetching GitHub members…")).not.toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "Try again", exact: true }),
+  ).toBeEnabled();
   await dialog.getByRole("button", { name: "Save membership" }).click();
   await expect(dialog).not.toBeVisible();
   expect(f.saved()).not.toHaveProperty("githubId");

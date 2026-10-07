@@ -299,6 +299,12 @@ return organization members; personal installations return the owner and collabo
 of the workspace's selected repositories. Pages are fetched in batches of 100, with
 the existing 2,000-entry limit per list. Accounts are deduplicated by numeric GitHub ID.
 The directory returns only IDs/logins and connection metadata, with no credentials.
+Personal repository lists run in batches of at most eight concurrent requests,
+preserving selected-repository order when merging accounts. The complete directory
+has a 60-second lookup budget; failed or timed-out batches cancel remaining requests
+and return an error instead of partial choices. The dialog also ends a stalled
+request after 65 seconds and offers **Try again**, preserving role and membership
+edits. Normal membership saves remain available if GitHub lookup fails.
 
 Existing organization installations need **Permissions & events → Organization
 permissions → Members: Read-only**, followed by approval of the installation's updated

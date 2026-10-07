@@ -37,6 +37,7 @@ const memberSchema = z.object({
   login: z.string().regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/),
 });
 export type GitHubMember = z.infer<typeof memberSchema>;
+const memberRepositoryBatchSize = 8;
 export interface GitHubMemberDirectory {
   connected: boolean;
   revision: number;
@@ -74,6 +75,7 @@ export class GitHubApp {
     signal?: AbortSignal,
   ) {
     try {
+      signal?.throwIfAborted();
       const response = await this.transport(url, {
         method: body === undefined ? "GET" : "POST",
         headers: {
@@ -168,12 +170,15 @@ export class GitHubApp {
     token: string,
     path: string,
     field?: string,
+    signal?: AbortSignal,
   ): Promise<unknown[]> {
     const result: unknown[] = [];
     for (let page = 1; page <= 20; page++) {
       const data = await this.request(
         `https://api.github.com${path}?per_page=100&page=${page}`,
         token,
+        undefined,
+        signal,
       );
       const items = z.array(z.unknown()).parse(field ? data[field] : data);
       result.push(...items);
@@ -228,7 +233,36 @@ export class GitHubApp {
         ),
       );
   }
-  async members(installationId: number, repositories: GitHubRepository[]) {
+  async members(
+    installationId: number,
+    repositories: GitHubRepository[],
+    signal?: AbortSignal,
+  ) {
+    const timeout = AbortSignal.timeout(60000);
+    const controller = new AbortController();
+    const lookupSignal = AbortSignal.any([
+      timeout,
+      controller.signal,
+      ...(signal ? [signal] : []),
+    ]);
+    try {
+      return await this.fetchMembers(
+        installationId,
+        repositories,
+        lookupSignal,
+      );
+    } catch (error) {
+      if (timeout.aborted) throw new Fault("github_members_timeout", 504);
+      throw error;
+    } finally {
+      controller.abort();
+    }
+  }
+  private async fetchMembers(
+    installationId: number,
+    repositories: GitHubRepository[],
+    signal: AbortSignal,
+  ) {
     const installation = z
       .object({
         app_id: z.number().int().positive(),
@@ -242,6 +276,8 @@ export class GitHubApp {
         await this.request(
           `https://api.github.com/app/installations/${installationId}`,
           this.jwt(),
+          undefined,
+          signal,
         ),
       );
     requireThat(
@@ -256,6 +292,14 @@ export class GitHubApp {
         "github_members_permission_missing",
         409,
       );
+    else
+      for (const repository of repositories)
+        requireThat(
+          repository.full_name.split("/")[0]?.toLowerCase() ===
+            installation.account.login.toLowerCase(),
+          "github_access_denied",
+          403,
+        );
     const credential = z.object({ token: z.string().min(1).max(8192) }).parse(
       await this.request(
         `https://api.github.com/app/installations/${installationId}/access_tokens`,
@@ -265,6 +309,7 @@ export class GitHubApp {
             ? { members: "read" }
             : { metadata: "read" },
         },
+        signal,
       ),
     );
     const members = new Map<number, GitHubMember>();
@@ -275,6 +320,8 @@ export class GitHubApp {
           await this.pages(
             credential.token,
             `/orgs/${installation.account.login}/members`,
+            undefined,
+            signal,
           ),
         ))
         members.set(member.id, member);
@@ -283,22 +330,30 @@ export class GitHubApp {
         installation.account.id,
         memberSchema.parse(installation.account),
       );
-      for (const repository of repositories) {
-        requireThat(
-          repository.full_name.split("/")[0]?.toLowerCase() ===
-            installation.account.login.toLowerCase(),
-          "github_access_denied",
-          403,
-        );
-        for (const member of z
-          .array(memberSchema)
-          .parse(
-            await this.pages(
-              credential.token,
-              `/repos/${repository.full_name}/collaborators`,
+      for (
+        let index = 0;
+        index < repositories.length;
+        index += memberRepositoryBatchSize
+      ) {
+        const batch = await Promise.all(
+          repositories
+            .slice(index, index + memberRepositoryBatchSize)
+            .map(async (repository) =>
+              z
+                .array(memberSchema)
+                .parse(
+                  await this.pages(
+                    credential.token,
+                    `/repos/${repository.full_name}/collaborators`,
+                    undefined,
+                    signal,
+                  ),
+                ),
             ),
-          ))
-          members.set(member.id, member);
+        );
+        for (const membersInRepository of batch)
+          for (const member of membersInRepository)
+            members.set(member.id, member);
       }
     }
     return {

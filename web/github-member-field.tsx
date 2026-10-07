@@ -9,6 +9,9 @@ type Request = <T>(
   signal?: AbortSignal,
 ) => Promise<T>;
 
+const timeoutMessage =
+  "GitHub is taking too long to return members. Try again.";
+
 export function GitHubMemberField({
   workspaceId,
   request,
@@ -34,6 +37,12 @@ export function GitHubMemberField({
     setDirectory(undefined);
     setLoading(true);
     setError("");
+    // Allow the server's 60-second lookup budget plus time to return its response.
+    const timeout = window.setTimeout(() => {
+      controller.abort();
+      setError(timeoutMessage);
+      setLoading(false);
+    }, 65000);
     request<GitHubMemberDirectory>(
       `/api/admin/workspaces/${workspaceId}/members/github`,
       "GET",
@@ -48,13 +57,19 @@ export function GitHubMemberField({
           setError(
             error.message.includes("github_members_permission_missing")
               ? "Enable Members: read in the GitHub App's organization permissions and approve the updated installation, then try again."
-              : "Could not fetch GitHub members. Try again or check the workspace's GitHub connection.",
+              : error.message.includes("github_members_timeout")
+                ? timeoutMessage
+                : "Could not fetch GitHub members. Try again or check the workspace's GitHub connection.",
           );
       })
       .finally(() => {
+        window.clearTimeout(timeout);
         if (!controller.signal.aborted) setLoading(false);
       });
-    return () => controller.abort();
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
   }, [workspaceId, request, retry]);
   const choices = directory?.members ?? [];
   const selectedAccount =

@@ -4,6 +4,8 @@
 @csrf = REPLACE_CSRF_TOKEN
 
 ### Fetch organization members or selected personal-repository collaborators.
+# The complete lookup has a 60-second budget and returns no partial account lists.
+# A stalled lookup returns HTTP 504 with error github_members_timeout; retry it.
 GET {{origin}}/api/admin/workspaces/{{workspace}}/members/github
 
 ### Fetch the membership version before editing.
