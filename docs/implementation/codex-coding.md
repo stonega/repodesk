@@ -55,7 +55,10 @@ confirmed message. Edits append new inputs. A necessary Codex question checkpoin
 partial work and releases the runner slot; answers preserve their original text.
 Send **stop**, **停止**, or `/cancel` in the bound conversation to stop the task.
 `/status` in that conversation reports its state and confirmed PR. The admin task
-list supports cancellation in both modes.
+list supports cancellation in both modes. Its labeled **Stop** button opens a
+confirmation dialog showing the task and repository before sending cancellation.
+**Cancel** leaves the task running; published issues, branches and PRs remain on
+GitHub after stopping.
 
 Codex discovers environment preparation and relevant checks from AGENTS.md,
 project manifests, scripts and CI. No setup/check commands are configured in the

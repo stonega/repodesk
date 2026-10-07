@@ -18,6 +18,20 @@ them.
 
 ## Recorded preferences
 
+### Dropdown inputs share the workspace selector style
+
+- **Preference:** Use the sidebar workspace selector's muted rounded trigger,
+  chevron, bordered menu, blue hover state and SVG selection check for dropdown
+  inputs throughout RepoDesk. Share these styles across controls and themes.
+- **Scope:** All web admin and setup dropdown inputs, including form dialogs,
+  filters, timezone groups, model suggestions and searchable repository selectors,
+  on desktop and mobile.
+- **Source:** 2026-10-06 — user requested “update all dropdown input in repodesk
+  to style like the workspace selector in left side bar.” and requested reimplementation.
+- **Exceptions:** Preserve repository search and existing field behavior, including
+  validation, custom model IDs, disabled states and keyboard use. Workspace creation remains a
+  workspace-menu action; other selectors do not acquire that action.
+
 ### Application version stays at the bottom right
 
 - **Preference:** Show the application version as small, muted text at the
@@ -30,14 +44,17 @@ them.
 ### Workspace pause belongs in Settings with confirmation
 
 - **Preference:** Use Workspace settings for a dedicated Pause workspace action
-  and saved activity status. Open a confirmation dialog before pausing, with
-  explicit consequences and Cancel. Provide Resume workspace when paused. Keep
+  and saved activity status. Place the Active/Paused badge immediately after the
+  Pause workspace card title in the same row. Open a confirmation dialog before
+  pausing, with explicit consequences and Cancel. Provide Resume workspace when paused. Keep
   pause out of the Overview team configuration editor and place Settings directly
   below Plugins in the sidebar.
 - **Scope:** Workspace administration on desktop and mobile.
 - **Source:** 2026-10-06 — user requested replacing the model-capacity content with
   pause controls, removing pause from the workspace edit modal, confirming pause
   in a modal, and moving Settings below Plugins.
+  2026-10-06 — user requested moving the Active badge after the Pause workspace
+  title.
 - **Exceptions:** Model capacity remains available in deployment Model settings.
   When Plugins is unavailable to an administrator, Settings follows the remaining
   workspace navigation.
@@ -64,6 +81,18 @@ them.
   and explicitly confirmed removal of their execution limits too.
 - **Exceptions:** Actor/repository/publication permissions, cancellation,
   retention, container isolation and provider/account limits remain applicable.
+
+### Coding task Stop is labeled and confirmed
+
+- **Preference:** Use a visible Stop text button in task rows. Open a confirmation
+  modal identifying the task and repository, explaining cancellation and retained
+  GitHub artifacts, with Stop followed by Cancel. Send cancellation only after
+  confirmation; lock dismissal while pending and keep failures in the modal.
+- **Scope:** Reviewed and continuous coding tasks in the Codex plugin, on desktop
+  and mobile.
+- **Source:** 2026-10-06 — user requested a Stop label button and a confirmation
+  modal for the coding task action shown in the screenshot.
+- **Exceptions:** Telegram Stop controls retain their existing behavior.
 
 ### Editing a repository starts with the saved selection
 
@@ -505,8 +534,8 @@ them.
 - **Scope:** Signed-in admin sidebar workspace selector, on desktop and mobile.
 - **Source:** 2026-09-28 — user shared the native workspace select menu and asked
   to use RepoDesk's own dropdown.
-- **Exceptions:** The setup timezone and other form selectors may remain native
-  controls.
+- **Exceptions:** The earlier allowance for native form selectors is superseded
+  by the 2026-10-06 shared dropdown preference above.
 
 ### Skill cards separate routine actions from version recovery
 
@@ -762,6 +791,7 @@ them.
 - **Exceptions:** Keep visible text for primary form submission, sign-in,
   authorization, approval, publication, deployment-wide controls, destructive
   workspace confirmation and other actions whose consequences need explanation.
+  Coding task Stop uses a text button and confirmation modal as specified above.
   Telegram controls are outside the web icon-library scope.
 
 Use this format for each preference:

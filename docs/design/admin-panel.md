@@ -75,6 +75,12 @@ Escape output content; do not render generated HTML as trusted UI.
 
 ## Configuration behavior
 
+Admin and setup dropdown inputs share the sidebar workspace selector's trigger,
+menu and selected-item styling in both themes. Menus support keyboard navigation,
+type-ahead, Escape and outside dismissal; form validation and submitted values are
+preserved. Repository selectors retain their searchable input. Dropdown menus
+stay within the viewport and remain inside the owning dialog's focus boundary.
+
 Successful saves and routine action confirmations appear in a shared floating
 toast, announced politely and dismissible manually or after six seconds. Hover
 and keyboard focus pause dismissal. Validation errors, readiness warnings and

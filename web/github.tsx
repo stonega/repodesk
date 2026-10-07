@@ -8,6 +8,7 @@ import {
   submitGitHubManifest,
 } from "./github-registration.tsx";
 import { Modal } from "./modal.tsx";
+import { Select } from "./select.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 import { useRepositoryRefresh } from "./use-repository-refresh.ts";
 
@@ -548,9 +549,10 @@ export function GitHubConnection({
                   see it.
                 </p>
                 <fieldset disabled={busy} className="plugin-fields">
-                  <label className="field">
+                  <label className="field" htmlFor="github-installation">
                     <span>GitHub installation</span>
-                    <select
+                    <Select
+                      id="github-installation"
                       required
                       value={installation}
                       onChange={(event) => {
@@ -574,7 +576,7 @@ export function GitHubConnection({
                           {item.account}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </label>
                   {!data.installations.length && (
                     <p>

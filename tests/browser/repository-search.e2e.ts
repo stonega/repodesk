@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import type { CodingPage, CodingSettings } from "../../src/coding/config.ts";
+import { chooseOption } from "./dropdown-helpers.ts";
 
 const workspaceId = "d2ce2eab-3b09-4e8e-858e-75c20d832517";
 const endpoint = `/api/admin/workspaces/${workspaceId}/plugins/coding`;
@@ -83,6 +84,11 @@ for (const width of [1280, 390]) {
       exact: true,
     });
     await expect(search).toBeFocused();
+    expect(
+      await dialog.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
     await expect(search).toHaveAttribute("aria-expanded", "false");
     await expect(
       dialog.getByRole("option", { name: "stonega/configured" }),
@@ -225,7 +231,7 @@ for (const width of [1280, 390]) {
     await expect(search).toHaveAttribute("aria-expanded", "true");
     await search.press("Enter");
     await expect(search).toHaveValue("stonega/configured");
-    await dialog.getByLabel("Execution policy").selectOption("direct");
+    await chooseOption(dialog.getByLabel("Execution policy"), "direct");
     await dialog
       .getByRole("button", { name: "Save coding repository", exact: true })
       .click();

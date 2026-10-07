@@ -65,8 +65,10 @@ import { CreateModal, Modal, ModalActions, ModalPending } from "./modal.tsx";
 import { Plugins } from "./plugins.tsx";
 import { prefixFields, RecordForm } from "./record-form.tsx";
 import { RunAttempts } from "./run-attempts.tsx";
+import { Select } from "./select.tsx";
 import { workspaceFields } from "./settings-fields.ts";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
+import { SuggestionInput } from "./suggestion-input.tsx";
 import { ThemeSwitch } from "./theme-switch.tsx";
 import { ToastProvider, useToast } from "./toast.tsx";
 import { Usage } from "./usage.tsx";
@@ -212,7 +214,7 @@ function Notice({
 }
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    // biome-ignore lint/a11y/noLabelWithoutControl: Every Field receives a native input, textarea, or select as its child.
+    // biome-ignore lint/a11y/noLabelWithoutControl: Every Field receives a labelable input, textarea, or dropdown trigger as its child.
     <label className="field">
       <span>{label}</span>
       {children}
@@ -590,7 +592,7 @@ function Setup() {
           </p>
           {!creatingWorkspace && data.workspaces.some((w) => !w.deleted) && (
             <Field label="Workspace draft">
-              <select
+              <Select
                 value={workspace?.id ?? ""}
                 onChange={(e) => {
                   const next = new URLSearchParams(params);
@@ -606,7 +608,7 @@ function Setup() {
                       {w.settings.name}
                     </option>
                   ))}
-              </select>
+              </Select>
             </Field>
           )}
           {workspace?.ownerVerified ? (
@@ -674,7 +676,7 @@ function Setup() {
                 />
               </Field>
               <Field label="Timezone">
-                <select
+                <Select
                   name="timezone"
                   required
                   disabled={workspaceSaving}
@@ -697,7 +699,7 @@ function Setup() {
                       ))}
                     </optgroup>
                   )}
-                </select>
+                </Select>
               </Field>
               {workspaceError && (
                 <p role="alert" className="notice">
@@ -1431,17 +1433,12 @@ function ModelCredentialForm({
           />
         </Field>
         <Field label="Model">
-          <input
-            list="model-suggestions"
+          <SuggestionInput
+            suggestions={["gpt-4.1-mini", "gpt-4.1", "gpt-4o-mini"]}
             value={model}
-            onChange={(e) => setModel(e.target.value)}
+            onChange={setModel}
             placeholder="Select or enter a custom model ID"
           />
-          <datalist id="model-suggestions">
-            <option value="gpt-4.1-mini" />
-            <option value="gpt-4.1" />
-            <option value="gpt-4o-mini" />
-          </datalist>
         </Field>
       </div>
       <details className="setup-advanced">
@@ -1453,7 +1450,7 @@ function ModelCredentialForm({
         </p>
         <div className="columns">
           <Field label="Thinking level">
-            <select
+            <Select
               value={thinking}
               onChange={(e) => setThinking(e.target.value as ThinkingLevel)}
             >
@@ -1462,7 +1459,7 @@ function ModelCredentialForm({
                   {level}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Model context window (tokens)">
             <input
@@ -2002,14 +1999,14 @@ function SettingsPage({ id }: { id: string }) {
         aria-label="Workspace activity"
         aria-busy={loading}
       >
-        <h2>Pause workspace</h2>
-        <p>
+        <div className="row">
+          <h2>Pause workspace</h2>
           {current ? (
             <span className="pill">{paused ? "Paused" : "Active"}</span>
           ) : (
             <Skeleton />
           )}
-        </p>
+        </div>
         <p className="muted">
           Pause assistant runs, scheduled work and pending run deliveries in
           this workspace. You can resume work here when you are ready.
@@ -2239,7 +2236,7 @@ function AccessPolicy({
         Roles determine which actions they can perform.
       </p>
       <Field label="Access mode">
-        <select
+        <Select
           value={mode}
           onChange={(e) => {
             setMode(e.target.value);
@@ -2248,7 +2245,7 @@ function AccessPolicy({
         >
           <option value="whitelist">Whitelist only</option>
           <option value="members">Active workspace members</option>
-        </select>
+        </Select>
       </Field>
       <details>
         <summary>Manage whitelist IDs ({data.allowed.length})</summary>
@@ -2522,14 +2519,14 @@ function MembersPage({ id }: { id: string }) {
             for membership.
           </p>
           <Field label="Role">
-            <select
+            <Select
               aria-label="Role"
               value={member.role}
               onChange={(e) => setMember({ ...member, role: e.target.value })}
             >
               <option value="member">Member</option>
               <option value="admin">Admin</option>
-            </select>
+            </Select>
           </Field>
           <label className="member-toggle-row">
             <span>Active membership</span>
@@ -2960,11 +2957,11 @@ function SkillsPage({ id }: { id: string }) {
           <input value={search} onChange={(e) => setSearch(e.target.value)} />
         </Field>
         <Field label="Skill state">
-          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <Select value={filter} onChange={(e) => setFilter(e.target.value)}>
             <option value="all">All</option>
             <option value="enabled">Enabled</option>
             <option value="disabled">Disabled</option>
-          </select>
+          </Select>
         </Field>
       </div>
       {data?.items
@@ -3077,7 +3074,7 @@ function SkillsPage({ id }: { id: string }) {
                   </p>
                   <div className="skill-card-rollback">
                     <Field label="Rollback source version">
-                      <select
+                      <Select
                         value={rollbackVersions[s.id] ?? 1}
                         onChange={(e) =>
                           setRollbackVersions((versions) => ({
@@ -3092,7 +3089,7 @@ function SkillsPage({ id }: { id: string }) {
                             Version {index + 1}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </Field>
                     <span className="skill-card-secondary">
                       <Action
@@ -4013,7 +4010,7 @@ function WorkspacePicker({
         <button
           ref={trigger}
           type="button"
-          className="workspace-picker-trigger"
+          className="workspace-picker-trigger dropdown-trigger"
           aria-label="Workspace"
           aria-describedby="workspace-picker-current"
           aria-haspopup="menu"
@@ -4034,7 +4031,7 @@ function WorkspacePicker({
         {open && (
           <div
             id="workspace-picker-menu"
-            className="workspace-picker-menu"
+            className="workspace-picker-menu dropdown-menu"
             role="menu"
             aria-label="Workspaces"
             onKeyDown={handleMenuKeyDown}
@@ -4043,7 +4040,7 @@ function WorkspacePicker({
               <button
                 key={workspace.id}
                 type="button"
-                className="workspace-menu-item"
+                className="workspace-menu-item dropdown-item"
                 role="menuitemradio"
                 aria-checked={workspace.id === chosen}
                 data-workspace-id={workspace.id}
@@ -4064,7 +4061,7 @@ function WorkspacePicker({
             {operator && (
               <button
                 type="button"
-                className="workspace-menu-item workspace-menu-create"
+                className="workspace-menu-item dropdown-item workspace-menu-create"
                 role="menuitem"
                 aria-label="New workspace"
                 onClick={() => {

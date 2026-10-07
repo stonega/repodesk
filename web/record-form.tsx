@@ -1,5 +1,6 @@
 import { useContext, useEffect, useId, useState } from "react";
 import { ModalActions, ModalPending } from "./modal.tsx";
+import { Select } from "./select.tsx";
 
 export interface FormField {
   path: string;
@@ -210,7 +211,7 @@ export function RecordForm({
                         }
                       />
                     ) : field.kind === "select" ? (
-                      <select
+                      <Select
                         {...common}
                         value={String(current ?? "")}
                         onChange={(event) =>
@@ -230,7 +231,7 @@ export function RecordForm({
                             {option.label}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     ) : (
                       <input
                         {...common}

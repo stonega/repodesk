@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
+import { Select } from "./select.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 export function submitGitHubManifest(result: {
@@ -113,15 +114,16 @@ export function GitHubRegistration({
                   onChange={(e) => setName(e.target.value)}
                 />
               </label>
-              <label className="field">
+              <label className="field" htmlFor="github-app-owner">
                 <span>App owner</span>
-                <select
+                <Select
+                  id="github-app-owner"
                   value={owner}
                   onChange={(e) => setOwner(e.target.value)}
                 >
                   <option value="organization">Organization</option>
                   <option value="personal">Personal account</option>
-                </select>
+                </Select>
               </label>
               {owner === "organization" && (
                 <label className="field">
