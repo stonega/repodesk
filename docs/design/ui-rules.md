@@ -571,6 +571,18 @@ them.
 - **Exceptions:** The earlier allowance for native form selectors is superseded
   by the 2026-10-06 shared dropdown preference above.
 
+### Agent skills use a compact search toolbar
+
+- **Preference:** Place search and state filtering at the right of the catalog on
+  desktop. Omit visible field labels, keep accessible names, and use a search icon,
+  placeholder and clear action. Show matching results and an actionable empty state.
+- **Scope:** Agent skills catalog search/filter controls. Search matches names,
+  slugs and descriptions, ignoring case and extra whitespace.
+- **Source:** 2026-10-07 — reimplementation request, interpreted using the supplied
+  Agent skills screenshot and feedback: “improve the search and filter , remove
+  the label, and improve search bar, move it to right side”.
+- **Exceptions:** Controls wrap on narrow screens; form editor labels remain visible.
+
 ### Skill cards separate routine actions from version recovery
 
 - **Preference:** Give skill cards a clear title/status header with management icons,

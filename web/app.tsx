@@ -22,7 +22,7 @@ import {
   useParams,
   useSearchParams,
 } from "react-router";
-import { Check, ChevronLeft, Refresh } from "reicon-react";
+import { Check, ChevronLeft, Refresh, Search } from "reicon-react";
 import {
   type ModelCapabilities,
   type ModelLimits,
@@ -2864,6 +2864,7 @@ function WorkflowsPage({ id }: { id: string }) {
 function SkillsPage({ id }: { id: string }) {
   const { data, error, reload } = useData<{
     items: (Skill & { dependents: unknown[] })[];
+    total: number;
   }>(`/api/admin/workspaces/${id}/skills`);
   const [editing, setEditing] = useState<Skill>();
   const [creating, setCreating] = useState(false);
@@ -2882,6 +2883,21 @@ function SkillsPage({ id }: { id: string }) {
   >({});
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const searchInput = useRef<HTMLInputElement>(null);
+  const searchTerms = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const visibleSkills = data?.items.filter((skill) => {
+    const text =
+      `${skill.draft.name} ${skill.draft.slug} ${skill.draft.description}`.toLowerCase();
+    return (
+      searchTerms.every((term) => text.includes(term)) &&
+      (filter === "all" || (filter === "enabled") === skill.enabled)
+    );
+  });
+  const resetFilters = () => {
+    setSearch("");
+    setFilter("all");
+    searchInput.current?.focus();
+  };
   const spec: SkillSpec = {
     slug: "my-recap",
     name: "My recap",
@@ -2915,178 +2931,209 @@ function SkillsPage({ id }: { id: string }) {
     >
       {error && <Notice error>{error}</Notice>}
       <Pager data={data} />
-      <div className="row">
-        <Field label="Search skills">
-          <input value={search} onChange={(e) => setSearch(e.target.value)} />
-        </Field>
-        <Field label="Skill state">
-          <Select value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option value="all">All</option>
+      <div className="skill-catalog-toolbar">
+        <span className="muted skill-catalog-count" role="status">
+          {data &&
+            `${visibleSkills?.length} of ${data.items.length} skills${data.total > 100 ? " on this page" : ""}`}
+        </span>
+        <div className="skill-catalog-controls">
+          <div className="skill-catalog-search">
+            <Search size={20} aria-hidden="true" focusable="false" />
+            <input
+              ref={searchInput}
+              type="search"
+              aria-label="Search skills"
+              placeholder="Search skills…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && (
+              <IconButton
+                icon="close"
+                label="Clear search"
+                onClick={() => {
+                  setSearch("");
+                  searchInput.current?.focus();
+                }}
+              />
+            )}
+          </div>
+          <Select
+            aria-label="Skill state"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          >
+            <option value="all">All states</option>
             <option value="enabled">Enabled</option>
             <option value="disabled">Disabled</option>
           </Select>
-        </Field>
+        </div>
       </div>
-      {data?.items
-        .filter(
-          (s) =>
-            `${s.draft.name} ${s.draft.slug}`
-              .toLowerCase()
-              .includes(search.toLowerCase()) &&
-            (filter === "all" || (filter === "enabled") === s.enabled),
-        )
-        .map((s) => (
-          <section className="card skill-card" key={s.id}>
-            <div className="skill-card-header">
-              <div className="skill-card-title">
-                <h2>{s.draft.name}</h2>
-                <span className="pill">
-                  {s.enabled ? "Enabled" : "Disabled"}
-                </span>
-              </div>
-              <div className="skill-card-controls">
-                <IconButton
-                  icon="edit"
-                  label="Edit draft"
-                  type="button"
-                  onClick={() => setEditing(s)}
-                />
-                {([s.enabled ? "disable" : "enable", "archive"] as const).map(
-                  (action) => (
-                    <Action
-                      icon={
-                        action === "archive"
-                          ? "archive"
-                          : action === "disable"
-                            ? "pause"
-                            : "play"
-                      }
-                      key={action}
-                      danger={action === "archive"}
-                      onClick={async () => {
-                        await api(
-                          `/api/admin/workspaces/${id}/skills/${s.id}/action`,
-                          "POST",
-                          { version: s.version, action },
-                        );
-                        reload();
-                      }}
-                    >
-                      {action}
-                    </Action>
-                  ),
-                )}
-              </div>
+      {data && !error && visibleSkills?.length === 0 && (
+        <section className="card skill-catalog-empty">
+          <h2>{data.items.length ? "No skills match" : "No skills yet"}</h2>
+          <p className="muted">
+            {data.items.length
+              ? "Try another search or change the skill state."
+              : "Create or import a skill to get started."}
+          </p>
+          {(search || filter !== "all") && (
+            <button type="button" className="secondary" onClick={resetFilters}>
+              Reset filters
+            </button>
+          )}
+        </section>
+      )}
+      {visibleSkills?.map((s) => (
+        <section className="card skill-card" key={s.id}>
+          <div className="skill-card-header">
+            <div className="skill-card-title">
+              <h2>{s.draft.name}</h2>
+              <span className="pill">{s.enabled ? "Enabled" : "Disabled"}</span>
             </div>
-            <p className="skill-card-description">{s.draft.description}</p>
-            {s.origin && (
-              <p className="muted">
-                Saved from a conversation by {s.origin.actor} on{" "}
-                {new Date(s.origin.sharedAt).toLocaleDateString()}.{" "}
-                {s.published.length
-                  ? "Approved reusable instruction skill."
-                  : "Review before publishing. Publication saves this procedure independently of conversation retention; enable it for team use."}
-              </p>
-            )}
-            <div className="skill-card-meta">
-              <span>Revision {s.version}</span>
-              <span>
-                {s.published.length} published{" "}
-                {s.published.length === 1 ? "version" : "versions"}
-              </span>
-            </div>
-            <details className="skill-card-preview">
-              <summary>Preview instructions & dependent schedules</summary>
-              <p className="prose">{s.draft.body}</p>
-              <DataDetails
-                value={{
-                  settings: s.draft.settings,
-                  tools: s.draft.tools,
-                  dependents: s.dependents,
-                }}
+            <div className="skill-card-controls">
+              <IconButton
+                icon="edit"
+                label="Edit draft"
+                type="button"
+                onClick={() => setEditing(s)}
               />
-            </details>
-            <div className="skill-card-footer">
-              <div className="skill-card-actions">
-                <Action
-                  onClick={async () => {
-                    await api(
-                      `/api/admin/workspaces/${id}/skills/${s.id}/action`,
-                      "POST",
-                      { version: s.version, action: "publish" },
-                    );
-                    reload();
-                  }}
-                >
-                  Publish draft
-                </Action>
-                <span className="skill-card-secondary">
+              {([s.enabled ? "disable" : "enable", "archive"] as const).map(
+                (action) => (
                   <Action
+                    icon={
+                      action === "archive"
+                        ? "archive"
+                        : action === "disable"
+                          ? "pause"
+                          : "play"
+                    }
+                    key={action}
+                    danger={action === "archive"}
                     onClick={async () => {
-                      setResult(
-                        await api(
-                          `/api/admin/workspaces/${id}/skills/${s.id}/test`,
-                          "POST",
-                          { sample },
-                        ),
+                      await api(
+                        `/api/admin/workspaces/${id}/skills/${s.id}/action`,
+                        "POST",
+                        { version: s.version, action },
                       );
                       reload();
                     }}
                   >
-                    Test draft policy
+                    {action}
                   </Action>
-                </span>
-              </div>
-              {s.published.length > 0 && (
-                <details className="skill-card-versions">
-                  <summary>Restore a published version</summary>
-                  <p className="muted">
-                    Copies the selected version into the draft and publishes it
-                    as a new version.
-                  </p>
-                  <div className="skill-card-rollback">
-                    <Field label="Rollback source version">
-                      <Select
-                        value={rollbackVersions[s.id] ?? 1}
-                        onChange={(e) =>
-                          setRollbackVersions((versions) => ({
-                            ...versions,
-                            [s.id]: Number(e.target.value),
-                          }))
-                        }
-                      >
-                        {s.published.map((_, index) => (
-                          // biome-ignore lint/suspicious/noArrayIndexKey: Published versions are immutable and append-only; their position is their version number.
-                          <option key={index + 1} value={index + 1}>
-                            Version {index + 1}
-                          </option>
-                        ))}
-                      </Select>
-                    </Field>
-                    <span className="skill-card-secondary">
-                      <Action
-                        onClick={async () => {
-                          await api(
-                            `/api/admin/workspaces/${id}/skills/${s.id}/action`,
-                            "POST",
-                            {
-                              version: s.version,
-                              action: "rollback",
-                              pin: rollbackVersions[s.id] ?? 1,
-                            },
-                          );
-                          reload();
-                        }}
-                      >
-                        Publish rollback as new version
-                      </Action>
-                    </span>
-                  </div>
-                </details>
+                ),
               )}
             </div>
-          </section>
-        ))}
+          </div>
+          <p className="skill-card-description">{s.draft.description}</p>
+          {s.origin && (
+            <p className="muted">
+              Saved from a conversation by {s.origin.actor} on{" "}
+              {new Date(s.origin.sharedAt).toLocaleDateString()}.{" "}
+              {s.published.length
+                ? "Approved reusable instruction skill."
+                : "Review before publishing. Publication saves this procedure independently of conversation retention; enable it for team use."}
+            </p>
+          )}
+          <div className="skill-card-meta">
+            <span>Revision {s.version}</span>
+            <span>
+              {s.published.length} published{" "}
+              {s.published.length === 1 ? "version" : "versions"}
+            </span>
+          </div>
+          <details className="skill-card-preview">
+            <summary>Preview instructions & dependent schedules</summary>
+            <p className="prose">{s.draft.body}</p>
+            <DataDetails
+              value={{
+                settings: s.draft.settings,
+                tools: s.draft.tools,
+                dependents: s.dependents,
+              }}
+            />
+          </details>
+          <div className="skill-card-footer">
+            <div className="skill-card-actions">
+              <Action
+                onClick={async () => {
+                  await api(
+                    `/api/admin/workspaces/${id}/skills/${s.id}/action`,
+                    "POST",
+                    { version: s.version, action: "publish" },
+                  );
+                  reload();
+                }}
+              >
+                Publish draft
+              </Action>
+              <span className="skill-card-secondary">
+                <Action
+                  onClick={async () => {
+                    setResult(
+                      await api(
+                        `/api/admin/workspaces/${id}/skills/${s.id}/test`,
+                        "POST",
+                        { sample },
+                      ),
+                    );
+                    reload();
+                  }}
+                >
+                  Test draft policy
+                </Action>
+              </span>
+            </div>
+            {s.published.length > 0 && (
+              <details className="skill-card-versions">
+                <summary>Restore a published version</summary>
+                <p className="muted">
+                  Copies the selected version into the draft and publishes it as
+                  a new version.
+                </p>
+                <div className="skill-card-rollback">
+                  <Field label="Rollback source version">
+                    <Select
+                      value={rollbackVersions[s.id] ?? 1}
+                      onChange={(e) =>
+                        setRollbackVersions((versions) => ({
+                          ...versions,
+                          [s.id]: Number(e.target.value),
+                        }))
+                      }
+                    >
+                      {s.published.map((_, index) => (
+                        // biome-ignore lint/suspicious/noArrayIndexKey: Published versions are immutable and append-only; their position is their version number.
+                        <option key={index + 1} value={index + 1}>
+                          Version {index + 1}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <span className="skill-card-secondary">
+                    <Action
+                      onClick={async () => {
+                        await api(
+                          `/api/admin/workspaces/${id}/skills/${s.id}/action`,
+                          "POST",
+                          {
+                            version: s.version,
+                            action: "rollback",
+                            pin: rollbackVersions[s.id] ?? 1,
+                          },
+                        );
+                        reload();
+                      }}
+                    >
+                      Publish rollback as new version
+                    </Action>
+                  </span>
+                </div>
+              </details>
+            )}
+          </div>
+        </section>
+      ))}
       {(creating || editing) && (
         <Modal
           title={editing ? `Edit ${editing.draft.name}` : "Create skill"}
