@@ -76,6 +76,7 @@ import "./style.css";
 import { SiteDomain } from "./site-domain.tsx";
 
 let csrf = "";
+const sessionEvents = new EventTarget();
 class ApiError extends Error {
   constructor(
     message: string,
@@ -101,13 +102,19 @@ async function api<T>(
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+  if (response.status === 401 && path !== "/api/admin/auth/login") {
+    csrf = "";
+    sessionEvents.dispatchEvent(new Event("expired"));
+  }
   const data = await response.json();
   if (!response.ok)
     throw new ApiError(
       response.status === 409 && data.error === "version_conflict"
         ? `${data.error}. Reload the current version and review your changes before saving again.`
         : response.status === 401
-          ? "Your session expired. Sign in again."
+          ? path === "/api/admin/auth/login"
+            ? "Invalid username or password."
+            : "Your session expired. Sign in again."
           : data.error === "setup_incomplete"
             ? "Finish bot credentials, model configuration and Telegram reception before activating."
             : data.error === "workspace_and_skill_required"
@@ -4092,6 +4099,17 @@ function Shell() {
   const navigate = useNavigate();
   const [locationParams] = useSearchParams();
   const requestedWorkspace = locationParams.get("workspace");
+  useEffect(() => {
+    if (!current) return;
+    const expire = () => {
+      setCurrent(undefined);
+      setWorkspace("");
+      setWorkspaces([]);
+      navigate("/admin", { replace: true });
+    };
+    sessionEvents.addEventListener("expired", expire);
+    return () => sessionEvents.removeEventListener("expired", expire);
+  }, [current, navigate]);
   useEffect(() => {
     if (
       requestedWorkspace &&

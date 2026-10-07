@@ -18,6 +18,18 @@ them.
 
 ## Recorded preferences
 
+### Expired admin sessions open sign-in immediately
+
+- **Preference:** When an authenticated request reports an expired or revoked
+  session, clear the signed-in state and open the login page directly. Do not
+  leave a session-expired banner with a page reload action.
+- **Scope:** Admin and authenticated setup pages, including background refreshes
+  and form submissions.
+- **Source:** 2026-10-07 — user showed the “Your session expired. Sign in again.”
+  banner with “Reload coding settings” and requested going directly to login.
+- **Exceptions:** Invalid login credentials keep the sign-in form visible with
+  an error. Permission denials and ordinary request failures stay on their page.
+
 ### Dropdown inputs share the workspace selector style
 
 - **Preference:** Use the sidebar workspace selector's muted rounded trigger,

@@ -143,6 +143,10 @@ First-account creation uses the same transition before opening setup.
 Opening or refreshing the app shows only the centered RepoDesk logo and brand text
 until deployment, session and workspace checks finish. Startup failures stay on
 that screen with **Try again**; only an unauthorized session opens sign-in.
+After sign-in, a protected API request returning HTTP 401 clears the session and
+workspace selection and opens sign-in at `/admin` immediately, including during
+background refresh or a save. Invalid credentials keep the sign-in form visible;
+HTTP 403 permission errors and other failures remain on the current page.
 
 Structured responses use labeled details and lists with readable dates, statuses,
 booleans and currency rather than JSON dumps. Setup, workflow, skill, instruction,
