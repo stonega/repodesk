@@ -6,6 +6,7 @@ import { decrypt, encrypt, hash, token } from "../setup/credentials.ts";
 import { audit, authorize, eligible } from "../workspaces/policy.ts";
 import { deliver } from "../workspaces/service.ts";
 import type { GitHubApp } from "./app.ts";
+import { availableGitHubAccount } from "./member-account.ts";
 import type { GitHubApps } from "./registry.ts";
 import { type GitHubUserAccess, invalidateGitHubWork } from "./user-access.ts";
 
@@ -196,6 +197,7 @@ export class GitHubUsers {
       "github_connection_changed",
       409,
     );
+    availableGitHubAccount(w, actor, row.identity.id);
     const conflict = await sql.query(
       "SELECT 1 FROM github_user_accounts WHERE workspace_id=$1 AND github_id=$2 AND actor<>$3",
       [w.id, row.identity.id, actor],
@@ -229,6 +231,7 @@ export class GitHubUsers {
     requireThat(member, "access_denied", 403);
     invalidateGitHubWork(w, actor);
     member.github = access;
+    member.githubAccount = { id: access.id, login: access.login };
     await sql.query("DELETE FROM github_user_flows WHERE state_hash=$1", [
       digest,
     ]);

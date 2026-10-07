@@ -19,6 +19,7 @@ repository-scoped issue submission. No personal token is accepted by the web pan
 3. Setup sends the manifest when you click **Connect GitHub**. In Plugins, click
    **Continue to GitHub**. Confirm creation on GitHub. The manifest preconfigures
    Contents, Issues and Pull requests read/write access, Metadata read access,
+   organization Members read access,
    no webhook events, and the deployment's callbacks. These permissions support
    Codex checkout and draft PR publication; coding policies and task authorization
    still control each operation. The callback accepts exactly this permission set
@@ -81,7 +82,8 @@ its pending registration flows but retains the operator's shared App credentials
    and write**, **Issues: Read and write** and **Pull requests: Read and write**.
    Metadata read access is included by GitHub. Code Truth alone uses Contents-read
    tokens; issue submission uses Issues-write tokens. Organization and Actions
-   permissions are unnecessary for these workflows.
+   permissions are unnecessary for these coding workflows. To fetch organization
+   members in member forms, also grant **Organization permissions → Members: Read-only**.
 4. A setup URL is unnecessary: the panel authorizes the user first, then lists their
    App installations. Leave webhooks disabled for this implementation; there is no
    webhook receiver. Installation suspension/removal is checked when minting tokens.
@@ -223,7 +225,7 @@ Reference inspected: Coolify commit `89e8506023af83016e3ccd64dc1327f51a7f8674`,
 [manifest form](https://github.com/coollabsio/coolify/blob/89e8506023af83016e3ccd64dc1327f51a7f8674/resources/views/livewire/source/github/change.blade.php#L345)
 and [server-side conversion](https://github.com/coollabsio/coolify/blob/89e8506023af83016e3ccd64dc1327f51a7f8674/app/Http/Controllers/Webhook/Github.php#L509).
 RepoDesk requests Contents, Issues and Pull requests write permissions plus Metadata
-read, and keeps its own session/tenant checks. Installation tokens remain scoped to
+and organization Members read, and keeps its own session/tenant checks. Installation tokens remain scoped to
 the selected repository and operation; Code Truth receives only source-read tokens.
 
 ## Update an existing App for Codex
@@ -288,6 +290,40 @@ existing approval retention and workspace-deletion policy.
 
 See [the example and deterministic verification](../../examples/github-issue.md).
 API reference: [Create an issue](https://docs.github.com/en/rest/issues/issues#create-an-issue).
+
+## Fetch GitHub accounts in member forms
+
+Implemented locally, 2026-10-07. Add/Edit member dialogs fetch account choices
+automatically from the workspace's connected installation. Organization installations
+return organization members; personal installations return the owner and collaborators
+of the workspace's selected repositories. Pages are fetched in batches of 100, with
+the existing 2,000-entry limit per list. Accounts are deduplicated by numeric GitHub ID.
+The directory returns only IDs/logins and connection metadata, with no credentials.
+
+Existing organization installations need **Permissions & events → Organization
+permissions → Members: Read-only**, followed by approval of the installation's updated
+permissions. The form explains this when the grant is missing; it never substitutes a
+partial public-member list. Personal installations use Metadata-read access.
+See GitHub's [organization member API](https://docs.github.com/en/rest/orgs/members#list-organization-members)
+and [collaborator API](https://docs.github.com/en/rest/collaborators/collaborators#list-repository-collaborators).
+
+Selecting an account saves a workspace-scoped `member.githubAccount` association.
+It does not create an OAuth token or repository permission snapshot. GitHub supplies
+no Telegram identity: an administrator explicitly selects the person's account, and
+the member can verify it with `/github connect`. The table shows **Verification pending**
+until verified. Verified accounts use the member's connection flow to change accounts.
+The same GitHub ID cannot be assigned or verified for two members in one workspace;
+OAuth confirmation also checks administrator-created associations.
+
+`GET /api/admin/workspaces/:id/members/github` returns
+`{ connected, revision, account?, source?, members: [{ id, login }] }`.
+`POST /api/admin/workspaces/:id/members` optionally accepts `githubId` (numeric ID,
+or `null` to clear an unverified association) and `githubRevision`. The server
+fetches the chosen identity, rechecks workspace authority and connection revision,
+and saves the association with the versioned membership update in one transaction.
+Omitting these fields preserves the association, including during GitHub outages.
+No new dependency or database migration is required; profiles use workspace JSON.
+See [the runnable request example](../../examples/github-members.http).
 
 ## Connect a verified Telegram member's GitHub account
 

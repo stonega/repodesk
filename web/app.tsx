@@ -59,6 +59,7 @@ import {
   workspaceOptions,
 } from "./form-fields.ts";
 import { GitHubConnection, GitHubSetup } from "./github.tsx";
+import { GitHubMemberField } from "./github-member-field.tsx";
 import { type ActionIcon, IconButton } from "./icon-button.tsx";
 import { RuntimeLogs } from "./logs.tsx";
 import { CreateModal, Modal, ModalActions, ModalPending } from "./modal.tsx";
@@ -2203,6 +2204,16 @@ interface MembersData {
   items: Member[];
   total: number;
 }
+interface MemberDraft {
+  id: string;
+  role: string;
+  active: boolean;
+  githubId: string;
+  githubAccount?: Member["githubAccount"];
+  github?: Member["github"];
+  githubChanged: boolean;
+  githubRevision?: number;
+}
 function MembersPage({ id }: { id: string }) {
   const [search, setSearch] = useState("");
   const [params, setParams] = useSearchParams();
@@ -2211,10 +2222,12 @@ function MembersPage({ id }: { id: string }) {
     `/api/admin/workspaces/${id}/members?offset=${offset}&search=${encodeURIComponent(search)}`,
   );
   const rows = data?.items ?? [];
-  const [member, setMember] = useState({
+  const [member, setMember] = useState<MemberDraft>({
     id: "",
     role: "member",
     active: true,
+    githubId: "",
+    githubChanged: false,
   });
   const [open, setOpen] = useState(false);
   const [editingMember, setEditingMember] = useState(false);
@@ -2235,7 +2248,13 @@ function MembersPage({ id }: { id: string }) {
             showLabel
             disabled={!data || loading}
             onClick={() => {
-              setMember({ id: "", role: "member", active: true });
+              setMember({
+                id: "",
+                role: "member",
+                active: true,
+                githubId: "",
+                githubChanged: false,
+              });
               setEditingMember(false);
               setOpen(true);
             }}
@@ -2297,7 +2316,13 @@ function MembersPage({ id }: { id: string }) {
                     <td className="github-access">
                       {m.github ? (
                         <>
-                          <strong>{m.github.login}</strong>
+                          <a
+                            href={`https://github.com/${m.github.login}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <strong>{m.github.login}</strong>
+                          </a>
                           <div className="muted">
                             {m.github.status} · Synced{" "}
                             {new Date(m.github.syncedAt).toLocaleString()}
@@ -2316,6 +2341,17 @@ function MembersPage({ id }: { id: string }) {
                                       : "Read"}
                             </div>
                           ))}
+                        </>
+                      ) : m.githubAccount ? (
+                        <>
+                          <a
+                            href={`https://github.com/${m.githubAccount.login}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <strong>{m.githubAccount.login}</strong>
+                          </a>
+                          <div className="muted">Verification pending</div>
                         </>
                       ) : (
                         <span className="muted">Not linked</span>
@@ -2339,6 +2375,12 @@ function MembersPage({ id }: { id: string }) {
                               id: m.id,
                               role: m.role,
                               active: m.active,
+                              githubId: String(
+                                m.github?.id ?? m.githubAccount?.id ?? "",
+                              ),
+                              githubAccount: m.githubAccount,
+                              github: m.github,
+                              githubChanged: false,
                             });
                             setEditingMember(true);
                             setOpen(true);
@@ -2377,6 +2419,21 @@ function MembersPage({ id }: { id: string }) {
             Usernames are received from Telegram; a numeric user ID is required
             for membership.
           </p>
+          <GitHubMemberField
+            workspaceId={id}
+            request={api}
+            account={member.github ?? member.githubAccount}
+            verified={!!member.github}
+            value={member.githubId}
+            onChange={(githubId, githubRevision) =>
+              setMember((current) => ({
+                ...current,
+                githubId,
+                githubRevision,
+                githubChanged: true,
+              }))
+            }
+          />
           <Field label="Role">
             <Select
               aria-label="Role"
@@ -2407,6 +2464,14 @@ function MembersPage({ id }: { id: string }) {
                   id: member.id,
                   role: member.role,
                   active: member.active,
+                  ...(member.githubChanged
+                    ? {
+                        githubId: member.githubId
+                          ? Number(member.githubId)
+                          : null,
+                        githubRevision: member.githubRevision,
+                      }
+                    : {}),
                   version: data?.version,
                 });
                 reload();

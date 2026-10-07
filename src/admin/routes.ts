@@ -21,6 +21,8 @@ import {
   type Workspace,
   workflowSchema,
 } from "../domain.ts";
+import type { GitHubMember } from "../github/app.ts";
+import { assignGitHubAccount } from "../github/member-account.ts";
 import { reconcileCharge, resolveDelivery } from "../jobs/recovery.ts";
 import { logQuery, readRuntimeLogs } from "../observability/logs.ts";
 import { requestDeletion } from "../privacy/service.ts";
@@ -747,7 +749,7 @@ export function adminRoutes(
           .replace(/^@/, "")
           .toLowerCase();
         const members = membersWithProfiles(w).filter((member) =>
-          `${member.id} ${member.username ?? ""} ${member.name ?? ""} ${member.github?.login ?? ""}`
+          `${member.id} ${member.username ?? ""} ${member.name ?? ""} ${member.github?.login ?? ""} ${member.githubAccount?.login ?? ""}`
             .toLowerCase()
             .includes(search),
         );
@@ -910,19 +912,66 @@ export function adminRoutes(
       );
     },
   );
+  app.get("/api/admin/workspaces/:id/members/github", async (c) => {
+    const id = validId(c.req.param("id"));
+    const w = await store.read(id);
+    workspaceActor(w, c.get("session").admin);
+    const directory = await github.memberDirectory(w);
+    const current = await store.read(id);
+    workspaceActor(current, c.get("session").admin);
+    requireThat(
+      (current.github?.revision ?? 0) === directory.revision &&
+        current.github?.installationId === w.github?.installationId,
+      "github_connection_changed",
+      409,
+    );
+    return c.json(directory);
+  });
   app.post("/api/admin/workspaces/:id/members", async (c) => {
     const input = z
       .object({
         id: userId,
         role: z.enum(["admin", "member"]),
         active: z.boolean(),
+        githubId: z.number().int().positive().safe().nullable().optional(),
+        githubRevision: z.number().int().nonnegative().optional(),
         version,
       })
       .strict()
       .parse(await c.req.json());
+    let account: GitHubMember | null = null;
+    if (input.githubId != null) {
+      const w = await store.read(validId(c.req.param("id")));
+      workspaceActor(w, c.get("session").admin);
+      requireThat(w.memberVersion === input.version, "version_conflict", 409);
+      const directory = await github.memberDirectory(w);
+      requireThat(
+        directory.revision === input.githubRevision,
+        "github_connection_changed",
+        409,
+      );
+      account = directory.members.find((m) => m.id === input.githubId) ?? null;
+      requireThat(account, "github_member_not_found", 409);
+    }
     return c.json(
       await change(c, (w, actor) => {
         updateMembership(w, actor, input.version, input);
+        if (input.githubId !== undefined) {
+          requireThat(
+            (w.github?.revision ?? 0) === input.githubRevision,
+            "github_connection_changed",
+            409,
+          );
+          const member = w.members.find((m) => m.id === input.id);
+          requireThat(member, "not_found", 404);
+          assignGitHubAccount(w, member, account);
+          audit(
+            w,
+            actor,
+            "github.account_assigned",
+            `${input.id}:${account?.id ?? "none"}`,
+          );
+        }
         return w.members;
       }),
     );

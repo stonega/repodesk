@@ -100,8 +100,9 @@ export function GitHubRegistration({
           >
             <p>
               Confirm creation on GitHub with read and write access to
-              repository code, issues and pull requests for coding tasks. Your
-              App will be available to your workspaces; each workspace chooses
+              repository code, issues and pull requests for coding tasks. The
+              App also reads organization members for member account selection.
+              It will be available to your workspaces; each workspace chooses
               its own repositories.
             </p>
             <fieldset disabled={busy} className="plugin-fields">

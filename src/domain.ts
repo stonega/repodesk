@@ -132,6 +132,7 @@ export interface AccessRequest {
 }
 export interface Member {
   github?: GitHubUserAccess;
+  githubAccount?: { id: number; login: string };
   id: string;
   username?: string;
   name?: string;

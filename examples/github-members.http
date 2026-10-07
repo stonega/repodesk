@@ -1,0 +1,43 @@
+# Retain an authorized workspace admin session cookie; never commit real credentials.
+@origin = http://localhost:3000
+@workspace = REPLACE_WORKSPACE_UUID
+@csrf = REPLACE_CSRF_TOKEN
+
+### Fetch organization members or selected personal-repository collaborators.
+GET {{origin}}/api/admin/workspaces/{{workspace}}/members/github
+
+### Fetch the membership version before editing.
+GET {{origin}}/api/admin/workspaces/{{workspace}}/members
+
+### Associate a fetched GitHub ID with a Telegram member.
+# Replace version with the members response's version and githubRevision with
+# the directory response's revision. Replace githubId with a fetched account ID.
+# This saves profile data; the member verifies ownership with /github connect.
+POST {{origin}}/api/admin/workspaces/{{workspace}}/members
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "id": "202",
+  "role": "member",
+  "active": true,
+  "version": 1,
+  "githubId": 42,
+  "githubRevision": 1
+}
+
+### Clear an unverified association using the latest membership version.
+POST {{origin}}/api/admin/workspaces/{{workspace}}/members
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "id": "202",
+  "role": "member",
+  "active": true,
+  "version": 2,
+  "githubId": null,
+  "githubRevision": 1
+}

@@ -18,6 +18,20 @@ them.
 
 ## Recorded preferences
 
+### Member forms fetch GitHub account choices
+
+- **Preference:** Include a GitHub account field in member forms and automatically
+  fetch available accounts from the workspace's connected GitHub installation.
+  Show the saved account and a profile link in the form and member table.
+- **Scope:** Add/Edit member dialogs and the Members & access table. Organization
+  installations supply organization members; personal installations supply their
+  owner and selected-repository collaborators.
+- **Source:** 2026-10-07 — user showed the GitHub column and requested the missing
+  edit-form link and automatic GitHub member fetching.
+- **Exceptions:** GitHub provides no Telegram IDs. An administrator chooses the
+  association; the member verifies account ownership through Telegram. Existing
+  verified accounts are changed by the member's connection flow.
+
 ### Expired admin sessions open sign-in immediately
 
 - **Preference:** When an authenticated request reports an expired or revoked

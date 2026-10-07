@@ -1,5 +1,8 @@
 # Runnable examples
 
+See [github-members.http](github-members.http) for automatically fetched GitHub
+account choices and versioned member profile associations.
+
 `health.http` checks a configured local API. `model-settings.http` shows an
 operator saving an OpenAI-compatible endpoint, custom model and thinking level. `workflow-proposal.json` matches the
 implemented proposal schema; replace its destination with your linked group (or

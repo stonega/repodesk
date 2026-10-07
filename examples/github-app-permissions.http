@@ -9,7 +9,7 @@ GET {{origin}}/api/admin/workspaces/{{workspace}}/github
 ### For a workspace whose operator has no registered App, prepare creation.
 # Returns the manifest/form destination; confirm App creation on GitHub separately.
 # Expected default_permissions: contents=write, issues=write,
-# pull_requests=write, metadata=read. No extra permissions or webhook events.
+# pull_requests=write, metadata=read, members=read. No webhook events.
 # Existing Apps return github_app_already_configured and are never replaced.
 POST {{origin}}/api/admin/workspaces/{{workspace}}/github/register
 Origin: {{origin}}

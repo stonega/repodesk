@@ -11,6 +11,7 @@ export const githubAppPermissions = {
   metadata: "read",
   issues: "write",
   pull_requests: "write",
+  members: "read",
 } as const;
 
 const account = z

@@ -1416,6 +1416,7 @@ test.describe
             metadata: "read",
             issues: "write",
             pull_requests: "write",
+            members: "read",
           });
           expect(manifest.hook_attributes).toEqual({
             url: "https://example.com/github/webhook",

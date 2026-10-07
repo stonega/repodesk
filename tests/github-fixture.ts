@@ -40,6 +40,7 @@ export function githubTransport(
             metadata: "read",
             issues: "write",
             pull_requests: "write",
+            members: "read",
           },
         },
         201,
@@ -95,6 +96,18 @@ export function githubTransport(
         token: "ghs_fixture_installation_secret",
         expires_at: new Date(Date.now() + 3600000).toISOString(),
       });
+    if (url === "https://api.github.com/app/installations/501")
+      return json({
+        app_id: 123,
+        account: { id: 100, login: "example", type: "Organization" },
+        suspended_at: null,
+        permissions: { members: "read" },
+      });
+    if (url.startsWith("https://api.github.com/orgs/example/members?"))
+      return json([
+        { id: 42, login: "fixture-user" },
+        { id: 43, login: "second-user" },
+      ]);
     return json({ message: "denied" }, 404);
   }) as typeof fetch;
   return fetcher;

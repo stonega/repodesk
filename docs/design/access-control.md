@@ -134,6 +134,13 @@ under `/api/setup/workspaces/:id/access-requests/:request/decision`.
 
 ## GitHub identity and repository permission sync (2026-10-05)
 
+Add/Edit member forms automatically fetch GitHub organization members or personal
+repository collaborators. Administrators can associate a fetched account with a
+Telegram member; the table links its profile and shows verification pending.
+Associations are tenant-scoped profile data and do not create repository grants.
+Verified accounts remain controlled by the member's Telegram connection flow.
+See [account selection and App permissions](../implementation/github-app.md#fetch-github-accounts-in-member-forms).
+
 Active members can link GitHub through `/github connect` in private Telegram,
 then confirm the account in Telegram. Stable GitHub numeric IDs and repository
 permission snapshots are stored per member and shown in Members & access.

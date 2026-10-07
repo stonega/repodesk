@@ -5,7 +5,7 @@ import type { Store } from "../db/repositories.ts";
 import { type Admin, requireThat, type Workspace } from "../domain.ts";
 import { decrypt, encrypt, hash, token } from "../setup/credentials.ts";
 import { audit } from "../workspaces/policy.ts";
-import type { GitHubApp } from "./app.ts";
+import type { GitHubApp, GitHubMemberDirectory } from "./app.ts";
 import type { GitHubPage } from "./config.ts";
 import {
   GitHubApps,
@@ -56,6 +56,18 @@ export class GitHubService {
   }
   private async callback() {
     return `${await publicOrigin(this.store, this.origin)}/api/admin/github/callback`;
+  }
+  async memberDirectory(w: Workspace): Promise<GitHubMemberDirectory> {
+    const revision = w.github?.revision ?? 0;
+    if (!w.github?.installationId)
+      return { connected: false, revision, members: [] };
+    const app = await this.apps.get(w.operatorId);
+    requireThat(app, "github_app_not_configured", 409);
+    return {
+      connected: true,
+      revision,
+      ...(await app.members(w.github.installationId, w.github.repositories)),
+    };
   }
   private async workspace(admin: Admin, id: string) {
     operator(admin);

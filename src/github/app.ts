@@ -32,6 +32,18 @@ const repositorySchema = z.object({
     .optional(),
 });
 export type GitHubRepository = z.infer<typeof repositorySchema>;
+const memberSchema = z.object({
+  id: z.number().int().positive().safe(),
+  login: z.string().regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/),
+});
+export type GitHubMember = z.infer<typeof memberSchema>;
+export interface GitHubMemberDirectory {
+  connected: boolean;
+  revision: number;
+  account?: string;
+  source?: "organization" | "repositories";
+  members: GitHubMember[];
+}
 export interface GitHubInstallation {
   id: number;
   account: string;
@@ -147,7 +159,7 @@ export class GitHubApp {
   private async pages(
     token: string,
     path: string,
-    field: string,
+    field?: string,
   ): Promise<unknown[]> {
     const result: unknown[] = [];
     for (let page = 1; page <= 20; page++) {
@@ -155,7 +167,7 @@ export class GitHubApp {
         `https://api.github.com${path}?per_page=100&page=${page}`,
         token,
       );
-      const items = z.array(z.unknown()).parse(data[field]);
+      const items = z.array(z.unknown()).parse(field ? data[field] : data);
       result.push(...items);
       if (items.length < 100) return result;
     }
@@ -207,6 +219,89 @@ export class GitHubApp {
           { permissions: { metadata: "read" } },
         ),
       );
+  }
+  async members(installationId: number, repositories: GitHubRepository[]) {
+    const installation = z
+      .object({
+        app_id: z.number().int().positive(),
+        account: memberSchema.extend({
+          type: z.enum(["Organization", "User"]),
+        }),
+        suspended_at: z.string().nullable(),
+        permissions: z.object({ members: z.string().optional() }),
+      })
+      .parse(
+        await this.request(
+          `https://api.github.com/app/installations/${installationId}`,
+          this.jwt(),
+        ),
+      );
+    requireThat(
+      installation.app_id === this.config.id && !installation.suspended_at,
+      "github_access_denied",
+      403,
+    );
+    const organization = installation.account.type === "Organization";
+    if (organization)
+      requireThat(
+        ["read", "write"].includes(installation.permissions.members ?? ""),
+        "github_members_permission_missing",
+        409,
+      );
+    const credential = z.object({ token: z.string().min(1).max(8192) }).parse(
+      await this.request(
+        `https://api.github.com/app/installations/${installationId}/access_tokens`,
+        this.jwt(),
+        {
+          permissions: organization
+            ? { members: "read" }
+            : { metadata: "read" },
+        },
+      ),
+    );
+    const members = new Map<number, GitHubMember>();
+    if (organization) {
+      for (const member of z
+        .array(memberSchema)
+        .parse(
+          await this.pages(
+            credential.token,
+            `/orgs/${installation.account.login}/members`,
+          ),
+        ))
+        members.set(member.id, member);
+    } else {
+      members.set(
+        installation.account.id,
+        memberSchema.parse(installation.account),
+      );
+      for (const repository of repositories) {
+        requireThat(
+          repository.full_name.split("/")[0]?.toLowerCase() ===
+            installation.account.login.toLowerCase(),
+          "github_access_denied",
+          403,
+        );
+        for (const member of z
+          .array(memberSchema)
+          .parse(
+            await this.pages(
+              credential.token,
+              `/repos/${repository.full_name}/collaborators`,
+            ),
+          ))
+          members.set(member.id, member);
+      }
+    }
+    return {
+      account: installation.account.login,
+      source: organization
+        ? ("organization" as const)
+        : ("repositories" as const),
+      members: [...members.values()].sort((a, b) =>
+        a.login.localeCompare(b.login),
+      ),
+    };
   }
   async installationRepositories(token: string): Promise<GitHubRepository[]> {
     // Installation permissions describe the App, not the authorizing user's role.
