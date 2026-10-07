@@ -4,6 +4,7 @@ import type { Store } from "../db/repositories.ts";
 import { type Admin, Fault, requireThat, type Workspace } from "../domain.ts";
 import type { GitHubApps } from "../github/registry.ts";
 import { decrypt, encrypt } from "../setup/credentials.ts";
+import { clearProgress, recordProgress } from "../telegram/feedback.ts";
 import { membersWithProfiles } from "../workspaces/member-profile.ts";
 import { audit, eligible } from "../workspaces/policy.ts";
 import {
@@ -14,6 +15,7 @@ import {
   emptyCoding,
 } from "./config.ts";
 import { DevelopmentExecutor } from "./executor.ts";
+import { markRunnerUnavailable, runnerStage } from "./feedback.ts";
 import type { LocalDeviceAuth, LocalRunner } from "./local/protocol.ts";
 import { checkCodingTask, notifyCoding } from "./policy.ts";
 
@@ -285,7 +287,11 @@ export class CodingService {
           "coding_outcome_unknown",
         ].includes(reason)
       ) {
-        await this.update(workspaceId, id, lease, {});
+        await this.update(workspaceId, id, lease, {
+          progress: current.progress
+            ? { ...current.progress, unavailable: true }
+            : undefined,
+        });
         return;
       }
       // Read failures can retry for up to two hours. Writes remain unknown forever.
@@ -294,7 +300,10 @@ export class CodingService {
         ["github_unavailable", "coding_runner_unavailable"].includes(reason) &&
         Date.parse(current.createdAt) + 7200000 > Date.now()
       ) {
-        await this.update(workspaceId, id, lease, {});
+        markRunnerUnavailable(current);
+        await this.update(workspaceId, id, lease, {
+          progress: current.progress,
+        });
         return;
       }
       const uncertain =
@@ -482,6 +491,18 @@ export class CodingService {
         threadId: result.threadId,
       });
     } else {
+      await this.store.change(workspaceId, (w) => {
+        const t = w.codingTasks?.find((t) => t.id === task.id);
+        if (!t || t.lease !== lease || t.cancelRequested) return;
+        checkCodingTask(w, t);
+        recordProgress(
+          w,
+          t,
+          "coding",
+          runnerStage(result),
+          `${t.createdAt}:${result.repairCount ?? 0}`,
+        );
+      });
       await this.update(workspaceId, task.id, lease, {
         threadId: result.threadId,
       });
@@ -539,6 +560,8 @@ export class CodingService {
       const d = await this.store.deployment(sql);
       requireThat(d.active && !d.paused, "deployment_paused", 409);
       task.state = state;
+      if (state === "starting_publication")
+        recordProgress(w, task, "coding", "publish", task.createdAt);
       task.updatedAt = new Date().toISOString();
       return true;
     });
@@ -555,6 +578,9 @@ export class CodingService {
       if (!task || task.lease !== lease || codingTerminal(task.state)) return;
       const changed = patch.state && patch.state !== task.state;
       Object.assign(task, patch);
+      if (task.progress?.unavailable) clearProgress(w, "coding", task.id);
+      if (!["running", "publishing"].includes(task.state))
+        clearProgress(w, "coding", task.id);
       if (changed) {
         task.updatedAt = new Date().toISOString();
         audit(w, task.actor, `coding.${task.state}`, task.id);

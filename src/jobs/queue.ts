@@ -11,6 +11,7 @@ import type { GitHubUsers } from "../github/users.ts";
 import { pruneRuntimeLogs, RuntimeLogger } from "../observability/logs.ts";
 import { sweep } from "../privacy/service.ts";
 import type { SetupService } from "../setup/service.ts";
+import { queuedRunFeedback } from "../telegram/feedback.ts";
 import { TelegramPoller } from "../telegram/polling.ts";
 import { tick } from "../workflows/service.ts";
 import { deliverAccessHelp } from "./control.ts";
@@ -142,7 +143,10 @@ export async function startWorker(
             ]);
             return;
           }
-          if (d.active && !d.paused) tick(w, d.model);
+          if (d.active && !d.paused) {
+            tick(w, d.model);
+            queuedRunFeedback(w);
+          }
         });
         // Durable rate-limit retries and ambiguous-send detection do not rely on queue retry timing.
         const current = await store.read(workspaceId);

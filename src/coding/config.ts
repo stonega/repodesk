@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Progress } from "../telegram/feedback.ts";
 import type { DevelopmentTask } from "./development.ts";
 import { developmentPolicy } from "./development-policy.ts";
 
@@ -112,6 +113,7 @@ export type CodingState =
   | "unknown"
   | "cancelled";
 export interface CodingTask {
+  progress?: Progress;
   id: string;
   actor: string;
   runId: string;

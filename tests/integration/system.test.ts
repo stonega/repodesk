@@ -27,7 +27,7 @@ import {
   workflowAction,
 } from "../../src/workflows/service.ts";
 import { setPolicy } from "../../src/workspaces/policy.ts";
-import { createRun } from "../../src/workspaces/service.ts";
+import { cancelRun, createRun } from "../../src/workspaces/service.ts";
 import { spec, workspace } from "../fixtures.ts";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -492,6 +492,34 @@ suite("PostgreSQL integration (isolated database)", () => {
     });
     expect(
       (await request(`/api/admin/workspaces/${other.id}/runs/${first.id}`))
+        .status,
+    ).toBe(404);
+  });
+  test("cancellation receipts remain visible in scoped admin run details", async () => {
+    const w = await seed();
+    const run = await store.change(w.id, (saved) => {
+      const r = createRun(
+        saved,
+        "101",
+        "Stop this request",
+        "101",
+        3,
+        "gpt-4.1-mini",
+      );
+      cancelRun(saved, "101", r.id);
+      return r;
+    });
+    const detail = await request(
+      `/api/admin/workspaces/${w.id}/runs/${run.id}`,
+    );
+    expect(detail.status).toBe(200);
+    const body = await detail.json();
+    expect(body.run.deliveries).toHaveLength(1);
+    expect(body.run.deliveries[0].cancellationRunId).toBe(run.id);
+    expect(body.run.deliveries[0].text).toContain("has stopped");
+    const other = await seed();
+    expect(
+      (await request(`/api/admin/workspaces/${other.id}/runs/${run.id}`))
         .status,
     ).toBe(404);
   });
@@ -1057,12 +1085,15 @@ suite("PostgreSQL integration (isolated database)", () => {
           "run_failed",
           expect.objectContaining({ error: expect.objectContaining({ code }) }),
         );
-        if (cause === "user") expect(saved.deliveries).toHaveLength(0);
-        else expect(saved.deliveries.at(-1)?.text).toContain(`(${code})`);
-        if (cause === "timeout")
+        if (cause === "user") {
+          expect(saved.deliveries.at(-1)?.text).toContain("has stopped");
+          expect(saved.deliveries.at(-1)?.cancellationRunId).toBe(r.id);
+        } else {
+          expect(saved.deliveries.at(-1)?.text).not.toContain(code);
           expect(saved.deliveries.at(-1)?.text).toContain(
-            "300-second time limit",
+            cause === "timeout" ? "timed out" : "restart",
           );
+        }
         // A repeated queue event must not replay an uncertain provider call.
         let replayed = false;
         await new Executor(store, setup, {
@@ -1106,7 +1137,7 @@ suite("PostgreSQL integration (isolated database)", () => {
       const saved = await store.read(w.id);
       expect(saved.runs[0]?.error).toBe("run_timeout");
       expect(saved.runs[0]?.attempts).toHaveLength(0);
-      expect(saved.deliveries[0]?.text).toContain("600-second time limit");
+      expect(saved.deliveries[0]?.text).toContain("request timed out");
       expect(saved.deliveries[0]?.text).not.toContain(
         "charges remain reserved",
       );
@@ -1262,7 +1293,8 @@ suite("PostgreSQL integration (isolated database)", () => {
       runId: r.id,
       state: "pending",
     });
-    expect(intent?.text).toContain("3 model-turn limit");
+    expect(intent?.text).toContain("available turns");
+    expect(intent?.text).not.toContain(r.id);
     const before = calls.length;
     const delivery = new DeliveryWorker(store, setup);
     await delivery.send(w.id, intent?.id ?? "");

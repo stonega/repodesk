@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { NavLink } from "react-router";
 import type { CodingPage, CodingSettings } from "../src/coding/config.ts";
 import { codingFailureMessage } from "../src/coding/failure-messages.ts";
+import { codingStatusLabel } from "../src/coding/feedback.ts";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
@@ -566,10 +567,7 @@ export function Coding({
                       <code>{task.payload.baseBranch}</code>
                     </td>
                     <td>
-                      {task.state === "auth_required"
-                        ? "Waiting for sign-in"
-                        : task.state.replaceAll("_", " ")}
-                      {task.cancelRequested && " · stop requested"}
+                      {codingStatusLabel(task)}
                       {task.questionText && <p>{task.questionText}</p>}
                       {task.error && (
                         <p>

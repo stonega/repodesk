@@ -1,7 +1,11 @@
+import { developmentStopped } from "../coding/development.ts";
+import { taskGet } from "../coding/task-store.ts";
+import { cancelDevelopment } from "../coding/tasks.ts";
 import type { Sql } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
+import { Fault } from "../domain.ts";
 import { eligible } from "../workspaces/policy.ts";
-import { cancelRun } from "../workspaces/service.ts";
+import { cancelRun, confirmRunStopped } from "../workspaces/service.ts";
 import type { Update } from "./router.ts";
 
 /** Telegram identifies the stopping user by the private chat, not a `from` field. */
@@ -42,6 +46,20 @@ export async function stopGeneration(
   );
   const run = runs[0];
   if (runs.length !== 1 || !run || run.cancelled) return;
+  let codingActive = false;
+  if (run.codingTaskId) {
+    try {
+      const task = await taskGet(sql, w.id, run.codingTaskId);
+      codingActive =
+        task.actor === actor &&
+        task.botId === botId &&
+        task.chatId === actor &&
+        task.topicId === topicId &&
+        !developmentStopped(task.state);
+    } catch (error) {
+      if (!(error instanceof Fault) || error.code !== "not_found") throw error;
+    }
+  }
   const deliveries = w.deliveries.filter(
     (d) => d.runId === run.id && d.id === `run:${run.id}:result`,
   );
@@ -55,14 +73,18 @@ export async function stopGeneration(
     deliveries.some((d) => ["pending", "sending"].includes(d.state));
   if (
     !active &&
+    !codingActive &&
     (!pending ||
       deliveries.some((d) => ["sent", "delivery_unknown"].includes(d.state)))
   )
     return;
+  if (codingActive && run.codingTaskId)
+    await cancelDevelopment(sql, w, actor, run.codingTaskId);
   cancelRun(w, actor, run.id);
   run.cancelled = true;
   run.status = "cancelled";
   run.finishedAt ??= new Date().toISOString();
+  if (!active) confirmRunStopped(w, run);
   await store.save(sql, w);
   return w.id;
 }

@@ -7,13 +7,14 @@ import {
   type Workspace,
 } from "../domain.ts";
 import { fingerprint } from "../setup/credentials.ts";
+import { clearProgress } from "../telegram/feedback.ts";
 import {
   audience,
   audit,
   authorize,
   runAllowed,
 } from "../workspaces/policy.ts";
-import { deliver } from "../workspaces/service.ts";
+import { cancellableRun, cancelRun, deliver } from "../workspaces/service.ts";
 import {
   type DevelopmentInput,
   type DevelopmentTask,
@@ -34,6 +35,7 @@ export function checkDevelopment(
   task: DevelopmentTask,
   actor = task.actor,
   stopping = false,
+  viewing = false,
 ) {
   authorize(w, actor);
   requireThat(task.workspaceId === w.id, "access_denied", 403);
@@ -56,7 +58,7 @@ export function checkDevelopment(
     "coding_configuration_changed",
     409,
   );
-  requireThat(!task.cancelRequested, "coding_cancelled", 409);
+  requireThat(viewing || !task.cancelRequested, "coding_cancelled", 409);
 }
 
 export function currentRequirement(
@@ -156,6 +158,7 @@ export async function startDevelopment(
       409,
     );
     checkDevelopment(w, task);
+    run.codingTaskId = task.id;
     return task;
   }
   const tasks = await taskList(sql, w.id);
@@ -245,13 +248,23 @@ export async function startDevelopment(
         expiresAt: s.expiresAt,
       })),
   });
+  run.codingTaskId = task.id;
   audit(w, actor, "coding.development_started", task.id);
   notifyDevelopment(
     w,
     task,
-    `Codex will investigate your request in ${payload.repository}. It will make the technical decisions and ask only for necessary product choices.`,
+    `Your request for ${payload.repository} is queued. Use /status to check it or /cancel to stop it.`,
     "started",
   );
+  const acknowledgement = w.deliveries.find(
+    (d) => d.id === `development:${task.id}:started`,
+  );
+  if (acknowledgement)
+    acknowledgement.feedback = {
+      owner: "development",
+      id: task.id,
+      key: "queued",
+    };
   return task;
 }
 
@@ -341,15 +354,52 @@ export async function cancelDevelopment(
 ) {
   const task = await taskGet(sql, w.id, id);
   checkDevelopment(w, task, actor, true);
+  if (developmentStopped(task.state)) return task;
+  if (task.cancelRequested) return task;
   task.cancelRequested = true;
+  clearProgress(w, "development", task.id);
   if (
     ["queued", "waiting", "review"].includes(task.state) ||
     (task.state === "auth_required" && !task.attemptId)
   )
     task.state = "cancelled";
   await taskSave(sql, task);
+  deliver(
+    w,
+    task.actor,
+    task.chatId,
+    task.state === "cancelled"
+      ? "Your task has stopped. Messages already sent cannot be undone."
+      : "Stopping your task… Any GitHub operation already underway may finish.",
+    {
+      topicId: task.topicId,
+      id: `development:${task.id}:cancel:${task.state === "cancelled" ? "stopped" : "requested"}`,
+    },
+  );
   audit(w, actor, "coding.cancel_requested", id);
   return task;
+}
+
+export async function cancelRequest(
+  sql: Sql,
+  w: Workspace,
+  actor: string,
+  id: string,
+) {
+  const run = cancellableRun(w, actor, id);
+  if (run.codingTaskId) {
+    const task = await taskGet(sql, w.id, run.codingTaskId);
+    requireThat(
+      task.actor === run.actor &&
+        task.chatId === run.chatId &&
+        task.topicId === run.topicId,
+      "access_denied",
+      403,
+    );
+    checkDevelopment(w, task, actor, true);
+    await cancelDevelopment(sql, w, actor, task.id);
+  }
+  return cancelRun(w, actor, id);
 }
 
 export async function pruneDevelopment(sql: Sql, w: Workspace) {

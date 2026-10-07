@@ -21,10 +21,15 @@ import { Fault, requireThat } from "../domain.ts";
 import type { SetupService } from "../setup/service.ts";
 import { attachmentErrors, loadAttachments } from "../telegram/attachments.ts";
 import { TelegramDraft } from "../telegram/draft.ts";
+import {
+  clearProgress,
+  notifyRunFailure,
+  requestFailureMessage,
+} from "../telegram/feedback.ts";
 import { discardFollowup } from "../telegram/followup.ts";
 import { commitDiscussions } from "../workspaces/conversation-memory.ts";
 import { audit, runAllowed } from "../workspaces/policy.ts";
-import { deliver } from "../workspaces/service.ts";
+import { confirmRunStopped, deliver } from "../workspaces/service.ts";
 import {
   recordThreadAnswer,
   refreshThreadContext,
@@ -56,6 +61,7 @@ export class Executor {
           run.error = "extension_configuration_invalid";
           run.finishedAt = new Date().toISOString();
           discardFollowup(w, run);
+          notifyRunFailure(w, run);
         }
       });
       return;
@@ -103,6 +109,7 @@ export class Executor {
           if (a.status === "reserved") a.status = "unknown";
         discardFollowup(w, r);
         audit(w, r.actor, "run.recovery_required", r.id);
+        notifyRunFailure(w, r);
         return;
       }
       r.modelOptions ??= {
@@ -120,10 +127,12 @@ export class Executor {
         r.error = "extension_configuration_changed";
         r.finishedAt = new Date().toISOString();
         discardFollowup(w, r);
+        notifyRunFailure(w, r);
         return;
       }
       refreshThreadContext(w, r);
       r.status = "running";
+      clearProgress(w, "run", r.id);
       r.fence++;
       r.telegramDraft =
         r.chatId === r.actor && !r.workflowId && deployment.bot
@@ -145,6 +154,7 @@ export class Executor {
       deadline,
       ...(shutdown ? [shutdown] : []),
     ]);
+    let handedOff = !!claimed.codingTaskId;
     const guard = async () => {
       signal.throwIfAborted();
       const d = await this.store.deployment();
@@ -168,6 +178,7 @@ export class Executor {
           "run_revoked",
           409,
         );
+        handedOff = !!r.codingTaskId;
         r.leaseUntil = new Date(Date.now() + 120000).toISOString();
       });
     };
@@ -363,7 +374,12 @@ export class Executor {
             (a) => a.runId === runId && !a.decision,
           ),
         checkpoint,
-        preview: draft ? (text) => draft.update(text) : undefined,
+        preview: draft
+          ? async (text) => {
+              if (handedOff) return;
+              await draft.update(text);
+            }
+          : undefined,
       };
       if (claimed.followup && claimed.followup.decision !== "reply") {
         classifying = true;
@@ -457,17 +473,25 @@ export class Executor {
             a.runId === r.id &&
             Date.parse(a.expiresAt) > Date.now(),
         );
-        const text = result.text.trim() ? result.text : "";
+        const handoff = !!r.codingTaskId;
+        const text = handoff
+          ? "Your coding request has been queued for Codex. Task updates will appear in this conversation."
+          : result.text.trim()
+            ? result.text
+            : "";
         r.status = proposals
           ? "awaiting_approval"
-          : text
-            ? result.status
-            : "partial";
-        r.error = proposals
-          ? undefined
-          : "reason" in result
-            ? result.reason
-            : undefined;
+          : handoff
+            ? "succeeded"
+            : text
+              ? result.status
+              : "partial";
+        r.error =
+          proposals || handoff
+            ? undefined
+            : "reason" in result
+              ? result.reason
+              : undefined;
         if (!proposals && !text) r.error ??= "empty_response";
         r.result = text;
         r.finishedAt = new Date().toISOString();
@@ -475,16 +499,10 @@ export class Executor {
         recordThreadAnswer(w, r);
         if (text) commitDiscussions(w, r);
         else delete r.discussionUpdates;
-        if (text || !proposals) {
-          const limitation =
-            r.error === "turn_limit"
-              ? ` within the ${r.settings.maxTurns} model-turn limit`
-              : r.error === "output_limit"
-                ? " within the model output limit"
-                : " because the model returned no answer";
+        if (!handoff && (text || !proposals)) {
           const response = text
-            ? `${text.slice(0, 2700)}${result.status === "partial" ? "\n\nI couldn’t finish this response within the available limits." : ""}`
-            : `I couldn’t finish this request${limitation}. Inspect run ${r.id} in the panel for details.`;
+            ? `${text.slice(0, 2700)}${result.status === "partial" ? `\n\n${requestFailureMessage(r.error ?? "incomplete_response")}` : ""}`
+            : requestFailureMessage(r.error ?? "empty_response");
           deliver(
             w,
             r.actor,
@@ -537,19 +555,15 @@ export class Executor {
         delete r.discussionUpdates;
         const unaddressed = r.followup && r.followup.decision !== "reply";
         discardFollowup(w, r);
-        if (!unaddressed && runAllowed(w, r))
-          deliver(
+        if (r.cancelled) confirmRunStopped(w, r);
+        else if (!unaddressed)
+          notifyRunFailure(
             w,
-            r.actor,
-            r.chatId,
-            attachmentErrors[r.error ?? ""] ??
-              `Run ${r.id}: ${r.status} (${r.error}).${timedOut ? ` The run exceeded its ${this.timeoutMs / 1000}-second time limit.` : ""} Inspect the run in the panel.${r.attempts.some((a) => a.status === "unknown") ? " Unknown provider charges remain reserved." : ""}`,
-            {
-              topicId: r.topicId,
-              replyTo: r.replyTo,
-              runId: r.id,
-              id: `run:${r.id}:failure`,
-            },
+            r,
+            r.codingTaskId
+              ? "Your coding request was handed to Codex, but the chat response could not finish. Use /status in this conversation to check the task’s current outcome."
+              : (attachmentErrors[r.error ?? ""] ??
+                  requestFailureMessage(r.error ?? "")),
           );
         audit(w, r.actor, `run.${r.status}`, r.id);
       });

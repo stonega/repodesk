@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { type Approval, requireThat, type Workspace } from "../domain.ts";
 import { authorizeRepository } from "../github/user-access.ts";
 import { fingerprint } from "../setup/credentials.ts";
+import { clearProgress } from "../telegram/feedback.ts";
 import {
   audience,
   audit,
@@ -16,6 +17,7 @@ import {
   codingPayload,
   codingTerminal,
 } from "./config.ts";
+import { reviewedStatus } from "./feedback.ts";
 
 export function codingDestination(
   w: Workspace,
@@ -201,7 +203,26 @@ export function cancelCoding(w: Workspace, actor: string, id: string) {
     "coding_maintainer_required",
     403,
   );
-  if (!codingTerminal(task.state)) task.cancelRequested = true;
+  if (codingTerminal(task.state) || task.cancelRequested) return task;
+  task.cancelRequested = true;
+  clearProgress(w, "coding", task.id);
+  if (
+    ["queued", "issue_created"].includes(task.state) ||
+    (task.state === "auth_required" && task.authResumeState !== "running")
+  )
+    task.state = "cancelled";
+  deliver(
+    w,
+    task.actor,
+    task.chatId,
+    task.state === "cancelled"
+      ? "Your task has stopped. Messages already sent cannot be undone."
+      : "Stopping your task… Any GitHub operation already underway may finish.",
+    {
+      topicId: task.topicId,
+      id: `coding:${task.id}:cancel:${task.state === "cancelled" ? "stopped" : "requested"}`,
+    },
+  );
   audit(w, actor, "coding.cancel_requested", id);
   return task;
 }
@@ -212,22 +233,18 @@ export function notifyCoding(w: Workspace, task: CodingTask) {
     return;
   }
   if (w.settings.paused) return;
-  const text = [
-    `Codex task ${task.id}: ${task.state.replaceAll("_", " ")}.`,
-    task.issue?.url,
-    task.workflowUrl,
-    task.prUrl,
-    task.error ? `Reason: ${task.error}.` : "",
-    task.state === "auth_required"
-      ? "Connect your Codex account in Plugins → Codex → Configuration. Your task is paused and will continue automatically after connection."
-      : task.state === "unknown"
-        ? "Check GitHub before starting another task. This task will not be replayed automatically."
-        : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-  deliver(w, task.actor, task.chatId, text, {
+  if (!["running", "publishing"].includes(task.state))
+    clearProgress(w, "coding", task.id);
+  const text = reviewedStatus(task);
+  const id = deliver(w, task.actor, task.chatId, text, {
     topicId: task.topicId,
-    id: `coding:${task.id}:${task.state}:${task.workflowRunId ?? ""}:${task.authPauses ?? 0}`,
+    id:
+      task.state === "cancelled"
+        ? `coding:${task.id}:cancel:stopped`
+        : `coding:${task.id}:${task.state}:${task.workflowRunId ?? ""}:${task.authPauses ?? 0}`,
   });
+  if (task.state === "queued") {
+    const d = w.deliveries.find((d) => d.id === id);
+    if (d) d.feedback = { owner: "coding", id: task.id, key: "queued" };
+  }
 }

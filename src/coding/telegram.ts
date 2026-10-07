@@ -5,6 +5,7 @@ import type { Message, Update } from "../telegram/router.ts";
 import { eligible } from "../workspaces/policy.ts";
 import { deliver } from "../workspaces/service.ts";
 import { developmentStopped } from "./development.ts";
+import { developmentStatus } from "./feedback.ts";
 import { taskEvent, taskGet, taskInputs, taskList } from "./task-store.ts";
 import {
   appendDevelopment,
@@ -36,33 +37,47 @@ export async function routeDevelopment(
     topicId = msg.message_thread_id ?? 0;
   const tasks = (await taskList(sql, w.id)).filter(
     (t) =>
-      !developmentStopped(t.state) &&
+      (cmd?.name === "status" ||
+        cmd?.name === "cancel" ||
+        !developmentStopped(t.state)) &&
       t.botId === botId &&
       t.chatId === chatId &&
       t.topicId === topicId,
   );
   const replyId = msg.reply_to_message?.message_id;
-  const anchor = replyId
-    ? tasks.find(
-        (t) =>
-          w.deliveries.some(
-            (d) =>
-              d.id.startsWith(`development:${t.id}:`) &&
-              d.state === "sent" &&
-              d.chatId === chatId &&
-              d.topicId === topicId &&
-              d.remoteId === replyId,
-          ) ||
-          (replyId &&
-            w.messages.some(
-              (s) => s.id === t.sourceId && s.id.endsWith(`:${replyId}`),
-            )),
-      )
-    : undefined;
+  const explicit =
+    cmd?.args && ["status", "cancel"].includes(cmd.name)
+      ? tasks.find((t) => t.id === cmd.args)
+      : undefined;
+  const anchor =
+    explicit ??
+    (replyId
+      ? tasks.find(
+          (t) =>
+            w.deliveries.some(
+              (d) =>
+                d.id.startsWith(`development:${t.id}:`) &&
+                d.state === "sent" &&
+                d.chatId === chatId &&
+                d.topicId === topicId &&
+                d.remoteId === replyId,
+            ) ||
+            (replyId &&
+              w.messages.some(
+                (s) => s.id === t.sourceId && s.id.endsWith(`:${replyId}`),
+              )),
+        )
+      : undefined);
   const candidates = [];
   for (const t of anchor ? [anchor] : tasks) {
     try {
-      checkDevelopment(w, t, actor, cmd?.name === "cancel");
+      checkDevelopment(
+        w,
+        t,
+        actor,
+        cmd?.name === "cancel",
+        cmd?.name === "status",
+      );
     } catch {
       continue;
     }
@@ -72,6 +87,10 @@ export async function routeDevelopment(
     // Outside a Topic, bind only replies. Unaddressed group messages need a recent participant binding.
     if (
       anchor ||
+      (!!cmd &&
+        ["status", "cancel"].includes(cmd.name) &&
+        msg.chat.type === "private" &&
+        participant) ||
       (topicId > 0 &&
         (msg.chat.type === "private" ||
           !!cmd ||
@@ -105,19 +124,35 @@ export async function routeDevelopment(
   w.messages = w.messages.slice(-2000);
   if (candidates.length > 1) {
     const eventId = `select:${botId}:${u.update_id}`;
+    const operation =
+      cmd?.name === "cancel"
+        ? "cancel"
+        : cmd?.name === "status"
+          ? "status"
+          : "input";
     for (const t of candidates)
-      await taskEvent(sql, t, eventId, { actor, source, botId });
-    deliver(w, actor, chatId, "Which Codex task should receive this message?", {
-      topicId,
-      replyTo: msg.message_id,
-      id: `development:selection:${botId}:${u.update_id}`,
-      buttons: candidates.map((t) => [
-        {
-          text: `${t.payload.repository}: ${t.payload.title}`.slice(0, 60),
-          callback_data: `devpick:${t.id}:${u.update_id}`,
-        },
-      ]),
-    });
+      await taskEvent(sql, t, eventId, { actor, source, botId, operation });
+    deliver(
+      w,
+      actor,
+      chatId,
+      operation === "cancel"
+        ? "Which Codex task should stop?"
+        : operation === "status"
+          ? "Which Codex task should I check?"
+          : "Which Codex task should receive this message?",
+      {
+        topicId,
+        replyTo: msg.message_id,
+        id: `development:selection:${botId}:${u.update_id}`,
+        buttons: candidates.map((t) => [
+          {
+            text: `${t.payload.repository}: ${t.payload.title}`.slice(0, 60),
+            callback_data: `devpick:${t.id}:${u.update_id}`,
+          },
+        ]),
+      },
+    );
     return true;
   }
   const task = candidates[0];
@@ -127,16 +162,12 @@ export async function routeDevelopment(
     /^(?:stop|cancel|停止|取消)[.!。！]?$/i.test(text.trim())
   ) {
     await cancelDevelopment(sql, w, actor, task.id);
-    deliver(w, actor, chatId, "Codex cancellation recorded.", {
-      topicId,
-      id: `development:${task.id}:cancel:${u.update_id}`,
-    });
   } else if (cmd?.name === "status") {
     deliver(
       w,
       actor,
       chatId,
-      `${task.payload.repository}: ${task.state}${task.question ? `\n${task.question.text}` : ""}${task.pr ? `\n${task.pr.url}` : ""}`,
+      `${developmentStatus(task)}\nReference: ${task.id}`,
       { topicId, id: `development:${task.id}:status:${u.update_id}` },
     );
   } else {
@@ -202,6 +233,24 @@ export async function selectDevelopment(
     403,
   );
   const task = await taskGet(sql, w.id, id);
+  if (row.data.operation === "cancel") {
+    await cancelDevelopment(sql, w, actor, task.id);
+    return true;
+  }
+  if (row.data.operation === "status") {
+    checkDevelopment(w, task, actor, false, true);
+    deliver(
+      w,
+      actor,
+      chatId,
+      `${developmentStatus(task)}\nReference: ${task.id}`,
+      {
+        topicId,
+        id: `development:${task.id}:status:${u.update_id}`,
+      },
+    );
+    return true;
+  }
   await appendDevelopment(
     sql,
     w,

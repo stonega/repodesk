@@ -1,16 +1,82 @@
+import { checkCodingPayload } from "../coding/policy.ts";
 import { taskGet } from "../coding/task-store.ts";
 import { checkDevelopment } from "../coding/tasks.ts";
+import type { Sql } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
-import { type Delivery, requireThat } from "../domain.ts";
+import { type Delivery, requireThat, type Workspace } from "../domain.ts";
 import type { SetupService } from "../setup/service.ts";
 import { TelegramError } from "../telegram/client.ts";
 import { telegramMarkdown, telegramRichMessage } from "../telegram/format.ts";
+import { selectionAllowed } from "../telegram/task-controls.ts";
 import { eligible, runAllowed } from "../workspaces/policy.ts";
 export class DeliveryWorker {
   constructor(
     private store: Store,
     private setup: SetupService,
   ) {}
+  private async feedbackAllowed(
+    w: Workspace,
+    d: Delivery,
+    sql: Sql = this.store.pool,
+  ) {
+    if (!(await selectionAllowed(sql, w, d))) return false;
+    if (d.cancellationRunId) {
+      const r = w.runs.find((r) => r.id === d.cancellationRunId);
+      if (
+        !r?.cancelled ||
+        r.actor !== d.actor ||
+        r.chatId !== d.chatId ||
+        r.topicId !== d.topicId
+      )
+        return false;
+      if (d.id.endsWith(":requested") && r.stopConfirmed) return false;
+    }
+    if (d.feedback?.owner === "run")
+      return w.runs.some(
+        (r) => r.id === d.feedback?.id && r.status === "queued" && !r.cancelled,
+      );
+    if (d.feedback?.owner === "development") {
+      try {
+        const t = await taskGet(sql, w.id, d.feedback.id);
+        return (
+          !t.cancelRequested &&
+          (d.feedback.key === "queued"
+            ? t.state === "queued"
+            : ["working", "publishing"].includes(t.state) &&
+              t.progress?.key === d.feedback.key &&
+              !t.progress.unavailable)
+        );
+      } catch {
+        return false;
+      }
+    }
+    const id = /^coding:([0-9a-f-]{36}):/.exec(d.id)?.[1];
+    if (id) {
+      const t = w.codingTasks?.find((t) => t.id === id);
+      if (t) {
+        if (!d.id.includes(":cancel:")) {
+          try {
+            checkCodingPayload(w, t.actor, t.payload);
+            if (d.actor !== t.actor) checkCodingPayload(w, d.actor, t.payload);
+          } catch {
+            return false;
+          }
+        }
+        if (d.feedback)
+          return (
+            !t.cancelRequested &&
+            (d.feedback.key === "queued"
+              ? t.state === "queued"
+              : ["running", "publishing", "starting_publication"].includes(
+                  t.state,
+                ) &&
+                t.progress?.key === d.feedback.key &&
+                !t.progress.unavailable)
+          );
+      } else if (d.feedback) return false;
+    }
+    return true;
+  }
   async send(workspaceId: string, id: string) {
     const deployment = await this.store.deployment();
     if (deployment.paused) return;
@@ -20,6 +86,10 @@ export class DeliveryWorker {
       if (d.state === "sending") {
         if (Date.parse(d.startedAt ?? "") + 30000 < Date.now())
           d.state = "delivery_unknown";
+        return;
+      }
+      if (!(await this.feedbackAllowed(w, d, sql))) {
+        d.state = "cancelled";
         return;
       }
       if (
@@ -32,7 +102,13 @@ export class DeliveryWorker {
             workspaceId,
             d.id.split(":")[1] ?? "",
           );
-          checkDevelopment(w, task, d.actor, d.id.includes(":cancel:"));
+          checkDevelopment(
+            w,
+            task,
+            d.actor,
+            d.id.includes(":cancel:"),
+            d.id.includes(":status:"),
+          );
         } catch {
           d.state = "cancelled";
           return;
@@ -60,6 +136,11 @@ export class DeliveryWorker {
       // This last durable policy check precedes the external effect. In-flight revocation cannot undo a send.
       const current = await this.store.read(workspaceId);
       requireThat(
+        await this.feedbackAllowed(current, intent),
+        "delivery_revoked",
+        403,
+      );
+      requireThat(
         !current.deletion &&
           eligible(current, intent.actor) &&
           (intent.chatId === intent.actor ||
@@ -85,6 +166,7 @@ export class DeliveryWorker {
           task,
           intent.actor,
           intent.id.includes(":cancel:"),
+          intent.id.includes(":status:"),
         );
       }
       const sent = await (await this.setup.client()).call<{

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requireThat } from "../domain.ts";
+import type { Progress } from "../telegram/feedback.ts";
 import { branchName, type codingPayload } from "./config.ts";
 import {
   type DevelopmentPolicy,
@@ -194,6 +195,7 @@ export type DevelopmentState =
   | "cancelled"
   | "unknown";
 export interface DevelopmentTask {
+  progress?: Progress;
   id: string;
   workspaceId: string;
   actor: string;

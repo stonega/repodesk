@@ -8,6 +8,28 @@ accepted by a pilot team. Each entry states its own test scope and remaining gat
 
 ## Implemented
 
+### Telegram progress and cancellation feedback (2026-10-06)
+
+Implemented the [friend beta feedback plan](telegram-feedback-plan.md). Telegram
+uses readable task stages and actionable failures, with durable phase notices,
+coalescing and suppression of obsolete progress. Status/cancellation target replies
+or the current conversation, with authenticated selection for multiple tasks.
+Queued selectors and actions recheck current permissions. Cancellation separates
+stopping from confirmed termination; missing runner records and publication in
+flight retain uncertainty. Native Stop and original-request cancellation reach a
+linked coding task under existing permissions. Pi handoff responses and previews
+cannot claim queued coding work is complete. Ordinary cancellation deliveries are
+included in scoped admin run details. The Codex panel uses the same readable stages.
+
+Validation: Biome, strict TypeScript, build and **451 deterministic tests** passed
+with disposable PostgreSQL; **25 affected browser scenarios** passed with desktop
+and mobile inspection. Application/supervisor/job images built, Node runtime
+contract and Compose validation passed, and deterministic container smoke covered
+the runner lifecycle with fake external services. Fresh migration/API/worker smoke
+passed. No new dependency or migration was added. Live Telegram/model/GitHub beta
+acceptance and deployment remain separate steps; see the
+[manual acceptance procedure](../../examples/telegram-feedback.md).
+
 ### Automatic Codex environment preparation and checks (2026-10-05)
 
 Removed setup/check command configuration from both repository forms and the

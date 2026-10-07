@@ -11,6 +11,7 @@ import type { GitHubApps } from "../github/registry.ts";
 import { decrypt, fingerprint } from "../setup/credentials.ts";
 import { loadSourceAttachments } from "../telegram/attachments.ts";
 import { type Telegram, TelegramClient } from "../telegram/client.ts";
+import { clearProgress, recordProgress } from "../telegram/feedback.ts";
 import {
   type DevelopmentRun,
   type DevelopmentTask,
@@ -19,6 +20,12 @@ import {
   developmentStopped,
 } from "./development.ts";
 import { codingFailureMessage } from "./failure-messages.ts";
+import {
+  markRunnerUnavailable,
+  publicationUnknown,
+  runnerStage,
+  taskUnknown,
+} from "./feedback.ts";
 import type {
   LocalDeviceAuth,
   LocalRunner,
@@ -136,6 +143,8 @@ export class DevelopmentExecutor {
       }
       if (t.cancelRequested && !t.attemptId && !t.contentRemoved) {
         t.state = "cancelled";
+        clearProgress(w, "development", t.id);
+        notifyDevelopment(w, t, "Your task has stopped.", "cancel:stopped");
         await taskSave(sql, t);
         return;
       }
@@ -166,17 +175,30 @@ export class DevelopmentExecutor {
         return;
       }
       if (task.cancelRequested) {
+        let stopConfirmed = true;
         if (task.attemptId)
           await this.runner.cancel(workspaceId, task.attemptId).catch((e) => {
             if (!(e instanceof Fault) || e.code !== "coding_task_not_found")
               throw e;
+            stopConfirmed = false;
           });
         await this.update(task, lease, async (_w, sql, t) => {
-          t.state = t.state === "publishing" ? "unknown" : "cancelled";
+          const publishing = t.state === "publishing";
+          t.state = publishing || !stopConfirmed ? "unknown" : "cancelled";
           await finishAttempt(
             sql,
             t,
             t.state === "unknown" ? "unknown" : "done",
+          );
+          await this.notice(
+            _w,
+            t,
+            t.state === "unknown"
+              ? publishing
+                ? publicationUnknown
+                : taskUnknown
+              : "Your task has stopped. Messages already sent cannot be undone.",
+            "cancel:stopped",
           );
         });
         return;
@@ -278,16 +300,6 @@ export class DevelopmentExecutor {
                   run,
                 }),
               ],
-            );
-            notifyDevelopment(
-              w,
-              t,
-              t.phase === "intake"
-                ? "Codex is investigating the request."
-                : t.phase === "analysis"
-                  ? "Codex is investigating your question."
-                  : "Codex is implementing and checking the change.",
-              `phase:${t.fence}`,
             );
             const sourceIds = new Set([
               ...inputs.map((input) => input.sourceId),
@@ -428,7 +440,17 @@ export class DevelopmentExecutor {
           ["preparing", "running", "ready", "succeeded"].includes(status.state),
         );
       if (["preparing", "running", "publishing"].includes(status.state)) {
-        await this.update(task, lease, async () => {});
+        await this.update(task, lease, async (w, sql, t) => {
+          await this.allowed(w, sql, t);
+          t.error = undefined;
+          recordProgress(
+            w,
+            t,
+            "development",
+            runnerStage(status, t.phase),
+            `${t.fence}:${t.consumedRevision}:${status.repairCount ?? 0}`,
+          );
+        });
         return;
       }
       if (
@@ -468,12 +490,7 @@ export class DevelopmentExecutor {
           t.state = "unknown";
           t.error = "coding_publication_unknown";
           await finishAttempt(sql, t, "unknown");
-          await this.notice(
-            w,
-            t,
-            "Publication outcome is unknown. It will not be repeated automatically.",
-            `stopped:${t.fence}`,
-          );
+          await this.notice(w, t, publicationUnknown, `stopped:${t.fence}`);
         });
         return;
       }
@@ -535,7 +552,7 @@ export class DevelopmentExecutor {
             await this.notice(
               w,
               t,
-              t.question.text,
+              `${t.question.text}\nReply here to continue.`,
               `question:${t.question.id}`,
             );
           } else if (t.phase === "intake") {
@@ -564,7 +581,7 @@ export class DevelopmentExecutor {
               await this.notice(
                 w,
                 t,
-                t.question.text,
+                `${t.question.text}\nReply here to continue.`,
                 `question:${t.question.id}`,
               );
             } else {
@@ -608,7 +625,7 @@ export class DevelopmentExecutor {
           await this.notice(
             w,
             t,
-            `Codex stopped: ${codingFailureMessage(t.error)}${t.pr ? `\n${t.pr.url}` : ""}`,
+            `${t.state === "unknown" ? (t.progress?.stage === "publish" ? publicationUnknown : taskUnknown) : t.state === "cancelled" ? "Your task has stopped." : codingFailureMessage(t.error)}${t.pr ? `\n${t.pr.url}` : ""}`,
             `stopped:${t.fence}`,
           );
         }
@@ -648,7 +665,10 @@ export class DevelopmentExecutor {
           code,
         )
       ) {
-        await this.update(task, lease, async () => {});
+        await this.update(task, lease, async (w, _sql, t) => {
+          markRunnerUnavailable(t);
+          clearProgress(w, "development", t.id);
+        });
         return;
       }
       if (task.attemptId && task.state !== "publishing")
@@ -679,7 +699,7 @@ export class DevelopmentExecutor {
           await this.notice(
             w,
             t,
-            `Codex stopped: ${codingFailureMessage(code)}${t.pr ? `\n${t.pr.url}` : ""}`,
+            `${t.state === "unknown" ? (t.progress?.stage === "publish" ? publicationUnknown : taskUnknown) : codingFailureMessage(code)}${t.pr ? `\n${t.pr.url}` : ""}`,
             `stopped:${t.fence}`,
           );
         }
@@ -708,7 +728,7 @@ export class DevelopmentExecutor {
         await this.notice(
           w,
           t,
-          "Codex account needs sign-in. Connect it in Plugins → Codex → Configuration. Your task is paused and will continue automatically after connection.",
+          codingFailureMessage("coding_device_auth_required"),
           `auth-required:${t.authPauses}`,
         );
       }
@@ -787,6 +807,13 @@ export class DevelopmentExecutor {
             );
         } else {
           t.state = "publishing";
+          recordProgress(
+            w,
+            t,
+            "development",
+            "publish",
+            `${t.fence}:${t.consumedRevision}`,
+          );
           await sql.query(
             "UPDATE coding_task_attempts SET state='publishing' WHERE workspace_id=$1 AND id=$2",
             [t.workspaceId, t.attemptId],
@@ -863,6 +890,8 @@ export class DevelopmentExecutor {
       const t = await taskGet(sql, task.workspaceId, task.id);
       if (t.lease !== lease) return;
       const result = await action(w, sql, t);
+      if (!["working", "publishing"].includes(t.state))
+        clearProgress(w, "development", t.id);
       if (release) {
         t.lease = undefined;
         t.leaseUntil = undefined;

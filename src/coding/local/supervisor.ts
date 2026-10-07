@@ -153,6 +153,7 @@ export class RunnerSupervisor implements LocalRunner {
       baseSha: r.baseSha,
       publishedSha: r.publishedSha,
       checkPassed: r.checkPassed,
+      repairCount: r.repairs,
     };
   }
   private volume(r: Record, mode: string) {

@@ -1,5 +1,5 @@
 import { expect, type Page, type Route, test } from "@playwright/test";
-import type { CodingPage } from "../../src/coding/config.ts";
+import type { CodingPage, CodingTask } from "../../src/coding/config.ts";
 import { chooseOption } from "./dropdown-helpers.ts";
 
 const workspaceId = "d2ce2eab-3b09-4e8e-858e-75c20d832517";
@@ -50,6 +50,76 @@ async function fixture(page: Page, state: CodingPage["deviceAuth"]) {
     dialog: page.getByRole("dialog", { name: "Edit Codex configuration" }),
   };
 }
+
+test("coding feedback shows confirmed stages, stopping and safe failures on desktop and mobile", async ({
+  page,
+}) => {
+  const f = await fixture(page, { state: "connected" });
+  await f.dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  const now = Date.now();
+  const task: CodingTask = {
+    id: "1e8f2aab-3b09-4e8e-858e-75c20d832517",
+    actor: "101",
+    runId: "fixture-run",
+    chatId: "101",
+    topicId: 3,
+    state: "running" as const,
+    createdAt: new Date(now).toISOString(),
+    updatedAt: new Date(now).toISOString(),
+    payload: {
+      repositoryId: 7001,
+      repository: "example/repo",
+      installationId: 501,
+      githubRevision: 1,
+      configRevision: 1,
+      baseBranch: "main",
+      backend: "podman" as const,
+      authMode: "device_code" as const,
+      title: "Readable task feedback",
+      body: "Fixture",
+    },
+    progress: {
+      key: "1:check",
+      stage: "check",
+      sequence: 1,
+      observedAt: now,
+      changedAt: now,
+    },
+  };
+  f.data.tasks = [task];
+  await page
+    .getByRole("button", { name: "Check progress", exact: true })
+    .click();
+  const row = page
+    .getByRole("row")
+    .filter({ hasText: "Readable task feedback" });
+  await expect(row).toContainText("Running checks");
+  await page.screenshot({
+    path: "test-results/telegram-feedback-desktop.png",
+    fullPage: true,
+  });
+  if (!task.progress) throw new Error("Missing progress fixture");
+  task.progress.unavailable = true;
+  await page
+    .getByRole("button", { name: "Check progress", exact: true })
+    .click();
+  await expect(row).toContainText("Runner status unavailable");
+  task.cancelRequested = true;
+  await page
+    .getByRole("button", { name: "Check progress", exact: true })
+    .click();
+  await expect(row).toContainText("Stopping");
+  task.state = "failed";
+  task.error = "private-provider-token-detail";
+  await expect(row).toContainText("Could not complete", { timeout: 10000 });
+  await expect(row).toContainText("workspace administrator");
+  await expect(row).not.toContainText("private-provider-token-detail");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: "test-results/telegram-feedback-mobile.png",
+    fullPage: true,
+  });
+});
 
 test("unavailable runner can be rechecked without losing the configuration draft", async ({
   page,

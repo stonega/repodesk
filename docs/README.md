@@ -27,6 +27,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Allowed-user whitelist](design/access-control.md) | Configurable access, admin controls, enforcement and revocation |
 | [Pi + Docker implementation plan](implementation/bot-plan.md) | Concrete engineering tasks, architecture decisions, tests and rollout |
 | [Roadmap](implementation/roadmap.md) | Dependency-ordered milestones and release gates |
+| [Telegram feedback beta plan](implementation/telegram-feedback-plan.md) | Readable progress, task status, cancellation and failures for friends and colleagues |
 | [GitHub App connections](implementation/github-app.md) | Register the App, connect workspace repositories, permissions and credential lifecycle |
 | [Codex coding tasks](implementation/codex-coding.md) | Maintainer-only issue-to-PR tasks, repository settings and local runner setup |
 | [Continuous Codex collaboration](design/codex-collaboration.md) | Policy-gated continuous tasks: Pi requirements intake, Codex decisions, Telegram questions, repair and same-PR follow-ups; live pilot pending |

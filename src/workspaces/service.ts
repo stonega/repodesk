@@ -58,6 +58,7 @@ export function deliver(
     buttons?: Workspace["deliveries"][number]["buttons"];
     id?: string;
     format?: "markdown" | "rich";
+    cancellationRunId?: string;
   } = {},
 ) {
   const id = options.id ?? randomUUID();
@@ -71,6 +72,7 @@ export function deliver(
     topicId: options.topicId ?? 0,
     replyTo: options.replyTo,
     runId: options.runId,
+    cancellationRunId: options.cancellationRunId,
     buttons: options.buttons,
     state: "pending",
     attempts: 0,
@@ -240,7 +242,7 @@ export function createRun(
   audit(w, actor, "run.queued", run.id);
   return run;
 }
-export function cancelRun(w: Workspace, actor: string, id: string) {
+export function cancellableRun(w: Workspace, actor: string, id: string) {
   authorize(w, actor);
   const run = w.runs.find((r) => r.id === id);
   requireThat(
@@ -251,15 +253,61 @@ export function cancelRun(w: Workspace, actor: string, id: string) {
     "not_found",
     404,
   );
-  if (["queued", "running", "awaiting_approval"].includes(run.status)) {
+  return run;
+}
+export function cancelRun(w: Workspace, actor: string, id: string) {
+  const run = cancellableRun(w, actor, id);
+  const working =
+    !run.stopConfirmed &&
+    (run.status === "running" || run.cancelled) &&
+    Date.parse(run.leaseUntil ?? "") > Date.now();
+  if (
+    run.codingTaskId ||
+    ["queued", "running", "awaiting_approval"].includes(run.status) ||
+    w.deliveries.some((d) => d.runId === id && d.state === "pending")
+  ) {
     run.cancelled = true;
     run.status = "cancelled";
     run.finishedAt = new Date().toISOString();
   }
   for (const d of w.deliveries)
     if (d.runId === id && d.state === "pending") d.state = "cancelled";
+  if (run.cancelled && !run.codingTaskId) {
+    run.stopConfirmed = !working;
+    deliver(
+      w,
+      run.actor,
+      run.chatId,
+      working
+        ? "Stopping your request…"
+        : "Your request has stopped. Messages already sent cannot be undone.",
+      {
+        topicId: run.topicId,
+        replyTo: run.replyTo,
+        cancellationRunId: run.id,
+        id: `run:${run.id}:cancel:${working ? "requested" : "stopped"}`,
+      },
+    );
+  }
   audit(w, actor, "run.cancelled", id);
   return run;
+}
+export function confirmRunStopped(w: Workspace, run: Run) {
+  if (!run.cancelled) return;
+  run.stopConfirmed = true;
+  if (run.codingTaskId) return;
+  deliver(
+    w,
+    run.actor,
+    run.chatId,
+    "Your request has stopped. Messages already sent cannot be undone.",
+    {
+      topicId: run.topicId,
+      replyTo: run.replyTo,
+      cancellationRunId: run.id,
+      id: `run:${run.id}:cancel:stopped`,
+    },
+  );
 }
 export function visibleRuns(w: Workspace, actor: string) {
   authorize(w, actor);

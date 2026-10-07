@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { Pool } from "pg";
 import {
   type DevelopmentResult,
   developmentPolicy,
@@ -24,11 +25,20 @@ import {
   selectDevelopment,
 } from "../../src/coding/telegram.ts";
 import { migrate } from "../../src/db/migrate.ts";
-import { database } from "../../src/db/pool.ts";
+import { database, transaction } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
 import { Fault, type Source } from "../../src/domain.ts";
 import { GitHubApp } from "../../src/github/app.ts";
 import { GitHubApps } from "../../src/github/registry.ts";
+import { DeliveryWorker } from "../../src/jobs/delivery.ts";
+import { Executor } from "../../src/jobs/execute.ts";
+import type { SetupService } from "../../src/setup/service.ts";
+import { stopGeneration } from "../../src/telegram/generation.ts";
+import type { Message } from "../../src/telegram/router.ts";
+import {
+  selectTaskControl,
+  taskControl,
+} from "../../src/telegram/task-controls.ts";
 import { createRun } from "../../src/workspaces/service.ts";
 import { workspace } from "../fixtures.ts";
 import { githubFixtureConfig, githubTransport } from "../github-fixture.ts";
@@ -1250,5 +1260,357 @@ const url = process.env.TEST_DATABASE_URL;
     expect(resumes).toBe(1);
     expect(f.cancels).toHaveLength(0);
     expect(f.starts[0]?.readToken).toBe("ghs_fixture_installation_secret");
+  });
+  test("runner stages survive polling and obsolete progress cannot publish after a question", async () => {
+    const f = await fixture();
+    await f.tick();
+    await f.tick({ state: "running", phase: "setup" });
+    const first = await store.read(f.w.id);
+    const progress = present(
+      first.deliveries.find((d) => d.feedback?.key.endsWith(":setup")),
+    );
+    expect((await f.read()).progress?.stage).toBe("setup");
+    await f.tick();
+    expect(
+      (await store.read(f.w.id)).deliveries.filter((d) => d.id === progress.id),
+    ).toHaveLength(1);
+    await f.tick({
+      state: "succeeded",
+      result: result({
+        status: "needs_input",
+        question: "Which page should be the default?",
+      }),
+      tokens: 2,
+    });
+    expect(
+      (await store.read(f.w.id)).deliveries.find((d) => d.id === progress.id)
+        ?.state,
+    ).toBe("cancelled");
+    let sends = 0;
+    const setup = {
+      client: async () => ({
+        call: async () => {
+          sends++;
+          return { message_id: 900 };
+        },
+      }),
+    } as unknown as SetupService;
+    await new DeliveryWorker(store, setup).send(f.w.id, progress.id);
+    expect(sends).toBe(0);
+    expect((await store.read(f.w.id)).deliveries.at(-1)?.text).toContain(
+      "Reply here to continue",
+    );
+  });
+  test("working cancellation confirms stop after the runner acknowledges and status stays readable", async () => {
+    const f = await fixture();
+    await f.tick();
+    await store.change(f.w.id, (w, sql) =>
+      cancelDevelopment(sql, w, "101", f.task.id),
+    );
+    expect((await store.read(f.w.id)).deliveries.at(-1)?.text).toContain(
+      "Stopping",
+    );
+    expect((await f.read()).state).toBe("working");
+    await f.tick();
+    expect((await f.read()).state).toBe("cancelled");
+    expect(f.cancels).toHaveLength(1);
+    let sends = 0;
+    const setup = {
+      client: async () => ({
+        call: async () => {
+          sends++;
+          return { message_id: 901 };
+        },
+      }),
+    } as unknown as SetupService;
+    const stopped = present(
+      (await store.read(f.w.id)).deliveries.find(
+        (d) => d.id === `development:${f.task.id}:cancel:stopped`,
+      ),
+    );
+    await new DeliveryWorker(store, setup).send(f.w.id, stopped.id);
+    await new DeliveryWorker(store, setup).send(f.w.id, stopped.id);
+    expect(sends).toBe(1);
+  });
+  test("task selection retains cancellation intent and rejects another actor or topic", async () => {
+    const f = await fixture();
+    const second = await store.change(f.w.id, async (w, sql) => {
+      const run = createRun(
+        w,
+        "101",
+        "Fix another page",
+        "101",
+        3,
+        "gpt-4.1-mini",
+        { replyTo: 20, botId: "999" },
+      );
+      run.status = "running";
+      const source = present(
+        w.messages.find((s) => s.runId === run.id && s.role === "user"),
+      );
+      return startDevelopment(sql, w, run.id, "101", 7001, [source.id], "999");
+    });
+    const msg: Message = {
+      message_id: 800,
+      date: Math.floor(Date.now() / 1000),
+      from: { id: 101, is_bot: false },
+      chat: { id: 101, type: "private" },
+      message_thread_id: 3,
+      text: "/cancel",
+    };
+    await store.change(f.w.id, (w, sql) =>
+      taskControl(sql, w, { update_id: 800, message: msg }, "999", msg, {
+        name: "cancel",
+        args: "",
+      }),
+    );
+    const selection = present(
+      (await store.read(f.w.id)).deliveries.find(
+        (d) => d.id === "control:999:800",
+      ),
+    );
+    const button = present(
+      selection.buttons
+        ?.flat()
+        .find((b) => b.callback_data.includes(f.task.id)),
+    );
+    await store.change(f.w.id, (w) => {
+      const d = present(w.deliveries.find((d) => d.id === selection.id));
+      d.state = "sent";
+      d.remoteId = 810;
+    });
+    const statusMsg = { ...msg, message_id: 802, text: "/status" };
+    await store.change(f.w.id, (w, sql) =>
+      taskControl(
+        sql,
+        w,
+        { update_id: 802, message: statusMsg },
+        "999",
+        statusMsg,
+        { name: "status", args: "" },
+      ),
+    );
+    await store.change(f.w.id, (w) => {
+      present(present(w.coding).settings.repositories[0]).maintainers = ["202"];
+    });
+    let revokedSends = 0;
+    const revokedSetup = {
+      client: async () => ({
+        call: async () => {
+          revokedSends++;
+          return { message_id: 903 };
+        },
+      }),
+    } as unknown as SetupService;
+    await new DeliveryWorker(store, revokedSetup).send(
+      f.w.id,
+      "control:999:802",
+    );
+    expect(revokedSends).toBe(0);
+    expect(
+      (await store.read(f.w.id)).deliveries.find(
+        (d) => d.id === "control:999:802",
+      )?.state,
+    ).toBe("cancelled");
+    const callback = {
+      update_id: 811,
+      callback_query: {
+        id: "callback",
+        from: { id: 101, is_bot: false },
+        data: button.callback_data,
+        message: { ...msg, message_id: 810 },
+      },
+    };
+    await expect(
+      store.change(f.w.id, (w, sql) =>
+        selectTaskControl(
+          sql,
+          w,
+          {
+            ...callback,
+            callback_query: {
+              ...callback.callback_query,
+              from: { id: 202, is_bot: false },
+            },
+          },
+          "999",
+        ),
+      ),
+    ).rejects.toThrow("access_denied");
+    await expect(
+      store.change(f.w.id, (w, sql) =>
+        selectTaskControl(
+          sql,
+          w,
+          {
+            ...callback,
+            callback_query: {
+              ...callback.callback_query,
+              message: { ...msg, message_id: 810, message_thread_id: 4 },
+            },
+          },
+          "999",
+        ),
+      ),
+    ).rejects.toThrow("access_denied");
+    await store.change(f.w.id, (w, sql) =>
+      selectTaskControl(sql, w, callback, "999"),
+    );
+    await store.change(f.w.id, (w, sql) =>
+      selectTaskControl(sql, w, callback, "999"),
+    );
+    expect((await f.read()).state).toBe("cancelled");
+    expect((await taskGet(store.pool, f.w.id, second.id)).cancelRequested).toBe(
+      false,
+    );
+    expect(await taskInputs(store.pool, await f.read())).toHaveLength(1);
+    expect(
+      (await store.read(f.w.id)).deliveries.filter(
+        (d) => d.id === `development:${f.task.id}:cancel:stopped`,
+      ),
+    ).toHaveLength(1);
+  });
+  test("missing runner records cannot falsely confirm cancellation", async () => {
+    const f = await fixture();
+    await f.tick();
+    f.runner.cancel = async () => {
+      throw new Fault("coding_task_not_found", 404);
+    };
+    await store.change(f.w.id, (w, sql) =>
+      cancelDevelopment(sql, w, "101", f.task.id),
+    );
+    await f.tick();
+    expect((await f.read()).state).toBe("unknown");
+    const text = (await store.read(f.w.id)).deliveries.at(-1)?.text;
+    expect(text).toContain("couldn’t confirm");
+    expect(text).not.toContain("has stopped");
+  });
+  test("Pi handoff cannot announce that queued Codex implementation has finished", async () => {
+    const f = await fixture();
+    let completionPreview = false;
+    const setup = {
+      client: async () => ({
+        call: async (method: string) => {
+          if (method === "sendRichMessageDraft") completionPreview = true;
+          return { message_id: 902 };
+        },
+      }),
+      modelKey: async () => "fixture",
+    } as unknown as SetupService;
+    await new Executor(store, setup, {
+      run: async (input) => {
+        await input.preview?.(
+          "Implementation finished and every check passed.",
+        );
+        return {
+          status: "succeeded",
+          text: "Implementation finished and every check passed.",
+          turns: 0,
+          tools: 0,
+          transcript: [],
+        };
+      },
+    }).execute(f.w.id, f.run.id);
+    const w = await store.read(f.w.id);
+    expect(w.runs.find((r) => r.id === f.run.id)?.result).toContain(
+      "queued for Codex",
+    );
+    expect(w.deliveries.some((d) => d.id === `run:${f.run.id}:result`)).toBe(
+      false,
+    );
+    expect(
+      w.deliveries.some((d) => d.text.includes("every check passed")),
+    ).toBe(false);
+    expect(completionPreview).toBe(false);
+  });
+  test("feedback delivery uses the current transaction even with a single database connection", async () => {
+    const f = await fixture();
+    const parsed = new URL(present(url));
+    parsed.pathname = `/${dbName}`;
+    const solo = new Store(
+      new Pool({
+        connectionString: parsed.toString(),
+        max: 1,
+        connectionTimeoutMillis: 1000,
+      }),
+    );
+    let sends = 0;
+    const setup = {
+      client: async () => ({
+        call: async () => {
+          sends++;
+          return { message_id: 904 };
+        },
+      }),
+    } as unknown as SetupService;
+    try {
+      await new DeliveryWorker(solo, setup).send(
+        f.w.id,
+        `development:${f.task.id}:started`,
+      );
+      expect(sends).toBe(1);
+      expect(
+        (await solo.read(f.w.id)).deliveries.find(
+          (d) => d.id === `development:${f.task.id}:started`,
+        )?.state,
+      ).toBe("sent");
+    } finally {
+      await solo.pool.end();
+    }
+  });
+  test("native Stop reaches the linked coding task even after the Pi handoff completes", async () => {
+    for (const working of [false, true]) {
+      const f = await fixture();
+      if (working) await f.tick();
+      const setup = {
+        client: async () => ({ call: async () => ({ message_id: 905 }) }),
+        modelKey: async () => "fixture",
+      } as unknown as SetupService;
+      await new Executor(store, setup, {
+        run: async () => ({
+          status: "succeeded",
+          text: "Queued",
+          turns: 0,
+          tools: 0,
+          transcript: [],
+        }),
+      }).execute(f.w.id, f.run.id);
+      const run = present(
+        (await store.read(f.w.id)).runs.find((r) => r.id === f.run.id),
+      );
+      const draft = present(run.telegramDraft);
+      await transaction(store.pool, (sql) =>
+        stopGeneration(store, sql, "999", {
+          chat: { id: 101, type: "private" },
+          message_thread_id: 3,
+          draft_id: draft.id,
+        }),
+      );
+      expect((await f.read()).cancelRequested).toBe(true);
+      await f.tick();
+      expect((await f.read()).state).toBe("cancelled");
+      expect(f.cancels).toHaveLength(working ? 1 : 0);
+      expect(
+        (await store.read(f.w.id)).deliveries.filter(
+          (d) => d.cancellationRunId === f.run.id,
+        ),
+      ).toHaveLength(0);
+    }
+  });
+  test("a failed Pi response reports the handoff without claiming the coding task failed", async () => {
+    const f = await fixture();
+    const setup = {
+      client: async () => ({ call: async () => ({ message_id: 906 }) }),
+      modelKey: async () => "fixture",
+    } as unknown as SetupService;
+    await new Executor(store, setup, {
+      run: async () => {
+        throw new Fault("provider_outcome_unknown", 503);
+      },
+    }).execute(f.w.id, f.run.id);
+    expect((await f.read()).state).toBe("queued");
+    expect((await store.read(f.w.id)).deliveries.at(-1)?.text).toContain(
+      "handed to Codex",
+    );
   });
 });

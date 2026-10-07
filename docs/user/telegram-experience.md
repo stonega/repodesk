@@ -75,8 +75,8 @@ See [examples](../../examples/private-threads.md).
 | Reply to the bot | Stay in the current Topic; outside Topics, continue the replied-to private thread; in groups, join that retained public discussion in the same chat/topic |
 | `/correct once <text>` | Reply to a delivered run to correct one new output |
 | `/correct save <text>` | Reply to a workflow output to propose a persistent correction |
-| `/status` | Latest five visible runs for this chat |
-| `/cancel <run UUID>` | Persist cancellation and block pending publication |
+| `/status [reference]` | Readable status for the replied-to or active request/task in this chat/topic; choose a target when several are available |
+| `/cancel [reference]` | Stop the replied-to or active request/task; choose a target when several are available |
 | `/automations` | List visible workflows; use `run`, `pause`, `resume` or `delete` plus UUID |
 | `/remember <text>` | Propose personal memory privately or workspace memory in a group |
 | `/memory`, `/memory edit <UUID> <text>`, `/memory forget <UUID>` | List, propose replacement, forget instructions |
@@ -85,7 +85,9 @@ See [examples](../../examples/private-threads.md).
 | `/privacy` | Collection, retention and removal explanation |
 | `/privacy delete` | Private admin request for confirmed workspace removal |
 
-Unsupported non-text requests are silently ignored, including media with captions.
+Photos, supported image documents, UTF-8 text/code files and selectable-text PDFs
+are accepted. Unsupported file input receives readable feedback when addressed to
+the bot; see [attachment input](../implementation/telegram-attachments.md).
 Commands addressed to other bots, bot-authored requests and unrelated group messages are ignored.
 Message edits update context and do not launch another request.
 
@@ -156,6 +158,37 @@ pending publication. `/cancel <run UUID>` remains available. Stop affects the ru
 that created that preview, even after you switch workspaces. Partial responses are
 not automatically saved. Already sent messages or external requests in flight cannot
 be retracted by Stop; uncertain provider charges remain reserved for reconciliation.
+
+## Progress and recovery
+
+Longer coding tasks send short updates when the runner confirms preparation,
+investigation, implementation, checks or repair. Fast transitions are combined;
+routine notices are limited to one every ten seconds. A confirmed active stage
+lasting two minutes can receive one delayed update. Ordinary private requests
+keep the native thinking preview; a private queue wait over thirty seconds can
+receive one queued notice. Ordinary group replies keep their final-only behavior.
+
+Send `/status` or reply to a task message with it. Status identifies required input,
+the last confirmed stage and confirmed issue/PR links. If the runner cannot be
+reached, it says that current status is unavailable. A necessary product question
+ends with “Reply here to continue.” A Codex sign-in pause directs the workspace
+operator to the configuration page. Task notices stay in their original chat/topic.
+
+Use native Stop for private assistant generation, or send `/cancel` in the task's
+conversation. Multiple candidates produce a target selector. Existing explicit
+references continue to work. When a private preview handed the request to Codex,
+its native Stop also cancels that linked task. Cancelling the original request from
+Telegram or the authorized admin control uses the task's existing cancellation
+permissions. “Stopping…” means cancellation was recorded while work
+was active; “has stopped” follows confirmed termination. A lost runner record or an
+in-flight publication may produce an uncertain outcome. Cancellation cannot retract
+existing artifacts or an external operation already in flight.
+
+Failures explain the next step without exposing internal codes or provider output.
+If an administrator must repair a connection, permission or configuration, the
+reply identifies that responsibility. If Telegram itself cannot receive the reply,
+the panel retains the separate delivery failure/unknown state. Unknown sends and
+GitHub writes are not automatically replayed.
 
 ## Web panel
 
@@ -235,7 +268,8 @@ Configured repository maintainers can ask Codex to implement or investigate a
 change. In **Reviewed** mode the bot proposes the issue/branch for one approval.
 In operator-enabled **Direct** mode, a clear implementation instruction starts a
 bounded continuous task without that extra click. Pi relays the original request;
-Codex makes technical decisions, runs checks and repairs failures within limits.
+Codex makes technical decisions, runs checks and continues repairs until completion,
+a necessary question, cancellation or failure. Provider/account limits still apply.
 Analysis requests do not authorize implementation or publication.
 
 Reply to a Codex question or task message, or continue its Telegram Topic, to add

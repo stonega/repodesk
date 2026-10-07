@@ -1,4 +1,5 @@
 import { ZodError } from "zod";
+import { codingFailureMessage } from "../coding/failure-messages.ts";
 import { routeDevelopment, selectDevelopment } from "../coding/telegram.ts";
 import { type Sql, transaction } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
@@ -34,9 +35,11 @@ import {
   visibleRuns,
 } from "../workspaces/service.ts";
 import { messageAttachments, messageText } from "./attachments.ts";
+import { requestFailureMessage } from "./feedback.ts";
 import { closeGroupAttention, followupCandidate } from "./followup.ts";
 import { stopGeneration } from "./generation.ts";
 import { command, type Update } from "./router.ts";
+import { selectTaskControl, taskControl } from "./task-controls.ts";
 
 export class Ingress {
   constructor(
@@ -167,6 +170,7 @@ export class Ingress {
         "UPDATE inbox SET workspace_id=$3 WHERE bot_id=$1 AND update_id=$2",
         [d.bot?.id, update.update_id, workspace.id],
       );
+      let callbackErrorText: string | undefined;
       try {
         if (workspace.deletion) return { ignored: true };
         const handled = await this.handleControl(
@@ -183,22 +187,38 @@ export class Ingress {
           throw error;
         const actor = msg?.from
           ? String(msg.from.id)
-          : update.callback_query?.data?.startsWith("github_")
-            ? String(update.callback_query.from.id)
+          : callback?.from
+            ? String(callback.from.id)
             : undefined;
+        const explanation =
+          error instanceof Fault &&
+          (error.code.startsWith("coding_") || error.code.startsWith("github_"))
+            ? codingFailureMessage(error.code)
+            : requestFailureMessage(
+                error instanceof Fault
+                  ? error.code
+                  : "invalid_command_arguments",
+              );
+        if (callback) callbackErrorText = explanation.slice(0, 180);
         if (
           actor &&
-          requestChat?.type === "private" &&
-          String(requestChat.id) === actor &&
+          requestChat &&
+          (requestChat.type === "private"
+            ? String(requestChat.id) === actor
+            : !!cmd &&
+              workspace.chats.some(
+                (c) => c.active && c.id === String(requestChat.id),
+              )) &&
           eligible(workspace, actor)
         )
-          deliver(
-            workspace,
-            actor,
-            actor,
-            `Unable to complete: ${error instanceof Fault ? error.code : "invalid_command_arguments"}. Use /help or contact your workspace admin.`,
-            { id: `event:${update.update_id}:error` },
-          );
+          deliver(workspace, actor, String(requestChat.id), explanation, {
+            id: `event:${update.update_id}:error`,
+            topicId:
+              msg?.message_thread_id ??
+              callback?.message?.message_thread_id ??
+              0,
+            replyTo: msg?.message_id,
+          });
       }
       if (
         requester &&
@@ -231,7 +251,7 @@ export class Ingress {
         if (chat) chat.title = title;
       }
       await this.store.save(sql, workspace);
-      return { accepted: true };
+      return { accepted: true, callbackText: callbackErrorText };
     });
     if (update.callback_query) {
       try {
@@ -239,7 +259,8 @@ export class Ingress {
           callback_query_id: update.callback_query.id,
           text:
             "callbackText" in result
-              ? result.callbackText
+              ? (result.callbackText ??
+                "Request checked. See the bot or admin panel for status.")
               : "Request checked. See the bot or admin panel for status.",
         });
       } catch {
@@ -386,9 +407,18 @@ export class Ingress {
     verifiedAdmin: boolean,
   ) {
     if (d.bot && (await selectDevelopment(sql, w, u, d.bot.id))) return true;
+    if (d.bot && (await selectTaskControl(sql, w, u, d.bot.id))) return true;
     const msg = u.message;
     const cmd = msg && d.bot ? command(msg, d.bot) : undefined;
     const actor = msg?.from && String(msg.from.id);
+    if (
+      d.bot &&
+      msg &&
+      cmd &&
+      eligible(w, actor ?? "") &&
+      (await taskControl(sql, w, u, d.bot.id, msg, cmd))
+    )
+      return true;
     if (
       cmd?.name === "start" &&
       cmd.args.startsWith("verify_") &&
@@ -692,7 +722,7 @@ export class Ingress {
       case "start":
       case "help":
         reply(
-          `RepoDesk · ${w.settings.name}\nTimezone: ${w.settings.timezone}\n/ask <request>, /recap, /status, /cancel <run>, /automations, /memory, /usage, /privacy\nGitHub: /github connect, /github sync, /github disconnect (private chat)\nAdmins: /linktoken, /capture on|off, /timezone <IANA>, /remember <instruction>\nIn groups, mention me or reply to start; clear follow-ups within five minutes can continue without mentioning me when Telegram delivers ordinary messages. Send photos, image files, UTF-8 text/code files or selectable-text PDFs with a caption describing your request. In private Topics, just send messages to continue the topic's conversation. Use Telegram Topics to separate conversations. Outside Topics, reply to an answer or your own message to continue it; standalone messages start new conversations. For configured Codex repositories, ask for a change in your own words. Reply to the task's message or continue its Topic to answer questions and add requirements; /status checks the bound task and /cancel or stop cancels it. Direct execution follows the repository's saved policy. Context contains only received retained messages. Access is managed in the admin panel. /workspace <id> selects a workspace.`,
+          `RepoDesk · ${w.settings.name}\nTimezone: ${w.settings.timezone}\n/ask <request>, /recap, /status, /cancel [reference], /automations, /memory, /usage, /privacy\nGitHub: /github connect, /github sync, /github disconnect (private chat)\nAdmins: /linktoken, /capture on|off, /timezone <IANA>, /remember <instruction>\nIn groups, mention me or reply to start; clear follow-ups within five minutes can continue without mentioning me when Telegram delivers ordinary messages. Send photos, image files, UTF-8 text/code files or selectable-text PDFs with a caption describing your request. In private Topics, just send messages to continue the topic's conversation. Use Telegram Topics to separate conversations. Outside Topics, reply to an answer or your own message to continue it; standalone messages start new conversations. For configured Codex repositories, ask for a change in your own words. Reply to the task's message or continue its Topic to answer questions and add requirements; /status checks the bound task and /cancel or stop cancels it. Direct execution follows the repository's saved policy. Context contains only received retained messages. Access is managed in the admin panel. /workspace <id> selects a workspace.`,
         );
         break;
       case "workspace":

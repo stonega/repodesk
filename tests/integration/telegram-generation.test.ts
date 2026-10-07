@@ -333,7 +333,11 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         error: "cancelled",
       });
       expect(saved.runs[0]?.attempts[0]?.status).toBe("unknown");
-      expect(saved.deliveries).toHaveLength(0);
+      expect(saved.deliveries).toHaveLength(2);
+      expect(saved.deliveries.at(-1)?.text).toContain("has stopped");
+      expect(
+        saved.deliveries.every((d) => d.cancellationRunId === run.id),
+      ).toBe(true);
       expect(calls.map((c) => c.method)).toEqual([
         "sendMessageDraft",
         "sendRichMessageDraft",

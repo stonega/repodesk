@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { PgBoss } from "pg-boss";
 import type { Store } from "../db/repositories.ts";
 import { requireThat, type Workspace } from "../domain.ts";
+import { notifyRunFailure } from "../telegram/feedback.ts";
 import { audit, authorize } from "../workspaces/policy.ts";
 import { visibleRuns } from "../workspaces/service.ts";
 export async function recoverJobs(store: Store, boss: PgBoss) {
@@ -25,6 +26,7 @@ export async function recoverJobs(store: Store, boss: PgBoss) {
         run.status = "failed";
         run.error = "queue_retries_exhausted";
         run.finishedAt = new Date().toISOString();
+        notifyRunFailure(current, run);
         audit(current, "worker", "run.queue_failed", run.id);
       } else
         await sql.query(

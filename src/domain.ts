@@ -260,6 +260,8 @@ export interface Approval {
   };
 }
 export interface Run {
+  codingTaskId?: string;
+  stopConfirmed?: boolean;
   id: string;
   actor: string;
   chatId: string;
@@ -342,6 +344,12 @@ export interface Run {
   error?: string;
 }
 export interface Delivery {
+  cancellationRunId?: string;
+  feedback?: {
+    owner: "run" | "coding" | "development";
+    id: string;
+    key: string;
+  };
   id: string;
   actor: string;
   chatId: string;

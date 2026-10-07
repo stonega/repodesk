@@ -8,6 +8,7 @@ import { modelCapabilities } from "../agent/runtime.ts";
 import type { LocalDeviceAuth } from "../coding/local/protocol.ts";
 import { codingView, saveCoding } from "../coding/service.ts";
 import { taskGet, taskList, taskSave } from "../coding/task-store.ts";
+import { cancelRequest } from "../coding/tasks.ts";
 import { type Sql, transaction } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import {
@@ -44,7 +45,7 @@ import {
   revokeWork,
   setPolicy,
 } from "../workspaces/policy.ts";
-import { cancelRun, createRun, visibleRuns } from "../workspaces/service.ts";
+import { createRun, visibleRuns } from "../workspaces/service.ts";
 import { claim, login, operator, session, throttle } from "./auth.ts";
 import { deploymentOrigin, SiteService } from "./site.ts";
 
@@ -840,7 +841,9 @@ export function adminRoutes(
           ...take(
             w.runs.toReversed().map((r) => ({
               ...r,
-              deliveries: w.deliveries.filter((d) => d.runId === r.id),
+              deliveries: w.deliveries.filter(
+                (d) => d.runId === r.id || d.cancellationRunId === r.id,
+              ),
             })),
           ),
         });
@@ -1226,7 +1229,9 @@ export function adminRoutes(
       mode: actor === w.operatorId ? "operator" : "member",
       run: {
         ...run,
-        deliveries: w.deliveries.filter((d) => d.runId === run.id),
+        deliveries: w.deliveries.filter(
+          (d) => d.runId === run.id || d.cancellationRunId === run.id,
+        ),
       },
     });
   });
@@ -1250,7 +1255,9 @@ export function adminRoutes(
   });
   app.post("/api/admin/workspaces/:id/runs/:run/cancel", async (c) =>
     c.json(
-      await change(c, (w, actor) => cancelRun(w, actor, c.req.param("run"))),
+      await change(c, (w, actor, sql) =>
+        cancelRequest(sql, w, actor, c.req.param("run")),
+      ),
     ),
   );
   app.post("/api/admin/workspaces/:id/runs/:run/retry", async (c) => {
@@ -1382,7 +1389,7 @@ export function adminRoutes(
             actual: a.actual,
           })),
           deliveries: w.deliveries
-            .filter((d) => d.runId === id)
+            .filter((d) => d.runId === id || d.cancellationRunId === id)
             .map((d) => ({ id: d.id, state: d.state, remoteId: d.remoteId })),
         });
     }
