@@ -175,6 +175,10 @@ them.
   Codex, a market featuring popular Pi extensions, and simple cards that open
   plugin detail pages.
 - **Exceptions:** New remains a labeled action in the Installed heading.
+  The Installed grid has no trailing skeleton after the built-in cards while
+  registered extensions load. Source: 2026-10-07 — user requested “remove this
+  additional skeleton loader at end” beside Code Truth and Codex. This exception
+  applies to the catalog grid; plugin detail loading retains its skeletons.
 
 ### Codex details show configuration, repositories and tasks separately
 

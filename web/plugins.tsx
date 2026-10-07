@@ -299,9 +299,6 @@ export function Plugins({
                       : "Disabled"
                 }
               />
-              {!data && loading && !error && (
-                <SkeletonRows label="Installed extensions" rows={2} />
-              )}
               {data?.entries.map((entry) => (
                 <PluginCard
                   key={entry.id}

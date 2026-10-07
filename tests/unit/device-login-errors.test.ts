@@ -121,13 +121,15 @@ test("disconnect terminates the launcher and its native child without affecting 
   const workspaces = [randomUUID(), randomUUID()];
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
+    // Announce login only after the native child has written its first heartbeat.
+    // Replace heartbeats atomically so a concurrent read cannot see an empty file.
     await writeFile(
       executable,
       `#!/usr/bin/env node
 const {spawn}=require('node:child_process');const {join,basename}=require('node:path');
 const marker=join(${JSON.stringify(dir)},basename(process.env.CODEX_HOME)+'.heartbeat');
-spawn(process.execPath,['-e',"const fs=require('node:fs');const tick=()=>fs.writeFileSync(process.argv[1],String(Date.now()));tick();setInterval(tick,25);",marker],{stdio:'inherit'});
-console.log('https://auth.openai.com/codex/device\\nEnter this one-time code\\n ABCD-EFGH');
+const child=spawn(process.execPath,['-e',"const fs=require('node:fs');const marker=process.argv[1];const tick=()=>{fs.writeFileSync(marker+'.tmp',String(Date.now()));fs.renameSync(marker+'.tmp',marker);};tick();process.send('ready');setInterval(tick,25);",marker],{stdio:['ignore','inherit','inherit','ipc']});
+child.once('message',()=>console.log('https://auth.openai.com/codex/device\\nEnter this one-time code\\n ABCD-EFGH'));
 setInterval(()=>{},1000);
 `,
     );
@@ -156,7 +158,10 @@ setInterval(()=>{},1000);
     expect(await auth.status(second)).toMatchObject({ state: "pending" });
   } finally {
     clearTimeout(timer);
-    await rm(dir, { recursive: true, force: true });
-    await Promise.all(workspaces.map((workspace) => auth.logout(workspace)));
+    try {
+      await Promise.all(workspaces.map((workspace) => auth.logout(workspace)));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   }
 });
