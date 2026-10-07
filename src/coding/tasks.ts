@@ -7,7 +7,7 @@ import {
   type Workspace,
 } from "../domain.ts";
 import { fingerprint } from "../setup/credentials.ts";
-import { clearProgress } from "../telegram/feedback.ts";
+import { clearProgress, deliverTaskProgress } from "../telegram/feedback.ts";
 import { taskButtons } from "../telegram/task-buttons.ts";
 import {
   audience,
@@ -111,6 +111,25 @@ export function notifyDevelopment(
 ) {
   audience(w, actor, task.chatId);
   if (w.settings.paused) return;
+  if (eventId === "started")
+    return deliverTaskProgress(w, task, "development", text, {
+      id: `development:${task.id}:${eventId}`,
+      buttons: taskButtons("development", task.id),
+    });
+  const outcome: Partial<Record<DevelopmentTask["state"], string>> = {
+    waiting: "I’m waiting for your answer.",
+    auth_required: "Your task is paused until Codex is reconnected.",
+    review: "Your task is ready for review.",
+    failed: "I couldn’t finish this task.",
+    cancelled: "Your task has stopped.",
+    unknown: "The task outcome needs an administrator’s check.",
+  };
+  const summary = outcome[task.state];
+  if (summary)
+    deliverTaskProgress(w, task, "development", summary, {
+      id: `development:${task.id}:progress:${eventId}`,
+      editOnly: true,
+    });
   return deliver(w, actor, task.chatId, text, {
     topicId: task.topicId,
     format: "markdown",

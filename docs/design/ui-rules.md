@@ -897,10 +897,13 @@ Use this format for each preference:
   notices based on confirmed application/runner stages. Explain failures with a
   useful next step and identify when an administrator must act. Acknowledge a stop
   request separately from confirmed termination when execution is still active.
-  Attach native inline **Status** and **Cancel** buttons to task acknowledgements
-  and progress notices instead of repeating command instructions. Longer stages
-  use brief, natural follow-ups specific to the confirmed stage; do not copy the
-  previous notice into a generic “taking longer” message.
+  Maintain one task progress message, editing the acknowledgement as confirmed
+  stages change, including checks, repairs and longer-stage updates. Keep native
+  inline **Status** and **Cancel** controls on that message while applicable.
+  New messages belong to necessary questions, actionable blockers, user-requested
+  status/input receipts and final outcomes. Routine progress must not flood the
+  conversation or repeat command instructions. Close the progress message when
+  waiting or finished so it does not imply ongoing work.
 - **Scope:** Telegram assistant requests and Reviewed/Direct coding tasks for the
   invite-only friend and colleague beta; apply the same wording principles to
   corresponding admin task status.
@@ -909,6 +912,8 @@ Use this format for each preference:
   2026-10-07 — user showed a successful Telegram coding task and requested inline
   status/cancel controls without repeated reminders, plus more natural progress
   follow-ups.
+  2026-10-07 — user showed repeated check/repair notices and requested editing one
+  progress message, with new messages only when useful, to keep Telegram conversational.
 - **Exceptions:** Keep short private replies on native thinking previews without
   an extra immediate queued acknowledgement. Unaddressed group traffic stays
   silent. Revocation and destination policy can prevent a notification. Unknown
@@ -916,6 +921,9 @@ Use this format for each preference:
   claim. Execution quotas remain governed by the existing Codex preference.
   Native Stop remains the control for private streaming answers. Explicit commands
   remain available; long private queue notices also offer inline task controls.
+  A confirmed deleted/uneditable progress message may be replaced once. An unknown
+  original send must be reconciled before a replacement; retries of edits target
+  the already-known message.
 
 ### Prefer native Telegram Topics for conversations
 

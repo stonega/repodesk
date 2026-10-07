@@ -132,6 +132,7 @@ export class TelegramClient implements Telegram {
       ok: boolean;
       result: T;
       error_code?: number;
+      description?: string;
       parameters?: { retry_after?: number };
     };
     try {
@@ -140,6 +141,17 @@ export class TelegramClient implements Telegram {
       throw new TelegramError("telegram_invalid_response", "unknown");
     }
     if (!body.ok) {
+      // Classify only known edit failures; never persist Telegram's raw description.
+      if (method === "editMessageText" && body.error_code === 400) {
+        if (/message is not modified/i.test(body.description ?? ""))
+          throw new TelegramError("telegram_message_not_modified", "permanent");
+        if (
+          /message to edit not found|message (?:can't|cannot|can not) be edited/i.test(
+            body.description ?? "",
+          )
+        )
+          throw new TelegramError("telegram_message_uneditable", "permanent");
+      }
       if (method === "getUpdates" && body.error_code === 409)
         throw new TelegramError("telegram_polling_conflict", "permanent");
       if (body.error_code === 401)

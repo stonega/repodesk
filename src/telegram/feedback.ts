@@ -7,7 +7,7 @@ import { taskButtons } from "./task-buttons.ts";
 
 export { requestFailureMessage, runStatus, stageMessage } from "./messages.ts";
 
-import type { Run, Workspace } from "../domain.ts";
+import type { Delivery, Run, Workspace } from "../domain.ts";
 import { runAllowed } from "../workspaces/policy.ts";
 import { deliver } from "../workspaces/service.ts";
 
@@ -27,6 +27,49 @@ interface ProgressTask {
   chatId: string;
   topicId: number;
   progress?: Progress;
+}
+
+/** Reuse a confirmed message, or wait for its in-flight send to be reconciled. */
+export function deliverTaskProgress(
+  w: Workspace,
+  task: ProgressTask,
+  owner: "coding" | "development",
+  text: string,
+  options: { id: string; buttons?: Delivery["buttons"]; editOnly?: boolean },
+) {
+  if (w.deliveries.some((d) => d.id === options.id)) return options.id;
+  const belongs = (d: Delivery) =>
+    d.actor === task.actor &&
+    d.chatId === task.chatId &&
+    d.topicId === task.topicId &&
+    (d.progressMessage ?? d.feedback)?.owner === owner &&
+    (d.progressMessage ?? d.feedback)?.id === task.id;
+  for (const d of w.deliveries)
+    if (belongs(d) && d.state === "pending") d.state = "cancelled";
+  const previous = w.deliveries.findLast(
+    (d) =>
+      belongs(d) &&
+      !d.editUnavailable &&
+      !w.deliveries.find((target) => target.id === d.editOf)?.editUnavailable &&
+      ["sent", "sending", "delivery_unknown"].includes(d.state),
+  );
+  if (!previous && options.editOnly) return;
+  const id = deliver(w, task.actor, task.chatId, text, {
+    topicId: task.topicId,
+    id: options.id,
+    buttons: options.buttons,
+  });
+  const d = w.deliveries.find((d) => d.id === id);
+  if (d) {
+    d.progressMessage = { owner, id: task.id };
+    // Retention may remove the original intent while a later edit still carries
+    // the confirmed message ID. That later record is a valid anchor.
+    d.editOf =
+      previous?.editOf && w.deliveries.some((t) => t.id === previous.editOf)
+        ? previous.editOf
+        : previous?.id;
+  }
+  return id;
 }
 
 export function clearProgress(w: Workspace, owner: string, id: string) {
@@ -72,13 +115,12 @@ export function recordProgress(
     (p.notifiedAt !== undefined && now - p.notifiedAt < 10000)
   )
     return;
-  const id = deliver(
+  const id = deliverTaskProgress(
     w,
-    task.actor,
-    task.chatId,
+    task,
+    owner,
     delayed ? ongoingStageMessage(stage) : stageMessage(stage),
     {
-      topicId: task.topicId,
       id: `${owner}:${task.id}:progress:${p.sequence}${delayed ? ":delay" : ""}`,
       buttons: taskButtons(owner, task.id),
     },

@@ -80,6 +80,7 @@ const codes = new Set([
   "telegram_outcome_unknown",
   "telegram_invalid_response",
   "telegram_destination_rejected",
+  "telegram_message_uneditable",
   "bot_not_configured",
   "model_not_configured",
   "model_endpoint_changed",

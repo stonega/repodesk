@@ -48,7 +48,7 @@ test("progress persists deduplication and coalesces rapid phases without a false
   expect(w.deliveries.every((d) => d.state === "cancelled")).toBe(true);
 });
 
-test("a confirmed long phase gets one delayed notice and real repairs get fresh identities", () => {
+test("a confirmed long phase replaces pending progress and real repairs get fresh edit identities", () => {
   const w = workspace(),
     t = task();
   recordProgress(w, t, "coding", "check", "1", 10000);
@@ -74,6 +74,48 @@ test("a confirmed long phase gets one delayed notice and real repairs get fresh 
   recordProgress(w, t, "coding", "check", "2", 320000);
   expect(new Set(w.deliveries.map((d) => d.id)).size).toBe(w.deliveries.length);
   expect(w.deliveries.at(-1)?.text).toContain("running the checks");
+  expect(w.deliveries.filter((d) => d.state === "pending")).toHaveLength(1);
+});
+
+test("repair cycles reuse confirmed progress after a restart without new Telegram messages", () => {
+  const w = workspace(),
+    t = task();
+  recordProgress(w, t, "coding", "check", "1", 10000);
+  const original = w.deliveries[0];
+  if (!original) throw Error("Missing progress");
+  original.state = "sent";
+  original.botId = "999";
+  original.remoteId = 400;
+  const restored = JSON.parse(JSON.stringify(t)) as typeof t;
+  for (let cycle = 2; cycle < 22; cycle++) {
+    recordProgress(
+      w,
+      restored,
+      "coding",
+      "repair",
+      String(cycle),
+      cycle * 20000,
+    );
+    const repair = w.deliveries.at(-1);
+    expect(repair?.editOf).toBe(original.id);
+    if (!repair) throw Error("Missing repair");
+    repair.state = "sent";
+    repair.remoteId = 400;
+    recordProgress(
+      w,
+      restored,
+      "coding",
+      "check",
+      String(cycle),
+      cycle * 20000 + 10000,
+    );
+    const check = w.deliveries.at(-1);
+    expect(check?.editOf).toBe(original.id);
+    if (!check) throw Error("Missing check");
+    check.state = "sent";
+    check.remoteId = 400;
+  }
+  expect(w.deliveries.filter((d) => !d.editOf)).toHaveLength(1);
 });
 
 test("only retained authorized private queue waits receive a delayed queue notice", () => {

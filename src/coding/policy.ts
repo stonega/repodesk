@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { type Approval, requireThat, type Workspace } from "../domain.ts";
 import { authorizeRepository } from "../github/user-access.ts";
 import { fingerprint } from "../setup/credentials.ts";
-import { clearProgress } from "../telegram/feedback.ts";
+import { clearProgress, deliverTaskProgress } from "../telegram/feedback.ts";
 import { taskButtons } from "../telegram/task-buttons.ts";
 import {
   audience,
@@ -237,7 +237,7 @@ export function notifyCoding(w: Workspace, task: CodingTask) {
   if (!["running", "publishing"].includes(task.state))
     clearProgress(w, "coding", task.id);
   const text = reviewedStatus(task);
-  const id = deliver(w, task.actor, task.chatId, text, {
+  const options = {
     topicId: task.topicId,
     buttons:
       !codingTerminal(task.state) && !task.cancelRequested
@@ -247,7 +247,16 @@ export function notifyCoding(w: Workspace, task: CodingTask) {
       task.state === "cancelled"
         ? `coding:${task.id}:cancel:stopped`
         : `coding:${task.id}:${task.state}:${task.workflowRunId ?? ""}:${task.authPauses ?? 0}`,
-  });
+  };
+  const routine = ["queued", "running", "publishing"].includes(task.state);
+  if (!routine)
+    deliverTaskProgress(w, task, "coding", text, {
+      id: `coding:${task.id}:progress:${task.state}:${task.workflowRunId ?? ""}:${task.authPauses ?? 0}`,
+      editOnly: true,
+    });
+  const id = routine
+    ? deliverTaskProgress(w, task, "coding", text, options)
+    : deliver(w, task.actor, task.chatId, text, options);
   if (task.state === "queued") {
     const d = w.deliveries.find((d) => d.id === id);
     if (d) d.feedback = { owner: "coding", id: task.id, key: "queued" };

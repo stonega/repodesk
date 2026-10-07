@@ -86,10 +86,23 @@ offer Cancel only while cancellation is applicable; old task buttons return the
 current outcome. Button acknowledgements clear the native spinner silently.
 Explicit commands and native streaming Stop remain available.
 
-Delayed progress uses a brief stage-specific follow-up rather than repeating the
-previous notice. Existing deduplication, two-minute threshold, ten-second throttle,
-stale-progress suppression and uncertain-send behavior remain in effect. Local
-fixtures cover delivery and callback routing; live Telegram acceptance remains pending.
+The later 2026-10-07 correction reuses one Telegram message for routine task
+progress, starting with the queued acknowledgement. Stage and delayed updates are
+separate durable `editMessageText` intents targeting a scoped, bot-bound sent message.
+Questions, actionable blockers, requested status/input receipts and outcomes stay
+separate replies. Waiting/terminal notices close the existing progress message.
+Concurrent edits serialize, stale pending updates are cancelled, rate limits retain
+their retry time and uncertain edits can retry the same known message. An uncertain
+original send never triggers a replacement. Telegram's confirmed missing/uneditable
+message rejection permits one replacement; an already-applied edit succeeds.
+Existing two-minute and ten-second thresholds remain notification policies.
+Local fixtures cover these paths; live Telegram acceptance remains pending.
+
+Local verification for the message-edit correction: Biome, strict TypeScript and
+Bun build passed. All **538 deterministic tests** passed against disposable
+PostgreSQL, including repeated repair edits, necessary question delivery, waiting
+message closure, missing-message replacement, uncertain sends/edits, rate limits,
+worker recovery, concurrent updates, retained edit anchors and scope revocation.
 
 The following delivery sequence remains the implementation and acceptance contract.
 
@@ -153,11 +166,11 @@ Map the runner's existing phase and the task's intake/analysis/work mode to read
 stages. Persist stage changes and their delivery intents together under the existing
 task/workspace locks; keep remote runner and Telegram calls outside those locks.
 Use stable event IDs that distinguish task, execution fence, input revision and
-stage transition. Replaying a poll must not create another notice, while a later
-real repair or follow-up can produce a new transition.
+stage transition. Replaying a poll must not create another intent, while a later
+real repair or follow-up can produce a new edit of the same message.
 
-Send one acknowledgement for an accepted coding task, then coalesce rapid routine
-transitions. As an initial notification policy, allow routine updates at most once
+Send one acknowledgement for an accepted coding task, then edit that message and
+coalesce rapid routine transitions. As a notification policy, allow routine edits at most once
 per ten seconds per task. Questions, sign-in pauses and final outcomes bypass that
 throttle. A phase lasting two minutes may produce one delayed update if a recent
 runner poll confirms it is still active. This is a notification threshold, not an

@@ -33,6 +33,8 @@ import { GitHubApps } from "../../src/github/registry.ts";
 import { DeliveryWorker } from "../../src/jobs/delivery.ts";
 import { Executor } from "../../src/jobs/execute.ts";
 import type { SetupService } from "../../src/setup/service.ts";
+import { TelegramError } from "../../src/telegram/client.ts";
+import { recordProgress } from "../../src/telegram/feedback.ts";
 import { stopGeneration } from "../../src/telegram/generation.ts";
 import type { Message, Update } from "../../src/telegram/router.ts";
 import {
@@ -1391,6 +1393,280 @@ const url = process.env.TEST_DATABASE_URL;
     expect(resumes).toBe(1);
     expect(f.cancels).toHaveLength(0);
     expect(f.starts[0]?.readToken).toBe("ghs_fixture_installation_secret");
+  });
+  async function telegramProgressFixture() {
+    const f = await fixture();
+    const calls: { method: string; params: Record<string, unknown> }[] = [];
+    let failure: TelegramError | undefined;
+    let onEdit: (() => Promise<void>) | undefined;
+    const setup = {
+      client: async () => ({
+        call: async (method: string, params: Record<string, unknown>) => {
+          calls.push({ method, params });
+          if (method === "editMessageText") await onEdit?.();
+          if (failure) throw failure;
+          return {
+            message_id:
+              900 + calls.filter((c) => c.method === "sendMessage").length,
+          };
+        },
+      }),
+    } as unknown as SetupService;
+    const worker = new DeliveryWorker(store, setup);
+    const acknowledgement = present(
+      (await store.read(f.w.id)).deliveries.at(-1),
+    );
+    await worker.send(f.w.id, acknowledgement.id);
+    await f.tick();
+    let now = Date.now();
+    const progress = async (stage: string, cycle = "1") => {
+      now += 10000;
+      await store.change(f.w.id, async (w, sql) => {
+        const t = await taskGet(sql, w.id, f.task.id);
+        t.state = "working";
+        recordProgress(w, t, "development", stage, cycle, now);
+        await taskSave(sql, t);
+      });
+      return present((await store.read(f.w.id)).deliveries.at(-1));
+    };
+    return {
+      ...f,
+      calls,
+      worker,
+      acknowledgement,
+      progress,
+      fail: (error?: TelegramError) => {
+        failure = error;
+      },
+      onEdit: (callback?: () => Promise<void>) => {
+        onEdit = callback;
+      },
+    };
+  }
+  test("accepted task, checks and repairs edit one message; a necessary question is new", async () => {
+    const f = await telegramProgressFixture();
+    for (const [stage, cycle] of [
+      ["check", "1"],
+      ["repair", "2"],
+      ["check", "2"],
+    ]) {
+      const d = await f.progress(present(stage), present(cycle));
+      await f.worker.send(f.w.id, d.id);
+      await f.worker.send(f.w.id, d.id);
+    }
+    expect(f.calls.map((c) => c.method)).toEqual([
+      "sendMessage",
+      "editMessageText",
+      "editMessageText",
+      "editMessageText",
+    ]);
+    for (const call of f.calls.slice(1)) {
+      expect(call.params.message_id).toBe(901);
+      expect(call.params.message_thread_id).toBeUndefined();
+      expect(call.params.reply_markup).toMatchObject({
+        inline_keyboard: [[{ text: "Status" }, { text: "Cancel" }]],
+      });
+    }
+    await f.tick();
+    await f.tick({
+      state: "succeeded",
+      result: result({
+        status: "needs_input",
+        question: "Which page should be the default?",
+      }),
+      tokens: 2,
+    });
+    for (const d of (await store.read(f.w.id)).deliveries)
+      if (d.state === "pending") await f.worker.send(f.w.id, d.id);
+    expect(f.calls.at(-1)?.method).toBe("sendMessage");
+    expect(f.calls.at(-1)?.params.text).toContain("Which page");
+    const closed = f.calls.find(
+      (c) => c.params.text === "I’m waiting for your answer.",
+    );
+    expect(closed?.method).toBe("editMessageText");
+    expect(closed?.params.reply_markup).toEqual({ inline_keyboard: [] });
+  });
+  test("uncertain edits retry the same message; already applied edits succeed", async () => {
+    const f = await telegramProgressFixture();
+    const d = await f.progress("check");
+    f.fail(new TelegramError("telegram_outcome_unknown", "unknown"));
+    await f.worker.send(f.w.id, d.id);
+    expect((await store.read(f.w.id)).deliveries.at(-1)?.state).toBe("pending");
+    await store.change(f.w.id, (w) => {
+      present(w.deliveries.at(-1)).nextAt = new Date(0).toISOString();
+    });
+    f.fail(new TelegramError("telegram_message_not_modified", "permanent"));
+    await f.worker.send(f.w.id, d.id);
+    expect((await store.read(f.w.id)).deliveries.at(-1)?.state).toBe("sent");
+    expect(f.calls.map((c) => c.method)).toEqual([
+      "sendMessage",
+      "editMessageText",
+      "editMessageText",
+    ]);
+    expect(f.calls.slice(1).map((c) => c.params.message_id)).toEqual([
+      901, 901,
+    ]);
+  });
+  test("a deleted message gets one replacement, then subsequent progress edits the replacement", async () => {
+    const f = await telegramProgressFixture();
+    const d = await f.progress("check");
+    f.fail(new TelegramError("telegram_message_uneditable", "permanent"));
+    await f.worker.send(f.w.id, d.id);
+    f.fail();
+    await f.worker.send(f.w.id, d.id);
+    const repair = await f.progress("repair", "2");
+    await f.worker.send(f.w.id, repair.id);
+    expect(f.calls.map((c) => c.method)).toEqual([
+      "sendMessage",
+      "editMessageText",
+      "sendMessage",
+      "editMessageText",
+    ]);
+    expect(f.calls.at(-1)?.params.message_id).toBe(902);
+  });
+  test("uncertain original sends never create a replacement progress message", async () => {
+    const f = await telegramProgressFixture();
+    await store.change(f.w.id, (w) => {
+      const d = present(
+        w.deliveries.find((d) => d.id === f.acknowledgement.id),
+      );
+      d.state = "delivery_unknown";
+      d.remoteId = undefined;
+    });
+    const d = await f.progress("check");
+    await f.worker.send(f.w.id, d.id);
+    expect(f.calls).toHaveLength(1);
+    expect((await store.read(f.w.id)).deliveries.at(-1)?.state).toBe(
+      "delivery_unknown",
+    );
+  });
+  test("progress waits for an in-flight original send and uses its confirmed message", async () => {
+    const f = await telegramProgressFixture();
+    await store.change(f.w.id, (w) => {
+      const anchor = present(
+        w.deliveries.find((d) => d.id === f.acknowledgement.id),
+      );
+      anchor.state = "sending";
+      anchor.remoteId = undefined;
+      anchor.startedAt = new Date().toISOString();
+    });
+    const d = await f.progress("check");
+    await f.worker.send(f.w.id, d.id);
+    expect(f.calls).toHaveLength(1);
+    await store.change(f.w.id, (w) => {
+      const anchor = present(
+        w.deliveries.find((d) => d.id === f.acknowledgement.id),
+      );
+      anchor.state = "sent";
+      anchor.remoteId = 901;
+    });
+    await f.worker.send(f.w.id, d.id);
+    expect(f.calls.at(-1)?.method).toBe("editMessageText");
+    expect(f.calls.at(-1)?.params.message_id).toBe(901);
+  });
+  test("later confirmed edits remain reusable after the original delivery expires", async () => {
+    const f = await telegramProgressFixture();
+    const check = await f.progress("check");
+    await f.worker.send(f.w.id, check.id);
+    await store.change(f.w.id, (w) => {
+      w.deliveries = w.deliveries.filter((d) => d.id !== f.acknowledgement.id);
+    });
+    const repair = await f.progress("repair", "2");
+    await f.worker.send(f.w.id, repair.id);
+    expect(f.calls.at(-1)?.method).toBe("editMessageText");
+    expect(f.calls.at(-1)?.params.message_id).toBe(901);
+    expect(f.calls.filter((c) => c.method === "sendMessage")).toHaveLength(1);
+  });
+  test("task edits serialize across workers and stale progress is suppressed", async () => {
+    const f = await telegramProgressFixture();
+    const d = await f.progress("check");
+    let release = () => {};
+    let entered = () => {};
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    f.onEdit(async () => {
+      entered();
+      await blocked;
+    });
+    const first = f.worker.send(f.w.id, d.id);
+    await started;
+    const obsolete = await f.progress("repair", "2");
+    const latest = await f.progress("check", "2");
+    await new DeliveryWorker(store, {
+      client: async () => {
+        throw Error("Concurrent edit");
+      },
+    } as unknown as SetupService).send(f.w.id, latest.id);
+    expect(f.calls).toHaveLength(2);
+    release();
+    await first;
+    f.onEdit();
+    await f.worker.send(f.w.id, obsolete.id);
+    await f.worker.send(f.w.id, latest.id);
+    expect(f.calls).toHaveLength(3);
+    expect(f.calls.at(-1)?.params.text).toContain("running the checks");
+  });
+  test("edit recovery after a worker crash keeps the known remote message", async () => {
+    const f = await telegramProgressFixture();
+    const d = await f.progress("check");
+    await store.change(f.w.id, (w) => {
+      const pending = present(w.deliveries.find((t) => t.id === d.id));
+      pending.state = "sending";
+      pending.startedAt = new Date(Date.now() - 31000).toISOString();
+      pending.attempts = 1;
+    });
+    await f.worker.send(f.w.id, d.id);
+    await f.worker.send(f.w.id, d.id);
+    expect(f.calls.at(-1)?.method).toBe("editMessageText");
+    expect(f.calls.at(-1)?.params.message_id).toBe(901);
+  });
+  test("rate limited edits honor the retry time; permanent failures do not resend", async () => {
+    const f = await telegramProgressFixture();
+    const d = await f.progress("check");
+    f.fail(new TelegramError("telegram_rate_limited", "retry", 60));
+    await f.worker.send(f.w.id, d.id);
+    await f.worker.send(f.w.id, d.id);
+    expect(f.calls).toHaveLength(2);
+    await store.change(f.w.id, (w) => {
+      present(w.deliveries.at(-1)).nextAt = new Date(0).toISOString();
+    });
+    f.fail(new TelegramError("telegram_destination_rejected", "permanent"));
+    await f.worker.send(f.w.id, d.id);
+    expect((await store.read(f.w.id)).deliveries.at(-1)?.state).toBe("failed");
+    expect(f.calls.filter((c) => c.method === "sendMessage")).toHaveLength(1);
+  });
+  test("editing rechecks actor, topic, task and bot bindings before external writes", async () => {
+    for (const boundary of [
+      "actor",
+      "topic",
+      "task",
+      "bot",
+      "revoked",
+    ] as const) {
+      const f = await telegramProgressFixture();
+      const d = await f.progress("check");
+      await store.change(f.w.id, (w) => {
+        const anchor = present(
+          w.deliveries.find((t) => t.id === f.acknowledgement.id),
+        );
+        if (boundary === "actor") anchor.actor = "202";
+        if (boundary === "topic") anchor.topicId++;
+        if (boundary === "task")
+          anchor.progressMessage = { owner: "development", id: randomUUID() };
+        if (boundary === "bot") anchor.botId = "1000";
+        if (boundary === "revoked")
+          present(w.members.find((m) => m.id === "101")).active = false;
+      });
+      await f.worker.send(f.w.id, d.id);
+      expect(f.calls).toHaveLength(1);
+      expect((await store.read(f.w.id)).deliveries.at(-1)?.state).toBe(
+        "cancelled",
+      );
+    }
   });
   test("runner stages survive polling and obsolete progress cannot publish after a question", async () => {
     const f = await fixture();

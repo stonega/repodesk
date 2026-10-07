@@ -373,6 +373,10 @@ export interface Run {
   error?: string;
 }
 export interface Delivery {
+  /** Routine task updates share one Telegram message; each edit is a durable intent. */
+  progressMessage?: { owner: "coding" | "development"; id: string };
+  editOf?: string;
+  editUnavailable?: boolean;
   botId?: string;
   cancellationRunId?: string;
   feedback?: {

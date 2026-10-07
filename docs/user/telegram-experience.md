@@ -178,12 +178,14 @@ be retracted by Stop; uncertain provider charges remain reserved for reconciliat
 
 ## Progress and recovery
 
-Longer coding tasks send short updates when the runner confirms preparation,
-investigation, implementation, checks or repair. Fast transitions are combined;
-routine notices are limited to one every ten seconds. A confirmed active stage
-lasting two minutes can receive one short follow-up, such as “The checks are still
-running. I’ll share the result when they finish.” Task acknowledgements and progress
-offer inline **Status** and **Cancel** buttons without repeated command reminders.
+Longer coding tasks keep one progress message: the queued acknowledgement is edited
+when the runner confirms preparation, investigation, implementation, checks or repair.
+Fast transitions are combined; routine edits are limited to one every ten seconds.
+A confirmed active stage lasting two minutes can receive one short update in that
+same message. Inline **Status** and **Cancel** controls remain available while
+applicable. Necessary questions, actionable blockers, requested status/input receipts
+and final results arrive as new replies. The progress message changes to waiting or
+finished and removes its active controls when appropriate.
 Ordinary private requests keep the native thinking preview; a private queue wait
 over thirty seconds can
 receive one queued notice with the same buttons. Ordinary group replies keep their

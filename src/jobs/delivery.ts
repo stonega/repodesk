@@ -14,6 +14,23 @@ export class DeliveryWorker {
     private store: Store,
     private setup: SetupService,
   ) {}
+  private editTarget(w: Workspace, d: Delivery, botId?: string) {
+    const target = w.deliveries.find((t) => t.id === d.editOf);
+    const scope = target?.progressMessage ?? target?.feedback;
+    if (
+      !d.progressMessage ||
+      !target ||
+      target.id === d.id ||
+      scope?.owner !== d.progressMessage.owner ||
+      scope.id !== d.progressMessage.id ||
+      target.actor !== d.actor ||
+      target.chatId !== d.chatId ||
+      target.topicId !== d.topicId ||
+      (target.botId && target.botId !== botId)
+    )
+      return;
+    return target;
+  }
   private async feedbackAllowed(
     w: Workspace,
     d: Delivery,
@@ -85,7 +102,8 @@ export class DeliveryWorker {
       if (!d || !["pending", "sending"].includes(d.state)) return;
       if (d.state === "sending") {
         if (Date.parse(d.startedAt ?? "") + 30000 < Date.now())
-          d.state = "delivery_unknown";
+          // Editing a known message can be replayed safely after a worker crash.
+          d.state = d.editOf ? "pending" : "delivery_unknown";
         return;
       }
       if (!(await this.feedbackAllowed(w, d, sql))) {
@@ -126,6 +144,33 @@ export class DeliveryWorker {
         return;
       }
       if (d.nextAt && Date.parse(d.nextAt) > Date.now()) return;
+      if (d.editOf) {
+        const target = this.editTarget(w, d, deployment.bot?.id);
+        if (!target || ["cancelled", "failed"].includes(target.state)) {
+          d.state = "cancelled";
+          return;
+        }
+        if (
+          ["pending", "sending"].includes(target.state) ||
+          w.deliveries.some(
+            (other) =>
+              other.id !== d.id &&
+              other.editOf === d.editOf &&
+              other.state === "sending",
+          )
+        )
+          return;
+        if (!target.remoteId) {
+          // An uncertain original send cannot authorize a replacement message.
+          d.state = "delivery_unknown";
+          return;
+        }
+        if (target.botId !== deployment.bot?.id || target.editUnavailable) {
+          d.state = "cancelled";
+          return;
+        }
+        d.remoteId = target.remoteId;
+      }
       d.state = "sending";
       d.botId = deployment.bot?.id;
       d.startedAt = new Date().toISOString();
@@ -170,42 +215,87 @@ export class DeliveryWorker {
           intent.id.includes(":status:"),
         );
       }
+      if (intent.editOf)
+        requireThat(
+          (await this.store.deployment()).bot?.id === intent.botId &&
+            this.editTarget(current, intent, intent.botId)?.remoteId ===
+              intent.remoteId,
+          "delivery_revoked",
+          403,
+        );
       const sent = await (await this.setup.client()).call<{
         message_id: number;
-      }>(intent.format === "rich" ? "sendRichMessage" : "sendMessage", {
-        chat_id: intent.chatId,
-        ...(intent.format === "rich"
-          ? { rich_message: telegramRichMessage(intent.text) }
-          : intent.format === "markdown"
-            ? telegramMarkdown(intent.text)
-            : { text: intent.text }),
-        message_thread_id: intent.topicId || undefined,
-        reply_parameters: intent.replyTo
-          ? { message_id: intent.replyTo, allow_sending_without_reply: true }
-          : undefined,
-        reply_markup: intent.buttons
-          ? { inline_keyboard: intent.buttons }
-          : undefined,
-        ...(intent.format === "rich"
-          ? {}
-          : { link_preview_options: { is_disabled: true } }),
-      });
-      await this.finish(workspaceId, id, (d) => {
+      }>(
+        intent.editOf
+          ? "editMessageText"
+          : intent.format === "rich"
+            ? "sendRichMessage"
+            : "sendMessage",
+        {
+          chat_id: intent.chatId,
+          ...(intent.editOf ? { message_id: intent.remoteId } : {}),
+          ...(intent.format === "rich"
+            ? { rich_message: telegramRichMessage(intent.text) }
+            : intent.format === "markdown"
+              ? telegramMarkdown(intent.text)
+              : { text: intent.text }),
+          message_thread_id: intent.editOf
+            ? undefined
+            : intent.topicId || undefined,
+          reply_parameters:
+            !intent.editOf && intent.replyTo
+              ? {
+                  message_id: intent.replyTo,
+                  allow_sending_without_reply: true,
+                }
+              : undefined,
+          reply_markup:
+            intent.buttons || intent.editOf
+              ? { inline_keyboard: intent.buttons ?? [] }
+              : undefined,
+          ...(intent.format === "rich"
+            ? {}
+            : { link_preview_options: { is_disabled: true } }),
+        },
+      );
+      await this.finish(workspaceId, intent, (d) => {
         d.state = "sent";
-        d.remoteId = sent.message_id;
+        d.remoteId = intent.editOf ? intent.remoteId : sent.message_id;
       });
       this.store.log.write("delivery_sent", {
         workspaceId,
         runId: intent.runId,
       });
     } catch (error) {
-      this.store.log.write("delivery_failed", {
-        error,
+      const unchanged =
+        intent.editOf &&
+        error instanceof TelegramError &&
+        error.code === "telegram_message_not_modified";
+      this.store.log.write(unchanged ? "delivery_sent" : "delivery_failed", {
+        ...(unchanged ? {} : { error }),
         workspaceId,
         runId: intent.runId,
       });
-      await this.finish(workspaceId, id, (d) => {
+      await this.finish(workspaceId, intent, (d, w) => {
         if (
+          intent.editOf &&
+          error instanceof TelegramError &&
+          error.code === "telegram_message_not_modified"
+        ) {
+          d.state = "sent";
+        } else if (
+          intent.editOf &&
+          error instanceof TelegramError &&
+          error.code === "telegram_message_uneditable"
+        ) {
+          const target = w.deliveries.find((t) => t.id === intent.editOf);
+          if (target) target.editUnavailable = true;
+          // Telegram confirmed there is no editable message: one replacement is safe.
+          d.editOf = undefined;
+          d.remoteId = undefined;
+          d.state = "pending";
+          d.attempts = 0;
+        } else if (
           intent.format === "rich" &&
           error instanceof TelegramError &&
           error.code === "telegram_destination_rejected" &&
@@ -217,12 +307,13 @@ export class DeliveryWorker {
           d.state = "pending";
         } else if (
           error instanceof TelegramError &&
-          error.disposition === "retry" &&
+          (error.disposition === "retry" ||
+            (intent.editOf && error.disposition === "unknown")) &&
           d.attempts < 5
         ) {
           d.state = "pending";
           d.nextAt = new Date(
-            Date.now() + error.retryAfter * 1000,
+            Date.now() + Math.max(error.retryAfter, 2 ** d.attempts) * 1000,
           ).toISOString();
         } else if (
           error instanceof TelegramError &&
@@ -235,12 +326,13 @@ export class DeliveryWorker {
   }
   private async finish(
     workspaceId: string,
-    id: string,
-    action: (d: Delivery) => void,
+    intent: Delivery,
+    action: (d: Delivery, w: Workspace) => void,
   ) {
     await this.store.change(workspaceId, (w) => {
-      const d = w.deliveries.find((d) => d.id === id);
-      if (d?.state === "sending") action(d);
+      const d = w.deliveries.find((d) => d.id === intent.id);
+      if (d?.state === "sending" && d.attempts === intent.attempts)
+        action(d, w);
     });
   }
 }

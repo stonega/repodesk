@@ -85,6 +85,17 @@ silently. Local button delivery, routing, isolation, revocation and replay tests
 passed as part of the **526-test** suite, alongside Biome, typecheck and build.
 New button behavior still needs live Telegram acceptance.
 
+The later 2026-10-07 correction makes routine progress edit the original task
+message, including delayed and repeated repair stages. Necessary questions,
+actionable blockers, requested receipts/status and final outcomes remain new
+replies. Waiting/terminal states close the existing progress message. Durable edits
+retain scope and bot checks, serialize, and retry known-message edits safely;
+confirmed deleted messages can be replaced once. Unknown original sends are not
+replayed. Verification guidance requires complete bounded commands or a repository
+script and explains how to report an irreparable frozen-plan blocker. See the
+[incident diagnosis](../../postmortem/2026-10-07-progress-flood-and-invalid-verification.md).
+This correction is local; the diagnosed live task still has its old frozen plan.
+
 Validation: Biome, strict TypeScript, build and **451 deterministic tests** passed
 with disposable PostgreSQL; **25 affected browser scenarios** passed with desktop
 and mobile inspection. Application/supervisor/job images built, Node runtime

@@ -84,6 +84,14 @@ Interpret the states separately:
   rejected text. Old attempts without these details cannot identify the exact
   rejected field after temporary session cleanup. See the
   [final-result incident](../../postmortem/2026-10-07-codex-final-result-validation.md).
+- Repeated check/repair cycles without a terminal error can indicate a malformed
+  frozen verification plan. Inspect only the task's runner `verificationCommands`
+  and sanitized `/task/check-diagnostics`; compare actual command length with the
+  2,000-character schema limit and confirm that the plan includes repository checks.
+  A missing argument in a frozen setup command cannot be fixed by ordinary source
+  repair. Use a repository script for longer preparation/check logic, and preserve
+  the checkpoint before operator-authorized recovery with a fresh plan. See the
+  [progress/verification incident](../../postmortem/2026-10-07-progress-flood-and-invalid-verification.md).
 - `coding_runner_unavailable` means runner communication or engine reconciliation
   failed; it does not establish an implementation failure. During the 2026-10-06
   release, the old worker remained active while the runner was replaced and marked
