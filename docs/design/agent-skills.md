@@ -61,6 +61,13 @@ below the instruction preview. Restore a published version expands a version
 selector and rollback action; the selected source is independent for each card.
 Skills without published versions do not show restore controls.
 
+The catalog has a right-aligned search and state toolbar with accessible names in
+place of visible field labels. Search ignores case and repeated whitespace, and
+matches all entered words across names, slugs and descriptions. Search and the
+enabled/disabled filter combine on the current catalog page; pagination is unchanged.
+The toolbar shows the matching count, offers a clear-search action, and wraps on
+mobile. No-match results offer Reset filters; an empty catalog offers creation guidance.
+
 Starter catalog: team recap, decision/blocker summary and follow-up drafting. These
 are reusable instructions over available chat context, not new autonomous write tools.
 Workspace admins can manage their catalog; only deployment operators register new
