@@ -34,11 +34,12 @@ import { DeliveryWorker } from "../../src/jobs/delivery.ts";
 import { Executor } from "../../src/jobs/execute.ts";
 import type { SetupService } from "../../src/setup/service.ts";
 import { stopGeneration } from "../../src/telegram/generation.ts";
-import type { Message } from "../../src/telegram/router.ts";
+import type { Message, Update } from "../../src/telegram/router.ts";
 import {
   selectTaskControl,
   taskControl,
 } from "../../src/telegram/task-controls.ts";
+import { Ingress } from "../../src/telegram/webhook.ts";
 import { createRun } from "../../src/workspaces/service.ts";
 import { workspace } from "../fixtures.ts";
 import { githubFixtureConfig, githubTransport } from "../github-fixture.ts";
@@ -1599,6 +1600,183 @@ const url = process.env.TEST_DATABASE_URL;
         (d) => d.id === `development:${f.task.id}:cancel:stopped`,
       ),
     ).toHaveLength(1);
+  });
+  test("inline Status and Cancel survive long tasks, acknowledge taps and deduplicate updates", async () => {
+    const f = await fixture();
+    const started = present(
+      (await store.read(f.w.id)).deliveries.find(
+        (d) => d.id === `development:${f.task.id}:started`,
+      ),
+    );
+    expect(started.text).not.toMatch(/\/status|\/cancel/);
+    const buttons = present(started.buttons?.[0]);
+    const calls: { method: string; params: Record<string, unknown> }[] = [];
+    const setup = {
+      client: async () => ({
+        call: async (method: string, params: Record<string, unknown>) => {
+          calls.push({ method, params });
+          return { message_id: 1900 };
+        },
+      }),
+    } as unknown as SetupService;
+    await new DeliveryWorker(store, setup).send(f.w.id, started.id);
+    expect(calls[0]?.method).toBe("sendMessage");
+    expect(calls[0]?.params.reply_markup).toEqual({
+      inline_keyboard: started.buttons,
+    });
+    expect(
+      (await store.read(f.w.id)).deliveries.find((d) => d.id === started.id)
+        ?.botId,
+    ).toBe("999");
+    await store.pool.query(
+      "INSERT INTO telegram_selections(actor,workspace_id) VALUES('101',$1) ON CONFLICT(actor) DO UPDATE SET workspace_id=excluded.workspace_id",
+      [f.w.id],
+    );
+    await f.tick();
+    await f.tick({ state: "running", phase: "implement" });
+    await store.change(f.w.id, (w) => {
+      present(w.deliveries.find((d) => d.id === started.id)).at = new Date(
+        Date.now() - 1800000,
+      ).toISOString();
+    });
+    const update = (id: number, data: string): Update => ({
+      update_id: id,
+      callback_query: {
+        id: `inline-${id}`,
+        from: { id: 101, is_bot: false },
+        data,
+        message: {
+          message_id: 1900,
+          date: Math.floor(Date.now() / 1000),
+          chat: { id: 101, type: "private" },
+          message_thread_id: 3,
+        },
+      },
+    });
+    const ingress = new Ingress(store, setup);
+    const status = update(
+      9200,
+      present(buttons.find((b) => b.text === "Status")).callback_data,
+    );
+    await ingress.accept(status);
+    await ingress.accept(status);
+    const statuses = (await store.read(f.w.id)).deliveries.filter(
+      (d) => d.id === `development:${f.task.id}:status:9200`,
+    );
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]?.text).toContain("investigating");
+    expect(statuses[0]?.text).not.toContain("Reference:");
+    expect(
+      calls.filter((c) => c.method === "answerCallbackQuery"),
+    ).toHaveLength(2);
+    const stop = present(
+      buttons.find((b) => b.text === "Cancel"),
+    ).callback_data;
+    await ingress.accept(update(9201, stop));
+    await ingress.accept(update(9202, stop));
+    expect((await f.read()).cancelRequested).toBe(true);
+    expect(
+      (await store.read(f.w.id)).deliveries.filter(
+        (d) => d.id === `development:${f.task.id}:cancel:requested`,
+      ),
+    ).toHaveLength(1);
+    await f.tick();
+    expect((await f.read()).state).toBe("cancelled");
+    expect(f.cancels).toHaveLength(1);
+    await ingress.accept(
+      update(
+        9203,
+        present(buttons.find((b) => b.text === "Status")).callback_data,
+      ),
+    );
+    const stopped = present(
+      (await store.read(f.w.id)).deliveries.find(
+        (d) => d.id === `development:${f.task.id}:status:9203`,
+      ),
+    );
+    expect(stopped.text).toContain("has stopped");
+    expect(stopped.buttons?.[0]?.map((b) => b.text)).toEqual(["Status"]);
+    expect(await taskInputs(store.pool, await f.read())).toHaveLength(1);
+  });
+  test("inline controls bind sent messages to actor, bot, workspace and topic and recheck access", async () => {
+    const f = await fixture();
+    const started = present(
+      (await store.read(f.w.id)).deliveries.find(
+        (d) => d.id === `development:${f.task.id}:started`,
+      ),
+    );
+    await store.change(f.w.id, (w) => {
+      Object.assign(present(w.deliveries.find((d) => d.id === started.id)), {
+        state: "sent",
+        botId: "999",
+        remoteId: 1930,
+      });
+    });
+    const callback = {
+      id: "bound-inline",
+      from: { id: 101, is_bot: false },
+      data: present(started.buttons?.[0]?.[0]).callback_data,
+      message: {
+        message_id: 1930,
+        date: Math.floor(Date.now() / 1000),
+        chat: { id: 101, type: "private" as const },
+        message_thread_id: 3,
+      },
+    };
+    const select = (
+      patch: Partial<typeof callback> = {},
+      botId = "999",
+      workspaceId = f.w.id,
+    ) =>
+      store.change(workspaceId, (w, sql) =>
+        selectTaskControl(
+          sql,
+          w,
+          { update_id: 9300, callback_query: { ...callback, ...patch } },
+          botId,
+        ),
+      );
+    await expect(select({ from: { id: 202, is_bot: false } })).rejects.toThrow(
+      "access_denied",
+    );
+    await expect(select({ from: { id: 101, is_bot: true } })).rejects.toThrow(
+      "access_denied",
+    );
+    await expect(
+      select({ message: { ...callback.message, message_id: 1931 } }),
+    ).rejects.toThrow("access_denied");
+    await expect(
+      select({ message: { ...callback.message, message_thread_id: 4 } }),
+    ).rejects.toThrow("access_denied");
+    await expect(
+      select({
+        message: { ...callback.message, chat: { id: 202, type: "private" } },
+      }),
+    ).rejects.toThrow("access_denied");
+    await expect(select({}, "998")).rejects.toThrow("access_denied");
+    await expect(select({ data: `tdc:${randomUUID()}` })).rejects.toThrow(
+      "access_denied",
+    );
+    const other = await fixture();
+    await expect(select({}, "999", other.w.id)).rejects.toThrow(
+      "access_denied",
+    );
+    await store.change(f.w.id, (w) => {
+      present(w.deliveries.find((d) => d.id === started.id)).state =
+        "delivery_unknown";
+    });
+    await expect(select()).rejects.toThrow("access_denied");
+    await store.change(f.w.id, (w) => {
+      present(w.deliveries.find((d) => d.id === started.id)).state = "sent";
+      present(present(w.coding).settings.repositories[0]).maintainers = ["202"];
+    });
+    await expect(select()).rejects.toThrow();
+    // The initiator retains cancellation authority when their maintainer grant is removed.
+    await select({ data: present(started.buttons?.[0]?.[1]).callback_data });
+    expect((await f.read()).state).toBe("cancelled");
+    expect(
+      (await taskGet(store.pool, other.w.id, other.task.id)).cancelRequested,
+    ).toBe(false);
   });
   test("missing runner records cannot falsely confirm cancellation", async () => {
     const f = await fixture();

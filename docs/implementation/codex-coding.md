@@ -59,8 +59,9 @@ with several tasks offers a selection; private conversations and unaddressed gro
 messages are never imported across audiences. Outside Topics, reply to the task's
 confirmed message. Edits append new inputs. A necessary Codex question checkpoints
 partial work and releases the runner slot; answers preserve their original text.
-Send **stop**, **停止**, or `/cancel` in the bound conversation to stop the task.
-`/status` in that conversation reports its state and confirmed PR. The admin task
+Tap inline **Cancel** on a task notice, or send **stop**, **停止**, or `/cancel` in
+the bound conversation to stop the task. Inline **Status** and `/status` in that
+conversation report its state and confirmed PR. The admin task
 list supports cancellation in both modes. Its **Stop** icon button has a
 task-specific accessible label and hover title, and opens a confirmation dialog
 showing the task and repository before sending cancellation.

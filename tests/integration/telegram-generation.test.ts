@@ -17,6 +17,7 @@ import { Executor } from "../../src/jobs/execute.ts";
 import { encrypt } from "../../src/setup/credentials.ts";
 import { SetupService } from "../../src/setup/service.ts";
 import type { Telegram } from "../../src/telegram/client.ts";
+import { queuedRunFeedback } from "../../src/telegram/feedback.ts";
 import { TelegramPoller } from "../../src/telegram/polling.ts";
 import { type Update, updateSchema } from "../../src/telegram/router.ts";
 import { Ingress } from "../../src/telegram/webhook.ts";
@@ -115,6 +116,55 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         },
       });
     }
+    test("a long private queue wait offers inline status and cancellation through ingress", async () => {
+      const f = await seed();
+      await store.change(f.w.id, (w) => {
+        const r = w.runs.find((r) => r.id === f.run.id);
+        if (!r) throw new Error("Missing queue fixture");
+        r.status = "queued";
+        r.at = new Date(Date.now() - 31000).toISOString();
+        queuedRunFeedback(w);
+      });
+      await store.pool.query(
+        "INSERT INTO telegram_selections(actor,workspace_id) VALUES('101',$1) ON CONFLICT(actor) DO UPDATE SET workspace_id=excluded.workspace_id",
+        [f.w.id],
+      );
+      const queued = (await store.read(f.w.id)).deliveries.find(
+        (d) => d.id === `run:${f.run.id}:queued`,
+      );
+      if (!queued?.buttons?.[0]?.[0] || !queued.buttons[0][1])
+        throw new Error("Missing queue buttons");
+      await new DeliveryWorker(store, setup).send(f.w.id, queued.id);
+      const tap = (data: string): Update => ({
+        update_id: ++sequence,
+        callback_query: {
+          id: `queue-${sequence}`,
+          from: { id: 101, is_bot: false },
+          data,
+          message: {
+            message_id: 10,
+            date: Math.floor(Date.now() / 1000),
+            chat: { id: 101, type: "private" },
+            message_thread_id: 7,
+          },
+        },
+      });
+      await ingress.accept(tap(queued.buttons[0][0].callback_data));
+      expect((await store.read(f.w.id)).deliveries.at(-1)?.text).toContain(
+        "Queued",
+      );
+      await ingress.accept(tap(queued.buttons[0][1].callback_data));
+      const stopped = (await store.read(f.w.id)).runs.find(
+        (r) => r.id === f.run.id,
+      );
+      expect(stopped?.status).toBe("cancelled");
+      expect(stopped?.stopConfirmed).toBe(true);
+      expect(
+        calls
+          .filter((c) => c.method === "answerCallbackQuery")
+          .map((c) => c.params.text),
+      ).toEqual(["", ""]);
+    });
     test("requests stream natively without queue replies and persist one final answer", async () => {
       for (const text of [
         "Hello",

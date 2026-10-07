@@ -77,6 +77,14 @@ linked coding task under existing permissions. Pi handoff responses and previews
 cannot claim queued coding work is complete. Ordinary cancellation deliveries are
 included in scoped admin run details. The Codex panel uses the same readable stages.
 
+The 2026-10-07 follow-up adds inline Status/Cancel controls to coding notices and
+long private queue notices, removing repeated command reminders. Longer stages
+use short, natural follow-ups. Button taps bind to confirmed sent messages and
+recheck current task permissions; acknowledgements clear the native spinner
+silently. Local button delivery, routing, isolation, revocation and replay tests
+passed as part of the **526-test** suite, alongside Biome, typecheck and build.
+New button behavior still needs live Telegram acceptance.
+
 Validation: Biome, strict TypeScript, build and **451 deterministic tests** passed
 with disposable PostgreSQL; **25 affected browser scenarios** passed with desktop
 and mobile inspection. Application/supervisor/job images built, Node runtime

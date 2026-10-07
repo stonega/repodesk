@@ -373,6 +373,7 @@ export interface Run {
   error?: string;
 }
 export interface Delivery {
+  botId?: string;
   cancellationRunId?: string;
   feedback?: {
     owner: "run" | "coding" | "development";

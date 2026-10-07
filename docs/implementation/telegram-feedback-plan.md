@@ -37,12 +37,13 @@ state; keep routine notices short and keep diagnostics in the admin panel.
 
 | Situation | Example reply | Required evidence |
 | --- | --- | --- |
-| Task accepted | “Your request for owner/repo is queued. Use /status to check it or /cancel to stop it.” | Task and initial input committed |
+| Task accepted | “Your request for owner/repo is queued. I’ll keep you posted.” with Status and Cancel buttons | Task and initial input committed |
 | Work starts | “I’m investigating the change in owner/repo.” | Runner attempt accepted in the relevant intake or analysis phase |
 | Environment preparation | “I’m preparing the repository environment.” | Confirmed runner preparation/setup phase |
 | Implementation | “I’m implementing the change.” | Implementation authorized and runner in the work phase |
-| Verification | “The changes are ready for checks. I’m running them now.” | Confirmed check phase, not a model summary |
-| Repair | “A check failed. I’m working on a repair before publishing.” | Failed check and a repair actually started |
+| Verification | “I’m running the checks now.” | Confirmed check phase, not a model summary |
+| Repair | “A check failed, so I’m fixing it before trying again.” | Failed check and a repair actually started |
+| Longer verification | “The checks are still running. I’ll share the result when they finish.” with Status and Cancel buttons | A recent poll confirms the same active check phase |
 | Question | “Should this apply to all users or only administrators? Reply here to continue.” | Persisted question in the waiting task |
 | Sign-in required | “Your task is paused because Codex needs sign-in. Ask the workspace operator to reconnect the account in Plugins → Codex → Configuration.” | Confirmed authentication pause; maintain the existing authorized continuation behavior |
 | Stop requested | “Stopping your task…” | Cancellation committed while an attempt is still active |
@@ -75,6 +76,21 @@ uncertainty. Pi handoff text and previews cannot announce that queued coding wor
 has finished; a failed chat response explains the existing handoff separately.
 Ordinary run cancellation receipts remain visible in scoped admin run details.
 
+The 2026-10-07 follow-up adds inline **Status** and **Cancel** buttons to Reviewed
+and Direct task acknowledgements and progress, active Direct task notices and long
+private queue notices. The buttons target their recorded task without a selector
+or command reminder. Taps validate the sent bot/message, requester, workspace,
+chat/topic and exact stored button before applying current permissions. The task
+initiator retains cancellation after a maintainer grant is removed. Status replies
+offer Cancel only while cancellation is applicable; old task buttons return the
+current outcome. Button acknowledgements clear the native spinner silently.
+Explicit commands and native streaming Stop remain available.
+
+Delayed progress uses a brief stage-specific follow-up rather than repeating the
+previous notice. Existing deduplication, two-minute threshold, ten-second throttle,
+stale-progress suppression and uncertain-send behavior remain in effect. Local
+fixtures cover delivery and callback routing; live Telegram acceptance remains pending.
+
 The following delivery sequence remains the implementation and acceptance contract.
 
 ### Local verification on 2026 10 06
@@ -93,6 +109,16 @@ fencing, authentication recovery, erasure and cancellation with fake external
 services. A fresh image migration/API/worker smoke returned HTTP 200 for health,
 readiness, setup and the Codex page. Temporary test state was isolated from the
 application database. No live model, Telegram or GitHub acceptance is implied.
+
+### Local follow-up verification on 2026 10 07
+
+Biome, strict TypeScript and Bun build passed. All **526 deterministic tests**
+passed against disposable PostgreSQL with the documented localhost proxy bypass.
+New cases cover native button delivery, callback acknowledgement, long-task controls,
+current status, cancellation in Reviewed/Direct/ordinary queued requests, duplicate
+updates, forged message references, actor/bot/workspace/topic isolation and access
+revocation. The UI preference, user instructions and manual acceptance example
+were updated. Live Telegram verification of these new buttons remains pending.
 
 ## Delivery sequence
 

@@ -19,6 +19,7 @@ import { Store } from "../../src/db/repositories.ts";
 import { GitHubApp } from "../../src/github/app.ts";
 import { GitHubApps } from "../../src/github/registry.ts";
 import { encrypt } from "../../src/setup/credentials.ts";
+import { selectTaskControl } from "../../src/telegram/task-controls.ts";
 import { decide } from "../../src/workflows/service.ts";
 import { createRun } from "../../src/workspaces/service.ts";
 import { workspace } from "../fixtures.ts";
@@ -96,6 +97,59 @@ const url = process.env.TEST_DATABASE_URL;
       present(w.codingTasks?.[0]).nextPollAt = undefined;
     });
   }
+  test("Reviewed task buttons show current status and retain initiator cancellation after grant removal", async () => {
+    const f = await fixture();
+    const queued = present(
+      (await store.read(f.id)).deliveries.find(
+        (d) => d.feedback?.owner === "coding" && d.feedback.id === f.taskId,
+      ),
+    );
+    expect(queued.buttons?.[0]?.map((b) => b.text)).toEqual([
+      "Status",
+      "Cancel",
+    ]);
+    await store.change(f.id, (w) => {
+      Object.assign(present(w.deliveries.find((d) => d.id === queued.id)), {
+        state: "sent",
+        botId: "999",
+        remoteId: 2100,
+      });
+    });
+    const tap = (data: string) =>
+      store.change(f.id, (w, sql) =>
+        selectTaskControl(
+          sql,
+          w,
+          {
+            update_id: 2101,
+            callback_query: {
+              id: "reviewed-inline",
+              from: { id: 101, is_bot: false },
+              data,
+              message: {
+                message_id: 2100,
+                date: Math.floor(Date.now() / 1000),
+                chat: { id: -100100, type: "supergroup" },
+                message_thread_id: 3,
+              },
+            },
+          },
+          "999",
+        ),
+      );
+    await tap(present(queued.buttons?.[0]?.[0]).callback_data);
+    expect((await store.read(f.id)).deliveries.at(-1)?.text).toContain(
+      "queued",
+    );
+    await store.change(f.id, (w) => {
+      present(present(w.coding).settings.repositories[0]).maintainers = [];
+    });
+    await expect(
+      tap(present(queued.buttons?.[0]?.[0]).callback_data),
+    ).rejects.toThrow();
+    await tap(present(queued.buttons?.[0]?.[1]).callback_data);
+    expect((await read(f.id)).state).toBe("cancelled");
+  });
   async function read(id: string) {
     return present((await store.read(id)).codingTasks?.[0]);
   }

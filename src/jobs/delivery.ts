@@ -127,6 +127,7 @@ export class DeliveryWorker {
       }
       if (d.nextAt && Date.parse(d.nextAt) > Date.now()) return;
       d.state = "sending";
+      d.botId = deployment.bot?.id;
       d.startedAt = new Date().toISOString();
       d.attempts++;
       return structuredClone(d);

@@ -3,6 +3,7 @@ import { type Approval, requireThat, type Workspace } from "../domain.ts";
 import { authorizeRepository } from "../github/user-access.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import { clearProgress } from "../telegram/feedback.ts";
+import { taskButtons } from "../telegram/task-buttons.ts";
 import {
   audience,
   audit,
@@ -238,6 +239,10 @@ export function notifyCoding(w: Workspace, task: CodingTask) {
   const text = reviewedStatus(task);
   const id = deliver(w, task.actor, task.chatId, text, {
     topicId: task.topicId,
+    buttons:
+      !codingTerminal(task.state) && !task.cancelRequested
+        ? taskButtons("coding", task.id)
+        : undefined,
     id:
       task.state === "cancelled"
         ? `coding:${task.id}:cancel:stopped`

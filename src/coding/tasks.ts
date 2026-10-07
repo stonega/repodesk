@@ -8,6 +8,7 @@ import {
 } from "../domain.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import { clearProgress } from "../telegram/feedback.ts";
+import { taskButtons } from "../telegram/task-buttons.ts";
 import {
   audience,
   audit,
@@ -114,6 +115,12 @@ export function notifyDevelopment(
     topicId: task.topicId,
     format: "markdown",
     id: `development:${task.id}:${eventId}`,
+    buttons:
+      !developmentStopped(task.state) &&
+      task.state !== "review" &&
+      !task.cancelRequested
+        ? taskButtons("development", task.id)
+        : undefined,
   });
 }
 
@@ -253,18 +260,19 @@ export async function startDevelopment(
   notifyDevelopment(
     w,
     task,
-    `Your request for ${payload.repository} is queued. Use /status to check it or /cancel to stop it.`,
+    `Your request for ${payload.repository} is queued. I’ll keep you posted.`,
     "started",
   );
   const acknowledgement = w.deliveries.find(
     (d) => d.id === `development:${task.id}:started`,
   );
-  if (acknowledgement)
+  if (acknowledgement) {
     acknowledgement.feedback = {
       owner: "development",
       id: task.id,
       key: "queued",
     };
+  }
   return task;
 }
 

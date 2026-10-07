@@ -7,12 +7,26 @@ const stages: Record<string, string> = {
   intake: "I’m investigating your request.",
   analysis: "I’m investigating your question.",
   implement: "I’m implementing the change.",
-  check: "The changes are ready for checks. I’m running them now.",
-  repair: "A check failed. I’m working on a repair before publishing.",
-  publish: "The recorded checks passed. I’m opening or updating your draft PR.",
+  check: "I’m running the checks now.",
+  repair: "A check failed, so I’m fixing it before trying again.",
+  publish: "The checks passed. I’m opening or updating your draft PR.",
 };
 export const stageMessage = (stage: string) =>
   stages[stage] ?? "Your task is running.";
+
+const ongoingStages: Record<string, string> = {
+  prepare: "I’m still getting the repository ready.",
+  setup: "The environment setup is still running.",
+  intake: "I’m still looking into your request.",
+  analysis: "I’m still looking into your question.",
+  implement: "I’m still working on the changes.",
+  check:
+    "The checks are still running. I’ll share the result when they finish.",
+  repair: "I’m still working on the failed check.",
+  publish: "I’m waiting for confirmation from GitHub about your draft PR.",
+};
+export const ongoingStageMessage = (stage: string) =>
+  ongoingStages[stage] ?? "Your task is still running. I’ll keep you posted.";
 
 const failures: Record<string, string> = {
   empty_response:

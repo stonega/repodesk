@@ -896,16 +896,25 @@ Use this format for each preference:
   notices based on confirmed application/runner stages. Explain failures with a
   useful next step and identify when an administrator must act. Acknowledge a stop
   request separately from confirmed termination when execution is still active.
+  Attach native inline **Status** and **Cancel** buttons to task acknowledgements
+  and progress notices instead of repeating command instructions. Longer stages
+  use brief, natural follow-ups specific to the confirmed stage; do not copy the
+  previous notice into a generic “taking longer” message.
 - **Scope:** Telegram assistant requests and Reviewed/Direct coding tasks for the
   invite-only friend and colleague beta; apply the same wording principles to
   corresponding admin task status.
 - **Source:** 2026-10-06 — user endorsed clear progress, cancellation and failure
   feedback and requested an implementation plan before inviting friends/colleagues.
+  2026-10-07 — user showed a successful Telegram coding task and requested inline
+  status/cancel controls without repeated reminders, plus more natural progress
+  follow-ups.
 - **Exceptions:** Keep short private replies on native thinking previews without
   an extra immediate queued acknowledgement. Unaddressed group traffic stays
   silent. Revocation and destination policy can prevent a notification. Unknown
   remote outcomes require truthful uncertainty rather than a success or stopped
   claim. Execution quotas remain governed by the existing Codex preference.
+  Native Stop remains the control for private streaming answers. Explicit commands
+  remain available; long private queue notices also offer inline task controls.
 
 ### Prefer native Telegram Topics for conversations
 

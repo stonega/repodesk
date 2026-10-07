@@ -1,4 +1,9 @@
-import { requestFailureMessage, stageMessage } from "./messages.ts";
+import {
+  ongoingStageMessage,
+  requestFailureMessage,
+  stageMessage,
+} from "./messages.ts";
+import { taskButtons } from "./task-buttons.ts";
 
 export { requestFailureMessage, runStatus, stageMessage } from "./messages.ts";
 
@@ -71,12 +76,11 @@ export function recordProgress(
     w,
     task.actor,
     task.chatId,
-    delayed
-      ? `This stage is taking longer. ${stageMessage(stage)} Use /status to check it or /cancel to stop it.`
-      : stageMessage(stage),
+    delayed ? ongoingStageMessage(stage) : stageMessage(stage),
     {
       topicId: task.topicId,
       id: `${owner}:${task.id}:progress:${p.sequence}${delayed ? ":delay" : ""}`,
+      buttons: taskButtons(owner, task.id),
     },
   );
   const d = w.deliveries.find((d) => d.id === id);
@@ -118,12 +122,13 @@ export function queuedRunFeedback(w: Workspace, now = Date.now()) {
       w,
       run.actor,
       run.chatId,
-      "Your request is still queued. Use /status to check it or /cancel to stop it.",
+      "Your request is still queued. I’ll let you know when it starts.",
       {
         topicId: run.topicId,
         replyTo: run.replyTo,
         runId: run.id,
         id: `run:${run.id}:queued`,
+        buttons: taskButtons("run", run.id),
       },
     );
     const d = w.deliveries.find((d) => d.id === id);

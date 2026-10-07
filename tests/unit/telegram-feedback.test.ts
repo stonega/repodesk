@@ -55,10 +55,25 @@ test("a confirmed long phase gets one delayed notice and real repairs get fresh 
   recordProgress(w, t, "coding", "check", "1", 130000);
   recordProgress(w, t, "coding", "check", "1", 300000);
   expect(w.deliveries.filter((d) => d.id.endsWith(":delay"))).toHaveLength(1);
+  const delayed = w.deliveries.find((d) => d.id.endsWith(":delay"));
+  expect(delayed?.text).toBe(
+    "The checks are still running. I’ll share the result when they finish.",
+  );
+  expect(delayed?.text).not.toContain(w.deliveries[0]?.text ?? "missing stage");
+  expect(delayed?.text).not.toMatch(/\/status|\/cancel|This stage/);
+  expect(delayed?.buttons?.flat().map((b) => b.text)).toEqual([
+    "Status",
+    "Cancel",
+  ]);
+  expect(
+    delayed?.buttons
+      ?.flat()
+      .every((b) => Buffer.byteLength(b.callback_data) <= 64),
+  ).toBe(true);
   recordProgress(w, t, "coding", "repair", "2", 310000);
   recordProgress(w, t, "coding", "check", "2", 320000);
   expect(new Set(w.deliveries.map((d) => d.id)).size).toBe(w.deliveries.length);
-  expect(w.deliveries.at(-1)?.text).toContain("running them");
+  expect(w.deliveries.at(-1)?.text).toContain("running the checks");
 });
 
 test("only retained authorized private queue waits receive a delayed queue notice", () => {
@@ -74,6 +89,11 @@ test("only retained authorized private queue waits receive a delayed queue notic
   queuedRunFeedback(w, at.getTime() + 60000);
   expect(w.deliveries).toHaveLength(1);
   expect(w.deliveries[0]?.feedback).toMatchObject({ owner: "run", id: r.id });
+  expect(w.deliveries[0]?.text).not.toMatch(/\/status|\/cancel/);
+  expect(w.deliveries[0]?.buttons?.[0]?.map((b) => b.text)).toEqual([
+    "Status",
+    "Cancel",
+  ]);
   r.status = "running";
   clearProgress(w, "run", r.id);
   expect(w.deliveries[0]?.state).toBe("cancelled");

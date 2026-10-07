@@ -22,11 +22,49 @@ import { audience, authorize } from "../workspaces/policy.ts";
 import { deliver, visibleRuns } from "../workspaces/service.ts";
 import { runStatus } from "./feedback.ts";
 import type { Message, Update } from "./router.ts";
+import { taskButtons } from "./task-buttons.ts";
 
 type Target =
   | { kind: "r"; value: Run }
   | { kind: "c"; value: CodingTask }
   | { kind: "d"; value: DevelopmentTask };
+
+async function controlTarget(
+  sql: Sql,
+  w: Workspace,
+  kind: string | undefined,
+  id: string,
+): Promise<Target | undefined> {
+  if (kind === "d") return { kind: "d", value: await taskGet(sql, w.id, id) };
+  if (kind === "c") {
+    const value = w.codingTasks?.find((t) => t.id === id);
+    return value && { kind: "c", value };
+  }
+  if (kind === "r") {
+    const value = w.runs.find((r) => r.id === id);
+    return value && { kind: "r", value };
+  }
+}
+
+function statusButtons(target: Target) {
+  const cancel =
+    target.kind === "r"
+      ? !target.value.cancelled &&
+        ["queued", "running", "awaiting_approval"].includes(target.value.status)
+      : !target.value.cancelRequested &&
+        (target.kind === "d"
+          ? !developmentStopped(target.value.state)
+          : !codingTerminal(target.value.state));
+  return taskButtons(
+    target.kind === "d"
+      ? "development"
+      : target.kind === "c"
+        ? "coding"
+        : "run",
+    target.value.id,
+    cancel,
+  );
+}
 function allowed(w: Workspace, actor: string, target: Target, stop: boolean) {
   authorize(w, actor);
   if (target.kind === "d")
@@ -81,12 +119,20 @@ async function perform(
   target: Target,
   stop: boolean,
   updateId: number,
+  reference = true,
 ) {
   allowed(w, actor, target, stop);
   if (stop) {
-    if (target.kind === "d")
+    if (target.kind === "d") {
+      const terminal =
+        developmentStopped(target.value.state) && !target.value.cancelRequested;
       await cancelDevelopment(sql, w, actor, target.value.id);
-    else if (target.kind === "c") {
+      if (terminal)
+        deliver(w, actor, chatId, developmentStatus(target.value), {
+          topicId,
+          id: `development:${target.value.id}:status:${updateId}`,
+        });
+    } else if (target.kind === "c") {
       const terminal =
         codingTerminal(target.value.state) && !target.value.cancelRequested;
       cancelCoding(w, actor, target.value.id);
@@ -113,10 +159,11 @@ async function perform(
       chatId,
       target.kind === "r"
         ? runStatus(target.value)
-        : `${target.kind === "d" ? developmentStatus(target.value) : reviewedStatus(target.value)}\nReference: ${target.value.id}`,
+        : `${target.kind === "d" ? developmentStatus(target.value) : reviewedStatus(target.value)}${reference ? `\nReference: ${target.value.id}` : ""}`,
       {
         topicId,
         id: `${target.kind === "d" ? "development" : target.kind === "c" ? "coding" : "run"}:${target.value.id}:status:${updateId}`,
+        buttons: reference ? undefined : statusButtons(target),
       },
     );
 }
@@ -256,6 +303,8 @@ export async function selectTaskControl(
   botId: string,
 ) {
   const c = u.callback_query;
+  if (/^t[rcd][cs]:/.test(c?.data ?? ""))
+    return inlineTaskControl(sql, w, u, botId);
   if (!c?.data || !/^f[rcd][cs]:/.test(c.data)) return false;
   requireThat(
     !c.from.is_bot && c.message && !c.message.sender_chat,
@@ -285,16 +334,7 @@ export async function selectTaskControl(
     "access_denied",
     403,
   );
-  const target: Target | undefined =
-    action?.[1] === "d"
-      ? { kind: "d", value: await taskGet(sql, w.id, id) }
-      : action?.[1] === "c"
-        ? w.codingTasks
-            ?.filter((t) => t.id === id)
-            .map((value): Target => ({ kind: "c", value }))[0]
-        : w.runs
-            .filter((r) => r.id === id)
-            .map((value): Target => ({ kind: "r", value }))[0];
+  const target = await controlTarget(sql, w, action?.[1], id);
   requireThat(target, "not_found", 404);
   requireThat(
     target.value.chatId === chatId && target.value.topicId === topicId,
@@ -316,6 +356,62 @@ export async function selectTaskControl(
   return true;
 }
 
+async function inlineTaskControl(
+  sql: Sql,
+  w: Workspace,
+  u: Update,
+  botId: string,
+) {
+  const c = u.callback_query;
+  const match = /^t([rcd])([cs]):([0-9a-f-]{36})$/.exec(c?.data ?? "");
+  if (!match) return false;
+  requireThat(
+    c && !c.from.is_bot && c.message && !c.message.sender_chat,
+    "access_denied",
+    403,
+  );
+  const actor = String(c.from.id),
+    chatId = String(c.message.chat.id),
+    topicId = c.message.message_thread_id ?? 0,
+    id = match[3];
+  requireThat(id, "invalid_request");
+  requireThat(
+    w.deliveries.some(
+      (d) =>
+        d.botId === botId &&
+        d.actor === actor &&
+        d.chatId === chatId &&
+        d.topicId === topicId &&
+        d.state === "sent" &&
+        d.remoteId === c.message?.message_id &&
+        d.buttons?.flat().some((b) => b.callback_data === c.data),
+    ),
+    "access_denied",
+    403,
+  );
+  const target = await controlTarget(sql, w, match[1], id);
+  requireThat(target, "not_found", 404);
+  requireThat(
+    target.value.chatId === chatId && target.value.topicId === topicId,
+    "access_denied",
+    403,
+  );
+  if (target.kind === "d")
+    requireThat(target.value.botId === botId, "access_denied", 403);
+  await perform(
+    sql,
+    w,
+    actor,
+    chatId,
+    topicId,
+    target,
+    match[2] === "c",
+    u.update_id,
+    false,
+  );
+  return true;
+}
+
 /** Queued selectors recheck every visible target before exposing their labels. */
 export async function selectionAllowed(sql: Sql, w: Workspace, d: Delivery) {
   if (!/^control:[0-9]+:[0-9]+$/.test(d.id) || !d.buttons) return true;
@@ -326,16 +422,7 @@ export async function selectionAllowed(sql: Sql, w: Workspace, d: Delivery) {
     if (!match?.[3]) return false;
     try {
       const id = match[3];
-      const target: Target | undefined =
-        match[1] === "d"
-          ? { kind: "d", value: await taskGet(sql, w.id, id) }
-          : match[1] === "c"
-            ? w.codingTasks
-                ?.filter((t) => t.id === id)
-                .map((value): Target => ({ kind: "c", value }))[0]
-            : w.runs
-                .filter((r) => r.id === id)
-                .map((value): Target => ({ kind: "r", value }))[0];
+      const target = await controlTarget(sql, w, match[1], id);
       if (
         !target ||
         target.value.chatId !== d.chatId ||

@@ -255,13 +255,15 @@ export class Ingress {
     });
     if (update.callback_query) {
       try {
+        const fallback = /^t[rcd][cs]:/.test(update.callback_query.data ?? "")
+          ? ""
+          : "Request checked. See the bot or admin panel for status.";
         await (await this.setup.client()).call("answerCallbackQuery", {
           callback_query_id: update.callback_query.id,
           text:
             "callbackText" in result
-              ? (result.callbackText ??
-                "Request checked. See the bot or admin panel for status.")
-              : "Request checked. See the bot or admin panel for status.",
+              ? (result.callbackText ?? fallback)
+              : fallback,
         });
       } catch {
         /* Callback acknowledgements have no application effect. */

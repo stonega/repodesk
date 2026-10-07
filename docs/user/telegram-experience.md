@@ -181,25 +181,33 @@ be retracted by Stop; uncertain provider charges remain reserved for reconciliat
 Longer coding tasks send short updates when the runner confirms preparation,
 investigation, implementation, checks or repair. Fast transitions are combined;
 routine notices are limited to one every ten seconds. A confirmed active stage
-lasting two minutes can receive one delayed update. Ordinary private requests
-keep the native thinking preview; a private queue wait over thirty seconds can
-receive one queued notice. Ordinary group replies keep their final-only behavior.
+lasting two minutes can receive one short follow-up, such as “The checks are still
+running. I’ll share the result when they finish.” Task acknowledgements and progress
+offer inline **Status** and **Cancel** buttons without repeated command reminders.
+Ordinary private requests keep the native thinking preview; a private queue wait
+over thirty seconds can
+receive one queued notice with the same buttons. Ordinary group replies keep their
+final-only behavior.
 
-Send `/status` or reply to a task message with it. Status identifies required input,
-the last confirmed stage and confirmed issue/PR links. If the runner cannot be
+Tap **Status**, send `/status` or reply to a task message with it. Status identifies
+required input, the last confirmed stage and confirmed issue/PR links. If the runner cannot be
 reached, it says that current status is unavailable. A necessary product question
 ends with “Reply here to continue.” A Codex sign-in pause directs the workspace
 operator to the configuration page. Task notices stay in their original chat/topic.
 
-Use native Stop for private assistant generation, or send `/cancel` in the task's
-conversation. Multiple candidates produce a target selector. Existing explicit
+Tap **Cancel** on a task notice, use native Stop for private assistant generation,
+or send `/cancel` in the task's conversation. Multiple candidates produce a target
+selector. Existing explicit
 references continue to work. When a private preview handed the request to Codex,
 its native Stop also cancels that linked task. Cancelling the original request from
 Telegram or the authorized admin control uses the task's existing cancellation
 permissions. “Stopping…” means cancellation was recorded while work
 was active; “has stopped” follows confirmed termination. A lost runner record or an
 in-flight publication may produce an uncertain outcome. Cancellation cannot retract
-existing artifacts or an external operation already in flight.
+existing artifacts or an external operation already in flight. Buttons stay bound
+to their sent task message, user, bot and chat/topic and recheck current access.
+An older notice reports the current task outcome; status replies omit Cancel once
+the task has stopped or a stop is already requested.
 
 Failures explain the next step without exposing internal codes or provider output.
 If an administrator must repair a connection, permission or configuration, the
