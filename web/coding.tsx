@@ -627,10 +627,10 @@ export function Coding({
                         "unknown",
                         "cancelled",
                       ].includes(task.state) && (
-                        <button
-                          type="button"
+                        <IconButton
+                          icon="stop"
                           className="danger"
-                          aria-label={`Stop coding task ${task.payload.title}`}
+                          label={`Stop coding task ${task.payload.title}`}
                           disabled={busy || task.cancelRequested}
                           onClick={() => {
                             setStopError("");
@@ -640,9 +640,7 @@ export function Coding({
                               repository: task.payload.repository,
                             });
                           }}
-                        >
-                          Stop
-                        </button>
+                        />
                       )}
                     </td>
                   </tr>

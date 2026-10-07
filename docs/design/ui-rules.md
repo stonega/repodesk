@@ -108,16 +108,19 @@ them.
 - **Exceptions:** Actor/repository/publication permissions, cancellation,
   retention, container isolation and provider/account limits remain applicable.
 
-### Coding task Stop is labeled and confirmed
+### Coding task Stop uses an icon and confirmation
 
-- **Preference:** Use a visible Stop text button in task rows. Open a confirmation
-  modal identifying the task and repository, explaining cancellation and retained
-  GitHub artifacts, with Stop followed by Cancel. Send cancellation only after
-  confirmation; lock dismissal while pending and keep failures in the modal.
+- **Preference:** Use the shared Stop icon button in task rows with an accessible
+  task-specific label and hover title. Open a confirmation modal identifying the
+  task and repository, explaining cancellation and retained GitHub artifacts,
+  with visible Stop followed by Cancel. Send cancellation only after confirmation;
+  lock dismissal while pending and keep failures in the modal.
 - **Scope:** Reviewed and continuous coding tasks in the Codex plugin, on desktop
   and mobile.
 - **Source:** 2026-10-06 — user requested a Stop label button and a confirmation
   modal for the coding task action shown in the screenshot.
+  2026-10-07 — user requested changing the task-row Stop button to an icon button,
+  superseding the earlier visible text preference for that control.
 - **Exceptions:** Telegram Stop controls retain their existing behavior.
 
 ### Editing a repository starts with the saved selection
@@ -826,7 +829,8 @@ them.
 - **Exceptions:** Keep visible text for primary form submission, sign-in,
   authorization, approval, publication, deployment-wide controls, destructive
   workspace confirmation and other actions whose consequences need explanation.
-  Coding task Stop uses a text button and confirmation modal as specified above.
+  Coding task rows use a Stop icon; their confirmation modal keeps visible text
+  as specified above.
   Telegram controls are outside the web icon-library scope.
 
 Use this format for each preference:

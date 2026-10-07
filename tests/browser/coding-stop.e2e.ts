@@ -116,7 +116,11 @@ for (const width of [1280, 390]) {
       const stop = row.getByRole("button", {
         name: `Stop coding task ${task.payload.title}`,
       });
-      await expect(stop).toHaveText("Stop");
+      await expect(stop).toHaveText("");
+      await expect(stop).toHaveAttribute(
+        "title",
+        `Stop coding task ${task.payload.title}`,
+      );
       await stop.click();
       const dialog = page.getByRole("dialog", { name: "Stop coding task?" });
       await expect(dialog).toContainText(task.payload.title);
