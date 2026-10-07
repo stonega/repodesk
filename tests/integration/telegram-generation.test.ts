@@ -264,7 +264,10 @@ const rootUrl = process.env.TEST_DATABASE_URL;
           if (!r?.telegramDraft) throw Error();
           if (mode === "bot") r.telegramDraft.botId = "888";
           if (mode === "fence") r.fence++;
-          if (mode === "revoked") v.policy.allowed = [];
+          if (mode === "revoked")
+            v.members.forEach((member) => {
+              member.active = false;
+            });
         });
         if (mode === "collision") {
           const other = await seed();

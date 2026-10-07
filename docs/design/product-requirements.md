@@ -72,10 +72,10 @@ automatically a company or tenant. An internal workspace owns each connected cha
 - Display whether the bot can receive all group messages or only directed interaction.
 - Default to command/reply mode. Monitoring is a separate opt-in setting.
 - Never treat unfinished setup, silence or a model guess as permission.
-- Support a configurable allowed-user whitelist, managed in the admin panel. Default
-  to whitelist-only; enroll and allow the workspace creator atomically. Authorize by
-  Telegram user ID, and recheck eligibility for callbacks, jobs and scheduled runs.
-  See [access-control requirements](access-control.md) for modes and revocation rules.
+- Allow all active workspace members to use the bot. Enroll the workspace creator
+  as owner atomically. Authorize by verified Telegram user ID and recheck active
+  membership, roles and scoped permissions for callbacks, jobs and scheduled runs.
+  See [access-control requirements](access-control.md) for membership and revocation rules.
 
 Acceptance: no data processing job begins before the chat is active; one chat cannot
 silently join two workspaces; a non-admin cannot claim someone else's group; repeat
@@ -243,8 +243,8 @@ bot commands. See [admin panel requirements](admin-panel.md) for screens and API
 Admins manage chat links, roles, workflow owners, monitoring, retention and budgets.
 Workspace operators also manage GitHub installation selection, Code Truth targets
 and repository-specific coding grants in the Plugins panel.
-They also configure allowed users, including bulk ID entry, access-mode changes and
-audited removal. Whitelisting never grants admin privileges or wider source access.
+They manage member enrollment, active status and roles with audited changes.
+Active membership never grants admin privileges or wider source access.
 Members can run shared workflows but cannot grant access they do not own.
 
 Audit workflow edits, approvals, memory changes, connection delegation, membership

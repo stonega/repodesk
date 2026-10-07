@@ -26,7 +26,7 @@ import {
   tick,
   workflowAction,
 } from "../../src/workflows/service.ts";
-import { setPolicy } from "../../src/workspaces/policy.ts";
+import { revokeWork } from "../../src/workspaces/policy.ts";
 import { cancelRun, createRun } from "../../src/workspaces/service.ts";
 import { spec, workspace } from "../fixtures.ts";
 
@@ -112,7 +112,9 @@ suite("PostgreSQL integration (isolated database)", () => {
     const w = workspace();
     w.operatorId = id;
     w.members = [{ id: "303", active: true, role: "owner" }];
-    w.policy.allowed = ["303"];
+    w.members.forEach((member) => {
+      member.active = member.id === "303";
+    });
     await store.pool.query(
       "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",
       [w.id, id, JSON.stringify(w)],
@@ -253,7 +255,9 @@ suite("PostgreSQL integration (isolated database)", () => {
     ).toBe(403);
     const other = await seed();
     await store.change(other.id, (v) => {
-      v.policy.allowed = ["303"];
+      v.members.forEach((member) => {
+        member.active = member.id === "303";
+      });
     });
     expect(
       (await request(`/api/admin/workspaces/${other.id}/settings`)).status,
@@ -364,7 +368,7 @@ suite("PostgreSQL integration (isolated database)", () => {
     const w = await seed();
     await store.change(w.id, (saved) => {
       saved.members.push({ id: "404", role: "admin", active: true });
-      saved.policy.allowed.push("404");
+
       for (const actor of ["101", "202"])
         createRun(
           saved,
@@ -688,7 +692,9 @@ suite("PostgreSQL integration (isolated database)", () => {
     );
     // The deployment operator keeps web configuration access without Telegram membership.
     await store.change(w.id, (v) => {
-      v.policy.allowed = ["303"];
+      v.members.forEach((member) => {
+        member.active = member.id === "303";
+      });
     });
     expect((await request(path)).status).toBe(200);
     expect(
@@ -964,7 +970,9 @@ suite("PostgreSQL integration (isolated database)", () => {
       )("plugin_tool", "new", action),
     ).rejects.toThrow("tool_policy_denied");
     await store.change(w.id, (v) => {
-      v.policy.allowed = [];
+      v.members.forEach((member) => {
+        member.active = false;
+      });
     });
     await expect(execute("plugin_tool", "one", action)).rejects.toThrow(
       "tool_policy_denied",
@@ -1330,7 +1338,9 @@ suite("PostgreSQL integration (isolated database)", () => {
             });
           if (mode === "revoked")
             await store.change(w.id, (v) => {
-              v.policy.allowed = [];
+              v.members.forEach((member) => {
+                member.active = false;
+              });
             });
           return {
             text: " \n",
@@ -1420,7 +1430,10 @@ suite("PostgreSQL integration (isolated database)", () => {
             );
           else
             await store.change(w.id, (v) => {
-              if (mode === "revoked") v.policy.allowed = [];
+              if (mode === "revoked")
+                v.members.forEach((member) => {
+                  member.active = false;
+                });
               if (mode === "paused") v.settings.paused = true;
               const run = v.runs.find((item) => item.id === r.id);
               if (run && mode === "fenced") run.fence++;
@@ -1557,9 +1570,13 @@ suite("PostgreSQL integration (isolated database)", () => {
     const r = await store.change(w.id, (v) =>
       createRun(v, "101", "hello", "-100100", 0, "gpt-4.1-mini"),
     );
-    await store.change(w.id, (v) =>
-      setPolicy(v, "303", v.policy.version, "whitelist", ["303"]),
-    );
+    await store.change(w.id, (v) => {
+      v.members.forEach((member) => {
+        member.active = member.id === "303";
+      });
+      v.memberVersion++;
+      revokeWork(v);
+    });
     expect((await request(`/api/admin/workspaces/${w.id}/runs`)).status).toBe(
       200,
     );

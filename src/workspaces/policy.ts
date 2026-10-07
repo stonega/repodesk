@@ -8,12 +8,7 @@ import {
 import { validMemory } from "./conversation-memory.ts";
 export function eligible(w: Workspace, actor: string, admin = false) {
   const member = w.members.find((m) => m.id === actor && m.active);
-  return (
-    !w.deletion &&
-    !!member &&
-    (!admin || member.role !== "member") &&
-    (w.policy.mode === "members" || w.policy.allowed.includes(actor))
-  );
+  return !w.deletion && !!member && (!admin || member.role !== "member");
 }
 export function authorize(
   w: Workspace,
@@ -123,28 +118,33 @@ export function revokeWork(w: Workspace, now = new Date()) {
     )
       d.state = "cancelled";
 }
-export function setPolicy(
+export function updateMembership(
   w: Workspace,
   actor: string,
   version: number,
-  mode: "whitelist" | "members",
-  allowed: string[],
+  input: { id: string; role: "admin" | "member"; active: boolean },
 ) {
   authorize(w, actor, true);
-  requireThat(w.policy.version === version, "version_conflict", 409);
-  const next = { mode, version: version + 1, allowed: [...new Set(allowed)] };
+  requireThat(w.memberVersion === version, "version_conflict", 409);
+  const previous = w.members.find((m) => m.id === input.id);
+  requireThat(previous?.role !== "owner", "owner_requires_host_recovery", 409);
+  const member = {
+    ...previous,
+    id: input.id,
+    role: input.role,
+    active: input.active,
+  };
+  const members = previous
+    ? w.members.map((m) => (m.id === input.id ? member : m))
+    : [...w.members, member];
   if (actor !== w.operatorId)
     requireThat(
-      w.members.some(
-        (m) =>
-          m.active &&
-          m.role !== "member" &&
-          (mode === "members" || next.allowed.includes(m.id)),
-      ),
+      members.some((m) => m.active && m.role !== "member"),
       "last_admin_lockout",
       409,
     );
-  w.policy = next;
+  w.members = members;
+  w.memberVersion++;
   revokeWork(w);
-  audit(w, actor, "access_policy.updated", w.id, next.version);
+  audit(w, actor, "member.updated", input.id, w.memberVersion);
 }

@@ -2,20 +2,15 @@
 @origin = http://localhost:3000
 @workspace = REPLACE_WORKSPACE_UUID
 @request = REPLACE_REQUEST_UUID
+@member = REPLACE_TELEGRAM_USER_ID
 @cookie = repodesk_session=REPLACE_SESSION
 @csrf = REPLACE_CSRF
 
-### Unified Members & access page uses this policy with member profiles
-# members include optional name, username and profileUpdatedAt display metadata.
-# Old approved requests provide a fallback; unknown users still have numeric IDs.
-GET {{origin}}/api/admin/workspaces/{{workspace}}/access-policy
-Cookie: {{cookie}}
-
-### Paginated member API also includes the available Telegram profiles
+### Member API returns membership version and paginated Telegram profiles
 GET {{origin}}/api/admin/workspaces/{{workspace}}/members?offset=0
 Cookie: {{cookie}}
 
-### Pending requests, current policy version, and shareable Telegram link
+### Pending requests, current membership version, and shareable Telegram link
 GET {{origin}}/api/admin/workspaces/{{workspace}}/access-requests
 Cookie: {{cookie}}
 
@@ -28,7 +23,7 @@ Content-Type: application/json
 
 {"decision":"approved","version":2}
 
-### Reject without granting membership or whitelist access
+### Reject without granting membership
 POST {{origin}}/api/admin/workspaces/{{workspace}}/access-requests/{{request}}/decision
 Cookie: {{cookie}}
 Origin: {{origin}}
@@ -36,3 +31,22 @@ X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
 {"decision":"rejected","version":2}
+
+### Enroll or reactivate a member; all active members can use the bot
+# Use the version returned by GET /members and refresh it after every successful edit.
+POST {{origin}}/api/admin/workspaces/{{workspace}}/members
+Cookie: {{cookie}}
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"id":"{{member}}","role":"member","active":true,"version":2}
+
+### Deactivate membership to revoke access and cancel pending work
+POST {{origin}}/api/admin/workspaces/{{workspace}}/members
+Cookie: {{cookie}}
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"id":"{{member}}","role":"member","active":false,"version":3}

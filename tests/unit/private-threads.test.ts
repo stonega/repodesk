@@ -261,11 +261,15 @@ test("history tool is available for existing skills but enforces revocation, ten
   await expect(tool(crypto.randomUUID()).execute("cross", {})).rejects.toThrow(
     "not_found",
   );
-  w.policy.allowed = [];
+  w.members.forEach((member) => {
+    member.active = false;
+  });
   await expect(tool().execute("read", args)).rejects.toThrow(
     "tool_policy_denied",
   );
-  w.policy.allowed = ["101"];
+  w.members.forEach((member) => {
+    member.active = member.id === "101";
+  });
   w.messages = w.messages.filter((m) => m.threadId !== a.threadId);
   await expect(tool().execute("read", args)).rejects.toThrow(
     "tool_policy_denied",

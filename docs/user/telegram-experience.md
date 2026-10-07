@@ -18,7 +18,7 @@ before those credentials exist.
 Send `/start` privately. Use `/timezone Asia/Taipei` (substitute your zone) to confirm
 workspace time. `/workspace <workspace UUID>` selects an enrolled workspace. People
 without workspace eligibility receive access-help only; ask an admin to enroll your
-numeric Telegram ID and add it to the whitelist.
+numeric Telegram ID as an active member.
 
 For a group, get `/linktoken` privately, then copy the complete `/link TOKEN` command
 shown as inline code in the reply and send it in the intended group
@@ -27,7 +27,7 @@ One group may be linked per workspace. Anonymous admin identities cannot link it
 
 The default source scope is directed messages. For whole-group recaps, an admin must
 verify bot visibility and explicitly enable `/capture on`. This includes received
-messages from group participants outside the whitelist. All group participants can
+messages from group participants who are not workspace members. All group participants can
 see group replies. Telegram old history is unavailable.
 
 ## Private conversations
@@ -81,7 +81,7 @@ See [examples](../../examples/private-threads.md).
 | `/remember <text>` | Propose personal memory privately or workspace memory in a group |
 | `/memory`, `/memory edit <UUID> <text>`, `/memory forget <UUID>` | List, propose replacement, forget instructions |
 | `/usage` | Recorded charges/reservations and workspace cap |
-| `/settings` | Current timezone, retention, access mode and version |
+| `/settings` | Current timezone, retention, membership access and version |
 | `/privacy` | Collection, retention and removal explanation |
 | `/privacy delete` | Private admin request for confirmed workspace removal |
 

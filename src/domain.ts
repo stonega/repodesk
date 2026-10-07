@@ -389,7 +389,7 @@ export interface Workspace {
   operatorId: string;
   version: number;
   settings: Settings;
-  policy: { mode: "whitelist" | "members"; version: number; allowed: string[] };
+  memberVersion: number;
   members: Member[];
   accessRequests?: AccessRequest[];
   chats: Chat[];

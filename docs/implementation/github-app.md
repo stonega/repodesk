@@ -295,7 +295,7 @@ Implemented locally, 2026-10-05. Apply `012_github_users.sql` through the normal
 migration command before starting the updated app and worker. No new dependencies
 or webhook subscriptions are required; the existing GitHub App callback URL is reused.
 
-An eligible member (active membership plus the workspace whitelist policy) sends
+An active workspace member sends
 `/github connect` in the bot's private chat. The bot supplies a ten-minute GitHub
 App authorization link with PKCE. After GitHub returns, the member must confirm the
 identified GitHub account using a button in that same Telegram account's private
@@ -308,7 +308,7 @@ snapshot on the workspace member. Members & access displays these details.
 One GitHub identity can belong to only one Telegram member within a workspace;
 links and permissions are independent between workspaces. GitHub admin/maintain
 access never promotes a RepoDesk member to workspace administrator, bypasses the
-whitelist or creates workspace membership.
+membership or grants an admin role.
 
 Permission synchronization uses GitHub's
 [List repositories accessible to the user access token](https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-user-access-token).
@@ -331,7 +331,7 @@ be undone. Remote permission changes have a polling delay; no real-time webhook
 revocation is claimed.
 
 `/github disconnect` deletes the encrypted user credential and pending authorization
-state, clears permission grants, and cancels pending work. Access-policy revocation
+state, clears permission grants, and cancels pending work. Member deactivation
 also removes user credentials during the next worker sync; workspace deletion purges
 credentials and flows through worker maintenance. Temporary states are one-use,
 actor/workspace/bot/App/revision bound and expire after ten minutes. Credentials

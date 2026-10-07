@@ -157,7 +157,9 @@ test("discussion tools enforce replay conflicts and revocation using existing gr
   await expect(
     tool.execute("record", { ...args, title: "changed" }),
   ).rejects.toThrow("tool_call_conflict");
-  w.policy.allowed = [];
+  w.members.forEach((member) => {
+    member.active = false;
+  });
   await expect(tool.execute("record", args)).rejects.toThrow(
     "tool_policy_denied",
   );

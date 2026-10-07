@@ -232,14 +232,18 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       update.message.document = { file_id: "notes", mime_type: "text/plain" };
       files.set("notes", Buffer.from("private attachment"));
       await store.change(w.id, (w) => {
-        w.policy.allowed = [];
+        w.members.forEach((member) => {
+          member.active = false;
+        });
       });
       await ingress.accept(update);
       expect((await store.read(w.id)).runs).toHaveLength(0);
       expect((await store.read(w.id)).messages).toHaveLength(0);
       expect(downloads).toEqual([]);
       await store.change(w.id, (w) => {
-        w.policy.allowed = ["101"];
+        w.members.forEach((member) => {
+          member.active = member.id === "101";
+        });
       });
       update.update_id = ++sequence;
       await ingress.accept(update);
@@ -253,13 +257,17 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         },
       };
       await store.change(w.id, (w) => {
-        w.policy.allowed = [];
+        w.members.forEach((member) => {
+          member.active = false;
+        });
       });
       await new Executor(store, setup, runner).execute(w.id, run.id);
       expect(downloads).toEqual([]);
       expect(called).toBe(false);
       await store.change(w.id, (w) => {
-        w.policy.allowed = ["101"];
+        w.members.forEach((member) => {
+          member.active = member.id === "101";
+        });
       });
       const during = message("", undefined, 23);
       if (!during.message) throw Error("missing message");
@@ -270,7 +278,9 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       if (!next) throw Error("missing next run");
       onDownload = async () => {
         await store.change(w.id, (w) => {
-          w.policy.allowed = [];
+          w.members.forEach((member) => {
+            member.active = false;
+          });
         });
       };
       await new Executor(store, setup, runner).execute(w.id, next.id);

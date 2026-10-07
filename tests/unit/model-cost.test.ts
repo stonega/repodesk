@@ -162,7 +162,9 @@ test("tool replay returns the durable snapshot and rechecks admin permissions", 
 test("cost tools enforce grants, current run policy, cancellation, fencing and tenant binding", async () => {
   const mutations: ((w: Workspace, run: Run) => void)[] = [
     (w) => {
-      w.policy.allowed = [];
+      w.members.forEach((member) => {
+        member.active = false;
+      });
     },
     (w) => {
       w.settings.paused = true;

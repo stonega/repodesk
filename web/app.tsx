@@ -1110,7 +1110,7 @@ function ModelConfigurationCard({
 type SetupAccessData = {
   version: number;
   requestUrl: string | null;
-  members: { id: string; role: string; allowed: boolean }[];
+  members: { id: string; role: string }[];
   requests: { id: string; actor: string; username?: string; name?: string }[];
 };
 function SetupAccess({ workspaceId }: { workspaceId: string }) {
@@ -1126,7 +1126,7 @@ function SetupAccess({ workspaceId }: { workspaceId: string }) {
       <h3>Telegram access</h3>
       <p className="muted">
         Share the request link with teammates and approve them here, or add a
-        known Telegram user ID directly. Only approved members can use the bot.
+        known Telegram user ID directly. All active members can use the bot.
       </p>
       {error && <Notice error>{error}</Notice>}
       {data?.requestUrl && (
@@ -1159,7 +1159,7 @@ function SetupAccess({ workspaceId }: { workspaceId: string }) {
               reload();
             }}
           >
-            Allow user
+            Add member
           </Action>
           <h4>Pending requests</h4>
           {data.requests.length ? (
@@ -1195,31 +1195,29 @@ function SetupAccess({ workspaceId }: { workspaceId: string }) {
           ) : (
             <p className="muted">No pending requests.</p>
           )}
-          <h4>Allowed members</h4>
-          {data.members.filter((member) => member.allowed).length ? (
+          <h4>Active members</h4>
+          {data.members.length ? (
             <ul className="setup-access-list">
-              {data.members
-                .filter((member) => member.allowed)
-                .map((member) => (
-                  <li key={member.id}>
-                    <span>
-                      {member.id} · {member.role}
-                    </span>
-                    {member.role !== "owner" && (
-                      <Action
-                        onConflict={reload}
-                        onClick={async () => {
-                          await api(`${path}/${member.id}`, "DELETE", {
-                            version: data.version,
-                          });
-                          reload();
-                        }}
-                      >
-                        Revoke
-                      </Action>
-                    )}
-                  </li>
-                ))}
+              {data.members.map((member) => (
+                <li key={member.id}>
+                  <span>
+                    {member.id} · {member.role}
+                  </span>
+                  {member.role !== "owner" && (
+                    <Action
+                      onConflict={reload}
+                      onClick={async () => {
+                        await api(`${path}/${member.id}`, "DELETE", {
+                          version: data.version,
+                        });
+                        reload();
+                      }}
+                    >
+                      Revoke
+                    </Action>
+                  )}
+                </li>
+              ))}
             </ul>
           ) : (
             <p className="muted">No one has access yet.</p>
@@ -2200,157 +2198,30 @@ function WorkspaceSettingsEditor({
     </Modal>
   );
 }
-interface AccessPolicyData {
+interface MembersData {
   version: number;
-  mode: "whitelist" | "members";
-  allowed: string[];
-  members: Member[];
-}
-function AccessPolicy({
-  id,
-  data,
-  reload,
-  loading,
-}: {
-  id: string;
-  data: AccessPolicyData;
-  reload: () => void;
-  loading: boolean;
-}) {
-  const [text, setText] = useState("");
-  const [mode, setMode] = useState("whitelist");
-  const [preview, setPreview] = useState<unknown>();
-  useEffect(() => {
-    if (data) {
-      setText(data.allowed.join("\n"));
-      setMode(data.mode);
-      setPreview(undefined);
-    }
-  }, [data]);
-  const input = () => ({
-    version: data?.version,
-    mode,
-    allowed: [...new Set(text.split(/[\s,]+/).filter(Boolean))],
-  });
-  return (
-    <section className="card" aria-label="Access policy">
-      <div className="row">
-        <h2>Access policy</h2>
-        <span className="pill">Version {data.version}</span>
-      </div>
-      <p>
-        Active members can use the bot when they meet the selected access mode.
-        Roles determine which actions they can perform.
-      </p>
-      <Field label="Access mode">
-        <Select
-          value={mode}
-          onChange={(e) => {
-            setMode(e.target.value);
-            setPreview(undefined);
-          }}
-        >
-          <option value="whitelist">Whitelist only</option>
-          <option value="members">Active workspace members</option>
-        </Select>
-      </Field>
-      <details>
-        <summary>Manage whitelist IDs ({data.allowed.length})</summary>
-        <p>
-          Use numeric Telegram IDs. Adding an ID here does not enroll a member.
-        </p>
-        <Field label="Telegram user IDs (one per line or comma separated)">
-          <textarea
-            rows={8}
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              setPreview(undefined);
-            }}
-          />
-        </Field>
-      </details>
-      <p>
-        {mode === "members"
-          ? "Editing the saved list does not revoke access in members mode."
-          : "Removing eligibility cancels pending work and suspends owned schedules."}{" "}
-        Last-admin management access is protected.
-      </p>
-      <div className="row">
-        <Action
-          onConflict={reload}
-          loading={loading}
-          onClick={async () =>
-            setPreview(
-              await api(
-                `/api/admin/workspaces/${id}/access-policy/preview`,
-                "POST",
-                input(),
-              ),
-            )
-          }
-        >
-          Preview affected work
-        </Action>
-        {preview !== undefined && (
-          <Action
-            onConflict={reload}
-            loading={loading}
-            onClick={async () => {
-              await api(
-                `/api/admin/workspaces/${id}/access-policy`,
-                "PUT",
-                input(),
-              );
-              reload();
-            }}
-          >
-            Apply reviewed policy
-          </Action>
-        )}
-      </div>
-      {preview !== undefined && <DataDetails value={preview} />}
-    </section>
-  );
+  items: Member[];
+  total: number;
 }
 function MembersPage({ id }: { id: string }) {
-  const { data, error, reload, loading } = useData<AccessPolicyData>(
-    `/api/admin/workspaces/${id}/access-policy`,
-  );
   const [search, setSearch] = useState("");
   const [params, setParams] = useSearchParams();
   const offset = Math.max(0, Number(params.get("offset")) || 0);
-  const rows = data
-    ? [
-        ...data.members,
-        ...data.allowed
-          .filter((id) => !data.members.some((m) => m.id === id))
-          .map((id) => ({
-            id,
-            role: undefined,
-            active: false,
-            name: undefined,
-            username: undefined,
-            github: undefined,
-          })),
-      ].filter((m) =>
-        `${m.id} ${m.username ?? ""} ${m.name ?? ""} ${m.github?.login ?? ""}`
-          .toLowerCase()
-          .includes(search.trim().replace(/^@/, "").toLowerCase()),
-      )
-    : [];
+  const { data, error, reload, loading } = useData<MembersData>(
+    `/api/admin/workspaces/${id}/members?offset=${offset}&search=${encodeURIComponent(search)}`,
+  );
+  const rows = data?.items ?? [];
   const [member, setMember] = useState({
     id: "",
     role: "member",
     active: true,
-    allow: true,
   });
   const [open, setOpen] = useState(false);
   const [editingMember, setEditingMember] = useState(false);
   return (
     <Page
       title="Members & access"
-      description="Manage members, roles, access requests and the workspace access policy in one place."
+      description="All active workspace members can use the bot. Manage membership, roles and access requests here."
       actions={
         <>
           {error && (
@@ -2364,7 +2235,7 @@ function MembersPage({ id }: { id: string }) {
             showLabel
             disabled={!data || loading}
             onClick={() => {
-              setMember({ id: "", role: "member", active: true, allow: true });
+              setMember({ id: "", role: "member", active: true });
               setEditingMember(false);
               setOpen(true);
             }}
@@ -2390,7 +2261,7 @@ function MembersPage({ id }: { id: string }) {
           Telegram names update when people interact with the bot. Users without
           a username or known profile are identified by their Telegram ID.
         </p>
-        <Pager data={{ total: rows.length }} />
+        <Pager data={data} />
         <section
           className="data-table-scroll"
           aria-label="Member access table"
@@ -2403,22 +2274,14 @@ function MembersPage({ id }: { id: string }) {
                 <th>User</th>
                 <th>Role</th>
                 <th>Membership</th>
-                <th>Whitelist</th>
                 <th>GitHub</th>
                 <th>Access</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {rows.slice(offset, offset + 100).map((m) => {
-                const allowed = data?.allowed.includes(m.id);
-                const access = !m.role
-                  ? "Not enrolled"
-                  : !m.active
-                    ? "Inactive"
-                    : data?.mode === "whitelist" && !allowed
-                      ? "Whitelist required"
-                      : "Allowed";
+              {rows.map((m) => {
+                const access = m.active ? "Allowed" : "Inactive";
                 return (
                   <tr key={m.id}>
                     <td>
@@ -2429,15 +2292,8 @@ function MembersPage({ id }: { id: string }) {
                       {m.username && m.name && <div>@{m.username}</div>}
                       <div className="muted">ID: {m.id}</div>
                     </td>
-                    <td>{m.role ?? "—"}</td>
-                    <td>
-                      {!m.role
-                        ? "Not enrolled"
-                        : m.active
-                          ? "Active"
-                          : "Removed"}
-                    </td>
-                    <td>{allowed ? "Listed" : "Not listed"}</td>
+                    <td>{m.role}</td>
+                    <td>{m.active ? "Active" : "Removed"}</td>
                     <td className="github-access">
                       {m.github ? (
                         <>
@@ -2475,17 +2331,16 @@ function MembersPage({ id }: { id: string }) {
                     <td>
                       {m.role !== "owner" && (
                         <IconButton
-                          icon={m.role ? "edit" : "add"}
-                          label={`${m.role ? "Edit" : "Enroll"} member ${m.id}`}
+                          icon="edit"
+                          label={`Edit member ${m.id}`}
                           disabled={loading}
                           onClick={() => {
                             setMember({
                               id: m.id,
-                              role: m.role ?? "member",
-                              active: m.role ? m.active : true,
-                              allow: false,
+                              role: m.role,
+                              active: m.active,
                             });
-                            setEditingMember(!!m.role);
+                            setEditingMember(true);
                             setOpen(true);
                           }}
                         />
@@ -2506,9 +2361,6 @@ function MembersPage({ id }: { id: string }) {
         onChange={reload}
         refreshKey={data}
       />
-      {data && (
-        <AccessPolicy id={id} data={data} reload={reload} loading={loading} />
-      )}
       {open && (
         <Modal
           title={editingMember ? "Edit member" : "Add member"}
@@ -2548,19 +2400,6 @@ function MembersPage({ id }: { id: string }) {
               }
             />
           </label>
-          <label className="member-toggle-row">
-            <span>Also allow in whitelist</span>
-            <input
-              className="member-toggle-input"
-              type="checkbox"
-              role="switch"
-              aria-checked={member.allow}
-              checked={member.allow}
-              onChange={(e) =>
-                setMember({ ...member, allow: e.target.checked })
-              }
-            />
-          </label>
           <ModalActions>
             <Action
               onClick={async () => {
@@ -2568,7 +2407,6 @@ function MembersPage({ id }: { id: string }) {
                   id: member.id,
                   role: member.role,
                   active: member.active,
-                  allow: member.allow,
                   version: data?.version,
                 });
                 reload();
@@ -2606,9 +2444,9 @@ function ChatsPage({ id }: { id: string }) {
             · Collection: {chat.collection ? "enabled" : "directed only"}
           </p>
           <p>
-            Opt-in collection may include received messages from people outside
-            the whitelist. Group replies are visible to everyone in the group.
-            Old history is unavailable.
+            Opt-in collection may include received messages from people who are
+            not workspace members. Group replies are visible to everyone in the
+            group. Old history is unavailable.
           </p>
           <div className="row">
             <Action

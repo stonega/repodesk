@@ -350,7 +350,9 @@ const url = process.env.TEST_DATABASE_URL;
       ).rejects.toMatchObject({ code: "github_authorization_expired" });
       state = await begin();
       await store.change(id, (w) => {
-        w.policy.allowed = w.policy.allowed.filter((a) => a !== "202");
+        w.members.forEach((member) => {
+          if (member.id === "202") member.active = false;
+        });
       });
       await expect(
         service.users.callbackResult(state, "fixture-code"),

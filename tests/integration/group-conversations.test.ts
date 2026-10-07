@@ -398,7 +398,10 @@ const rootUrl = process.env.TEST_DATABASE_URL;
               });
             if (mode === "revoke" || mode === "edit")
               await store.change(w.id, (w) => {
-                if (mode === "revoke") w.policy.allowed = [];
+                if (mode === "revoke")
+                  w.members.forEach((member) => {
+                    member.active = false;
+                  });
                 else {
                   const source = w.messages[0];
                   if (source) source.text = "edited source";

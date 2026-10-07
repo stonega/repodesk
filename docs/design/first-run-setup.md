@@ -60,7 +60,7 @@ Before activation, process only tightly scoped control interactions; normal mode
 requests remain disabled. For local operation, explicitly select
 `TELEGRAM_TRANSPORT=polling`; the worker receives the same control interactions
 without an HTTPS webhook. Owner linking works before or after activation and
-never bypasses Telegram sender identity, membership or whitelist checks.
+never bypasses Telegram sender identity, membership checks.
 
 ## Authentication and privilege model
 
@@ -73,7 +73,7 @@ Choose and verify the maintained authentication implementation in the setup slic
 The deployment admin may configure this deployment, credentials and initial workspace
 provisioning. This does not authorize reading private conversations or acting as a
 Telegram user. Bot usage, approvals, schedules and ordinary workspace-panel access
-still require a verified Telegram identity, membership, whitelist eligibility and role.
+still require a verified Telegram identity, active membership and role.
 Optional Telegram web login can be enabled after the bot/domain are configured.
 
 Operator recovery uses an authenticated host/container command to reset local admin
@@ -105,8 +105,8 @@ does not enable model work or schedules.
 
 Allow setup to resume from any authenticated step. Missing bot or model
 configuration keeps the bot inactive and shows next actions in the dashboard.
-An empty whitelist is valid at activation and denies all ordinary bot use until
-the administrator explicitly allows a member. Owner linking is optional.
+An empty membership is valid at activation and denies all ordinary bot use until
+the administrator enrolls or approves an active member. Owner linking is optional.
 
 Make activation idempotent. If webhook registration succeeds but the final DB write
 fails, a retry inspects and reconciles remote state. If registration fails, keep

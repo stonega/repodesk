@@ -15,7 +15,7 @@ export function workspace(): Workspace {
     { id: "202", role: "member", active: true },
     { id: "303", role: "admin", active: true },
   );
-  w.policy.allowed.push("202", "303");
+
   w.chats.push({
     id: "-100100",
     active: true,

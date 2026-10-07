@@ -21,7 +21,7 @@ First load provides admin creation and a resumable bot-setup wizard. Agent skill
 can be created/imported, configured, tested and enabled from the panel.
 
 Demonstration: first web visit → claim setup and create admin → configure bot, model,
-whitelist and skills → activate → start bot → link group → authorize the desired context collection →
+members and skills → activate → start bot → link group → authorize the desired context collection →
 request recap → correct its format → approve Friday schedule → restart containers →
 receive one scheduled recap using the corrected format → inspect it in the admin
 panel → pause it from the panel successfully.
@@ -192,8 +192,8 @@ the update does not create another run; removed/blocked destinations stop retryi
   verification and independent workspace-admin verification.
 - [x] Add explicit member enrollment; linking a group does not make every Telegram
   sender a workspace admin. Reject ambiguous anonymous-admin identity for sensitive actions.
-- [x] Add a versioned workspace access policy and Telegram-ID whitelist, defaulting
-  to whitelist-only. Seed the owner, deny empty lists and use one shared policy check
+- [x] Use versioned active workspace membership by verified Telegram ID. Enroll the
+  owner, deny non-members and use one shared membership check
   for bot requests, callbacks, admin APIs, queued jobs and schedules. Implement effective
   revocation and last-admin recovery as defined in [access control](../design/access-control.md).
 - [x] Store chat/topic boundaries and available history coverage.

@@ -30,7 +30,7 @@ Use only your dedicated staging bot/group and explicit model spend cap.
 
 1. Claim setup, create admin, save draft, reload and verify it resumes.
 2. Check bot identity, reconcile the HTTPS webhook, configure model and skills,
-   then activate without a Telegram owner. Confirm the empty allowlist denies use,
+   then activate without a Telegram owner. Confirm the empty membership denies use,
    approve one staging user from Setup, and verify only that user can use the bot.
 3. Confirm `/help`; forged webhook calls must return 401. Duplicate update delivery
    must create one run. Link a group as both workspace and Telegram administrator.
@@ -112,8 +112,8 @@ or upstream exception text. Run IDs and versioned audit events support investiga
 
 The JSONB aggregate is intentionally capped for small pilots. Scale the storage model
 before raising the 2,000-message / 1,000-run / 20-concurrent-request workspace bounds.
-Normal UI pages return up to 100 records per API page. Workspace policies permit at
-most 500 whitelist IDs. Schedules are daily/weekly only and skip five-minute-late runs.
+Normal UI pages return up to 100 records per API page. Access requests retain at
+most 500 records per workspace. Schedules are daily/weekly only and skip five-minute-late runs.
 
 The provider receives authorized retained context; `store:false` prevents application
 session storage but does not override provider abuse-monitoring retention. The deletion

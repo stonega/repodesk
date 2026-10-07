@@ -18,7 +18,7 @@ export function newWorkspace(
     operatorId,
     version: 1,
     settings: settingsSchema.parse(settings),
-    policy: { mode: "whitelist", version: 1, allowed: [] },
+    memberVersion: 1,
     members: [],
     chats: [],
     messages: [],
@@ -42,8 +42,7 @@ export function enrollOwner(w: Workspace, actor: string) {
   const member = w.members.find((m) => m.id === actor);
   if (member) Object.assign(member, { role: "owner", active: true });
   else w.members.push({ id: actor, role: "owner", active: true });
-  if (!w.policy.allowed.includes(actor)) w.policy.allowed.push(actor);
-  w.policy.version++;
+  w.memberVersion++;
   audit(w, actor, "owner.verified", w.id);
 }
 export function deliver(

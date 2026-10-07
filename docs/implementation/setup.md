@@ -143,9 +143,9 @@ Webhook remains the default transport; polling starts only when explicitly confi
    level under **Model settings**. The default base URL is
    `https://api.openai.com/v1`, model `gpt-4.1-mini`, and thinking `off`.
    Choose a suggested model or enter any custom ID. Set budgets and enabled skills.
-5. Review readiness under Model settings and activate. No Telegram owner or allowed user is required at
-   activation; an empty allowlist means the bot denies ordinary use. Share the
-   request-access link there and approve a user, or allow a known numeric ID.
+5. Review readiness under Model settings and activate. No Telegram owner or member is required at
+   activation; an empty membership means the bot denies ordinary use. Share the
+   request-access link there and approve a user, or enroll a known numeric ID.
    The web administrator can also manage workspace settings, skills and access in
    the admin panel before linking a personal Telegram account. Runs & delivery
    shows every retained workspace run's request, response, transcript and delivery
@@ -155,8 +155,7 @@ Webhook remains the default transport; polling starts only when explicitly confi
    Once Telegram updates are being received, the request-access link can collect
    requests before activation; approval does not enable ordinary bot work.
 6. If owner actions in Telegram are needed, generate the optional identity link
-   from Model settings and open it with the intended Telegram account. This enrolls and
-   whitelists that account. Existing sessions are revoked; sign in again. Then
+   from Model settings and open it with the intended Telegram account. This enrolls that account as an active owner. Existing sessions are revoked; sign in again. Then
    `/linktoken` can link a group in which that user is a Telegram administrator.
 
 Telegram ID entry alone never proves identity. Extra panel accounts are created
@@ -166,7 +165,7 @@ link from Operations. They have no deployment-operator privileges.
 Group collection is off by default. Disable BotFather privacy where appropriate,
 recheck visibility under Group access, and explicitly consent with `/capture on`
 in the group or the panel. Collection covers received messages, including authors
-outside the whitelist, and does not import old history.
+who are not workspace members, and does not import old history.
 
 ## OpenAI-compatible model settings
 
@@ -273,7 +272,7 @@ workflows, skills/imports, instructions, run requests, panel accounts, plugins,
 repositories/networks and GitHub Apps. Save/submit completes the existing action;
 Cancel or Escape discards that dialog's draft. Errors leave the dialog open for
 correction. Related edit controls open the same editor. Existing settings and
-access-policy forms remain on their pages.
+member forms remain on their pages.
 
 For Code Truth, **Add repository** opens repository and branch fields. **Add network**
 opens a nested dialog; cancelling it preserves the repository draft. Choose

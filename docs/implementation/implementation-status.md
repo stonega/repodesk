@@ -202,7 +202,7 @@ PostgreSQL and Code Truth containers were preserved. Database backup:
 - One-use deployment claim, scrypt passwords, revocable sessions, CSRF/origin checks,
   encrypted write-only settings, resumable setup and verified Telegram identity links.
 - Telegram webhook validation, command/reply routing, group-admin verification, explicit
-  enrollment/whitelist policy, consented received-message collection and scoped sources.
+  active membership policy, consented received-message collection and scoped sources.
 - Manual requests/recaps, source-ID validation, usage reservations, cancellation,
   versioned instruction/workflow/skill snapshots and separate delivery outcomes.
 - Canonically hashed approvals, daily/weekly recurrence with DST policy, unique
@@ -338,11 +338,12 @@ Code Truth were preserved. Verified backup:
 ### Unified members and access (2026-09-21)
 
 The sidebar now has one **Members & access** entry. Its searchable, paginated table
-shows Telegram names/usernames and numeric IDs, role, membership, whitelist status
-and effective access, including whitelisted IDs that are not enrolled. Access
-requests and policy preview/apply controls share this page. Old access-policy URLs
-redirect while preserving workspace query parameters; search/pagination also retain
-those parameters. Existing member and policy APIs remain supported.
+shows Telegram names/usernames and numeric IDs, role, membership and effective
+access. Access requests share this page. As of 2026-10-07, all active members have
+bot access; the whitelist, access mode and policy preview/apply controls and APIs
+are removed. Old access-policy browser URLs redirect while preserving workspace
+query parameters; search/pagination also retain those parameters. The member API
+provides a membership revision for concurrent edits.
 
 Profiles are optional fields in workspace JSON: trusted Telegram sender updates
 refresh them, and approved requests populate them. Older approved requests provide
@@ -539,7 +540,7 @@ still follow the existing delivery truncation. See [configuration](setup.md#mode
 
 Implemented unauthorized-user request buttons, scoped request links, deduplicated
 pending requests and admin approval/rejection under Members. Approval atomically
-creates/reactivates regular membership, whitelists the verified Telegram ID and queues
+creates/reactivates regular membership for the verified Telegram ID and queues
 a confirmation with normal delivery authorization checks. Requests use workspace
 JSONB; migration `009_access_requests.sql` scopes fixed access-help deliveries.
 
@@ -1121,3 +1122,25 @@ for local test fixtures. Four browser scenarios passed for desktop/mobile layout
 keyboard navigation, direct visits, refresh, back navigation, pagination, load
 recovery and switching to a missing run. Desktop and mobile screenshots were
 reviewed. No dependency or migration was added.
+
+### Bot access follows active membership (2026-10-07)
+
+All active workspace members can use the bot. The Members & access page no longer
+shows access modes, a whitelist column/toggle or policy preview/apply controls.
+Roles, repository grants, workspace pause and member deactivation still apply to
+requests, callbacks, queued work, schedules and delivery. Access-request approval
+and owner verification enroll active members without a second access list.
+
+Migration `015_remove_workspace_whitelist.sql` removes saved workspace policies
+and preserves their concurrency revision as `memberVersion`. Active members
+previously excluded by a whitelist now have bot access; listed non-members remain
+non-members, and existing cancelled work/suspended schedules retain their state.
+The member API returns a membership revision with searchable, paginated profiles;
+retired access-policy API routes are unavailable. Old browser links still redirect.
+
+Deterministic and PostgreSQL checks cover active/inactive/non-member and role
+boundaries, revocation of runs/approvals/schedules/delivery, stale edits, last-admin
+protection, access-request replay, repeated migration and retired APIs. All 17 admin
+browser tests passed, including membership deactivation/reactivation across reload,
+removed controls, Telegram profiles, desktop/mobile layouts and setup enrollment.
+Lint, TypeScript and production build passed. See [membership and access](../design/access-control.md).

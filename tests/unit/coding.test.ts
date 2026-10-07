@@ -110,7 +110,9 @@ test("only a repository maintainer can propose; workspace admin is not an implic
   expect(() =>
     codingDestination(w, "101", { ...input, repositoryId: 7002 }),
   ).toThrow();
-  w.policy.allowed = [];
+  w.members.forEach((member) => {
+    member.active = false;
+  });
   expect(() => codingDestination(w, "101", input)).toThrow("access_denied");
 });
 test("device auth uses connected repositories regardless of visibility", () => {

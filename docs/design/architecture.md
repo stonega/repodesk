@@ -75,7 +75,7 @@ The cursor advances only after durable ingress commits, so crashes can replay sa
 Polling runs before activation to establish receiver readiness, without enabling ordinary agent
 work. A recent polling success replaces webhook readiness in activation checks;
 model and skill checks remain. Owner linking can happen after activation, while
-an empty membership and whitelist deny bot use. Existing webhooks are reported as a
+an empty membership denies bot use. Existing webhooks are reported as a
 conflict, never silently deleted.
 
 ```mermaid
@@ -134,10 +134,10 @@ indexed tenant tables before raising capacity or running large teams.
 
 The local operator configures the deployment, creates accounts and issues recovery
 links. It is not a Telegram actor. A one-use private bot interaction verifies the
-Telegram identity, consumes its token, enrolls the first owner, seeds the whitelist
+Telegram identity, consumes its token, enrolls the first active owner
 and invalidates old browser sessions.
 
-Workspace actions require active membership, allowed-user eligibility, role and
+Workspace actions require active membership, role and
 source/destination checks. Group linking additionally calls Telegram `getChatMember`
 and requires attributable administrator identity. Anonymous admin senders are denied.
 Private sources/memory are excluded from group context. Queued runs, tool calls,

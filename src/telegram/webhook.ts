@@ -768,7 +768,7 @@ export class Ingress {
         audit(w, actor, "chat.collection_changed", chat.id);
         reply(
           chat.collection
-            ? "Collection enabled with admin consent. Received group messages, including messages by people outside the whitelist, may appear in team recaps. Old history is unavailable."
+            ? "Collection enabled with admin consent. Received group messages, including messages by people who are not workspace members, may appear in team recaps. Old history is unavailable."
             : "Collection disabled. Only directed messages will be stored.",
         );
         break;
@@ -891,7 +891,7 @@ export class Ingress {
       }
       case "settings":
         reply(
-          `Timezone: ${w.settings.timezone}\nRetention: ${w.settings.retentionDays} days\nAccess: ${w.policy.mode}\nSettings version: ${w.version}\nUse the admin panel for configuration.`,
+          `Timezone: ${w.settings.timezone}\nRetention: ${w.settings.retentionDays} days\nAccess: active workspace members\nSettings version: ${w.version}\nUse the admin panel for configuration.`,
         );
         break;
       case "privacy":

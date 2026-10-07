@@ -42,7 +42,6 @@ export function sweep(w: Workspace, now = new Date()) {
     w.chats = [];
     w.members = [];
     w.accessRequests = [];
-    w.policy.allowed = [];
     w.deletion.purgedAt ??= now.toISOString();
     return;
   }

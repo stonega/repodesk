@@ -216,14 +216,12 @@ export class SetupService {
     requireThat(w.operatorId === admin.id && !w.deletion, "access_denied", 403);
     const d = await this.store.deployment();
     return {
-      version: w.policy.version,
+      version: w.memberVersion,
       members: w.members
         .filter((member) => member.active)
         .map((member) => ({
           id: member.id,
           role: member.role,
-          allowed:
-            w.policy.mode === "members" || w.policy.allowed.includes(member.id),
         })),
       requests: (w.accessRequests ?? []).filter(
         (request) => request.status === "pending",
@@ -241,7 +239,7 @@ export class SetupService {
         "access_denied",
         403,
       );
-      requireThat(w.policy.version === version, "version_conflict", 409);
+      requireThat(w.memberVersion === version, "version_conflict", 409);
       const member = w.members.find((item) => item.id === actor);
       requireThat(
         member?.role !== "owner",
@@ -251,10 +249,8 @@ export class SetupService {
       if (member) {
         member.active = true;
       } else w.members.push({ id: actor, role: "member", active: true });
-      if (!w.policy.allowed.includes(actor)) w.policy.allowed.push(actor);
-      w.policy.version++;
-      audit(w, admin.id, "member.updated", actor, w.policy.version);
-      audit(w, admin.id, "access.allowed", actor, w.policy.version);
+      w.memberVersion++;
+      audit(w, admin.id, "member.updated", actor, w.memberVersion);
     });
     return this.access(admin, id);
   }
@@ -266,14 +262,13 @@ export class SetupService {
         "access_denied",
         403,
       );
-      requireThat(w.policy.version === version, "version_conflict", 409);
+      requireThat(w.memberVersion === version, "version_conflict", 409);
       const member = w.members.find((item) => item.id === actor);
       requireThat(member && member.role !== "owner", "not_found", 404);
       member.active = false;
-      w.policy.allowed = w.policy.allowed.filter((item) => item !== actor);
-      w.policy.version++;
+      w.memberVersion++;
       revokeWork(w);
-      audit(w, admin.id, "access.revoked", actor, w.policy.version);
+      audit(w, admin.id, "access.revoked", actor, w.memberVersion);
     });
     return this.access(admin, id);
   }

@@ -7,7 +7,7 @@ import { workspace } from "../fixtures.ts";
 
 test("profile updates are display-only and cannot enroll a user or change access", () => {
   const w = workspace();
-  const policy = structuredClone(w.policy);
+  const version = w.memberVersion;
   updateMemberProfile(w, { id: "404", username: "unknown" });
   expect(w.members).toHaveLength(3);
   updateMemberProfile(w, { id: "202", username: "alice", name: "Alice" });
@@ -17,7 +17,7 @@ test("profile updates are display-only and cannot enroll a user or change access
     role: "member",
     active: true,
   });
-  expect(w.policy).toEqual(policy);
+  expect(w.memberVersion).toBe(version);
 });
 
 test("legacy approved profiles are available but removed usernames do not reappear", () => {

@@ -122,7 +122,9 @@ test("group routing and retrieval isolate topics, bots, private chats and worksp
   ).toBe(true);
   const other = workspace();
   expect(ask(other, "202", "continue", 0, 100).threadId).not.toBe(a.threadId);
-  w.policy.allowed = [];
+  w.members.forEach((member) => {
+    member.active = false;
+  });
   expect(() => queryChatHistory(w, b, {})).toThrow();
 });
 
@@ -250,7 +252,9 @@ test("other addressees close attention and anonymous, untrusted, edited or stale
     message(9999),
   ])
     expect(followupCandidate(w, msg, "999")).toBeUndefined();
-  w.policy.allowed = [];
+  w.members.forEach((member) => {
+    member.active = false;
+  });
   expect(followupCandidate(w, message(), "999")).toBeUndefined();
 });
 

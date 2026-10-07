@@ -280,7 +280,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     });
     test("an allowed private message gets an activation notice before activation", async () => {
       const w = await seed(false);
-      await setup.allowMember(admin, w.id, "101", w.policy.version);
+      await setup.allowMember(admin, w.id, "101", w.memberVersion);
       updates = async () => [message(1, "hi"), message(2, "hi")];
       await poller.pollOnce(signal());
       expect((await store.read(w.id)).runs).toHaveLength(0);
@@ -312,7 +312,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       await poller.pollOnce(signal());
       const saved = await store.read(w.id);
       expect(saved.members.find((m) => m.id === "101")?.role).toBe("owner");
-      expect(saved.policy.allowed).toContain("101");
+      expect(saved.members.find((m) => m.id === "101")?.active).toBe(true);
       expect(saved.runs).toHaveLength(0);
       expect(saved.tokens).toHaveLength(0);
       expect(
@@ -379,7 +379,6 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       expect((await setup.access(admin, w.id)).members).toContainEqual({
         id: "202",
         role: "member",
-        allowed: true,
       });
       const identity = await setup.identityToken(admin, w.id);
       updates = async () => [message(14, identity.command)];

@@ -17,7 +17,7 @@ Content-Type: application/json
 }
 
 ### After saving the workspace, bot token, model, and receiver, activate.
-### A personal Telegram owner link is optional; an empty access list denies bot use.
+### A personal Telegram owner link is optional; an empty membership denies bot use.
 @session = REPLACE_SESSION_COOKIE
 @csrf = REPLACE_CSRF_TOKEN
 @workspaceId = REPLACE_WORKSPACE_UUID
@@ -29,11 +29,11 @@ Origin: {{baseUrl}}
 Cookie: repodesk_session={{session}}
 X-CSRF-Token: {{csrf}}
 
-### Get the request link, pending requests, allowed members, and policy version.
+### Get the request link, pending requests, active members, and membership version.
 GET {{baseUrl}}/api/setup/workspaces/{{workspaceId}}/access
 Cookie: repodesk_session={{session}}
 
-### Allow a known numeric Telegram user ID as a member.
+### Enroll a known numeric Telegram user ID as an active member.
 ### Replace version with the value from the preceding GET response.
 POST {{baseUrl}}/api/setup/workspaces/{{workspaceId}}/access
 Origin: {{baseUrl}}
@@ -46,7 +46,7 @@ Content-Type: application/json
   "version": 1
 }
 
-### Or approve a pending request using its ID and the latest policy version.
+### Or approve a pending request using its ID and the latest membership version.
 POST {{baseUrl}}/api/setup/workspaces/{{workspaceId}}/access-requests/{{requestId}}/decision
 Origin: {{baseUrl}}
 Cookie: repodesk_session={{session}}
@@ -58,7 +58,7 @@ Content-Type: application/json
   "version": 1
 }
 
-### Revoke that member using the latest policy version.
+### Revoke that member using the latest membership version.
 DELETE {{baseUrl}}/api/setup/workspaces/{{workspaceId}}/access/{{telegramUserId}}
 Origin: {{baseUrl}}
 Cookie: repodesk_session={{session}}

@@ -24,7 +24,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [First-run setup](design/first-run-setup.md) | Initial admin creation, bot onboarding, secrets and activation |
 | [LLM extensions / plugins](design/llm-extensions.md) | Existing Pi extension loading, headless compatibility, grants and recovery |
 | [Agent skills](design/agent-skills.md) | Web-managed catalog, settings, versioning and Pi integration |
-| [Allowed-user whitelist](design/access-control.md) | Configurable access, admin controls, enforcement and revocation |
+| [Workspace membership and access](design/access-control.md) | Active membership, roles, enforcement and revocation |
 | [Pi + Docker implementation plan](implementation/bot-plan.md) | Concrete engineering tasks, architecture decisions, tests and rollout |
 | [Roadmap](implementation/roadmap.md) | Dependency-ordered milestones and release gates |
 | [Telegram feedback beta plan](implementation/telegram-feedback-plan.md) | Readable progress, task status, cancellation and failures for friends and colleagues |

@@ -7,6 +7,7 @@ import {
   test,
 } from "bun:test";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { claim, session } from "../../src/admin/auth.ts";
 import { createApp } from "../../src/app.ts";
 import { migrate } from "../../src/db/migrate.ts";
@@ -99,7 +100,9 @@ const url = process.env.TEST_DATABASE_URL;
     const other = workspace();
     other.operatorId = id;
     other.members = [{ id: "303", active: true, role: "owner" }];
-    other.policy.allowed = ["303"];
+    other.members.forEach((member) => {
+      member.active = member.id === "303";
+    });
     await store.pool.query(
       "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",
       [other.id, id, JSON.stringify(other)],
@@ -142,6 +145,94 @@ const url = process.env.TEST_DATABASE_URL;
         : [],
     },
   });
+  test("migration removes legacy restrictions without enrolling listed strangers or changing work", async () => {
+    const legacy = {
+      ...w,
+      memberVersion: undefined,
+      policy: { mode: "whitelist", version: 17, allowed: ["999"] },
+    };
+    await store.pool.query("UPDATE workspaces SET data=$2 WHERE id=$1", [
+      w.id,
+      JSON.stringify(legacy),
+    ]);
+    const sql = await readFile(
+      new URL(
+        "../../migrations/015_remove_workspace_whitelist.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    for (let pass = 0; pass < 2; pass++) {
+      await store.pool.query(sql);
+      const current = await store.read(w.id);
+      expect(current.memberVersion).toBe(17);
+      expect(current).not.toHaveProperty("policy");
+      expect(current.members).toEqual(w.members);
+      expect(current.audit).toEqual(w.audit);
+      expect(current.runs).toEqual(w.runs);
+      expect(current.workflows).toEqual(w.workflows);
+      for (const actor of ["101", "202", "303"])
+        expect(eligible(current, actor)).toBe(true);
+      expect(eligible(current, "999")).toBe(false);
+    }
+  });
+  test("member API grants access on enrollment and protects revisions without whitelist controls", async () => {
+    const response = await api(`${w.id}/members`);
+    const initial = await response.json();
+    expect(initial.version).toBe(w.memberVersion);
+    expect(initial).not.toHaveProperty("allowed");
+    expect(initial).not.toHaveProperty("mode");
+    const member = {
+      id: "404",
+      role: "member",
+      active: true,
+      version: initial.version,
+    };
+    expect((await api(`${w.id}/members`, "POST", member)).status).toBe(200);
+    expect(eligible(await store.read(w.id), "404")).toBe(true);
+    expect(
+      (await api(`${w.id}/members`, "POST", { ...member, active: false }))
+        .status,
+    ).toBe(409);
+    expect(eligible(await store.read(w.id), "404")).toBe(true);
+    const next = await (await api(`${w.id}/members?search=404`)).json();
+    expect(next.total).toBe(1);
+    expect(next.items[0].id).toBe("404");
+    expect(
+      (
+        await api(`${w.id}/members`, "POST", {
+          ...member,
+          version: next.version,
+          allow: false,
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await api(`${w.id}/members`, "POST", {
+          ...member,
+          active: false,
+          version: next.version,
+        })
+      ).status,
+    ).toBe(200);
+    expect(eligible(await store.read(w.id), "404")).toBe(false);
+    for (const [resource, method] of [
+      ["access-policy", "GET"],
+      ["access-policy", "PUT"],
+      ["access-policy/preview", "POST"],
+    ]) {
+      expect(
+        (
+          await api(
+            `${w.id}/${resource}`,
+            method,
+            method === "GET" ? undefined : {},
+          )
+        ).status,
+      ).toBe(404);
+    }
+  });
   test("member profiles follow the actual sender, persist in both APIs and respect duplicate events", async () => {
     const update = message(202, "/help");
     await ingress.accept(update);
@@ -153,11 +244,11 @@ const url = process.env.TEST_DATABASE_URL;
     expect(
       current.members.find((m) => m.id === "101")?.username,
     ).toBeUndefined();
-    expect(current.policy).toEqual(w.policy);
+    expect(current.memberVersion).toEqual(w.memberVersion);
     const duplicate = structuredClone(update);
     required(required(duplicate.message).from).username = "replayed_name";
     expect(await ingress.accept(duplicate)).toEqual({ duplicate: true });
-    for (const resource of ["members", "access-policy"]) {
+    for (const resource of ["members"]) {
       const response = await api(`${w.id}/${resource}`);
       expect(response.status).toBe(200);
       const body = await response.json();
@@ -190,7 +281,9 @@ const url = process.env.TEST_DATABASE_URL;
     const other = workspace();
     other.operatorId = adminId;
     other.members = [{ id: "202", active: true, role: "owner" }];
-    other.policy.allowed = ["202"];
+    other.members.forEach((member) => {
+      member.active = member.id === "202";
+    });
     await store.pool.query(
       "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",
       [other.id, adminId, JSON.stringify(other)],
@@ -284,8 +377,10 @@ const url = process.env.TEST_DATABASE_URL;
     await ingress.accept(message(404, "/ask hello"));
     expect((await store.read(w.id)).runs).toHaveLength(1);
     await store.change(w.id, (v) => {
-      v.policy.allowed = v.policy.allowed.filter((a) => a !== "404");
-      v.policy.version++;
+      v.members.forEach((member) => {
+        if (member.id === "404") member.active = false;
+      });
+      v.memberVersion++;
     });
     expect(
       (await api(path, "POST", { decision: "approved", version: page.version }))
@@ -298,7 +393,7 @@ const url = process.env.TEST_DATABASE_URL;
     const current = await store.read(w.id);
     const entry = required(current.accessRequests?.[0]);
     const path = `${w.id}/access-requests/${entry.id}/decision`;
-    const input = { decision: "approved", version: w.policy.version };
+    const input = { decision: "approved", version: w.memberVersion };
     expect((await api(path, "POST", input, { cookie: "" })).status).toBe(401);
     expect(
       (await api(path, "POST", input, { "x-csrf-token": "wrong" })).status,
@@ -417,7 +512,9 @@ const url = process.env.TEST_DATABASE_URL;
     try {
       await store.change(w.id, (current) => {
         current.members = [];
-        current.policy.allowed = [];
+        current.members.forEach((member) => {
+          member.active = false;
+        });
       });
       const page = await (await api(`${w.id}/access-requests`)).json();
       expect(page.requestUrl).toContain(`start=access_${w.id}`);

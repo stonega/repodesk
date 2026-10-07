@@ -330,7 +330,7 @@ test.describe
           page.getByText("Link my Telegram account (optional)"),
         ).toBeVisible();
         await page.getByLabel("Telegram user ID").fill("202");
-        await page.getByRole("button", { name: "Allow user" }).click();
+        await page.getByRole("button", { name: "Add member" }).click();
         await expect(page.getByText("202 · member")).toBeVisible();
         await page.getByRole("button", { name: "Revoke" }).click();
         await expect(page.getByText("No one has access yet.")).toBeVisible();
@@ -2206,9 +2206,9 @@ test.describe
             exact: true,
           }),
         });
-        // A concurrent policy edit must leave the request pending and explain reload.
+        // A concurrent membership edit must leave the request pending and explain reload.
         await store.change(workspaceId, (w) => {
-          w.policy.version++;
+          w.memberVersion++;
         });
         await applicant
           .getByRole("button", { name: "Approve access", exact: true })
@@ -2240,7 +2240,7 @@ test.describe
           page.getByText("No pending access requests."),
         ).toBeVisible();
         const current = await store.read(workspaceId);
-        expect(current.policy.allowed).toContain("808");
+        expect(current.members.find((m) => m.id === "808")?.active).toBe(true);
         expect(current.members.find((m) => m.id === "809")).toBeUndefined();
         expect(
           current.accessRequests?.find((r) => r.actor === "809")?.status,
@@ -2285,8 +2285,8 @@ test.describe
               username: "inactive_person",
             },
           );
-          w.policy.allowed.push("811", "812");
-          w.policy.version++;
+
+          w.memberVersion++;
         });
         await page.goto("/admin/members");
         await page.getByLabel("Username", { exact: true }).fill("browseradmin");
@@ -2314,7 +2314,7 @@ test.describe
           table.getByRole("row").filter({ hasText: `ID: ${id}` });
         await expect(row("808")).toContainText("@applicant");
         await expect(row("808")).toContainText("Access applicant");
-        await expect(row("810")).toContainText("Whitelist required");
+        await expect(row("810")).toContainText("Allowed");
         await expect(
           table.getByRole("columnheader", { name: "GitHub", exact: true }),
         ).toBeVisible();
@@ -2323,7 +2323,7 @@ test.describe
         await expect(row("810")).toContainText("Synced");
         await expect(row("808")).toContainText("Not linked");
         await expect(row("811")).toContainText("Inactive");
-        await expect(row("812")).toContainText("Not enrolled");
+        await expect(row("812")).toHaveCount(0);
         const search = page.getByLabel(
           "Search members by name, username or ID",
         );
@@ -2339,22 +2339,16 @@ test.describe
         await search.fill("810");
         await expect(row("810")).toContainText("Telegram user");
         await search.fill("");
-        const policy = page.getByRole("region", {
-          name: "Access policy",
-          exact: true,
-        });
-        await chooseOption(policy.getByLabel("Access mode"), "members");
-        await policy
-          .getByRole("button", { name: "Preview affected work" })
-          .click();
-        await policy
-          .getByRole("button", { name: "Apply reviewed policy" })
-          .click();
+        await expect(
+          page.getByRole("region", { name: "Access policy", exact: true }),
+        ).toHaveCount(0);
+        await expect(
+          table.getByRole("columnheader", { name: "Whitelist", exact: true }),
+        ).toHaveCount(0);
         await expect(
           row("810").getByText("Allowed", { exact: true }),
         ).toBeVisible();
         await expect(row("811")).toContainText("Inactive");
-        await expect(row("812")).toContainText("Not enrolled");
         await page.getByRole("button", { name: "Edit member 808" }).click();
         const dialog = page.getByRole("dialog", { name: "Edit member" });
         await expect(
@@ -2365,33 +2359,28 @@ test.describe
         await expect(dialog).toHaveCount(0);
         await expect(row("808")).toContainText("admin");
         await expect(row("808")).toContainText("@applicant");
-        await chooseOption(policy.getByLabel("Access mode"), "whitelist");
-        await policy.getByText(/^Manage whitelist IDs/).click();
-        const ids = policy.getByLabel(
-          "Telegram user IDs (one per line or comma separated)",
-        );
-        await ids.fill("101\n811\n812");
-        await policy
-          .getByRole("button", { name: "Preview affected work" })
+        await page.getByRole("button", { name: "Edit member 810" }).click();
+        const memberDialog = page.getByRole("dialog", { name: "Edit member" });
+        await expect(
+          memberDialog.getByRole("switch", { name: "Also allow in whitelist" }),
+        ).toHaveCount(0);
+        await memberDialog
+          .getByRole("switch", { name: "Active membership" })
+          .uncheck();
+        await memberDialog
+          .getByRole("button", { name: "Save membership" })
           .click();
-        await policy
-          .getByRole("button", { name: "Apply reviewed policy" })
-          .click();
-        await expect(row("808")).toContainText("Whitelist required");
-        await ids.fill("");
-        await policy
-          .getByRole("button", { name: "Preview affected work" })
-          .click();
-        await policy
-          .getByRole("button", { name: "Apply reviewed policy" })
-          .click();
-        await expect(policy.getByRole("alert")).toContainText(
-          "last_admin_lockout",
-        );
+        await expect(row("810")).toContainText("Inactive");
         await page.reload();
-        await policy.getByText(/^Manage whitelist IDs/).click();
-        await expect(ids).toHaveValue("101\n811\n812");
-        await policy.getByText(/^Manage whitelist IDs/).click();
+        await expect(row("810")).toContainText("Inactive");
+        await page.getByRole("button", { name: "Edit member 810" }).click();
+        await memberDialog
+          .getByRole("switch", { name: "Active membership" })
+          .check();
+        await memberDialog
+          .getByRole("button", { name: "Save membership" })
+          .click();
+        await expect(row("810")).toContainText("Allowed");
         await page.setViewportSize({ width: 1280, height: 900 });
         await page.screenshot({
           path: "test-results/members-access-desktop.png",
@@ -2404,11 +2393,6 @@ test.describe
           fullPage: true,
         });
       } finally {
-        await store.change(workspaceId, (w) => {
-          w.policy.mode = "whitelist";
-          if (!w.policy.allowed.includes("808")) w.policy.allowed.push("808");
-          w.policy.version++;
-        });
         await pool.end();
       }
     });
@@ -2541,7 +2525,6 @@ test.describe
       for (const path of [
         "overview",
         "settings",
-        "access-policy",
         "members",
         "chats",
         "workflows",

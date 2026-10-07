@@ -21,41 +21,84 @@ import {
 } from "../../src/workflows/service.ts";
 import {
   authorize,
+  eligible,
   runAllowed,
-  setPolicy,
+  updateMembership,
 } from "../../src/workspaces/policy.ts";
-import { createRun } from "../../src/workspaces/service.ts";
+import { createRun, deliver } from "../../src/workspaces/service.ts";
 import { spec, workspace } from "../fixtures.ts";
 
 describe("tenant and access boundaries", () => {
-  test("whitelisting does not confer membership or admin role", () => {
+  test("all active members can use the bot; roles still restrict administration", () => {
     const w = workspace();
-    w.policy.allowed.push("999");
+    for (const actor of ["101", "202", "303"]) {
+      expect(eligible(w, actor)).toBe(true);
+      expect(authorize(w, actor)).toBe(actor);
+    }
     expect(() => authorize(w, "999")).toThrow("access_denied");
     expect(() => authorize(w, "202", true)).toThrow("access_denied");
-    w.policy.allowed = [];
-    expect(() => authorize(w, "101")).toThrow();
+    updateMembership(w, "101", w.memberVersion, {
+      id: "404",
+      role: "member",
+      active: true,
+    });
+    expect(authorize(w, "404")).toBe("404");
+    updateMembership(w, "101", w.memberVersion, {
+      id: "404",
+      role: "member",
+      active: false,
+    });
+    expect(() => authorize(w, "404")).toThrow("access_denied");
+    w.deletion = {
+      requestedAt: new Date().toISOString(),
+      providerState: "pending",
+    };
+    expect(eligible(w, "101")).toBe(false);
   });
-  test("revocation invalidates queued work, approvals and schedules", () => {
+  test("member deactivation invalidates queued work, approvals and schedules", () => {
     const w = workspace();
     const p = proposeWorkflow(w, "303", spec(w));
     decide(w, "303", p.approval.id, true);
     const r = createRun(w, "303", "hello", "-100100", 0, "gpt-4.1-mini");
     const a = proposeInstruction(w, "303", "short", "workspace", "test");
-    setPolicy(w, "101", w.policy.version, "whitelist", ["101"]);
+    deliver(w, "303", "-100100", "Pending reply", { runId: r.id });
+    updateMembership(w, "101", w.memberVersion, {
+      id: "303",
+      role: "admin",
+      active: false,
+    });
     expect(r.status).toBe("cancelled");
     expect(p.workflow.status).toBe("suspended");
     expect(a.decision).toBe("revoked");
+    expect(w.deliveries[0]?.state).toBe("cancelled");
     expect(runAllowed(w, r)).toBe(false);
   });
-  test("last admin and stale writes are protected", () => {
+  test("membership edits protect the last admin, roles, owner and stale writes", () => {
     const w = workspace();
-    expect(() =>
-      setPolicy(w, "101", w.policy.version, "whitelist", ["202"]),
-    ).toThrow("last_admin_lockout");
-    expect(() => setPolicy(w, "101", 0, "members", [])).toThrow(
+    const owner = w.members.find((m) => m.id === "101");
+    if (!owner) throw new Error("Missing owner fixture");
+    owner.active = false;
+    const input = { id: "303", role: "member" as const, active: true };
+    expect(() => updateMembership(w, "303", w.memberVersion, input)).toThrow(
+      "last_admin_lockout",
+    );
+    expect(eligible(w, "303", true)).toBe(true);
+    expect(() => updateMembership(w, "303", 0, input)).toThrow(
       "version_conflict",
     );
+    expect(() => updateMembership(w, "202", w.memberVersion, input)).toThrow(
+      "access_denied",
+    );
+    expect(() =>
+      updateMembership(w, w.operatorId, w.memberVersion, {
+        id: "101",
+        role: "admin",
+        active: true,
+      }),
+    ).toThrow("owner_requires_host_recovery");
+    updateMembership(w, w.operatorId, w.memberVersion, input);
+    expect(eligible(w, "303")).toBe(true);
+    expect(eligible(w, "303", true)).toBe(false);
   });
   test("private sources and memory cannot enter group runs or other topics", () => {
     const w = workspace();

@@ -580,23 +580,28 @@ them.
 
 ### Members and access share one page
 
-- **Preference:** Combine member management, access requests and whitelist policy
-  in one page. Show Telegram names/usernames alongside numeric IDs, with role,
-  membership, whitelist and effective-access states in a searchable table.
+- **Preference:** Combine member management and access requests in one page. Show
+  Telegram names/usernames alongside numeric IDs, with role, membership and effective-access
+  states in a searchable table. All active members can use the bot; omit whitelist
+  controls, access modes and policy preview/apply actions.
 - **Scope:** Workspace member and access management. Keep numeric IDs as the
   permission identity; display names come from Telegram interactions.
 - **Source:** 2026-09-21 — user requested merging Allowed users and Members and
   adding Telegram usernames to members currently shown only as IDs.
+  Updated 2026-10-07 — user requested removing the whitelist feature because all
+  active workspace members can use the bot.
 - **Exceptions:** Members with no known Telegram profile retain an ID fallback.
 
 ### Member switches sit beside their labels
 
-- **Preference:** Show active membership and whitelist permission as switch
-  controls aligned to the right of their labels in the member dialog. Keep
-  guidance about numeric Telegram IDs beside the ID field.
+- **Preference:** Show active membership as a switch aligned to the right of its
+  label in the member dialog. Membership alone enables bot use; do not show a
+  whitelist switch. Keep guidance about numeric Telegram IDs beside the ID field.
 - **Scope:** Add and edit member dialogs in the admin panel.
 - **Source:** 2026-09-27 — user asked to change the member checkboxes to toggles
   and move them to the right.
+  Updated 2026-10-07 — user removed whitelist permission; retain only the active
+  membership switch.
 - **Exceptions:** None recorded.
 
 ### Member creation has a labeled header action

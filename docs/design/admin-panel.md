@@ -35,7 +35,7 @@ Public static assets can load before login, but contain no workspace data or sec
 | Shared instructions | List, edit, scope, provenance, versions, forget | Never lists other users' personal memories by virtue of admin role. |
 | Runs | Compact run summaries link to a dedicated detail page with all workspace run messages, evidence, cost and existing cancel/retry controls; deployment administrators can read messages without linking Telegram | Direct visits and refreshes load the selected run independently of list pagination; Back to Runs retains the workspace and list offset. Workspace owners/admins can inspect every retained run, including private requests, results, transcripts and delivery text. Access stays tenant-scoped; execution and mutations retain Telegram authorization. Retry creates a traceable attempt; uncertain delivery cannot be blindly resent. |
 | Usage and limits | Recorded/estimated usage, daily/monthly caps, reservations and blocked jobs | Changes apply atomically; concurrent workers cannot overspend the displayed cap. |
-| Members & access | Search Telegram names/usernames/IDs; manage membership, roles and requests; configure access mode and whitelist with impact preview | Show membership, whitelist and effective access separately in one table. Preserve last-admin protection, tenant boundaries and revocation checks. |
+| Members & access | Search Telegram names/usernames/IDs and GitHub logins; manage active membership, roles and requests; fetch GitHub account choices in member forms and show profile links | All active members can use the bot; roles determine available actions. GitHub associations require explicit selection and separate member verification. Preserve last-admin protection, tenant boundaries and revocation checks. |
 | Privacy and audit | Retention settings, deletion request/status, configuration/action audit | Destructive changes show scope; logs omit credentials and raw private chat text. |
 | Runtime logs | Operator-only API/worker/polling/run/delivery events; severity/service/search filters, cursor pagination, auto-refresh | Static messages and allowed error codes; no secrets/private text; workspace metadata scoped to its operator; seven-day/10,000-entry retention. |
 | Operator settings | Readiness of global bot/provider credentials, webhook state, allowed models, maintenance controls | Deployment-operator-only; workspace admins cannot modify global bot identity or webhook. |
@@ -48,8 +48,8 @@ must work without manually editing database rows.
 
 ## Identity and authorization
 
-Apply the configurable [allowed-user whitelist](access-control.md) to workspace access
-in both the bot and this panel. Allowlisting grants eligibility, not an admin role.
+Apply [active workspace membership](access-control.md) to bot access and retain role
+checks for panel administration. Regular membership grants no admin role.
 
 On an uninitialized deployment, use the [first-run wizard](first-run-setup.md) to
 create a local deployment admin, protected by a one-time host-issued claim token.
@@ -59,7 +59,7 @@ password hashes and revocable server-side sessions; no public first-visitor sign
 After bot configuration, allow verified Telegram identity linking and optional
 Telegram web login for workspace users. Validate signed data and freshness server-side;
 use Secure/HttpOnly/SameSite cookies and reject replay/login-CSRF attempts. Workspace
-membership, roles and the allowed-user policy remain separate from authentication.
+membership and roles remain separate from authentication.
 [Telegram web login](https://core.telegram.org/bots/features#web-login)
 
 The local deployment admin may configure credentials, initial workspaces and recovery.
@@ -120,7 +120,6 @@ and encryption key stay operator-level deployment settings.
 | `/api/admin/workspaces/:id/instructions/*` | Scoped memory/instruction management |
 | `/api/admin/workspaces/:id/runs/*` | Authorized history, details, cancel and retry |
 | `/api/admin/workspaces/:id/members/*` | Membership and roles |
-| `/api/admin/workspaces/:id/access-policy` | Versioned access mode and allowed-user list management |
 | `/api/admin/workspaces/:id/usage` and `/audit` | Paginated accounting and audit metadata |
 | `/api/admin/workspaces/:id/deletion` | Request/status of authorized purge |
 | `/api/admin/workspaces/:id/plugins` | Read/update the workspace-scoped Pi extension registry with optimistic revisions and atomic audit |
@@ -237,8 +236,8 @@ The **Plugins** page also offers predefined **Code Truth**: enable/disable, add/
 
 The **Members & access** page includes **Access requests** and a shareable
 Telegram request link. Pending rows show the Telegram ID, available display name and
-username, and request time. **Approve access** grants regular membership plus whitelist
-eligibility; **Reject request** dismisses the request without granting access. Actions
+username, and request time. **Approve access** grants active regular membership and bot
+access; **Reject request** dismisses the request without granting access. Actions
 are disabled while saving, conflicts keep the request visible for reload, and successful
 approval refreshes the member list. See [access control](access-control.md#telegram-access-requests-implemented-2026-09-20)
 for tenant routing, retention, authorization and API behavior.

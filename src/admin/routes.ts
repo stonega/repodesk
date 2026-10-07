@@ -43,7 +43,7 @@ import {
   authorize,
   eligible,
   revokeWork,
-  setPolicy,
+  updateMembership,
 } from "../workspaces/policy.ts";
 import { createRun, visibleRuns } from "../workspaces/service.ts";
 import { claim, login, operator, session, throttle } from "./auth.ts";
@@ -58,13 +58,6 @@ const authInput = z.object({
   username: z.string().regex(/^[a-zA-Z0-9_.-]{3,64}$/),
   password: z.string().min(12).max(256),
 });
-const policyInput = z
-  .object({
-    version,
-    mode: z.enum(["whitelist", "members"]),
-    allowed: z.array(userId).max(500),
-  })
-  .strict();
 const validId = (id: string) => z.uuid().parse(id);
 const workspaceActor = (w: Workspace, admin: Admin) => {
   if (admin.telegramId && eligible(w, admin.telegramId, true))
@@ -650,10 +643,8 @@ export function adminRoutes(
       );
       requireThat(member, "existing_admin_required");
       member.active = true;
-      if (!w.policy.allowed.includes(member.id))
-        w.policy.allowed.push(member.id);
-      w.policy.version++;
-      audit(w, admin.id, "access.recovered", member.id, w.policy.version);
+      w.memberVersion++;
+      audit(w, admin.id, "access.recovered", member.id, w.memberVersion);
       await sql.query(
         "INSERT INTO operator_audit(actor,action,target) VALUES($1,'workspace.recovered',$2)",
         [admin.id, w.id],
@@ -681,7 +672,7 @@ export function adminRoutes(
     if (actor === admin.id) {
       const resource = c.req.path.split("/").slice(5).join("/");
       requireThat(
-        /^(overview|settings|members|access-policy|access-requests|skills)(\/.*)?$/.test(
+        /^(overview|settings|members|access-requests|skills)(\/.*)?$/.test(
           resource,
         ) ||
           (c.req.method === "GET" &&
@@ -724,7 +715,6 @@ export function adminRoutes(
               ? { codingTasks: w.codingTasks?.length ?? 0 }
               : {}),
           },
-          policyVersion: w.policy.version,
           connections: deployment
             ? {
                 bot: {
@@ -751,25 +741,22 @@ export function adminRoutes(
           capabilities: modelCapabilities(deployment.model, deployment) ?? null,
         });
       }
-      case "access-policy":
-        return c.json({
-          ...w.policy,
-          members: membersWithProfiles(w),
-          affected: {
-            runs: w.runs
-              .filter((r) => ["queued", "running"].includes(r.status))
-              .map((r) => ({ id: r.id, actor: r.actor })),
-            workflows: w.workflows
-              .filter((f) => f.status === "active")
-              .map((f) => ({ id: f.id, owner: f.owner })),
-          },
-        });
-      case "members":
-        return c.json(take(membersWithProfiles(w)));
+      case "members": {
+        const search = (c.req.query("search") ?? "")
+          .trim()
+          .replace(/^@/, "")
+          .toLowerCase();
+        const members = membersWithProfiles(w).filter((member) =>
+          `${member.id} ${member.username ?? ""} ${member.name ?? ""} ${member.github?.login ?? ""}`
+            .toLowerCase()
+            .includes(search),
+        );
+        return c.json({ version: w.memberVersion, ...take(members) });
+      }
       case "access-requests": {
         const deployment = await store.deployment();
         return c.json({
-          version: w.policy.version,
+          version: w.memberVersion,
           items: (w.accessRequests ?? []).filter((r) => r.status === "pending"),
           requestUrl: deployment.bot
             ? `https://t.me/${deployment.bot.username}?start=access_${w.id}`
@@ -896,46 +883,6 @@ export function adminRoutes(
       }),
     );
   });
-  app.put("/api/admin/workspaces/:id/access-policy", async (c) => {
-    const input = policyInput.parse(await c.req.json());
-    return c.json(
-      await change(c, (w, actor) => {
-        setPolicy(w, actor, input.version, input.mode, input.allowed);
-        return w.policy;
-      }),
-    );
-  });
-  app.post("/api/admin/workspaces/:id/access-policy/preview", async (c) => {
-    const input = policyInput.parse(await c.req.json());
-    return c.json(
-      await change(c, (w) => {
-        const removed = w.members.filter(
-          (m) =>
-            m.active &&
-            input.mode === "whitelist" &&
-            !input.allowed.includes(m.id),
-        );
-        return {
-          added: input.allowed.filter((id) => !w.policy.allowed.includes(id)),
-          removed: w.policy.allowed.filter((id) => !input.allowed.includes(id)),
-          revoked: removed.map((m) => m.id),
-          runs: w.runs
-            .filter(
-              (r) =>
-                removed.some((m) => m.id === r.actor) &&
-                ["queued", "running"].includes(r.status),
-            )
-            .map((r) => r.id),
-          workflows: w.workflows
-            .filter(
-              (f) =>
-                removed.some((m) => m.id === f.owner) && f.status === "active",
-            )
-            .map((f) => f.id),
-        };
-      }),
-    );
-  });
   app.post(
     "/api/admin/workspaces/:id/access-requests/:request/decision",
     async (c) => {
@@ -969,51 +916,13 @@ export function adminRoutes(
         id: userId,
         role: z.enum(["admin", "member"]),
         active: z.boolean(),
-        allow: z.boolean(),
         version,
       })
       .strict()
       .parse(await c.req.json());
     return c.json(
       await change(c, (w, actor) => {
-        requireThat(
-          w.policy.version === input.version,
-          "version_conflict",
-          409,
-        );
-        const previous = w.members.find((m) => m.id === input.id);
-        requireThat(
-          previous?.role !== "owner",
-          "owner_requires_host_recovery",
-          409,
-        );
-        if (previous)
-          Object.assign(previous, { role: input.role, active: input.active });
-        else
-          w.members.push({
-            id: input.id,
-            role: input.role,
-            active: input.active,
-          });
-        if (input.allow && !w.policy.allowed.includes(input.id))
-          w.policy.allowed.push(input.id);
-        if (actor !== w.operatorId)
-          requireThat(
-            w.members.some(
-              (m) =>
-                m.active &&
-                m.role !== "member" &&
-                (w.policy.mode === "members" ||
-                  w.policy.allowed.includes(m.id)),
-            ),
-            "last_admin_lockout",
-            409,
-          );
-        w.policy.version++;
-        revokeWork(w);
-        audit(w, actor, "member.updated", input.id, w.policy.version);
-        if (input.allow)
-          audit(w, actor, "access.allowed", input.id, w.policy.version);
+        updateMembership(w, actor, input.version, input);
         return w.members;
       }),
     );

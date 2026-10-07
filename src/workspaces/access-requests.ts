@@ -60,7 +60,7 @@ export function decideAccessRequest(
   // A replay must never restore access revoked after the original decision.
   if (request.status === decision) return request;
   requireThat(request.status === "pending", "access_request_decided", 409);
-  requireThat(w.policy.version === version, "version_conflict", 409);
+  requireThat(w.memberVersion === version, "version_conflict", 409);
   if (decision === "approved") {
     const member = w.members.find((m) => m.id === request.actor);
     requireThat(member?.role !== "owner", "owner_requires_host_recovery", 409);
@@ -82,11 +82,8 @@ export function decideAccessRequest(
         },
         new Date(request.requestedAt),
       );
-    if (!w.policy.allowed.includes(request.actor))
-      w.policy.allowed.push(request.actor);
-    w.policy.version++;
-    audit(w, actor, "member.updated", request.actor, w.policy.version, now);
-    audit(w, actor, "access.allowed", request.actor, w.policy.version, now);
+    w.memberVersion++;
+    audit(w, actor, "member.updated", request.actor, w.memberVersion, now);
     if (
       request.chatId === request.actor ||
       w.chats.some((c) => c.active && c.id === request.chatId)
@@ -107,7 +104,7 @@ export function decideAccessRequest(
     actor,
     `access_request.${decision}`,
     request.id,
-    w.policy.version,
+    w.memberVersion,
     now,
   );
   return request;
