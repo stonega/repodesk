@@ -18,6 +18,20 @@ them.
 
 ## Recorded preferences
 
+### Dropdown inputs share the workspace selector style
+
+- **Preference:** Use the sidebar workspace selector's muted rounded trigger,
+  chevron, bordered menu, blue hover state and SVG selection check for dropdown
+  inputs throughout RepoDesk. Share these styles across controls and themes.
+- **Scope:** All web admin and setup dropdown inputs, including form dialogs,
+  filters, timezone groups, model suggestions and searchable repository selectors,
+  on desktop and mobile.
+- **Source:** 2026-10-06 — user requested “update all dropdown input in repodesk
+  to style like the workspace selector in left side bar.” and requested reimplementation.
+- **Exceptions:** Preserve repository search and existing field behavior, including
+  validation, custom model IDs, disabled states and keyboard use. Workspace creation remains a
+  workspace-menu action; other selectors do not acquire that action.
+
 ### Application version stays at the bottom right
 
 - **Preference:** Show the application version as small, muted text at the
@@ -520,8 +534,8 @@ them.
 - **Scope:** Signed-in admin sidebar workspace selector, on desktop and mobile.
 - **Source:** 2026-09-28 — user shared the native workspace select menu and asked
   to use RepoDesk's own dropdown.
-- **Exceptions:** The setup timezone and other form selectors may remain native
-  controls.
+- **Exceptions:** The earlier allowance for native form selectors is superseded
+  by the 2026-10-06 shared dropdown preference above.
 
 ### Skill cards separate routine actions from version recovery
 

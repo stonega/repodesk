@@ -1,4 +1,7 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+
+import { Check } from "reicon-react";
+import { DropdownPopup } from "./dropdown-popup.tsx";
 
 type RepositoryOption = { id: number; full_name: string };
 
@@ -15,6 +18,7 @@ export function RepositorySelect({
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const dismiss = useCallback(() => setOpen(false), []);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const selected = repositories.find((repository) => repository.id === value);
@@ -55,62 +59,65 @@ export function RepositorySelect({
   return (
     <div className="field repository-select">
       <label htmlFor={id}>Repository</label>
-      <input
-        ref={input}
-        id={id}
-        role="combobox"
-        required
-        autoComplete="off"
-        spellCheck={false}
-        placeholder="Search connected repositories"
-        aria-autocomplete="list"
-        aria-expanded={open}
-        aria-controls={open ? `${id}-list` : undefined}
-        aria-activedescendant={
-          open && activeOption ? `${id}-option-${activeOption.id}` : undefined
-        }
-        value={open ? query : (selected?.full_name ?? "")}
-        onClick={() => {
-          if (!open) show();
-        }}
-        onBlur={() => setOpen(false)}
-        onChange={(event) => {
-          setQuery(event.target.value);
-          setActive(0);
-          setOpen(true);
-        }}
-        onKeyDown={(event) => {
-          if (event.nativeEvent.isComposing) return;
-          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-            event.preventDefault();
-            if (!open) show();
-            else
-              setActive((index) =>
-                Math.max(
-                  0,
-                  Math.min(
-                    matches.length - 1,
-                    index + (event.key === "ArrowDown" ? 1 : -1),
-                  ),
-                ),
-              );
-          } else if (event.key === "Enter" && open) {
-            event.preventDefault();
-            if (activeOption) choose(activeOption);
-          } else if (event.key === "Escape" && open) {
-            event.preventDefault();
-            event.stopPropagation();
-            setOpen(false);
-          } else if (open && (event.key === "Home" || event.key === "End")) {
-            event.preventDefault();
-            setActive(
-              event.key === "Home" ? 0 : Math.max(0, matches.length - 1),
-            );
+      <span className="dropdown-search-control">
+        <input
+          className="dropdown-trigger"
+          ref={input}
+          id={id}
+          role="combobox"
+          required
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="Search connected repositories"
+          aria-autocomplete="list"
+          aria-expanded={open}
+          aria-controls={open ? `${id}-list` : undefined}
+          aria-activedescendant={
+            open && activeOption ? `${id}-option-${activeOption.id}` : undefined
           }
-        }}
-      />
+          value={open ? query : (selected?.full_name ?? "")}
+          onClick={() => {
+            if (!open) show();
+          }}
+          onBlur={() => setOpen(false)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setActive(0);
+            setOpen(true);
+          }}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing) return;
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              event.preventDefault();
+              if (!open) show();
+              else
+                setActive((index) =>
+                  Math.max(
+                    0,
+                    Math.min(
+                      matches.length - 1,
+                      index + (event.key === "ArrowDown" ? 1 : -1),
+                    ),
+                  ),
+                );
+            } else if (event.key === "Enter" && open) {
+              event.preventDefault();
+              if (activeOption) choose(activeOption);
+            } else if (event.key === "Escape" && open) {
+              event.preventDefault();
+              event.stopPropagation();
+              setOpen(false);
+            } else if (open && (event.key === "Home" || event.key === "End")) {
+              event.preventDefault();
+              setActive(
+                event.key === "Home" ? 0 : Math.max(0, matches.length - 1),
+              );
+            }
+          }}
+        />
+      </span>
       {open && (
-        <div className="repository-select-popup">
+        <DropdownPopup anchor={input} onDismiss={dismiss}>
           <div
             ref={list}
             className="repository-select-list"
@@ -120,6 +127,7 @@ export function RepositorySelect({
           >
             {matches.map((repository, index) => (
               <button
+                className="dropdown-item"
                 type="button"
                 tabIndex={-1}
                 key={repository.id}
@@ -131,18 +139,26 @@ export function RepositorySelect({
                 onPointerDown={(event) => event.preventDefault()}
                 onClick={() => choose(repository)}
               >
-                {repository.full_name}
+                <span>{repository.full_name}</span>
+                {repository.id === value && (
+                  <Check
+                    aria-hidden="true"
+                    size={20}
+                    weight="Outline"
+                    color="currentColor"
+                  />
+                )}
               </button>
             ))}
           </div>
           {!matches.length && (
-            <p role="status">
+            <p role="status" className="repository-select-empty">
               {repositories.length
                 ? "No repositories match your search."
                 : "No connected repositories available."}
             </p>
           )}
-        </div>
+        </DropdownPopup>
       )}
     </div>
   );

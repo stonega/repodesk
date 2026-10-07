@@ -6,6 +6,7 @@ import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
 import { RepositorySelect } from "./repository-select.tsx";
+import { Select } from "./select.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 import { useRepositoryRefresh } from "./use-repository-refresh.ts";
 
@@ -726,9 +727,10 @@ export function Coding({
               );
             }}
           >
-            <label className="field">
+            <label className="field" htmlFor="coding-auth-mode">
               <span>Sign-in method</span>
-              <select
+              <Select
+                id="coding-auth-mode"
                 value={configDraft.authMode}
                 onChange={(event) =>
                   setConfigDraft({
@@ -739,7 +741,7 @@ export function Coding({
               >
                 <option value="provider_key">Custom provider API key</option>
                 <option value="device_code">ChatGPT device code</option>
-              </select>
+              </Select>
             </label>
             {configDraft.authMode === "provider_key" ? (
               <>
@@ -1034,7 +1036,7 @@ function RepositoryEditor({
         <legend>Development collaboration</legend>
         <label className="field" htmlFor="coding-execution-mode">
           <span>Execution policy</span>
-          <select
+          <Select
             id="coding-execution-mode"
             value={policy.executionMode}
             onChange={(e) =>
@@ -1053,7 +1055,7 @@ function RepositoryEditor({
             <option value="direct">
               Direct — maintainer's clear instruction starts Codex
             </option>
-          </select>
+          </Select>
           <small>
             Codex makes technical decisions. Analysis requests allow
             investigation only. Existing tasks stop if their policy changes.
