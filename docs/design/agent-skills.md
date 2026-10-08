@@ -61,6 +61,14 @@ below the instruction preview. Restore a published version expands a version
 selector and rollback action; the selected source is independent for each card.
 Skills without published versions do not show restore controls.
 
+Enable stays disabled until a version is published, with guidance to review the
+instructions and choose Publish draft. Publication and enablement remain separate
+actions. Archived cards show an Archived badge and explain that their instructions
+can be reused in a new skill; Enable and Archive are unavailable. Management icons
+stay together when the header wraps, and request errors appear below the header
+without displacing individual buttons. A rejected enable request explains the
+published/unarchived requirement instead of exposing `publish_first`.
+
 The catalog has a right-aligned search and state toolbar with accessible names in
 place of visible field labels. Search ignores case and repeated whitespace, and
 matches all entered words across names, slugs and descriptions. Search and the

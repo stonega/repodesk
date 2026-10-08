@@ -44,6 +44,10 @@ After a successful assistant investigation in the same chat:
 
 Review the full proposed instructions and requested tools, then approve the draft.
 This creates a **disabled, unpublished** skill visible to workspace admins.
+The card explains why Enable is unavailable: review the instructions, choose
+**Publish draft**, then **Enable**. An Archived badge means the skill cannot be
+enabled again; create or import a new skill to reuse its instructions. Request
+errors appear below the aligned management icons.
 An admin opens **Skills**, reviews/edits it, clicks **Publish draft**, then enables it.
 Teammates can subsequently ask to use the named skill. A new published version does
 not replace the version already pinned to an existing schedule.

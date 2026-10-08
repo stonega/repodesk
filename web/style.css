@@ -884,6 +884,7 @@ button.github-repository-more:hover:not(:disabled) {
   gap: 8px 20px;
 }
 .skill-card-title {
+  flex: 1 1 260px;
   min-width: 0;
 }
 .skill-card-title h2 {
@@ -891,6 +892,9 @@ button.github-repository-more:hover:not(:disabled) {
   overflow-wrap: anywhere;
 }
 .skill-card-controls {
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
   gap: 2px;
 }
 .skill-card-description {

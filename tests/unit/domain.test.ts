@@ -213,6 +213,29 @@ describe("approvals and scheduling", () => {
   });
 });
 describe("skills, memory, retention", () => {
+  test("enable requires a published, unarchived skill and admin access", () => {
+    const w = workspace();
+    const template = w.skills[0];
+    if (!template) throw new Error("Missing skill fixture");
+    const skill = saveSkill(w, "101", {
+      ...template.draft,
+      slug: "report-draft",
+    });
+    const enable = (actor = "101") =>
+      changeSkill(w, actor, skill.id, skill.version, "enable");
+    expect(enable).toThrow("publish_first");
+    expect(skill.enabled).toBe(false);
+    changeSkill(w, "101", skill.id, skill.version, "publish");
+    expect(skill.enabled).toBe(false);
+    expect(() => enable("202")).toThrow("access_denied");
+    enable();
+    expect(skill.enabled).toBe(true);
+    changeSkill(w, "101", skill.id, skill.version, "archive");
+    expect(skill.published).toHaveLength(1);
+    expect(skill.enabled).toBe(false);
+    expect(enable).toThrow("publish_first");
+    expect(skill.enabled).toBe(false);
+  });
   test("approved correction affects only future snapshots; forget removes future context", () => {
     const w = workspace();
     const a = proposeInstruction(w, "101", "Use bullets", "workspace", "test");
