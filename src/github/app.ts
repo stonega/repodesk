@@ -521,6 +521,7 @@ export class GitHubApp {
         z.object({
           number: z.number().int().positive(),
           state: z.enum(["open", "closed"]),
+          draft: z.boolean(),
           head: z.object({
             ref: z.string(),
             sha: z.string(),
@@ -538,6 +539,7 @@ export class GitHubApp {
     const matching = pulls.filter(
       (p) =>
         p.state === "open" &&
+        !p.draft &&
         p.head.ref === branch &&
         p.head.sha === sha &&
         p.head.repo?.full_name === repository &&

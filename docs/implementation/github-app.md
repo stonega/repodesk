@@ -21,7 +21,7 @@ repository-scoped issue submission. No personal token is accepted by the web pan
    Contents, Issues and Pull requests read/write access, Metadata read access,
    organization Members read access,
    no webhook events, and the deployment's callbacks. These permissions support
-   Codex checkout and draft PR publication; coding policies and task authorization
+   Codex checkout and PR publication; coding policies and task authorization
    still control each operation. The callback accepts exactly this permission set
    and rejects missing grants or additional permissions.
    GitHub requires a publicly addressable webhook URL even when delivery is disabled.

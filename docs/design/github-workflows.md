@@ -49,7 +49,7 @@ or turn text found in a repository into instructions with authority.
 | --- | --- | --- |
 | Ask how selected code works | Code Truth indexes configured branches and exposes source-query tools with commit provenance and workspace grants. It requires its optional service and plugin setup. | Implemented locally; live repository/model evaluation remains |
 | File a GitHub issue | AI drafts repository, title and full body; the requester approves before the GitHub App creates it. | Implemented locally; live GitHub submission remains unverified |
-| Delegate a feature or fix | A configured repository maintainer approves issue creation, Codex execution and a draft PR; task status and links return to Telegram. | Implemented locally; repository setup and live execution remain |
+| Delegate a feature or fix | A configured repository maintainer approves issue creation, Codex execution and a PR; task status and links return to Telegram. | Implemented locally; repository setup and live execution remain |
 | Ask for PR/issue status or a PR digest | Read-only selected repository metadata with numbered items, reviewers, merge windows, dates, links and explicit paging coverage. Approved daily/weekly workflows pin repository sources and destination. | Implemented locally; live GitHub/model report evaluation remains |
 | Save an assistant procedure as a team skill | Requester approves a sanitized draft from an owned completed run; admins publish and enable it through Skills. | Implemented locally; usefulness/reuse evaluation remains |
 | Get a work handoff | Personal task/checkpoint/question/PR and discussion summary; group queries remain in the current topic. | Implemented locally; live usefulness evaluation remains |
@@ -73,7 +73,7 @@ See [Review Bot](../implementation/review-bot.md), [GitHub App setup](../impleme
   Code Truth indexes configured branches and snapshots; its result does not prove
   current issue/PR state or that an answer is semantically correct.
 - A GitHub write needs a reviewable, actor-bound approval for the exact target and
-  payload. A coding approval explicitly covers its issue, local execution and draft PR.
+  payload. A coding approval explicitly covers its issue, local execution and PR.
   There is no automatic merge. Unknown remote outcomes require inspection before
   a new request; automatic replay could duplicate work.
 - Repository files, issue text and tool output are untrusted input. They cannot
@@ -106,7 +106,7 @@ Merge, deployment and general GitHub writes are not included in the initial task
 
 Evaluate the primary journey with a dedicated test repository and bot before a
 pilot: connect a repository, ask a source question, review a proposed issue, and
-complete one maintainer-approved coding task through a draft PR. Measure answer
+complete one maintainer-approved coding task through a PR. Measure answer
 usefulness and source accuracy, approval clarity, task completion and recovery from
 unknown outcomes. The [repository reports, skills and handoff plan](../implementation/team-workflows-plan.md)
 was authorized for local implementation on 2026-10-07. Evaluate those paths using

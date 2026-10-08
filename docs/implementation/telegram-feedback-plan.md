@@ -49,8 +49,8 @@ state; keep routine notices short and keep diagnostics in the admin panel.
 | Stop requested | “Stopping your task…” | Cancellation committed while an attempt is still active |
 | Stopped | “Your task has stopped.” | Local cancellation complete and runner stop confirmed, or no attempt ever started |
 | Ready without publication | “The changes passed the recorded checks. Publication has not been requested.” | Verified revision with no publication grant |
-| Publishing | “The checks passed. I’m opening or updating your draft PR.” | Verification and publication reservation for the current revision |
-| Completed | “The recorded checks passed. Here is your draft PR: …” | Confirmed PR URL and published revision |
+| Publishing | “The checks passed. I’m opening or updating your PR.” | Verification and publication reservation for the current revision |
+| Completed | “The recorded checks passed. Your PR is ready for review: …” | Confirmed ready PR URL and published revision |
 | Publication uncertain | “I couldn’t confirm whether GitHub accepted the update. An administrator needs to check GitHub before another attempt.” | Persisted unknown outcome; never automatically replay the write |
 | Unmapped failure | “I couldn’t finish this task. Ask the workspace administrator to inspect it in the panel.” | Safe generic fallback with internal diagnostic reference retained separately |
 

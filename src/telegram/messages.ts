@@ -9,7 +9,7 @@ const stages: Record<string, string> = {
   implement: "I’m implementing the change.",
   check: "I’m running the checks now.",
   repair: "A check failed, so I’m fixing it before trying again.",
-  publish: "The checks passed. I’m opening or updating your draft PR.",
+  publish: "The checks passed. I’m opening or updating your PR.",
 };
 export const stageMessage = (stage: string) =>
   stages[stage] ?? "Your task is running.";
@@ -23,7 +23,7 @@ const ongoingStages: Record<string, string> = {
   check:
     "The checks are still running. I’ll share the result when they finish.",
   repair: "I’m still working on the failed check.",
-  publish: "I’m waiting for confirmation from GitHub about your draft PR.",
+  publish: "I’m waiting for confirmation from GitHub about your PR.",
 };
 export const ongoingStageMessage = (stage: string) =>
   ongoingStages[stage] ?? "Your task is still running. I’ll keep you posted.";

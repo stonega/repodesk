@@ -31,7 +31,7 @@ limits before raising budgets or inviting large groups.
 1. Follow [setup](setup.md) on a staging HTTPS host with a dedicated test bot,
    GitHub App and selected test repository. Enable Code Truth for a known branch.
 2. Run capped model evaluations: source question with checked citations, exact issue
-   approval and one configured maintainer coding task through a draft PR.
+   approval and one configured maintainer coding task through a PR.
 3. Exercise denied repository access, revoked grants and unknown GitHub outcomes;
    complete the [release runbook](release-runbook.md) recovery drills.
 4. Record model/provider behavior, retention policy, data-handling terms and the

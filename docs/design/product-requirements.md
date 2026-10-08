@@ -201,7 +201,7 @@ does not enable source questions. See [the GitHub journey](github-workflows.md).
 
 The local read path queries indexed source from configured branches. The local write
 paths are a requester-approved issue and a maintainer-approved coding task that can
-create an issue, start Codex and open a draft PR. The latter requires a separate
+create an issue, start Codex and open a PR. The latter requires a separate
 repository maintainer grant and runtime setup. AI output is never authorization.
 Read-only issue/PR metadata and scoped digests are implemented locally as of
 2026-10-07; live usefulness remains unverified. See the
@@ -335,7 +335,7 @@ platform support and add loop prevention before enabling bot-to-bot workflows.
 | --- | --- | --- | --- |
 | Repository source explanation (local implementation) | Configured Code Truth branch/snapshot | Answer with source references and stated coverage | Active workspace and repository grant; never infer live PR state from source index |
 | GitHub issue draft (local implementation) | User request and selected repository | Exact title/body for approval, then issue link | Requester-bound approval; selected repository and Issues permission |
-| Coding task (local implementation) | Maintainer request, configured base branch and workflow | Approved issue, task status and draft PR link | Repository maintainer grant and explicit issue/workflow/PR approval |
+| Coding task (local implementation) | Maintainer request, configured base branch and workflow | Approved issue, task status and PR link | Repository maintainer grant and explicit issue/workflow/PR approval |
 | Open PR digest (proposed) | Authorized current PR metadata | Stale PRs, owners, review requests and links | New read-only metadata tool; no inferred GitHub access |
 | Weekly team recap (supporting P0) | Received messages, selected time range, approved format | Shipped work, decisions, blockers, next steps, source references | Only data from the connected chat and available retention window |
 | Support themes (P1) | Approved support discussions | Themes, examples, frequency estimates, recommendations | Redact customer details; acknowledge sample coverage |

@@ -268,7 +268,7 @@ has no network or credentials.
 The worker rechecks actor, repository, configuration and deployment permissions
 after minting a fresh repository-scoped publication token. A new container with a
 fresh volume applies the patch, rejects `.github/` changes, commits, pushes a unique
-task branch and creates a draft PR. It never runs repository scripts. There is no
+task branch and creates a PR. It never runs repository scripts. There is no
 automatic merge. Publication has its own durable reservation and is never blindly
 retried after an uncertain response.
 

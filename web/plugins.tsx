@@ -302,7 +302,7 @@ export function Plugins({
               <PluginCard
                 to={path("/codex")}
                 name="Codex"
-                summary="Isolated coding tasks and draft PRs."
+                summary="Isolated coding tasks and PRs ready for review."
                 status={
                   builtIns.codex === undefined
                     ? "Built in"

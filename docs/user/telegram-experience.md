@@ -301,7 +301,7 @@ Analysis requests do not authorize implementation or publication.
 
 Reply to a Codex question or task message, or continue its Telegram Topic, to add
 requirements and answer necessary product questions. Multiple tasks in a Topic
-require a task selection. Follow-ups continue the same draft PR. Waiting releases
+require a task selection. Follow-ups continue the same PR. Waiting releases
 the runner slot; pending requirements are retained in order. Send **stop**, **停止**,
 or `/cancel` in the task conversation to cancel; `/status` reports its state and
 confirmed PR. Cancellation during publication is best-effort. Ordinary membership

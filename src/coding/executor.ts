@@ -572,7 +572,7 @@ export class DevelopmentExecutor {
           await this.notice(
             w,
             t,
-            `Draft PR: ${t.pr.url}\n${t.result?.summary ?? "Configured checks passed."}`,
+            `PR ready for review: ${t.pr.url}\n${t.result?.summary ?? "Configured checks passed."}`,
             `published:${t.fence}`,
           );
         } else if (status.state === "succeeded") {

@@ -178,6 +178,7 @@ const url = process.env.TEST_DATABASE_URL;
     const downloads: string[] = [];
     let downloadError: string | undefined;
     let confirmUnknown = false;
+    let publicationDraft = false;
     let remoteHead = "b".repeat(40),
       closed = false;
     const app = new GitHubApp(githubFixtureConfig, (async (input, init) => {
@@ -189,6 +190,7 @@ const url = process.env.TEST_DATABASE_URL;
                 {
                   number: 43,
                   state: "open",
+                  draft: publicationDraft,
                   head: {
                     ref: `codex/repodesk-${task.id}`,
                     sha: "b".repeat(40),
@@ -288,8 +290,9 @@ const url = process.env.TEST_DATABASE_URL;
       onToken: (fn: () => Promise<void>) => {
         onToken = fn;
       },
-      confirmUnknown: () => {
+      confirmUnknown: (draft = false) => {
         confirmUnknown = true;
+        publicationDraft = draft;
       },
       close: () => {
         closed = true;
@@ -1416,28 +1419,29 @@ const url = process.env.TEST_DATABASE_URL;
       }),
     ).rejects.toThrow("coding_source_required");
   });
-  test("read-only reconciliation confirms a lost publication without another write", async () => {
-    const f = await fixture();
-    await f.tick();
-    await f.tick({ state: "succeeded", tokens: 10, result: result() });
-    await f.tick();
-    await f.tick({
-      state: "ready",
-      tokens: 20,
-      result: result({ status: "completed" }),
-      checkPassed: true,
+  for (const draft of [false, true])
+    test(`read-only reconciliation ${draft ? "leaves a draft uncertain" : "confirms a ready PR"} without another write`, async () => {
+      const f = await fixture();
+      await f.tick();
+      await f.tick({ state: "succeeded", tokens: 10, result: result() });
+      await f.tick();
+      await f.tick({
+        state: "ready",
+        tokens: 20,
+        result: result({ status: "completed" }),
+        checkPassed: true,
+      });
+      f.confirmUnknown(draft);
+      const done = await f.tick({
+        state: "unknown",
+        tokens: 20,
+        publishedSha: "b".repeat(40),
+        error: "coding_publication_unknown",
+      });
+      expect(done.state).toBe(draft ? "unknown" : "review");
+      expect(done.pr?.number).toBe(draft ? undefined : 43);
+      expect(f.publications).toHaveLength(1);
     });
-    f.confirmUnknown();
-    const done = await f.tick({
-      state: "unknown",
-      tokens: 20,
-      publishedSha: "b".repeat(40),
-      error: "coding_publication_unknown",
-    });
-    expect(done.state).toBe("review");
-    expect(done.pr?.number).toBe(43);
-    expect(f.publications).toHaveLength(1);
-  });
   async function configureDevice(f: Awaited<ReturnType<typeof fixture>>) {
     let connected = true;
     const runner = f.runner as LocalRunner & LocalDeviceAuth;

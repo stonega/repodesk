@@ -60,7 +60,24 @@ try {
   );
   await writeFile(
     join(dir, "fake-github.cjs"),
-    `global.fetch=async(url,options)=>{if(require('node:fs').existsSync('/input/job.json')&&JSON.parse(require('node:fs').readFileSync('/input/job.json','utf8')).development?.pr)throw Error('Existing PR must not be recreated');if(!String(url).startsWith('https://api.github.com/repos/example/smoke/pulls'))throw Error('Unexpected network call');const body=JSON.parse(options.body);if(!body.draft||!body.head.startsWith('codex/repodesk-'))throw Error('Invalid publication');return new Response(JSON.stringify({number:43}),{status:201});};`,
+    `let draft=true;
+global.fetch=async(url,options)=>{
+ const job=JSON.parse(require('node:fs').readFileSync('/input/job.json','utf8'));
+ if(job.development?.pr) {
+  const sha=require('node:child_process').execFileSync('/usr/bin/git',['-C','/task/repo','rev-parse','HEAD']).toString().trim();
+  if(url==='https://api.github.com/repos/example/smoke/pulls/43'&&!options.method)return Response.json({node_id:'PR_smoke',number:43,state:'open',merged:false,draft,head:{ref:job.development.pr.branch,sha,repo:{full_name:'example/smoke'}},base:{ref:job.payload.baseBranch}});
+  if(url==='https://api.github.com/graphql'&&options.method==='POST') {
+   const body=JSON.parse(options.body);
+   if(!draft||!body.query.includes('markPullRequestReadyForReview')||body.variables.id!=='PR_smoke')throw Error('Invalid readiness update');
+   draft=false;return Response.json({data:{markPullRequestReadyForReview:{pullRequest:{id:'PR_smoke',isDraft:false,headRefOid:sha}}}});
+  }
+  throw Error('Existing PR must not be recreated');
+ }
+ if(url!=='https://api.github.com/repos/example/smoke/pulls'||options.method!=='POST')throw Error('Unexpected network call');
+ const body=JSON.parse(options.body);
+ if(body.draft!==false||!body.head.startsWith('codex/repodesk-'))throw Error('Invalid publication');
+ return Response.json({number:43,draft:false},{status:201});
+};`,
   );
   await writeFile(
     join(dir, "git"),

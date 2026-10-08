@@ -23,6 +23,22 @@ model intent accuracy. No dependency, migration, deployment or live external cal
 was added. See [routing contract](../design/codex-collaboration.md#task-lifecycle-and-conversation)
 and [staging journey](../../examples/telegram-feedback.md).
 
+## Codex PR readiness, 2026-10-08
+
+Successful Reviewed and Direct coding publications now create PRs ready for review.
+Verified same-PR follow-ups mark existing drafts ready before confirming success.
+Readiness checks bind the PR to the configured repository, branch, base and verified
+commit. Lost acknowledgements are not replayed; read-only recovery requires an open,
+non-draft PR at that commit. Review Bot fixes retain their existing draft policy.
+Settings, approval previews, task status, Telegram notices and current guides use
+the updated publication contract.
+
+Biome, strict TypeScript, build, **577 deterministic tests** with disposable PostgreSQL,
+all **17 admin browser scenarios**, Docker job/supervisor builds, full fake-provider
+Docker lifecycle smoke and Compose validation passed. Mobile settings were visually
+checked. Localhost was excluded from the host proxy for local service tests. No live
+GitHub, Telegram or model calls, or deployment, were performed.
+
 ## Review Bot, 2026-10-07
 
 [Review Bot](review-bot.md) is implemented locally: selected-repository automatic

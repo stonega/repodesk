@@ -276,6 +276,18 @@ when implementing or reviewing a change.
   fix its UI issues, and requested Telegram usernames in the user list.
 - **Exceptions:** When no username is known, show the numeric Telegram ID alone.
 
+### Completed Codex tasks show PRs ready for review
+
+- **Preference:** Successful Codex publication leaves the PR ready for review and
+  uses matching language in settings, task status and Telegram results.
+- **Scope:** Reviewed and Direct tasks in the Codex plugin; verified follow-ups
+  mark an existing draft PR ready before reporting successful publication.
+- **Source:** 2026-10-08 — user requested that the PR status be ready when a Codex
+  plugin job finishes.
+- **Exceptions:** Publication still requires passing checks and current authority.
+  Unconfirmed readiness remains unknown. Historical drafts are updated only on
+  an authorized published follow-up. Review Bot fixes retain their draft policy.
+
 ### Codex owns environment preparation and verification
 
 - **Preference:** Do not expose setup or check command configuration in either

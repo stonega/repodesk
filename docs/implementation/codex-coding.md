@@ -29,7 +29,7 @@ before any GitHub checkout, not evidence of repository reachability failure.
 
 In the repository editor, select **Direct** to allow a current maintainer's clear
 instruction to authorize a task. Set whether verified implementations
-publish a draft PR by default. Codex has no application-imposed execution-cycle,
+publish a PR by default. Codex has no application-imposed execution-cycle,
 repair-count, active-time or token quotas. It continues authorized work until
 completion, a necessary question, cancellation or failure. Provider/account
 limits, container isolation, retention and current permissions still apply.
@@ -98,6 +98,13 @@ their normal handling. Reported usage includes both turns, with missing reports
 marked unknown. Safe issue codes and known field paths survive account-volume
 cleanup in runner state and the tenant-scoped attempt record. Historical stopped
 tasks are not automatically retried by this correction.
+
+Successful publication creates a PR ready for review after the recorded checks
+pass. A verified follow-up also marks an existing draft PR ready for review before
+reporting success. Previously completed draft PRs change on their next authorized
+published follow-up; they are not updated in bulk. A failed or unconfirmed readiness
+update leaves publication unknown. Read-only recovery requires an open, non-draft
+PR at the recorded commit. Review Bot fixes preserve that plugin's draft policy.
 
 A follow-up fetches the existing PR and current branch head, then updates that
 branch using non-force publication from a fresh container. Closed/merged PRs are
@@ -179,7 +186,7 @@ A configured maintainer can ask the bot to implement a feature or fix in a selec
 repository. The `propose_coding_task` tool drafts the exact repository, base
 branch, issue title and body. A Telegram approval binds the initiating actor to
 creating the issue, running Codex locally, pushing a task branch and opening a
-draft PR. Approval expires after 15 minutes. Another actor cannot approve it.
+PR. Approval expires after 15 minutes. Another actor cannot approve it.
 
 Model authentication does not grant repository access. The worker uses the
 connected GitHub App to mint a fresh installation token scoped to the selected
@@ -190,7 +197,7 @@ separate preparation, environment initialization, implementation, verification a
 preparation container gets a repository read token; Codex and checks run without a
 GitHub token. Publication gets a fresh scoped write token after the worker
 rechecks actor, repository, configuration and deployment authority. It rejects
-`.github/` changes and opens a draft PR. No merge is automatic.
+`.github/` changes and opens a PR. No merge is automatic.
 
 Each task has an issue link, status and, on success, a PR link. Ask for status or
 stop by task UUID. Operators can inspect and stop tasks in Plugins. The initiator

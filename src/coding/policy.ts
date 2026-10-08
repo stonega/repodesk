@@ -132,7 +132,7 @@ export function proposeCoding(
     w,
     actor,
     run.chatId,
-    `Start Codex implementation in ${payload.repository}?\nBase branch: ${payload.baseBranch}\nRunner: local Podman\n\nTitle: ${payload.title}\n\n${payload.body}\n\nApprove to create this issue, run Codex in an isolated local container, push a task branch and open a draft PR referencing the issue. Coding provider usage is billed separately from chat usage.`,
+    `Start Codex implementation in ${payload.repository}?\nBase branch: ${payload.baseBranch}\nRunner: local Podman\n\nTitle: ${payload.title}\n\n${payload.body}\n\nApprove to create this issue, run Codex in an isolated local container, push a task branch and open a PR ready for review referencing the issue. Coding provider usage is billed separately from chat usage.`,
     {
       runId,
       topicId: run.topicId,

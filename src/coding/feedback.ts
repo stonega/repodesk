@@ -66,7 +66,7 @@ export function codingStatusLabel(task: {
       implement: "Implementing",
       repair: "Repairing failed checks",
       check: "Running checks",
-      publish: "Publishing draft PR",
+      publish: "Publishing PR",
     };
     return (
       labels[task.progress?.stage ?? ""] ?? "Waiting for runner confirmation"
@@ -80,14 +80,14 @@ export function codingStatusLabel(task: {
       task.phase === "analysis"
         ? "Investigation complete"
         : task.pr
-          ? "Draft PR published"
+          ? "PR ready for review"
           : "Ready for review",
     creating_issue: "Creating approved issue",
     issue_created: "Waiting for runner",
     dispatching: "Starting runner",
     starting_publication: "Preparing publication",
-    publishing: "Publishing draft PR",
-    succeeded: "Draft PR ready",
+    publishing: "Publishing PR",
+    succeeded: "PR ready for review",
     failed: "Could not complete",
     cancelled: "Stopped",
     unknown: "Outcome uncertain",
@@ -123,7 +123,7 @@ export function developmentStatus(task: DevelopmentTask) {
       task.phase === "analysis" || task.result?.status === "analysis"
         ? "The investigation is complete."
         : task.pr
-          ? "A draft PR was published for this task."
+          ? "Your PR is ready for review."
           : "The recorded checks passed. Publication has not been requested.",
     failed: codingFailureMessage(task.error ?? ""),
     cancelled: "Your task has stopped.",
@@ -141,12 +141,12 @@ export function reviewedStatus(task: CodingTask) {
     dispatching: "I’m starting the coding runner.",
     running: active(task),
     starting_publication:
-      "The recorded checks passed. Preparing draft PR publication.",
+      "The recorded checks passed. Preparing PR publication.",
     publishing:
       task.progress?.unavailable || task.cancelRequested
         ? active(task)
         : stageMessage("publish"),
-    succeeded: "The recorded checks passed. Your draft PR is ready.",
+    succeeded: "The recorded checks passed. Your PR is ready for review.",
     failed: codingFailureMessage(task.error ?? ""),
     cancelled: "Your task has stopped.",
     unknown:

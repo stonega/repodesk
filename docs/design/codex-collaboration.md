@@ -10,9 +10,13 @@ development workflow; other Pi conversation features keep their existing scope.
 
 ## Product contract
 
+PR readiness source: 2026-10-08 — the project owner requested that Codex plugin
+PRs be ready when the job finishes. Reviewed and Direct coding publication now
+creates non-draft PRs and marks existing drafts ready after verified follow-ups.
+
 An authorized maintainer states a development goal in Telegram. Codex investigates
 the repository, decides how to implement it, verifies the result and produces a
-reviewable draft PR. Follow-up requests continue the same development task and PR.
+PR ready for review. Follow-up requests continue the same development task and PR.
 The user supplies goals and necessary product choices, rather than approving each
 implementation step. Progress messages do not require a reply.
 
@@ -44,7 +48,7 @@ click is needed when that scope is unambiguous and policy permits direct executi
 An acknowledgement reports what will run; it is not a timer-based consent mechanism.
 
 The repository policy defines whether an instruction to implement includes publishing
-a draft PR by default. An explicit request to open a PR authorizes that operation
+a PR by default. An explicit request to open a PR authorizes that operation
 within policy. Neither a Pi tool call nor a Codex classification is independent
 proof of consent: the grant must be grounded in the authenticated user's instruction
 and configured policy. Ambiguous intent does not authorize repository writes.
@@ -79,7 +83,7 @@ The proposed logical states describe product behavior; they are not today's
 | Working | Codex investigates, plans, implements and checks; the application records the current phase and execution attempt. |
 | Waiting for input | A Codex question is durable and linked to the originating chat/task. No chat lease or process promise must remain open merely to wait for a person. |
 | Publishing | Application services validate the completed result and current authority, then reserve publication before performing external writes. |
-| Ready for review | A result and draft PR are available. A new authorized input can start another attempt on the same task/PR. |
+| Ready for review | A verified result and PR ready for review are available. A new authorized input can start another attempt on the same task/PR. |
 | Failed, cancelled or outcome unknown | Explain the reason and available recovery. Preserve confirmed artifacts; do not infer permission to replay uncertain writes. |
 
 Codex decides whether a missing detail warrants a question. It uses repository

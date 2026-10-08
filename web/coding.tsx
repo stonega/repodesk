@@ -1068,7 +1068,9 @@ function RepositoryEditor({
               })
             }
           />
-          <span>Publish verified implementations as draft PRs by default</span>
+          <span>
+            Publish verified implementations as PRs ready for review by default
+          </span>
         </label>
         <small>
           Codex continues implementation and check repairs until the task is

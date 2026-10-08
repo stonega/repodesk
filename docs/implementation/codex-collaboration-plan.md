@@ -78,7 +78,7 @@ passed. The protocol and Podman fixtures use synthetic messages and fake externa
 services; their evidence does not establish live-model interpretation quality.
 
 The dedicated live pilot remains pending: authenticated maintainer → question →
-answer → in-flight input → failed check/repair → one draft PR → restart/session loss
+answer → in-flight input → failed check/repair → one PR → restart/session loss
 → follow-up on that PR. Evaluate analysis/execute/ambiguous/quoted-instruction intent
 with the actual configured model. No local fake proves natural-language consent
 quality, device-account billing or live GitHub/Telegram behavior. Pilot enablement,
@@ -95,10 +95,10 @@ migration reruns, application image runtime smoke and Compose validation.
 ## Outcome and first release
 
 An authorized maintainer can ask in Telegram to implement a change and open a
-draft PR, without a redundant approval click when repository policy permits it.
+PR, without a redundant approval click when repository policy permits it.
 Codex receives the original requirements, investigates code, makes technical
 decisions, asks necessary product questions, implements and verifies the change.
-Further messages and PR feedback continue the same task and draft PR.
+Further messages and PR feedback continue the same task and PR.
 Pi handles requirements intake and relay. Application services own identity,
 authorization, ordering, budgets, persistence, cancellation and publication.
 
@@ -111,14 +111,14 @@ monitoring, cross-repository execution and new model selection are outside this 
 
 The end-to-end acceptance journey is:
 
-1. A maintainer requests a fix and draft PR in a selected repository; the bot
+1. A maintainer requests a fix and PR in a selected repository; the bot
    acknowledges scope and Codex starts without a duplicate approval prompt.
 2. Codex asks a consequential product question. The answer reaches the same task;
    waiting does not hold a Telegram request lease or require a container forever.
 3. The maintainer supplies another requirement during work. Codex receives it in
    order and verifies the resulting revision before publication.
 4. A Codex-selected check fails; Codex receives diagnostics and repairs it within limits.
-5. The application publishes one draft PR and reports verification and limitations.
+5. The application publishes one PR and reports verification and limitations.
 6. The maintainer requests another change after completion. The application obtains
    current branch/PR state and Codex updates that PR, preserving others' changes.
 7. A restart or lost session does not duplicate inputs, publication or the PR.
@@ -195,7 +195,7 @@ Questions and task-bound follow-ups route through application bindings, without
 asking Pi to plan or decide whether a technical clarification is necessary.
 
 Repository settings distinguish legacy reviewed execution from scoped direct
-execution, define whether implementation defaults to a draft PR, and bound active
+execution, define whether implementation defaults to a PR, and bound active
 time, attempts and provider usage. Existing installations retain their reviewed
 mode until the operator explicitly saves the new policy. In direct mode, a clear
 authenticated user execution instruction supplies task-level authorization;

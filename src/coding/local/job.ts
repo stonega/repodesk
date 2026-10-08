@@ -13,7 +13,7 @@ import { CodexAuthError, codexAuthFailure } from "./auth-failure.ts";
 import { runConversation } from "./conversation.ts";
 import { CodexConversationError } from "./conversation-failure.ts";
 import { localStart } from "./protocol.ts";
-import { publicationPushArgs } from "./publication.ts";
+import { markPullRequestReady, publicationPushArgs } from "./publication.ts";
 
 const jobSchema = localStart
   .omit({ readToken: true, providerApiKey: true })
@@ -393,6 +393,16 @@ async function publish(job: Job) {
     }
   }
   if (job.development?.pr) {
+    if (!job.development.review)
+      await markPullRequestReady(
+        job.payload.repository,
+        {
+          ...job.development.pr,
+          headSha: publishedSha,
+          baseBranch: job.payload.baseBranch,
+        },
+        process.env.GITHUB_TOKEN ?? "",
+      );
     await writeFile(
       "/task/publication.json",
       JSON.stringify({ prUrl: job.development.pr.url, publishedSha }),
@@ -420,7 +430,7 @@ async function publish(job: Job) {
         title: result?.title ?? job.payload.title,
         head: branch,
         base: job.payload.baseBranch,
-        draft: true,
+        draft: false,
         body:
           result?.body ??
           `Implements https://github.com/${job.payload.repository}/issues/${job.issue?.number}\n\nCodex task ${job.taskId}. Configured checks passed in an isolated local runner. Review before merging.`,
@@ -429,7 +439,7 @@ async function publish(job: Job) {
   );
   if (response.status !== 201) throw new Error("coding_publication_unknown");
   const pr = z
-    .object({ number: z.number().int().positive() })
+    .object({ number: z.number().int().positive(), draft: z.literal(false) })
     .parse(await response.json());
   await writeFile(
     "/task/publication.json",

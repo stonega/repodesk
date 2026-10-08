@@ -28,7 +28,7 @@ use fixtures. See [supported formats and limits](../docs/implementation/telegram
    consumes that answer instead of starting a separate Pi conversation. Repeat
    with a captioned image document, a runner restart and multiple tasks in one
    Topic; the latter must offer task selection. Cancel the staging task afterward
-   unless publishing its verified draft PR is part of the authorized check.
+   unless publishing its verified PR is part of the authorized check.
 
 The bot does not combine album updates into a single request or copy files into a
 Codex task checkout. Send one file per request for predictable results.

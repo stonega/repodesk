@@ -1086,9 +1086,10 @@ test.describe
       await card
         .getByRole("button", { name: "Sync & check indexes", exact: true })
         .click();
-      await expect(card.getByRole("alert")).toContainText(
-        "local Code Truth service is unavailable",
-      );
+      await expect(
+        page.getByRole("region", { name: "Notification" }).getByRole("alert"),
+      ).toContainText("local Code Truth service is unavailable");
+      await expect(card.getByRole("alert")).toHaveCount(0);
       await page.route(
         "**/api/admin/workspaces/*/plugins/code-truth/status",
         async (route) => {
@@ -1634,7 +1635,9 @@ test.describe
       );
       await chooseOption(codingDialog.getByLabel("Execution policy"), "direct");
       await codingDialog
-        .getByLabel("Publish verified implementations as draft PRs by default")
+        .getByLabel(
+          "Publish verified implementations as PRs ready for review by default",
+        )
         .check();
       for (const label of [
         "Maximum execution cycles",
@@ -1674,7 +1677,7 @@ test.describe
       );
       await expect(
         codingEdit.getByLabel(
-          "Publish verified implementations as draft PRs by default",
+          "Publish verified implementations as PRs ready for review by default",
         ),
       ).toBeChecked();
       for (const label of [
