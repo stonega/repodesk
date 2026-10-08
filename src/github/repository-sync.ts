@@ -25,6 +25,12 @@ function selectedRepositories(w: Workspace, accessible: GitHubRepository[]) {
   });
 }
 
+function repositoryPolicy(repositories: GitHubRepository[] = []) {
+  return JSON.stringify(
+    repositories.map(({ pushed_at, updated_at, ...policy }) => policy),
+  );
+}
+
 /** Refresh metadata without granting newly installed repositories to a workspace. */
 export class RepositorySync {
   private refreshes = new Map<string, Refresh>();
@@ -108,7 +114,12 @@ export class RepositorySync {
       )
         return;
       connection.repositories = repositories;
-      connection.revision++;
+      // Activity timestamps affect menu ordering, not access or pending approvals.
+      if (
+        repositoryPolicy(repositories) !==
+        repositoryPolicy(snapshot.github?.repositories)
+      )
+        connection.revision++;
       // Existing Code Truth targets follow the same numeric repository identity.
       let targetsChanged = false;
       for (const target of w.plugins?.codeTruth?.repositories ?? []) {

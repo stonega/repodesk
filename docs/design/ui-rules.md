@@ -32,6 +32,26 @@ when implementing or reviewing a change.
 
 ## Recorded preferences
 
+### Telegram repository menus favor recent work
+
+- **Preference:** Offer `/repos` as a native inline repository picker, showing at
+  most ten active repositories. Prioritize repositories the person recently
+  mentioned, then recent repository activity. Keep the current selection visible
+  and make changing or clearing it straightforward.
+  Make `/repos` and private `/github` account linking discoverable in Telegram's
+  native command menu alongside the main conversation/task shortcuts.
+- **Scope:** Repository selection in Telegram, scoped to the workspace, person,
+  bot and chat/topic. Use one repository per button row so names remain readable;
+  `/repos <name>` searches connected choices beyond the first ten.
+- **Source:** 2026-10-08 — user requested improving Telegram's inline menu with
+  `/repos` and the latest ten active repositories, preferring recent mentions.
+  Later in the same task, the user also requested `/github` for connecting GitHub.
+- **Exceptions:** Show only workspace-selected repositories accessible to the
+  person; exclude archived/disabled repositories and private repositories in
+  groups. Selection supplies default context and does not grant action permission.
+  Rankings use retained personal mentions and saved GitHub activity metadata;
+  they do not imply a live GitHub fetch for each command.
+
 ### Workflow cards lead to dedicated details
 
 - **Preference:** Improve workflow card readability and provide a dedicated

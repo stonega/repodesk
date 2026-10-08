@@ -38,6 +38,7 @@ import { messageAttachments, messageText } from "./attachments.ts";
 import { requestFailureMessage } from "./feedback.ts";
 import { closeGroupAttention, followupCandidate } from "./followup.ts";
 import { stopGeneration } from "./generation.ts";
+import { repositoryMenu, selectRepository } from "./repositories.ts";
 import { command, type Update } from "./router.ts";
 import { selectTaskControl, taskControl } from "./task-controls.ts";
 
@@ -255,7 +256,9 @@ export class Ingress {
     });
     if (update.callback_query) {
       try {
-        const fallback = /^t[rcd][cs]:/.test(update.callback_query.data ?? "")
+        const fallback = /^(?:t[rcd][cs]:|repo:)/.test(
+          update.callback_query.data ?? "",
+        )
           ? ""
           : "Request checked. See the bot or admin panel for status.";
         await (await this.setup.client()).call("answerCallbackQuery", {
@@ -494,7 +497,8 @@ export class Ingress {
       } else if (!cmd.args || cmd.args === "connect") {
         const url = await this.githubUsers.begin(sql, w, actor, d.bot.id);
         text = `Connect your GitHub account within 10 minutes:\n${url}\nThen return here to confirm your account.`;
-      } else text = "Use /github connect, /github sync or /github disconnect.";
+      } else
+        text = "Use /github to connect, /github sync or /github disconnect.";
       deliver(w, actor, actor, text, { id: `event:${u.update_id}:github` });
       return true;
     }
@@ -534,6 +538,7 @@ export class Ingress {
       return true;
     }
     if (d.paused) return true;
+    if (d.bot && selectRepository(w, u, d.bot.id)) return true;
     if (cmd?.name === "link" && actor && msg) {
       authorize(w, actor, true);
       requireThat(verifiedAdmin, "telegram_admin_required", 403);
@@ -724,11 +729,14 @@ export class Ingress {
       case "start":
       case "help":
         reply(
-          `RepoDesk · ${w.settings.name}\nTimezone: ${w.settings.timezone}\n/ask <request>, /recap, /status, /cancel [reference], /automations, /memory, /usage, /privacy\nGitHub: /github connect, /github sync, /github disconnect (private chat)\nAdmins: /linktoken, /capture on|off, /timezone <IANA>, /remember <instruction>\nIn groups, mention me or reply to start; clear follow-ups within five minutes can continue without mentioning me when Telegram delivers ordinary messages. Send photos, image files, UTF-8 text/code files or selectable-text PDFs with a caption describing your request. In private Topics, just send messages to continue the topic's conversation. Use Telegram Topics to separate conversations. Outside Topics, reply to an answer or your own message to continue it; standalone messages start new conversations. For configured Codex repositories, ask for a change in your own words. Reply to a current task question to answer it directly. Other Topic messages go to the assistant, which handles conversation and review requests and passes clear code changes to the matching task; /status checks the bound task and /cancel or stop cancels it. Direct execution follows the repository's saved policy. Context contains only received retained messages. Access is managed in the admin panel. /workspace <id> selects a workspace.`,
+          `RepoDesk · ${w.settings.name}\nTimezone: ${w.settings.timezone}\n/ask <request>, /repos [name], /recap, /status, /cancel [reference], /automations, /memory, /usage, /privacy\n/repos selects a repository for this chat/topic; recently mentioned repositories appear first.\nGitHub: /github (connect), /github sync, /github disconnect (private chat)\nAdmins: /linktoken, /capture on|off, /timezone <IANA>, /remember <instruction>\nIn groups, mention me or reply to start; clear follow-ups within five minutes can continue without mentioning me when Telegram delivers ordinary messages. Send photos, image files, UTF-8 text/code files or selectable-text PDFs with a caption describing your request. In private Topics, just send messages to continue the topic's conversation. Use Telegram Topics to separate conversations. Outside Topics, reply to an answer or your own message to continue it; standalone messages start new conversations. For configured Codex repositories, ask for a change in your own words. Reply to a current task question to answer it directly. Other Topic messages go to the assistant, which handles conversation and review requests and passes clear code changes to the matching task; /status checks the bound task and /cancel or stop cancels it. Direct execution follows the repository's saved policy. Context contains only received retained messages. Access is managed in the admin panel. /workspace <id> selects a workspace.`,
         );
         break;
       case "workspace":
         reply(`Selected ${w.settings.name} (${w.id})`);
+        break;
+      case "repos":
+        repositoryMenu(w, u, msg, d.bot.id, cmd.args);
         break;
       case "timezone":
         authorize(w, actor, true);

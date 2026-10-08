@@ -12,6 +12,7 @@ import { pruneRuntimeLogs, RuntimeLogger } from "../observability/logs.ts";
 import { sweep } from "../privacy/service.ts";
 import type { ReviewExecutor } from "../review-bot/executor.ts";
 import type { SetupService } from "../setup/service.ts";
+import { TelegramCommandMenu } from "../telegram/commands.ts";
 import { queuedRunFeedback } from "../telegram/feedback.ts";
 import { TelegramPoller } from "../telegram/polling.ts";
 import { tick } from "../workflows/service.ts";
@@ -80,6 +81,7 @@ export async function startWorker(
   const delivery = new DeliveryWorker(store, setup);
   const shutdown = new AbortController();
   const id = randomUUID();
+  const commandMenu = new TelegramCommandMenu(store, setup);
   await boss.work<JobData>(
     "run",
     { localConcurrency: 3, pollingIntervalSeconds: 1 },
@@ -247,6 +249,21 @@ export async function startWorker(
   };
   githubTick();
   const githubTimer = setInterval(githubTick, 30000);
+  let menuBusy: Promise<void> | undefined;
+  const menuTick = () => {
+    if (menuBusy || shutdown.signal.aborted) return;
+    menuBusy = commandMenu
+      .sync(shutdown.signal)
+      .catch((error) => {
+        if (!shutdown.signal.aborted)
+          store.log.write("worker_maintenance_failed", { error });
+      })
+      .finally(() => {
+        menuBusy = undefined;
+      });
+  };
+  menuTick();
+  const menuTimer = setInterval(menuTick, 5000);
   codingTick();
   const codingTimer = setInterval(codingTick, 5000);
   let reviewBusy: Promise<void> | undefined;
@@ -270,11 +287,12 @@ export async function startWorker(
     clearInterval(timer);
     clearInterval(codingTimer);
     clearInterval(githubTimer);
+    clearInterval(menuTimer);
     clearInterval(reviewTimer);
     shutdown.abort();
     await reviewBusy;
     await Promise.all([polling, boss.stop({ graceful: true, timeout: 10000 })]);
-    await Promise.all([codingBusy, githubBusy]);
+    await Promise.all([codingBusy, githubBusy, menuBusy]);
     while (busy) await new Promise((resolve) => setTimeout(resolve, 25));
     await store.pool.query("DELETE FROM worker_heartbeats WHERE id=$1", [id]);
   };

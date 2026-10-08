@@ -29,6 +29,8 @@ export const ongoingStageMessage = (stage: string) =>
   ongoingStages[stage] ?? "Your task is still running. I’ll keep you posted.";
 
 const failures: Record<string, string> = {
+  repository_menu_expired:
+    "This repository menu has expired or access changed. Send /repos to open the current choices.",
   empty_response:
     "The model returned no answer. Try a clearer request; ask the administrator to check the model if this happens again.",
   incomplete_response:

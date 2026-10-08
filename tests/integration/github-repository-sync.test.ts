@@ -155,6 +155,31 @@ const url = process.env.TEST_DATABASE_URL;
     expect(JSON.stringify(page)).not.toContain("ghs_metadata_test_secret");
   });
 
+  test("activity refresh updates picker ordering without invalidating repository access", async () => {
+    const { id, state, sync } = await fixture();
+    Object.assign(state.repositories[0] ?? {}, {
+      pushed_at: "2026-10-08T00:00:00Z",
+      updated_at: "2026-10-08T01:00:00Z",
+    });
+    const page = await sync.refresh(admin, id);
+    expect(page.workspace.github?.repositories[0]?.pushed_at).toBe(
+      "2026-10-08T00:00:00Z",
+    );
+    expect(page.workspace.github?.revision).toBe(1);
+    state.now += 4000;
+    Object.assign(state.repositories[0] ?? {}, {
+      pushed_at: "2026-10-08T02:00:00Z",
+    });
+    const refreshed = await sync.refresh(admin, id);
+    expect(refreshed.workspace.github?.repositories[0]?.pushed_at).toBe(
+      "2026-10-08T02:00:00Z",
+    );
+    expect(refreshed.workspace.github?.revision).toBe(1);
+    Object.assign(state.repositories[0] ?? {}, { archived: true });
+    state.now += 4000;
+    expect((await sync.refresh(admin, id)).workspace.github?.revision).toBe(2);
+  });
+
   test("unchanged refreshes coalesce requests, reuse tokens and avoid version churn", async () => {
     const { id, state, sync } = await fixture();
     await Promise.all([sync.refresh(admin, id), sync.refresh(admin, id)]);

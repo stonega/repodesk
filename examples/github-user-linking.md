@@ -6,7 +6,7 @@ repositories. See [setup and permission boundaries](../docs/implementation/githu
 
 ```text
 /workspace <workspace-id>
-/github connect
+/github
 ```
 
 Open the bot's authorization link, authorize your account on GitHub, then return
@@ -14,6 +14,11 @@ to Telegram and press **Connect account** after checking the displayed GitHub lo
 Members & access will show your GitHub identity and selected-repository permissions.
 GitHub rights do not grant a RepoDesk administrator role. Coding also needs the
 operator's existing maintainer grant.
+
+`/github connect` is an equivalent explicit form. `/github` appears in Telegram's
+private command menu after the active worker publishes its shortcuts; groups show
+`/repos`, Ask, Status, Cancel and Help instead. Registration is retried on failures
+and does not block receiving messages or working on tasks.
 
 ```text
 /github sync

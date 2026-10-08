@@ -6,6 +6,7 @@ import {
   settingsSchema,
   type Workspace,
 } from "../domain.ts";
+import { selectedRepository } from "../github/repository-context.ts";
 import { starterSkills } from "../skills/catalog.ts";
 import { audience, audit, authorize } from "./policy.ts";
 import { groupThread, privateThread, refreshThreadContext } from "./threads.ts";
@@ -170,9 +171,28 @@ export function createRun(
           (i.scope === "workflow" && i.workflowId === workflow?.id)),
     )
     .map((i) => structuredClone(i));
+  const repository =
+    !options.workflowId && options.botId
+      ? selectedRepository(
+          w,
+          actor,
+          chatId,
+          topicId,
+          options.botId,
+          now.getTime(),
+        )
+      : undefined;
   const run: Run = {
     id: options.id ?? randomUUID(),
     actor,
+    repository:
+      repository && w.github?.installationId
+        ? {
+            id: repository.id,
+            full_name: repository.full_name,
+            installationId: w.github.installationId,
+          }
+        : undefined,
     chatId,
     topicId,
     replyTo: options.replyTo,

@@ -8,6 +8,29 @@ GitHub actions from Telegram. The AI helps interpret the request; repository acc
 tool grants and write approvals come from the application. See the
 [GitHub journey and capability status](../design/github-workflows.md).
 
+## Repository picker (implemented locally)
+
+Send `/repos` to choose a repository from native inline buttons. The picker shows
+up to ten active, workspace-selected repositories you can access. Your recently
+mentioned repositories and recent selections come first, followed by the latest
+saved GitHub push time (or update time when push time is unavailable). Archived
+and disabled repositories are excluded. GitHub activity metadata refreshes through
+the existing admin repository refresh; the command does not make a live GitHub call.
+
+Use `/repos <name>` to search by owner/repository name beyond the first ten. A
+checkmark and **Selected** label show the current repository; **Clear selection**
+removes it. Each menu is valid for fifteen minutes and one selection. Open `/repos`
+again if a menu expires or repository access changes.
+
+Selection belongs to your current workspace, bot, chat and topic. Subsequent
+assistant requests use it as the default repository when you do not name one;
+explicit repository references take precedence. Other people and topics keep
+their own selections. Selection expires with workspace retention and does not
+approve GitHub writes, bypass maintainer policy or retarget an existing coding task.
+In linked groups, only public repositories appear; use private chat for private
+repositories. Native desktop/mobile rendering still requires a live Telegram check.
+See [the runnable picker journey](../../examples/telegram-repositories.md).
+
 ## Repository reports, team skills and handoffs
 
 Locally implemented on 2026-10-07. In private chat, ask for current PR/issue status
@@ -84,6 +107,8 @@ See [examples](../../examples/private-threads.md).
 | `/start`, `/help` | Workspace onboarding, limitations and commands |
 | `/timezone <IANA zone>` | Admin timezone confirmation |
 | `/workspace <UUID>` | Select an enrolled workspace privately |
+| `/repos [name]` | Choose a repository from up to ten inline choices, or search connected names |
+| `/github`, `/github connect` | Connect your GitHub account in private chat; `/github sync` refreshes grants and `/github disconnect` removes the link |
 | `/linktoken`, `/link TOKEN` | Expiring one-use group linking |
 | `/capture on` / `/capture off` | Admin consent to received group-message collection |
 | `/ask <request>` | Bounded Pi request; `/ask@botname` works in groups |
@@ -312,7 +337,10 @@ pilot validation before production enablement.
 ## Connect your GitHub account (implemented locally)
 
 After your workspace administrator approves your Telegram identity, send
-`/github connect` in a private chat with the bot. Follow the GitHub authorization
+`/github` (or `/github connect`) in a private chat with the bot. The native command
+menu includes `/repos` and `/github`, plus Ask, Status, Cancel and Help shortcuts.
+The active worker publishes these menus on startup and after bot-token rotation;
+the group menu omits the private GitHub connection command. Follow the GitHub authorization
 link, return to Telegram, check the GitHub login and press **Connect account**.
 Your administrator can see the linked account and repository permissions under
 Members & access. With multiple workspaces, use `/workspace <id>` first.

@@ -1370,3 +1370,41 @@ protection, access-request replay, repeated migration and retired APIs. All 17 a
 browser tests passed, including membership deactivation/reactivation across reload,
 removed controls, Telegram profiles, desktop/mobile layouts and setup enrollment.
 Lint, TypeScript and production build passed. See [membership and access](../design/access-control.md).
+
+## Telegram repository picker (2026-10-08)
+
+`/repos` now opens native inline buttons for up to ten active workspace-selected
+repositories. The requester's retained mentions and recent selections rank first;
+remaining repositories use saved GitHub push/update timestamps with stable name
+ordering when activity is unavailable. `/repos <name>` searches beyond the first
+ten. The current selection is labeled and checked, with a Clear selection action.
+Archived/disabled repositories, denied upstream grants and private group choices
+are excluded. GitHub timestamps refresh through existing admin repository refresh;
+timestamp-only updates preserve the connection revision and existing grants.
+
+Selection is persisted per workspace, actor, bot and chat/topic, expires with
+retention, and supplies default repository context to subsequent interactive runs.
+Original requests and explicit targets are preserved; selection grants no write
+or coding authority. Callback controls bind to a confirmed delivery, actor, bot,
+destination and current connection, expire after fifteen minutes and are consumed
+after selection. New menus revoke older controls and queued replies. Access and
+current saved delivery state are rechecked immediately before sending. Workspace
+deletion purges selection state.
+
+The active worker publishes Telegram's default/group command menus and a private
+menu that includes `/github` for account linking alongside `/repos`, Ask, Status,
+Cancel and Help. `/github` reuses the existing verified private linking flow;
+`/github connect`, sync and disconnect remain supported. Registration runs outside
+polling and maintenance, is once per worker/credential, honors retry backoff and
+stops old-client writes after credential changes. Scoped menu visibility does not
+replace request authorization. Explicit language/chat-specific Telegram overrides
+can take precedence over these menus.
+
+Validation: **610 deterministic tests passed** against disposable PostgreSQL with
+host proxies disabled. Focused tests cover ranking/name boundaries, ten-row limits,
+search and empty states, selection/clearing, actor/topic/bot isolation, duplicate
+updates, copied/stale/revoked callbacks, pending delivery revocation and retention.
+Lint, strict typecheck, build and the Node runtime contract passed. No dependency
+or migration was added. No live Telegram send, GitHub call or deployment was
+performed; native Telegram desktop/mobile rendering remains a staging gate.
+See [the runnable picker journey](../../examples/telegram-repositories.md).

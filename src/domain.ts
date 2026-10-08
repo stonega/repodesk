@@ -282,6 +282,7 @@ export interface Approval {
   };
 }
 export interface Run {
+  repository?: { id: number; full_name: string; installationId: number };
   githubRead?: RepositorySources;
   handoffRead?: {
     references: MemoryReferences;
@@ -374,6 +375,13 @@ export interface Run {
   error?: string;
 }
 export interface Delivery {
+  repositoryMenu?: {
+    installationId: number;
+    revision: number;
+    expiresAt: string;
+    repositories: { id: number; full_name: string }[];
+    consumed?: boolean;
+  };
   /** Routine task updates share one Telegram message; each edit is a durable intent. */
   progressMessage?: { owner: "coding" | "development"; id: string };
   editOf?: string;
@@ -416,6 +424,15 @@ export interface Audit {
   version?: number;
 }
 export interface Workspace {
+  repositorySelections?: {
+    actor: string;
+    chatId: string;
+    topicId: number;
+    botId: string;
+    installationId: number;
+    repositoryId: number;
+    at: string;
+  }[];
   reviewBot?: ReviewConfig;
   reviewTasks?: ReviewTask[];
   reviewCleanup?: string[];

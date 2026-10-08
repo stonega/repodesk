@@ -4,6 +4,7 @@ import { checkDevelopment } from "../coding/tasks.ts";
 import type { Sql } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import { type Delivery, requireThat, type Workspace } from "../domain.ts";
+import { repositoryDeliveryAllowed } from "../github/repository-context.ts";
 import type { SetupService } from "../setup/service.ts";
 import { TelegramError } from "../telegram/client.ts";
 import { telegramMarkdown, telegramRichMessage } from "../telegram/format.ts";
@@ -36,6 +37,7 @@ export class DeliveryWorker {
     d: Delivery,
     sql: Sql = this.store.pool,
   ) {
+    if (!repositoryDeliveryAllowed(w, d)) return false;
     if (!(await selectionAllowed(sql, w, d))) return false;
     if (d.cancellationRunId) {
       const r = w.runs.find((r) => r.id === d.cancellationRunId);
@@ -110,6 +112,10 @@ export class DeliveryWorker {
         d.state = "cancelled";
         return;
       }
+      if (d.repositoryMenu && d.botId !== deployment.bot?.id) {
+        d.state = "cancelled";
+        return;
+      }
       if (
         d.id.startsWith("development:") &&
         /^development:[0-9a-f-]{36}:/.test(d.id)
@@ -181,6 +187,12 @@ export class DeliveryWorker {
     try {
       // This last durable policy check precedes the external effect. In-flight revocation cannot undo a send.
       const current = await this.store.read(workspaceId);
+      if (intent.repositoryMenu)
+        requireThat(
+          intent.botId === (await this.store.deployment()).bot?.id,
+          "delivery_revoked",
+          403,
+        );
       requireThat(
         await this.feedbackAllowed(current, intent),
         "delivery_revoked",

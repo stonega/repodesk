@@ -39,6 +39,7 @@ export function sweep(w: Workspace, now = new Date()) {
     delete w.reviewBot;
     delete w.plugins;
     delete w.github;
+    delete w.repositorySelections;
     delete w.coding;
     delete w.codingTasks;
     w.messages = [];
@@ -82,6 +83,9 @@ export function sweep(w: Workspace, now = new Date()) {
     }
   }
   const cutoff = now.getTime() - w.settings.retentionDays * 86400000;
+  w.repositorySelections = w.repositorySelections?.filter(
+    (s) => Date.parse(s.at) > cutoff,
+  );
   w.accessRequests = w.accessRequests?.filter(
     (r) =>
       Date.parse(r.decidedAt ?? r.requestedAt) > now.getTime() - 30 * 86400000,

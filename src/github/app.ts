@@ -22,6 +22,10 @@ const repositorySchema = z.object({
   id: z.number().int().positive(),
   full_name: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
   private: z.boolean().optional(),
+  archived: z.boolean().optional(),
+  disabled: z.boolean().optional(),
+  pushed_at: z.iso.datetime().nullable().optional(),
+  updated_at: z.iso.datetime().nullable().optional(),
   permissions: z
     .object({
       pull: z.boolean(),

@@ -157,7 +157,7 @@ const url = process.env.TEST_DATABASE_URL;
           date: 1,
           chat: { id: 202, type: "private" as const },
           from: { id: 202, is_bot: false },
-          text: "/github connect",
+          text: "/github",
           entities: [{ type: "bot_command", offset: 0, length: 7 }],
         },
       };
@@ -167,6 +167,9 @@ const url = process.env.TEST_DATABASE_URL;
       const replies = w.deliveries.filter((d) => d.id === "event:2:github");
       expect(replies).toHaveLength(1);
       expect(replies[0]?.chatId).toBe("202");
+      expect(replies[0]?.text).toContain(
+        "https://github.com/login/oauth/authorize",
+      );
       expect(w.runs).toHaveLength(0);
     });
     test("public callback binds identity only after same-user private Telegram confirmation", async () => {

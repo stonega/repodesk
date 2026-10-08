@@ -15,6 +15,10 @@ test("installation metadata pagination returns every repository without App perm
         id: (page - 1) * 100 + i + 1,
         full_name: `example/repo-${(page - 1) * 100 + i + 1}`,
         private: true,
+        archived: false,
+        disabled: false,
+        pushed_at: "2026-10-08T00:00:00Z",
+        updated_at: "2026-10-08T00:00:01Z",
         permissions: { pull: true, push: true, admin: true },
       })),
     });
@@ -26,6 +30,10 @@ test("installation metadata pagination returns every repository without App perm
     id: 101,
     full_name: "example/repo-101",
     private: true,
+    archived: false,
+    disabled: false,
+    pushed_at: "2026-10-08T00:00:00Z",
+    updated_at: "2026-10-08T00:00:01Z",
   });
   expect(repositories.every((r) => r.permissions === undefined)).toBe(true);
 });
