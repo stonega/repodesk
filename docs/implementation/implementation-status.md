@@ -1,5 +1,28 @@
 # Implementation evidence
 
+## Codex follow-up intent routing, 2026-10-08
+
+Ordinary messages in a private or linked-group Topic now enter Pi even when a
+Codex task is working, waiting or ready for review. Pi chooses between answering
+with permitted read tools, continuing clear changes to the matching task/PR, and
+starting a separate coding goal. PR reviews and explanations no longer resume
+Codex automatically. Metadata alone is not presented as a code review.
+
+Direct ingress remains for explicit task controls, replies to the confirmed notice
+for the current Codex question, and edits/duplicates of accepted task inputs.
+Unanchored answers receive Pi intent handling. Explicit Pi continuations record
+their task handoff so native Stop and completion notices follow the correct task.
+Actor, workspace, bot, chat/Topic, source and repository boundaries remain checked.
+
+Biome, strict TypeScript, production build and the full deterministic suite passed
+with disposable PostgreSQL and loopback proxy bypass. Coverage includes private
+and group Topics, ordinary/old-result replies, duplicate events, question/media
+answers, task-input edits, original-wording continuation on the same PR, multiple
+tasks and cancellation. These checks establish routing and authorization, not live
+model intent accuracy. No dependency, migration, deployment or live external call
+was added. See [routing contract](../design/codex-collaboration.md#task-lifecycle-and-conversation)
+and [staging journey](../../examples/telegram-feedback.md).
+
 ## Review Bot, 2026-10-07
 
 [Review Bot](review-bot.md) is implemented locally: selected-repository automatic

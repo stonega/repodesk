@@ -95,7 +95,7 @@ export function codingExtension(
         pi.registerTool({
           name: "start_development_task",
           label: "Start continuous Codex task",
-          description: `Relay an authenticated maintainer's ORIGINAL received message to Codex for investigation, analysis or implementation. Codex owns all technical decisions and any necessary product questions. Do not write a technical plan or issue body. Only the listed Direct targets support this tool. For Reviewed targets, use propose_coding_task to request approval instead; never retry a direct-policy rejection. Choose only a clearly requested repository. Source IDs must include this run's request. Direct targets: ${JSON.stringify(directTargets)}.`,
+          description: `Start a coding task for a clear implementation/fix request or an explicit request to use Codex. Handle ordinary conversation, explanations, status and PR review with the assistant's available read tools. An existing task in this topic does not authorize another Codex turn. Use query_work_handoff to resolve an existing task before starting new work; send_development_input continues changes to that task/PR. Relay the authenticated maintainer's ORIGINAL received message. Codex owns technical decisions and necessary product questions within the coding task. Do not write a technical plan or issue body. Only the listed Direct targets support this tool. For Reviewed targets, use propose_coding_task to request approval instead; never retry a direct-policy rejection. Choose only a clearly requested repository. Source IDs must include this run's request. Direct targets: ${JSON.stringify(directTargets)}.`,
           parameters: Type.Object({
             repositoryId: Type.Integer(),
             sourceIds: Type.Array(Type.String(), { minItems: 1, maxItems: 10 }),
@@ -125,7 +125,7 @@ export function codingExtension(
         name: "send_development_input",
         label: "Relay original Codex task input",
         description:
-          "Relay a received authenticated message to an existing task. Preserve original wording. Only resolve task bindings; Codex handles technical choices and questions.",
+          "Continue an existing coding task only for a clear request to change its code, an answer to its pending question, or an explicit request to use Codex. Resolve the task with query_work_handoff or confirmed task evidence. A shared topic, reply to an old result, request to review a PR, explanation or acknowledgement alone must not resume coding. Answer ordinary requests with the assistant's read tools. Preserve the received authenticated message verbatim; Codex handles technical choices within the task.",
         parameters: Type.Object({
           taskId: Type.String(),
           sourceId: Type.String(),
@@ -151,6 +151,7 @@ export function codingExtension(
               source,
               `${source.id}:relay`,
             );
+            run.codingTaskId = task.id;
             return {
               taskId: task.id,
               revision: task.revision,

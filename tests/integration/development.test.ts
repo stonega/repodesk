@@ -2,11 +2,14 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { Pool } from "pg";
+import { ExtensionCatalog } from "../../src/agent/extensions.ts";
+import { type AgentInput, selectedModel } from "../../src/agent/runtime.ts";
 import {
   type DevelopmentResult,
   developmentPolicy,
 } from "../../src/coding/development.ts";
 import { DevelopmentExecutor } from "../../src/coding/executor.ts";
+import { codingExtension } from "../../src/coding/extension.ts";
 import type {
   LocalDeviceAuth,
   LocalRunner,
@@ -370,12 +373,20 @@ const url = process.env.TEST_DATABASE_URL;
         question: "Attach the screenshot.",
       }),
     });
+    await store.change(f.w.id, (w) => {
+      const notice = present(
+        w.deliveries.find((d) => d.id.includes(":question:")),
+      );
+      notice.state = "sent";
+      notice.remoteId = 19;
+    });
     const msg = {
       message_id: 20,
       date: Math.floor(Date.now() / 1000),
       from: { id: 101, is_bot: false },
       chat: { id: 101, type: "private" as const },
       message_thread_id: 3,
+      reply_to_message: { message_id: 19 },
       photo: [
         {
           file_id: "answer-photo",
@@ -412,12 +423,25 @@ const url = process.env.TEST_DATABASE_URL;
   });
   test("captioned image documents and edited media become ordered task inputs; unauthorized users cannot append", async () => {
     const f = await fixture();
+    await f.tick();
+    await f.tick({
+      state: "succeeded",
+      result: result({ status: "needs_input", question: "Which style?" }),
+    });
+    await store.change(f.w.id, (w) => {
+      const notice = present(
+        w.deliveries.find((d) => d.id.includes(":question:")),
+      );
+      notice.state = "sent";
+      notice.remoteId = 19;
+    });
     const msg = {
       message_id: 20,
       date: Math.floor(Date.now() / 1000),
       from: { id: 101, is_bot: false },
       chat: { id: 101, type: "private" as const },
       message_thread_id: 3,
+      reply_to_message: { message_id: 19 },
       caption: "Match this style",
       document: {
         file_id: "document-photo",
@@ -462,7 +486,7 @@ const url = process.env.TEST_DATABASE_URL;
     ]);
     await f.tick();
     expect(f.downloads[0]).toBe("edited-photo");
-    expect(f.starts[0]?.development?.media?.images).toHaveLength(2);
+    expect(f.starts.at(-1)?.development?.media?.images).toHaveLength(2);
   });
   test("media is not dispatched after permission, cancellation, source or bot credential changes during download", async () => {
     for (const change of [
@@ -1029,56 +1053,250 @@ const url = process.env.TEST_DATABASE_URL;
     expect(f.erases).toHaveLength(1);
     await expect(f.read()).rejects.toThrow("not_found");
   });
-  test("Telegram answers, edits, duplicates and ambiguous Topics preserve authenticated inputs", async () => {
+  test("only current question replies and accepted-input edits bypass assistant routing", async () => {
     const f = await fixture();
-    const message = {
+    await f.tick();
+    await f.tick({
+      state: "succeeded",
+      result: result({
+        status: "needs_input",
+        question: "How should empty pages behave?",
+      }),
+    });
+    await store.change(f.w.id, (w) => {
+      const notice = present(
+        w.deliveries.find((d) => d.id.includes(":question:")),
+      );
+      notice.state = "sent";
+      notice.remoteId = 19;
+    });
+    const message: Message = {
       message_id: 20,
       date: Math.floor(Date.now() / 1000),
       from: { id: 101, is_bot: false },
-      chat: { id: 101, type: "private" as const },
+      chat: { id: 101, type: "private" },
       message_thread_id: 3,
+      reply_to_message: { message_id: 19 },
       text: "Also handle empty pages",
     };
-    const route = (update: {
-      update_id: number;
-      message?: typeof message;
-      edited_message?: typeof message;
-    }) =>
+    const route = (update: Update, msg: Message) =>
       store.change(f.w.id, (w, sql) =>
-        routeDevelopment(
-          sql,
-          w,
-          update,
-          "999",
-          update.message ?? present(update.edited_message),
-          { name: "ask", args: message.text },
-        ),
+        routeDevelopment(sql, w, update, "999", msg, {
+          name: "ask",
+          args: msg.text ?? "",
+        }),
       );
-    await route({ update_id: 20, message });
-    await route({ update_id: 20, message });
-    await route({
-      update_id: 21,
-      edited_message: { ...message, text: "Keep original page numbering" },
-    });
+    // Forged or unconfirmed reply IDs and other audiences cannot bind a question.
+    for (const unrelated of [
+      { ...message, reply_to_message: undefined },
+      { ...message, reply_to_message: { message_id: 9999 } },
+      { ...message, message_thread_id: 4 },
+      { ...message, from: { id: 303, is_bot: false } },
+    ])
+      expect(
+        await route({ update_id: 20, message: unrelated }, unrelated),
+      ).toBe(false);
+    expect((await f.read()).revision).toBe(1);
+    expect(await route({ update_id: 20, message }, message)).toBe(true);
+    expect(await route({ update_id: 20, message }, message)).toBe(true);
+    const edited = {
+      ...message,
+      text: "Keep original page numbering",
+      reply_to_message: undefined,
+    };
+    expect(await route({ update_id: 21, edited_message: edited }, edited)).toBe(
+      true,
+    );
     expect((await f.read()).revision).toBe(3);
     expect((await taskInputs(store.pool, f.task)).map((i) => i.text)).toEqual([
       original,
-      message.text,
-      "Keep original page numbering",
+      present(message.text),
+      edited.text,
     ]);
-    await expect(
-      store.change(f.w.id, (w, sql) =>
-        appendDevelopment(
-          sql,
-          w,
-          f.task,
-          "303",
-          { ...f.source, author: "303" },
-          "unauthorized",
+    const lateReply = {
+      ...message,
+      message_id: 22,
+      text: "Can you review it?",
+    };
+    expect(await route({ update_id: 22, message: lateReply }, lateReply)).toBe(
+      false,
+    );
+    expect((await f.read()).revision).toBe(3);
+  });
+  test("ordinary follow-ups enter Pi in private and group Topics without resuming a Codex task", async () => {
+    for (const chatId of ["101", "-100100"])
+      for (const state of ["queued", "working", "review", "waiting"] as const) {
+        const f = await fixture(original, chatId);
+        await store.pool.query(
+          chatId === "101"
+            ? "INSERT INTO telegram_selections(actor,workspace_id) VALUES('101',$1) ON CONFLICT(actor) DO UPDATE SET workspace_id=excluded.workspace_id"
+            : "INSERT INTO chat_bindings(chat_id,workspace_id) VALUES('-100100',$1) ON CONFLICT(chat_id) DO UPDATE SET workspace_id=excluded.workspace_id",
+          [f.w.id],
+        );
+        await store.change(f.w.id, async (w, sql) => {
+          const task = await f.read();
+          task.state = state;
+          if (state === "waiting")
+            task.question = {
+              id: randomUUID(),
+              text: "Which default page?",
+              revision: 1,
+            };
+          await taskSave(sql, task);
+          const notice = present(
+            w.deliveries.find((d) => d.id === `development:${task.id}:started`),
+          );
+          notice.state = "sent";
+          notice.remoteId = 19;
+        });
+        // The shared topic, an old task reply and even a new coding goal all need Pi's intent decision.
+        const texts = [
+          "Can you review it?",
+          "Explain what changed",
+          "Thanks",
+          "Fix sorting in a different feature",
+        ];
+        const ingress = new Ingress(store, {} as SetupService);
+        for (const [index, text] of texts.entries()) {
+          const message: Message = {
+            message_id: 20 + index,
+            date: Math.floor(Date.now() / 1000),
+            from: { id: 101, is_bot: false },
+            chat: {
+              id: Number(chatId),
+              type: chatId === "101" ? "private" : "supergroup",
+            },
+            message_thread_id: 3,
+            reply_to_message:
+              chatId === "101" && index % 2 === 0
+                ? undefined
+                : { message_id: 19, from: { id: 999, is_bot: true } },
+            text,
+          };
+          const update = {
+            update_id:
+              10000 +
+              texts.length *
+                (["queued", "working", "review", "waiting"].indexOf(state) +
+                  (chatId === "101" ? 0 : 4)) +
+              index,
+            message,
+          };
+          await ingress.accept(update);
+          await ingress.accept(update);
+        }
+        if (chatId !== "101")
+          await ingress.accept({
+            update_id:
+              20000 + ["queued", "working", "review", "waiting"].indexOf(state),
+            message: {
+              message_id: 30,
+              date: Math.floor(Date.now() / 1000),
+              from: { id: 101, is_bot: false },
+              chat: { id: Number(chatId), type: "supergroup" },
+              message_thread_id: 3,
+              text: "An unrelated comment to a teammate",
+            },
+          });
+        const w = await store.read(f.w.id);
+        expect(w.runs.slice(1).map((r) => r.task)).toEqual(texts);
+        expect(w.runs.slice(1).every((r) => !r.codingTaskId)).toBe(true);
+        expect((await f.read()).revision).toBe(1);
+        expect(await taskInputs(store.pool, f.task)).toHaveLength(1);
+        expect(
+          w.deliveries.some((d) => d.id.startsWith("development:selection:")),
+        ).toBe(false);
+      }
+  });
+  test("Pi can explicitly continue the same task with original inputs and a recorded handoff", async () => {
+    const f = await fixture();
+    const pr = {
+      number: 43,
+      url: "https://github.com/example/workspace/pull/43",
+      branch: `codex/repodesk-${f.task.id}`,
+      headSha: "a".repeat(40),
+    };
+    await store.change(f.w.id, async (_w, sql) => {
+      const task = await f.read();
+      task.state = "review";
+      task.pr = pr;
+      await taskSave(sql, task);
+    });
+    const run = await store.change(f.w.id, (w) => {
+      const run = createRun(
+        w,
+        "101",
+        "Also handle empty pages",
+        "101",
+        3,
+        "gpt-4.1-mini",
+        { replyTo: 20, botId: "999" },
+      );
+      run.status = "running";
+      return structuredClone(run);
+    });
+    const w = await store.read(f.w.id);
+    const source = present(
+      w.messages.find((s) => s.runId === run.id && s.role === "user"),
+    );
+    const input: AgentInput = {
+      workspaceId: w.id,
+      actor: "101",
+      runId: run.id,
+      model: selectedModel("gpt-4.1-mini"),
+      apiKey: "fixture",
+      system: "",
+      prompt: "",
+      transcript: [],
+      tools: [],
+      maxTurns: 2,
+      maxTools: 3,
+      signal: new AbortController().signal,
+      guard: async () => {},
+      reserve: async () => "attempt",
+      checkpoint: async () => {},
+    };
+    const catalog = ExtensionCatalog.fromSnapshot(
+      [],
+      [codingExtension(store, w)],
+    );
+    const host = present(await catalog.open(input));
+    try {
+      const tool = present(
+        host.tools.find((t) => t.name === "send_development_input"),
+      );
+      await tool.execute(
+        "continue",
+        { taskId: f.task.id, sourceId: source.id },
+        input.signal,
+      );
+      await tool.execute(
+        "duplicate",
+        { taskId: f.task.id, sourceId: source.id },
+        input.signal,
+      );
+      expect((await f.read()).revision).toBe(2);
+      expect((await f.read()).pr).toEqual(pr);
+      expect((await taskInputs(store.pool, f.task)).map((i) => i.text)).toEqual(
+        [original, run.task],
+      );
+      expect(
+        (await store.read(w.id)).runs.find((r) => r.id === run.id)
+          ?.codingTaskId,
+      ).toBe(f.task.id);
+      await expect(
+        tool.execute(
+          "past-message",
+          { taskId: f.task.id, sourceId: f.source.id },
+          input.signal,
         ),
-      ),
-    ).rejects.toThrow("destination_denied");
-    // A second task in the same Topic requires selection rather than guessing.
+      ).rejects.toThrow("coding_current_request_required");
+    } finally {
+      await host.close();
+    }
+  });
+  test("plain stop with multiple tasks preserves cancellation through task selection", async () => {
+    const f = await fixture();
     await store.change(f.w.id, async (w, sql) => {
       const run = createRun(w, "101", "Fix sorting", "101", 3, "gpt-4.1-mini", {
         replyTo: 30,
@@ -1090,18 +1308,45 @@ const url = process.env.TEST_DATABASE_URL;
       );
       await startDevelopment(sql, w, run.id, "101", 7001, [source.id], "999");
     });
-    await route({ update_id: 31, message: { ...message, message_id: 31 } });
-    const w = await store.read(f.w.id);
-    const selection = present(
-      w.deliveries.find((d) => d.id === "development:selection:999:31"),
-    );
-    expect(selection.buttons).toHaveLength(2);
-    await store.change(w.id, (w) => {
-      const d = present(w.deliveries.find((d) => d.id === selection.id));
-      d.state = "sent";
-      d.remoteId = 40;
+    const message: Message = {
+      message_id: 31,
+      date: Math.floor(Date.now() / 1000),
+      from: { id: 101, is_bot: false },
+      chat: { id: 101, type: "private" },
+      message_thread_id: 3,
+      text: "stop",
+    };
+    const conversation = { ...message, text: "Can you review it?" };
+    expect(
+      await store.change(f.w.id, (w, sql) =>
+        routeDevelopment(
+          sql,
+          w,
+          { update_id: 30, message: conversation },
+          "999",
+          conversation,
+          { name: "ask", args: conversation.text },
+        ),
+      ),
+    ).toBe(false);
+    expect(
+      await store.change(f.w.id, (w, sql) =>
+        routeDevelopment(sql, w, { update_id: 31, message }, "999", message, {
+          name: "ask",
+          args: "stop",
+        }),
+      ),
+    ).toBe(true);
+    await store.change(f.w.id, (w) => {
+      const selection = present(
+        w.deliveries.find((d) => d.id === "development:selection:999:31"),
+      );
+      expect(selection.text).toBe("Which Codex task should stop?");
+      expect(selection.buttons).toHaveLength(2);
+      selection.state = "sent";
+      selection.remoteId = 40;
     });
-    await store.change(w.id, (w, sql) =>
+    await store.change(f.w.id, (w, sql) =>
       selectDevelopment(
         sql,
         w,
@@ -1117,53 +1362,8 @@ const url = process.env.TEST_DATABASE_URL;
         "999",
       ),
     );
-    expect((await f.read()).revision).toBe(4);
-    const photoMessage = {
-      ...message,
-      message_id: 41,
-      text: undefined,
-      photo: [{ file_id: "selection-photo", width: 10, height: 10 }],
-    };
-    expect(
-      await store.change(f.w.id, (w, sql) =>
-        routeDevelopment(
-          sql,
-          w,
-          { update_id: 41, message: photoMessage },
-          "999",
-          photoMessage,
-        ),
-      ),
-    ).toBe(true);
-    expect((await f.read()).revision).toBe(4);
-    await store.change(f.w.id, (w) => {
-      const selection = present(
-        w.deliveries.find((d) => d.id === "development:selection:999:41"),
-      );
-      expect(selection.buttons).toHaveLength(2);
-      selection.state = "sent";
-      selection.remoteId = 42;
-    });
-    await store.change(f.w.id, (w, sql) =>
-      selectDevelopment(
-        sql,
-        w,
-        {
-          update_id: 42,
-          callback_query: {
-            id: "image-choice",
-            from: { id: 101, is_bot: false },
-            data: `devpick:${f.task.id}:41`,
-            message: { ...message, message_id: 42 },
-          },
-        },
-        "999",
-      ),
-    );
-    expect((await f.read()).revision).toBe(5);
-    expect((await taskInputs(store.pool, f.task)).at(-1)?.hasAttachments).toBe(
-      true,
-    );
+    expect((await f.read()).state).toBe("cancelled");
+    expect((await f.read()).revision).toBe(1);
   });
   test("two workers reserve one attempt, and revocation during token minting denies start", async () => {
     const f = await fixture();

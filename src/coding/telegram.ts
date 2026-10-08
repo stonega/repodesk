@@ -35,9 +35,17 @@ export async function routeDevelopment(
   const actor = String(msg.from.id),
     chatId = String(msg.chat.id),
     topicId = msg.message_thread_id ?? 0;
+  const operation =
+    cmd?.name === "status"
+      ? "status"
+      : cmd?.name === "cancel" ||
+          /^(?:stop|cancel|停止|取消)[.!。！]?$/i.test(text.trim())
+        ? "cancel"
+        : "input";
+  const messageSourceId = `${msg.chat.type === "private" ? `${botId}:` : ""}${chatId}:${msg.message_id}`;
   const tasks = (await taskList(sql, w.id)).filter(
     (t) =>
-      (cmd?.name === "status" ||
+      (operation === "status" ||
         cmd?.name === "cancel" ||
         !developmentStopped(t.state)) &&
       t.botId === botId &&
@@ -69,21 +77,48 @@ export async function routeDevelopment(
         )
       : undefined);
   const candidates = [];
-  for (const t of anchor ? [anchor] : tasks) {
+  for (const t of u.edited_message ? tasks : anchor ? [anchor] : tasks) {
     try {
       checkDevelopment(
         w,
         t,
         actor,
-        cmd?.name === "cancel",
-        cmd?.name === "status",
+        operation === "cancel",
+        operation === "status",
       );
     } catch {
       continue;
     }
+    const inputs = await taskInputs(sql, t);
+    if (operation === "input") {
+      // A topic or old task notice is context, not a request to resume Codex.
+      // Only received answers to the current question and edits/duplicates of
+      // already accepted inputs bypass the normal assistant's intent decision.
+      const acceptedInput = inputs.some(
+        (i) =>
+          i.actor === actor &&
+          (i.sourceId === messageSourceId ||
+            (!!u.edited_message &&
+              i.sourceId.startsWith(`${messageSourceId}:edit:`))),
+      );
+      const questionReply =
+        !u.edited_message &&
+        replyId !== undefined &&
+        t.state === "waiting" &&
+        t.question &&
+        w.deliveries.some(
+          (d) =>
+            d.id === `development:${t.id}:question:${t.question?.id}` &&
+            d.state === "sent" &&
+            d.chatId === chatId &&
+            d.topicId === topicId &&
+            d.remoteId === replyId,
+        );
+      if (acceptedInput || questionReply) candidates.push(t);
+      continue;
+    }
     const participant =
-      t.actor === actor ||
-      (await taskInputs(sql, t)).some((i) => i.actor === actor);
+      t.actor === actor || inputs.some((i) => i.actor === actor);
     // Outside a Topic, bind only replies. Unaddressed group messages need a recent participant binding.
     if (
       anchor ||
@@ -105,7 +140,7 @@ export async function routeDevelopment(
     await cancelDevelopment(sql, w, actor, selected.id);
     return true;
   }
-  const sourceId = `${msg.chat.type === "private" ? `${botId}:` : ""}${chatId}:${msg.message_id}${u.edited_message ? `:edit:${u.update_id}` : ""}`;
+  const sourceId = `${messageSourceId}${u.edited_message ? `:edit:${u.update_id}` : ""}`;
   const source: Source = {
     id: sourceId,
     author: actor,
@@ -124,12 +159,6 @@ export async function routeDevelopment(
   w.messages = w.messages.slice(-2000);
   if (candidates.length > 1) {
     const eventId = `select:${botId}:${u.update_id}`;
-    const operation =
-      cmd?.name === "cancel"
-        ? "cancel"
-        : cmd?.name === "status"
-          ? "status"
-          : "input";
     for (const t of candidates)
       await taskEvent(sql, t, eventId, { actor, source, botId, operation });
     deliver(
@@ -157,12 +186,9 @@ export async function routeDevelopment(
   }
   const task = candidates[0];
   requireThat(task, "coding_task_not_found", 404);
-  if (
-    cmd?.name === "cancel" ||
-    /^(?:stop|cancel|停止|取消)[.!。！]?$/i.test(text.trim())
-  ) {
+  if (operation === "cancel") {
     await cancelDevelopment(sql, w, actor, task.id);
-  } else if (cmd?.name === "status") {
+  } else if (operation === "status") {
     deliver(
       w,
       actor,

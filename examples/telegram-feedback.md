@@ -13,7 +13,9 @@ these steps are not part of automated setup or tests.
    links, clear the native spinner and remain usable after ten minutes. Also test
    `/status` in the same Topic or by replying to a task message.
 3. Supply a change that needs a consequential product choice. Answer the question
-   in its Topic or by Reply. Confirm that the same task continues.
+   by Reply to its current question. Confirm that the same task continues. Also
+   answer without Reply in its Topic: Pi should resolve the pending question and
+   explicitly relay the original answer to the same task.
 4. Exercise a slow phase and a failing repository check in the test fixture.
    Observe at most one natural delayed edit per confirmed active phase, and a repair
    edit only after repair starts. Repeated check/repair cycles must not add messages.
@@ -36,6 +38,16 @@ these steps are not part of automated setup or tests.
    requester should get a readable next step. Inspect the panel separately for
    a Telegram delivery failure; an unknown original send must not automatically
    retry. An uncertain edit can safely retry the same known message.
+
+9. After a task publishes its PR, send “Can you review it?”, “Explain what
+   changed”, and an unrelated question in the same Topic, including a Reply to its
+   old result. Each should reach Pi without automatically resuming Codex. A review
+   must stay read-only and disclose missing diff/source evidence when unavailable.
+   Then request a concrete code change to that PR: Pi should resolve and continue
+   the same task with the original instruction. A new feature request should get
+   its own task. Repeat with two tasks in one Topic; ordinary conversation should
+   not open a Codex-task selection. Test private and explicitly addressed group
+   conversations; plain unrelated group traffic should remain uncollected.
 
 Record the deployed image, repository, verification performed and sanitized
 task/run references. Do not put credentials, private requests, device codes or raw

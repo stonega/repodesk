@@ -24,7 +24,7 @@ finishing any one of them does not erase the task or its follow-up relationship.
 
 | Layer | Responsibility | Decision boundary |
 | --- | --- | --- |
-| Pi | Receive requirements and pass original messages, relevant conversation and attachments to the task; relay questions, progress and results. | Does not select an architecture, files, implementation steps, repair strategy or whether technical clarification is needed. An optional summary cannot replace or override the source material. |
+| Pi | Interpret each current message and choose whether to answer with read tools, start a coding task, or continue matching development work; pass original requirements and relay task questions, progress and results. | Does not select an architecture, files, implementation steps, repair strategy or whether technical clarification is needed. An optional summary cannot replace or override the source material. |
 | Codex | Interpret requirements against current code; investigate, plan, make technical decisions, implement, test, repair and handle follow-up changes. | Can request a product choice or an application action, but cannot grant authority, change execution limits or treat external content as user authorization. |
 | Application services | Bind actor/workspace/repository/chat/task identity; record authorization, inputs, reported usage and outcomes; enforce cancellation, execution ordering and publication. | Decide whether a requested operation is permitted. They do not choose the implementation solution. |
 
@@ -51,7 +51,7 @@ and configured policy. Ambiguous intent does not authorize repository writes.
 
 | Situation | Behavior |
 | --- | --- |
-| Ask to explain or analyze | Codex investigates within permitted read scope; no implementation or publication is inferred. |
+| Ask to explain, analyze or review a PR | Pi uses permitted read tools and states missing evidence. An explicit request to use Codex may delegate read-only investigation; no implementation or publication is inferred. |
 | Clearly request implementation in a known repository | Record the task grant and start without a duplicate confirmation. |
 | Make ordinary technical choices, add tests or repair failed checks | Codex continues within the task grant until completion, a necessary question, cancellation or failure. |
 | Explicitly request another change on the same task/PR | Record a new input revision and continue when current permissions and the task scope cover it. |
@@ -90,9 +90,27 @@ user or adding an implementation recommendation. No reply is not approval.
 Independent authorized work may continue while a question is pending, but work
 depending on the answer cannot proceed. The application records that dependency.
 
-Use persisted reply anchors, question bindings and chat/topic task bindings to route
-new messages. Do not attach every message in a topic to an arbitrary active task.
-When multiple tasks could match, ask the user to select one. Group follow-ups also
+Routing preference source: 2026-10-08 — the project owner reported that a PR
+review request after a coding task was automatically sent to Codex and requested
+intent-based routing, with Codex reserved for coding work. This applies to later
+messages in private and linked-group conversations, including replies to old task
+results. It does not change repository grants or Review Bot's GitHub event routing.
+
+A task in a Topic is reference context, not ownership of the conversation. Normal
+messages first reach Pi, which handles explanations, summaries, status and PR
+review with its permitted read tools. Metadata alone cannot support a code review;
+Pi must disclose missing diff/source evidence rather than claim it inspected code.
+Only a clear implementation/fix request, an explicit request to use Codex, or an
+answer to its specific pending question can start or continue a coding task. Pi
+uses the authorized work handoff to resolve short references to prior tasks/PRs;
+new development goals can start separate tasks without being appended to old work.
+
+Application routing bypasses Pi only for explicit task controls, replies to the
+confirmed delivery of the current question, and edits/duplicates of already
+accepted task inputs. Other replies and unanchored question answers receive Pi
+intent handling. Group messages must still address the assistant or satisfy the
+existing conversational follow-up gate. When multiple tasks could match, resolve
+the request from context or ask for the missing target. Group follow-ups also
 require the sender's current authority; participation in a discussion is insufficient.
 An explicit stop request uses the existing cancellation path promptly rather than
 waiting behind normal task inputs.
