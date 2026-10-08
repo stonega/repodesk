@@ -2,6 +2,9 @@
 
 These are opt-in live acceptance journeys after local setup; deterministic tests
 never make these GitHub or model calls. Follow [Review Bot setup](../docs/implementation/review-bot.md).
+Use **New** in the Repositories heading to configure a target in its dialog;
+use its **Edit** action to change saved policies. Cancel leaves the saved values
+unchanged, and removal requires confirmation.
 
 1. Enable automatic review for a dedicated test repository. Open a non-draft PR
    containing a concrete regression. Expect one informational review at that head

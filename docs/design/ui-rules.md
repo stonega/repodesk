@@ -5,6 +5,20 @@ designing or modifying UI, and apply the rules relevant to the current task.
 These preferences guide design; they do not claim that the UI already implements
 them.
 
+## Common UI decisions
+
+This index points to existing preferences; each linked rule's scope and exceptions
+still apply. Follow the [UI implementation and completion checks](../../AGENTS.md#ui-implementation-and-completion-checks)
+when implementing or reviewing a change.
+
+| Decision | Relevant preferences |
+| --- | --- |
+| Saved display versus editing | [Modal editors](#add-and-create-flows-use-modals), [workspace values](#workspace-settings-show-saved-values-before-editing), [team summary](#team-configuration-uses-one-overview-editor), [model summary](#model-configuration-uses-a-summary-card-and-one-editor) |
+| Plugin detail layout | [Shared plugin layout](#plugin-details-share-card-layouts-and-a-title-switch), [Codex sections](#codex-details-show-configuration-repositories-and-tasks-separately) |
+| Action labels and controls | [Edit/New labels](#edit-and-add-buttons-use-short-labels), [shared icons](#common-action-buttons-use-reicon), [dropdown styling](#dropdown-inputs-share-the-workspace-selector-style) |
+| Dialog actions | [Cancel order](#modal-cancel-follows-the-primary-action), [close controls](#modal-close-controls-use-a-plain-x), [secondary actions](#dialog-support-actions-use-secondary-buttons) |
+| Feedback and loading | [Toasts and error placement](#routine-action-confirmations-and-request-errors-use-toasts), [visible loading layout](#loading-keeps-the-layout-visible) |
+
 ## Maintenance
 
 - When UI feedback expresses a reusable preference, record it during the same task.
@@ -794,8 +808,10 @@ them.
 
 - **Preference:** Open a modal from an explicit Add/Create action instead of
   displaying the creation form directly on the page. Keep lists and summaries
-  on the page, and use the same modal editor for related edit actions. Provide
-  a named dialog, trapped keyboard focus, Escape and visible cancel controls,
+  on the page as saved labels, values and statuses, with an Edit action. Do not
+  reuse the form as the normal display, including by disabling its controls.
+  New and Edit may share a modal editor; display and editing remain separate.
+  Provide a named dialog, trapped keyboard focus, Escape and visible cancel controls,
   focus return, mobile scrolling, and validation/errors inside the dialog.
   Cancel discards the draft; failed saves keep it open; pending saves block
   dismissal and duplicate submission.
@@ -805,12 +821,17 @@ them.
   member, workflow, skill and instruction editors also use these dialogs.
 - **Source:** 2026-09-20 — user requested preferring modals for Add actions
   across the app instead of inline forms.
+- **Source update:** 2026-10-08 — user showed the Review Bot repository card
+  with selectors, checkboxes and Save settings, and objected to using the same
+  UI for display and editing. Show saved repository settings in a compact list
+  or summary; open New/Edit in a modal.
 - **Exceptions:** Sign-in/bootstrap, policy forms,
   workspace creation in the setup wizard, approval decisions and
   recovery controls stay on their pages. Field editing
   within a modal may remain inline. Applying repository/network changes edits
   a draft; the existing Save Code Truth step persists it. GitHub confirmation
-  still takes place on GitHub.
+  still takes place on GitHub. The policy-form exception does not cover saved
+  repository policy records on plugin detail pages, including Review Bot.
 
 ### Do not add routine refresh buttons
 

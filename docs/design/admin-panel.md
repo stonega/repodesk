@@ -75,6 +75,15 @@ Escape output content; do not render generated HTML as trusted UI.
 
 ## Configuration behavior
 
+Plugin detail pages show saved configuration as labels, values and statuses.
+Review Bot lists repository policies with New in the section heading and Edit
+on each saved record. New and Edit open a repository dialog; the normal display
+contains no repository form controls or page-wide Save settings action. Cancel
+discards the draft, failed saves keep the dialog open, and stale revisions require
+reloading saved settings before editing again. Repository removal is confirmed
+before saving. The GitHub webhook card also displays saved URL/secret status and
+opens its existing editor from Edit.
+
 Admin and setup dropdown inputs share the sidebar workspace selector's trigger,
 menu and selected-item styling in both themes. Menus support keyboard navigation,
 type-ahead, Escape and outside dismissal; form validation and submitted values are

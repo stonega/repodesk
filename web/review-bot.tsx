@@ -13,20 +13,34 @@ import { SkeletonRows } from "./skeleton.tsx";
 import { ErrorToast, useToast } from "./toast.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
-const explain = (error: unknown) =>
-  ({
-    review_repository_required:
-      "Enable Codex and select at least one configured repository.",
-    review_reviewer_required:
-      "Choose an active Codex maintainer for automatic reviews.",
-    review_webhook_required: "Configure the GitHub webhook first.",
-    review_repository_already_configured:
-      "This repository already has Review Bot enabled in another workspace.",
-    coding_direct_execution_disabled:
-      "Enable Direct execution for this repository in Codex before accepting fixes.",
-    version_conflict:
-      "These settings changed. Reload the saved settings and try again.",
-  })[String((error as Error).message)] ?? (error as Error).message;
+type ReviewRepository = ReviewSettings["repositories"][number];
+type RepositoryDraft = {
+  originalId?: number;
+  target: ReviewRepository;
+  settings: ReviewSettings;
+  revision: number;
+};
+const explain = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  const code = message.startsWith("version_conflict.")
+    ? "version_conflict"
+    : message;
+  return (
+    {
+      review_repository_required:
+        "Enable Codex and select at least one configured repository.",
+      review_reviewer_required:
+        "Choose an active Codex maintainer for automatic reviews.",
+      review_webhook_required: "Configure the GitHub webhook first.",
+      review_repository_already_configured:
+        "This repository already has Review Bot enabled in another workspace.",
+      coding_direct_execution_disabled:
+        "Enable Direct execution for this repository in Codex before accepting fixes.",
+      version_conflict:
+        "These settings changed. Reload the saved settings and try again.",
+    }[code] ?? message
+  );
+};
 
 export function ReviewBot({
   request,
@@ -39,8 +53,8 @@ export function ReviewBot({
 }) {
   const endpoint = `/api/admin/workspaces/${workspaceId}/plugins/review-bot`;
   const [page, setPage] = useState<ReviewPage>();
-  const [draft, setDraft] = useState<ReviewSettings>();
-  const [draftRevision, setDraftRevision] = useState(0);
+  const [editing, setEditing] = useState<RepositoryDraft>();
+  const [removing, setRemoving] = useState<RepositoryDraft>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [hookOpen, setHookOpen] = useState(false);
@@ -51,7 +65,9 @@ export function ReviewBot({
   useEffect(() => {
     let active = true;
     setPage(undefined);
-    setDraft(undefined);
+    setEditing(undefined);
+    setRemoving(undefined);
+    setStopping(undefined);
     setError("");
     setGenerated(undefined);
     setHookSecret("");
@@ -60,8 +76,6 @@ export function ReviewBot({
       .then((data) => {
         if (active) {
           setPage(data);
-          setDraft(data.settings);
-          setDraftRevision(data.revision);
         }
       })
       .catch((e) => {
@@ -79,39 +93,62 @@ export function ReviewBot({
       clearInterval(timer);
     };
   }, [endpoint, request]);
-  const save = async (settings: ReviewSettings) => {
-    if (!page || busy) return;
+  const save = async (settings: ReviewSettings, revision: number) => {
+    if (!page || busy) return false;
     setBusy(true);
     setError("");
     try {
       const data = await request<ReviewPage>(endpoint, "PUT", {
-        revision: draftRevision,
+        revision,
         settings,
       });
       setPage(data);
-      setDraft(data.settings);
-      setDraftRevision(data.revision);
       notify("Review Bot settings saved.");
+      return true;
+    } catch (e) {
+      setError(explain(e));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  const update = (value: Partial<ReviewRepository>) =>
+    setEditing((draft) =>
+      draft ? { ...draft, target: { ...draft.target, ...value } } : draft,
+    );
+  const openEditor = (target: ReviewRepository, originalId?: number) => {
+    if (!page || busy) return;
+    setError("");
+    setEditing({
+      originalId,
+      target: { ...target },
+      settings: page.settings,
+      revision: page.revision,
+    });
+  };
+  const reload = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      setPage(await request<ReviewPage>(endpoint));
+      setEditing(undefined);
+      setRemoving(undefined);
+      setError("");
     } catch (e) {
       setError(explain(e));
     } finally {
       setBusy(false);
     }
   };
-  const update = (
-    index: number,
-    value: Partial<ReviewSettings["repositories"][number]>,
-  ) =>
-    setDraft((d) =>
-      d
-        ? {
-            ...d,
-            repositories: d.repositories.map((r, i) =>
-              i === index ? { ...r, ...value } : r,
-            ),
-          }
-        : d,
-    );
+  const availableRepository = page?.repositories.find(
+    (repository) =>
+      !page.settings.repositories.some(
+        (target) => target.repositoryId === repository.id,
+      ),
+  );
+  const selectedRepository = page?.repositories.find(
+    (repository) => repository.id === editing?.target.repositoryId,
+  );
   const configureHook = async (event: FormEvent) => {
     event.preventDefault();
     if (busy) return;
@@ -139,9 +176,9 @@ export function ReviewBot({
         <PluginToggle
           name="Review Bot"
           enabled={page?.settings.enabled}
-          disabled={busy || !draft}
+          disabled={busy || !page}
           onChange={(enabled) => {
-            if (draft) void save({ ...draft, enabled });
+            if (page) void save({ ...page.settings, enabled }, page.revision);
           }}
         />
       </PluginDetailHeading>
@@ -149,56 +186,52 @@ export function ReviewBot({
         Automatic PR reviews and tagged requests, using your configured Codex
         runner.
       </p>
-      {error && !hookOpen && !stopping && (
+      {error && !hookOpen && !stopping && !editing && !removing && (
         <ErrorToast message={error}>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              void request<ReviewPage>(endpoint)
-                .then((data) => {
-                  setPage(data);
-                  setDraft(data.settings);
-                  setDraftRevision(data.revision);
-                  setError("");
-                })
-                .catch((e) => setError(explain(e)));
-            }}
-          >
+          <button type="button" disabled={busy} onClick={() => void reload()}>
             Reload saved settings
           </button>
         </ErrorToast>
       )}
       <section className="card">
-        <h2>GitHub webhook</h2>
+        <div className="plugin-card-heading">
+          <h2>GitHub webhook</h2>
+          <IconButton
+            icon="edit"
+            label="Edit GitHub webhook"
+            disabled={busy || !page}
+            onClick={() => {
+              setError("");
+              setHookOpen(true);
+              setGenerated(undefined);
+            }}
+          />
+        </div>
         <p>
           Enable webhook delivery in your GitHub App settings. Subscribe to Pull
           request, Issue comment and Pull request review comment events.
         </p>
         {page ? (
           <>
-            <div className="field">
-              <label htmlFor="review-webhook-url">Webhook URL</label>
-              <input id="review-webhook-url" readOnly value={page.webhookUrl} />
-            </div>
+            <dl className="data-details">
+              <div>
+                <dt>Webhook URL</dt>
+                <dd>
+                  <code>{page.webhookUrl}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Webhook secret</dt>
+                <dd>
+                  {page.webhookConfigured ? "Configured" : "Not configured"}
+                </dd>
+              </div>
+            </dl>
             <p className="muted">
               {page.webhookConfigured
                 ? "Webhook secret configured. Delivery must also be enabled in GitHub."
                 : "Configure a secret, then paste it into the GitHub App webhook settings."}
             </p>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                setError("");
-                setHookOpen(true);
-                setGenerated(undefined);
-              }}
-            >
-              {page.webhookConfigured
-                ? "Update webhook secret"
-                : "Configure webhook"}
-            </button>
             {page.botHandle && (
               <p>
                 Tag <code>@{page.botHandle}</code> with <code>review</code>,{" "}
@@ -211,166 +244,120 @@ export function ReviewBot({
           <SkeletonRows label="GitHub webhook configuration" />
         )}
       </section>
-      <section className="card">
-        <h2>Repositories</h2>
-        <p className="muted">
-          Select repositories configured in Codex. Automatic reviews use the
-          selected maintainer’s repository grant. Tagged requests require a
-          verified GitHub account. Fixes also require Codex Direct execution.
-        </p>
-        {!draft || !page ? (
-          <SkeletonRows label="Review repositories" />
-        ) : (
-          <form
-            className="record-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void save(draft);
+      <section className="card" aria-labelledby="review-repositories-heading">
+        <div className="plugin-card-heading">
+          <h2 id="review-repositories-heading">Repositories</h2>
+          <IconButton
+            icon="add"
+            label="Add repository"
+            showLabel
+            disabled={
+              busy ||
+              !availableRepository ||
+              !page ||
+              page.settings.repositories.length >= 12
+            }
+            onClick={() => {
+              if (availableRepository)
+                openEditor({
+                  repositoryId: availableRepository.id,
+                  reviewer: availableRepository.maintainers[0]?.id ?? "",
+                  autoReview: true,
+                  acceptRequests: true,
+                  allowFixes: false,
+                });
             }}
-          >
-            <fieldset disabled={busy}>
-              {draft.repositories.map((target, index) => {
-                const repository = page.repositories.find(
-                  (r) => r.id === target.repositoryId,
-                );
-                return (
-                  <section className="card" key={target.repositoryId}>
-                    <RepositorySelect
-                      repositories={page.repositories.filter(
-                        (r) =>
-                          r.id === target.repositoryId ||
-                          !draft.repositories.some(
-                            (t) => t.repositoryId === r.id,
-                          ),
-                      )}
-                      value={target.repositoryId}
-                      onChange={(id) =>
-                        update(index, {
-                          repositoryId: id,
-                          reviewer:
-                            page.repositories.find((r) => r.id === id)
-                              ?.maintainers[0]?.id ?? "",
-                        })
-                      }
-                    />
-                    <div className="field">
-                      <label htmlFor={`review-owner-${index}`}>
-                        Automatic review owner
-                      </label>
-                      <Select
-                        id={`review-owner-${index}`}
-                        value={target.reviewer}
-                        onChange={(event) =>
-                          update(index, { reviewer: event.target.value })
-                        }
-                        required
+          />
+        </div>
+        <p className="muted">
+          Automatic reviews use the selected maintainer’s repository grant.
+          Tagged requests require a verified GitHub account. Fixes also require
+          Codex Direct execution.
+        </p>
+        {!page ? (
+          <SkeletonRows label="Review repositories" />
+        ) : !page.settings.repositories.length ? (
+          <p className="muted">
+            {page.repositories.length
+              ? "No repositories configured. Choose New to add one."
+              : "Enable Codex and configure a repository and maintainer to get started."}
+          </p>
+        ) : (
+          page.settings.repositories.map((target) => {
+            const repository = page.repositories.find(
+              (repository) => repository.id === target.repositoryId,
+            );
+            const name =
+              repository?.full_name ?? `Repository ${target.repositoryId}`;
+            const reviewer = repository?.maintainers.find(
+              (maintainer) => maintainer.id === target.reviewer,
+            );
+            return (
+              <article
+                className="review-repository"
+                aria-label={name}
+                key={target.repositoryId}
+              >
+                <div className="plugin-card-heading">
+                  <h3>
+                    {repository ? (
+                      <a
+                        href={`https://github.com/${repository.full_name}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                       >
-                        <option value="">Select a maintainer</option>
-                        {repository?.maintainers.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name}
-                          </option>
-                        ))}
-                      </Select>
-                    </div>
-                    <label className="form-check">
-                      <input
-                        type="checkbox"
-                        checked={target.autoReview}
-                        onChange={(event) =>
-                          update(index, { autoReview: event.target.checked })
-                        }
-                      />
-                      Automatically review open PRs and new commits
-                    </label>
-                    <label className="form-check">
-                      <input
-                        type="checkbox"
-                        checked={target.acceptRequests}
-                        onChange={(event) =>
-                          update(index, {
-                            acceptRequests: event.target.checked,
-                          })
-                        }
-                      />
-                      Accept tagged requests
-                    </label>
-                    <label className="form-check">
-                      <input
-                        type="checkbox"
-                        checked={target.allowFixes}
-                        onChange={(event) =>
-                          update(index, { allowFixes: event.target.checked })
-                        }
-                      />
-                      Allow explicitly requested fixes to the same PR
-                    </label>
+                        {name}
+                      </a>
+                    ) : (
+                      name
+                    )}
+                  </h3>
+                  <div className="row">
+                    <IconButton
+                      icon="edit"
+                      label={`Edit ${name}`}
+                      disabled={busy}
+                      onClick={() => openEditor(target, target.repositoryId)}
+                    />
                     <IconButton
                       icon="delete"
-                      label={`Remove ${repository?.full_name ?? "repository"}`}
-                      type="button"
-                      onClick={() =>
-                        setDraft({
-                          ...draft,
-                          repositories: draft.repositories.filter(
-                            (_, i) => i !== index,
-                          ),
-                        })
-                      }
+                      label={`Remove ${name}`}
+                      disabled={busy}
+                      onClick={() => {
+                        setError("");
+                        setRemoving({
+                          target,
+                          settings: page.settings,
+                          revision: page.revision,
+                        });
+                      }}
                     />
-                  </section>
-                );
-              })}
-              {!page.repositories.length && (
-                <p>
-                  Enable Codex and configure a repository and maintainer to get
-                  started.
-                </p>
-              )}
-              <div className="modal-actions">
-                <IconButton
-                  icon="add"
-                  label="Add repository"
-                  showLabel
-                  type="button"
-                  disabled={
-                    draft.repositories.length >= 12 ||
-                    !page.repositories.some(
-                      (r) =>
-                        !draft.repositories.some(
-                          (t) => t.repositoryId === r.id,
-                        ),
-                    )
-                  }
-                  onClick={() => {
-                    const repo = page.repositories.find(
-                      (r) =>
-                        !draft.repositories.some(
-                          (t) => t.repositoryId === r.id,
-                        ),
-                    );
-                    if (repo)
-                      setDraft({
-                        ...draft,
-                        repositories: [
-                          ...draft.repositories,
-                          {
-                            repositoryId: repo.id,
-                            reviewer: repo.maintainers[0]?.id ?? "",
-                            autoReview: true,
-                            acceptRequests: true,
-                            allowFixes: false,
-                          },
-                        ],
-                      });
-                  }}
-                />
-                <button type="submit">
-                  {busy ? "Saving…" : "Save settings"}
-                </button>
-              </div>
-            </fieldset>
-          </form>
+                  </div>
+                </div>
+                <dl className="plugin-summary">
+                  <div>
+                    <dt>Automatic review owner</dt>
+                    <dd>
+                      {reviewer?.name ??
+                        `Unavailable maintainer (${target.reviewer})`}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Automatic reviews</dt>
+                    <dd>{target.autoReview ? "Enabled" : "Disabled"}</dd>
+                  </div>
+                  <div>
+                    <dt>Tagged requests</dt>
+                    <dd>{target.acceptRequests ? "Enabled" : "Disabled"}</dd>
+                  </div>
+                  <div>
+                    <dt>Requested fixes</dt>
+                    <dd>{target.allowFixes ? "Allowed" : "Disabled"}</dd>
+                  </div>
+                </dl>
+              </article>
+            );
+          })
         )}
       </section>
       <section className="card">
@@ -443,6 +430,189 @@ export function ReviewBot({
           </div>
         )}
       </section>
+      {editing && page && (
+        <Modal
+          title={
+            editing.originalId === undefined
+              ? "Add Review Bot repository"
+              : "Edit Review Bot repository"
+          }
+          busy={busy}
+          onClose={() => {
+            setEditing(undefined);
+            setError("");
+          }}
+        >
+          <form
+            className="record-form coding-repository-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const repositories =
+                editing.originalId === undefined
+                  ? [...editing.settings.repositories, editing.target]
+                  : editing.settings.repositories.map((target) =>
+                      target.repositoryId === editing.originalId
+                        ? editing.target
+                        : target,
+                    );
+              void save(
+                { ...editing.settings, repositories },
+                editing.revision,
+              ).then((saved) => {
+                if (saved) setEditing(undefined);
+              });
+            }}
+          >
+            {error && (
+              <p className="notice" role="alert">
+                {error}
+              </p>
+            )}
+            {error && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy}
+                onClick={() => void reload()}
+              >
+                Reload saved settings
+              </button>
+            )}
+            <RepositorySelect
+              repositories={page.repositories.filter(
+                (repository) =>
+                  repository.id === editing.originalId ||
+                  !editing.settings.repositories.some(
+                    (target) => target.repositoryId === repository.id,
+                  ),
+              )}
+              value={editing.target.repositoryId}
+              onChange={(id) =>
+                update({
+                  repositoryId: id,
+                  reviewer:
+                    page.repositories.find((repository) => repository.id === id)
+                      ?.maintainers[0]?.id ?? "",
+                })
+              }
+            />
+            <div className="field">
+              <label htmlFor="review-owner">Automatic review owner</label>
+              <Select
+                id="review-owner"
+                value={editing.target.reviewer}
+                onChange={(event) => update({ reviewer: event.target.value })}
+                required
+              >
+                <option value="">Select a maintainer</option>
+                {selectedRepository?.maintainers.map((maintainer) => (
+                  <option key={maintainer.id} value={maintainer.id}>
+                    {maintainer.name}
+                  </option>
+                ))}
+              </Select>
+              <small>
+                Automatic reviews use this maintainer’s repository grant.
+              </small>
+            </div>
+            <label className="form-check">
+              <input
+                type="checkbox"
+                checked={editing.target.autoReview}
+                onChange={(event) =>
+                  update({ autoReview: event.target.checked })
+                }
+              />
+              Automatically review open PRs and new commits
+            </label>
+            <label className="form-check">
+              <input
+                type="checkbox"
+                checked={editing.target.acceptRequests}
+                onChange={(event) =>
+                  update({ acceptRequests: event.target.checked })
+                }
+              />
+              Accept tagged requests
+            </label>
+            <label className="form-check">
+              <input
+                type="checkbox"
+                checked={editing.target.allowFixes}
+                onChange={(event) =>
+                  update({ allowFixes: event.target.checked })
+                }
+              />
+              Allow explicitly requested fixes to the same PR
+            </label>
+            <p className="muted">
+              Tagged requests require a verified GitHub account. Fixes also
+              require Codex Direct execution.
+            </p>
+            <ModalActions>
+              <button type="submit">
+                {busy ? "Saving…" : "Save repository"}
+              </button>
+            </ModalActions>
+          </form>
+        </Modal>
+      )}
+      {removing && (
+        <Modal
+          title="Remove Review Bot repository"
+          busy={busy}
+          onClose={() => {
+            setRemoving(undefined);
+            setError("");
+          }}
+        >
+          {error && (
+            <p className="notice" role="alert">
+              {error}
+            </p>
+          )}
+          {error && (
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy}
+              onClick={() => void reload()}
+            >
+              Reload saved settings
+            </button>
+          )}
+          <p>
+            Remove{" "}
+            {page?.repositories.find(
+              (repository) => repository.id === removing.target.repositoryId,
+            )?.full_name ?? `repository ${removing.target.repositoryId}`}{" "}
+            from Review Bot? Automatic reviews and tagged requests will no
+            longer be accepted for this repository.
+          </p>
+          <ModalActions>
+            <button
+              type="button"
+              className="danger"
+              onClick={() => {
+                void save(
+                  {
+                    ...removing.settings,
+                    repositories: removing.settings.repositories.filter(
+                      (target) =>
+                        target.repositoryId !== removing.target.repositoryId,
+                    ),
+                  },
+                  removing.revision,
+                ).then((saved) => {
+                  if (saved) setRemoving(undefined);
+                });
+              }}
+            >
+              {busy ? "Removing…" : "Remove repository"}
+            </button>
+          </ModalActions>
+        </Modal>
+      )}
       {hookOpen && (
         <Modal
           title="Configure GitHub webhook"

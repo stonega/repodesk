@@ -4,12 +4,14 @@
 
 RepoDesk is a Telegram assistant for GitHub organizations and personal repositories, inspired by Every Agent. Start with
 `docs/README.md`. Public competitor claims, design proposals, and implemented behavior
-must remain distinguishable. The initial code is a backend scaffold, not a working AI bot.
+must remain distinguishable. Check `docs/implementation/implementation-status.md`
+for implemented behavior and outstanding release gates; do not infer current behavior
+from design proposals.
 
 ## Structure
 
 - `src/`: TypeScript backend, Hono on Node.js deployed with Docker.
-- `web/` (planned): React Router admin SPA served by the backend.
+- `web/`: React Router admin SPA served by the backend.
 - `tests/`: deterministic tests using Bun; no live Telegram or model calls.
 - `docs/design/`: product requirements and architecture.
 - `docs/research/`: dated, source-linked research and unresolved claims.
@@ -26,7 +28,7 @@ Read the relevant design and implementation docs before coding. Keep the standal
 layout unless a second independently deployed surface justifies a change. Use Bun
 for packages and scripts, TypeScript strict mode, and Biome for linting/formatting.
 Keep dependencies explicit and explain additions. Prefer small, readable functions.
-Use Pi (`pi-agent-core` and `pi-ai`) for the planned AI runtime. Keep durable state,
+Use Pi (`pi-agent-core` and `pi-ai`) for the AI runtime. Keep durable state,
 authorization, scheduling and delivery in application services around Pi.
 
 Run `bun run check`, `bun run typecheck`, `bun test`, and `bun run build` after
@@ -50,6 +52,30 @@ instructions take precedence over recorded preferences. Update the affected rule
 when a preference changes, or record an exception when the change is specific to
 one context. This keeps the interface consistent with the user's evolving design
 style.
+
+### UI implementation and completion checks
+
+- Before coding, identify the applicable preference headings, their scope and
+  exceptions, and turn them into observable acceptance criteria for the task.
+  Reading the rules alone does not verify compliance.
+- Inspect a comparable implemented screen and reuse shared components for dialogs,
+  actions, dropdowns, summaries and notifications. Check that the reference itself
+  follows the applicable rules; existing UI is not an automatic exception.
+- For managed records, explicitly check the saved display separately from New/Edit.
+  Apply the [modal editor rule](docs/design/ui-rules.md#add-and-create-flows-use-modals),
+  including its exceptions. A form inside a card is still a form; disabling controls
+  does not make it a saved summary.
+- Before reporting completion, compare the rendered UI with the acceptance criteria
+  at desktop and mobile widths. Inspect affected display/editor, loading/empty,
+  pending and error states where applicable. Passing lint, types, builds or save
+  tests does not establish UI-rule compliance.
+- Add focused browser regression coverage for changed interaction contracts and
+  reported failures. Assert the required user behavior, including separation of
+  display and editing when relevant, rather than merely validating the existing
+  form or matching its markup. Use deterministic fixtures.
+- Fix applicable mismatches in the affected flow before calling the UI change
+  complete. Updating a rule document does not repair its implementation. Report
+  any unverified states explicitly instead of claiming visual verification.
 
 ## Product boundaries
 

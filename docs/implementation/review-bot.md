@@ -20,7 +20,10 @@ No new dependency, separate deployment or model credential is required.
    `installation_repositories` lifecycle events.
    A publicly reachable HTTPS origin is required for live delivery. Saving a secret
    in RepoDesk does not update or verify GitHub's webhook configuration.
-4. Add repositories, choose an automatic review owner and save. Enable Review Bot.
+4. Choose **New** in Repositories, choose an automatic review owner and save the
+   repository in the dialog. The page shows saved repository names, owners and
+   policy values. **Edit** opens the same editor; Cancel discards changes, failed
+   saves retain them, and removal requires confirmation. Enable Review Bot.
    Automatic reviews and tagged requests are independently configurable per repository.
    The same operator/App installation repository can have Review Bot enabled in only
    one workspace, preventing duplicate reviews and ambiguous request routing.
@@ -125,6 +128,12 @@ workspace/task. These are ingress/storage bounds; Review Bot adds no Codex execu
 repair, time or token quotas.
 
 ## Verification
+
+Repository display/editor follow-up on 2026-10-08: Biome, strict TypeScript,
+build and all **581 deterministic tests** passed. All **10 Review Bot browser
+scenarios** passed, covering desktop/mobile summaries, New/Edit dialogs,
+discarded drafts, failed/pending saves, confirmed removal and polling conflicts.
+Desktop/mobile screenshots were visually inspected.
 
 Local verification on 2026-10-07: Biome, strict TypeScript and the build passed;
 **569 deterministic tests** passed with disposable PostgreSQL and **97 browser

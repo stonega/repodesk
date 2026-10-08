@@ -2061,6 +2061,22 @@ input.plugin-toggle-input:disabled {
 .coding-repository p {
   margin: 2px 0 0;
 }
+.review-repository {
+  padding: 14px 0;
+  border-top: 1px solid var(--ui-border);
+}
+.review-repository .plugin-card-heading {
+  align-items: center;
+  margin-bottom: 12px;
+}
+.review-repository h3 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.review-repository .plugin-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
 .coding-repository-form .field {
   margin-bottom: 16px;
 }
@@ -2490,7 +2506,8 @@ input.plugin-toggle-input:disabled {
   margin-top: 6px;
 }
 @media (max-width: 640px) {
-  .plugin-summary {
+  .plugin-summary,
+  .review-repository .plugin-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .data-details > div {
