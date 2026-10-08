@@ -32,6 +32,20 @@ when implementing or reviewing a change.
 
 ## Recorded preferences
 
+### Workflow cards lead to dedicated details
+
+- **Preference:** Improve workflow card readability and provide a dedicated
+  detail page. Keep the name and status prominent, group schedule information
+  into labeled values, and put technical identifiers in details.
+- **Scope:** Scheduled workflow cards and their detail pages, including the
+  read-only deployment-operator view, on desktop and mobile.
+- **Source:** 2026-10-08 — user requested improving card content, adding a workflow
+  detail page and updating related APIs, with a screenshot of the workflows page.
+  The labeled summary layout is the implementation choice for that request.
+- **Exceptions:** Existing privacy and identity requirements still govern task
+  content, destinations and management actions. Display recurrence previews as
+  previews when a workflow is not active.
+
 ### Member forms fetch GitHub account choices
 
 - **Preference:** Include a GitHub account field in member forms and automatically

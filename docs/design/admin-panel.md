@@ -260,6 +260,29 @@ The **Plugins** page also offers predefined **Code Truth**: enable/disable, add/
 
 [GitHub App setup and API](../implementation/github-app.md) documents the implemented workspace connection flow.
 
+### Workflow details (implemented)
+
+Scheduled workflow cards show name/status, a readable daily or weekly schedule,
+the explicit schedule timezone, the next recurrence time and budget per run.
+The name links to `/admin/workflows/:workflowId?workspace=:id&offset=:offset`;
+direct visits, refreshes and Back to Workflows retain workspace and list position.
+The detail view adds upcoming recurrence times, owner/version/ID and, for linked
+authorized members, task, output format, destination/topic, context window and
+pinned skill version. Existing proposal and lifecycle controls remain available.
+Deleting from details returns to the list. Loading and failed reads have explicit
+states and retry; draft/paused/suspended times are labeled schedule previews.
+
+`GET /api/admin/workspaces/:id/workflows/:workflowId` returns
+`{ mode, workflow, repositorySources? }`. Member details include the full workflow
+and current accessible repository choices. Unlinked deployment operators receive
+only the same allowlisted schedule metadata as their list, never the task, chat,
+skill or historical specs. Both reads share visibility rules: deleted workflows
+are hidden; linked members see their own workflows and active workspace-group
+workflows. Missing or inaccessible workflow IDs return 404; foreign workspace
+access is denied. The list API remains compatible. Recurrence previews do not
+guarantee dispatch, which still depends on workspace and workflow policy.
+See [workflow API examples](../../examples/workflows.http).
+
 ### Access request review (implemented)
 
 The **Members & access** page includes **Access requests** and a shareable

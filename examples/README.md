@@ -6,6 +6,9 @@ account choices and versioned member profile associations.
 See [team-workflows.md](team-workflows.md) for repository status/daily reports,
 conversation-created skill drafts, work handoffs and manual pilot acceptance.
 
+See [workflows.http](workflows.http) for workflow list/detail reads and direct
+detail-page links with the existing member/operator visibility boundaries.
+
 `health.http` checks a configured local API. `model-settings.http` shows an
 operator saving an OpenAI-compatible endpoint, custom model and thinking level. `workflow-proposal.json` matches the
 implemented proposal schema; replace its destination with your linked group (or

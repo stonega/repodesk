@@ -43,7 +43,11 @@ async function fixture(page: Page) {
     },
     skillVersion: 1,
     versions: [],
-    next: [],
+    next: [
+      "2026-10-09T09:00:00Z",
+      "2026-10-16T09:00:00Z",
+      "2026-10-23T09:00:00Z",
+    ],
   };
   let saved:
     | {
@@ -54,6 +58,32 @@ async function fixture(page: Page) {
   await page.route("**/api/**", async (route) => {
     const req = route.request(),
       path = new URL(req.url()).pathname;
+    if (
+      req.method() === "POST" &&
+      path.endsWith("/workflows/repository-report/action")
+    ) {
+      const input = req.postDataJSON();
+      expect(input.version).toBe(workflow.version);
+      workflow.status = input.action === "delete" ? "deleted" : "paused";
+      await route.fulfill({ json: workflow });
+      return;
+    }
+    if (
+      req.method() === "GET" &&
+      path.endsWith("/workflows/repository-report")
+    ) {
+      await route.fulfill({
+        json: {
+          mode: "member",
+          workflow,
+          repositorySources: {
+            revision: 2,
+            repositories: w.github?.repositories,
+          },
+        },
+      });
+      return;
+    }
     if (
       req.method() === "PUT" &&
       path.endsWith("/workflows/repository-report")
@@ -93,8 +123,8 @@ async function fixture(page: Page) {
               : path.endsWith("/workflows")
                 ? {
                     mode: "member",
-                    items: [workflow],
-                    total: 1,
+                    items: workflow.status === "deleted" ? [] : [workflow],
+                    total: workflow.status === "deleted" ? 0 : 1,
                     repositorySources: {
                       revision: 2,
                       repositories: w.github?.repositories,
@@ -171,4 +201,135 @@ test("conversation skill provenance and explicit publication remain usable on de
     card.getByText("Approved reusable instruction skill.", { exact: false }),
   ).toBeVisible();
   expect(f.draft.published).toHaveLength(1);
+});
+
+test("workflow cards link to readable details with local times and retain list pagination", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  await page.goto(`/admin/workflows?workspace=${f.w.id}&offset=100`);
+  const card = page.locator(".workflow-card");
+  await expect(card.getByText("Every Friday at 17:00")).toBeVisible();
+  await expect(card.getByText("Asia/Taipei")).toBeVisible();
+  await expect(card.locator("time")).toHaveText("Oct 9, 2026, 17:00");
+  await expect(
+    card.getByText("repository-report", { exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("link", { name: "Repository report", exact: true })
+    .click();
+  await expect(page).toHaveURL(
+    new RegExp(
+      `/admin/workflows/repository-report\\?workspace=${f.w.id}&offset=100`,
+    ),
+  );
+  await expect(
+    page.getByRole("heading", { name: "Task", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Recap the team", { exact: true })).toBeVisible();
+  await expect(page.getByText("Pinned version 1")).toBeVisible();
+  await expect(
+    page.getByText("repository-report", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Upcoming schedule times" }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Recap the team", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "pause", exact: true }).click();
+  await expect(page.getByText("Not scheduled while paused")).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/workflow-detail-mobile.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Edit proposal" }).click();
+  await expect(
+    page.getByRole("dialog").getByRole("checkbox", { name: "example/private" }),
+  ).toBeChecked();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("link", { name: "Back to Workflows" }).click();
+  await expect(page).toHaveURL(
+    `/admin/workflows?workspace=${f.w.id}&offset=100`,
+  );
+  await page.screenshot({
+    path: "test-results/workflow-list-mobile.png",
+    fullPage: true,
+  });
+  await page
+    .getByRole("link", { name: "Repository report", exact: true })
+    .click();
+  await page.getByRole("button", { name: "delete", exact: true }).click();
+  await expect(page).toHaveURL(
+    `/admin/workflows?workspace=${f.w.id}&offset=100`,
+  );
+  await expect(page.getByText("No scheduled workflows yet.")).toBeVisible();
+});
+
+test("operator workflow details remain read-only and recover from unavailable records", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  const workflow = {
+    id: "operator-workflow",
+    name: "Daily GitHub development report — stonega/repodesk",
+    owner: "101",
+    version: 2,
+    status: "paused",
+    budgetUsd: 0.1,
+    recurrence: {
+      frequency: "daily",
+      weekday: 7,
+      hour: 9,
+      minute: 0,
+      timezone: "Asia/Taipei",
+    },
+    next: ["2026-10-09T01:00:00Z"],
+    reason: "Paused by owner",
+  };
+  let unavailable = false;
+  await page.route("**/api/admin/workspaces/*/workflows/**", async (route) => {
+    if (unavailable)
+      await route.fulfill({ status: 404, json: { error: "not_found" } });
+    else await route.fulfill({ json: { mode: "operator", workflow } });
+  });
+  await page.goto(`/admin/workflows/operator-workflow?workspace=${f.w.id}`);
+  await expect(page.getByText("Not scheduled while paused")).toBeVisible();
+  await expect(page.getByText("Every day at 09:00")).toBeVisible();
+  await expect(
+    page.getByText("Workspace schedule details are read-only here.", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Task", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Edit proposal" })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("button", { name: "pause", exact: true }),
+  ).toHaveCount(0);
+  await page.screenshot({
+    path: "test-results/workflow-detail-desktop.png",
+    fullPage: true,
+  });
+  unavailable = true;
+  await page.reload();
+  await expect(page.getByRole("alert")).toContainText(
+    "Workflow not found or no longer available.",
+  );
+  await expect(page.locator(".workflow-card")).toHaveCount(0);
+  unavailable = false;
+  workflow.recurrence.frequency = "weekly";
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect(
+    page.getByRole("heading", { name: workflow.name }),
+  ).toBeVisible();
+  await expect(page.getByText("Every Sunday at 09:00")).toBeVisible();
 });

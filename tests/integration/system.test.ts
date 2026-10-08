@@ -372,6 +372,40 @@ suite("PostgreSQL integration (isolated database)", () => {
         status: "draft",
       });
       expect(workflowHistory.items[0]).not.toHaveProperty("spec");
+      const workflowId = workflowHistory.items[0].id;
+      const workflowDetail = await request(`${base}/workflows/${workflowId}`);
+      expect(workflowDetail.status).toBe(200);
+      expect(await workflowDetail.json()).toEqual({
+        mode: "operator",
+        workflow: workflowHistory.items[0],
+      });
+      expect((await request(`${base}/workflows/${randomUUID()}`)).status).toBe(
+        404,
+      );
+      expect((await request(`${base}/workflows/not-an-id`)).status).toBe(400);
+      expect(
+        (
+          await request(
+            `/api/admin/workspaces/${foreign.id}/workflows/${workflowId}`,
+          )
+        ).status,
+      ).toBe(403);
+      expect(
+        (
+          await request(`${base}/workflows/${workflowId}/action`, "POST", {
+            version: 1,
+            action: "pause",
+          })
+        ).status,
+      ).toBe(403);
+      expect(
+        (
+          await request(`${base}/workflows/${workflowId}`, "PUT", {
+            version: 1,
+            spec: spec(w),
+          })
+        ).status,
+      ).toBe(403);
       expect((await request(`${base}/runs`, "POST", {})).status).toBe(403);
       expect((await request(`${base}/workflows`, "POST", {})).status).toBe(403);
     } finally {
@@ -380,6 +414,70 @@ suite("PostgreSQL integration (isolated database)", () => {
         [operatorId],
       );
     }
+  });
+  test("workflow details share list visibility and retain private content boundaries", async () => {
+    const w = await seed();
+    const workflows = await store.change(w.id, (saved) => {
+      const own = proposeWorkflow(saved, "101", {
+        ...spec(saved),
+        chatId: "101",
+        task: "Personal report",
+      }).workflow;
+      const privateOther = proposeWorkflow(saved, "303", {
+        ...spec(saved),
+        chatId: "303",
+        task: "Other private report",
+      }).workflow;
+      const shared = proposeWorkflow(saved, "303", {
+        ...spec(saved),
+        task: "Shared report",
+      }).workflow;
+      const deleted = proposeWorkflow(saved, "101", spec(saved)).workflow;
+      deleted.status = "deleted";
+      return { own, privateOther, shared, deleted };
+    });
+    const base = `/api/admin/workspaces/${w.id}/workflows`;
+    const list = await (await request(base)).json();
+    expect(list.items.map((f: { id: string }) => f.id).sort()).toEqual(
+      [workflows.own.id, workflows.shared.id].sort(),
+    );
+    for (const workflow of [workflows.own, workflows.shared]) {
+      const response = await request(`${base}/${workflow.id}`);
+      expect(response.status).toBe(200);
+      const detail = await response.json();
+      expect(detail).toMatchObject({
+        mode: "member",
+        workflow: {
+          id: workflow.id,
+          spec: workflow.spec,
+          versions: workflow.versions,
+        },
+        repositorySources: { revision: 0, repositories: [] },
+      });
+      expect(detail.workflow.next).toHaveLength(3);
+    }
+    for (const id of [
+      workflows.privateOther.id,
+      workflows.deleted.id,
+      randomUUID(),
+    ])
+      expect((await request(`${base}/${id}`)).status).toBe(404);
+    expect(
+      (
+        await request(`${base}/${workflows.own.id}`, "GET", undefined, {
+          cookie: "",
+        })
+      ).status,
+    ).toBe(401);
+    await store.change(w.id, (saved) => {
+      for (const chat of saved.chats) chat.active = false;
+    });
+    expect((await request(`${base}/${workflows.shared.id}`)).status).toBe(404);
+    await store.change(w.id, (saved) => {
+      for (const member of saved.members)
+        if (member.id === "101") member.role = "member";
+    });
+    expect((await request(`${base}/${workflows.own.id}`)).status).toBe(403);
   });
   test("workspace admins see every run while members and revoked admins are denied", async () => {
     const w = await seed();

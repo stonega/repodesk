@@ -1,0 +1,23 @@
+# Sign in as the workspace deployment operator or a linked workspace owner/admin.
+# Unlinked operators receive schedule metadata only. Linked members can inspect
+# their own workflows and workflows whose group is active in this workspace.
+@origin = http://localhost:3000
+@workspaceId = REPLACE_WITH_WORKSPACE_UUID
+@workflowId = REPLACE_WITH_WORKFLOW_UUID
+@session = REPLACE_WITH_SESSION
+
+### List workflows (100 per page); the existing response contract is preserved.
+GET {{origin}}/api/admin/workspaces/{{workspaceId}}/workflows?offset=0
+Cookie: repodesk_session={{session}}
+
+### Fetch one workflow: { mode, workflow, repositorySources? }.
+# Member details include the spec and saved versions. Operator details contain
+# only the same metadata as the operator list, without task, destination or skill.
+# Missing, deleted and member-inaccessible workflows return 404.
+# `next` contains recurrence previews, including when the workflow is not active.
+GET {{origin}}/api/admin/workspaces/{{workspaceId}}/workflows/{{workflowId}}
+Cookie: repodesk_session={{session}}
+
+### Open details; workspace and list offset survive refresh and the back link.
+GET {{origin}}/admin/workflows/{{workflowId}}?workspace={{workspaceId}}&offset=0
+Cookie: repodesk_session={{session}}

@@ -2024,6 +2024,48 @@ input.plugin-toggle-input:disabled {
 .plugin-card-heading p {
   margin: 3px 0 0;
 }
+.workflow-card h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.workflow-title-link {
+  color: inherit;
+  text-decoration: none;
+}
+.workflow-title-link:hover {
+  color: var(--ui-accent);
+  text-decoration: underline;
+}
+.workflow-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 18px 24px;
+  margin: 20px 0;
+}
+.workflow-summary dt {
+  color: var(--ui-muted);
+  font-size: 13px;
+}
+.workflow-summary dd {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+}
+.workflow-summary small {
+  display: block;
+  margin-top: 4px;
+  color: var(--ui-muted);
+}
+.workflow-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 32px;
+  padding-left: 20px;
+}
+.workflow-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .plugin-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
