@@ -13,6 +13,13 @@ its disposable Compose stacks do not use the production daemon or host ports.
 The container has no production Docker socket or application-directory mount.
 It shares the VPS kernel and requires trusted workflow code.
 
+On cgroup v2, the entrypoint moves its processes into an `init` child cgroup and
+enables the available controllers before starting the inner Docker daemon. This
+allows CI task containers to enforce their CPU, memory and PID limits. Enabling
+controllers retries briefly to tolerate process-exit races and fails startup if
+the hierarchy cannot be prepared. The initialization follows
+[Moby's Docker-in-Docker wrapper](https://github.com/moby/moby/blob/master/hack/dind).
+
 The outer Compose project is `repodesk-actions-runner`, separate from production's
 `repodesk`. Its container is limited to two CPUs and 4 GiB of memory. One runner
 executes one job at a time; browser shards queue rather than running simultaneously.
@@ -54,6 +61,23 @@ cache persist in a separate volume. Protect these volumes as runner credentials.
 Register only once. Do not replace an existing runner registration during a job.
 
 ## Verify and operate
+
+Before installing a changed runner image, run the local resource-limit smoke:
+
+```sh
+docker build --tag repodesk-actions-runner:test deploy/actions-runner
+bash scripts/actions-runner-smoke.sh repodesk-actions-runner:test
+docker compose --file deploy/actions-runner/compose.yaml config --quiet
+```
+
+The smoke starts a disposable runner with the same CPU/memory limits, loads a
+local image into its isolated Docker daemon and checks a nested container's
+CPU, memory and PID limits on cgroup v2. It does not register a runner or contact
+GitHub, Telegram or a model provider. Its containers and volumes are removed.
+A successful `docker info` alone does not verify resource-limited task startup.
+For an existing VPS installation, copy the updated runner files and recreate it
+with the install command after GitHub reports it idle; pushing the commit does
+not update the running runner container.
 
 ```sh
 gh api repos/stonega/repodesk/actions/runners \
