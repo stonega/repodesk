@@ -6,6 +6,14 @@ Use **New** in the Repositories heading to configure a target in its dialog;
 use its **Edit** action to change saved policies. Cancel leaves the saved values
 unchanged, and removal requires confirmation.
 
+For a new GitHub App, start **Connect GitHub** in setup or **New** in Manage
+GitHub. The suggested name is `repodesk`; choose another available name on GitHub
+if needed. On a public HTTPS deployment, confirm that GitHub has an active webhook
+at the operator-specific URL and subscriptions to Pull request, Issue comment and
+Pull request review comment. After the callback, Review Bot should show its secret
+as configured without copying it. Repository policy and verified maintainer setup
+are still required. Existing Apps follow the manual webhook steps in the guide.
+
 1. Enable automatic review for a dedicated test repository. Open a non-draft PR
    containing a concrete regression. Expect one informational review at that head
    with supported file/line findings. Redeliver its webhook: expect no duplicate.

@@ -1,5 +1,26 @@
 # Implementation evidence
 
+## GitHub App onboarding defaults, 2026-10-08
+
+New GitHub App registrations now suggest `repodesk` in setup, the creation dialog
+and API requests that omit a name. Their manifests preselect `pull_request`,
+`issue_comment` and `pull_request_review_comment`; public HTTPS domains enable the
+operator-specific webhook automatically, including a configured admin site domain.
+Local, IP-address and non-HTTPS origins retain an inactive placeholder with the
+subscriptions selected. GitHub's generated secret is required at conversion and
+stored encrypted for Review Bot's existing operator-scoped fallback after restart.
+Existing App records and explicit secret replacements remain supported. Review Bot
+repository policies and verified member requirements remain unchanged.
+
+Biome, strict TypeScript, build and **584 deterministic tests** passed with disposable
+PostgreSQL and loopback proxy bypass. Added coverage checks name defaults, public
+and local origins, custom domains, encrypted secret retention, signed webhook intake,
+invalid conversions and operator isolation. All **17 admin browser scenarios**
+passed, including setup name submission, failed-registration recovery and the
+creation dialog's default name and posted manifest. Desktop/mobile creation and
+saved App summaries were visually inspected. No dependency, migration, live
+GitHub/Telegram call, production configuration change or deployment was added.
+
 ## Codex follow-up intent routing, 2026-10-08
 
 Ordinary messages in a private or linked-group Topic now enter Pi even when a

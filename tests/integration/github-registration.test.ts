@@ -6,7 +6,7 @@ import {
   expect,
   test,
 } from "bun:test";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { claim, login } from "../../src/admin/auth.ts";
 import { PluginService } from "../../src/agent/plugin-service.ts";
 import { createApp } from "../../src/app.ts";
@@ -17,12 +17,14 @@ import { Store } from "../../src/db/repositories.ts";
 import type { Admin } from "../../src/domain.ts";
 import { GitHubApps } from "../../src/github/registry.ts";
 import { GitHubService } from "../../src/github/service.ts";
+import { ReviewService } from "../../src/review-bot/service.ts";
 import { hash } from "../../src/setup/credentials.ts";
 import { SetupService } from "../../src/setup/service.ts";
 import { workspace } from "../fixtures.ts";
 import {
   githubFixture,
   githubFixtureConfig,
+  githubFixtureWebhookSecret,
   githubTransport,
 } from "../github-fixture.ts";
 
@@ -192,7 +194,11 @@ const url = process.env.TEST_DATABASE_URL;
         issues: "write",
         pull_requests: "write",
       },
-      default_events: [],
+      default_events: [
+        "pull_request",
+        "issue_comment",
+        "pull_request_review_comment",
+      ],
       hook_attributes: {
         url: "https://example.com/github/webhook",
         active: false,
@@ -234,6 +240,106 @@ const url = process.env.TEST_DATABASE_URL;
       ),
     ).rejects.toMatchObject({ code: "github_authorization_expired" });
     expect(conversions).toBe(0);
+  });
+  test("new HTTPS Apps default to repodesk and the operator's active Review Bot webhook", async () => {
+    const hostedOrigin = "https://repodesk.example";
+    const hosted = new GitHubService(store, key, hostedOrigin, apps);
+    const personal = await hosted.register(admin, id, hash(auth.raw), {
+      owner: "personal",
+      public: false,
+      source: "setup",
+    });
+    expect(personal.manifest).toMatchObject({
+      name: "repodesk",
+      hook_attributes: {
+        url: `${hostedOrigin}/github/webhook/${admin.id}`,
+        active: true,
+      },
+      default_events: [
+        "pull_request",
+        "issue_comment",
+        "pull_request_review_comment",
+      ],
+    });
+    const organization = await hosted.register(admin, sibling, hash(auth.raw), {
+      owner: "organization",
+      organization: "example",
+      public: false,
+    });
+    expect(organization.manifest.name).toBe("repodesk");
+    expect(organization.manifest.hook_attributes).toEqual(
+      personal.manifest.hook_attributes,
+    );
+    const custom = await hosted.register(admin, id, hash(auth.raw), input);
+    expect(custom.manifest.name).toBe(input.name);
+  });
+  test("origins without a public HTTPS domain keep webhook delivery inactive", async () => {
+    for (const localOrigin of [
+      "http://repodesk.example",
+      "https://localhost",
+      "https://127.0.0.1",
+      "https://repodesk.local",
+    ]) {
+      const local = new GitHubService(store, key, localOrigin, apps);
+      const result = await local.register(admin, id, hash(auth.raw), input);
+      expect(result.manifest.hook_attributes).toEqual({
+        url: "https://example.com/github/webhook",
+        active: false,
+      });
+      expect(result.manifest.default_events).toContain("issue_comment");
+    }
+  });
+  test("manifest registration retains the generated secret for signed webhook intake after restart", async () => {
+    await service.registrationResult(
+      admin,
+      hash(auth.raw),
+      stateOf(await start()),
+      "fixture-manifest-code",
+    );
+    const stored = (
+      await store.pool.query(
+        "SELECT credentials FROM github_apps WHERE operator_id=$1",
+        [admin.id],
+      )
+    ).rows[0].credentials;
+    expect(stored).not.toContain(githubFixtureWebhookSecret);
+    expect(
+      (await store.pool.query("SELECT count(*) FROM review_bot_hooks")).rows[0]
+        .count,
+    ).toBe("0");
+    const restarted = new GitHubApps(store, key, undefined, githubTransport());
+    const review = new ReviewService(store, restarted, key, origin);
+    const view = await review.view(admin, id);
+    expect(view.webhookConfigured).toBe(true);
+    expect(view.settings.enabled).toBe(false);
+    expect(JSON.stringify(view)).not.toContain(githubFixtureWebhookSecret);
+    expect(await review.hookSecret(randomUUID())).toBeUndefined();
+    const receiver = createApp(
+      store,
+      new SetupService(store, key, origin),
+      origin,
+      undefined,
+      service,
+      key,
+      undefined,
+      review,
+    );
+    const body = JSON.stringify({ zen: "Fixture webhook." });
+    const send = (secret: string) =>
+      receiver.request(`/github/webhook/${admin.id}`, {
+        method: "POST",
+        headers: {
+          "x-github-event": "ping",
+          "x-github-delivery": randomUUID(),
+          "x-hub-signature-256": `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`,
+        },
+        body,
+      });
+    expect((await send("incorrect-secret")).status).toBe(401);
+    const accepted = await send(githubFixtureWebhookSecret);
+    expect(accepted.status).toBe(200);
+    expect(await accepted.json()).toEqual({ accepted: true });
+    expect((await store.read(id)).reviewTasks).toBeUndefined();
   });
   test("callback is session-bound and one-use; credentials are encrypted and operator-scoped", async () => {
     const pending = await start(),
@@ -424,7 +530,7 @@ const url = process.env.TEST_DATABASE_URL;
       false,
     );
   });
-  test("invalid permission/owner/key responses are rejected without persisting secrets", async () => {
+  test("invalid permission/owner/key/webhook-secret responses are rejected without persisting secrets", async () => {
     const upstream = githubTransport();
     const permissions = {
       contents: "write",
@@ -444,6 +550,9 @@ const url = process.env.TEST_DATABASE_URL;
       { permissions: { ...permissions, members: "write" } },
       { owner: { login: "wrong-org" } },
       { pem: "not-a-private-key" },
+      { webhook_secret: undefined },
+      { webhook_secret: null },
+      { webhook_secret: "" },
     ]) {
       const registry = new GitHubApps(store, key, undefined, (async (
         url,

@@ -361,12 +361,16 @@ when implementing or reviewing a change.
 
 - **Preference:** Use RepoDesk as the product name in the admin panel and bot.
   Show organization and personal GitHub account names only as connected account
-  data or clearly labeled examples.
+  data or clearly labeled examples. Suggest lowercase `repodesk` as the default
+  GitHub App name in setup and the creation dialog, without a workspace suffix.
 - **Scope:** Product identity, setup, help text, default GitHub App name and examples.
 - **Source:** 2026-09-26 — user clarified that DeepX was only an example GitHub
   organization and chose RepoDesk as the project name.
+  2026-10-08 — user requested `repodesk` as the default GitHub App name.
 - **Exceptions:** Historical deployment records and compatibility identifiers may
   retain their original values so existing installations continue to work.
+  Custom App names remain editable; GitHub may require another name if the
+  suggested name is already taken.
 
 ### Setup entry splits background and form
 
@@ -880,13 +884,19 @@ when implementing or reviewing a change.
 - **Preference:** Offer an in-panel creation entry that preconfigures the GitHub App
   and receives its credentials automatically after the user confirms on GitHub.
   Keep organization/personal ownership explicit, select personal initially, and
-  explain the next installation step.
+  explain the next installation step. New Apps preselect Review Bot's PR/comment
+  events, enable the operator-specific webhook for a public HTTPS domain and retain
+  GitHub's generated secret without adding setup fields or a copy/paste step.
 - **Scope:** GitHub App onboarding in setup and the workspace Plugins panel.
 - **Source:** 2026-09-20 — user requested a button to create a GitHub App directly,
   referencing Coolify's guided setup. 2026-09-26 — user requested support for
   creating the App for a personal account.
+  2026-10-08 — user requested webhook configuration by default for new GitHub setup.
 - **Exceptions:** Existing Apps can still use manual environment/file configuration.
-  The setup wizard uses personal ownership and a generated App name without a
+  Existing App settings are not rewritten. Local or non-HTTPS origins keep delivery
+  inactive until a public HTTPS receiver is configured. Review Bot policies and
+  verified member identities remain separate requirements.
+  The setup wizard uses personal ownership and the default `repodesk` name without a
   dialog; organization ownership and visibility choices remain in Plugins.
 
 ### Common action buttons use Reicon

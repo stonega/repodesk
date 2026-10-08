@@ -11,15 +11,22 @@ No new dependency, separate deployment or model credential is required.
 
 1. Connect the GitHub App and repositories to the workspace. Enable Codex, configure
    the repositories and assign active maintainers. Review Bot selects from these targets.
-2. Open Review Bot and configure a webhook secret. Use an existing secret or generate
-   one; generated secrets appear once in that dialog. The encrypted secret belongs
-   to the operator's App and is shared across that operator's workspaces.
-3. In the GitHub App settings, set the displayed webhook URL, paste the secret,
-   enable delivery and subscribe to `pull_request`, `issue_comment`,
+2. Open Review Bot. New Apps created through RepoDesk retain GitHub's generated
+   webhook secret automatically. If **Webhook secret** shows **Not configured**,
+   configure an existing secret or generate one; generated secrets appear once in
+   that dialog. The encrypted secret belongs to the operator's App and is shared
+   across that operator's workspaces. Replacing a secret also requires updating it
+   in GitHub.
+3. New Apps created through RepoDesk with a public HTTPS domain already have the
+   webhook URL, delivery and required event subscriptions configured. For an
+   existing or manually registered App, set the displayed webhook URL, paste the
+   secret, enable delivery and subscribe to `pull_request`, `issue_comment`,
    `pull_request_review_comment`. The receiver also handles `installation` and
    `installation_repositories` lifecycle events.
    A publicly reachable HTTPS origin is required for live delivery. Saving a secret
-   in RepoDesk does not update or verify GitHub's webhook configuration.
+   in RepoDesk does not update or verify GitHub's webhook configuration. Local
+   registrations retain an inactive placeholder until a public HTTPS receiver is
+   configured.
 4. Choose **New** in Repositories, choose an automatic review owner and save the
    repository in the dialog. The page shows saved repository names, owners and
    policy values. **Edit** opens the same editor; Cancel discards changes, failed

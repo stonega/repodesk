@@ -21,7 +21,7 @@ export const registrationInput = z.discriminatedUnion("owner", [
   z
     .object({
       owner: z.literal("personal"),
-      name: z.string().trim().min(1).max(34),
+      name: z.string().trim().min(1).max(34).default("repodesk"),
       public: z.boolean(),
       source: z.literal("setup").optional(),
     })
@@ -30,7 +30,7 @@ export const registrationInput = z.discriminatedUnion("owner", [
     .object({
       owner: z.literal("organization"),
       organization: account,
-      name: z.string().trim().min(1).max(34),
+      name: z.string().trim().min(1).max(34).default("repodesk"),
       public: z.boolean(),
       source: z.literal("setup").optional(),
     })
@@ -112,7 +112,7 @@ export class GitHubApps {
           client_id: storedConfig.shape.clientId,
           client_secret: storedConfig.shape.clientSecret,
           pem: storedConfig.shape.privateKey,
-          webhook_secret: storedConfig.shape.webhookSecret,
+          webhook_secret: z.string().min(1).max(8192),
           owner: z.object({ login: account }),
           permissions: z.record(z.string(), z.string()),
         })

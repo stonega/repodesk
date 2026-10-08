@@ -123,6 +123,24 @@ test.describe
         path: "test-results/setup-github.png",
         fullPage: true,
       });
+      const registrationRoute = "**/api/admin/workspaces/*/github/register";
+      await page.route(registrationRoute, async (route) => {
+        expect(route.request().postDataJSON()).toEqual({
+          owner: "personal",
+          name: "repodesk",
+          public: false,
+          source: "setup",
+        });
+        await route.fulfill({
+          status: 502,
+          json: { error: "github_unavailable" },
+        });
+      });
+      await page.getByRole("button", { name: "Connect GitHub" }).click();
+      await expect(page.getByRole("alert")).toContainText(
+        "GitHub is unavailable. Try again shortly.",
+      );
+      await page.unroute(registrationRoute);
       await page.goto("/admin");
       await expect(
         page.getByRole("link", { name: "Runs", exact: true }),
@@ -1372,6 +1390,11 @@ test.describe
       await expect(
         page
           .getByRole("dialog", { name: "Create GitHub App", exact: true })
+          .getByLabel("App name", { exact: true }),
+      ).toHaveValue("repodesk");
+      await expect(
+        page
+          .getByRole("dialog", { name: "Create GitHub App", exact: true })
           .getByRole("combobox", { name: "App owner", exact: true }),
       ).toHaveAttribute("value", "personal");
       await expect(
@@ -1402,6 +1425,10 @@ test.describe
         fullPage: true,
       });
       await page.setViewportSize({ width: 1280, height: 900 });
+      await page.screenshot({
+        path: "test-results/github-create-desktop.png",
+        fullPage: true,
+      });
       await page.route(
         "https://github.com/settings/apps/new**",
         async (route) => {
@@ -1411,6 +1438,7 @@ test.describe
               "manifest",
             ) ?? "{}",
           );
+          expect(manifest.name).toBe("repodesk");
           expect(manifest.public).toBe(false);
           expect(manifest.default_permissions).toEqual({
             contents: "write",
@@ -1423,7 +1451,11 @@ test.describe
             url: "https://example.com/github/webhook",
             active: false,
           });
-          expect(manifest.default_events).toEqual([]);
+          expect(manifest.default_events).toEqual([
+            "pull_request",
+            "issue_comment",
+            "pull_request_review_comment",
+          ]);
           expect(new URL(manifest.callback_urls[0]).origin).toBe(
             new URL(page.url()).origin,
           );
@@ -1469,6 +1501,16 @@ test.describe
       await expect(page.locator("body")).not.toContainText(
         "fixture-client-secret",
       );
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(manage).toBeVisible();
+      await expect(
+        page.getByRole("dialog", { name: "Create GitHub App", exact: true }),
+      ).toHaveCount(0);
+      await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
+      await page.screenshot({
+        path: "test-results/github-created-mobile.png",
+        fullPage: true,
+      });
     });
     test("GitHub App authorization connects selected repositories to the returning workspace", async ({
       page,

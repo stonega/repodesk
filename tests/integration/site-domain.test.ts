@@ -184,6 +184,10 @@ const url = process.env.TEST_DATABASE_URL;
     });
     expect(next.manifest).toMatchObject({
       url: custom,
+      hook_attributes: {
+        url: `${custom}/github/webhook/${admin.id}`,
+        active: true,
+      },
       callback_urls: [site.githubCallbackUrl],
       redirect_url: site.githubSetupUrl,
     });

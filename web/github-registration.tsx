@@ -36,12 +36,12 @@ export function GitHubRegistration({
   const [busy, setBusy] = useState(false);
   const [owner, setOwner] = useState("personal");
   const [organization, setOrganization] = useState("");
-  const [name, setName] = useState("RepoDesk");
+  const [name, setName] = useState("repodesk");
   const [isPublic, setPublic] = useState(false);
   const openCreation = () => {
     setOwner("personal");
     setOrganization("");
-    setName("RepoDesk");
+    setName("repodesk");
     setPublic(false);
     setError("");
     setOpen(true);
@@ -102,8 +102,9 @@ export function GitHubRegistration({
               Confirm creation on GitHub with read and write access to
               repository code, issues and pull requests for coding tasks. The
               App also reads organization members for member account selection.
-              It will be available to your workspaces; each workspace chooses
-              its own repositories.
+              Webhooks for PR reviews and tagged requests are preconfigured for
+              deployments with a public HTTPS domain. It will be available to
+              your workspaces; each workspace chooses its own repositories.
             </p>
             <fieldset disabled={busy} className="plugin-fields">
               <label className="field">

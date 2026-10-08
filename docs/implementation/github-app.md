@@ -2,7 +2,8 @@
 
 Implemented: guided GitHub App creation, workspace-scoped web authorization,
 installation/repository selection, disconnect, and short-lived read-only installation
-tokens for Code Truth, optional authenticated Review Bot webhook intake, plus Telegram issue drafts with explicit approval and
+tokens for Code Truth, preconfigured authenticated Review Bot webhook intake on
+public HTTPS deployments, plus Telegram issue drafts with explicit approval and
 repository-scoped issue submission. No personal token is accepted by the web panel.
 
 ## Create the App from the panel
@@ -10,8 +11,10 @@ repository-scoped issue submission. No personal token is accepted by the web pan
 1. During first-run setup, click **Connect GitHub**. Setup creates a private,
    personally owned App automatically when needed. To choose an organization
    owner, select a workspace and use **Plugins → GitHub → Create GitHub App**.
-2. Setup uses an automatically generated App name and personal ownership. In
-   Plugins, enter an App name. **Personal account** is selected initially; choose
+2. Setup suggests `repodesk` as the App name and uses personal ownership. In
+   Plugins, the editable App name also defaults to `repodesk`. GitHub lets you
+   change the suggested name if it is already taken. **Personal account** is
+   selected initially; choose
    **Organization** and enter its login when the organization should own the App.
    Leave **Allow installation on other GitHub accounts** unchecked for an App used
    only by its owner. Enable it when a personally owned App needs installation on an
@@ -20,16 +23,23 @@ repository-scoped issue submission. No personal token is accepted by the web pan
    **Continue to GitHub**. Confirm creation on GitHub. The manifest preconfigures
    Contents, Issues and Pull requests read/write access, Metadata read access,
    organization Members read access,
-   no webhook events, and the deployment's callbacks. These permissions support
+   `pull_request`, `issue_comment` and `pull_request_review_comment` webhook
+   subscriptions, and the deployment's callbacks. These permissions support
    Codex checkout and PR publication; coding policies and task authorization
    still control each operation. The callback accepts exactly this permission set
    and rejects missing grants or additional permissions.
-   GitHub requires a publicly addressable webhook URL even when delivery is disabled.
-   The inactive hook uses `https://example.com/github/webhook` as a reserved-domain
-   placeholder. It receives no events; local browser callback URLs remain unchanged.
+   With a public HTTPS domain, webhook delivery is enabled at
+   `PUBLIC_ORIGIN/github/webhook/<operator-id>` (using the saved admin site domain
+   when configured). Localhost, IP-address and non-HTTPS origins retain an inactive
+   `https://example.com/github/webhook` placeholder because GitHub rejects local
+   webhook URLs. Their event subscriptions are still preselected; configure a
+   public HTTPS receiver before enabling delivery. Browser callback URLs retain
+   the deployment's origin.
 4. GitHub returns to the setup step or original workspace. The server exchanges its one-use code
-   for App credentials and encrypts them in PostgreSQL; nothing needs copying into
-   `.env`, no extra Compose override is needed, and API/worker restarts are unnecessary.
+   for App credentials, including GitHub's generated webhook secret, and encrypts
+   them in PostgreSQL. Review Bot uses that secret automatically; nothing needs
+   copying into `.env`, no extra Compose override is needed, and API/worker restarts
+   are unnecessary.
 5. In setup, authorize the account, then use the same **Connect GitHub** button
    to open GitHub installation. Choose repositories on GitHub and return to the
    setup tab. It detects the installation, connects the granted repositories and
@@ -49,6 +59,11 @@ require an explicit choice in Plugins.
 App credentials are scoped to the local operator account and can be reused by that
 operator's workspaces. Creating an App does not connect any workspace or grant it
 repository access. Workspace connections and disconnects remain independent.
+Review Bot remains disabled until a workspace operator configures its repositories
+and enables it. Tagged requests still require verified member GitHub identities.
+Existing GitHub Apps keep their names, webhook secrets and event subscriptions;
+update their webhook settings manually using the [Review Bot guide](review-bot.md).
+
 The button is hidden when an App is already available. Existing environment/file
 credentials take precedence and remain supported.
 
@@ -172,24 +187,28 @@ denied access and invalid responses retain the last saved list and show an updat
 notice; normal tool permission checks still apply. Reconnect, disconnect,
 ownership revocation or deletion during a request prevents that response from
 replacing newer state. Updates are near realtime while the list is open; webhooks
-remain disabled and there is no background repository sync while the panel is closed.
+are separate from this polling flow; there is no background repository metadata sync
+while the panel is closed.
 No migration, new dependency or App permission change is required. See the
 [manual staging check](../../examples/github-repository-sync.md).
 
 ## Security and API
 
 POST `/api/admin/workspaces/:id/github/register` accepts
-`{owner: "organization", organization: "example", name: "RepoDesk", public: false}`
-or `{owner: "personal", name: "RepoDesk", public: false}`. It returns only the
-public manifest and a fixed GitHub form destination. The browser POSTs `manifest`
+`{owner: "organization", organization: "example", name: "repodesk", public: false}`
+or `{owner: "personal", name: "repodesk", public: false}`. Omitting `name` uses
+`repodesk`. It returns only the public manifest and a fixed GitHub form destination.
+The browser POSTs `manifest`
 as a JSON string. GET `/api/admin/github/app/callback` exchanges the temporary code
 server-side, then redirects to the originating workspace without secrets or codes.
 Registration requires workspace operator ownership, Origin/CSRF, rate limiting and
 one-use session/admin/workspace-bound state. Returned owner, permissions and RSA key
 are validated. A unique operator record prevents concurrent flows overwriting keys.
-Client secret and private key are encrypted with operator-bound AES-GCM. The webhook
-secret is discarded because webhooks are disabled. API/worker load the saved App
-on demand; safe UI status exposes only its slug and installation link.
+Client secret, private key and generated webhook secret are encrypted with
+operator-bound AES-GCM. New manifest conversions require a nonempty webhook secret;
+existing App records without one remain supported. Review Bot uses the generated
+secret unless the operator explicitly configures a replacement. API/worker load
+the saved App on demand; safe UI status exposes only its slug and installation link.
 
 `/api/admin/workspaces/:id/github` supports GET (safe status), PUT (connect selected
 installation/repository IDs), and DELETE (disconnect), with expected connection revisions.

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { operator, throttle } from "../admin/auth.ts";
-import { publicOrigin } from "../admin/site.ts";
+import { publicOrigin, siteDomain } from "../admin/site.ts";
 import type { Store } from "../db/repositories.ts";
 import { type Admin, requireThat, type Workspace } from "../domain.ts";
 import { decrypt, encrypt, hash, token } from "../setup/credentials.ts";
@@ -230,6 +230,9 @@ export class GitHubService {
       ? `/organizations/${organization}/settings/apps/new`
       : "/settings/apps/new";
     const origin = await publicOrigin(this.store, this.origin);
+    const site = new URL(origin);
+    const webhookActive =
+      site.protocol === "https:" && siteDomain.safeParse(site.hostname).success;
     return {
       url: `https://github.com${path}?state=${state}`,
       manifest: {
@@ -237,16 +240,21 @@ export class GitHubService {
         url: origin,
         redirect_url: `${origin}/api/admin/github/app/callback`,
         callback_urls: [`${origin}/api/admin/github/callback`],
-        // GitHub validates this required URL even for an inactive hook. Use
-        // the reserved example domain; this app never subscribes to webhooks.
+        // GitHub rejects local webhook URLs even when delivery is disabled.
         hook_attributes: {
-          url: "https://example.com/github/webhook",
-          active: false,
+          url: webhookActive
+            ? `${origin}/github/webhook/${admin.id}`
+            : "https://example.com/github/webhook",
+          active: webhookActive,
         },
         public: input.public,
         request_oauth_on_install: false,
         default_permissions: { ...githubAppPermissions },
-        default_events: [],
+        default_events: [
+          "pull_request",
+          "issue_comment",
+          "pull_request_review_comment",
+        ],
       },
     };
   }

@@ -159,7 +159,7 @@ export function GitHubSetup({
           "POST",
           {
             owner: "personal",
-            name: `RepoDesk-${workspaceId.slice(0, 8)}`,
+            name: "repodesk",
             public: false,
             source: "setup",
           },
@@ -173,16 +173,7 @@ export function GitHubSetup({
     } finally {
       setBusy(false);
     }
-  }, [
-    busy,
-    data,
-    endpoint,
-    error,
-    needsRepositoryChoice,
-    refresh,
-    request,
-    workspaceId,
-  ]);
+  }, [busy, data, endpoint, error, needsRepositoryChoice, refresh, request]);
   useEffect(() => {
     if (
       callback !== "app-created" ||

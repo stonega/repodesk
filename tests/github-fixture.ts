@@ -14,6 +14,8 @@ export const githubFixtureConfig = {
   slug: "deepx-fixture",
 };
 export const githubPublicKey = keys.publicKey;
+export const githubFixtureWebhookSecret =
+  "fixture-github-webhook-secret-32-characters";
 export function githubTransport(
   observe?: (url: string, init: RequestInit) => void,
   repositoryCount = 2,
@@ -34,6 +36,7 @@ export function githubTransport(
           client_id: githubFixtureConfig.clientId,
           client_secret: githubFixtureConfig.clientSecret,
           pem: githubFixtureConfig.privateKey,
+          webhook_secret: githubFixtureWebhookSecret,
           owner: { login: "example" },
           permissions: {
             contents: "write",

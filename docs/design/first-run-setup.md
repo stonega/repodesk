@@ -26,6 +26,11 @@ who can reach an unclaimed deployment can submit the first account.
 Updated 2026-09-27 following the user's request to remove bootstrap tokens and keep
 first setup to username and password only.
 
+New GitHub App registrations suggest `repodesk`, preselect Review Bot's PR/comment
+events and enable the operator-specific webhook on public HTTPS deployments.
+GitHub's generated secret is saved automatically. Local origins retain inactive
+delivery; Review Bot repository policies and member verification remain separate.
+
 This is our application design, not built-in behavior supplied by Pi or Docker.
 
 ## Wizard steps
