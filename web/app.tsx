@@ -239,6 +239,7 @@ function Action({
   disabled = false,
   loading = false,
   onConflict,
+  onError,
 }: {
   resetKey?: unknown;
   children: string;
@@ -249,6 +250,7 @@ function Action({
   disabled?: boolean;
   loading?: boolean;
   onConflict?: () => void;
+  onError?: (message: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -261,10 +263,12 @@ function Action({
     setBusy(true);
     setModalPending?.(true);
     setError("");
+    onError?.("");
     try {
       await onClick();
     } catch (e) {
-      setError((e as Error).message);
+      if (onError) onError((e as Error).message);
+      else setError((e as Error).message);
     } finally {
       setBusy(false);
       setModalPending?.(false);
@@ -2861,6 +2865,81 @@ function WorkflowsPage({ id }: { id: string }) {
     </Page>
   );
 }
+function SkillCardHeader({
+  skill: s,
+  onEdit,
+  onAction,
+}: {
+  skill: Skill;
+  onEdit: () => void;
+  onAction: (action: "enable" | "disable" | "archive") => Promise<void>;
+}) {
+  const [error, setError] = useState("");
+  return (
+    <>
+      <div className="skill-card-header">
+        <div className="skill-card-title">
+          <h2>{s.draft.name}</h2>
+          <span className="pill">
+            {s.archived ? "Archived" : s.enabled ? "Enabled" : "Disabled"}
+          </span>
+        </div>
+        <div className="skill-card-controls">
+          <IconButton
+            icon="edit"
+            label="Edit draft"
+            type="button"
+            onClick={onEdit}
+          />
+          {([s.enabled ? "disable" : "enable", "archive"] as const).map(
+            (action) => (
+              <Action
+                icon={
+                  action === "archive"
+                    ? "archive"
+                    : action === "disable"
+                      ? "pause"
+                      : "play"
+                }
+                key={action}
+                danger={action === "archive"}
+                disabled={
+                  s.archived || (action === "enable" && !s.published.length)
+                }
+                onError={(message) =>
+                  setError(
+                    message === "publish_first"
+                      ? "Only published, unarchived skills can be enabled. Reload the page to check this skill’s current status."
+                      : message,
+                  )
+                }
+                onClick={async () => {
+                  await onAction(action);
+                }}
+              >
+                {action}
+              </Action>
+            ),
+          )}
+        </div>
+      </div>
+
+      {s.archived ? (
+        <p className="muted">
+          Archived skills cannot be enabled. Create or import a new skill to
+          reuse these instructions.
+        </p>
+      ) : !s.enabled && !s.published.length ? (
+        <p className="muted">
+          Review the instructions and choose Publish draft below, then enable
+          this skill.
+        </p>
+      ) : null}
+      {error && <Notice error>{error}</Notice>}
+    </>
+  );
+}
+
 function SkillsPage({ id }: { id: string }) {
   const { data, error, reload } = useData<{
     items: (Skill & { dependents: unknown[] })[];
@@ -2986,45 +3065,22 @@ function SkillsPage({ id }: { id: string }) {
       )}
       {visibleSkills?.map((s) => (
         <section className="card skill-card" key={s.id}>
-          <div className="skill-card-header">
-            <div className="skill-card-title">
-              <h2>{s.draft.name}</h2>
-              <span className="pill">{s.enabled ? "Enabled" : "Disabled"}</span>
-            </div>
-            <div className="skill-card-controls">
-              <IconButton
-                icon="edit"
-                label="Edit draft"
-                type="button"
-                onClick={() => setEditing(s)}
-              />
-              {([s.enabled ? "disable" : "enable", "archive"] as const).map(
-                (action) => (
-                  <Action
-                    icon={
-                      action === "archive"
-                        ? "archive"
-                        : action === "disable"
-                          ? "pause"
-                          : "play"
-                    }
-                    key={action}
-                    danger={action === "archive"}
-                    onClick={async () => {
-                      await api(
-                        `/api/admin/workspaces/${id}/skills/${s.id}/action`,
-                        "POST",
-                        { version: s.version, action },
-                      );
-                      reload();
-                    }}
-                  >
-                    {action}
-                  </Action>
-                ),
-              )}
-            </div>
-          </div>
+          <SkillCardHeader
+            key={`${s.id}:${s.version}`}
+            skill={s}
+            onEdit={() => setEditing(s)}
+            onAction={async (action) => {
+              await api(
+                `/api/admin/workspaces/${id}/skills/${s.id}/action`,
+                "POST",
+                {
+                  version: s.version,
+                  action,
+                },
+              );
+              reload();
+            }}
+          />
           <p className="skill-card-description">{s.draft.description}</p>
           {s.origin && (
             <p className="muted">

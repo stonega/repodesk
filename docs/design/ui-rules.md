@@ -589,10 +589,15 @@ them.
   separate purpose from version metadata, and group Publish and Test below the
   preview. Keep rollback controls in an expandable section with a labeled version
   selector, so recovery actions do not compete with everyday actions.
+  Keep the management icons aligned as one group, with errors below the header.
+  Explain unavailable enablement in plain language and show archived status.
 - **Scope:** Skill catalog cards; keep the layout readable when controls wrap on mobile.
 - **Source:** 2026-09-21 — user requested reorganizing the skill card, illustrated
   with the existing crowded action and rollback rows. The grouping above is the
   implementation interpretation of that request.
+  2026-10-08 — user requested fixing the report skill card shown with a raw
+  `publish_first` error and uneven icons. Aligned controls and readable state
+  guidance are the implementation interpretation, scoped to skill cards.
 - **Exceptions:** None recorded.
 
 ### Skill creation has a labeled header action
