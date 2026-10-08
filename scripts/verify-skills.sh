@@ -5,8 +5,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 verify_phase="${1:-all}"
 case "$verify_phase" in
-  all|quality|browser|release-browser) ;;
-  *) echo "Usage: bash scripts/verify-skills.sh [all|quality|browser|release-browser]" >&2; exit 2 ;;
+  all|quality|browser|release-browser|runs-browser) ;;
+  *) echo "Usage: bash scripts/verify-skills.sh [all|quality|browser|release-browser|runs-browser]" >&2; exit 2 ;;
 esac
 bun install --frozen-lockfile
 bun install --cwd services/code-truth --frozen-lockfile
@@ -71,6 +71,8 @@ if [[ "$verify_phase" != *browser ]]; then
 fi
 if [[ "$verify_phase" == release-browser ]]; then
   bun run test:browser
+elif [[ "$verify_phase" == runs-browser ]]; then
+  bun run test:browser tests/browser/runs.e2e.ts tests/browser/admin.e2e.ts
 elif [[ "$verify_phase" != quality ]]; then
   bun run test:browser tests/browser/skills-search.e2e.ts tests/browser/team-workflows.e2e.ts tests/browser/admin.e2e.ts
 fi

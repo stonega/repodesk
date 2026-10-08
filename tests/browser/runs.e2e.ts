@@ -32,14 +32,29 @@ const run = {
   })),
   deliveries: [{ state: "sent", at: "2026-09-28T10:00:32.000Z", attempts: 1 }],
 };
+const summary = {
+  id: run.id,
+  actor: run.actor,
+  status: run.status,
+  at: run.at,
+  model: run.model,
+  taskPreview: run.task,
+  attemptCount: run.attempts.length,
+  deliveryStates: ["sent"],
+};
 
 async function fixture(
   page: Page,
   mode: "member" | "operator",
   detail?: (route: Route) => Promise<void>,
+  list?: (route: Route) => Promise<void>,
 ) {
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === endpoint && list) {
+      await list(route);
+      return;
+    }
     if (url.pathname === `${endpoint}/${runId}` && detail) {
       await detail(route);
       return;
@@ -64,7 +79,7 @@ async function fixture(
           : url.pathname === "/api/admin/workspaces"
             ? [{ id: workspaceId, name: "Run fixture" }]
             : url.pathname === endpoint
-              ? { mode, total: 101, items: [run] }
+              ? { mode, total: 101, offset: 100, limit: 25, items: [summary] }
               : url.pathname === `${endpoint}/${runId}`
                 ? { mode, run }
                 : {};
@@ -178,4 +193,145 @@ test("a missing run shows a recoverable error without a previous run's messages"
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
   await page.getByRole("link", { name: "Back to Runs" }).click();
   await expect(page).toHaveURL(listUrl);
+});
+
+for (const width of [1280, 390]) {
+  test(`runs request summary pages and load details only on navigation at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const offsets: number[] = [];
+    let detailRequests = 0;
+    const items = Array.from({ length: 25 }, (_, index) => ({
+      ...summary,
+      id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      taskPreview: `Request ${index + 1}`,
+    }));
+    await fixture(
+      page,
+      "member",
+      async (route) => {
+        detailRequests++;
+        await route.fulfill({ json: { mode: "member", run } });
+      },
+      async (route) => {
+        const params = new URL(route.request().url()).searchParams;
+        expect(params.get("limit")).toBe("25");
+        const offset = Number(params.get("offset"));
+        offsets.push(offset);
+        await route.fulfill({
+          json: {
+            mode: "member",
+            total: 26,
+            offset,
+            limit: 25,
+            items: offset === 0 ? items : offset === 25 ? [summary] : [],
+          },
+        });
+      },
+    );
+    const firstPage = `/admin/runs?workspace=${workspaceId}&offset=0`;
+    await page.goto(firstPage);
+    await expect(page.locator(".run-card")).toHaveCount(25);
+    await expect(
+      page.getByRole("navigation", { name: "Pagination" }),
+    ).toContainText("1–25 of 26");
+    await expect(
+      page.getByRole("button", { name: "Previous page" }),
+    ).toBeDisabled();
+    await page.getByRole("button", { name: "Next page" }).click();
+    await expect(page.locator(".run-card")).toHaveCount(1);
+    await expect(
+      page.getByRole("navigation", { name: "Pagination" }),
+    ).toContainText("26–26 of 26");
+    await expect(
+      page.getByRole("button", { name: "Next page" }),
+    ).toBeDisabled();
+    expect(detailRequests).toBe(0);
+    await expect(page.locator("body")).toHaveJSProperty("scrollWidth", width);
+    await page.screenshot({
+      path: `test-results/run-list-${width}.png`,
+      fullPage: true,
+    });
+    await page.locator(".run-card").click();
+    await expect(page.getByRole("region", { name: "Messages" })).toContainText(
+      run.result,
+    );
+    expect(detailRequests).toBe(1);
+    await page.getByRole("link", { name: "Back to Runs" }).click();
+    await expect(
+      page.getByRole("navigation", { name: "Pagination" }),
+    ).toContainText("26–26 of 26");
+    await page.reload();
+    await expect(page.locator(".run-card")).toHaveCount(1);
+    await page.getByRole("button", { name: "Previous page" }).click();
+    await expect(page).toHaveURL(firstPage);
+    await expect(page.locator(".run-card")).toHaveCount(25);
+    await page.goBack();
+    await expect(
+      page.getByRole("navigation", { name: "Pagination" }),
+    ).toContainText("26–26 of 26");
+    expect(offsets).toEqual([0, 25, 25, 25, 0, 25]);
+  });
+}
+
+test("runs hide stale rows while paging, recover failures, and handle empty pages", async ({
+  page,
+}) => {
+  let held: Route | undefined;
+  let fail = true;
+  await fixture(page, "member", undefined, async (route) => {
+    const offset = Number(
+      new URL(route.request().url()).searchParams.get("offset"),
+    );
+    if (offset === 25 && fail) {
+      held = route;
+      return;
+    }
+    await route.fulfill({
+      json: {
+        mode: "member",
+        total: 26,
+        offset,
+        limit: 25,
+        items: offset === 0 ? [summary] : [],
+      },
+    });
+  });
+  await page.goto(`/admin/runs?workspace=${workspaceId}`);
+  await expect(page.locator(".run-card")).toHaveCount(1);
+  await page.getByRole("button", { name: "Next page" }).click();
+  await expect.poll(() => !!held).toBe(true);
+  await expect(page.locator(".run-card")).toHaveCount(0);
+  await expect(
+    page.getByRole("region", { name: "Runs", exact: true }),
+  ).toHaveAttribute("aria-busy", "true");
+  await expect(page.getByRole("button", { name: "Next page" })).toBeDisabled();
+  await held?.fulfill({
+    status: 503,
+    json: { error: "temporarily_unavailable" },
+  });
+  await expect(page.getByRole("alert")).toContainText(
+    "temporarily_unavailable",
+  );
+  await expect(page.locator(".run-card")).toHaveCount(0);
+  fail = false;
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect(
+    page.getByText("No runs on this page.", { exact: false }),
+  ).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await page.goto(`/admin/runs?workspace=${workspaceId}&offset=100`);
+  await expect(
+    page.getByRole("navigation", { name: "Pagination" }),
+  ).toContainText("0–0 of 26");
+  await expect(
+    page.getByRole("button", { name: "Previous page" }),
+  ).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Next page" })).toBeDisabled();
+  await page.goto(`/admin/runs?workspace=${workspaceId}&offset=invalid`);
+  await expect(page.locator(".run-card")).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "Previous page" }),
+  ).toBeDisabled();
 });

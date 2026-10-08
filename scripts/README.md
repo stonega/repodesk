@@ -32,6 +32,10 @@ environment and database; together they run the same checks as the default comma
 Temporary subprocess fixtures use the checkout cache because `/tmp` may be mounted
 with execution disabled.
 
+For runs API/UI changes, use `bash scripts/verify-skills.sh quality` and
+`bash scripts/verify-skills.sh runs-browser`. The latter runs the runs and admin
+browser suites with the same independent preparation and disposable database.
+
 For a release, run `bash scripts/verify-skills.sh quality` and
 `bash scripts/verify-skills.sh release-browser`. The latter prepares the same
 environment and runs the entire browser suite instead of only the skills-related

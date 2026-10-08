@@ -314,22 +314,39 @@ suite("PostgreSQL integration (isolated database)", () => {
         model: "test-model",
       });
       expect(runHistory.items[0]).toMatchObject({
-        task: "Private request visible to admins",
-        result: "Private response visible to admins",
-        chatId: "101",
-        transcript: [
-          {
-            role: "assistant",
-            content: [{ type: "text", text: "Saved checkpoint" }],
-          },
-        ],
+        taskPreview: "Private request visible to admins",
+        attemptCount: 0,
+        deliveryStates: [],
       });
+      expect(Object.keys(runHistory.items[0]).sort()).toEqual(
+        [
+          "id",
+          "actor",
+          "status",
+          "model",
+          "at",
+          "taskPreview",
+          "attemptCount",
+          "deliveryStates",
+        ].sort(),
+      );
       const runId = runHistory.items[0].id;
       const detail = await request(`${base}/runs/${runId}`);
       expect(detail.status).toBe(200);
-      expect(await detail.json()).toEqual({
+      expect(await detail.json()).toMatchObject({
         mode: "operator",
-        run: runHistory.items[0],
+        run: {
+          id: runId,
+          task: "Private request visible to admins",
+          result: "Private response visible to admins",
+          chatId: "101",
+          transcript: [
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "Saved checkpoint" }],
+            },
+          ],
+        },
       });
       expect((await request(`${base}/runs/${randomUUID()}`)).status).toBe(404);
       expect((await request(`${base}/runs/not-an-id`)).status).toBe(400);
@@ -399,15 +416,22 @@ suite("PostgreSQL integration (isolated database)", () => {
     expect(ownerHistory.total).toBe(2);
     expect(history.mode).toBe("member");
     expect(history.total).toBe(2);
-    expect(history.items.map((r: { task: string }) => r.task)).toEqual([
-      "Private request from 202",
-      "Private request from 101",
-    ]);
+    expect(
+      history.items.map((r: { taskPreview: string }) => r.taskPreview),
+    ).toEqual(["Private request from 202", "Private request from 101"]);
     const privateRun = history.items[0];
     const detailPath = `${base}/runs/${privateRun.id}`;
     const detail = await request(detailPath, "GET", undefined, headers);
     expect(detail.status).toBe(200);
-    expect(await detail.json()).toEqual({ mode: "member", run: privateRun });
+    expect(await detail.json()).toMatchObject({
+      mode: "member",
+      run: {
+        id: privateRun.id,
+        task: "Private request from 202",
+        transcript: [],
+      },
+    });
+    expect(privateRun).not.toHaveProperty("transcript");
     expect(
       (
         await request(
@@ -486,7 +510,57 @@ suite("PostgreSQL integration (isolated database)", () => {
     const base = `/api/admin/workspaces/${w.id}/runs`;
     const list = await (await request(base)).json();
     expect(list.total).toBe(101);
+    expect(list).toMatchObject({ offset: 0, limit: 25 });
+    expect(list.items).toHaveLength(25);
     expect(list.items.map((r: { id: string }) => r.id)).not.toContain(first.id);
+    const second = await (await request(`${base}?offset=25`)).json();
+    expect(second).toMatchObject({ total: 101, offset: 25, limit: 25 });
+    expect(second.items).toHaveLength(25);
+    expect(
+      second.items.some((r: { id: string }) =>
+        list.items.some((s: { id: string }) => s.id === r.id),
+      ),
+    ).toBe(false);
+    const last = await (await request(`${base}?offset=100`)).json();
+    expect(last.items).toHaveLength(1);
+    expect(last.items[0]).toMatchObject({
+      id: first.id,
+      deliveryStates: ["sent"],
+    });
+    const wide = await (await request(`${base}?limit=100`)).json();
+    expect(wide.items).toHaveLength(100);
+    expect(wide.items.map((r: { id: string }) => r.id)).toEqual(
+      (await store.read(w.id)).runs
+        .toReversed()
+        .slice(0, 100)
+        .map((r) => r.id),
+    );
+    expect(await (await request(`${base}?offset=200`)).json()).toMatchObject({
+      items: [],
+      total: 101,
+      offset: 200,
+      limit: 25,
+    });
+    for (const query of [
+      "offset=-1",
+      "offset=1.5",
+      "offset=nope",
+      "offset=Infinity",
+      "offset=9007199254740992",
+      "limit=0",
+      "limit=101",
+      "limit=1.5",
+      "limit=nope",
+    ])
+      expect((await request(`${base}?${query}`)).status).toBe(400);
+    expect(
+      await (await request(`/api/admin/workspaces/${other.id}/runs`)).json(),
+    ).toMatchObject({
+      items: [],
+      total: 0,
+      offset: 0,
+      limit: 25,
+    });
     const detail = await request(`${base}/${first.id}?offset=999`);
     expect(detail.status).toBe(200);
     expect((await detail.json()).run).toMatchObject({
@@ -498,6 +572,74 @@ suite("PostgreSQL integration (isolated database)", () => {
       (await request(`/api/admin/workspaces/${other.id}/runs/${first.id}`))
         .status,
     ).toBe(404);
+  });
+  test("run summaries bound large content while details retain the full record", async () => {
+    const w = await seed();
+    const task = `Long request ${"details ".repeat(400)}`;
+    const result = "Large answer ".repeat(1000);
+    const run = await store.change(w.id, (saved) => {
+      const r = createRun(saved, "101", task, "101", 0, "test-model");
+      r.result = result;
+      r.transcript = [
+        { role: "assistant", content: [{ type: "text", text: result }] },
+      ];
+      r.attempts = [
+        {
+          id: randomUUID(),
+          at: r.at,
+          reserved: 0.01,
+          status: "settled",
+          actual: 0.005,
+        },
+      ];
+      for (let i = 0; i < 30; i++)
+        saved.deliveries.push({
+          id: randomUUID(),
+          runId: r.id,
+          actor: r.actor,
+          chatId: r.chatId,
+          topicId: 0,
+          text: result,
+          state: "sent",
+          attempts: 1,
+          at: r.at,
+        });
+      saved.deliveries.push({
+        id: randomUUID(),
+        cancellationRunId: r.id,
+        actor: r.actor,
+        chatId: r.chatId,
+        topicId: 0,
+        text: "Stopped",
+        state: "pending",
+        attempts: 0,
+        at: r.at,
+      });
+      return r;
+    });
+    const base = `/api/admin/workspaces/${w.id}/runs`;
+    const list = await (await request(base)).json();
+    expect(list.items).toEqual([
+      {
+        id: run.id,
+        actor: "101",
+        status: run.status,
+        at: run.at,
+        model: "test-model",
+        taskPreview: `${task.slice(0, 199)}…`,
+        attemptCount: 1,
+        deliveryStates: ["sent", "pending"],
+      },
+    ]);
+    expect(JSON.stringify(list).length).toBeLessThan(700);
+    const detail = await (await request(`${base}/${run.id}`)).json();
+    expect(detail.run).toMatchObject({
+      task,
+      result,
+      transcript: run.transcript,
+      attempts: run.attempts,
+    });
+    expect(detail.run.deliveries).toHaveLength(31);
   });
   test("cancellation receipts remain visible in scoped admin run details", async () => {
     const w = await seed();
