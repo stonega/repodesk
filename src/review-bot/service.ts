@@ -10,6 +10,7 @@ import { branchName, codingPayload } from "../coding/config.ts";
 import type { Store } from "../db/repositories.ts";
 import { type Admin, Fault, requireThat, type Workspace } from "../domain.ts";
 import type { GitHubApps } from "../github/registry.ts";
+import { ModelProviders } from "../models/service.ts";
 import { decrypt, encrypt, fingerprint } from "../setup/credentials.ts";
 import { audit, eligible } from "../workspaces/policy.ts";
 import {
@@ -157,6 +158,11 @@ export class ReviewService {
     const input = reviewSave.parse(value);
     await this.store.change(workspaceId, async (w, sql) => {
       reviewAuthority(w, admin);
+      if (input.settings.model)
+        await new ModelProviders(this.store, this.key ?? "").selected(
+          w,
+          input.settings.model,
+        );
       requireThat(
         input.revision === (w.reviewBot?.revision ?? 0),
         "version_conflict",

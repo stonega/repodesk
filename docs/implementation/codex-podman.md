@@ -102,10 +102,14 @@ below. Do not copy an existing host `auth.json`, the entire host Codex home,
 host plugins, or host credentials into images or task volumes. No key was copied
 from the device.
 
-The workspace operator selects **Custom provider API key** or **ChatGPT device
+The workspace operator selects a saved model provider or **ChatGPT device
 code** under **Plugins → Codex → Configuration → Edit**. Existing
-workspaces default to the custom provider. The operator can set, replace or
-remove that provider API key in the same panel. The app
+workspaces default to the custom provider. Register API providers once under
+**Model settings**, then select a provider and Responses-compatible model in Codex.
+The task-scoped proxy uses each attempt’s selected URL/model and keeps its key in
+the supervisor. Code Review can select another model from the same provider. For an existing workspace with a legacy saved key, the operator can replace or
+remove it in that panel until a shared provider is selected. The following
+credential details describe the compatibility path. The app
 stores it encrypted with `ENCRYPTION_KEY` and workspace-bound authenticated data.
 The panel/API return only whether a key is configured, never its value. Saved
 workspace keys take precedence over the optional supervisor environment fallback

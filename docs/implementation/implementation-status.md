@@ -1,5 +1,39 @@
 # Implementation evidence
 
+## Shared model providers and GitHub App icon, 2026-10-08
+
+Setup now includes Workspace → Model → Telegram → GitHub. Operators save an
+OpenAI-compatible provider URL and encrypted key once; saving fetches its model
+list. Providers are reused across that operator's workspaces. Bot chat, Codex and
+Review Bot save independent model selections from the same catalog. Chat execution
+pins the selected provider and workspace model revision; Codex's task-scoped proxy
+binds the chosen endpoint/model and keeps provider keys sealed in the supervisor.
+Legacy configuration remains readable, and ChatGPT device-code authentication is
+still available. Provider discovery does not make a paid inference request.
+
+Provider records use saved summaries and New/Edit dialogs; service editors contain
+provider/model selectors. Tests cover ownership, CSRF, encrypted storage, URL/key
+binding, failed discovery, stale saves, unavailable models, key rotation, sharing,
+independent selections, and task-proxy routing after restart. Workspace deletion
+removes its model selection; shared operator provider records remain configuration.
+No dependency or database migration was added.
+
+GitHub creation now offers the existing RepoDesk icon as a 200×200 PNG under 1 MiB
+and an owner-appropriate App settings link. The documented manifest cannot set an
+icon, so setup waits for the owner's upload acknowledgement before authorization.
+That acknowledgement does not independently verify the badge on GitHub.
+
+Validation: Biome, strict TypeScript, production build and all **619** deterministic
+tests passed with disposable PostgreSQL. All **41** affected browser scenarios
+passed: admin (17), provider/model/icon (6), Codex device (8), and Review Bot (10).
+Desktop/mobile saved displays, editors, pending/error states and the icon handoff
+were visually inspected. App, job and supervisor images built; full fake-provider
+Docker lifecycle, offline OCR preparation and Docker-runner Compose checks passed.
+Tests used isolated loopback ports/artifacts and fake provider/GitHub transports.
+No live provider inference, GitHub logo upload, account connection or deployment
+was performed. Real provider protocol/model compatibility remains pilot acceptance.
+
+
 ## Shared repository card styling, 2026-10-08
 
 Repository summaries now reuse one card component and list styles in Members &

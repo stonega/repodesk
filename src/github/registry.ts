@@ -46,6 +46,7 @@ const storedConfig = z.object({
     .regex(/^[a-z0-9-]+$/)
     .max(100),
   webhookSecret: z.string().min(1).max(8192).optional(),
+  organization: account.optional(),
 });
 
 /** Credentials belong to the operator; repository connections remain workspace scoped. */
@@ -144,6 +145,7 @@ export class GitHubApps {
         clientSecret: data.client_secret,
         privateKey: data.pem,
         webhookSecret: data.webhook_secret,
+        ...(organization ? { organization } : {}),
       };
     } catch {
       // Neither GitHub's response nor key parsing errors may expose credentials.

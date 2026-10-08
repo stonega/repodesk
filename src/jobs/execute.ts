@@ -48,17 +48,22 @@ export class Executor {
     const pluginRevision = extensionWorkspace.plugins?.revision ?? 0;
     const codingRevision = extensionWorkspace.coding?.revision ?? 0;
     let runner: AgentRunner;
+    let chatModel: Awaited<ReturnType<SetupService["models"]["chat"]>>;
     try {
+      chatModel = await this.setup.models.chat(extensionWorkspace);
       runner =
         typeof this.runner === "function"
           ? await this.runner(deployment, workspaceId)
           : this.runner;
-    } catch {
+    } catch (error) {
       await this.store.change(workspaceId, (w) => {
         const run = w.runs.find((r) => r.id === runId);
         if (run?.status === "queued") {
           run.status = "failed";
-          run.error = "extension_configuration_invalid";
+          run.error =
+            error instanceof Fault
+              ? error.code
+              : "extension_configuration_invalid";
           run.finishedAt = new Date().toISOString();
           discardFollowup(w, run);
           notifyRunFailure(w, run);
@@ -112,6 +117,11 @@ export class Executor {
         notifyRunFailure(w, r);
         return;
       }
+      if (chatModel && !r.modelProvider && !r.attempts.length) {
+        r.model = chatModel.model;
+        r.modelOptions = chatModel.options;
+        r.modelProvider = chatModel.provider;
+      }
       r.modelOptions ??= {
         modelBaseUrl: deployment.modelBaseUrl ?? DEFAULT_MODEL_BASE_URL,
         thinkingLevel: deployment.thinkingLevel ?? "off",
@@ -159,13 +169,30 @@ export class Executor {
       signal.throwIfAborted();
       const d = await this.store.deployment();
       requireThat(d.active && !d.paused, "deployment_paused", 409);
-      requireThat(
-        (d.modelBaseUrl ?? DEFAULT_MODEL_BASE_URL) ===
-          claimed.modelOptions?.modelBaseUrl,
-        "model_endpoint_changed",
-        409,
-      );
+      if (claimed.modelProvider) {
+        await this.setup.models.modelKey(
+          claimed.modelProvider.operatorId,
+          claimed.modelProvider.id,
+          claimed.modelProvider.version,
+        );
+      } else {
+        requireThat(
+          (d.modelBaseUrl ?? DEFAULT_MODEL_BASE_URL) ===
+            claimed.modelOptions?.modelBaseUrl,
+          "model_endpoint_changed",
+          409,
+        );
+      }
       await this.store.change(workspaceId, (w) => {
+        if (claimed.modelProvider)
+          requireThat(
+            w.operatorId === claimed.modelProvider.operatorId &&
+              w.chatModel?.selection.providerId === claimed.modelProvider.id &&
+              (claimed.modelProvider.chatRevision === undefined ||
+                w.chatModel?.revision === claimed.modelProvider.chatRevision),
+            "model_configuration_changed",
+            409,
+          );
         requireThat(
           (w.plugins?.revision ?? 0) === pluginRevision &&
             (w.coding?.revision ?? 0) === codingRevision,
@@ -306,7 +333,13 @@ export class Executor {
         actor: claimed.actor,
         runId,
         model: selectedModel(claimed.model, claimed.modelOptions),
-        apiKey: await this.setup.modelKey(claimed.modelOptions?.modelBaseUrl),
+        apiKey: claimed.modelProvider
+          ? await this.setup.models.modelKey(
+              claimed.modelProvider.operatorId,
+              claimed.modelProvider.id,
+              claimed.modelProvider.version,
+            )
+          : await this.setup.modelKey(claimed.modelOptions?.modelBaseUrl),
         thinkingLevel: claimed.modelOptions?.thinkingLevel,
         system: context.system,
         prompt: context.prompt,

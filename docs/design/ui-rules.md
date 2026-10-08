@@ -33,6 +33,35 @@ when implementing or reviewing a change.
 
 ## Recorded preferences
 
+### Model providers are reused across services
+
+- **Preference:** Add an OpenAI-compatible API provider with its base URL and
+  write-only API key, fetch its model list, and choose the bot chat model during
+  workspace setup. Later model-powered services select a model from those saved
+  providers instead of asking for the URL and key again.
+- **Scope:** Authenticated setup, Model settings, Codex and Code Review. Providers
+  are shared across workspaces managed by the same deployment operator; each
+  workspace/service saves its own model selection.
+- **Source:** 2026-10-08 — user requested provider-first model setup, automatic
+  API model discovery and reuse for bot chat, code review, Codex and other services.
+- **Exceptions:** ChatGPT device-code sign-in remains an independent Codex option.
+  Existing deployment/per-workspace model credentials remain a compatibility path
+  until replaced. Custom bot models still need documented capacity and prices.
+  Provider records use New/Edit dialogs and saved summaries; the setup chat-model
+  selector is a guided form. API keys are edited only on the provider record.
+
+### Newly created GitHub Apps use RepoDesk branding
+
+- **Preference:** Use RepoDesk's existing app icon as the GitHub App icon when
+  guiding users through App creation.
+- **Scope:** GitHub App creation in setup and Manage GitHub, with a ready-to-upload
+  PNG and an owner-appropriate GitHub settings link after registration.
+- **Source:** 2026-10-08 — user requested adding our app icon when creating a
+  GitHub App for a user.
+- **Exceptions:** GitHub's documented manifest has no logo field; the owner uploads
+  the icon in GitHub. Setup waits for the owner's upload acknowledgement before
+  continuing authorization. An acknowledgement is not API verification of the icon.
+
 ### Telegram repository menus favor recent work
 
 - **Preference:** Offer `/repos` as a native inline repository picker, showing at
@@ -451,7 +480,7 @@ when implementing or reviewing a change.
 ### Authenticated setup shows one essential step at a time
 
 - **Preference:** Present setup as navigable, resumable steps. Show only the
-  workspace, Telegram bot and GitHub App steps. Continue saves Workspace and
+  workspace, model provider/chat selection, Telegram bot and GitHub App steps. Continue saves Workspace and
   Telegram fields before moving forward; errors keep the draft on that step.
   Do not pair a separate Save button with Continue. The GitHub step shows one
   Connect GitHub action. GitHub handles authorization and installation repository
@@ -459,9 +488,11 @@ when implementing or reviewing a change.
   RepoDesk with confetti and a Get started button that opens the workspace.
   Keep detailed GitHub controls in Plugins and show that page to the deployment
   administrator even before Telegram account linking. Keep optional workspace
-  policies in Workspace settings, and model configuration and bot activation in
+  policies in Workspace settings, and detailed model management and bot activation in
   the admin panel.
 - **Scope:** Authenticated setup at `/setup`, including desktop and mobile.
+- **Source update:** 2026-10-08 — user requested a model-provider step during first
+  workspace setup, superseding the earlier three-step sequence.
 - **Source:** 2026-09-27 — user asked to split the long setup page into several
   steps and leave unimportant options for later. The user then asked to remove
   the separate Save workspace button from the inline Workspace form. The user
@@ -585,8 +616,8 @@ when implementing or reviewing a change.
 
 - **Preference:** Show saved model configuration as a compact responsive grid of
   labels and values, matching the Overview team card. Place one Edit icon at the
-  top right to open a single modal containing credentials, model selection and
-  advanced settings. Keep explanations and validation in the editor; show only
+  top right to open a modal containing model selection and advanced settings.
+  Saved provider summaries have their own New/Edit dialogs for the URL and key. Keep explanations and validation in the editor; show only
   configured/missing status for the write-only API key. Cancel discards the draft;
   successful saves close the modal and refresh the summary.
 - **Scope:** Model settings in the admin panel.
@@ -1123,8 +1154,9 @@ Use this format for each preference:
 
 - **Preference:** Let workspace operators set, replace and remove the local Codex
   provider API key in the panel, showing only its configured status after saving.
-- **Scope:** Local Podman Codex credentials. Provider endpoint/model remain deployment
-  configuration; an environment key may serve as an optional fallback.
+- **Scope:** Local Codex credentials. Shared provider records own the API URL/key;
+  Codex chooses a provider/model in its configuration dialog. Existing deployment
+  configuration and workspace keys remain compatibility fallbacks.
 - **Source:** 2026-09-22 — user requested API key configuration in the web panel,
   superseding the earlier environment-only request for this credential.
   2026-09-29 — user requested local Codex execution only.

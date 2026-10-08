@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { DEFAULT_MODEL_BASE_URL } from "../../agent/model-settings.ts";
+import type { RuntimeProvider } from "../../models/config.ts";
 
 export const runnerSettings = z.object({
   CODEX_CONTAINER_ENGINE: z.enum(["podman", "docker"]).default("podman"),
@@ -17,7 +19,8 @@ export const runnerSettings = z.object({
         !u.search &&
         !u.hash
       );
-    }, "Use an HTTPS provider URL without credentials or query parameters"),
+    }, "Use an HTTPS provider URL without credentials or query parameters")
+    .default(DEFAULT_MODEL_BASE_URL),
   CODEX_MODEL: z
     .string()
     .regex(/^[A-Za-z0-9._/-]+$/)
@@ -66,25 +69,26 @@ export function codexConfig(
     | "CODEX_RUNNER_PROXY_URL"
   >,
   authMode: "provider_key" | "device_code" = "provider_key",
+  provider?: RuntimeProvider,
 ) {
   const quote = (value: string) => JSON.stringify(value);
   if (authMode === "device_code")
     return [
-      `model_reasoning_effort = ${quote(settings.CODEX_REASONING_EFFORT)}`,
+      `model_reasoning_effort = ${quote(provider?.reasoningEffort ?? settings.CODEX_REASONING_EFFORT)}`,
       'approval_policy = "never"',
       'sandbox_mode = "danger-full-access"',
       'cli_auth_credentials_store = "file"',
       "",
     ].join("\n");
   return [
-    `model = ${quote(settings.CODEX_MODEL)}`,
+    `model = ${quote(provider?.model ?? settings.CODEX_MODEL)}`,
     'model_provider = "proxy"',
-    `model_reasoning_effort = ${quote(settings.CODEX_REASONING_EFFORT)}`,
+    `model_reasoning_effort = ${quote(provider?.reasoningEffort ?? settings.CODEX_REASONING_EFFORT)}`,
     'approval_policy = "never"',
     // The outer container is the execution boundary; nested sandboxes vary by host.
     'sandbox_mode = "danger-full-access"',
     "[model_providers.proxy]",
-    `name = ${quote(settings.CODEX_PROVIDER_NAME)}`,
+    `name = ${quote(provider?.name ?? settings.CODEX_PROVIDER_NAME)}`,
     `base_url = ${quote(`${settings.CODEX_RUNNER_PROXY_URL.replace(/\/$/, "")}/v1`)}`,
     'env_key = "CODEX_TASK_TOKEN"',
     'wire_api = "responses"',

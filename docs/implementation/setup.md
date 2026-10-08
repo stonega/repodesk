@@ -40,13 +40,18 @@ persists in PostgreSQL. Complete first setup before exposing a fresh deployment
 beyond localhost: the first successful submission establishes its administrator.
 See [the setup API example](../../examples/setup.http) for the equivalent request.
 
-The authenticated setup wizard guides you through Workspace, Telegram bot and
-GitHub App. Create the workspace with a name and timezone;
+The authenticated setup wizard guides you through Workspace, Model, Telegram bot
+and GitHub App. Model adds an OpenAI-compatible provider with a base URL and API key,
+fetches its `/models` list on save, and lets you select a bot chat model. Providers
+are shared across your workspaces; each workspace and service saves its own choice. Create the workspace with a name and timezone;
 **Continue to Telegram** saves it and keeps you on Workspace if validation fails.
 The timezone selector starts with your browser's IANA timezone and also offers UTC
 and other available IANA zones.
 Adjust budgets and retention later in the Overview team editor. You can revisit steps.
-The GitHub step has one **Connect GitHub** button. It creates a personal App when
+The GitHub step has one **Connect GitHub** button. After creating a new App, download
+the provided RepoDesk icon, upload it in the linked GitHub App settings, and
+acknowledge the upload before authorization continues. GitHub manifests cannot
+set the icon automatically. It creates a personal App when
 needed, then asks GitHub for user authorization and installation. Choose the
 repositories in GitHub. Setup verifies one accessible installation, connects its
 granted repositories and shows a RepoDesk welcome dialog with confetti. Click
@@ -491,3 +496,30 @@ selectable text. Restart the updated API and worker together; no SQL migration o
 webhook subscription change is needed. Images require a vision-capable model. See
 [supported input and limits](telegram-attachments.md) and the
 [manual staging check](../../examples/telegram-attachments.md).
+
+## Shared model providers
+
+**Model settings → Model providers → New** opens the provider editor. Saving sends
+one credential-bearing server-side `GET BASE_URL/models`, with redirects disabled,
+a 15-second timeout and a 1 MiB response limit. A URL with no API path uses `/v1`;
+other API paths are preserved. Failed discovery leaves the editor open and does
+not replace the saved provider. Edit fetches the current model list again. A changed
+URL requires re-entering the key; a blank key retains it only for the same URL.
+
+Providers are operator-owned records in deployment JSONB, with encrypted keys bound
+to operator/provider IDs. APIs return safe labels, URLs, model IDs and configured
+status. Each workspace saves its bot chat selection; Codex and Review Bot choose
+independently from the same catalog. Removing an in-use provider is rejected.
+A provider update affects new Codex/review attempts; already-running attempts keep
+their sealed credentials and endpoint/model snapshot. Cancel them to stop existing
+work. Chat runs stop when their pinned provider or model-selection revision changes.
+Workspace deletion removes its selection; shared provider configuration remains.
+
+Chat uses Chat Completions. Codex and OCR delegation use the Codex Responses path;
+select a compatible model/provider for those services. `/models` does not prove
+protocol support or provide standard capacity/pricing data. Known bot models use
+the bundled Pi catalog; custom models require documented limits and token prices.
+Use Advanced model settings to supply or override those values. No paid model call
+is made by provider discovery. Old deployment chat settings and saved Codex keys
+remain supported until the service switches to a shared provider. ChatGPT device
+code sign-in remains an independent option.

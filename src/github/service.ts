@@ -118,6 +118,9 @@ export class GitHubService {
       configured: !!app,
       canRegister: !app && this.apps.canRegister,
       appSlug: app?.config.slug,
+      appSettingsUrl: app
+        ? `https://github.com/${app.config.organization ? `organizations/${encodeURIComponent(app.config.organization)}/settings` : "settings"}/apps/${encodeURIComponent(app.config.slug)}`
+        : undefined,
       installUrl: app?.installUrl,
       connection: w.github,
       refreshError,

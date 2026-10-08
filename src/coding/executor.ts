@@ -8,6 +8,7 @@ import {
   type Workspace,
 } from "../domain.ts";
 import type { GitHubApps } from "../github/registry.ts";
+import { ModelProviders } from "../models/service.ts";
 import { decrypt, fingerprint } from "../setup/credentials.ts";
 import { loadSourceAttachments } from "../telegram/attachments.ts";
 import { type Telegram, TelegramClient } from "../telegram/client.ts";
@@ -287,6 +288,13 @@ export class DevelopmentExecutor {
               snapshot.coding.providerApiKey,
             )
           : undefined;
+        const sharedProvider =
+          task.payload.authMode === "provider_key"
+            ? await new ModelProviders(this.store, this.key ?? "").runner(
+                snapshot,
+                snapshot.coding?.settings.model,
+              )
+            : {};
         const reserved = await this.update(
           task,
           lease,
@@ -294,6 +302,7 @@ export class DevelopmentExecutor {
             const deployment = await this.allowed(w, sql, t);
             t.pr = pr;
             t.fence++;
+            t.runnerModel = sharedProvider.modelProvider;
             t.attempts++;
             t.attemptId = randomUUID();
             t.authWaitMs = 0;
@@ -429,6 +438,7 @@ export class DevelopmentExecutor {
           payload: task.payload,
           readToken: token,
           providerApiKey,
+          ...sharedProvider,
           development: reserved.run,
         });
         await this.update(task, lease, async (_w, sql, t) => {

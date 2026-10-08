@@ -39,8 +39,14 @@ This is our application design, not built-in behavior supplied by Pi or Docker.
 | --- | --- | --- |
 | Create admin | Username and password on the first-run entry | Atomically verify unclaimed state, create the local deployment-admin account and a revocable session. |
 | 1. Workspace | Enter a workspace name, select an IANA timezone, then continue | Continue saves the draft before advancing. Budget and retention policies can be adjusted later in Workspace settings. |
-| 2. Connect Telegram | Enter a BotFather token in a write-only field, then Continue | Validate bot identity and show its username without returning the token. |
-| 3. GitHub App | Click Connect GitHub; confirm authorization and choose repositories during GitHub installation | The setup page verifies one accessible installation and connects its granted repositories, then shows a RepoDesk welcome dialog with confetti. Get started opens the workspace. Detailed controls remain in Plugins. The bot stays inactive until model settings, a skill and activation are completed in the panel. |
+| 2. Model | Add an OpenAI-compatible provider in its dialog, saving a base API URL and key to fetch the model list; select a bot chat model | Continue saves a workspace-specific selection. Providers are reused across the same operator’s workspaces and by Codex/Review Bot. Custom bot models require capacity and prices in Advanced settings. |
+| 3. Connect Telegram | Enter a BotFather token in a write-only field, then Continue | Validate bot identity and show its username without returning the token. |
+| 4. GitHub App | Click Connect GitHub; confirm authorization and choose repositories during GitHub installation | The setup page verifies one accessible installation and connects its granted repositories, then shows a RepoDesk welcome dialog with confetti. Get started opens the workspace. Detailed controls remain in Plugins. The bot stays inactive until model settings, a skill and activation are completed in the panel. |
+
+After manifest registration, setup offers the RepoDesk PNG and an App-owner settings
+link. GitHub requires the owner to upload the icon under Display information; the
+manifest cannot set it. The owner acknowledges the upload before authorization
+continues. This acknowledgement does not independently verify the GitHub badge.
 
 The authenticated wizard uses the administrator entry's two-panel visual layout.
 Only one step is shown at a time; step navigation allows returning to saved work.

@@ -4,6 +4,7 @@ import type { PluginSettings } from "./agent/plugin-config.ts";
 import type { CodingConfig, CodingTask } from "./coding/config.ts";
 import type { GitHubConnection } from "./github/config.ts";
 import type { GitHubUserAccess } from "./github/user-access.ts";
+import type { ModelProvider, ModelSelection } from "./models/config.ts";
 import type { ReviewConfig, ReviewTask } from "./review-bot/config.ts";
 
 export class Fault extends Error {
@@ -336,6 +337,12 @@ export interface Run {
   settingsVersion: number;
   model: string;
   modelOptions?: ModelOptions;
+  modelProvider?: {
+    id: string;
+    version: number;
+    operatorId: string;
+    chatRevision?: number;
+  };
   extensionVersion?: string;
   skillPins: { id: string; version: number }[];
   instructions: Instruction[];
@@ -427,6 +434,7 @@ export interface Audit {
   version?: number;
 }
 export interface Workspace {
+  chatModel?: { revision: number; selection: ModelSelection };
   repositorySelections?: {
     actor: string;
     chatId: string;
@@ -483,6 +491,7 @@ export interface Workspace {
   };
 }
 export interface Deployment extends ModelOptions {
+  modelProviders?: ModelProvider[];
   site?: { domain: string | null; revision: number };
   version: number;
   active: boolean;

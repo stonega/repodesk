@@ -27,24 +27,19 @@ export function runnerApp(
     }
   });
   app.on("POST", ["/v1/responses", "/v1/responses/compact"], async (c) => {
-    const providerApiKey = supervisor.providerKey(
+    const provider = supervisor.providerConnection(
       (c.req.header("authorization") ?? "").replace(/^Bearer /, ""),
     );
-    const settings = supervisor.settings;
     const body = await c.req.json();
-    requireThat(
-      body.model === settings.CODEX_MODEL,
-      "coding_model_denied",
-      403,
-    );
+    requireThat(body.model === provider.model, "coding_model_denied", 403);
     const response = await transport(
-      `${settings.CODEX_PROVIDER_BASE_URL.replace(/\/$/, "")}${c.req.path.slice(3)}`,
+      `${provider.baseUrl.replace(/\/$/, "")}${c.req.path.slice(3)}`,
       {
         method: "POST",
         redirect: "error",
         signal: c.req.raw.signal,
         headers: {
-          authorization: `Bearer ${providerApiKey}`,
+          authorization: `Bearer ${provider.apiKey}`,
           "content-type": "application/json",
           accept: "text/event-stream",
         },

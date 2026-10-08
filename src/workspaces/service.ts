@@ -213,7 +213,7 @@ export function createRun(
       : undefined,
     settings: structuredClone(w.settings),
     settingsVersion: w.version,
-    model,
+    model: w.chatModel?.selection.model ?? model,
     skillPins: pins,
     instructions,
     sources,

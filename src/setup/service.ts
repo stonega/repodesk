@@ -14,6 +14,7 @@ import {
   requireThat,
   type Settings,
 } from "../domain.ts";
+import { ModelProviders, type ModelTransport } from "../models/service.ts";
 import {
   type BotIdentity,
   registerWebhook,
@@ -29,6 +30,7 @@ import { audit, revokeWork } from "../workspaces/policy.ts";
 import { newWorkspace } from "../workspaces/service.ts";
 import { decrypt, encrypt, hash, token } from "./credentials.ts";
 export class SetupService {
+  readonly models: ModelProviders;
   constructor(
     public store: Store,
     private key: string,
@@ -36,7 +38,10 @@ export class SetupService {
     private transport: (token: string) => Telegram = (t) =>
       new TelegramClient(t),
     public readonly telegramTransport: TelegramTransport = "webhook",
-  ) {}
+    modelTransport: ModelTransport = fetch,
+  ) {
+    this.models = new ModelProviders(store, key, modelTransport);
+  }
   async client(d?: Deployment) {
     d ??= await this.store.deployment();
     requireThat(d.credentials.bot, "bot_not_configured", 409);
@@ -64,6 +69,7 @@ export class SetupService {
           published: s.published.length > 0,
         })),
         deleted: !!w.deletion,
+        chatModelConfigured: !!w.chatModel,
         deletion: w.deletion,
       }));
     return {
@@ -372,12 +378,21 @@ export class SetupService {
       requireThat(
         d.bot &&
           d.credentials.bot &&
-          d.credentials.model &&
+          (d.credentials.model ||
+            (await this.store.all()).some(
+              (w) => !w.deletion && w.operatorId === admin.id && w.chatModel,
+            )) &&
           (await this.receiverStatus(d, sql)).ready,
         "setup_incomplete",
         409,
       );
-      selectedModel(d.model, d);
+      if (d.credentials.model) selectedModel(d.model, d);
+      for (const w of (await this.store.all()).filter(
+        (w) => !w.deletion && w.operatorId === admin.id && w.chatModel,
+      )) {
+        const selected = await this.models.chat(w);
+        if (selected) selectedModel(selected.model, selected.options);
+      }
       const rows = await sql.query(
         "SELECT data FROM workspaces WHERE operator_id=$1 FOR UPDATE",
         [admin.id],

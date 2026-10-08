@@ -68,3 +68,48 @@ Content-Type: application/json
 {
   "version": 2
 }
+
+### Shared provider catalog (operator-owned; API keys are never returned).
+GET {{baseUrl}}/api/admin/operator/model-providers
+Cookie: repodesk_session={{session}}
+
+### Register a provider and fetch its models. Use the latest catalog version.
+### API base URLs without a path use /v1. Saving makes only a /models GET.
+PUT {{baseUrl}}/api/admin/operator/model-providers
+Origin: {{baseUrl}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "version": 1,
+  "name": "Team API",
+  "baseUrl": "https://REPLACE_PROVIDER_HOST/v1",
+  "apiKey": "REPLACE_PROVIDER_API_KEY"
+}
+
+### Read this workspace's bot model and the shared provider choices.
+GET {{baseUrl}}/api/admin/workspaces/{{workspaceId}}/models
+Cookie: repodesk_session={{session}}
+
+### Select a model ID returned by the provider, using the current workspace revision.
+@providerId = REPLACE_PROVIDER_UUID
+@modelId = REPLACE_DISCOVERED_MODEL_ID
+PUT {{baseUrl}}/api/admin/workspaces/{{workspaceId}}/models
+Origin: {{baseUrl}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "revision": 0,
+  "selection": {
+    "providerId": "{{providerId}}",
+    "model": "{{modelId}}",
+    "thinkingLevel": "off"
+  }
+}
+
+### Custom bot models also require modelLimits and modelPricing in selection.
+### Codex and Review Bot settings accept the same providerId/model selection in settings.model.
+### Codex/Review use a Responses-compatible provider/model; Review can inherit Codex.

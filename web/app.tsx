@@ -28,12 +28,10 @@ import type {
   WorkflowCollection,
   WorkflowDetail,
 } from "../src/admin/workflow-view.ts";
-import {
-  type ModelCapabilities,
-  type ModelLimits,
-  modelLimitsSchema,
-  type ThinkingLevel,
-  thinkingLevels,
+import type {
+  ModelCapabilities,
+  ModelLimits,
+  ThinkingLevel,
 } from "../src/agent/model-settings.ts";
 import type {
   Approval,
@@ -69,13 +67,13 @@ import { type ActionIcon, IconButton } from "./icon-button.tsx";
 import { RuntimeLogs } from "./logs.tsx";
 import { MemberRepositories } from "./member-repositories.tsx";
 import { CreateModal, Modal, ModalActions, ModalPending } from "./modal.tsx";
+import { ModelProvidersPanel } from "./model-providers.tsx";
 import { Plugins } from "./plugins.tsx";
 import { prefixFields, RecordForm } from "./record-form.tsx";
 import { RunAttempts } from "./run-attempts.tsx";
 import { Select } from "./select.tsx";
 import { workspaceFields } from "./settings-fields.ts";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
-import { SuggestionInput } from "./suggestion-input.tsx";
 import { ThemeSwitch } from "./theme-switch.tsx";
 import { ToastProvider, useToast } from "./toast.tsx";
 import { Usage } from "./usage.tsx";
@@ -481,6 +479,7 @@ interface Progress {
     version: number;
     settings: Settings;
     ownerVerified: boolean;
+    chatModelConfigured?: boolean;
     skills: {
       id: string;
       name: string;
@@ -514,14 +513,14 @@ function Setup() {
             ? "Set up a new workspace"
             : "Set up your team assistant"
         }
-        description="Create a workspace, connect Telegram and set up GitHub. Configure the model and activate the bot in the admin panel."
+        description="Create a workspace, choose your chat model, connect Telegram and set up GitHub."
       >
         {error ? (
           <Notice error>{error}</Notice>
         ) : (
           <>
             <nav className="setup-steps" aria-label="Setup steps">
-              {["Workspace", "Telegram bot", "GitHub App"].map(
+              {["Workspace", "Model", "Telegram bot", "GitHub App"].map(
                 (label, index) => (
                   <button
                     type="button"
@@ -561,6 +560,7 @@ function Setup() {
   );
   const steps = [
     { id: "workspace", label: "Workspace", complete: !!workspace },
+    { id: "model", label: "Model", complete: !!workspace?.chatModelConfigured },
     { id: "telegram", label: "Telegram bot", complete: !!data.bot },
     { id: "github", label: "GitHub App", complete: false },
   ] as const;
@@ -584,7 +584,7 @@ function Setup() {
           ? "Set up a new workspace"
           : "Set up your team assistant"
       }
-      description="Create a workspace, connect Telegram and set up GitHub. Configure the model and activate the bot in the admin panel."
+      description="Create a workspace, choose your chat model, connect Telegram and set up GitHub."
     >
       <p className="setup-account-status">
         Setup · Step {currentIndex + 1} of {steps.length}
@@ -678,7 +678,7 @@ function Setup() {
                     const next = new URLSearchParams(params);
                     next.delete("new");
                     next.set("workspace", created.id);
-                    next.set("step", "telegram");
+                    next.set("step", "model");
                     setParams(next);
                   } else if (
                     name !== workspace.settings.name ||
@@ -690,7 +690,7 @@ function Setup() {
                     });
                   }
                   reload();
-                  if (workspace) goToStep("telegram");
+                  if (workspace) goToStep("model");
                 } catch (error) {
                   setWorkspaceError(
                     error instanceof Error
@@ -747,6 +747,21 @@ function Setup() {
           )}
         </section>
       )}
+      {currentStep === "model" &&
+        (workspace ? (
+          <ModelProvidersPanel
+            request={api}
+            workspaceId={workspace.id}
+            legacyModel={data.model}
+            onPending={setCredentialSaving}
+            onContinue={() => {
+              reload();
+              goToStep("telegram");
+            }}
+          />
+        ) : (
+          <Notice>Save a workspace before choosing a model.</Notice>
+        ))}
       {currentStep === "telegram" && (
         <section className="card setup-card">
           <h2>Connect Telegram</h2>
@@ -811,7 +826,16 @@ function Setup() {
             disabled={workspaceSaving}
             aria-busy={workspaceSaving}
           >
-            {workspaceSaving ? "Saving…" : "Continue to Telegram"}
+            {workspaceSaving ? "Saving…" : "Continue to Model"}
+          </button>
+        ) : currentStep === "model" ? (
+          <button
+            type="submit"
+            form="setup-model-form"
+            disabled={credentialSaving || !workspace}
+            aria-busy={credentialSaving}
+          >
+            {credentialSaving ? "Saving…" : "Continue to Telegram"}
           </button>
         ) : currentStep === "telegram" ? (
           <button
@@ -901,9 +925,6 @@ function ModelSettings({ workspaceId }: { workspaceId: string }) {
   const { data, error, reload, loading } = useData<Progress>(
     "/api/setup/progress",
   );
-  const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState<Progress>();
-  const notify = useToast();
   const [identity, setIdentity] = useState<{ url: string; command: string }>();
   useEffect(() => {
     const timer = setInterval(reload, 5000);
@@ -918,7 +939,7 @@ function ModelSettings({ workspaceId }: { workspaceId: string }) {
         {error ? (
           <Notice error>{error}</Notice>
         ) : (
-          <ModelConfigurationCard loading onEdit={() => {}} />
+          <ModelProvidersPanel request={api} workspaceId={workspaceId} />
         )}
       </Page>
     );
@@ -926,8 +947,11 @@ function ModelSettings({ workspaceId }: { workspaceId: string }) {
   const missing = [
     !workspace && "Create a workspace in Setup.",
     !data.credentials.bot && "Save a Telegram bot token in Setup.",
-    !data.credentials.model && "Save a model API key.",
-    !data.modelCapabilities &&
+    !data.credentials.model &&
+      !workspace?.chatModelConfigured &&
+      "Choose a provider and chat model.",
+    !workspace?.chatModelConfigured &&
+      !data.modelCapabilities &&
       "Configure the model context window and maximum output.",
     !data.receiver.ready &&
       (data.telegramTransport === "polling"
@@ -942,35 +966,13 @@ function ModelSettings({ workspaceId }: { workspaceId: string }) {
       title="Model settings"
       description="Connect your model provider, then activate the assistant when its receiver and skills are ready."
     >
-      <ModelConfigurationCard
-        progress={data}
-        loading={loading}
-        onEdit={() => {
-          setEditing(data);
-        }}
+      <ModelProvidersPanel
+        key={workspaceId}
+        request={api}
+        workspaceId={workspaceId}
+        onSaved={reload}
+        legacyModel={data.model}
       />
-      {editing && (
-        <Modal
-          title="Edit model configuration"
-          busy={saving}
-          onClose={() => setEditing(undefined)}
-        >
-          <p className="muted">
-            Enter an OpenAI-compatible base URL, API key, and model ID. Saving
-            does not make a model request.
-          </p>
-          <ModelCredentialForm
-            progress={editing}
-            saving={saving}
-            setSaving={setSaving}
-            onSaved={() => {
-              setEditing(undefined);
-              notify("Model settings saved.");
-              reload();
-            }}
-          />
-        </Modal>
-      )}
       <section className="card" aria-label="Activation">
         <h2>Activate the bot</h2>
         <p>
@@ -1069,72 +1071,6 @@ function ModelSettings({ workspaceId }: { workspaceId: string }) {
         )}
       </section>
     </Page>
-  );
-}
-function ModelConfigurationCard({
-  progress: p,
-  loading,
-  onEdit,
-}: {
-  progress?: Progress;
-  loading: boolean;
-  onEdit: () => void;
-}) {
-  const fields = [
-    ["Model API key", p?.credentials.model ? "Configured" : "Missing"],
-    ["Model base URL", p?.modelBaseUrl],
-    ["Model", p?.model],
-    ["Thinking level", p?.thinkingLevel],
-    [
-      "Context window (tokens)",
-      p?.modelCapabilities?.limits.contextWindow.toLocaleString() ??
-        "Not configured",
-    ],
-    [
-      "Maximum output (tokens)",
-      p?.modelCapabilities?.limits.maxOutputTokens.toLocaleString() ??
-        "Not configured",
-    ],
-    [
-      "Input price (USD / million tokens)",
-      p?.modelPricing ? `$${p.modelPricing.input}` : "No override",
-    ],
-    [
-      "Output price (USD / million tokens)",
-      p?.modelPricing ? `$${p.modelPricing.output}` : "No override",
-    ],
-  ];
-  return (
-    <section
-      className="card"
-      aria-labelledby="model-settings-heading"
-      aria-busy={loading}
-    >
-      <div className="row team-card-heading">
-        <div>
-          <h2 id="model-settings-heading">Model configuration</h2>
-          <p className="muted">
-            {p ? `Settings version ${p.version}` : <Skeleton />}
-          </p>
-        </div>
-        <IconButton
-          icon="edit"
-          label="Edit model configuration"
-          disabled={!p || loading}
-          onClick={onEdit}
-        />
-      </div>
-      <ul className="settings-list">
-        {fields.map(([label, value]) => (
-          <li className="settings-item" key={label}>
-            <div className="settings-item-details">
-              <h3>{label}</h3>
-              <p className="settings-item-value">{p ? value : <Skeleton />}</p>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </section>
   );
 }
 type SetupAccessData = {
@@ -1331,263 +1267,6 @@ function TelegramCredentialForm({
           {error}
         </p>
       )}
-    </form>
-  );
-}
-function ModelCredentialForm({
-  progress: p,
-  onSaved,
-  saving,
-  setSaving,
-}: {
-  progress: Progress;
-  onSaved: () => void;
-  saving: boolean;
-  setSaving: (saving: boolean) => void;
-}) {
-  const [key, setKey] = useState("");
-  const [model, setModel] = useState(p.model);
-  const [baseUrl, setBaseUrl] = useState(p.modelBaseUrl);
-  const [thinking, setThinking] = useState(p.thinkingLevel);
-  const [inputPrice, setInputPrice] = useState(
-    p.modelPricing?.input.toString() ?? "",
-  );
-  const [outputPrice, setOutputPrice] = useState(
-    p.modelPricing?.output.toString() ?? "",
-  );
-  const [contextWindow, setContextWindow] = useState(
-    p.modelLimits?.contextWindow.toString() ?? "",
-  );
-  const [modelOutput, setModelOutput] = useState(
-    p.modelLimits?.maxOutputTokens.toString() ?? "",
-  );
-  const [limitErrors, setLimitErrors] = useState<Record<string, string>>({});
-  const [error, setError] = useState("");
-  return (
-    <form
-      aria-busy={saving}
-      onChangeCapture={() => {
-        setError("");
-      }}
-      onSubmit={async (event) => {
-        event.preventDefault();
-        if (saving) return;
-        setError("");
-        setLimitErrors({});
-        setSaving(true);
-        try {
-          const unchanged =
-            !key &&
-            p.credentials.model &&
-            !!p.modelCapabilities &&
-            model === p.model &&
-            baseUrl === p.modelBaseUrl &&
-            thinking === p.thinkingLevel &&
-            inputPrice === (p.modelPricing?.input.toString() ?? "") &&
-            outputPrice === (p.modelPricing?.output.toString() ?? "") &&
-            contextWindow === (p.modelLimits?.contextWindow.toString() ?? "") &&
-            modelOutput === (p.modelLimits?.maxOutputTokens.toString() ?? "");
-          if (!unchanged) {
-            if (!key && !p.credentials.model)
-              throw new Error("Enter a model API key to save settings.");
-            if (!!contextWindow !== !!modelOutput)
-              throw new Error(
-                "Enter both model limits, or clear both to use the catalog.",
-              );
-            const limits =
-              contextWindow && modelOutput
-                ? {
-                    contextWindow: Number(contextWindow),
-                    maxOutputTokens: Number(modelOutput),
-                  }
-                : null;
-            if (limits) {
-              const parsed = modelLimitsSchema.safeParse(limits);
-              if (!parsed.success) {
-                setLimitErrors(
-                  Object.fromEntries(
-                    parsed.error.issues.map((issue) => [
-                      String(issue.path[0]),
-                      issue.message,
-                    ]),
-                  ),
-                );
-                throw new Error("Check the model limit fields.");
-              }
-            }
-            if (!!inputPrice !== !!outputPrice)
-              throw new Error("Enter both token prices.");
-            await api("/api/admin/operator/credentials", "PUT", {
-              version: p.version,
-              modelKey: key || undefined,
-              model,
-              modelBaseUrl: baseUrl,
-              thinkingLevel: thinking,
-              modelLimits: limits,
-              modelPricing:
-                inputPrice !== "" && outputPrice !== ""
-                  ? { input: Number(inputPrice), output: Number(outputPrice) }
-                  : undefined,
-            });
-            setKey("");
-          }
-          onSaved();
-        } catch (cause) {
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "Could not save model configuration.",
-          );
-        } finally {
-          setSaving(false);
-        }
-      }}
-    >
-      <div className="columns">
-        <Field
-          label={`Model API key · ${p.credentials.model ? "configured" : "missing"}`}
-        >
-          <input
-            type="password"
-            autoComplete="off"
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            placeholder={
-              p.credentials.model
-                ? "Leave blank to retain"
-                : "Enter your provider API key"
-            }
-          />
-        </Field>
-        <Field label="Model base URL">
-          <input
-            type="url"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder="https://api.openai.com/v1"
-          />
-        </Field>
-        <Field label="Model">
-          <SuggestionInput
-            suggestions={["gpt-4.1-mini", "gpt-4.1", "gpt-4o-mini"]}
-            value={model}
-            onChange={setModel}
-            placeholder="Select or enter a custom model ID"
-          />
-        </Field>
-      </div>
-      <details className="setup-advanced">
-        <summary>Advanced model settings</summary>
-        <p className="muted">
-          Set thinking, capacity, and token prices when your provider needs
-          them. You can return to this editor later. Custom models require
-          capacity and prices.
-        </p>
-        <div className="columns">
-          <Field label="Thinking level">
-            <Select
-              value={thinking}
-              onChange={(e) => setThinking(e.target.value as ThinkingLevel)}
-            >
-              {thinkingLevels.map((level) => (
-                <option key={level} value={level}>
-                  {level}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Model context window (tokens)">
-            <input
-              type="number"
-              min="1"
-              step="1"
-              aria-label="Model context window (tokens)"
-              value={contextWindow}
-              onChange={(e) => {
-                setContextWindow(e.target.value);
-                setLimitErrors({});
-              }}
-              aria-invalid={!!limitErrors.contextWindow}
-              aria-describedby="model-context-help"
-              placeholder="Catalog value for known models"
-            />
-            <small id="model-context-help">
-              Input and output combined. Required for custom models.
-            </small>
-            {limitErrors.contextWindow && (
-              <small role="alert">{limitErrors.contextWindow}</small>
-            )}
-          </Field>
-          <Field label="Model maximum output (tokens)">
-            <input
-              type="number"
-              min="1"
-              step="1"
-              aria-label="Model maximum output (tokens)"
-              value={modelOutput}
-              onChange={(e) => {
-                setModelOutput(e.target.value);
-                setLimitErrors({});
-              }}
-              aria-invalid={!!limitErrors.maxOutputTokens}
-              aria-describedby="model-output-help"
-              placeholder="Catalog value for known models"
-            />
-            <small id="model-output-help">
-              Use your provider's documented limit, including reasoning where
-              applicable.
-            </small>
-            {limitErrors.maxOutputTokens && (
-              <small role="alert">{limitErrors.maxOutputTokens}</small>
-            )}
-          </Field>
-          <Field label="Input price (USD / million tokens)">
-            <input
-              type="number"
-              min="0"
-              step="any"
-              value={inputPrice}
-              onChange={(e) => setInputPrice(e.target.value)}
-              placeholder="Catalog price"
-            />
-          </Field>
-          <Field label="Output price (USD / million tokens)">
-            <input
-              type="number"
-              min="0"
-              step="any"
-              value={outputPrice}
-              onChange={(e) => setOutputPrice(e.target.value)}
-              placeholder="Catalog price"
-            />
-          </Field>
-        </div>
-        <p className="muted">
-          Include the API path (usually /v1). Enter the API key again when
-          changing endpoints. Thinking levels require model support; off omits
-          reasoning effort. Custom models need both token prices for budget
-          estimates; use 0 for a free local model. Saved price overrides remain
-          until you replace them.
-        </p>
-        <p className="muted">
-          Saved model limits:{" "}
-          {p.modelCapabilities
-            ? `${p.modelCapabilities.limits.contextWindow.toLocaleString()} context tokens · ${p.modelCapabilities.limits.maxOutputTokens.toLocaleString()} maximum output · ${p.modelCapabilities.source === "catalog" ? "bundled Pi catalog" : "operator supplied"}`
-            : "Unknown — configure before running the assistant"}
-          . Clear both model limit fields to use catalog values. Review these
-          limits when changing models or endpoints.
-        </p>
-      </details>
-      {error && (
-        <p role="alert" className="notice">
-          {error}
-        </p>
-      )}
-      <ModalActions>
-        <button type="submit" disabled={saving}>
-          {saving ? "Saving…" : "Save model configuration"}
-        </button>
-      </ModalActions>
     </form>
   );
 }

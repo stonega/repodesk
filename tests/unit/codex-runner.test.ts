@@ -170,6 +170,64 @@ async function fixture(concurrency = 4) {
     },
   };
 }
+test("a selected provider and model stay bound to the task proxy across supervisor restart", async () => {
+  const f = await fixture();
+  f.input.providerApiKey = "selected-provider-secret";
+  f.input.modelProvider = {
+    id: randomUUID(),
+    version: 1,
+    name: "Team provider",
+    baseUrl: "https://selected.example/v1",
+    model: "team/coding-model",
+  };
+  await f.supervisor.start(f.input);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  const taskToken = f.calls.find(
+    (call) => call.args[0] === "create" && call.args.at(-1) === "implement",
+  )?.env?.CODEX_TASK_TOKEN;
+  if (!taskToken) throw Error("missing task token");
+  expect(f.jobInputs.at(-1)).toContain("team/coding-model");
+  expect(f.jobInputs.at(-1)).not.toContain("selected-provider-secret");
+  const restarted = new RunnerSupervisor(f.settings, f.engine);
+  await restarted.initialize();
+  expect(restarted.providerConnection(taskToken)).toEqual({
+    apiKey: "selected-provider-secret",
+    baseUrl: "https://selected.example/v1",
+    model: "team/coding-model",
+  });
+  let requestUrl = "",
+    authorization = "";
+  const app = runnerApp(restarted, (async (input, init) => {
+    requestUrl = String(input);
+    authorization = new Headers(init?.headers).get("authorization") ?? "";
+    return Response.json({ output: [] });
+  }) as typeof fetch);
+  const response = await app.request("/v1/responses", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${taskToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ model: "team/coding-model", input: [] }),
+  });
+  expect(response.status).toBe(200);
+  expect(requestUrl).toBe("https://selected.example/v1/responses");
+  expect(authorization).toBe("Bearer selected-provider-secret");
+  expect(
+    (
+      await app.request("/v1/responses", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${taskToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ model: f.settings.CODEX_MODEL, input: [] }),
+      })
+    ).status,
+  ).toBe(403);
+});
+
 test("OCR preparation failure stops before model credentials or publication are issued", async () => {
   const f = await fixture();
   const readText = f.engine.readText.bind(f.engine);

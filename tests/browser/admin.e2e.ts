@@ -6,14 +6,16 @@ import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
 import { Fault, workflowSchema } from "../../src/domain.ts";
 import { RuntimeLogger } from "../../src/observability/logs.ts";
-import { decrypt } from "../../src/setup/credentials.ts";
 import { decide, proposeWorkflow } from "../../src/workflows/service.ts";
 import { requestAccess } from "../../src/workspaces/access-requests.ts";
 import { enrollOwner } from "../../src/workspaces/service.ts";
 import { chooseOption } from "./dropdown-helpers.ts";
 
 let workspaceId = "";
-const browserDbPath = join(tmpdir(), "repodesk-browser-3107-db.json");
+let modelProviderId = "";
+const browserDbPath =
+  process.env.BROWSER_DB_PATH ??
+  join(tmpdir(), "repodesk-browser-3107-db.json");
 async function chooseWorkspace(page: Page, id: string) {
   await page.getByRole("button", { name: "Workspace", exact: true }).click();
   await page
@@ -56,7 +58,7 @@ test.describe
         Math.abs((desktopArt?.width ?? 0) - (desktopForm?.width ?? 0)),
       ).toBeLessThan(2);
       await page.screenshot({
-        path: "test-results/setup-entry-desktop.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/setup-entry-desktop.png`,
         fullPage: true,
       });
       await page.setViewportSize({ width: 390, height: 844 });
@@ -64,7 +66,7 @@ test.describe
       await expect(art).toHaveCSS("width", "390px");
       await expect(network).toBeVisible();
       await page.screenshot({
-        path: "test-results/setup-entry-mobile.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/setup-entry-mobile.png`,
         fullPage: true,
       });
       await page.setViewportSize({ width: 1280, height: 720 });
@@ -82,7 +84,7 @@ test.describe
         page.getByRole("navigation", { name: "Setup steps" }),
       ).toBeVisible();
       const setupSteps = page.getByRole("navigation", { name: "Setup steps" });
-      await expect(setupSteps.getByRole("button")).toHaveCount(3);
+      await expect(setupSteps.getByRole("button")).toHaveCount(4);
       await expect(setupSteps).toContainText("GitHub App");
       await expect(setupSteps).not.toContainText("Enter panel");
       await expect(
@@ -94,6 +96,33 @@ test.describe
       );
       await chooseOption(page.getByLabel("Timezone"), "America/New_York");
       await page.getByLabel("Workspace name").fill("Browser team");
+      await page.getByRole("button", { name: "Continue to Model" }).click();
+      await expect(
+        page.getByRole("heading", { name: "Model providers" }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "New model provider" }).click();
+      const providerDialog = page.getByRole("dialog", {
+        name: "New model provider",
+      });
+      await providerDialog.getByLabel("Provider name").fill("Team API");
+      await providerDialog
+        .getByLabel("API base URL")
+        .fill("https://models.example.test/v1");
+      await providerDialog
+        .getByLabel("API key", { exact: true })
+        .fill("fake-provider-key");
+      await providerDialog
+        .getByRole("button", { name: "Save provider" })
+        .click();
+      await expect(providerDialog).toHaveCount(0);
+      const models = await (
+        await page.request.get("/api/admin/operator/model-providers")
+      ).json();
+      modelProviderId = models.providers[0].id;
+      await chooseOption(
+        page.getByLabel("Model", { exact: true }),
+        "gpt-4.1-mini",
+      );
       await page.getByRole("button", { name: "Continue to Telegram" }).click();
       await expect(
         page.getByRole("heading", { name: "Connect Telegram" }),
@@ -120,7 +149,7 @@ test.describe
         page.getByRole("button", { name: "Disconnect GitHub" }),
       ).toHaveCount(0);
       await page.screenshot({
-        path: "test-results/setup-github.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/setup-github.png`,
         fullPage: true,
       });
       const registrationRoute = "**/api/admin/workspaces/*/github/register";
@@ -212,111 +241,114 @@ test.describe
       await expect(
         page.getByRole("button", { name: "Activate bot", exact: true }),
       ).toBeDisabled();
-      const modelCard = page.getByRole("region", {
-        name: "Model configuration",
+      const modelCard = page.getByRole("region", { name: "Bot chat model" });
+      const providerCard = page.getByRole("region", {
+        name: "Model providers",
       });
-      await expect(modelCard.locator(".settings-item")).toHaveCount(8);
+      await expect(modelCard).toContainText("gpt-4.1-mini");
+      await expect(providerCard).toContainText("Team API");
+      await expect(providerCard.locator("input,select")).toHaveCount(0);
+      await expect(modelCard.locator("input,select")).toHaveCount(0);
+      await providerCard.getByRole("button", { name: "Edit Team API" }).click();
+      const providerEditor = page.getByRole("dialog", {
+        name: "Edit model provider",
+      });
       await expect(
-        modelCard.getByText("Missing", { exact: true }),
-      ).toBeVisible();
-      await expect(page.getByLabel("Model base URL")).toHaveCount(0);
-      await modelCard
-        .getByRole("button", { name: "Edit model configuration" })
-        .click();
-      const modelDialog = page.getByRole("dialog", {
-        name: "Edit model configuration",
-      });
-      await expect(modelDialog).toBeVisible();
-      await expect(modelDialog.getByLabel(/Model API key/)).toBeFocused();
-      await page
-        .getByRole("button", { name: "Save model configuration" })
-        .click();
-      await expect(page.getByRole("alert")).toContainText(
-        "Enter a model API key to save settings.",
+        providerEditor.getByLabel("API key", { exact: true }),
+      ).toHaveValue("");
+      await expect(providerEditor.getByLabel("API base URL")).toHaveValue(
+        "https://models.example.test/v1",
       );
-      await expect(page.getByLabel("Thinking level")).toBeHidden();
-      await page.getByText("Advanced model settings").click();
-      await page.getByLabel(/Model API key/).fill("fake-provider-key");
-      await page
-        .getByLabel("Model base URL")
-        .fill("https://models.example.test/v1");
-      await page.getByLabel("Model", { exact: true }).fill("team/custom-model");
-      await chooseOption(page.getByLabel("Thinking level"), "high");
-      await page.getByLabel("Model context window (tokens)").fill("128000");
-      await page.getByLabel("Model maximum output (tokens)").fill("128000");
-      await page.getByLabel("Input price (USD / million tokens)").fill("1");
-      await page.getByLabel("Output price (USD / million tokens)").fill("3");
-      await page
-        .getByRole("button", { name: "Save model configuration" })
+      await providerEditor
+        .getByRole("button", { name: "Cancel", exact: true })
         .click();
+      await modelCard.getByRole("button", { name: "Edit chat model" }).click();
+      const modelDialog = page.getByRole("dialog", { name: "Edit chat model" });
       await expect(
-        page.getByText(
-          "Maximum output must be smaller than the context window to leave room for input.",
-          { exact: true },
-        ),
-      ).toBeVisible();
-      await page.getByLabel("Model maximum output (tokens)").fill("16000");
-      await page
-        .getByRole("button", { name: "Save model configuration" })
+        modelDialog.getByLabel("Model provider", { exact: true }),
+      ).toBeFocused();
+      await chooseOption(
+        modelDialog.getByLabel("Model", { exact: true }),
+        "team/custom-model",
+      );
+      await modelDialog
+        .getByRole("button", { name: "Save chat model" })
         .click();
-      await expect(page.getByText("Model settings saved.")).toBeVisible();
+      await expect(modelDialog.getByRole("alert")).toContainText(
+        "token prices",
+      );
+      await modelDialog
+        .getByText("Advanced model settings", { exact: true })
+        .click();
+      await chooseOption(modelDialog.getByLabel("Thinking level"), "high");
+      await modelDialog
+        .getByLabel("Model context window (tokens)")
+        .fill("128000");
+      await modelDialog
+        .getByLabel("Model maximum output (tokens)")
+        .fill("128000");
+      await modelDialog
+        .getByLabel("Input price (USD / million tokens)")
+        .fill("1");
+      await modelDialog
+        .getByLabel("Output price (USD / million tokens)")
+        .fill("3");
+      await modelDialog
+        .getByRole("button", { name: "Save chat model" })
+        .click();
+      await expect(modelDialog.getByRole("alert")).toContainText(
+        "Maximum output must be smaller",
+      );
+      await modelDialog
+        .getByLabel("Model maximum output (tokens)")
+        .fill("16000");
+      await modelDialog
+        .getByRole("button", { name: "Save chat model" })
+        .click();
       await expect(modelDialog).toHaveCount(0);
-      await expect(
-        modelCard.getByText("Configured", { exact: true }),
-      ).toBeVisible();
-      await expect(
-        modelCard.getByText("team/custom-model", { exact: true }),
-      ).toBeVisible();
-      await expect(
-        modelCard.getByText("128,000", { exact: true }),
-      ).toBeVisible();
-      await expect(
-        modelCard.getByText("16,000", { exact: true }),
-      ).toBeVisible();
+      await expect(modelCard).toContainText("team/custom-model");
+      await expect(modelCard).toContainText("128,000");
+      await expect(modelCard).toContainText("16,000");
       await expect(modelCard).not.toContainText("fake-provider-key");
       await page.screenshot({
-        path: "test-results/model-summary-desktop.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/model-summary-desktop.png`,
         fullPage: true,
       });
       await page.reload();
-      await modelCard
-        .getByRole("button", { name: "Edit model configuration" })
+      await modelCard.getByRole("button", { name: "Edit chat model" }).click();
+      await expect(
+        modelDialog.getByLabel("Model", { exact: true }),
+      ).toHaveAttribute("value", "team/custom-model");
+      await modelDialog
+        .getByText("Advanced model settings", { exact: true })
         .click();
-      await expect(page.getByLabel(/Model API key/)).toHaveValue("");
-      await expect(page.getByLabel("Model base URL")).toHaveValue(
-        "https://models.example.test/v1",
-      );
-      await expect(page.getByLabel("Model", { exact: true })).toHaveValue(
-        "team/custom-model",
-      );
-      await page.getByText("Advanced model settings").click();
-      await expect(page.getByLabel("Thinking level")).toHaveAttribute(
+      await expect(modelDialog.getByLabel("Thinking level")).toHaveAttribute(
         "value",
         "high",
       );
       await page.screenshot({
-        path: "test-results/model-editor-desktop.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/model-editor-desktop.png`,
         fullPage: true,
       });
-      await page
-        .getByLabel("Model", { exact: true })
-        .fill("discard-this-draft");
+      await chooseOption(
+        modelDialog.getByLabel("Model", { exact: true }),
+        "gpt-4.1-mini",
+      );
       await modelDialog
         .getByRole("button", { name: "Cancel", exact: true })
         .click();
       await expect(modelDialog).toHaveCount(0);
       await expect(
-        modelCard.getByRole("button", { name: "Edit model configuration" }),
+        modelCard.getByRole("button", { name: "Edit chat model" }),
       ).toBeFocused();
-      await modelCard
-        .getByRole("button", { name: "Edit model configuration" })
-        .click();
-      await expect(page.getByLabel("Model", { exact: true })).toHaveValue(
-        "team/custom-model",
-      );
+      await modelCard.getByRole("button", { name: "Edit chat model" }).click();
+      await expect(
+        modelDialog.getByLabel("Model", { exact: true }),
+      ).toHaveAttribute("value", "team/custom-model");
       await page.setViewportSize({ width: 390, height: 844 });
-      await page.getByText("Advanced model settings").click();
-      await expect(modelDialog).toBeVisible();
+      await modelDialog
+        .getByText("Advanced model settings", { exact: true })
+        .click();
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await expect
         .poll(() =>
@@ -326,11 +358,15 @@ test.describe
         )
         .toBe(true);
       await page.screenshot({
-        path: "test-results/model-editor-mobile.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/model-editor-mobile.png`,
         fullPage: true,
       });
       await page.keyboard.press("Escape");
       await expect(modelDialog).toHaveCount(0);
+      await page.screenshot({
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/model-summary-mobile.png`,
+        fullPage: true,
+      });
       await page.setViewportSize({ width: 1280, height: 900 });
       if (process.env.BROWSER_TELEGRAM_TRANSPORT === "polling") {
         await expect(page.getByText(/Polling: ready/)).toBeVisible({
@@ -369,7 +405,7 @@ test.describe
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await page.screenshot({
-        path: "test-results/panel-model-mobile.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/panel-model-mobile.png`,
         fullPage: true,
       });
       await page.setViewportSize({ width: 1280, height: 900 });
@@ -440,7 +476,7 @@ test.describe
         .fill("20");
       await callsDialog.getByLabel("Run budget (USD)").fill("200");
       await page.screenshot({
-        path: "test-results/workspace-settings-desktop.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/workspace-settings-desktop.png`,
         fullPage: true,
       });
       await page.setViewportSize({ width: 390, height: 844 });
@@ -456,7 +492,7 @@ test.describe
         ),
       ).toBe(true);
       await page.screenshot({
-        path: "test-results/workspace-settings-mobile.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/workspace-settings-mobile.png`,
         fullPage: true,
       });
       await page.clock.install();
@@ -482,7 +518,7 @@ test.describe
         (toastBounds?.x ?? 0) + (toastBounds?.width ?? 0),
       ).toBeLessThanOrEqual(390);
       await page.screenshot({
-        path: "test-results/configuration-toast-mobile.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/configuration-toast-mobile.png`,
         fullPage: true,
       });
       await toast.hover();
@@ -545,7 +581,7 @@ test.describe
         "Team configuration saved.",
       );
       await page.screenshot({
-        path: "test-results/configuration-toast-desktop.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/configuration-toast-desktop.png`,
         fullPage: true,
       });
       await toast.getByRole("button", { name: "Dismiss notification" }).click();
@@ -646,14 +682,16 @@ test.describe
         card.getByText("3 published versions", { exact: true }),
       ).toBeVisible();
       await page.screenshot({
-        path: "test-results/skills-desktop.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/skills-desktop.png`,
         fullPage: true,
       });
       await page.setViewportSize({ width: 390, height: 844 });
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
         .toBeLessThanOrEqual(390);
-      await card.screenshot({ path: "test-results/skill-card-mobile.png" });
+      await card.screenshot({
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/skill-card-mobile.png`,
+      });
       await page.setViewportSize({ width: 1280, height: 800 });
       await card.getByRole("button", { name: "Test draft policy" }).click();
       await expect(
@@ -705,7 +743,7 @@ test.describe
       ).toBeVisible();
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await page.screenshot({
-        path: "test-results/admin-mobile.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/admin-mobile.png`,
         fullPage: true,
       });
     });
@@ -775,13 +813,17 @@ test.describe
       await page.getByRole("button", { name: "Previous page" }).click();
       await expect(table.locator("tbody tr")).toHaveCount(100);
       await page.setViewportSize({ width: 1280, height: 900 });
-      await page.screenshot({ path: "test-results/usage-desktop.png" });
+      await page.screenshot({
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/usage-desktop.png`,
+      });
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await page
         .getByRole("heading", { name: "Usage & budget" })
         .scrollIntoViewIfNeeded();
-      await page.screenshot({ path: "test-results/usage-mobile.png" });
+      await page.screenshot({
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/usage-mobile.png`,
+      });
       mode = "empty";
       await page.reload();
       await expect(table.getByText("No usage recorded yet.")).toBeVisible();
@@ -869,12 +911,12 @@ test.describe
         await page.setViewportSize({ width: 390, height: 844 });
         await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
         await page.screenshot({
-          path: "test-results/runtime-logs-mobile.png",
+          path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/runtime-logs-mobile.png`,
           fullPage: true,
         });
         await page.setViewportSize({ width: 1280, height: 900 });
         await page.screenshot({
-          path: "test-results/runtime-logs-desktop.png",
+          path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/runtime-logs-desktop.png`,
           fullPage: true,
         });
         await page.getByLabel("Auto-refresh every 5 seconds").uncheck();
@@ -923,13 +965,13 @@ test.describe
         page.getByRole("link", { name: "Open pi-mcp-adapter" }),
       ).toBeVisible();
       await page.screenshot({
-        path: "test-results/plugins-catalog-desktop.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/plugins-catalog-desktop.png`,
         fullPage: true,
       });
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await page.screenshot({
-        path: "test-results/plugins-catalog-mobile.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/plugins-catalog-mobile.png`,
         fullPage: true,
       });
       await page.setViewportSize({ width: 1280, height: 900 });
@@ -1000,7 +1042,7 @@ test.describe
       await page.setViewportSize({ width: 1280, height: 900 });
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.screenshot({
-        path: "test-results/plugins-desktop.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/plugins-desktop.png`,
         fullPage: true,
       });
       await page.setViewportSize({ width: 390, height: 844 });
@@ -1009,7 +1051,7 @@ test.describe
       await expect(page.getByLabel("Installed file path")).toBeVisible();
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await page.screenshot({
-        path: "test-results/plugins-mobile.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/plugins-mobile.png`,
         fullPage: true,
       });
       await page.getByRole("button", { name: "Cancel editing" }).click();
@@ -1145,13 +1187,13 @@ test.describe
       await page.setViewportSize({ width: 1280, height: 1000 });
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.screenshot({
-        path: "test-results/code-truth-desktop.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/code-truth-desktop.png`,
         fullPage: true,
       });
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await page.screenshot({
-        path: "test-results/code-truth-mobile.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/code-truth-mobile.png`,
         fullPage: true,
       });
       await card
@@ -1203,6 +1245,18 @@ test.describe
       await expect(page.getByLabel("Workspace draft")).toHaveCount(0);
       await page.getByLabel("Workspace name").fill("Independent team");
       await chooseOption(page.getByLabel("Timezone"), "America/New_York");
+      await page.getByRole("button", { name: "Continue to Model" }).click();
+      await expect(
+        page.getByRole("heading", { name: "Model providers" }),
+      ).toBeVisible();
+      await chooseOption(
+        page.getByLabel("Model provider", { exact: true }),
+        modelProviderId,
+      );
+      await chooseOption(
+        page.getByLabel("Model", { exact: true }),
+        "gpt-4.1-mini",
+      );
       await page.getByRole("button", { name: "Continue to Telegram" }).click();
       await expect(
         page.getByRole("heading", { name: "Connect Telegram" }),
@@ -1421,12 +1475,12 @@ test.describe
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await page.screenshot({
-        path: "test-results/github-create-mobile.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/github-create-mobile.png`,
         fullPage: true,
       });
       await page.setViewportSize({ width: 1280, height: 900 });
       await page.screenshot({
-        path: "test-results/github-create-desktop.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/github-create-desktop.png`,
         fullPage: true,
       });
       await page.route(
@@ -1508,7 +1562,7 @@ test.describe
       ).toHaveCount(0);
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await page.screenshot({
-        path: "test-results/github-created-mobile.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/github-created-mobile.png`,
         fullPage: true,
       });
     });
@@ -1573,10 +1627,6 @@ test.describe
       await expect(
         manage.getByRole("link", { name: "Open example/workspace on GitHub" }),
       ).toHaveAttribute("target", "_blank");
-      await expect(manage.locator(".github-repositories")).toHaveCSS(
-        "display",
-        "flex",
-      );
       await expect(
         manage.getByText("example/second", { exact: true }),
       ).toHaveCount(0);
@@ -1656,12 +1706,12 @@ test.describe
         0,
       );
       await codingDialog.screenshot({
-        path: "test-results/coding-add-desktop.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/coding-add-desktop.png`,
       });
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await codingDialog.screenshot({
-        path: "test-results/coding-add-mobile.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/coding-add-mobile.png`,
       });
       await page.setViewportSize({ width: 1280, height: 720 });
       await codingDialog
@@ -1733,12 +1783,12 @@ test.describe
         codingEdit.getByRole("combobox", { name: "Repository", exact: true }),
       ).toHaveAttribute("aria-expanded", "false");
       await codingEdit.screenshot({
-        path: "test-results/coding-policy-desktop.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/coding-policy-desktop.png`,
       });
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await codingEdit.screenshot({
-        path: "test-results/coding-policy-mobile.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/coding-policy-mobile.png`,
       });
       await page.setViewportSize({ width: 1280, height: 720 });
       await codingEdit
@@ -1748,10 +1798,14 @@ test.describe
         .getByRole("button", { name: "Cancel", exact: true })
         .click();
       await expect(coding.getByText(/Base: develop/)).toBeVisible();
-      await coding.screenshot({ path: "test-results/coding-desktop.png" });
+      await coding.screenshot({
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/coding-desktop.png`,
+      });
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
-      await coding.screenshot({ path: "test-results/coding-mobile.png" });
+      await coding.screenshot({
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/coding-mobile.png`,
+      });
       await page
         .getByRole("switch", { name: "Enable Codex implementation" })
         .click();
@@ -1760,10 +1814,15 @@ test.describe
       await configuration
         .getByRole("button", { name: "Edit Codex configuration" })
         .click();
-      await configDialog
-        .getByRole("textbox", { name: "Provider API key" })
-        .fill("fake-panel-key");
-      const [keyResponse] = await Promise.all([
+      await chooseOption(
+        configDialog.getByLabel("Model provider", { exact: true }),
+        modelProviderId,
+      );
+      await chooseOption(
+        configDialog.getByLabel("Model", { exact: true }),
+        "gpt-4.1",
+      );
+      const [modelResponse] = await Promise.all([
         page.waitForResponse(
           (r) =>
             r.url().endsWith("/plugins/coding") &&
@@ -1773,53 +1832,36 @@ test.describe
           .getByRole("button", { name: "Save configuration" })
           .click(),
       ]);
-      expect(keyResponse.status()).toBe(200);
-      expect(await keyResponse.text()).not.toContain("fake-panel-key");
+      expect(modelResponse.status()).toBe(200);
+      expect(await modelResponse.text()).not.toContain("fake-provider-key");
       await expect(configDialog).toHaveCount(0);
-      await expect(
-        configuration.getByText("Workspace key configured", { exact: true }),
-      ).toBeVisible();
+      await expect(configuration).toContainText("Provider key configured");
       const fixture = JSON.parse(await readFile(browserDbPath, "utf8"));
-      const keyPool = database(fixture.url);
+      const modelPool = database(fixture.url);
       try {
-        const saved = await new Store(keyPool).read(workspaceId);
-        const ciphertext = saved.coding?.providerApiKey;
-        if (!ciphertext) throw Error("Missing encrypted provider key");
-        expect(JSON.stringify(saved)).not.toContain("fake-panel-key");
-        expect(
-          decrypt(
-            "ab".repeat(32),
-            `coding-provider:${workspaceId}`,
-            ciphertext,
-          ),
-        ).toBe("fake-panel-key");
-        expect(await keyResponse.text()).not.toContain(ciphertext);
+        const saved = await new Store(modelPool).read(workspaceId);
+        expect(saved.coding?.settings.model).toMatchObject({
+          providerId: modelProviderId,
+          model: "gpt-4.1",
+        });
+        expect(saved.coding?.providerApiKey).toBeUndefined();
       } finally {
-        await keyPool.end();
+        await modelPool.end();
       }
       await page.reload();
       await configuration
         .getByRole("button", { name: "Edit Codex configuration" })
         .click();
       await expect(
-        configDialog.getByRole("textbox", { name: "Provider API key" }),
-      ).toHaveValue("");
-      await configDialog
-        .getByRole("textbox", { name: "Provider API key" })
-        .fill("fake-replacement-key");
-      await configDialog
-        .getByRole("button", { name: "Save configuration" })
-        .click();
-      await expect(configDialog).toHaveCount(0);
-      await configuration
-        .getByRole("button", { name: "Edit Codex configuration" })
-        .click();
+        configDialog.getByLabel("Model", { exact: true }),
+      ).toHaveAttribute("value", "gpt-4.1");
       await expect(
         configDialog.getByRole("textbox", { name: "Provider API key" }),
-      ).toHaveValue("");
-      await configDialog
-        .getByRole("textbox", { name: "Provider API key" })
-        .fill("discard-this-draft");
+      ).toHaveCount(0);
+      await chooseOption(
+        configDialog.getByLabel("Model", { exact: true }),
+        "gpt-4.1-mini",
+      );
       await configDialog
         .getByRole("button", { name: "Cancel", exact: true })
         .click();
@@ -1827,22 +1869,8 @@ test.describe
         .getByRole("button", { name: "Edit Codex configuration" })
         .click();
       await expect(
-        configDialog.getByRole("textbox", { name: "Provider API key" }),
-      ).toHaveValue("");
-      await configDialog.getByLabel("Remove saved key").check();
-      await configDialog
-        .getByRole("button", { name: "Save configuration" })
-        .click();
-      await expect(
-        configuration.getByText("No workspace key", { exact: true }),
-      ).toBeVisible();
-      await page.reload();
-      await expect(
-        configuration.getByText("No workspace key", { exact: true }),
-      ).toBeVisible();
-      await configuration
-        .getByRole("button", { name: "Edit Codex configuration" })
-        .click();
+        configDialog.getByLabel("Model", { exact: true }),
+      ).toHaveAttribute("value", "gpt-4.1");
       await chooseOption(
         configDialog.getByLabel("Sign-in method"),
         "device_code",
@@ -1876,7 +1904,7 @@ test.describe
         .getByRole("button", { name: "Save configuration" })
         .click();
       await expect(
-        configuration.getByText("Custom provider API key"),
+        configuration.getByText("Saved model provider"),
       ).toBeVisible();
 
       await expect(
@@ -1885,7 +1913,7 @@ test.describe
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await page.screenshot({
-        path: "test-results/github-mobile.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/github-mobile.png`,
         fullPage: true,
       });
     });
@@ -1924,7 +1952,7 @@ test.describe
         page
           .getByRole("navigation", { name: "Setup steps" })
           .getByRole("button"),
-      ).toHaveCount(3);
+      ).toHaveCount(4);
       await page.getByRole("button", { name: "Connect GitHub" }).click();
       const celebration = page.locator(".setup-celebration");
       await expect(
@@ -1939,7 +1967,9 @@ test.describe
       );
       await expect(page.locator(".setup-confetti span")).toHaveCount(32);
       await page.waitForTimeout(300);
-      await page.screenshot({ path: "test-results/setup-confetti.png" });
+      await page.screenshot({
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/setup-confetti.png`,
+      });
       await page.waitForTimeout(1900);
       await expect(page).toHaveURL(/\/setup\?/);
       await getStarted.click();
@@ -1950,7 +1980,7 @@ test.describe
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await page.screenshot({
-        path: "test-results/overview-connections-mobile.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/overview-connections-mobile.png`,
         fullPage: true,
       });
       await page.setViewportSize({ width: 1280, height: 720 });
@@ -1965,10 +1995,14 @@ test.describe
       await expect(page).toHaveURL(overviewUrl);
       const manage = page.getByRole("dialog", { name: "Manage GitHub" });
       await expect(manage).toBeVisible();
-      await page.screenshot({ path: "test-results/github-manage-desktop.png" });
+      await page.screenshot({
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/github-manage-desktop.png`,
+      });
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
-      await page.screenshot({ path: "test-results/github-manage-mobile.png" });
+      await page.screenshot({
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/github-manage-mobile.png`,
+      });
       await page.setViewportSize({ width: 1280, height: 720 });
       await expect(
         page.getByRole("region", { name: "GitHub connection" }),
@@ -2156,12 +2190,12 @@ test.describe
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await expect(repo).toBeVisible();
       await page.screenshot({
-        path: "test-results/add-repository-modal-mobile.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/add-repository-modal-mobile.png`,
         fullPage: true,
       });
       await page.setViewportSize({ width: 1280, height: 900 });
       await page.screenshot({
-        path: "test-results/add-repository-modal-desktop.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/add-repository-modal-desktop.png`,
         fullPage: true,
       });
       await repo.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -2238,12 +2272,12 @@ test.describe
         await page.setViewportSize({ width: 390, height: 844 });
         await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
         await page.screenshot({
-          path: "test-results/access-requests-mobile.png",
+          path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/access-requests-mobile.png`,
           fullPage: true,
         });
         await page.setViewportSize({ width: 1280, height: 900 });
         await page.screenshot({
-          path: "test-results/access-requests-desktop.png",
+          path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/access-requests-desktop.png`,
           fullPage: true,
         });
         const applicant = requests.getByRole("article").filter({
@@ -2365,7 +2399,8 @@ test.describe
           table.getByRole("columnheader", { name: "GitHub", exact: true }),
         ).toBeVisible();
         await expect(row("810")).toContainText("linked-github-member");
-        await expect(row("810")).toContainText("example/workspace · Read");
+        await expect(row("810")).toContainText("example/workspace");
+        await expect(row("810")).toContainText("Read");
         await expect(row("810")).toContainText("Synced");
         await expect(row("808")).toContainText("Not linked");
         await expect(row("811")).toContainText("Inactive");
@@ -2429,13 +2464,13 @@ test.describe
         await expect(row("810")).toContainText("Allowed");
         await page.setViewportSize({ width: 1280, height: 900 });
         await page.screenshot({
-          path: "test-results/members-access-desktop.png",
+          path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/members-access-desktop.png`,
           fullPage: true,
         });
         await page.setViewportSize({ width: 390, height: 844 });
         await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
         await page.screenshot({
-          path: "test-results/members-access-mobile.png",
+          path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/members-access-mobile.png`,
           fullPage: true,
         });
       } finally {
@@ -2546,13 +2581,13 @@ test.describe
         page.getByRole("button", { name: "Approve exact proposal" }).first(),
       ).toBeVisible();
       await page.screenshot({
-        path: "test-results/readable-approvals-desktop.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/readable-approvals-desktop.png`,
         fullPage: true,
       });
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await page.screenshot({
-        path: "test-results/readable-approvals-mobile.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/readable-approvals-mobile.png`,
         fullPage: true,
       });
     });
@@ -2602,13 +2637,13 @@ test.describe
         .getByRole("button", { name: "Cancel", exact: true })
         .click();
       await page.screenshot({
-        path: "test-results/readable-operations-desktop.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/readable-operations-desktop.png`,
         fullPage: true,
       });
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await page.screenshot({
-        path: "test-results/readable-operations-mobile.png",
+        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/readable-operations-mobile.png`,
         fullPage: true,
       });
     });

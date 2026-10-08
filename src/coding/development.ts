@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requireThat } from "../domain.ts";
+import type { RuntimeProvider } from "../models/config.ts";
 import { reviewFindings } from "../review-bot/github.ts";
 import type { Progress } from "../telegram/feedback.ts";
 import { branchName, type codingPayload } from "./config.ts";
@@ -232,6 +233,7 @@ export type DevelopmentState =
   | "cancelled"
   | "unknown";
 export interface DevelopmentTask {
+  runnerModel?: RuntimeProvider;
   progress?: Progress;
   id: string;
   workspaceId: string;

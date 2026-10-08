@@ -408,3 +408,15 @@ GitHub's [refresh-token guidance](https://docs.github.com/en/enterprise-cloud%40
 Local tests use fake GitHub responses and disposable PostgreSQL; real account linking
 and permission changes remain live acceptance checks. Local implementation does not
 connect accounts, send live Telegram messages or deploy this change.
+
+## RepoDesk App icon
+
+GitHub's [manifest fields](https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest)
+do not include a logo. GitHub [requires the App owner to upload a badge](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/creating-a-custom-badge-for-your-github-app)
+after registration. RepoDesk provides its existing icon as a 200×200 PNG under
+1 MiB, with a Download icon action in creation and an owner-appropriate settings
+link afterward. Setup asks the owner to upload it under Display information and
+choose Set new avatar before acknowledging the step and continuing authorization.
+The acknowledgment is not independent verification of the GitHub image. Existing
+App credentials without stored organization metadata retain the personal settings
+link; organization owners can navigate to their organization's App settings.

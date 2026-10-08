@@ -165,6 +165,47 @@ export function adminRoutes(
   app.get("/api/setup/progress", async (c) =>
     c.json(await setup.progress(c.get("session").admin)),
   );
+  app.get("/api/admin/operator/model-providers", async (c) =>
+    c.json(await setup.models.catalog(c.get("session").admin)),
+  );
+  app.post("/api/admin/operator/model-providers/discover", async (c) =>
+    c.json(
+      await setup.models.discover(c.get("session").admin, await c.req.json()),
+    ),
+  );
+  app.put("/api/admin/operator/model-providers", async (c) =>
+    c.json(await setup.models.save(c.get("session").admin, await c.req.json())),
+  );
+  app.delete("/api/admin/operator/model-providers/:provider", async (c) => {
+    const input = z
+      .object({ version })
+      .strict()
+      .parse(await c.req.json());
+    return c.json(
+      await setup.models.remove(
+        c.get("session").admin,
+        validId(c.req.param("provider")),
+        input.version,
+      ),
+    );
+  });
+  app.get("/api/admin/workspaces/:id/models", async (c) =>
+    c.json(
+      await setup.models.workspace(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+      ),
+    ),
+  );
+  app.put("/api/admin/workspaces/:id/models", async (c) =>
+    c.json(
+      await setup.models.saveChat(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+        await c.req.json(),
+      ),
+    ),
+  );
   app.post("/api/setup/workspaces", async (c) =>
     c.json(
       await setup.createWorkspace(
@@ -481,9 +522,12 @@ export function adminRoutes(
   app.put("/api/admin/workspaces/:id/plugins/coding", async (c) => {
     const input = await c.req.json();
     const id = validId(c.req.param("id"));
-    const page = await store.change(id, (w) =>
-      saveCoding(w, c.get("session").admin, input, encryptionKey),
-    );
+    const page = await store.change(id, async (w) => {
+      const page = saveCoding(w, c.get("session").admin, input, encryptionKey);
+      if (page.settings.model)
+        await setup.models.selected(w, page.settings.model);
+      return page;
+    });
     page.developmentTasks = await taskList(store.pool, id);
     if (deviceAuth)
       try {

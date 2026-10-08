@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useState } from "react";
+import type { ModelSelection, ProviderCatalog } from "../src/models/config.ts";
 import type {
   ReviewPage,
   ReviewSettings,
@@ -6,6 +7,7 @@ import type {
 } from "../src/review-bot/config.ts";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
+import { ModelPicker } from "./model-providers.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
 import { RepositoryCard } from "./repository-card.tsx";
 import { RepositorySelect } from "./repository-select.tsx";
@@ -53,6 +55,23 @@ export function ReviewBot({
   backTo: string;
 }) {
   const endpoint = `/api/admin/workspaces/${workspaceId}/plugins/review-bot`;
+  const [catalog, setCatalog] = useState<ProviderCatalog>();
+  const [modelEditing, setModelEditing] = useState<{
+    settings: ReviewSettings;
+    revision: number;
+  }>();
+  const [modelDraft, setModelDraft] = useState<ModelSelection>();
+  useEffect(() => {
+    let active = true;
+    void request<ProviderCatalog>("/api/admin/operator/model-providers")
+      .then((data) => {
+        if (active) setCatalog(data);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [request]);
   const [page, setPage] = useState<ReviewPage>();
   const [editing, setEditing] = useState<RepositoryDraft>();
   const [removing, setRemoving] = useState<RepositoryDraft>();
@@ -187,12 +206,128 @@ export function ReviewBot({
         Automatic PR reviews and tagged requests, using your configured Codex
         runner.
       </p>
-      {error && !hookOpen && !stopping && !editing && !removing && (
-        <ErrorToast message={error}>
-          <button type="button" disabled={busy} onClick={() => void reload()}>
-            Reload saved settings
-          </button>
-        </ErrorToast>
+      {error &&
+        !modelEditing &&
+        !hookOpen &&
+        !stopping &&
+        !editing &&
+        !removing && (
+          <ErrorToast message={error}>
+            <button type="button" disabled={busy} onClick={() => void reload()}>
+              Reload saved settings
+            </button>
+          </ErrorToast>
+        )}
+      <section className="card" aria-label="Review model">
+        <div className="plugin-card-heading">
+          <h2>Review model</h2>
+          <IconButton
+            icon="edit"
+            label="Edit review model"
+            disabled={!page || busy}
+            onClick={() => {
+              if (!page) return;
+              setError("");
+              setModelDraft(page.settings.model);
+              setModelEditing({
+                settings: page.settings,
+                revision: page.revision,
+              });
+            }}
+          />
+        </div>
+        <p className="muted">
+          Reviews and answers use this model. Requested fixes use the Codex
+          model.
+        </p>
+        <dl className="plugin-summary">
+          <div>
+            <dt>Provider</dt>
+            <dd>
+              {!page ? (
+                <SkeletonRows label="Review provider" />
+              ) : page.settings.model ? (
+                (catalog?.providers.find(
+                  (p) => p.id === page.settings.model?.providerId,
+                )?.name ?? "Saved provider")
+              ) : (
+                "Use Codex provider"
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>Model</dt>
+            <dd>
+              {page ? (
+                (page.settings.model?.model ?? "Use Codex model")
+              ) : (
+                <SkeletonRows label="Review model" />
+              )}
+            </dd>
+          </div>
+        </dl>
+      </section>
+      {modelEditing && (
+        <Modal
+          title="Edit review model"
+          busy={busy}
+          onClose={() => setModelEditing(undefined)}
+        >
+          <form
+            onSubmit={async (event) => {
+              event.preventDefault();
+              if (
+                await save(
+                  { ...modelEditing.settings, model: modelDraft },
+                  modelEditing.revision,
+                )
+              )
+                setModelEditing(undefined);
+            }}
+          >
+            <label className="plugin-check">
+              <input
+                type="checkbox"
+                checked={!modelDraft}
+                disabled={busy}
+                onChange={(event) => {
+                  if (event.target.checked) setModelDraft(undefined);
+                  else
+                    setModelDraft({
+                      providerId: catalog?.providers?.[0]?.id ?? "",
+                      model: "",
+                    });
+                }}
+              />
+              <span>Use the Codex model</span>
+            </label>
+            {modelDraft && (
+              <ModelPicker
+                request={request}
+                value={modelDraft}
+                onChange={setModelDraft}
+                disabled={busy}
+              />
+            )}
+            <p className="muted">
+              Choose a Responses-compatible model from a saved provider. Manage
+              providers in Model settings.
+            </p>
+            {error && (
+              <p className="notice" role="alert">
+                {error}
+              </p>
+            )}
+            <ModalActions>
+              <button
+                type="submit"
+                disabled={busy || (!!modelDraft && !modelDraft.model)}
+              >
+                {busy ? "Saving…" : "Save review model"}
+              </button>
+            </ModalActions>
+          </form>
+        </Modal>
       )}
       <section className="card">
         <div className="plugin-card-heading">

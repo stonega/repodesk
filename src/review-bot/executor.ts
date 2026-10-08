@@ -9,6 +9,7 @@ import type {
 import type { Store } from "../db/repositories.ts";
 import { Fault, requireThat, type Workspace } from "../domain.ts";
 import type { GitHubApps } from "../github/registry.ts";
+import { ModelProviders } from "../models/service.ts";
 import { decrypt, fingerprint } from "../setup/credentials.ts";
 import { type ReviewTask, reviewTerminal } from "./config.ts";
 import { progressMarker, ReviewGitHub, reviewMarker } from "./github.ts";
@@ -447,12 +448,37 @@ export class ReviewExecutor {
         w.coding.providerApiKey,
       );
     }
+    const codingModel =
+      w.coding?.settings.authMode === "provider_key"
+        ? w.coding.settings.model
+        : undefined;
+    const selection =
+      task.mode === "fix"
+        ? codingModel
+        : (w.reviewBot?.settings.model ?? codingModel);
+    const sharedProvider = selection
+      ? await new ModelProviders(this.store, this.key ?? "").runner(
+          w,
+          selection,
+        )
+      : {};
+    if (
+      sharedProvider.modelProvider &&
+      !(await this.update(workspaceId, task.id, lease, (t) => {
+        t.runnerModel = sharedProvider.modelProvider;
+      }))
+    )
+      return;
     await runner.start({
       workspaceId,
       taskId: task.attemptId,
-      payload: saved.payload,
+      payload: {
+        ...saved.payload,
+        ...(selection ? { authMode: "provider_key" as const } : {}),
+      },
       readToken: github.token,
       providerApiKey,
+      ...sharedProvider,
       development: run,
     });
     await this.update(workspaceId, task.id, lease, (t) => {

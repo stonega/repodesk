@@ -11,6 +11,7 @@ export interface GitHubPage {
   configured: boolean;
   canRegister?: boolean;
   appSlug?: string;
+  appSettingsUrl?: string;
   installUrl?: string;
   connection?: GitHubConnection;
   refreshError?: string;

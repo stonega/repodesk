@@ -10,6 +10,7 @@ export interface GitHubAppConfig {
   privateKey: string;
   slug: string;
   webhookSecret?: string;
+  organization?: string;
 }
 const accountSchema = z.object({ login: z.string().min(1).max(100) });
 const installationSchema = z.object({

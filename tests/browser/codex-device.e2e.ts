@@ -40,7 +40,21 @@ async function fixture(page: Page, state: CodingPage["deviceAuth"]) {
             ? [{ id: workspaceId, name: "Device sign-in fixture" }]
             : path === endpoint
               ? data
-              : {};
+              : path === "/api/admin/operator/model-providers"
+                ? {
+                    version: 1,
+                    providers: [
+                      {
+                        id: "00000000-0000-4000-8000-000000000002",
+                        name: "Team provider",
+                        baseUrl: "https://models.example.test/v1",
+                        apiKeyConfigured: true,
+                        version: 1,
+                        models: ["team/coding-model"],
+                      },
+                    ],
+                  }
+                : {};
     await route.fulfill({ json });
   });
   await page.goto(`/admin/plugins/codex?workspace=${workspaceId}`);
@@ -144,9 +158,14 @@ test("unavailable runner can be rechecked without losing the configuration draft
   await expect(
     dialog.getByRole("link", { name: "Codex runner setup instructions" }),
   ).toBeVisible();
-  await dialog
-    .getByLabel("Provider API key", { exact: true })
-    .fill("unsaved-test-key");
+  await chooseOption(
+    dialog.getByLabel("Model provider"),
+    "00000000-0000-4000-8000-000000000002",
+  );
+  await chooseOption(
+    dialog.getByLabel("Model", { exact: true }),
+    "team/coding-model",
+  );
   await chooseOption(dialog.getByLabel("Sign-in method"), "device_code");
   data.deviceAuth = { state: "disconnected" };
   await dialog.getByRole("button", { name: "Recheck connection" }).click();
@@ -154,9 +173,10 @@ test("unavailable runner can be rechecked without losing the configuration draft
     dialog.getByRole("button", { name: "Sign in with device code" }),
   ).toBeEnabled();
   await chooseOption(dialog.getByLabel("Sign-in method"), "provider_key");
-  await expect(
-    dialog.getByLabel("Provider API key", { exact: true }),
-  ).toHaveValue("unsaved-test-key");
+  await expect(dialog.getByLabel("Model", { exact: true })).toHaveAttribute(
+    "value",
+    "team/coding-model",
+  );
   await expect(dialog).toBeVisible();
 });
 

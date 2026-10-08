@@ -3,6 +3,7 @@ import { operator } from "../admin/auth.ts";
 import type { Store } from "../db/repositories.ts";
 import { type Admin, Fault, requireThat, type Workspace } from "../domain.ts";
 import type { GitHubApps } from "../github/registry.ts";
+import { ModelProviders } from "../models/service.ts";
 import { decrypt, encrypt } from "../setup/credentials.ts";
 import { clearProgress, recordProgress } from "../telegram/feedback.ts";
 import { membersWithProfiles } from "../workspaces/member-profile.ts";
@@ -34,6 +35,7 @@ export function codingView(w: Workspace, admin: Admin): CodingPage {
       enabled: settings.enabled,
       backend: "podman",
       authMode: settings.authMode ?? "provider_key",
+      model: settings.model,
       repositories: settings.repositories.map((target) => ({
         repositoryId: target.repositoryId,
         baseBranch: target.baseBranch,
@@ -76,7 +78,14 @@ export function saveCoding(
       409,
     );
   }
-  let providerApiKey = w.coding?.providerApiKey;
+  if (input.settings.model)
+    requireThat(
+      input.providerApiKey === undefined,
+      "provider_credentials_managed_centrally",
+    );
+  let providerApiKey = input.settings.model
+    ? undefined
+    : w.coding?.providerApiKey;
   if (input.providerApiKey === null) providerApiKey = undefined;
   else if (input.providerApiKey !== undefined) {
     requireThat(encryptionKey, "coding_credentials_unavailable", 503);
@@ -336,6 +345,21 @@ export class CodingService {
           w.coding.providerApiKey,
         );
       }
+      const sharedProvider =
+        task.payload.authMode === "provider_key"
+          ? await new ModelProviders(
+              this.store,
+              this.encryptionKey ?? "",
+            ).runner(w, w.coding?.settings.model, task.runnerModel)
+          : {};
+      if (sharedProvider.modelProvider)
+        await this.update(
+          workspaceId,
+          task.id,
+          lease,
+          { runnerModel: sharedProvider.modelProvider },
+          false,
+        );
       const token = await this.localToken(workspaceId, task, "contents");
       const reserved = await this.reserveLocal(
         workspaceId,
@@ -353,6 +377,7 @@ export class CodingService {
           issue: task.issue,
           readToken: token,
           providerApiKey,
+          ...sharedProvider,
         });
       } catch (error) {
         if (error instanceof Fault && error.code === "coding_runner_busy") {

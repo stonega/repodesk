@@ -307,7 +307,11 @@ export class RunnerSupervisor implements LocalRunner {
             : {}),
           baseSha: r.baseSha,
           verificationCommands: r.verificationCommands,
-          config: codexConfig(this.settings, r.input.payload.authMode),
+          config: codexConfig(
+            this.settings,
+            r.input.payload.authMode,
+            r.input.modelProvider,
+          ),
         }),
         { mode: 0o644 },
       );
@@ -901,7 +905,7 @@ export class RunnerSupervisor implements LocalRunner {
       return this.device.logout(workspaceId);
     });
   }
-  providerKey(token: string): string {
+  providerConnection(token: string) {
     const record = [...this.records.values()].find(
       (r) =>
         r.state === "running" &&
@@ -918,7 +922,16 @@ export class RunnerSupervisor implements LocalRunner {
         )
       : this.settings.CODEX_PROVIDER_API_KEY;
     requireThat(key, "coding_provider_not_configured", 409);
-    return key;
+    return {
+      apiKey: key,
+      baseUrl:
+        record.input.modelProvider?.baseUrl ??
+        this.settings.CODEX_PROVIDER_BASE_URL,
+      model: record.input.modelProvider?.model ?? this.settings.CODEX_MODEL,
+    };
+  }
+  providerKey(token: string): string {
+    return this.providerConnection(token).apiKey;
   }
   async sweep() {
     return this.serial(async () => {

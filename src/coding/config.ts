@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { RuntimeProvider } from "../models/config.ts";
+import { modelSelectionSchema } from "../models/config.ts";
 import type { Progress } from "../telegram/feedback.ts";
 import type { DevelopmentTask } from "./development.ts";
 import { developmentPolicy } from "./development-policy.ts";
@@ -52,6 +54,7 @@ export const codingSettingsSchema = z
     backend: z.literal("podman"),
     authMode: z.enum(["provider_key", "device_code"]).default("provider_key"),
     repositories: z.array(codingRepositorySchema).max(12),
+    model: modelSelectionSchema.optional(),
   })
   .strict()
   .refine(
@@ -113,6 +116,7 @@ export type CodingState =
   | "unknown"
   | "cancelled";
 export interface CodingTask {
+  runnerModel?: RuntimeProvider;
   progress?: Progress;
   id: string;
   actor: string;

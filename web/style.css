@@ -2709,3 +2709,48 @@ input.plugin-toggle-input:disabled {
     animation: none;
   }
 }
+
+.github-app-badge {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-block: 1rem;
+}
+.github-app-badge img {
+  flex: 0 0 64px;
+}
+.github-app-badge h3 {
+  margin-top: 0;
+}
+
+.model-provider-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.model-provider-item .settings-item-details {
+  min-width: 0;
+  flex: 1;
+}
+.model-provider-item .settings-item-value,
+.model-provider-item h3 {
+  overflow-wrap: anywhere;
+}
+.model-provider-item > .row {
+  flex: 0 0 auto;
+}
+.github-icon-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  margin-block: 0.75rem;
+}
+.github-icon-checkbox {
+  flex: 0 0 auto;
+  margin-top: 0.25rem;
+}
+.github-icon-copy {
+  flex: 1;
+  min-width: 0;
+}

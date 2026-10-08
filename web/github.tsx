@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import type { GitHubRepository } from "../src/github/app.ts";
 import type { GitHubPage } from "../src/github/config.ts";
+import { GitHubAppBadge } from "./github-app-badge.tsx";
 import {
   GitHubRegistration,
   submitGitHubManifest,
@@ -52,6 +53,7 @@ export function GitHubSetup({
   onConnected: () => void;
 }) {
   const endpoint = `/api/admin/workspaces/${workspaceId}/github`;
+  const [iconReady, setIconReady] = useState(false);
   const [data, setData] = useState<GitHubPage>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -177,13 +179,14 @@ export function GitHubSetup({
   useEffect(() => {
     if (
       callback !== "app-created" ||
+      !iconReady ||
       !data?.configured ||
       autoConnecting.current
     )
       return;
     autoConnecting.current = true;
     void connect();
-  }, [callback, connect, data]);
+  }, [callback, connect, data, iconReady]);
   return (
     <>
       {callback === "failed" && (
@@ -202,6 +205,26 @@ export function GitHubSetup({
         </p>
       )}
       {!data && !error && <SkeletonRows label="GitHub connection" rows={1} />}
+      {callback === "app-created" &&
+        data?.configured &&
+        !data.pending &&
+        !iconReady && (
+          <>
+            <GitHubAppBadge settingsUrl={data.appSettingsUrl} />
+            <label className="checkbox github-icon-confirmation">
+              <input
+                className="github-icon-checkbox"
+                type="checkbox"
+                checked={iconReady}
+                onChange={(event) => setIconReady(event.target.checked)}
+                disabled={busy}
+              />
+              <span className="github-icon-copy">
+                I uploaded the RepoDesk icon in GitHub
+              </span>
+            </label>
+          </>
+        )}
       {data?.pending && !completed.current && (
         <p className="muted" role="status">
           {needsInstallationSelection
@@ -223,6 +246,7 @@ export function GitHubSetup({
           type="button"
           disabled={
             busy ||
+            (callback === "app-created" && !iconReady) ||
             (!data.configured && !data.canRegister) ||
             needsInstallationSelection
           }
@@ -384,6 +408,9 @@ export function GitHubConnection({
                 but setup failed here, remove that unused App in GitHub before
                 retrying, or configure it manually.
               </p>
+            )}
+            {params.get("github") === "app-created" && data?.configured && (
+              <GitHubAppBadge settingsUrl={data.appSettingsUrl} />
             )}
             {params.get("github") === "app-created" && data?.configured && (
               <p role="status">

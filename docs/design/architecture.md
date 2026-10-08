@@ -300,3 +300,16 @@ Automatic reviews use a maintainer-owned standing policy; user tags use verified
 GitHub identities and current repository grants. Review turns remain read-only;
 fixes require verified checks and a distinct publication token. Progress and
 results return to the PR, independently of Telegram destinations.
+
+### Shared model provider catalog
+
+Deployment JSONB stores operator-owned provider records with encrypted keys, cached
+model IDs and versions. Workspace JSONB stores the bot chat selection; Codex and
+Review Bot settings hold independent selections. Server APIs enforce operator and
+workspace ownership, optimistic versions and in-use removal checks. Discovery is a
+bounded, redirect-denying server GET; remote model metadata supplies choices, never
+authority. Chat runs pin provider/selection versions and obtain keys only inside
+the worker. Codex starts carry safe provider/model metadata and a separately
+transmitted key that is sealed in the supervisor. Proxy routing and model allowlists
+are bound to each attempt instead of deployment-global defaults. Existing
+configuration remains readable, and no database migration is required.

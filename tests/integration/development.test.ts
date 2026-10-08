@@ -2409,6 +2409,7 @@ const url = process.env.TEST_DATABASE_URL;
         },
       }),
       modelKey: async () => "fixture",
+      models: { chat: async () => undefined },
     } as unknown as SetupService;
     await new Executor(store, setup, {
       run: async (input) => {
@@ -2478,6 +2479,7 @@ const url = process.env.TEST_DATABASE_URL;
       const setup = {
         client: async () => ({ call: async () => ({ message_id: 905 }) }),
         modelKey: async () => "fixture",
+        models: { chat: async () => undefined },
       } as unknown as SetupService;
       await new Executor(store, setup, {
         run: async () => ({
@@ -2515,6 +2517,7 @@ const url = process.env.TEST_DATABASE_URL;
     const setup = {
       client: async () => ({ call: async () => ({ message_id: 906 }) }),
       modelKey: async () => "fixture",
+      models: { chat: async () => undefined },
     } as unknown as SetupService;
     await new Executor(store, setup, {
       run: async () => {

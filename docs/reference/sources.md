@@ -103,3 +103,17 @@ commands were exercised on disposable local Git commits without model credential
 
 These sources document an integration contract, not independently verified review
 quality. Live semantic acceptance remains a release gate.
+
+## Shared providers and GitHub branding, 2026-10-08
+
+- [OpenAI models list](https://developers.openai.com/api/reference/resources/models/methods/list):
+  Context7 and official documentation confirmed bearer-authenticated `/models` and
+  model `data[].id` values. The standard response does not establish endpoint
+  compatibility, context capacity or prices.
+- [Codex custom providers](https://developers.openai.com/codex/config-advanced#custom-model-providers):
+  official documentation confirms per-provider base URLs, model selection and the
+  Responses configuration used by the existing task proxy.
+- [GitHub manifest](https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest)
+  and [custom badges](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/creating-a-custom-badge-for-your-github-app):
+  Context7 and official pages confirmed that logos are uploaded by the owner after
+  registration, using PNG/JPG/GIF under 1 MiB; 200×200 is the recommended size.

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { runtimeProviderSchema } from "../../models/config.ts";
 import { codingPayload } from "../config.ts";
 import { developmentResult, developmentRun } from "../development.ts";
 import { resultIssues } from "../result-validation.ts";
@@ -15,6 +16,7 @@ export const localStart = z
       })
       .optional(),
     development: developmentRun.optional(),
+    modelProvider: runtimeProviderSchema.optional(),
     providerApiKey: z.string().trim().min(1).max(8192).optional(),
     readToken: z.string().min(1).max(8192),
   })

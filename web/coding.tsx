@@ -5,6 +5,7 @@ import { codingFailureMessage } from "../src/coding/failure-messages.ts";
 import { codingStatusLabel } from "../src/coding/feedback.ts";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
+import { ModelPicker } from "./model-providers.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
 import { RepositoryCard } from "./repository-card.tsx";
 import { RepositorySelect } from "./repository-select.tsx";
@@ -285,9 +286,11 @@ export function Coding({
           : data.deviceAuth?.state === "auth_required"
             ? "ChatGPT sign-in required"
             : "ChatGPT not connected"
-      : data?.providerApiKeyConfigured
-        ? "Workspace key configured"
-        : "No workspace key";
+      : data?.settings.model
+        ? "Provider key configured"
+        : data?.providerApiKeyConfigured
+          ? "Workspace key configured"
+          : "No workspace key";
   return (
     <section
       className="coding-detail"
@@ -376,7 +379,20 @@ export function Coding({
               {data
                 ? data.settings.authMode === "device_code"
                   ? "ChatGPT device code"
-                  : "Custom provider API key"
+                  : data.settings.model
+                    ? "Saved model provider"
+                    : "Custom provider API key"
+                : pendingValue}
+            </dd>
+          </div>
+          <div>
+            <dt>Model</dt>
+            <dd>
+              {data
+                ? data.settings.authMode === "device_code"
+                  ? "ChatGPT account default"
+                  : (data.settings.model?.model ??
+                    "Previous deployment configuration")
                 : pendingValue}
             </dd>
           </div>
@@ -755,41 +771,51 @@ export function Coding({
             </label>
             {configDraft.authMode === "provider_key" ? (
               <>
+                <ModelPicker
+                  request={request}
+                  value={configDraft.model}
+                  disabled={busy}
+                  onChange={(model) =>
+                    setConfigDraft({ ...configDraft, model })
+                  }
+                />
                 <p className="muted">
-                  Provider endpoint and model are set in deployment
-                  configuration.
-                  {data.providerApiKeyConfigured
-                    ? " A workspace key is configured."
-                    : " No workspace key is saved; a deployment key is used if configured."}
+                  Choose a Responses-compatible model from a saved provider.
+                  Manage providers in Model settings.
                 </p>
-                <label className="field">
-                  <span>Provider API key</span>
-                  <input
-                    type="password"
-                    autoComplete="new-password"
-                    maxLength={8192}
-                    value={keyDraft}
-                    disabled={removeKey}
-                    placeholder={
-                      data.providerApiKeyConfigured
-                        ? "Leave blank to keep saved key"
-                        : "Optional workspace key"
-                    }
-                    onChange={(event) => setKeyDraft(event.target.value)}
-                  />
-                </label>
-                {data.providerApiKeyConfigured && (
-                  <label className="plugin-check">
-                    <input
-                      type="checkbox"
-                      checked={removeKey}
-                      onChange={(event) => {
-                        setRemoveKey(event.target.checked);
-                        if (event.target.checked) setKeyDraft("");
-                      }}
-                    />
-                    <span>Remove saved key</span>
-                  </label>
+                {!configDraft.model && (
+                  <p className="muted">
+                    An existing deployment configuration remains available until
+                    you choose a provider.
+                  </p>
+                )}
+                {!configDraft.model && data.providerApiKeyConfigured && (
+                  <details className="setup-advanced">
+                    <summary>Previous workspace key</summary>
+                    <label className="field">
+                      <span>Provider API key</span>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        maxLength={8192}
+                        value={keyDraft}
+                        disabled={removeKey}
+                        placeholder="Leave blank to keep saved key"
+                        onChange={(event) => setKeyDraft(event.target.value)}
+                      />
+                    </label>
+                    <label className="plugin-check">
+                      <input
+                        type="checkbox"
+                        checked={removeKey}
+                        onChange={(event) => {
+                          setRemoveKey(event.target.checked);
+                          if (event.target.checked) setKeyDraft("");
+                        }}
+                      />
+                      <span>Remove saved key</span>
+                    </label>
+                  </details>
                 )}
               </>
             ) : (

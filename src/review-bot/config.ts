@@ -4,6 +4,8 @@ import type {
   DevelopmentResult,
   DevelopmentRun,
 } from "../coding/development.ts";
+import type { RuntimeProvider } from "../models/config.ts";
+import { modelSelectionSchema } from "../models/config.ts";
 
 export const reviewRepository = z
   .object({
@@ -18,6 +20,7 @@ export const reviewSettings = z
   .object({
     enabled: z.boolean(),
     repositories: z.array(reviewRepository).max(12),
+    model: modelSelectionSchema.optional(),
   })
   .strict()
   .refine(
@@ -51,6 +54,7 @@ export type ReviewState =
   | "cancelled"
   | "unknown";
 export interface ReviewTask {
+  runnerModel?: RuntimeProvider;
   id: string;
   key: string;
   actor: string;

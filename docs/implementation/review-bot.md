@@ -9,7 +9,9 @@ Its primary review framework is [Open Code Review](https://open-codereview.ai/do
 OCR selects reviewable files and resolves review rules; Codex supplies the analysis
 through the existing local runner and workspace credentials. The task image pins
 `@alibaba-group/open-code-review` 1.12.12 alongside Codex. No separate deployment
-or model credential is required. Rebuild the task image when updating this integration;
+or model credential is required. The Review model editor can select a saved
+provider and Responses-compatible model, or inherit Codex. Reviews and answers use
+that selection; fixes use the Codex model. Rebuild the task image when updating this integration;
 custom runner images must include this JSON-capable OCR version.
 
 ## Configure
