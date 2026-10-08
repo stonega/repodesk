@@ -48,6 +48,14 @@ these steps are not part of automated setup or tests.
    its own task. Repeat with two tasks in one Topic; ordinary conversation should
    not open a Codex-task selection. Test private and explicitly addressed group
    conversations; plain unrelated group traffic should remain uncollected.
+10. Once a PR is confirmed, check the progress message and result on Telegram
+    desktop and mobile. **Review** and **Merge** should replace Status/Cancel:
+    Review opens that PR's changed files; Merge opens that PR's GitHub page, where
+    merge permissions and confirmation still apply. Continue the task until it
+    asks a necessary question: the question and progress edit must retain the
+    same PR actions. Repeat with a blocker and a `/status` reply; an older Status
+    button must return the current PR actions. Use `/cancel` for post-publication
+    cancellation and verify its receipt keeps the existing PR links.
 
 Record the deployed image, repository, verification performed and sanitized
 task/run references. Do not put credentials, private requests, device codes or raw

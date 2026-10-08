@@ -132,7 +132,10 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       const queued = (await store.read(f.w.id)).deliveries.find(
         (d) => d.id === `run:${f.run.id}:queued`,
       );
-      if (!queued?.buttons?.[0]?.[0] || !queued.buttons[0][1])
+      if (
+        !queued?.buttons?.[0]?.[0]?.callback_data ||
+        !queued.buttons[0][1]?.callback_data
+      )
         throw new Error("Missing queue buttons");
       await new DeliveryWorker(store, setup).send(f.w.id, queued.id);
       const tap = (data: string): Update => ({

@@ -22,7 +22,7 @@ import { audience, authorize } from "../workspaces/policy.ts";
 import { deliver, visibleRuns } from "../workspaces/service.ts";
 import { runStatus } from "./feedback.ts";
 import type { Message, Update } from "./router.ts";
-import { taskButtons } from "./task-buttons.ts";
+import { pullRequestButtons, taskButtons } from "./task-buttons.ts";
 
 type Target =
   | { kind: "r"; value: Run }
@@ -46,7 +46,15 @@ async function controlTarget(
   }
 }
 
-function statusButtons(target: Target) {
+function statusButtons(target: Target, reference = false) {
+  const prButtons = pullRequestButtons(
+    target.kind === "d"
+      ? target.value.pr?.url
+      : target.kind === "c"
+        ? target.value.prUrl
+        : undefined,
+  );
+  if (prButtons || reference) return prButtons;
   const cancel =
     target.kind === "r"
       ? !target.value.cancelled &&
@@ -131,6 +139,7 @@ async function perform(
         deliver(w, actor, chatId, developmentStatus(target.value), {
           topicId,
           id: `development:${target.value.id}:status:${updateId}`,
+          buttons: statusButtons(target, true),
         });
     } else if (target.kind === "c") {
       const terminal =
@@ -140,6 +149,7 @@ async function perform(
         deliver(w, actor, chatId, reviewedStatus(target.value), {
           topicId,
           id: `coding:${target.value.id}:status:${updateId}`,
+          buttons: statusButtons(target, true),
         });
     } else {
       const run = await cancelRequest(sql, w, actor, target.value.id);
@@ -163,7 +173,7 @@ async function perform(
       {
         topicId,
         id: `${target.kind === "d" ? "development" : target.kind === "c" ? "coding" : "run"}:${target.value.id}:status:${updateId}`,
-        buttons: reference ? undefined : statusButtons(target),
+        buttons: statusButtons(target, reference),
       },
     );
 }
@@ -417,7 +427,7 @@ export async function selectionAllowed(sql: Sql, w: Workspace, d: Delivery) {
   if (!/^control:[0-9]+:[0-9]+$/.test(d.id) || !d.buttons) return true;
   for (const b of d.buttons.flat()) {
     const match = /^f([rcd])([cs]):([0-9a-f-]{36}):[0-9]+$/.exec(
-      b.callback_data,
+      b.callback_data ?? "",
     );
     if (!match?.[3]) return false;
     try {

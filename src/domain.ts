@@ -401,7 +401,10 @@ export interface Delivery {
   runId?: string;
   text: string;
   format?: "markdown" | "rich";
-  buttons?: { text: string; callback_data: string }[][];
+  buttons?: (
+    | { text: string; callback_data: string; url?: never }
+    | { text: string; url: string; callback_data?: never }
+  )[][];
   state:
     | "pending"
     | "sending"

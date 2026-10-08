@@ -2,6 +2,17 @@ import type { Delivery } from "../domain.ts";
 
 export type TaskOwner = "run" | "coding" | "development";
 
+/** GitHub handles review and merge permissions and confirmation on the PR itself. */
+export function pullRequestButtons(url?: string): Delivery["buttons"] {
+  if (!url) return;
+  return [
+    [
+      { text: "Review", url: `${url}/files` },
+      { text: "Merge", url },
+    ],
+  ];
+}
+
 /** Short references only; sent delivery records and current policy authorize taps. */
 export function taskButtons(
   owner: TaskOwner,

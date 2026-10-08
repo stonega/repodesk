@@ -20,6 +20,7 @@ import { taskGet, taskInputs, taskSave } from "../../src/coding/task-store.ts";
 import {
   appendDevelopment,
   cancelDevelopment,
+  notifyDevelopment,
   pruneDevelopment,
   startDevelopment,
 } from "../../src/coding/tasks.ts";
@@ -1690,6 +1691,130 @@ const url = process.env.TEST_DATABASE_URL;
     expect(closed?.method).toBe("editMessageText");
     expect(closed?.params.reply_markup).toEqual({ inline_keyboard: [] });
   });
+  test("a confirmed PR replaces task controls in outcomes, questions, follow-up progress and status", async () => {
+    const f = await telegramProgressFixture();
+    const url = "https://github.com/example/workspace/pull/43";
+    const buttons = [
+      [
+        { text: "Review", url: `${url}/files` },
+        { text: "Merge", url },
+      ],
+    ];
+    for (const state of [
+      "review",
+      "waiting",
+      "auth_required",
+      "failed",
+      "unknown",
+    ] as const) {
+      await store.change(f.w.id, async (w, sql) => {
+        const t = await taskGet(sql, w.id, f.task.id);
+        t.pr = {
+          number: 43,
+          url,
+          branch: `codex/repodesk-${t.id}`,
+          headSha: "b".repeat(40),
+        };
+        t.state = state;
+        notifyDevelopment(
+          w,
+          t,
+          state === "waiting"
+            ? `Waiting for your answer: Which verification runner should I use?\n${url}`
+            : `PR checkpoint: ${state}\n${url}`,
+          `pr-controls:${state}`,
+        );
+        await taskSave(sql, t);
+      });
+      const pending = (await store.read(f.w.id)).deliveries.filter(
+        (d) => d.state === "pending",
+      );
+      expect(pending).toHaveLength(2);
+      for (const d of pending) {
+        expect(d.buttons).toEqual(buttons);
+        await f.worker.send(f.w.id, d.id);
+      }
+      const [progress, outcome] = f.calls.slice(-2);
+      expect(progress?.method).toBe("editMessageText");
+      expect(progress?.params.message_id).toBe(901);
+      expect(outcome?.method).toBe("sendMessage");
+      expect(outcome?.params.message_thread_id).toBe(3);
+      expect(progress?.params.reply_markup).toEqual({
+        inline_keyboard: buttons,
+      });
+      expect(outcome?.params.reply_markup).toEqual({
+        inline_keyboard: buttons,
+      });
+    }
+    const followup = await f.progress("check", "after-pr");
+    await f.worker.send(f.w.id, followup.id);
+    expect(f.calls.at(-1)?.params.reply_markup).toEqual({
+      inline_keyboard: buttons,
+    });
+    await store.change(f.w.id, (w, sql) =>
+      cancelDevelopment(sql, w, "101", f.task.id),
+    );
+    const cancellation = present((await store.read(f.w.id)).deliveries.at(-1));
+    expect(cancellation.buttons).toEqual(buttons);
+    await f.worker.send(f.w.id, cancellation.id);
+    expect(f.calls.at(-1)?.params.reply_markup).toEqual({
+      inline_keyboard: buttons,
+    });
+    await store.change(f.w.id, (w, sql) =>
+      selectTaskControl(
+        sql,
+        w,
+        {
+          update_id: 9500,
+          callback_query: {
+            id: "old-status-after-pr",
+            from: { id: 101, is_bot: false },
+            data: present(f.acknowledgement.buttons?.[0]?.[0]?.callback_data),
+            message: {
+              message_id: 901,
+              date: Math.floor(Date.now() / 1000),
+              chat: { id: 101, type: "private" },
+              message_thread_id: 3,
+            },
+          },
+        },
+        "999",
+      ),
+    );
+    const status = present((await store.read(f.w.id)).deliveries.at(-1));
+    expect(status.buttons).toEqual(buttons);
+    await f.worker.send(f.w.id, status.id);
+    expect(f.calls.at(-1)?.params.reply_markup).toEqual({
+      inline_keyboard: buttons,
+    });
+    const msg: Message = {
+      message_id: 9501,
+      date: Math.floor(Date.now() / 1000),
+      from: { id: 101, is_bot: false },
+      chat: { id: 101, type: "private" },
+      message_thread_id: 3,
+      text: `/status ${f.task.id}`,
+    };
+    await store.change(f.w.id, (w, sql) =>
+      taskControl(sql, w, { update_id: 9501, message: msg }, "999", msg, {
+        name: "status",
+        args: f.task.id,
+      }),
+    );
+    expect((await store.read(f.w.id)).deliveries.at(-1)?.buttons).toEqual(
+      buttons,
+    );
+    await store.change(f.w.id, (w) => {
+      present(w.members.find((m) => m.id === "101")).active = false;
+    });
+    const sends = f.calls.length;
+    const revokedStatus = present((await store.read(f.w.id)).deliveries.at(-1));
+    await f.worker.send(f.w.id, revokedStatus.id);
+    expect(f.calls).toHaveLength(sends);
+    expect((await store.read(f.w.id)).deliveries.at(-1)?.state).toBe(
+      "cancelled",
+    );
+  });
   test("uncertain edits retry the same message; already applied edits succeed", async () => {
     const f = await telegramProgressFixture();
     const d = await f.progress("check");
@@ -1983,7 +2108,7 @@ const url = process.env.TEST_DATABASE_URL;
     const button = present(
       selection.buttons
         ?.flat()
-        .find((b) => b.callback_data.includes(f.task.id)),
+        .find((b) => b.callback_data?.includes(f.task.id)),
     );
     await store.change(f.w.id, (w) => {
       const d = present(w.deliveries.find((d) => d.id === selection.id));
@@ -2136,7 +2261,7 @@ const url = process.env.TEST_DATABASE_URL;
     const ingress = new Ingress(store, setup);
     const status = update(
       9200,
-      present(buttons.find((b) => b.text === "Status")).callback_data,
+      present(buttons.find((b) => b.text === "Status")?.callback_data),
     );
     await ingress.accept(status);
     await ingress.accept(status);
@@ -2150,8 +2275,8 @@ const url = process.env.TEST_DATABASE_URL;
       calls.filter((c) => c.method === "answerCallbackQuery"),
     ).toHaveLength(2);
     const stop = present(
-      buttons.find((b) => b.text === "Cancel"),
-    ).callback_data;
+      buttons.find((b) => b.text === "Cancel")?.callback_data,
+    );
     await ingress.accept(update(9201, stop));
     await ingress.accept(update(9202, stop));
     expect((await f.read()).cancelRequested).toBe(true);
@@ -2166,7 +2291,7 @@ const url = process.env.TEST_DATABASE_URL;
     await ingress.accept(
       update(
         9203,
-        present(buttons.find((b) => b.text === "Status")).callback_data,
+        present(buttons.find((b) => b.text === "Status")?.callback_data),
       ),
     );
     const stopped = present(

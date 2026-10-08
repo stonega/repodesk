@@ -996,6 +996,20 @@ Use this format for each preference:
   incomplete responses still need a short, readable explanation. Source citations
   remain supported.
 
+### Telegram PR messages offer Review and Merge
+
+- **Preference:** Once a coding task has a confirmed PR, replace inline Status
+  and Cancel with Review and Merge. Keep the PR actions on the progress message,
+  final result, questions, blockers and requested status, including follow-up work.
+- **Scope:** Telegram Reviewed and Direct coding task messages with a confirmed
+  PR. Review opens the PR's changed files; Merge opens its GitHub page.
+- **Source:** 2026-10-08 — user showed a waiting-for-input task message containing
+  a PR link and requested Review or Merge for its inline buttons.
+- **Exceptions:** Tasks without a confirmed PR retain existing Status/Cancel
+  controls. GitHub handles review, merge permissions and merge confirmation;
+  the links do not execute these actions in Telegram. Explicit task commands
+  remain available. Notification permissions and chat/topic isolation still apply.
+
 ### Telegram tasks show clear progress and outcomes
 
 - **Preference:** Make it clear whether an accepted request is working, waiting
@@ -1006,6 +1020,7 @@ Use this format for each preference:
   Maintain one task progress message, editing the acknowledgement as confirmed
   stages change, including checks, repairs and longer-stage updates. Keep native
   inline **Status** and **Cancel** controls on that message while applicable.
+  Once a PR is confirmed, use [Review and Merge](#telegram-pr-messages-offer-review-and-merge).
   New messages belong to necessary questions, actionable blockers, user-requested
   status/input receipts and final outcomes. Routine progress must not flood the
   conversation or repeat command instructions. Close the progress message when

@@ -3,7 +3,7 @@ import { type Approval, requireThat, type Workspace } from "../domain.ts";
 import { authorizeRepository } from "../github/user-access.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import { clearProgress, deliverTaskProgress } from "../telegram/feedback.ts";
-import { taskButtons } from "../telegram/task-buttons.ts";
+import { pullRequestButtons, taskButtons } from "../telegram/task-buttons.ts";
 import {
   audience,
   audit,
@@ -222,6 +222,7 @@ export function cancelCoding(w: Workspace, actor: string, id: string) {
     {
       topicId: task.topicId,
       id: `coding:${task.id}:cancel:${task.state === "cancelled" ? "stopped" : "requested"}`,
+      buttons: pullRequestButtons(task.prUrl),
     },
   );
   audit(w, actor, "coding.cancel_requested", id);
@@ -237,12 +238,14 @@ export function notifyCoding(w: Workspace, task: CodingTask) {
   if (!["running", "publishing"].includes(task.state))
     clearProgress(w, "coding", task.id);
   const text = reviewedStatus(task);
+  const prButtons = pullRequestButtons(task.prUrl);
   const options = {
     topicId: task.topicId,
     buttons:
-      !codingTerminal(task.state) && !task.cancelRequested
+      prButtons ??
+      (!codingTerminal(task.state) && !task.cancelRequested
         ? taskButtons("coding", task.id)
-        : undefined,
+        : undefined),
     id:
       task.state === "cancelled"
         ? `coding:${task.id}:cancel:stopped`
@@ -253,6 +256,7 @@ export function notifyCoding(w: Workspace, task: CodingTask) {
     deliverTaskProgress(w, task, "coding", text, {
       id: `coding:${task.id}:progress:${task.state}:${task.workflowRunId ?? ""}:${task.authPauses ?? 0}`,
       editOnly: true,
+      buttons: prButtons,
     });
   const id = routine
     ? deliverTaskProgress(w, task, "coding", text, options)

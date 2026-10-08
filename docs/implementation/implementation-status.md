@@ -1,5 +1,22 @@
 # Implementation evidence
 
+## Telegram PR controls, 2026-10-08
+
+Reviewed and Direct coding task messages with a confirmed PR now use native
+Review/Merge URL buttons. Review opens changed files; Merge opens the PR on GitHub
+for its permission checks and confirmation. Outcomes, waiting questions, blockers,
+follow-up progress, cancellation receipts and requested status keep the PR actions.
+The existing progress message receives the same controls through its durable edit.
+Before publication, existing task controls remain applicable. Older Status taps
+return current PR actions without granting a review or merge operation in Telegram.
+
+Deterministic tests verify sent and edited button payloads, the waiting-after-PR
+case, confirmed publication, follow-up work, old controls and revoked delivery.
+Biome, strict TypeScript, build and all **611 deterministic tests** passed against
+disposable PostgreSQL.
+Live Telegram desktop/mobile rendering remains unverified; no deployment or live
+Telegram/GitHub action is part of this change.
+
 ## Open Code Review primary framework, 2026-10-08
 
 Review Bot now uses Open Code Review (OCR) delegation as its primary review

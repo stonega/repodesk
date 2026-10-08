@@ -3,7 +3,7 @@ import {
   requestFailureMessage,
   stageMessage,
 } from "./messages.ts";
-import { taskButtons } from "./task-buttons.ts";
+import { pullRequestButtons, taskButtons } from "./task-buttons.ts";
 
 export { requestFailureMessage, runStatus, stageMessage } from "./messages.ts";
 
@@ -27,6 +27,8 @@ interface ProgressTask {
   chatId: string;
   topicId: number;
   progress?: Progress;
+  pr?: { url: string };
+  prUrl?: string;
 }
 
 /** Reuse a confirmed message, or wait for its in-flight send to be reconciled. */
@@ -122,7 +124,9 @@ export function recordProgress(
     delayed ? ongoingStageMessage(stage) : stageMessage(stage),
     {
       id: `${owner}:${task.id}:progress:${p.sequence}${delayed ? ":delay" : ""}`,
-      buttons: taskButtons(owner, task.id),
+      buttons:
+        pullRequestButtons(task.pr?.url ?? task.prUrl) ??
+        taskButtons(owner, task.id),
     },
   );
   const d = w.deliveries.find((d) => d.id === id);

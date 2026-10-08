@@ -8,7 +8,7 @@ import {
 } from "../domain.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import { clearProgress, deliverTaskProgress } from "../telegram/feedback.ts";
-import { taskButtons } from "../telegram/task-buttons.ts";
+import { pullRequestButtons, taskButtons } from "../telegram/task-buttons.ts";
 import {
   audience,
   audit,
@@ -111,10 +111,11 @@ export function notifyDevelopment(
 ) {
   audience(w, actor, task.chatId);
   if (w.settings.paused) return;
+  const prButtons = pullRequestButtons(task.pr?.url);
   if (eventId === "started")
     return deliverTaskProgress(w, task, "development", text, {
       id: `development:${task.id}:${eventId}`,
-      buttons: taskButtons("development", task.id),
+      buttons: prButtons ?? taskButtons("development", task.id),
     });
   const outcome: Partial<Record<DevelopmentTask["state"], string>> = {
     waiting: "I’m waiting for your answer.",
@@ -129,17 +130,19 @@ export function notifyDevelopment(
     deliverTaskProgress(w, task, "development", summary, {
       id: `development:${task.id}:progress:${eventId}`,
       editOnly: true,
+      buttons: prButtons,
     });
   return deliver(w, actor, task.chatId, text, {
     topicId: task.topicId,
     format: "markdown",
     id: `development:${task.id}:${eventId}`,
     buttons:
-      !developmentStopped(task.state) &&
+      prButtons ??
+      (!developmentStopped(task.state) &&
       task.state !== "review" &&
       !task.cancelRequested
         ? taskButtons("development", task.id)
-        : undefined,
+        : undefined),
   });
 }
 
@@ -401,6 +404,7 @@ export async function cancelDevelopment(
     {
       topicId: task.topicId,
       id: `development:${task.id}:cancel:${task.state === "cancelled" ? "stopped" : "requested"}`,
+      buttons: pullRequestButtons(task.pr?.url),
     },
   );
   audit(w, actor, "coding.cancel_requested", id);

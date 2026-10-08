@@ -137,7 +137,7 @@ const url = process.env.TEST_DATABASE_URL;
           "999",
         ),
       );
-    await tap(present(queued.buttons?.[0]?.[0]).callback_data);
+    await tap(present(queued.buttons?.[0]?.[0]?.callback_data));
     expect((await store.read(f.id)).deliveries.at(-1)?.text).toContain(
       "queued",
     );
@@ -145,9 +145,9 @@ const url = process.env.TEST_DATABASE_URL;
       present(present(w.coding).settings.repositories[0]).maintainers = [];
     });
     await expect(
-      tap(present(queued.buttons?.[0]?.[0]).callback_data),
+      tap(present(queued.buttons?.[0]?.[0]?.callback_data)),
     ).rejects.toThrow();
-    await tap(present(queued.buttons?.[0]?.[1]).callback_data);
+    await tap(present(queued.buttons?.[0]?.[1]?.callback_data));
     expect((await read(f.id)).state).toBe("cancelled");
   });
   async function read(id: string) {
@@ -600,6 +600,14 @@ const url = process.env.TEST_DATABASE_URL;
   });
   test("Podman tasks retain approval and duplicate protection through fresh publication", async () => {
     const { id, taskId } = await fixture();
+    await store.change(id, (w) => {
+      const queued = present(
+        w.deliveries.find(
+          (d) => d.feedback?.owner === "coding" && d.feedback.id === taskId,
+        ),
+      );
+      Object.assign(queued, { state: "sent", botId: "999", remoteId: 2111 });
+    });
     const local = localFixture();
     const { service, requests } = provider({ local: local.runner });
     await service.advance(id, taskId);
@@ -636,6 +644,47 @@ const url = process.env.TEST_DATABASE_URL;
     await service.advance(id, taskId);
     expect((await read(id)).state).toBe("succeeded");
     expect((await read(id)).threadId).toBe("thread-123");
+    const prButtons = [
+      [
+        {
+          text: "Review",
+          url: "https://github.com/example/workspace/pull/43/files",
+        },
+        { text: "Merge", url: "https://github.com/example/workspace/pull/43" },
+      ],
+    ];
+    const deliveries = (await store.read(id)).deliveries;
+    expect(
+      deliveries.findLast((d) => d.progressMessage?.id === taskId)?.buttons,
+    ).toEqual(prButtons);
+    expect(
+      deliveries.findLast((d) => d.id.startsWith(`coding:${taskId}:succeeded:`))
+        ?.buttons,
+    ).toEqual(prButtons);
+    await store.change(id, (w, sql) => {
+      return selectTaskControl(
+        sql,
+        w,
+        {
+          update_id: 2110,
+          callback_query: {
+            id: "published-status",
+            from: { id: 101, is_bot: false },
+            data: `tcs:${taskId}`,
+            message: {
+              message_id: 2111,
+              date: Math.floor(Date.now() / 1000),
+              chat: { id: -100100, type: "supergroup" },
+              message_thread_id: 3,
+            },
+          },
+        },
+        "999",
+      );
+    });
+    expect((await store.read(id)).deliveries.at(-1)?.buttons).toEqual(
+      prButtons,
+    );
     expect(
       (await store.read(id)).deliveries.some(
         (d) => d.text.includes("/pull/43") && d.topicId === 3,

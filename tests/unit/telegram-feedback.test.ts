@@ -68,7 +68,11 @@ test("a confirmed long phase replaces pending progress and real repairs get fres
   expect(
     delayed?.buttons
       ?.flat()
-      .every((b) => Buffer.byteLength(b.callback_data) <= 64),
+      .every(
+        (b) =>
+          typeof b.callback_data === "string" &&
+          Buffer.byteLength(b.callback_data) <= 64,
+      ),
   ).toBe(true);
   recordProgress(w, t, "coding", "repair", "2", 310000);
   recordProgress(w, t, "coding", "check", "2", 320000);

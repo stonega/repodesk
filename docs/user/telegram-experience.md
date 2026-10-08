@@ -211,6 +211,10 @@ same message. Inline **Status** and **Cancel** controls remain available while
 applicable. Necessary questions, actionable blockers, requested status/input receipts
 and final results arrive as new replies. The progress message changes to waiting or
 finished and removes its active controls when appropriate.
+Once the task has a confirmed PR, inline **Review** and **Merge** replace the task
+controls on progress, outcomes, questions and status replies. Review opens the PR's
+changed files; Merge opens the PR on GitHub, where you can complete the merge with
+your GitHub permissions and confirmation. Follow-up work keeps these PR links.
 Ordinary private requests keep the native thinking preview; a private queue wait
 over thirty seconds can
 receive one queued notice with the same buttons. Ordinary group replies keep their
@@ -231,9 +235,10 @@ Telegram or the authorized admin control uses the task's existing cancellation
 permissions. “Stopping…” means cancellation was recorded while work
 was active; “has stopped” follows confirmed termination. A lost runner record or an
 in-flight publication may produce an uncertain outcome. Cancellation cannot retract
-existing artifacts or an external operation already in flight. Buttons stay bound
+existing artifacts or an external operation already in flight. Task-control callbacks stay bound
 to their sent task message, user, bot and chat/topic and recheck current access.
-An older notice reports the current task outcome; status replies omit Cancel once
+An older Status button reports the current task outcome and offers Review/Merge
+when the task has a confirmed PR. Otherwise, status replies omit Cancel once
 the task has stopped or a stop is already requested.
 
 Failures explain the next step without exposing internal codes or provider output.
