@@ -5,8 +5,14 @@
 @runId = REPLACE_WITH_RUN_UUID
 @session = REPLACE_WITH_SESSION
 
-### List the first 100 runs; later pages use offset=100, 200, etc.
-GET {{origin}}/api/admin/workspaces/{{workspaceId}}/runs?offset=0
+### List 25 compact summaries (default); limit accepts 1–100, offset is non-negative.
+# Response: { mode, total, offset, limit, items: [{ id, actor, status, at, model,
+# taskPreview, attemptCount, deliveryStates }] }. Full records use the detail endpoint.
+GET {{origin}}/api/admin/workspaces/{{workspaceId}}/runs?offset=0&limit=25
+Cookie: repodesk_session={{session}}
+
+### Fetch the next page without loading messages, attempts or delivery bodies.
+GET {{origin}}/api/admin/workspaces/{{workspaceId}}/runs?offset=25&limit=25
 Cookie: repodesk_session={{session}}
 
 ### Fetch one run, including messages, model attempts and delivery details.
@@ -14,5 +20,5 @@ GET {{origin}}/api/admin/workspaces/{{workspaceId}}/runs/{{runId}}
 Cookie: repodesk_session={{session}}
 
 ### Open the dedicated detail page; offset preserves the return list page.
-GET {{origin}}/admin/runs/{{runId}}?workspace={{workspaceId}}&offset=100
+GET {{origin}}/admin/runs/{{runId}}?workspace={{workspaceId}}&offset=25
 Cookie: repodesk_session={{session}}

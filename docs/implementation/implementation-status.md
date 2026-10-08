@@ -1206,6 +1206,30 @@ migration was added. No live GitHub call, Telegram send or deployment was perfor
 See [behavior and limits](github-app.md#automatic-repository-updates) and the
 [manual staging check](../../examples/github-repository-sync.md).
 
+## Compact run history and pagination (2026-10-08)
+
+The runs API now returns explicit summary fields and pagination metadata, with a
+default page size of 25 and a validated maximum of 100. The panel fetches 25 items
+per page and retrieves full messages, attempts and delivery records only through
+the existing detail endpoint. Page transitions discard previous-page rows;
+loading, retry, empty and out-of-range states are explicit. Detail/back navigation
+and browser history preserve the list offset. Workspace read and mutation
+permissions are unchanged. See [the API contract](../design/admin-panel.md) and
+[runnable requests](../../examples/runs.http).
+
+Compatibility: list items no longer contain full run records, and the default
+page size changes from 100 to 25. Clients needing details must use the detail
+endpoint; clients needing 100 summaries can specify `limit=100`. The workspace
+is still loaded from its JSON database record; this reduces response size and
+summary construction work, not database reads. Offset pages can shift when new
+runs arrive or retention removes older runs; they are not a snapshot.
+
+Verification: `bash scripts/verify-skills.sh quality` runs dependency preparation,
+quality/type checks, deterministic PostgreSQL tests, the build and Node runtime
+contract. `bash scripts/verify-skills.sh runs-browser` prepares its own database
+and runs the runs/admin browser suites, including desktop/mobile pagination,
+on-demand details, loading/error recovery and preserved navigation.
+
 ## Dedicated run detail pages (2026-10-06)
 
 Compact run cards link to `/admin/runs/:runId?workspace=:workspaceId` instead of

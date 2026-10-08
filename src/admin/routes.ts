@@ -51,6 +51,7 @@ import {
 } from "../workspaces/policy.ts";
 import { createRun, visibleRuns } from "../workspaces/service.ts";
 import { claim, login, operator, session, throttle } from "./auth.ts";
+import { runSummaries } from "./run-history.ts";
 import { deploymentOrigin, SiteService } from "./site.ts";
 
 type Env = { Variables: { session: Session } };
@@ -881,18 +882,25 @@ export function adminRoutes(
             ),
           ),
         );
-      case "runs":
+      case "runs": {
+        const page = z
+          .object({
+            offset: z.coerce
+              .number()
+              .int()
+              .min(0)
+              .max(Number.MAX_SAFE_INTEGER)
+              .default(0),
+            limit: z.coerce.number().int().min(1).max(100).default(25),
+          })
+          .parse(c.req.query());
         return c.json({
           mode: actor === w.operatorId ? "operator" : "member",
-          ...take(
-            w.runs.toReversed().map((r) => ({
-              ...r,
-              deliveries: w.deliveries.filter(
-                (d) => d.runId === r.id || d.cancellationRunId === r.id,
-              ),
-            })),
-          ),
+          items: runSummaries(w, page.offset, page.limit),
+          total: w.runs.length,
+          ...page,
         });
+      }
       case "usage": {
         const attempts = w.runs.flatMap((r) =>
           r.attempts.map((a) => ({ ...a, runId: r.id, model: r.model })),

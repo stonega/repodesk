@@ -438,6 +438,8 @@ them.
   presented as a readable ordered list and technical metadata below them. Give
   each run a workspace-scoped URL that supports direct visits and refreshes, and
   a Back to Runs link that preserves the list's pagination.
+  Fetch a bounded page of summaries for the list, with previous/next controls;
+  fetch messages and technical detail only when opening an individual run.
 - **Scope:** Runs & delivery in the workspace admin panel, on desktop and mobile.
 - **Source:** 2026-09-28 — user showed a tall run card and asked for compact
   items that open a detailed message list when clicked.
@@ -445,6 +447,8 @@ them.
   restriction in run details so admins can see all messages.
   2026-10-06 — user requested a new run detail page instead of the modal,
   superseding the earlier dialog preference.
+  2026-10-08 — user requested less information in the runs API, a detail API
+  for full records, and a paginated UI list.
 - **Exceptions:** Deployment administrators and eligible workspace owners/admins
   can read every retained run message in their workspace, including private runs.
   Telegram linking is unnecessary for deployment administrators to view messages;

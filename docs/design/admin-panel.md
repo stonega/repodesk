@@ -154,6 +154,21 @@ lists and tool checkboxes. Bound IDs and concurrency versions remain in request
 payloads without becoming editable fields. Failed saves preserve drafts and show
 field errors; pending saves block modal dismissal and duplicate submission.
 
+The runs list requests 25 summaries at a time, with previous/next controls and a
+URL offset preserved through detail navigation, reload and browser history.
+`GET /api/admin/workspaces/:id/runs?offset=0&limit=25` returns
+`{ mode, items, total, offset, limit }`. Offset defaults to 0 and must be a
+non-negative safe integer; limit defaults to 25 and must be an integer from 1 to
+100. Invalid pagination returns HTTP 400. Results remain newest-created first;
+out-of-range offsets return an empty page with the retained total.
+Each item contains only `id`, `actor`, `status`, `at`, `model`, `taskPreview`
+(whitespace-normalized, at most 200 characters including an ellipsis),
+`attemptCount`, and distinct `deliveryStates`, including cancellation receipts.
+Messages, full requests, settings, instructions, sources, attempts, tool data and
+delivery records are available only in the detail response. Both endpoints retain
+the same workspace authorization. The list shows skeletons while paging and retry
+on failure, without retaining rows from a different page.
+
 Run detail pages at `/admin/runs/:runId?workspace=:workspaceId` load the selected
 record from `GET /api/admin/workspaces/:id/runs/:run`. Missing or expired runs show
 an explicit error and a Back to Runs link; failed loads offer Try again.

@@ -23,6 +23,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { Check, ChevronLeft, Refresh, Search } from "reicon-react";
+import type { RunHistoryPage, RunSummary } from "../src/admin/run-history.ts";
 import {
   type ModelCapabilities,
   type ModelLimits,
@@ -175,36 +176,54 @@ function useData<T>(path: string) {
   }, [resourcePath, revision]);
   return { data, error, reload, loading };
 }
-function Pager({ data }: { data: unknown }) {
+function Pager({
+  data,
+  pageSize = 100,
+  loading = false,
+  alwaysShow = false,
+}: {
+  data: unknown;
+  pageSize?: number;
+  loading?: boolean;
+  alwaysShow?: boolean;
+}) {
   const [params, setParams] = useSearchParams();
   const total = (data as { total?: number } | undefined)?.total ?? 0;
-  const offset = Number(params.get("offset")) || 0;
+  const rawOffset = Number(params.get("offset"));
+  const offset =
+    Number.isSafeInteger(rawOffset) && rawOffset > 0 ? rawOffset : 0;
   const goTo = (offset: number) => {
     const next = new URLSearchParams(params);
     next.set("offset", String(offset));
     setParams(next);
   };
-  if (total <= 100 && offset === 0) return null;
+  if (!alwaysShow && total <= pageSize && offset === 0) return null;
   return (
-    <div className="row">
+    <nav className="row pagination" aria-label="Pagination">
       <IconButton
         icon="previous"
         label="Previous page"
         type="button"
-        disabled={offset === 0}
-        onClick={() => goTo(Math.max(0, offset - 100))}
+        disabled={loading || offset === 0}
+        onClick={() => goTo(Math.max(0, offset - pageSize))}
       />
       <span>
-        {offset + 1}–{Math.min(offset + 100, total)} of {total}
+        {loading ? (
+          <Skeleton width="8rem" />
+        ) : data ? (
+          `${total > offset ? offset + 1 : 0}–${total > offset ? Math.min(offset + pageSize, total) : 0} of ${total}`
+        ) : (
+          "Page unavailable"
+        )}
       </span>
       <IconButton
         icon="next"
         label="Next page"
         type="button"
-        disabled={offset + 100 >= total}
-        onClick={() => goTo(offset + 100)}
+        disabled={loading || offset + pageSize >= total}
+        onClick={() => goTo(offset + pageSize)}
       />
-    </div>
+    </nav>
   );
 }
 function Notice({
@@ -3376,7 +3395,7 @@ function RunCard({
   to,
 }: {
   title: string;
-  run: AdminRun;
+  run: RunSummary;
   detail: string;
   to: string;
 }) {
@@ -3466,14 +3485,19 @@ function RunMessages({ run }: { run: AdminRun }) {
 
 function RunsPage({ id }: { id: string }) {
   const [params] = useSearchParams();
+  const rawOffset = Number(params.get("offset"));
+  const offset =
+    Number.isSafeInteger(rawOffset) && rawOffset > 0 ? rawOffset : 0;
+  return <RunListPage key={`${id}:${offset}`} id={id} offset={offset} />;
+}
+function RunListPage({ id, offset }: { id: string; offset: number }) {
+  const [params] = useSearchParams();
   const detailParams = new URLSearchParams(params);
   detailParams.set("workspace", id);
-  const { data, error, reload, loading } = useData<
-    | { mode: "member"; items: AdminRun[]; total: number }
-    | { mode: "operator"; items: AdminRun[]; total: number }
-  >(`/api/admin/workspaces/${id}/runs`);
+  const { data, error, reload, loading } = useData<RunHistoryPage>(
+    `/api/admin/workspaces/${id}/runs?offset=${offset}&limit=25`,
+  );
   const memberData = data?.mode === "member" ? data : undefined;
-  const operatorData = data?.mode === "operator" ? data : undefined;
   return (
     <Page
       title="Runs & delivery"
@@ -3515,25 +3539,26 @@ function RunsPage({ id }: { id: string }) {
       }
     >
       {error && <Notice error>{error}</Notice>}
-      <Pager data={data} />
+      <Pager data={data} pageSize={25} loading={loading} alwaysShow />
+      {!data && loading && (
+        <section aria-label="Runs" aria-busy="true">
+          <SkeletonRows label="Run summaries" rows={3} />
+        </section>
+      )}
       {data?.total === 0 && (
         <section className="card">No assistant runs yet.</section>
       )}
-      {operatorData?.items.map((r) => (
+      {data && data.total > 0 && data.items.length === 0 && (
+        <section className="card">
+          No runs on this page. Use Previous page to return to earlier results.
+        </section>
+      )}
+      {data?.items.map((r) => (
         <RunCard
           key={r.id}
-          title={`Run ${r.id.slice(0, 8)}`}
+          title={memberData ? r.taskPreview : `Run ${r.id.slice(0, 8)}`}
           run={r}
-          detail={`${r.attempts.length} model ${r.attempts.length === 1 ? "attempt" : "attempts"} · Delivery: ${r.deliveries.length ? r.deliveries.map((delivery) => delivery.state).join(", ") : "none"}`}
-          to={`/admin/runs/${r.id}?${detailParams.toString()}`}
-        />
-      ))}
-      {memberData?.items.map((r) => (
-        <RunCard
-          key={r.id}
-          title={r.task}
-          run={r}
-          detail={`Run ${r.id.slice(0, 8)} · Delivery: ${r.deliveries.length ? r.deliveries.map((delivery) => delivery.state).join(", ") : "none"}`}
+          detail={`${r.attemptCount} model ${r.attemptCount === 1 ? "attempt" : "attempts"} · Delivery: ${r.deliveryStates.join(", ") || "none"}`}
           to={`/admin/runs/${r.id}?${detailParams.toString()}`}
         />
       ))}
