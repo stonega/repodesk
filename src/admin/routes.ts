@@ -757,7 +757,11 @@ export function adminRoutes(
               ? w.workflows.filter((f) => f.status !== "deleted").length
               : visibleWorkflows(w, actor).length,
             ...(operatorView
-              ? { codingTasks: w.codingTasks?.length ?? 0 }
+              ? {
+                  codingTasks:
+                    (w.codingTasks?.length ?? 0) +
+                    (await taskList(store.pool, w.id)).length,
+                }
               : {}),
           },
           connections: deployment

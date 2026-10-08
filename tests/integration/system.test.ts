@@ -29,6 +29,7 @@ import {
 import { revokeWork } from "../../src/workspaces/policy.ts";
 import { cancelRun, createRun } from "../../src/workspaces/service.ts";
 import { spec, workspace } from "../fixtures.ts";
+import { developmentTask, teamWorkspace } from "../team-workflows-fixture.ts";
 
 const url = process.env.TEST_DATABASE_URL;
 const suite = url ? describe : describe.skip;
@@ -274,6 +275,109 @@ suite("PostgreSQL integration (isolated database)", () => {
     expect(
       (await request("/api/admin/not-a-resource")).headers.get("content-type"),
     ).toContain("json");
+  });
+  test("Overview coding count matches Reviewed and Direct tasks in this workspace", async () => {
+    const w = teamWorkspace();
+    w.operatorId = operatorId;
+    w.members.push({ id: "404", role: "admin", active: true });
+    const direct = developmentTask(w);
+    const reviewed = {
+      id: randomUUID(),
+      actor: direct.actor,
+      runId: randomUUID(),
+      chatId: direct.chatId,
+      topicId: direct.topicId,
+      payload: direct.payload,
+      state: "succeeded" as const,
+      createdAt: direct.createdAt,
+      updatedAt: direct.updatedAt,
+    };
+    w.github = undefined;
+    await store.pool.query(
+      "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",
+      [w.id, operatorId, JSON.stringify(w)],
+    );
+    const other = await seed();
+    await store.pool.query(
+      "INSERT INTO coding_tasks(workspace_id,id,data) VALUES($1,$2,$3)",
+      [
+        other.id,
+        randomUUID(),
+        JSON.stringify({ ...direct, workspaceId: other.id }),
+      ],
+    );
+    await store.pool.query("UPDATE admins SET telegram_id=NULL WHERE id=$1", [
+      operatorId,
+    ]);
+    const memberId = randomUUID();
+    try {
+      const base = `/api/admin/workspaces/${w.id}`;
+      const count = async (expected: number) => {
+        const response = await request(`${base}/overview`);
+        expect(response.status).toBe(200);
+        const overview = await response.json();
+        const page = await (await request(`${base}/plugins/coding`)).json();
+        expect(overview.counts.codingTasks).toBe(expected);
+        expect(overview.counts.codingTasks).toBe(
+          page.tasks.length + page.developmentTasks.length,
+        );
+      };
+      await count(0);
+      await store.pool.query(
+        "INSERT INTO coding_tasks(workspace_id,id,data) VALUES($1,$2,$3)",
+        [w.id, direct.id, JSON.stringify(direct)],
+      );
+      await count(1);
+      await store.change(w.id, (saved) => {
+        saved.codingTasks = [reviewed];
+      });
+      await count(2);
+      // A task's execution attempts and final state do not change its count.
+      direct.state = "cancelled";
+      direct.attempts = 3;
+      await store.pool.query(
+        "UPDATE coding_tasks SET data=$3 WHERE workspace_id=$1 AND id=$2",
+        [w.id, direct.id, JSON.stringify(direct)],
+      );
+      await count(2);
+      await store.pool.query(
+        "DELETE FROM coding_tasks WHERE workspace_id=$1 AND id=$2",
+        [w.id, direct.id],
+      );
+      await count(1);
+      const foreign = await foreignWorkspace();
+      expect(
+        (await request(`/api/admin/workspaces/${foreign.id}/overview`)).status,
+      ).toBe(403);
+      const memberName = `counts_${randomUUID().slice(0, 8)}`;
+      await store.pool.query(
+        "INSERT INTO admins(id,username,password_hash,telegram_id) VALUES($1,$2,$3,'404')",
+        [memberId, memberName, await passwordHash("a long test password")],
+      );
+      const member = await login(
+        store.pool,
+        memberName,
+        "a long test password",
+      );
+      const response = await request(`${base}/overview`, "GET", undefined, {
+        cookie: `repodesk_session=${member.raw}`,
+      });
+      expect(response.status).toBe(200);
+      expect((await response.json()).counts.codingTasks).toBeUndefined();
+      expect(
+        (
+          await request(`${base}/plugins/coding`, "GET", undefined, {
+            cookie: `repodesk_session=${member.raw}`,
+          })
+        ).status,
+      ).toBe(403);
+    } finally {
+      await store.pool.query("DELETE FROM admins WHERE id=$1", [memberId]);
+      await store.pool.query(
+        "UPDATE admins SET telegram_id='101' WHERE id=$1",
+        [operatorId],
+      );
+    }
   });
   test("unlinked deployment operator sees all run messages and read-only workflow history", async () => {
     const w = await seed();

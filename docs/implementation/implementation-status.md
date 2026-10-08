@@ -1,5 +1,24 @@
 # Implementation evidence
 
+## Overview coding-task count, 2026-10-08
+
+The Overview Coding Tasks card now includes both Reviewed tasks in workspace
+state and Direct tasks in the workspace-scoped task table, using the same list
+query as the Codex page. Waiting, completed and cancelled tasks count once,
+independently of their execution attempts. The card opens the Codex task list
+instead of the Plugins catalog. Existing count visibility and tenant permissions
+remain in effect.
+
+Regression coverage checks empty, Reviewed-only, Direct-only and mixed counts,
+other-workspace isolation and workspace-administrator access. Browser checks use
+the real local API with deterministic database fixtures at 1280px and 390px,
+verify the count and destination rows, and cover the existing pending, failed-load,
+retry and saved-value refresh states.
+
+Validation: Biome, TypeScript and build passed; all 586 Bun tests passed against
+disposable PostgreSQL, and all seven focused browser checks passed. Rendered
+Overview counts and the matching Codex list were inspected on desktop and mobile.
+
 ## GitHub App onboarding defaults, 2026-10-08
 
 New GitHub App registrations now suggest `repodesk` in setup, the creation dialog

@@ -1687,7 +1687,7 @@ function ReadPage({
             {Object.entries(counts).map(([key, value]) => (
               <NavLink
                 key={key}
-                to={`/admin/${key === "codingTasks" ? "plugins" : key}?workspace=${id}${key === "codingTasks" ? "#coding-tasks" : ""}`}
+                to={`/admin/${key === "codingTasks" ? "plugins/codex" : key}?workspace=${id}${key === "codingTasks" ? "#coding-tasks" : ""}`}
                 aria-label={`${value !== undefined ? `${value} ` : loading ? "" : "Unavailable "}${key === "codingTasks" ? "coding tasks" : key}. View details`}
               >
                 <strong>
