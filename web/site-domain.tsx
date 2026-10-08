@@ -3,7 +3,7 @@ import type { SiteView } from "../src/admin/site.ts";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { Skeleton } from "./skeleton.tsx";
-import { useToast } from "./toast.tsx";
+import { ErrorToast, useToast } from "./toast.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 const endpoint = "/api/admin/operator/site";
@@ -121,12 +121,11 @@ export function SiteDomain({ request }: { request: Request }) {
   return (
     <>
       {error && (
-        <p className="error" role="alert">
-          {error}{" "}
+        <ErrorToast message={error}>
           <button type="button" onClick={() => setReload((value) => value + 1)}>
             Try again
           </button>
-        </p>
+        </ErrorToast>
       )}
       <section className="card" aria-busy={!site && !error}>
         <div className="row">

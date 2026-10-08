@@ -980,9 +980,30 @@ button.github-repository-more:hover:not(:disabled) {
   font-size: 14px;
   overflow-wrap: anywhere;
 }
+.toast-content {
+  min-width: 0;
+}
+.toast-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.toast-actions button {
+  padding: 8px 12px;
+  white-space: normal;
+}
+.toast-error {
+  border-color: var(--ui-danger-border);
+  background: var(--ui-danger-soft);
+  color: var(--ui-danger);
+}
 .toast-icon {
   flex: 0 0 auto;
   color: var(--ui-success);
+}
+.toast-error .toast-icon {
+  color: var(--ui-danger);
 }
 .toast .icon-button {
   color: var(--ui-muted);

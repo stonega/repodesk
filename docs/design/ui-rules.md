@@ -134,7 +134,7 @@ them.
   repository and a closed dropdown when opening Edit.
 - **Exceptions:** None recorded.
 
-### Routine action confirmations use toasts
+### Routine action confirmations and request errors use toasts
 
 - **Preference:** Show successful saves and comparable action confirmations in a
   compact floating toast instead of an inline banner. Auto-dismiss after six
@@ -144,12 +144,20 @@ them.
   Telegram bot tokens, plugins, site settings and access decisions. Keep the
   toast within the viewport on desktop and mobile without shifting page content.
   Index refresh confirmations use the same toast; retain index results on the page.
+  Page-level action and request errors also use floating toasts with distinct
+  error styling, alert announcements and any existing retry/reload action.
+  Error toasts remain until dismissed or the error clears so recovery controls
+  do not time out.
 - **Source:** 2026-10-06 — user showed the inline “Team configuration saved.”
   banner and requested a toast for this kind of notification, then requested a
   sweep of the remaining inline notifications.
-- **Exceptions:** Validation errors, readiness warnings, ongoing progress and
-  guidance requiring action stay beside their relevant controls. Copy-link
-  feedback retains its brief check icon as specified below.
+- **Source update:** 2026-10-08 — user showed the Review Bot “Configure the GitHub
+  webhook first.” error with “Reload saved settings” and requested toasts for this
+  kind of notification. Applies to comparable plugin and settings request errors.
+- **Exceptions:** Field/form validation errors, saved readiness warnings, ongoing
+  progress and setup guidance stay beside their relevant controls. Dialog errors
+  stay inside the open dialog so they remain visible and keyboard-accessible.
+  Copy-link feedback retains its brief check icon as specified below.
   Errors use alert semantics and error styling, distinct from informational notices.
 
 ### Edit and add buttons use short labels

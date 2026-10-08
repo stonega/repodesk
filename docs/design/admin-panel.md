@@ -214,6 +214,10 @@ the draft, and successful saves close the modal and refresh the summary.
 The sidebar workspace selector uses a panel-styled menu with a selected state and
 the operator-only New workspace action, which opens the setup wizard with a blank
 workspace form.
+Review Bot, Codex, Code Truth, plugin and site settings request failures use a
+floating error toast with the existing reload/retry control. These toasts use
+alert semantics and remain until dismissed or recovered, without shifting the
+page. Form validation and errors in open dialogs remain beside their controls.
 The compact account footer groups the username and sign-out icon, with a light/dark
 theme button at the right. Themes apply across the panel, sign-in and setup pages.
 The browser remembers explicit choices; otherwise the initial theme follows the

@@ -12,7 +12,7 @@ import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
 import { ReviewBot } from "./review-bot.tsx";
 import { SkeletonRows } from "./skeleton.tsx";
-import { useToast } from "./toast.tsx";
+import { ErrorToast, useToast } from "./toast.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 type View = "catalog" | "installed" | "market";
@@ -271,8 +271,7 @@ export function Plugins({
               />
             </div>
             {error && editing === undefined && (
-              <p className="notice" role="alert">
-                {error}{" "}
+              <ErrorToast message={error}>
                 <button
                   type="button"
                   disabled={busy || loading}
@@ -280,7 +279,7 @@ export function Plugins({
                 >
                   Reload saved plugins
                 </button>
-              </p>
+              </ErrorToast>
             )}
             {data?.notice && (
               <p className="notice" role="status">
@@ -411,8 +410,7 @@ export function Plugins({
               </section>
             )}
             {error && editing === undefined && (
-              <p className="notice" role="alert">
-                {error}{" "}
+              <ErrorToast message={error}>
                 <button
                   type="button"
                   disabled={busy || loading}
@@ -420,7 +418,7 @@ export function Plugins({
                 >
                   Reload saved plugins
                 </button>
-              </p>
+              </ErrorToast>
             )}
             {data?.notice && (
               <p className="notice" role="status">

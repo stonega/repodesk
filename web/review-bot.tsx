@@ -10,7 +10,7 @@ import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
 import { RepositorySelect } from "./repository-select.tsx";
 import { Select } from "./select.tsx";
 import { SkeletonRows } from "./skeleton.tsx";
-import { useToast } from "./toast.tsx";
+import { ErrorToast, useToast } from "./toast.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 const explain = (error: unknown) =>
@@ -149,9 +149,8 @@ export function ReviewBot({
         Automatic PR reviews and tagged requests, using your configured Codex
         runner.
       </p>
-      {error && (
-        <p className="notice" role="alert">
-          {error}{" "}
+      {error && !hookOpen && !stopping && (
+        <ErrorToast message={error}>
           <button
             type="button"
             disabled={busy}
@@ -168,7 +167,7 @@ export function ReviewBot({
           >
             Reload saved settings
           </button>
-        </p>
+        </ErrorToast>
       )}
       <section className="card">
         <h2>GitHub webhook</h2>
@@ -191,6 +190,7 @@ export function ReviewBot({
               type="button"
               disabled={busy}
               onClick={() => {
+                setError("");
                 setHookOpen(true);
                 setGenerated(undefined);
               }}
@@ -429,7 +429,10 @@ export function ReviewBot({
                           icon="stop"
                           label={`Stop PR #${task.number} task`}
                           disabled={busy || task.cancelRequested}
-                          onClick={() => setStopping(task)}
+                          onClick={() => {
+                            setError("");
+                            setStopping(task);
+                          }}
                         />
                       )}
                     </td>
@@ -444,6 +447,7 @@ export function ReviewBot({
         <Modal
           title="Configure GitHub webhook"
           onClose={() => {
+            setError("");
             setHookOpen(false);
             setGenerated(undefined);
             setHookSecret("");
@@ -451,6 +455,11 @@ export function ReviewBot({
           busy={busy}
           cancelLabel={generated ? "Done" : "Cancel"}
         >
+          {error && (
+            <p className="notice" role="alert">
+              {error}
+            </p>
+          )}
           {generated ? (
             <>
               <p>
@@ -512,9 +521,17 @@ export function ReviewBot({
       {stopping && (
         <Modal
           title="Stop Review Bot task"
-          onClose={() => setStopping(undefined)}
+          onClose={() => {
+            setError("");
+            setStopping(undefined);
+          }}
           busy={busy}
         >
+          {error && (
+            <p className="notice" role="alert">
+              {error}
+            </p>
+          )}
           <p>
             Stop work on PR #{stopping.number}? GitHub operations already
             underway may finish.

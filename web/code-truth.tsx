@@ -10,7 +10,7 @@ import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
-import { useToast } from "./toast.tsx";
+import { ErrorToast, useToast } from "./toast.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 const explain = (error: unknown) => {
@@ -145,12 +145,11 @@ export function CodeTruth({
         </p>
       )}
       {error && (
-        <p role="alert" className="notice">
-          {error}
+        <ErrorToast message={error}>
           <button type="button" disabled={busy} onClick={() => void load()}>
             Reload Code Truth
           </button>
-        </p>
+        </ErrorToast>
       )}
       <section
         className="card"

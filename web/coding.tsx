@@ -9,6 +9,7 @@ import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
 import { RepositorySelect } from "./repository-select.tsx";
 import { Select } from "./select.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
+import { ErrorToast } from "./toast.tsx";
 import { useRepositoryRefresh } from "./use-repository-refresh.ts";
 
 type Request = <T>(
@@ -306,8 +307,7 @@ export function Coding({
         </PluginDetailHeading>
       )}
       {error && !editing && !configEditing && (
-        <p className="notice" role="alert">
-          {error}{" "}
+        <ErrorToast message={error}>
           <button
             type="button"
             disabled={busy || loading}
@@ -315,7 +315,7 @@ export function Coding({
           >
             Reload coding settings
           </button>
-        </p>
+        </ErrorToast>
       )}
       {data?.repositoryRefreshError && (
         <p className="notice" role="status">
