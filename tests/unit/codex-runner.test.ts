@@ -170,6 +170,39 @@ async function fixture(concurrency = 4) {
     },
   };
 }
+test("OCR preparation failure stops before model credentials or publication are issued", async () => {
+  const f = await fixture();
+  const readText = f.engine.readText.bind(f.engine);
+  f.engine.readText = (container, path, maxBytes) =>
+    path.endsWith("failure-code")
+      ? Promise.resolve("coding_review_preparation_failed")
+      : readText(container, path, maxBytes);
+  await f.supervisor.start(f.input);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  f.fail();
+  expect(
+    await f.supervisor.status(f.input.workspaceId, f.input.taskId),
+  ).toMatchObject({
+    state: "failed",
+    error: "coding_review_preparation_failed",
+    phase: "setup",
+  });
+  const containers = f.calls.filter((call) => call.args[0] === "create");
+  expect(containers.map((call) => call.args.at(-1))).toEqual([
+    "prepare",
+    "setup",
+  ]);
+  expect(containers.every((call) => !call.env?.CODEX_TASK_TOKEN)).toBe(true);
+  expect(
+    containers.every(
+      (call) => !call.args.some((arg) => arg.includes(":/auth")),
+    ),
+  ).toBe(true);
+  await expect(
+    f.supervisor.publish(f.input.workspaceId, f.input.taskId, "write-token"),
+  ).rejects.toThrow("coding_task_not_ready");
+});
+
 test("task names are tenant-scoped; container boundary excludes host and bot access", async () => {
   const f = await fixture();
   const key = taskKey(f.input.workspaceId, f.input.taskId);

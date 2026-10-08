@@ -86,3 +86,20 @@ was built and smoke-tested locally; no production deployment occurred.
 - [Temporal PlainDate implementation](https://github.com/js-temporal/temporal-polyfill/blob/main/lib/plaindate.ts):
   Context7 verified named-zone start-of-day conversion. The existing pinned 0.5.1
   dependency is used for calendar report windows, with 23/25-hour DST fixtures.
+
+## Open Code Review integration, 2026-10-08
+
+The requested [documentation entry point](https://open-codereview.ai/docs) returned
+404 in the web retrieval tool. Current official docs were retrieved through Context7
+(`/alibaba/open-code-review`) and the upstream documentation source. The official
+CLI's npm package metadata and version 1.12.12 were checked directly; delegation
+commands were exercised on disposable local Git commits without model credentials.
+
+| Source | Scope |
+| --- | --- |
+| [Delegation documentation](https://github.com/alibaba/open-code-review/blob/main/pages/src/content/docs/en/integrations/delegate.md) | OCR file selection and grouped rules with a host agent such as Codex; no OCR LLM credential required. |
+| [Delegation skill](https://github.com/alibaba/open-code-review/blob/main/skills/open-code-review-delegate/SKILL.md) | JSON commands, per-file checklist, coverage and exclusion reporting; external context remains data. |
+| [Official CLI package](https://www.npmjs.com/package/@alibaba-group/open-code-review/v/1.12.12) | Pinned CLI distribution and platform binaries. |
+
+These sources document an integration contract, not independently verified review
+quality. Live semantic acceptance remains a release gate.

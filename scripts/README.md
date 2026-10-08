@@ -5,6 +5,7 @@
 - `register-webhook.ts`: explicit opt-in staging webhook reconciliation.
 - `evaluate.ts`: explicit, spend-capped live model evaluation; never run by normal checks.
 - `runtime-contract.ts`: fake-provider Pi contract under Node; no credentials required.
+- `open-code-review-smoke.ts`: offline OCR preparation in a prebuilt `codex-job` image; exact refs, exclusions, rules and preparation failure, with disposable Docker volumes and no credentials. Run `bun scripts/open-code-review-smoke.ts IMAGE_TAG`.
 - `backup.sh`: protected PostgreSQL custom dump through Compose.
 - `restore-rehearsal.sh`: restore into a disposable sibling DB, verify, remove it.
 - `start-local.sh`: start the configured local Podman stack; pass `--build` to rebuild images.

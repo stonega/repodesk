@@ -288,7 +288,10 @@ current implementation until the corresponding delivery slices are completed.
 ## Review Bot PR tasks
 
 The optional [Review Bot](../implementation/review-bot.md) uses the existing
-GitHub App and local Codex runner. Signed ingress commits delivery receipts and
+GitHub App and local Codex runner, with Open Code Review as the primary review
+framework. A credential-free setup phase runs OCR delegation to produce a validated
+file/rule plan before Codex read-only analysis. Preparation failures stop execution
+without substituting another engine. Signed ingress commits delivery receipts and
 workspace-scoped PR jobs atomically. JSONB task records carry original inputs,
 source hashes, policy/configuration revisions, runner attempts and committed
 publication reservations. A separate worker tick claims fenced leases and

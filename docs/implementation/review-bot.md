@@ -4,8 +4,13 @@ Status: implemented locally; live GitHub and Codex acceptance remains a release 
 
 Review Bot is a built-in plugin at **Plugins → Review Bot**. It automatically
 reviews PRs in selected repositories and accepts directly addressed GitHub comments.
-It shares the existing GitHub App, local Codex runner and workspace Codex credentials.
-No new dependency, separate deployment or model credential is required.
+Its primary review framework is [Open Code Review](https://open-codereview.ai/docs)
+(OCR), using the official [delegation workflow](https://github.com/alibaba/open-code-review/blob/main/pages/src/content/docs/en/integrations/delegate.md).
+OCR selects reviewable files and resolves review rules; Codex supplies the analysis
+through the existing local runner and workspace credentials. The task image pins
+`@alibaba-group/open-code-review` 1.12.12 alongside Codex. No separate deployment
+or model credential is required. Rebuild the task image when updating this integration;
+custom runner images must include this JSON-capable OCR version.
 
 ## Configure
 
@@ -55,8 +60,22 @@ automatic jobs. Explicit requests can work on draft PRs. Closing a PR cancels it
 pending work; converting to draft stops only automatic reviews.
 
 Reviews check out the exact PR head through the base repository's pull ref, including
-fork PRs, and compare the recorded base/head commits. Codex reviews in its read-only
-sandbox, without repository setup scripts or tests. Review/answer turns declare
+fork PRs, and compare the recorded base/head commits. In the credential-free setup
+phase, application code runs `ocr delegate preview --format json --from BASE --to HEAD`
+and `ocr delegate rule --format json -- PATH...` in bounded batches. It validates the
+JSON version, exact refs, file counts, relative paths and complete rule coverage,
+then writes a task-local review plan outside the checkout. It does not run repository
+setup scripts or tests. OCR never receives a GitHub/model credential or calls an LLM.
+Missing OCR, incompatible/malformed output or incomplete rules fail the task with
+`coding_review_preparation_failed`; there is no alternate review engine.
+
+Codex reads the OCR plan and reviews in its read-only sandbox. Its review instructions
+require a checklist of every reviewable file, matching rules, merge-base diffs,
+reviewed/skipped coverage and explicit reasons for OCR exclusions and skipped files.
+Coverage reporting is model-generated; the application validates preparation coverage
+and inline anchors, but does not independently prove the model inspected every file.
+OCR rules and repository content remain reference data, never authorization.
+Review/answer turns declare
 credential directories and `/proc` unreadable, remove inherited shell credentials
 and keep project configuration untrusted. The runner host must support Codex’s
 Linux command sandbox; a sandbox failure has no unrestricted fallback. It returns a concise summary
@@ -132,9 +151,21 @@ Webhook payloads are limited to 2 MiB; other HTTP APIs keep their existing 64 Ki
 limit. Tagged comment input is limited to 20,000 characters. Existing pilot storage
 limits allow 200 retained tasks, 20 nonterminal tasks and 100 input revisions per
 workspace/task. These are ingress/storage bounds; Review Bot adds no Codex execution,
-repair, time or token quotas.
+repair, time or token quotas. OCR command output and the combined review plan are
+bounded to 6 MiB; oversized preparation fails explicitly rather than dropping files
+or truncating rules. Control characters and non-relative paths in OCR output are
+unsupported and fail preparation.
 
 ## Verification
+
+OCR integration on 2026-10-08: Biome, strict TypeScript, build and all **592**
+deterministic tests passed with disposable PostgreSQL. App/job Docker builds,
+migrations/API health and base/Docker-runner Compose validation passed. The pinned
+OCR CLI ran offline in the built job image using exact local commits. The smoke
+script covers file/rule coverage, exclusions, failed preparation and answer/fix
+isolation; supervisor regression coverage rejects publication after preparation
+failure. These checks do not establish live model inspection or semantic quality.
+
 
 Repository display/editor follow-up on 2026-10-08: Biome, strict TypeScript,
 build and all **581 deterministic tests** passed. All **10 Review Bot browser

@@ -92,6 +92,13 @@ test("review turns are read-only, pinned to exact commits, with strict structure
   });
   const prompt = developmentPrompt(run);
   expect(prompt).toContain(`git diff ${"b".repeat(40)}...${"a".repeat(40)}`);
+  expect(prompt).toContain("Open Code Review (OCR) delegation");
+  expect(prompt).toContain("/task/open-code-review.json");
+  expect(prompt).toContain("do not substitute an ad-hoc review");
+  expect(prompt).toContain(
+    "each file is reviewed or skipped with a concrete reason",
+  );
+  expect(prompt).toContain("coverage rate");
   expect(prompt).toContain("Do not run repository scripts");
   expect(prompt).toContain("Never claim tests ran");
   const schema = developmentSchema(run);
@@ -105,4 +112,12 @@ test("review turns are read-only, pinned to exact commits, with strict structure
   expect(developmentOutputSchema.properties).not.toHaveProperty(
     "reviewFindings",
   );
+  if (!run.review) throw new Error("Review fixture missing");
+  for (const action of ["answer", "fix"] as const) {
+    const followup = developmentPrompt({
+      ...run,
+      review: { ...run.review, action },
+    });
+    expect(followup).not.toContain("/task/open-code-review.json");
+  }
 });

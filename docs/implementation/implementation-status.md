@@ -1,5 +1,26 @@
 # Implementation evidence
 
+## Open Code Review primary framework, 2026-10-08
+
+Review Bot now uses Open Code Review (OCR) delegation as its primary review
+framework. The task image pins the official CLI at 1.12.12. Credential-free setup
+prepares a commit-pinned file/rule plan, validates JSON compatibility and complete
+rule coverage, and stops on preparation failures before model execution. Codex
+performs read-only analysis using its existing workspace credentials. Review
+instructions require file coverage and explicit exclusion/skipping reasons; that
+reported inspection coverage remains model-generated. Answers and authorized fixes
+retain their existing workflow. No migration or new model account is required.
+
+Biome, strict TypeScript, build and all **592 deterministic tests** passed against
+disposable PostgreSQL. App/job Docker images built, migrations/API health and base
+plus Docker-runner Compose validation passed. The pinned OCR CLI's real offline
+preparation passed inside the job image, including exact refs, grouped rules,
+exclusions and failure behavior. The repeatable
+[smoke script](../../scripts/open-code-review-smoke.ts) uses disposable Docker volumes
+and no model/GitHub credentials. Rebuild existing task images to use this integration.
+Live semantic review quality and intended-host Codex sandbox compatibility remain
+release gates. See [setup and boundaries](review-bot.md).
+
 ## Overview coding-task count, 2026-10-08
 
 The Overview Coding Tasks card now includes both Reviewed tasks in workspace

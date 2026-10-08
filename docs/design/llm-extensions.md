@@ -205,6 +205,8 @@ remains pending.
 [Review Bot](../implementation/review-bot.md) receives authenticated GitHub App events,
 reviews selected PRs at exact commits and accepts verified maintainer tags for
 read-only answers or explicitly authorized same-PR fixes. It reuses the Codex runner
-and credentials. Its application services own standing review policy, task grants,
+and credentials, with Open Code Review delegation as its primary review framework.
+The credential-free setup phase resolves OCR files/rules; Codex performs read-only
+analysis from that plan. Its application services own standing review policy, task grants,
 repository permissions, durable publication and GitHub progress comments. It does
 not broaden the executable file-extension API or expose an arbitrary GitHub write tool.

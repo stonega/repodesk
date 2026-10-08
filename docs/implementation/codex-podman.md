@@ -75,7 +75,10 @@ Build the reusable task image from the repository root:
 podman build --format=docker --target codex-job -t localhost/deepx-codex-job:local .
 ```
 
-The image pins Codex CLI 0.155.1 and includes Node 24, Bun 1.3.14, Git and Bash.
+The image pins Codex CLI 0.155.1 and Open Code Review CLI 1.12.12 and includes
+Node 24, Bun 1.3.14, Git and Bash. Review Bot uses OCR delegation for file selection
+and rules with the existing Codex model credentials. Custom images used for reviews
+must retain the OCR CLI; missing or incompatible OCR fails preparation.
 Use a reviewed custom image based on this target if a repository needs additional
 system tools. Set `CODEX_RUNNER_IMAGE` to its local tag; the runner never pulls
 images supplied by a model or task. Build before starting tasks.

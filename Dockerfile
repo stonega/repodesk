@@ -46,9 +46,10 @@ CMD ["node", "dist/runner-server.js"]
 # Reused for preparation, isolated implementation, and fresh PR publication.
 FROM node:24-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS codex-job
 ARG CODEX_VERSION=0.155.1
+ARG OPEN_CODE_REVIEW_VERSION=1.12.12
 RUN apt-get update && apt-get install -y --no-install-recommends git bash ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install -g @openai/codex@${CODEX_VERSION} \
+    && npm install -g @openai/codex@${CODEX_VERSION} @alibaba-group/open-code-review@${OPEN_CODE_REVIEW_VERSION} \
     && npm cache clean --force
 COPY --from=base /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /opt/deepx

@@ -61,6 +61,7 @@ const terminal = (state: string) =>
 const implementationFailures = new Set([
   ...conversationFailureCodes,
   "coding_setup_failed",
+  "coding_review_preparation_failed",
   "coding_codex_failed",
   "coding_check_failed",
   "coding_patch_empty",

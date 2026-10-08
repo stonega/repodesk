@@ -12,6 +12,7 @@ import {
 import { CodexAuthError, codexAuthFailure } from "./auth-failure.ts";
 import { runConversation } from "./conversation.ts";
 import { CodexConversationError } from "./conversation-failure.ts";
+import { prepareOpenCodeReview } from "./open-code-review.ts";
 import { localStart } from "./protocol.ts";
 import { markPullRequestReady, publicationPushArgs } from "./publication.ts";
 
@@ -139,9 +140,20 @@ async function clone(job: Job) {
   await git(["checkout", "--detach", sha]);
   return sha;
 }
-async function setup() {
+async function setup(job: Job) {
   const env = { ...gitEnv, HOME: "/task/home" };
   await mkdir(env.HOME, { recursive: true });
+  if (job.development?.review?.action === "review") {
+    try {
+      const plan = await prepareOpenCodeReview(job.development.review, (args) =>
+        command("ocr", args, { cwd: repo, env }),
+      );
+      await writeFile("/task/open-code-review.json", JSON.stringify(plan));
+    } catch {
+      await writeFile("/task/failure-code", "coding_review_preparation_failed");
+      throw new Error("coding_review_preparation_failed");
+    }
+  }
 }
 async function implement(job: Job) {
   if (!job.baseSha || !job.config) throw new Error("coding_job_invalid");
@@ -504,7 +516,7 @@ try {
         )
           throw error;
       }
-    } else if (mode === "setup") await setup();
+    } else if (mode === "setup") await setup(job);
     else if (mode === "implement") await implement(job);
     else if (mode === "check") await check(job);
     else if (mode === "publish") await publish(job);

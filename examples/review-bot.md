@@ -16,7 +16,8 @@ are still required. Existing Apps follow the manual webhook steps in the guide.
 
 1. Enable automatic review for a dedicated test repository. Open a non-draft PR
    containing a concrete regression. Expect one informational review at that head
-   with supported file/line findings. Redeliver its webhook: expect no duplicate.
+   with supported file/line findings. Check that the summary reports OCR exclusions,
+   reviewed/skipped files and coverage. Redeliver its webhook: expect no duplicate.
 2. Open a PR in an unselected repository and a draft in the selected repository.
    Expect no automatic review. Mark the selected draft ready: expect a review.
 3. Push a new commit while review is running. Expect the old result to stop and the
@@ -38,3 +39,25 @@ are still required. Existing Apps follow the manual webhook steps in the guide.
 9. Inspect a simulated unknown publication in activity. Confirm that restart does
    not blindly resend a review, progress comment or push. Inspect the confirmed
    GitHub artifact and task evidence before requesting new work.
+
+For a repeatable offline runner smoke check, build the `codex-job` target and run
+its credential-free preparation with disposable Docker volumes:
+
+```sh
+docker build --target codex-job -t repodesk-ocr-job:test .
+bun scripts/open-code-review-smoke.ts repodesk-ocr-job:test
+```
+
+This covers actual OCR JSON/rules, excluded files, failed preparation and answer/fix
+isolation without network access. To inspect the CLI manually, run `ocr --version`
+inside that image. A disposable Git repository with two local commits can
+exercise the actual preparation commands without GitHub/model credentials:
+
+```sh
+ocr delegate preview --format json --from BASE_SHA --to HEAD_SHA
+ocr delegate rule --format json -- src/example.ts
+```
+
+In a disposable custom image, remove or replace OCR with a failing fixture and
+start a review. Expect `coding_review_preparation_failed`, no model execution and
+no GitHub publication. Answer/fix tasks retain their existing Codex workflow.
