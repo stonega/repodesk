@@ -31,6 +31,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Repository reports, skills and handoffs](implementation/team-workflows-plan.md) | Accepted R01–R03 plan, permission contracts, implementation and verification |
 | [Telegram feedback beta plan](implementation/telegram-feedback-plan.md) | Readable progress, task status, cancellation and failures for friends and colleagues |
 | [GitHub App connections](implementation/github-app.md) | Register the App, connect workspace repositories, permissions and credential lifecycle |
+| [Review Bot](implementation/review-bot.md) | Selected-repository automatic PR reviews and tagged same-PR work |
 | [Codex coding tasks](implementation/codex-coding.md) | Maintainer-only issue-to-PR tasks, repository settings and local runner setup |
 | [Continuous Codex collaboration](design/codex-collaboration.md) | Policy-gated continuous tasks: Pi requirements intake, Codex decisions, Telegram questions, repair and same-PR follow-ups; live pilot pending |
 | [Codex collaboration implementation plan](implementation/codex-collaboration-plan.md) | Protocol proof, durable tasks, original-requirement handoff, Telegram input, repair, same-PR continuation and release gates |

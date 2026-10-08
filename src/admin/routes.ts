@@ -27,6 +27,7 @@ import { repositoryAccess } from "../github/user-access.ts";
 import { reconcileCharge, resolveDelivery } from "../jobs/recovery.ts";
 import { logQuery, readRuntimeLogs } from "../observability/logs.ts";
 import { requestDeletion } from "../privacy/service.ts";
+import type { ReviewService } from "../review-bot/service.ts";
 import { equal, hash, passwordHash } from "../setup/credentials.ts";
 import type { SetupService } from "../setup/service.ts";
 import { changeSkill, saveSkill, testSkill } from "../skills/catalog.ts";
@@ -87,6 +88,7 @@ export function adminRoutes(
   github: GitHubService,
   encryptionKey?: string,
   deviceAuth?: LocalDeviceAuth,
+  review?: ReviewService,
 ) {
   const app = new Hono<Env>();
   const site = new SiteService(store, origin);
@@ -417,6 +419,48 @@ export function adminRoutes(
         await c.req.json(),
       ),
     ),
+  );
+  app.get("/api/admin/workspaces/:id/plugins/review-bot", async (c) => {
+    requireThat(review, "review_bot_unavailable", 409);
+    return c.json(
+      await review.view(c.get("session").admin, validId(c.req.param("id"))),
+    );
+  });
+  app.put("/api/admin/workspaces/:id/plugins/review-bot", async (c) => {
+    requireThat(review, "review_bot_unavailable", 409);
+    return c.json(
+      await review.save(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+        await c.req.json(),
+      ),
+    );
+  });
+  app.post(
+    "/api/admin/workspaces/:id/plugins/review-bot/webhook",
+    async (c) => {
+      requireThat(review, "review_bot_unavailable", 409);
+      return c.json(
+        await review.configureHook(
+          c.get("session").admin,
+          validId(c.req.param("id")),
+          await c.req.json(),
+        ),
+      );
+    },
+  );
+  app.post(
+    "/api/admin/workspaces/:id/plugins/review-bot/:task/cancel",
+    async (c) => {
+      requireThat(review, "review_bot_unavailable", 409);
+      return c.json(
+        await review.cancel(
+          c.get("session").admin,
+          validId(c.req.param("id")),
+          validId(c.req.param("task")),
+        ),
+      );
+    },
   );
   app.get("/api/admin/workspaces/:id/plugins/coding", async (c) => {
     const id = validId(c.req.param("id"));

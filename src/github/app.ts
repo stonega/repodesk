@@ -9,6 +9,7 @@ export interface GitHubAppConfig {
   clientSecret: string;
   privateKey: string;
   slug: string;
+  webhookSecret?: string;
 }
 const accountSchema = z.object({ login: z.string().min(1).max(100) });
 const installationSchema = z.object({
@@ -73,11 +74,12 @@ export class GitHubApp {
     token?: string,
     body?: unknown,
     signal?: AbortSignal,
+    method?: "PATCH",
   ) {
     try {
       signal?.throwIfAborted();
       const response = await this.transport(url, {
-        method: body === undefined ? "GET" : "POST",
+        method: method ?? (body === undefined ? "GET" : "POST"),
         headers: {
           accept: "application/json",
           "content-type": "application/json",
@@ -383,7 +385,8 @@ export class GitHubApp {
       | "publish"
       | "coding_read"
       | "issues_read"
-      | "pulls_read" = "contents",
+      | "pulls_read"
+      | "review" = "contents",
   ) {
     requireThat(
       repositoryIds.length > 0 && repositoryIds.length <= 12,
@@ -396,17 +399,19 @@ export class GitHubApp {
       {
         repository_ids: repositoryIds,
         permissions:
-          permission === "issues_read"
-            ? { issues: "read" }
-            : permission === "pulls_read"
-              ? { pull_requests: "read" }
-              : permission === "issues"
-                ? { issues: "write" }
-                : permission === "publish"
-                  ? { contents: "write", pull_requests: "write" }
-                  : permission === "coding_read"
-                    ? { contents: "read", pull_requests: "read" }
-                    : { contents: "read" },
+          permission === "review"
+            ? { pull_requests: "write", issues: "write" }
+            : permission === "issues_read"
+              ? { issues: "read" }
+              : permission === "pulls_read"
+                ? { pull_requests: "read" }
+                : permission === "issues"
+                  ? { issues: "write" }
+                  : permission === "publish"
+                    ? { contents: "write", pull_requests: "write" }
+                    : permission === "coding_read"
+                      ? { contents: "read", pull_requests: "read" }
+                      : { contents: "read" },
       },
     );
     return z
@@ -446,6 +451,33 @@ export class GitHubApp {
       branch: pr.head.ref,
       headSha: pr.head.sha,
     };
+  }
+  /** Application-owned PR operations; never exposed as an arbitrary model tool. */
+  async reviewResource(
+    token: string,
+    repository: string,
+    path: string,
+    body?: unknown,
+    method?: "PATCH",
+  ) {
+    requireThat(
+      /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository),
+      "github_repository_not_connected",
+      409,
+    );
+    requireThat(
+      /^(?:pulls\/[1-9]\d*(?:\/files|\/reviews)?|pulls\/comments\/[1-9]\d*|issues\/[1-9]\d*\/comments|issues\/comments\/[1-9]\d*)(?:\?per_page=100&page=[1-9]\d*)?$/.test(
+        path,
+      ),
+      "invalid_github_item",
+    );
+    return this.request(
+      `https://api.github.com/repos/${repository}/${path}`,
+      token,
+      body,
+      undefined,
+      method,
+    );
   }
   async repositoryMetadata(
     token: string,

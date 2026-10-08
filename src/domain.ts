@@ -4,6 +4,7 @@ import type { PluginSettings } from "./agent/plugin-config.ts";
 import type { CodingConfig, CodingTask } from "./coding/config.ts";
 import type { GitHubConnection } from "./github/config.ts";
 import type { GitHubUserAccess } from "./github/user-access.ts";
+import type { ReviewConfig, ReviewTask } from "./review-bot/config.ts";
 
 export class Fault extends Error {
   constructor(
@@ -415,6 +416,9 @@ export interface Audit {
   version?: number;
 }
 export interface Workspace {
+  reviewBot?: ReviewConfig;
+  reviewTasks?: ReviewTask[];
+  reviewCleanup?: string[];
   coding?: CodingConfig;
   codingTasks?: CodingTask[];
   github?: GitHubConnection;

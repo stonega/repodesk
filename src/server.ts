@@ -10,6 +10,7 @@ import { configuredGitHubApp } from "./github/app.ts";
 import { GitHubApps } from "./github/registry.ts";
 import { GitHubService } from "./github/service.ts";
 import { RuntimeLogger } from "./observability/logs.ts";
+import { ReviewService } from "./review-bot/service.ts";
 import { SetupService } from "./setup/service.ts";
 
 const cfg = config();
@@ -44,6 +45,7 @@ const app = createApp(
   cfg.CODEX_RUNNER_URL && cfg.CODEX_RUNNER_TOKEN
     ? new LocalRunnerClient(cfg.CODEX_RUNNER_URL, cfg.CODEX_RUNNER_TOKEN)
     : undefined,
+  new ReviewService(store, githubApp, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN),
 );
 const server = serve({ fetch: app.fetch, hostname: "0.0.0.0", port: cfg.PORT });
 log.write("app_started");

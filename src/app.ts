@@ -9,6 +9,7 @@ import type { LocalDeviceAuth } from "./coding/local/protocol.ts";
 import type { Store } from "./db/repositories.ts";
 import { Fault, requireThat } from "./domain.ts";
 import { GitHubService } from "./github/service.ts";
+import type { ReviewService } from "./review-bot/service.ts";
 import { equal } from "./setup/credentials.ts";
 import type { SetupService } from "./setup/service.ts";
 import { updateSchema } from "./telegram/router.ts";
@@ -21,6 +22,7 @@ export function createApp(
   github = new GitHubService(store, "", origin),
   encryptionKey?: string,
   deviceAuth?: LocalDeviceAuth,
+  review?: ReviewService,
 ) {
   const app = new Hono();
   const ingress = new Ingress(store, setup, github.users);
@@ -39,12 +41,13 @@ export function createApp(
       },
     }),
   );
-  app.use(
-    "*",
+  app.use("*", (c, next) =>
     bodyLimit({
-      maxSize: 65536,
+      maxSize: c.req.path.startsWith("/github/webhook/")
+        ? 2 * 1024 * 1024
+        : 65536,
       onError: (c) => c.json({ error: "payload_too_large" }, 413),
-    }),
+    })(c, next),
   );
   app.get("/healthz", (c) => c.json({ status: "ok" }));
   app.get("/readyz", async (c) => {
@@ -79,6 +82,18 @@ export function createApp(
     const update = updateSchema.parse(await c.req.json());
     return c.json(await ingress.accept(update));
   });
+  app.post("/github/webhook/:operatorId", async (c) => {
+    requireThat(review, "review_bot_unavailable", 409);
+    return c.json(
+      await review.accept(
+        c.req.param("operatorId"),
+        c.req.header("x-github-event") ?? "",
+        c.req.header("x-github-delivery") ?? "",
+        c.req.header("x-hub-signature-256") ?? "",
+        Buffer.from(await c.req.arrayBuffer()),
+      ),
+    );
+  });
   // Telegram flows use the existing registered callback, without a panel login.
   app.get("/api/admin/github/callback", async (c, next) => {
     const state = c.req.query("state") ?? "";
@@ -100,6 +115,7 @@ export function createApp(
       github,
       encryptionKey,
       deviceAuth,
+      review,
     ),
   );
   app.get("/", async (c) => {

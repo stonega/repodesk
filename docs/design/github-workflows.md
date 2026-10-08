@@ -53,9 +53,10 @@ or turn text found in a repository into instructions with authority.
 | Ask for PR/issue status or a PR digest | Read-only selected repository metadata with numbered items, reviewers, merge windows, dates, links and explicit paging coverage. Approved daily/weekly workflows pin repository sources and destination. | Implemented locally; live GitHub/model report evaluation remains |
 | Save an assistant procedure as a team skill | Requester approves a sanitized draft from an owned completed run; admins publish and enable it through Skills. | Implemented locally; usefulness/reuse evaluation remains |
 | Get a work handoff | Personal task/checkpoint/question/PR and discussion summary; group queries remain in the current topic. | Implemented locally; live usefulness evaluation remains |
-| Review, comment, merge or modify arbitrary repository content | Separate, narrowly scoped actions with distinct approvals and recovery rules. | Proposed; no general GitHub write tool is available |
+| Automatically review selected PRs and finish tagged requests | Opt-in Review Bot policy, exact-commit informational reviews, verified maintainer mentions and checked same-PR fixes. | Implemented locally; live webhook/review/publication acceptance remains |
+| Merge or modify arbitrary repository content | Separate, narrowly scoped actions with distinct approvals and recovery rules. | Proposed; no general GitHub write tool is available |
 
-See [GitHub App setup](../implementation/github-app.md),
+See [Review Bot](../implementation/review-bot.md), [GitHub App setup](../implementation/github-app.md),
 [Code Truth](../implementation/code-truth.md),
 [Codex tasks](../implementation/codex-coding.md) and the
 [Telegram guide](../user/telegram-experience.md) for the implemented paths.

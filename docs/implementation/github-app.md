@@ -2,7 +2,7 @@
 
 Implemented: guided GitHub App creation, workspace-scoped web authorization,
 installation/repository selection, disconnect, and short-lived read-only installation
-tokens for Code Truth, plus Telegram issue drafts with explicit approval and
+tokens for Code Truth, optional authenticated Review Bot webhook intake, plus Telegram issue drafts with explicit approval and
 repository-scoped issue submission. No personal token is accepted by the web panel.
 
 ## Create the App from the panel
@@ -85,8 +85,9 @@ its pending registration flows but retains the operator's shared App credentials
    permissions are unnecessary for these coding workflows. To fetch organization
    members in member forms, also grant **Organization permissions → Members: Read-only**.
 4. A setup URL is unnecessary: the panel authorizes the user first, then lists their
-   App installations. Leave webhooks disabled for this implementation; there is no
-   webhook receiver. Installation suspension/removal is checked when minting tokens.
+   App installations. Leave webhooks disabled unless using [Review Bot](review-bot.md). Its
+   optional receiver requires the displayed operator-specific URL, a saved secret
+   and explicit event subscriptions in the GitHub App settings. Installation suspension/removal is checked when minting tokens.
 5. Generate a client secret and a private key. Save them under `secrets/` with private
    file permissions. Never commit them or paste them into the panel.
 

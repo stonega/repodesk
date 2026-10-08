@@ -13,6 +13,7 @@ import { CodexAuthError, codexAuthFailure } from "./auth-failure.ts";
 import { runConversation } from "./conversation.ts";
 import { CodexConversationError } from "./conversation-failure.ts";
 import { localStart } from "./protocol.ts";
+import { publicationPushArgs } from "./publication.ts";
 
 const jobSchema = localStart
   .omit({ readToken: true, providerApiKey: true })
@@ -106,7 +107,9 @@ async function clone(job: Job) {
       "--no-checkout",
       "--single-branch",
       "--branch",
-      job.development?.pr?.branch ?? job.payload.baseBranch,
+      job.development?.review
+        ? job.payload.baseBranch
+        : (job.development?.pr?.branch ?? job.payload.baseBranch),
       "--",
       `https://github.com/${job.payload.repository}.git`,
       repo,
@@ -114,8 +117,22 @@ async function clone(job: Job) {
     "/task",
     true,
   );
+  if (job.development?.review) {
+    const review = job.development.review;
+    await git(
+      ["fetch", "--no-tags", "origin", `refs/pull/${review.number}/head`],
+      repo,
+      true,
+    );
+    if ((await git(["rev-parse", "FETCH_HEAD"])).trim() !== review.headSha) {
+      await writeFile("/task/failure-code", "coding_remote_head_changed");
+      throw new Error("coding_remote_head_changed");
+    }
+    await git(["cat-file", "-e", `${review.baseSha}^{commit}`]);
+  }
   const sha =
     job.baseSha ??
+    job.development?.review?.headSha ??
     job.development?.pr?.headSha ??
     (await git(["rev-parse", "HEAD"])).trim();
   if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("coding_base_invalid");
@@ -169,6 +186,8 @@ async function implement(job: Job) {
             ? undefined
             : job.development.threadId,
         readOnly: job.development.mode !== "work",
+        protectCredentials:
+          !!job.development.review && job.development.mode !== "work",
       });
     } catch (error) {
       if (
@@ -341,6 +360,13 @@ async function publish(job: Job) {
       "Implement maintainer-approved RepoDesk task",
     ]);
   const publishedSha = (await git(["rev-parse", "HEAD"])).trim();
+  if (job.development?.pr)
+    await git([
+      "merge-base",
+      "--is-ancestor",
+      job.development.pr.headSha,
+      publishedSha,
+    ]);
   await writeFile(
     "/task/publication-intent.json",
     JSON.stringify({ publishedSha }),
@@ -348,7 +374,7 @@ async function publish(job: Job) {
   if (diff) {
     try {
       await git(
-        ["push", "--porcelain", "origin", `HEAD:refs/heads/${branch}`],
+        publicationPushArgs(branch, job.development?.pr?.headSha),
         repo,
         true,
       );
@@ -360,7 +386,7 @@ async function publish(job: Job) {
       // One explicit ref, confirmed non-fast-forward rejection: no remote write occurred.
       if (
         output.includes("[rejected]") &&
-        /\((?:non-fast-forward|fetch first)\)/.test(output)
+        /\((?:non-fast-forward|fetch first|stale info)\)/.test(output)
       )
         await writeFile("/task/failure-code", "coding_remote_head_changed");
       throw error;

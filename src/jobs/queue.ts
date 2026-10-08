@@ -10,6 +10,7 @@ import type { GitHubIssues } from "../github/issues.ts";
 import type { GitHubUsers } from "../github/users.ts";
 import { pruneRuntimeLogs, RuntimeLogger } from "../observability/logs.ts";
 import { sweep } from "../privacy/service.ts";
+import type { ReviewExecutor } from "../review-bot/executor.ts";
 import type { SetupService } from "../setup/service.ts";
 import { queuedRunFeedback } from "../telegram/feedback.ts";
 import { TelegramPoller } from "../telegram/polling.ts";
@@ -71,6 +72,7 @@ export async function startWorker(
   githubIssues?: GitHubIssues,
   coding?: CodingService,
   githubUsers?: GitHubUsers,
+  review?: ReviewExecutor,
 ) {
   const boss = queue(url, store.log);
   await boss.start();
@@ -247,12 +249,30 @@ export async function startWorker(
   const githubTimer = setInterval(githubTick, 30000);
   codingTick();
   const codingTimer = setInterval(codingTick, 5000);
+  let reviewBusy: Promise<void> | undefined;
+  const reviewTick = () => {
+    if (!review || reviewBusy || shutdown.signal.aborted) return;
+    reviewBusy = (async () => {
+      for (const workspaceId of await store.ids()) {
+        if (shutdown.signal.aborted) break;
+        await review.tick(workspaceId);
+      }
+    })()
+      .catch((error) => store.log.write("worker_maintenance_failed", { error }))
+      .finally(() => {
+        reviewBusy = undefined;
+      });
+  };
+  reviewTick();
+  const reviewTimer = setInterval(reviewTick, 5000);
   const timer = setInterval(() => void maintain(), 5000);
   return async () => {
     clearInterval(timer);
     clearInterval(codingTimer);
     clearInterval(githubTimer);
+    clearInterval(reviewTimer);
     shutdown.abort();
+    await reviewBusy;
     await Promise.all([polling, boss.stop({ graceful: true, timeout: 10000 })]);
     await Promise.all([codingBusy, githubBusy]);
     while (busy) await new Promise((resolve) => setTimeout(resolve, 25));

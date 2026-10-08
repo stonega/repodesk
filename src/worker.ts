@@ -11,6 +11,7 @@ import { GitHubApps } from "./github/registry.ts";
 import { GitHubUsers } from "./github/users.ts";
 import { startWorker } from "./jobs/queue.ts";
 import { RuntimeLogger } from "./observability/logs.ts";
+import { ReviewExecutor } from "./review-bot/executor.ts";
 import { SetupService } from "./setup/service.ts";
 
 const cfg = config();
@@ -52,6 +53,14 @@ const stop = await startWorker(
     cfg.ENCRYPTION_KEY,
   ),
   new GitHubUsers(store, githubApps, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN),
+  new ReviewExecutor(
+    store,
+    githubApps,
+    cfg.CODEX_RUNNER_URL && cfg.CODEX_RUNNER_TOKEN
+      ? new LocalRunnerClient(cfg.CODEX_RUNNER_URL, cfg.CODEX_RUNNER_TOKEN)
+      : undefined,
+    cfg.ENCRYPTION_KEY,
+  ),
 );
 log.write("worker_started");
 let stopping = false;

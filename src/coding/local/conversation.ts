@@ -29,6 +29,7 @@ export async function runConversation(options: {
   images?: DevelopmentMedia["images"];
   threadId?: string;
   readOnly?: boolean;
+  protectCredentials?: boolean;
   signal?: AbortSignal;
   timeoutMs?: number;
   outputSchema?: typeof developmentOutputSchema;
@@ -276,7 +277,34 @@ export async function runConversation(options: {
     const config = {
       cwd: options.cwd,
       approvalPolicy: "never",
-      sandbox: options.readOnly ? "read-only" : "danger-full-access",
+      sandbox: options.protectCredentials
+        ? undefined
+        : options.readOnly
+          ? "read-only"
+          : "danger-full-access",
+      ...(options.protectCredentials
+        ? {
+            config: {
+              sandbox_mode: "read-only",
+              filesystem: {
+                ":root": "read",
+                "/auth": "deny",
+                "/task/codex": "deny",
+                "/task/home/.codex": "deny",
+                "/proc": "deny",
+              },
+              shell_environment_policy: {
+                inherit: "none",
+                set: {
+                  PATH: "/usr/local/bin:/usr/bin:/bin",
+                  HOME: "/task/home",
+                  LANG: "C.UTF-8",
+                },
+                projects: { [options.cwd]: { trust_level: "untrusted" } },
+              },
+            },
+          }
+        : {}),
     };
     let started: unknown;
     if (options.threadId) {
@@ -322,7 +350,9 @@ export async function runConversation(options: {
             url: `data:${image.mimeType};base64,${image.data}`,
           })),
         ],
-        ...(correction ? { sandboxPolicy: { type: "readOnly" } } : {}),
+        ...(correction && !options.protectCredentials
+          ? { sandboxPolicy: { type: "readOnly" } }
+          : {}),
         outputSchema: options.outputSchema ?? developmentOutputSchema,
       });
       turnId = z.object({ turn: z.object({ id: z.string() }) }).parse(begun)

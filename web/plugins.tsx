@@ -3,12 +3,14 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import type { PluginPage, PluginSpec } from "../src/agent/plugin-config.ts";
 import type { CodeTruthPage } from "../src/code-truth/config.ts";
 import type { CodingPage } from "../src/coding/config.ts";
+import type { ReviewPage } from "../src/review-bot/config.ts";
 import { CodeTruth } from "./code-truth.tsx";
 import { Coding } from "./coding.tsx";
 import { GitHubConnection } from "./github.tsx";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
+import { ReviewBot } from "./review-bot.tsx";
 import { SkeletonRows } from "./skeleton.tsx";
 import { useToast } from "./toast.tsx";
 
@@ -104,6 +106,7 @@ export function Plugins({
   const [builtIns, setBuiltIns] = useState<{
     codeTruth?: boolean;
     codex?: boolean;
+    reviewBot?: boolean;
   }>({});
   const path = (suffix = "") =>
     `/admin/plugins${suffix}?workspace=${encodeURIComponent(workspaceId)}`;
@@ -128,7 +131,8 @@ export function Plugins({
       view === "catalog" ||
       (view === "installed" &&
         pluginId !== "code-truth" &&
-        pluginId !== "codex")
+        pluginId !== "codex" &&
+        pluginId !== "review-bot")
     )
       void load();
   }, [load, pluginId, view]);
@@ -138,9 +142,14 @@ export function Plugins({
     void Promise.allSettled([
       request<CodeTruthPage>(`${endpoint}/code-truth`),
       request<CodingPage>(`${endpoint}/coding`),
-    ]).then(([truth, coding]) => {
+      request<ReviewPage>(`${endpoint}/review-bot`),
+    ]).then(([truth, coding, review]) => {
       if (!active) return;
       setBuiltIns({
+        reviewBot:
+          review.status === "fulfilled"
+            ? review.value.settings?.enabled
+            : undefined,
         codeTruth:
           truth.status === "fulfilled"
             ? truth.value.settings.enabled
@@ -197,8 +206,10 @@ export function Plugins({
           ? "Code Truth"
           : pluginId === "codex"
             ? "Codex"
-            : (selected?.id ??
-              (loading ? (pluginId ?? "Plugin") : "Plugin not found"));
+            : pluginId === "review-bot"
+              ? "Review Bot"
+              : (selected?.id ??
+                (loading ? (pluginId ?? "Plugin") : "Plugin not found"));
 
   return (
     <>
@@ -210,7 +221,9 @@ export function Plugins({
             Manage installed extensions and explore the Pi ecosystem.
           </p>
         </header>
-      ) : (pluginId !== "code-truth" && pluginId !== "codex") ||
+      ) : (pluginId !== "code-truth" &&
+          pluginId !== "codex" &&
+          pluginId !== "review-bot") ||
         view === "market" ? (
         <PluginDetailHeading title={heading} backTo={path()}>
           {view === "installed" && selected && data && (
@@ -299,6 +312,18 @@ export function Plugins({
                       : "Disabled"
                 }
               />
+              <PluginCard
+                to={path("/review-bot")}
+                name="Review Bot"
+                summary="Automatic PR reviews and tagged fixes."
+                status={
+                  builtIns.reviewBot === undefined
+                    ? "Built in"
+                    : builtIns.reviewBot
+                      ? "Enabled"
+                      : "Disabled"
+                }
+              />
               {data?.entries.map((entry) => (
                 <PluginCard
                   key={entry.id}
@@ -363,12 +388,21 @@ export function Plugins({
           backTo={path()}
         />
       )}
+      {view === "installed" && pluginId === "review-bot" && (
+        <ReviewBot
+          key={workspaceId}
+          request={request}
+          workspaceId={workspaceId}
+          backTo={path()}
+        />
+      )}
       {view === "installed" && pluginId === "codex" && (
         <Coding request={request} workspaceId={workspaceId} backTo={path()} />
       )}
       {view === "installed" &&
         pluginId !== "code-truth" &&
-        pluginId !== "codex" && (
+        pluginId !== "codex" &&
+        pluginId !== "review-bot" && (
           <>
             {!data && loading && !error && (
               <section className="card" aria-busy="true">

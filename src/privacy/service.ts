@@ -26,6 +26,17 @@ export function requestDeletion(w: Workspace, actor: string) {
 }
 export function sweep(w: Workspace, now = new Date()) {
   if (w.deletion) {
+    w.reviewCleanup = [
+      ...new Set([
+        ...(w.reviewCleanup ?? []),
+        ...(w.reviewTasks ?? []).flatMap((t) => [
+          ...(t.attemptIds ?? []),
+          t.attemptId,
+        ]),
+      ]),
+    ];
+    delete w.reviewTasks;
+    delete w.reviewBot;
     delete w.plugins;
     delete w.github;
     delete w.coding;

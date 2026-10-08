@@ -1,5 +1,22 @@
 # Implementation evidence
 
+## Review Bot, 2026-10-07
+
+[Review Bot](review-bot.md) is implemented locally: selected-repository automatic
+PR reviews, verified GitHub mentions, read-only answers, checked same-PR fixes,
+immediate status, cancellation, question continuation and durable reconciliation.
+Webhook secrets/receipts use migration `016_review_bot.sql`; task configuration and
+records remain tenant-scoped. Repeated events, source/permission changes, stale
+heads, branch rewinds and uncertain outcomes are covered deterministically.
+
+Biome, strict TypeScript, build, **569 deterministic tests** with disposable
+PostgreSQL and **97 browser scenarios** passed. App/job Docker builds, migration,
+API health, fake-Git PR preparation, Node 24 Pi contract and Compose validation passed.
+No live GitHub, Telegram or model call was part of these checks. The development
+host's Codex command-sandbox probe failed at bubblewrap namespace/devpts setup;
+live review acceptance requires a compatible runner. See the linked setup and
+[acceptance journeys](../../examples/review-bot.md).
+
 This dated log records local implementation and verification, including the P0
 bot/admin/worker foundation and bounded GitHub paths. Some changes were deployed to
 a local Podman stack, but the [primary GitHub journey](../design/github-workflows.md)

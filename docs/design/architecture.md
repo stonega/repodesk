@@ -82,6 +82,7 @@ conflict, never silently deleted.
 flowchart LR
   Web[Admin SPA] --> API[Hono API]
   TG[Telegram webhook] --> API
+  GHW[GitHub App webhook / Review Bot] --> API
   API --> DB[(PostgreSQL)]
   DB --> Outbox[Transactional dispatcher]
   Outbox --> Jobs[pg-boss]
@@ -283,3 +284,16 @@ without a duplicate approval click. Clarifications, check repairs and subsequent
 changes continue the same durable task/PR; session reuse must not be the only source
 of continuity. Existing issue-to-PR approvals and runner behavior above remain the
 current implementation until the corresponding delivery slices are completed.
+
+## Review Bot PR tasks
+
+The optional [Review Bot](../implementation/review-bot.md) uses the existing
+GitHub App and local Codex runner. Signed ingress commits delivery receipts and
+workspace-scoped PR jobs atomically. JSONB task records carry original inputs,
+source hashes, policy/configuration revisions, runner attempts and committed
+publication reservations. A separate worker tick claims fenced leases and
+reconciles stable-ID runner starts and unknown review/comment outcomes.
+Automatic reviews use a maintainer-owned standing policy; user tags use verified
+GitHub identities and current repository grants. Review turns remain read-only;
+fixes require verified checks and a distinct publication token. Progress and
+results return to the PR, independently of Telegram destinations.

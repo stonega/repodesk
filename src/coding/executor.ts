@@ -149,6 +149,25 @@ export class DevelopmentExecutor {
         t.error = reason(error);
       }
       if (
+        !t.cancelRequested &&
+        t.state === "queued" &&
+        t.pr &&
+        w.reviewTasks?.some(
+          (review) =>
+            review.mode === "fix" &&
+            review.payload.repositoryId === t.payload.repositoryId &&
+            review.number === t.pr?.number &&
+            [
+              "starting",
+              "running",
+              "ready",
+              "publishing",
+              "auth_required",
+            ].includes(review.state),
+        )
+      )
+        return;
+      if (
         t.cancelRequested &&
         !t.attemptId &&
         !t.contentRemoved &&

@@ -41,7 +41,7 @@ continue to return `extension_tool_failed`.
 ## Installation and grants
 
 The Plugins landing page shows compact Installed cards for built-in Code Truth,
-built-in Codex and workspace-registered file extensions. Clicking a card opens
+built-in Codex, built-in Review Bot and workspace-registered file extensions. Clicking a card opens
 its detail route, where the existing configuration and controls live. The
 Markets section links to a small, dated selection of popular packages from
 [Pi's package catalog](https://pi.dev/packages?type=extension). These are
@@ -199,3 +199,12 @@ targets. Reviewed targets retain `propose_coding_task` and Telegram approval.
 `send_development_input`, `development_task_status` and
 `cancel_development_task` handle existing continuous tasks. Live pilot validation
 remains pending.
+
+## Predefined Review Bot
+
+[Review Bot](../implementation/review-bot.md) receives authenticated GitHub App events,
+reviews selected PRs at exact commits and accepts verified maintainer tags for
+read-only answers or explicitly authorized same-PR fixes. It reuses the Codex runner
+and credentials. Its application services own standing review policy, task grants,
+repository permissions, durable publication and GitHub progress comments. It does
+not broaden the executable file-extension API or expose an arbitrary GitHub write tool.
