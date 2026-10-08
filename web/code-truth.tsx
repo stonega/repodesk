@@ -9,6 +9,7 @@ import type {
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
+import { RepositoryCard } from "./repository-card.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 import { ErrorToast, useToast } from "./toast.tsx";
 
@@ -242,43 +243,47 @@ export function CodeTruth({
             {data && settings.repositories.length === 0 && (
               <p>No repositories configured.</p>
             )}
-            {settings.repositories.map((repo, index) => (
-              <section
-                className="plugin-item"
-                key={repo.id}
-                aria-label={`Repository ${index + 1}`}
-              >
-                <div className="row">
-                  <h3>{repo.id}</h3>
-                  <IconButton
-                    icon="edit"
-                    label={`Edit repository ${index + 1}`}
-                    onClick={() => setEditingRepository(index)}
-                  />
-                  <IconButton
-                    icon="delete"
-                    label={`Remove repository ${index + 1}`}
-                    className="danger"
-                    onClick={() =>
-                      change({
-                        ...settings,
-                        repositories: settings.repositories.filter(
-                          (_, i) => i !== index,
-                        ),
-                      })
-                    }
-                  />
-                </div>
-                <p className="mono">{repo.repositoryUrl}</p>
-                <ul>
-                  {Object.entries(repo.networks).map(([network, branch]) => (
-                    <li key={network}>
-                      {network} → {branch}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ))}
+            <div className="repository-list repository-list-stacked">
+              {settings.repositories.map((repo, index) => (
+                <RepositoryCard
+                  key={repo.id}
+                  label={`Repository ${index + 1}`}
+                  name={repo.id}
+                  url={repo.repositoryUrl}
+                  actions={
+                    <>
+                      <IconButton
+                        icon="edit"
+                        label={`Edit repository ${index + 1}`}
+                        onClick={() => setEditingRepository(index)}
+                      />
+                      <IconButton
+                        icon="delete"
+                        label={`Remove repository ${index + 1}`}
+                        className="danger"
+                        onClick={() =>
+                          change({
+                            ...settings,
+                            repositories: settings.repositories.filter(
+                              (_, i) => i !== index,
+                            ),
+                          })
+                        }
+                      />
+                    </>
+                  }
+                >
+                  <p className="repository-card-note">{repo.repositoryUrl}</p>
+                  <ul>
+                    {Object.entries(repo.networks).map(([network, branch]) => (
+                      <li key={network}>
+                        {network} → {branch}
+                      </li>
+                    ))}
+                  </ul>
+                </RepositoryCard>
+              ))}
+            </div>
             <div className="row">
               <button type="submit" disabled={!dirty}>
                 Save Code Truth

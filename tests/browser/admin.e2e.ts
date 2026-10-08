@@ -1973,18 +1973,18 @@ test.describe
       await expect(
         page.getByRole("region", { name: "GitHub connection" }),
       ).toHaveCount(0);
-      await expect(manage.locator(".github-repository")).toHaveCount(5);
+      await expect(manage.getByRole("article")).toHaveCount(5);
       const more = manage.getByRole("button", { name: "8 more" });
       await expect(more).toHaveAttribute("aria-expanded", "false");
       await more.click();
-      await expect(manage.locator(".github-repository")).toHaveCount(13);
+      await expect(manage.getByRole("article")).toHaveCount(13);
       await expect(
         manage.getByRole("link", { name: "Open example/repo-13 on GitHub" }),
       ).toBeVisible();
       const less = manage.getByRole("button", { name: "Show less" });
       await expect(less).toHaveAttribute("aria-expanded", "true");
       await less.click();
-      await expect(manage.locator(".github-repository")).toHaveCount(5);
+      await expect(manage.getByRole("article")).toHaveCount(5);
       await manage.getByRole("button", { name: "Close Manage GitHub" }).click();
       await expect(manage).toHaveCount(0);
       await expect(page).toHaveURL(overviewUrl);

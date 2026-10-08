@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
-import { ArrowUpRightSquare } from "reicon-react";
 import type { GitHubRepository } from "../src/github/app.ts";
 import type { GitHubPage } from "../src/github/config.ts";
 import {
@@ -8,6 +7,7 @@ import {
   submitGitHubManifest,
 } from "./github-registration.tsx";
 import { Modal } from "./modal.tsx";
+import { RepositoryCard } from "./repository-card.tsx";
 import { Select } from "./select.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 import { useRepositoryRefresh } from "./use-repository-refresh.ts";
@@ -429,35 +429,23 @@ export function GitHubConnection({
                   Approve/Reject buttons.
                 </p>
                 <ul
-                  className="github-repositories"
+                  className="repository-list"
                   aria-label="Connected repositories"
                 >
                   {(showAllRepositories
                     ? data.connection.repositories
                     : data.connection.repositories.slice(0, 5)
                   ).map((repo) => (
-                    <li className="github-repository" key={repo.id}>
-                      <span>{repo.full_name}</span>
-                      <a
-                        className="github-repository-link"
-                        href={`https://github.com/${repo.full_name}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`Open ${repo.full_name} on GitHub`}
-                        title={`Open ${repo.full_name} on GitHub`}
-                      >
-                        <ArrowUpRightSquare
-                          size={18}
-                          weight="Outline"
-                          color="currentColor"
-                          aria-hidden="true"
-                          focusable="false"
-                        />
-                      </a>
+                    <li className="repository-list-item" key={repo.id}>
+                      <RepositoryCard
+                        compact
+                        name={repo.full_name}
+                        url={`https://github.com/${repo.full_name}`}
+                      />
                     </li>
                   ))}
                   {data.connection.repositories.length > 5 && (
-                    <li>
+                    <li className="repository-list-item">
                       <button
                         type="button"
                         className="github-repository-more"

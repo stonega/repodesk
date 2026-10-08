@@ -1,5 +1,43 @@
 # Implementation evidence
 
+## Shared repository card styling, 2026-10-08
+
+Repository summaries now reuse one card component and list styles in Members &
+access, Manage GitHub, Codex, Review Bot and Code Truth. Compact and detailed cards
+share their surface, border, corners, typography, badges and action layout. Long
+names wrap; managed cards give names the full heading width on mobile. External
+GitHub links use accessible labels and 44px targets. Existing saved details,
+New/Edit dialogs, the five-member-repository preview limit and GitHub's expandable
+connection list retain their behavior. The UI rules record this app-wide preference.
+
+Biome, strict TypeScript, production build and **611 deterministic tests** passed
+in an isolated checkout containing only these UI changes, against disposable
+PostgreSQL. **44 browser checks** passed across repository styling, member previews,
+repository search/refresh, Review Bot editing/errors and loading/recovery. New checks
+compare card styling across all five views at 1280px and 390px in light and dark
+themes, verify long names, saved details, safe links and edit/cancel behavior.
+Rendered cards were visually inspected at both widths and in both themes. The
+complete working tree also passed **619 deterministic tests** during implementation.
+No dependency, migration or deployment was added.
+
+## Compact member repository previews, 2026-10-08
+
+Members & access now shows at most five repository permission entries in each
+member's GitHub column. Lists longer than five offer Show all with the total count,
+opening the complete saved list in the shared read-only modal. Long names wrap;
+the modal scrolls, traps focus, closes with its X or Escape and returns focus to
+the triggering button. Opening it performs no additional GitHub request or write.
+Member editing and verification-pending account displays retain their existing flows.
+
+Validation: Biome and production build passed; all **619 deterministic tests**
+passed against disposable PostgreSQL. All **nine focused member browser checks**
+passed, including zero/one/five/six-entry boundaries, a 60-repository list, permission
+labels, keyboard behavior, member editing and lookup failure recovery. Preview and
+modal rendering, including the final long repository name, were visually inspected
+at 1280px and 390px. Full typechecking remains blocked by an unrelated unresolved
+`advanced` reference in the concurrently edited `web/model-providers.tsx`. No
+dependency, migration or deployment was added.
+
 ## Telegram PR controls, 2026-10-08
 
 Reviewed and Direct coding task messages with a confirmed PR now use native

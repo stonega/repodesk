@@ -67,6 +67,7 @@ import { GitHubConnection, GitHubSetup } from "./github.tsx";
 import { GitHubMemberField } from "./github-member-field.tsx";
 import { type ActionIcon, IconButton } from "./icon-button.tsx";
 import { RuntimeLogs } from "./logs.tsx";
+import { MemberRepositories } from "./member-repositories.tsx";
 import { CreateModal, Modal, ModalActions, ModalPending } from "./modal.tsx";
 import { Plugins } from "./plugins.tsx";
 import { prefixFields, RecordForm } from "./record-form.tsx";
@@ -2355,20 +2356,11 @@ function MembersPage({ id }: { id: string }) {
                             {m.github.status} · Synced{" "}
                             {new Date(m.github.syncedAt).toLocaleString()}
                           </div>
-                          {m.github.repositories.map((r) => (
-                            <div key={r.id}>
-                              {r.full_name} ·{" "}
-                              {r.permissions?.admin
-                                ? "Admin"
-                                : r.permissions?.maintain
-                                  ? "Maintain"
-                                  : r.permissions?.push
-                                    ? "Write"
-                                    : r.permissions?.triage
-                                      ? "Triage"
-                                      : "Read"}
-                            </div>
-                          ))}
+                          <MemberRepositories
+                            key={m.github.id}
+                            login={m.github.login}
+                            repositories={m.github.repositories}
+                          />
                         </>
                       ) : m.githubAccount ? (
                         <>

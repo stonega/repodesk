@@ -75,6 +75,13 @@ Escape output content; do not render generated HTML as trusted UI.
 
 ## Configuration behavior
 
+Repository summaries use the same shared card frame in Members & access, Manage
+GitHub, Codex, Review Bot and Code Truth: a muted surface, subtle border, rounded
+corners, wrapping names, compact badges and a common action area. Compact lists
+and cards with saved policy details share that styling. External repository links
+have accessible names and 44px targets; New/Edit remains separate from saved
+display. Member previews retain five entries and open the complete list in a modal.
+
 Plugin detail pages show saved configuration as labels, values and statuses.
 Review Bot lists repository policies with New in the section heading and Edit
 on each saved record. New and Edit open a repository dialog; the normal display

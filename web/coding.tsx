@@ -6,6 +6,7 @@ import { codingStatusLabel } from "../src/coding/feedback.ts";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
+import { RepositoryCard } from "./repository-card.tsx";
 import { RepositorySelect } from "./repository-select.tsx";
 import { Select } from "./select.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
@@ -449,50 +450,63 @@ export function Coding({
         {data && !data.settings.repositories.length && (
           <p>No coding repositories configured.</p>
         )}
-        {data?.settings.repositories.map((repo) => (
-          <div className="coding-repository" key={repo.repositoryId}>
-            <div>
-              <strong>
-                {data.repositories.find((r) => r.id === repo.repositoryId)
-                  ?.full_name ??
-                  `Repository ${repo.repositoryId} (disconnected)`}
-              </strong>
-              <p>
-                Base: <code>{repo.baseBranch}</code> · Maintainers:{" "}
-                {repo.maintainers.join(", ")}
-              </p>
-            </div>
-            <div className="row">
-              <IconButton
-                icon="edit"
-                label={`Edit coding repository ${repo.repositoryId}`}
-                disabled={busy || loading}
-                onClick={() => {
-                  setError("");
-                  setEditing(structuredClone(repo));
-                }}
-              />
-              <IconButton
-                icon="delete"
-                label={`Remove coding repository ${repo.repositoryId}`}
-                disabled={busy || loading}
-                onClick={() => {
-                  if (
-                    confirm(
-                      "Remove this coding repository? Active tasks will receive cancellation requests.",
-                    )
-                  )
-                    void save({
-                      ...data.settings,
-                      repositories: data.settings.repositories.filter(
-                        (r) => r.repositoryId !== repo.repositoryId,
-                      ),
-                    });
-                }}
-              />
-            </div>
-          </div>
-        ))}
+        <div className="repository-list repository-list-stacked">
+          {data?.settings.repositories.map((repo) => {
+            const repository = data.repositories.find(
+              (r) => r.id === repo.repositoryId,
+            );
+            return (
+              <RepositoryCard
+                key={repo.repositoryId}
+                name={
+                  repository?.full_name ??
+                  `Repository ${repo.repositoryId} (disconnected)`
+                }
+                url={
+                  repository
+                    ? `https://github.com/${repository.full_name}`
+                    : undefined
+                }
+                actions={
+                  <>
+                    <IconButton
+                      icon="edit"
+                      label={`Edit coding repository ${repo.repositoryId}`}
+                      disabled={busy || loading}
+                      onClick={() => {
+                        setError("");
+                        setEditing(structuredClone(repo));
+                      }}
+                    />
+                    <IconButton
+                      icon="delete"
+                      label={`Remove coding repository ${repo.repositoryId}`}
+                      disabled={busy || loading}
+                      onClick={() => {
+                        if (
+                          confirm(
+                            "Remove this coding repository? Active tasks will receive cancellation requests.",
+                          )
+                        )
+                          void save({
+                            ...data.settings,
+                            repositories: data.settings.repositories.filter(
+                              (r) => r.repositoryId !== repo.repositoryId,
+                            ),
+                          });
+                      }}
+                    />
+                  </>
+                }
+              >
+                <p className="repository-card-note">
+                  Base: <code>{repo.baseBranch}</code> · Maintainers:{" "}
+                  {repo.maintainers.join(", ")}
+                </p>
+              </RepositoryCard>
+            );
+          })}
+        </div>
       </section>
       <section
         className="card"

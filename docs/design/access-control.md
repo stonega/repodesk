@@ -143,7 +143,9 @@ See [account selection and App permissions](../implementation/github-app.md#fetc
 
 Active members can link GitHub through `/github connect` in private Telegram,
 then confirm the account in Telegram. Stable GitHub numeric IDs and repository
-permission snapshots are stored per member and shown in Members & access.
+permission snapshots are stored per member and shown in Members & access. Each
+GitHub summary shows up to five repositories with permission labels; when there
+are more, Show all opens the complete saved list in a read-only modal.
 The OAuth callback alone grants nothing. Repository grants intersect GitHub user
 access with the operator-selected installation repositories. Membership, roles,
 coding-maintainer grants and write approvals remain independent application checks.

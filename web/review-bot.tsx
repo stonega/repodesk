@@ -7,6 +7,7 @@ import type {
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
+import { RepositoryCard } from "./repository-card.tsx";
 import { RepositorySelect } from "./repository-select.tsx";
 import { Select } from "./select.tsx";
 import { SkeletonRows } from "./skeleton.tsx";
@@ -283,81 +284,74 @@ export function ReviewBot({
               : "Enable Codex and configure a repository and maintainer to get started."}
           </p>
         ) : (
-          page.settings.repositories.map((target) => {
-            const repository = page.repositories.find(
-              (repository) => repository.id === target.repositoryId,
-            );
-            const name =
-              repository?.full_name ?? `Repository ${target.repositoryId}`;
-            const reviewer = repository?.maintainers.find(
-              (maintainer) => maintainer.id === target.reviewer,
-            );
-            return (
-              <article
-                className="review-repository"
-                aria-label={name}
-                key={target.repositoryId}
-              >
-                <div className="plugin-card-heading">
-                  <h3>
-                    {repository ? (
-                      <a
-                        href={`https://github.com/${repository.full_name}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {name}
-                      </a>
-                    ) : (
-                      name
-                    )}
-                  </h3>
-                  <div className="row">
-                    <IconButton
-                      icon="edit"
-                      label={`Edit ${name}`}
-                      disabled={busy}
-                      onClick={() => openEditor(target, target.repositoryId)}
-                    />
-                    <IconButton
-                      icon="delete"
-                      label={`Remove ${name}`}
-                      disabled={busy}
-                      onClick={() => {
-                        setError("");
-                        setRemoving({
-                          target,
-                          settings: page.settings,
-                          revision: page.revision,
-                        });
-                      }}
-                    />
-                  </div>
-                </div>
-                <dl className="plugin-summary">
-                  <div>
-                    <dt>Automatic review owner</dt>
-                    <dd>
-                      {reviewer?.name ??
-                        `Unavailable maintainer (${target.reviewer})`}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Automatic reviews</dt>
-                    <dd>{target.autoReview ? "Enabled" : "Disabled"}</dd>
-                  </div>
-                  <div>
-                    <dt>Tagged requests</dt>
-                    <dd>{target.acceptRequests ? "Enabled" : "Disabled"}</dd>
-                  </div>
-                  <div>
-                    <dt>Requested fixes</dt>
-                    <dd>{target.allowFixes ? "Allowed" : "Disabled"}</dd>
-                  </div>
-                </dl>
-              </article>
-            );
-          })
+          <div className="repository-list repository-list-stacked">
+            {page.settings.repositories.map((target) => {
+              const repository = page.repositories.find(
+                (repository) => repository.id === target.repositoryId,
+              );
+              const name =
+                repository?.full_name ?? `Repository ${target.repositoryId}`;
+              const reviewer = repository?.maintainers.find(
+                (maintainer) => maintainer.id === target.reviewer,
+              );
+              return (
+                <RepositoryCard
+                  name={name}
+                  url={
+                    repository
+                      ? `https://github.com/${repository.full_name}`
+                      : undefined
+                  }
+                  key={target.repositoryId}
+                  actions={
+                    <>
+                      <IconButton
+                        icon="edit"
+                        label={`Edit ${name}`}
+                        disabled={busy}
+                        onClick={() => openEditor(target, target.repositoryId)}
+                      />
+                      <IconButton
+                        icon="delete"
+                        label={`Remove ${name}`}
+                        disabled={busy}
+                        onClick={() => {
+                          setError("");
+                          setRemoving({
+                            target,
+                            settings: page.settings,
+                            revision: page.revision,
+                          });
+                        }}
+                      />
+                    </>
+                  }
+                >
+                  <dl className="plugin-summary">
+                    <div>
+                      <dt>Automatic review owner</dt>
+                      <dd>
+                        {reviewer?.name ??
+                          `Unavailable maintainer (${target.reviewer})`}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Automatic reviews</dt>
+                      <dd>{target.autoReview ? "Enabled" : "Disabled"}</dd>
+                    </div>
+                    <div>
+                      <dt>Tagged requests</dt>
+                      <dd>{target.acceptRequests ? "Enabled" : "Disabled"}</dd>
+                    </div>
+                    <div>
+                      <dt>Requested fixes</dt>
+                      <dd>{target.allowFixes ? "Allowed" : "Disabled"}</dd>
+                    </div>
+                  </dl>
+                </RepositoryCard>
+              );
+            })}
+          </div>
         )}
       </section>
       <section className="card">
