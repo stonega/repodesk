@@ -23,7 +23,6 @@ import {
 } from "../domain.ts";
 import type { GitHubMember } from "../github/app.ts";
 import { assignGitHubAccount } from "../github/member-account.ts";
-import { repositoryAccess } from "../github/user-access.ts";
 import { reconcileCharge, resolveDelivery } from "../jobs/recovery.ts";
 import { logQuery, readRuntimeLogs } from "../observability/logs.ts";
 import { requestDeletion } from "../privacy/service.ts";
@@ -53,6 +52,11 @@ import { createRun, visibleRuns } from "../workspaces/service.ts";
 import { claim, login, operator, session, throttle } from "./auth.ts";
 import { runSummaries } from "./run-history.ts";
 import { deploymentOrigin, SiteService } from "./site.ts";
+import {
+  visibleWorkflows,
+  workflowMetadata,
+  workflowRepositories,
+} from "./workflow-view.ts";
 
 type Env = { Variables: { session: Session } };
 const sessionCookie = "repodesk_session";
@@ -71,13 +75,6 @@ const workspaceActor = (w: Workspace, admin: Admin) => {
     return admin.id;
   return authorize(w, admin.telegramId, true);
 };
-const visibleWorkflows = (w: Workspace, actor: string) =>
-  w.workflows.filter(
-    (f) =>
-      f.status !== "deleted" &&
-      (f.owner === actor ||
-        w.chats.some((chat) => chat.id === f.spec.chatId && chat.active)),
-  );
 
 import type { GitHubService } from "../github/service.ts";
 
@@ -725,7 +722,7 @@ export function adminRoutes(
         ) ||
           (c.req.method === "GET" &&
             (/^runs(?:\/[^/]+)?$/.test(resource) ||
-              (!admin.telegramId && resource === "workflows"))),
+              (!admin.telegramId && /^workflows(?:\/[^/]+)?$/.test(resource)))),
         "access_denied",
         403,
       );
@@ -820,33 +817,12 @@ export function adminRoutes(
             ...take(
               w.workflows
                 .filter((f) => f.status !== "deleted")
-                .map((f) => ({
-                  id: f.id,
-                  name: f.spec.name,
-                  owner: f.owner,
-                  status: f.status,
-                  version: f.version,
-                  recurrence: f.spec.recurrence,
-                  budgetUsd: f.spec.budgetUsd,
-                  next: nextOccurrences(f.spec.recurrence, new Date()),
-                  reason: f.reason,
-                })),
+                .map((f) => workflowMetadata(f)),
             ),
           });
         return c.json({
           mode: "member",
-          repositorySources: {
-            revision: w.github?.revision ?? 0,
-            repositories: w.github?.installationId
-              ? w.github.repositories
-                  .filter((repo) => repositoryAccess(w, actor, repo.id))
-                  .map((repo) => ({
-                    id: repo.id,
-                    full_name: repo.full_name,
-                    private: repo.private,
-                  }))
-              : [],
-          },
+          repositorySources: workflowRepositories(w, actor),
           ...take(
             visibleWorkflows(w, actor).map((f) => ({
               ...f,
@@ -1067,6 +1043,26 @@ export function adminRoutes(
       audit(w, actor, `chat.${input.action}`, id);
     });
     return c.json({ ok: true });
+  });
+  app.get("/api/admin/workspaces/:id/workflows/:workflow", async (c) => {
+    const w = await store.read(validId(c.req.param("id")));
+    const actor = workspaceActor(w, c.get("session").admin);
+    const id = validId(c.req.param("workflow"));
+    const operatorView = actor === w.operatorId;
+    const workflow = (
+      operatorView ? w.workflows : visibleWorkflows(w, actor)
+    ).find((f) => f.id === id && f.status !== "deleted");
+    requireThat(workflow, "not_found", 404);
+    if (operatorView)
+      return c.json({ mode: "operator", workflow: workflowMetadata(workflow) });
+    return c.json({
+      mode: "member",
+      workflow: {
+        ...workflow,
+        next: nextOccurrences(workflow.spec.recurrence, new Date()),
+      },
+      repositorySources: workflowRepositories(w, actor),
+    });
   });
   app.post("/api/admin/workspaces/:id/workflows", async (c) => {
     const input = workflowSchema.parse(await c.req.json());

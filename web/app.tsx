@@ -24,6 +24,10 @@ import {
 } from "react-router";
 import { Check, ChevronLeft, Refresh, Search } from "reicon-react";
 import type { RunHistoryPage, RunSummary } from "../src/admin/run-history.ts";
+import type {
+  WorkflowCollection,
+  WorkflowDetail,
+} from "../src/admin/workflow-view.ts";
 import {
   type ModelCapabilities,
   type ModelLimits,
@@ -74,6 +78,7 @@ import { SuggestionInput } from "./suggestion-input.tsx";
 import { ThemeSwitch } from "./theme-switch.tsx";
 import { ToastProvider, useToast } from "./toast.tsx";
 import { Usage } from "./usage.tsx";
+import { WorkflowSummary } from "./workflow-summary.tsx";
 import "./style.css";
 import { SiteDomain } from "./site-domain.tsx";
 
@@ -2632,33 +2637,42 @@ function ApprovalList({
     </section>
   );
 }
-function WorkflowsPage({ id }: { id: string }) {
-  const { data, error, reload, loading } = useData<
-    | {
-        mode: "member";
-        items: (Workflow & { next: string[] })[];
-        repositorySources?: {
-          revision: number;
-          repositories: { id: number; full_name: string }[];
-        };
-        total: number;
-      }
-    | {
-        mode: "operator";
-        items: {
-          id: string;
-          name: string;
-          owner: string;
-          status: Workflow["status"];
-          version: number;
-          recurrence: Workflow["spec"]["recurrence"];
-          budgetUsd: number;
-          next: string[];
-          reason?: string;
-        }[];
-        total: number;
-      }
-  >(`/api/admin/workspaces/${id}/workflows`);
+function WorkflowDetailRoute({ id }: { id: string }) {
+  const { workflowId = "" } = useParams();
+  return (
+    <WorkflowsPage key={id + workflowId} id={id} workflowId={workflowId} />
+  );
+}
+function WorkflowsPage({
+  id,
+  workflowId,
+}: {
+  id: string;
+  workflowId?: string;
+}) {
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const backParams = new URLSearchParams(params);
+  backParams.set("workspace", id);
+  const listUrl = `/admin/workflows?${backParams.toString()}`;
+  const detailUrl = (workflow: string) =>
+    `/admin/workflows/${encodeURIComponent(workflow)}?${backParams.toString()}`;
+  const {
+    data: response,
+    error,
+    reload,
+    loading,
+  } = useData<WorkflowCollection | WorkflowDetail>(
+    `/api/admin/workspaces/${id}/workflows${workflowId ? `/${encodeURIComponent(workflowId)}` : ""}`,
+  );
+  const data: WorkflowCollection | undefined =
+    !error && response
+      ? "workflow" in response
+        ? response.mode === "member"
+          ? { ...response, items: [response.workflow], total: 1 }
+          : { ...response, items: [response.workflow], total: 1 }
+        : response
+      : undefined;
   const memberData = data?.mode === "member" ? data : undefined;
   const repositorySources = memberData?.repositorySources ?? {
     revision: 0,
@@ -2694,11 +2708,11 @@ function WorkflowsPage({ id }: { id: string }) {
   };
   return (
     <Page
-      title="Scheduled workflows"
+      title={workflowId ? "Workflow details" : "Scheduled workflows"}
       description="Daily and weekly schedules use the displayed timezone. Late runs over five minutes are skipped; daylight-saving gaps are skipped and repeated times run once."
       actions={
         <>
-          {memberData && (
+          {memberData && !workflowId && (
             <IconButton
               icon="add"
               label="Add workflow"
@@ -2713,8 +2727,29 @@ function WorkflowsPage({ id }: { id: string }) {
         </>
       }
     >
-      {error && <Notice error>{error}</Notice>}
-      <Pager data={data} />
+      {error && (
+        <Notice error>
+          {workflowId && error === "not_found"
+            ? "Workflow not found or no longer available."
+            : error}
+        </Notice>
+      )}
+      {workflowId ? (
+        <p>
+          <Link className="page-back-link" to={listUrl}>
+            <ChevronLeft
+              size={18}
+              weight="Outline"
+              color="currentColor"
+              aria-hidden="true"
+            />
+            Back to Workflows
+          </Link>
+        </p>
+      ) : (
+        <Pager data={data} />
+      )}
+      {loading && !data && <SkeletonRows label="Workflows" />}
       {operatorData && (
         <p className="muted">
           Workspace schedule details are read-only here. Link your Telegram
@@ -2725,39 +2760,77 @@ function WorkflowsPage({ id }: { id: string }) {
         <section className="card">No scheduled workflows yet.</section>
       )}
       {operatorData?.items.map((f) => (
-        <section className="card" key={f.id}>
+        <section className="card workflow-card" key={f.id}>
           <div className="row">
-            <h2>{f.name}</h2>
+            <h2>
+              {workflowId ? (
+                f.name
+              ) : (
+                <Link className="workflow-title-link" to={detailUrl(f.id)}>
+                  {f.name}
+                </Link>
+              )}
+            </h2>
             <span className="pill">{f.status}</span>
           </div>
-          <p className="mono">{f.id}</p>
-          <p>
-            Owner {f.owner} · Version {f.version} · Budget ${f.budgetUsd}/run
-          </p>
-          <p>
-            {f.recurrence.frequency} at{" "}
-            {String(f.recurrence.hour).padStart(2, "0")}:
-            {String(f.recurrence.minute).padStart(2, "0")}{" "}
-            {f.recurrence.timezone}
-          </p>
-          {f.next.length > 0 && <p>Next: {f.next.join(" · ")}</p>}
-          {f.reason && <p className="muted">{f.reason}</p>}
+          <WorkflowSummary workflow={f} detail={!!workflowId} />
         </section>
       ))}
       {memberData?.items.map((f) => (
-        <section className="card" key={f.id}>
+        <section className="card workflow-card" key={f.id}>
           <div className="row">
-            <h2>{f.spec.name}</h2>
+            <h2>
+              {workflowId ? (
+                f.spec.name
+              ) : (
+                <Link className="workflow-title-link" to={detailUrl(f.id)}>
+                  {f.spec.name}
+                </Link>
+              )}
+            </h2>
             <span className="pill">{f.status}</span>
           </div>
-          <p>
-            Owner {f.owner} · Version {f.version} · Skill v{f.skillVersion}
-          </p>
-          <p>Next: {f.next.join(" · ")}</p>
-          <p>
-            Source/destination {f.spec.chatId}, topic {f.spec.topicId} · $
-            {f.spec.budgetUsd}/run
-          </p>
+          <WorkflowSummary
+            workflow={{
+              ...f,
+              name: f.spec.name,
+              recurrence: f.spec.recurrence,
+              budgetUsd: f.spec.budgetUsd,
+            }}
+            detail={!!workflowId}
+          />
+          {workflowId && (
+            <>
+              <h3>Task</h3>
+              <p className="workflow-text">{f.spec.task}</p>
+              <h3>Output format</h3>
+              <p className="workflow-text">
+                {f.spec.format || "No format specified."}
+              </p>
+              <dl className="workflow-summary">
+                <div>
+                  <dt>Source / destination (Telegram)</dt>
+                  <dd>
+                    {f.spec.chatId}
+                    <small>Topic {f.spec.topicId}</small>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Context window</dt>
+                  <dd>{f.spec.windowDays} days</dd>
+                </div>
+                <div>
+                  <dt>Skill</dt>
+                  <dd>
+                    {skills.data?.items.find(
+                      (skill) => skill.id === f.spec.skillId,
+                    )?.draft.name ?? f.spec.skillId}
+                    <small>Pinned version {f.skillVersion}</small>
+                  </dd>
+                </div>
+              </dl>
+            </>
+          )}
           {f.spec.github && (
             <p>
               Repositories:{" "}
@@ -2798,7 +2871,8 @@ function WorkflowsPage({ id }: { id: string }) {
                     "POST",
                     { version: f.version, action },
                   );
-                  reload();
+                  if (workflowId && action === "delete") navigate(listUrl);
+                  else reload();
                 }}
               >
                 {action}
@@ -4573,6 +4647,10 @@ function Shell() {
                   replace
                 />
               }
+            />
+            <Route
+              path="/admin/workflows/:workflowId"
+              element={chosen ? <WorkflowDetailRoute id={chosen} /> : <Setup />}
             />
             <Route
               path="/admin/runs/:runId"
