@@ -1,0 +1,24 @@
+name: repodesk-actions-runner
+services:
+  runner:
+    build: .
+    image: repodesk-actions-runner:local
+    # Docker-in-Docker requires privilege, but has its own socket, data and network.
+    privileged: true
+    init: true
+    restart: unless-stopped
+    cpus: 2
+    mem_limit: 4g
+    stop_grace_period: 2m
+    volumes:
+      - runner:/opt/actions-runner
+      - docker:/var/lib/docker
+    healthcheck:
+      test: [CMD-SHELL, "docker info >/dev/null 2>&1 && pgrep -u runner -f Runner.Listener >/dev/null"]
+      start_period: 2m
+      interval: 15s
+      timeout: 5s
+      retries: 4
+volumes:
+  runner:
+  docker:

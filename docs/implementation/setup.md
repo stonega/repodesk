@@ -310,6 +310,19 @@ set `NO_PROXY=localhost,127.0.0.1` for tests (including the local model HTTP fix
 
 GitHub's **Verify** workflow runs quality/database checks, four browser shards,
 application/Code Truth container checks, and Codex lifecycle smoke checks concurrently.
+All verification, release deployment and Codex diagnostics jobs target self-hosted
+Linux x64 runners with the labels `self-hosted`, `linux` and `x64`. Register an
+online runner available to this repository before running these workflows. Use an
+Ubuntu host with Git, Bash, Node 24, Docker Engine and Compose v2, with Docker access
+without interactive sudo. Browser jobs also need noninteractive sudo to install
+Chromium system dependencies; the workflows install Bun themselves.
+
+Give each runner its own host or isolated Docker daemon: verification uses fixed
+localhost ports 5432 and 3000, image tags and a disposable Compose project. Multiple
+runner agents sharing those resources can conflict. Parallel execution requires
+multiple available runners; a single runner queues the jobs and runs them serially.
+For the existing VPS, use the [dedicated Actions runner deployment](self-hosted-runner.md)
+with its own Docker daemon and network so verification does not share production ports.
 Each browser shard uses one worker and its own PostgreSQL service, preserving serial
 test groups and avoiding shared fixture state. The final `checks` job requires every
 job to succeed, including when verification is called by the release workflow.
@@ -323,7 +336,7 @@ took 7m08s, including 2m40s for browser tests and 1m39s for Codex image builds/s
 The target is about two minutes with warm caches and available runners; fresh caches,
 dependency updates and runner queues can take longer. Confirm actual wall time in
 GitHub after the workflow lands.
-Parallel jobs reduce waiting time but can increase total billed runner minutes.
+Parallel jobs reduce waiting time but require more self-hosted runner capacity.
 
 The skill **Test draft policy** control is a deterministic validation/preview,
 not a claim that a live model obeyed the skill. The Pi fake-provider tests exercise

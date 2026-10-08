@@ -10,7 +10,7 @@ permissions:
 jobs:
   quality:
     name: Quality and database tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 10
     services:
       postgres:
@@ -41,7 +41,7 @@ jobs:
 
   browser:
     name: Browser (${{ matrix.shard }}/4)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 10
     strategy:
       fail-fast: false
@@ -73,7 +73,7 @@ jobs:
 
   containers:
     name: Application and Code Truth containers
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 10
     env:
       POSTGRES_PASSWORD: ci-only
@@ -119,7 +119,7 @@ jobs:
 
   codex:
     name: Codex task and account lifecycle
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 10
     env:
       NO_PROXY: localhost,127.0.0.1
@@ -155,7 +155,7 @@ jobs:
   checks:
     if: ${{ always() }}
     needs: [quality, browser, containers, codex]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - name: Require every verification job to pass
         env:

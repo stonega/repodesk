@@ -13,8 +13,9 @@ private token; workspace users only enable the plugin and connect their account.
 It does not deploy the optional Code Truth service or the local Podman overlay.
 Use a dedicated stack; do not point it at an existing local Podman installation. The VPS must be Linux x86_64 with Docker Engine, Compose v2
 (supporting `up --wait`), Bash, gzip, `sha256sum` and `flock`, and enough disk for the loaded
-images, release archive and database backup. The GitHub-hosted runner must be able
-to reach its SSH port. The deploy user needs Docker access without interactive sudo.
+images, release archive and database backup. The self-hosted Linux x64 Actions runner
+must meet the [workflow prerequisites](setup.md) and be able to reach the VPS's SSH
+port. The deploy user needs Docker access without interactive sudo.
 
 ## Provision the host once
 
