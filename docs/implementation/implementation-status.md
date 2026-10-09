@@ -1,9 +1,35 @@
 # Implementation evidence
 
+## Mobile admin navigation and version placement (2026-10-09)
+
+At widths up to 800px, the admin shell shows a compact persistent header and
+opens navigation in a scrollable left-side sheet. It reuses the shared modal's
+focus boundary, Escape handling and plain X; backdrop taps, navigation and
+workspace selection dismiss it. Desktop keeps its persistent sidebar. Resizing
+back to mobile starts with the sheet closed. Workspace permissions, account
+controls and update authorization remain enforced by the existing flows.
+
+The mobile admin version and update indicator sit at the header's right edge,
+clear of page content. Mobile sign-in/setup use a normal-flow footer; desktop
+retains the bottom-right label. Both use the same version and update portal.
+
+Deterministic browser coverage in `sidebar.e2e.ts` exercises 320px, 390px, 800px
+and desktop layouts, focus/dismissal, workspace selection, short-screen scrolling,
+empty workspaces, restricted navigation and page loading/error states. Account
+tests open the mobile sheet before exercising its controls. The sign-out fixture
+covers pending dismissal locks, visible failures and retry; error text wraps
+below the identity/actions without squeezing the username into a narrow column.
+Verification uses
+`bash scripts/verify-skills.sh quality` and
+all three `bash scripts/verify-skills.sh release-N-browser` phases (`N` = 1, 2, 3);
+these prepare dependencies and
+disposable PostgreSQL without model or GitHub credentials. Physical mobile
+browsers and deployment are outside these local checks.
+
 ## GitHub release checks and host updates (2026-10-09)
 
 Signed-in pages check the configured repository's latest stable release and show
-an arrow after the bottom-right version when a newer numeric version is available.
+an arrow after the version label when a newer numeric version is available.
 The shared modal shows formatted changelog/update notes and an operator-only
 Update now action. Installation queues an atomic host request after checking
 release identity, notes, commit, session/origin/CSRF and updater heartbeat. Durable

@@ -173,7 +173,27 @@ when implementing or reviewing a change.
 - **Scope:** Shared web page shell, including admin, sign-in and setup pages.
 - **Source:** 2026-10-06 — user requested adding a version number at the right
   bottom of the page.
-- **Exceptions:** Toasts and dialogs may cover the label while open.
+- **Source update:** 2026-10-09 — the mobile-sidebar retry also requested improving
+  the version-label position on mobile. The mobile admin header's right edge is
+  the chosen placement, keeping the label and update action clear of page content.
+- **Exceptions:** At mobile widths, admin pages put the version in the persistent
+  header; sign-in and setup put it in a normal-flow footer. Desktop retains the
+  bottom-right label. Toasts and dialogs may cover the label while open.
+
+### Mobile navigation opens as a left-side sheet
+
+- **Preference:** Keep mobile page content immediately visible. Open sidebar
+  navigation from a menu button as a left-side sheet over the page, with a dimmed
+  backdrop, rather than stacking navigation above the content. Keep workspace,
+  navigation and account controls together and scrollable on short screens.
+- **Scope:** Signed-in admin navigation at widths up to 800px. Reuse the shared
+  modal focus boundary, plain X close control and themed surfaces. Escape,
+  backdrop taps, route changes and workspace selection dismiss the sheet.
+- **Source:** 2026-10-09 — retry of “improve the sidebar on mobile， work as a
+  left side sheet, not on top” and “Also the version label position on mobile”.
+- **Exceptions:** Desktop retains its persistent sidebar. Sign-in and guided
+  setup retain their existing layouts. The sheet is navigation, not a record
+  editor, and has no Save/Cancel action row.
 
 ### Available updates open release notes from the version indicator
 
@@ -181,7 +201,7 @@ when implementing or reviewing a change.
   immediately after the application version. Clicking it opens a modal containing
   the changelog, update notes and an explicit update action.
 - **Scope:** Shared signed-in admin/setup shell at desktop and mobile widths.
-  Preserve the muted bottom-right version and shared modal close, focus, pending
+  Preserve the muted responsive version placement and shared modal close, focus, pending
   lock and primary-action-then-Cancel behavior.
 - **Source:** 2026-10-09 — user requested automatic GitHub release checks, an
   indicator after the version and a modal to update with changelogs/update notes.

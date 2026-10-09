@@ -1387,6 +1387,18 @@ pre {
 .account-identity > .action {
   flex: 0 0 auto;
 }
+.account:has(.notice) {
+  align-items: start;
+}
+.account-identity:has(.notice) {
+  flex-wrap: wrap;
+}
+.account-identity > .action:has(.notice) {
+  display: contents;
+}
+.account-identity .notice {
+  flex-basis: 100%;
+}
 details {
   margin: 15px 0;
 }
@@ -1781,10 +1793,40 @@ aside .field > span {
 }
 @media (max-width: 800px) {
   .app-version {
-    right: max(8px, env(safe-area-inset-right));
+    position: static;
+    justify-content: flex-end;
+    padding: 8px max(16px, env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom));
+  }
+  body:has(.mobile-header) .app-version {
+    position: fixed;
+    top: env(safe-area-inset-top, 0px);
+    right: max(12px, env(safe-area-inset-right));
+    bottom: auto;
+    height: 64px;
+    padding: 0;
+    z-index: 10;
+  }
+  .mobile-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: calc(64px + env(safe-area-inset-top, 0px));
+    padding: env(safe-area-inset-top, 0px) 112px 0
+      max(12px, env(safe-area-inset-left));
+    background: var(--ui-surface);
+    border-bottom: 1px solid var(--ui-border);
+  }
+  .mobile-brand {
+    font-size: 18px;
+    font-weight: 650;
   }
   .layout {
     grid-template-columns: 1fr;
+    align-content: start;
   }
   aside {
     position: relative;
@@ -1874,6 +1916,47 @@ aside .field > span {
   }
   .auth-content {
     padding: 24px;
+  }
+  .navigation-sheet {
+    inset: 0 auto 0 0;
+    margin: 0;
+    width: min(320px, calc(100% - 48px));
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    padding: max(12px, env(safe-area-inset-top)) 16px
+      max(8px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    border: 0;
+    border-right: 1px solid var(--ui-border);
+    border-radius: 0 16px 16px 0;
+  }
+  .navigation-sheet[open] {
+    display: flex;
+    flex-direction: column;
+  }
+  .navigation-sheet .modal-heading {
+    margin-bottom: 12px;
+  }
+  .navigation-sheet .modal-fields {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+  .navigation-sheet aside {
+    width: 100%;
+    padding: 0;
+    border: 0;
+    overscroll-behavior: contain;
+  }
+  .navigation-sheet nav {
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+  .navigation-sheet nav a {
+    min-height: 44px;
+  }
+  .navigation-sheet .account {
+    margin-top: auto;
   }
 }
 

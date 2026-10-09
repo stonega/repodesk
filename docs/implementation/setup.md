@@ -66,7 +66,11 @@ with AES-256-GCM; the database does not contain the runtime encryption key.
 `GET /healthz` reports process liveness. `GET /readyz` also requires a recent
 worker heartbeat. `/admin/*` deep links load the SPA; `/api/*` failures remain JSON.
 
-The web pages show the application version at the bottom right. The build reads
+The web pages show the application version at the bottom right on desktop.
+Mobile admin pages keep it in the header beside the navigation menu; mobile
+sign-in and setup use a normal-flow footer. The menu opens a scrollable left-side
+sheet; close it with the X, Escape, a backdrop tap, or a navigation selection.
+The build reads
 it from `package.json`; update its `version` when preparing a release and rebuild
 the assets or Docker image to display the new version.
 Signed-in pages check GitHub releases automatically. A newer release adds an arrow

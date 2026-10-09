@@ -44,6 +44,12 @@ async function fixture(page: Page) {
   await page.getByLabel("Username", { exact: true }).fill(username);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin$/);
+  await expect(
+    page.getByRole("heading", { name: "Your team, in view", exact: true }),
+  ).toBeVisible();
+  if ((page.viewportSize()?.width ?? 1280) <= 800)
+    await page.getByRole("button", { name: "Open navigation" }).click();
   await expect(
     page.getByRole("button", { name: "Workspace", exact: true }),
   ).toBeVisible();
