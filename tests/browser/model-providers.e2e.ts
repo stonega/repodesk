@@ -30,6 +30,8 @@ async function fixture(page: Page) {
       "INSERT INTO admins(id,username,password_hash,operator) VALUES($1,$2,$3,true)",
       [operatorId, username, await passwordHash(password)],
     );
+    // A fresh shard must show sign-in without relying on earlier setup tests.
+    await pool.query("UPDATE deployment SET claimed=true WHERE id=true");
     for (const item of [w, sibling])
       await pool.query(
         "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",

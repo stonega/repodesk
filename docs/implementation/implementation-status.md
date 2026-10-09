@@ -1,5 +1,21 @@
 # Implementation evidence
 
+## Independent model-provider browser fixtures, 2026-10-09
+
+The model-provider browser fixture now marks its disposable deployment claimed
+after inserting its administrator. Previously, a fresh CI shard displayed the
+first-run Create administrator form while the tests waited for Sign in; a full
+local browser run hid this dependency on earlier setup tests. The original
+[Browser (3/4) failure](https://github.com/stonega/repodesk/actions/runs/37883870995/job/113669400138)
+was reproduced with one test against fresh PostgreSQL. All six affected tests now
+pass as a standalone file at 1280px and 390px. Application behavior, dependencies
+and deployment configuration are unchanged.
+
+Validation: Biome, strict TypeScript, production build, Node runtime contract,
+all **645 deterministic tests** and all **40 tests in browser shard 3/4** passed
+against disposable PostgreSQL. No production rollout or live external action
+was performed.
+
 ## No fixed chat tool-call quota, 2026-10-09
 
 Normal Pi workspace requests no longer stop after eight tool calls. The worker
