@@ -356,7 +356,6 @@ export class Executor {
           1,
           claimed.settings.maxTurns - claimed.attempts.length,
         ),
-        maxTools: 8,
         remainingBudget: async () => {
           const w = await this.store.read(workspaceId);
           const r = w.runs.find((r) => r.id === runId);

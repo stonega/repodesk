@@ -62,6 +62,12 @@ that cancellation prevented it.
 
 ## Delivered implementation
 
+The 2026-10-09 correction removes the fixed eight-call quota from ordinary chat
+requests. Tool calls remain sequential and guarded; model-turn/spending limits,
+timeout, cancellation, approvals and current permissions still apply. Internal
+summary/classification passes remain tool-free. Explicit internal or evaluation
+tool limits report their cause instead of falling back to an unmapped failure.
+
 The application now translates task status and failures into readable replies,
 records confirmed runner stages with durable notification identities, combines
 fast transitions, and suppresses obsolete pending progress. Status and cancellation

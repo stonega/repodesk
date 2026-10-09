@@ -165,6 +165,7 @@ test("messages hide unknown codes and expose only verified runner stages", () =>
   const secret = "private-provider-token-detail";
   expect(codingFailureMessage(secret)).not.toContain(secret);
   expect(requestFailureMessage(secret)).not.toContain(secret);
+  expect(requestFailureMessage("tool_limit")).toContain("tool-call limit");
   expect(codingFailureMessage("github_app_permissions_missing")).toContain(
     "operator",
   );

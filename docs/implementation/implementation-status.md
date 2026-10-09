@@ -1,5 +1,29 @@
 # Implementation evidence
 
+## No fixed chat tool-call quota, 2026-10-09
+
+Normal Pi workspace requests no longer stop after eight tool calls. The worker
+omits the call-count cap, and the runtime treats an omitted cap as unlimited while
+still accounting for calls. Workspace model-turn/spending limits, timeout,
+cancellation, permissions and approval pauses remain enforced. Internal
+summarization/classification stays tool-free; deliberate internal/evaluation caps
+remain available and have a specific Telegram failure message. No workspace
+setting, dependency or migration was added.
+
+Regression tests complete twelve reads in one batch and across several model
+turns, recover from a failed lookup, and stop on revocation after the ninth read.
+The real worker fixture finishes twelve durable tool outcomes in two model turns
+and queues one answer; duplicate execution does not replay it. Existing tests
+cover cancellation, budgets, model-turn exhaustion, approvals and tool-free passes.
+
+Validation in an isolated checkout of this fix: Biome, strict TypeScript,
+production build, Node runtime contract and **628 deterministic tests** passed
+against disposable PostgreSQL. The application image built and passed isolated
+migration/health/setup smoke; base Compose validation passed. Concurrent GitHub
+action changes in the shared checkout were preserved and excluded from this
+verification. No production rollout, live model call, GitHub write or Telegram
+send was performed.
+
 ## Actionable coding checkout failures, 2026-10-09
 
 Coding preparation now distinguishes a missing configured base branch from other

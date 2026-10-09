@@ -95,7 +95,9 @@ export interface AgentInput {
   transcript: AgentMessage[];
   tools: AgentTool[];
   maxTurns: number;
-  maxTools: number;
+  // Internal tool-free passes and evaluation callers may impose an explicit cap.
+  // Ordinary workspace requests have no tool-call count limit.
+  maxTools?: number;
   // Optional caps are for evaluation callers, not workspace settings.
   maxInputChars?: number;
   maxOutputTokens?: number;
@@ -355,7 +357,11 @@ export class PiRunner implements AgentRunner {
               reason: "awaiting_approval",
               terminate: true,
             };
-          requireThat(++toolCount <= input.maxTools, "tool_limit");
+          toolCount++;
+          requireThat(
+            input.maxTools === undefined || toolCount <= input.maxTools,
+            "tool_limit",
+          );
           if (extensions) {
             const event = {
               type: "tool_call" as const,

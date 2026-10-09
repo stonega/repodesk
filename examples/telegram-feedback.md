@@ -44,6 +44,9 @@ these steps are not part of automated setup or tests.
    Repositories before a new request. Confirm the same saved details on desktop
    and mobile in the panel. Restore the intended branch; the failed task must not
    restart automatically. No raw Git output or token should appear in the reply.
+   An assistant request requiring more than eight authorized reads should finish
+   while model turns and budget remain. Confirm that revocation or cancellation
+   still stops subsequent reads and model-turn exhaustion reports its own cause.
 
 9. After a task publishes its PR, send “Can you review it?”, “Explain what
    changed”, and an unrelated question in the same Topic, including a Reply to its

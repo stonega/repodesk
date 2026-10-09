@@ -9,6 +9,7 @@ import {
   PiRunner,
   selectedModel,
 } from "../../src/agent/runtime.ts";
+import { Fault } from "../../src/domain.ts";
 
 function message(
   content: AssistantMessage["content"],
@@ -227,6 +228,102 @@ test("Pi fake stream validates and executes tools sequentially, checkpoints orde
   );
   expect(events.at(-1)).toBe("agent_end");
 });
+test("uncapped requests complete more than eight tool calls across batches and model turns", async () => {
+  for (const batchSize of [2, 12]) {
+    let sent = 0;
+    let executed = 0;
+    const batches = 12 / batchSize;
+    const runner = new PiRunner(() => {
+      sent++;
+      return stream(
+        sent <= batches
+          ? message(
+              Array.from({ length: batchSize }, (_, index) => ({
+                type: "toolCall" as const,
+                id: `read-${(sent - 1) * batchSize + index + 1}`,
+                name: "read",
+                arguments: { index: (sent - 1) * batchSize + index + 1 },
+              })),
+              "toolUse",
+            )
+          : message([{ type: "text", text: "Review completed" }]),
+      );
+    });
+    const result = await runner.run(
+      input({
+        maxTools: undefined,
+        maxTurns: batches + 1,
+        tools: [
+          {
+            name: "read",
+            label: "Read",
+            description: "Read",
+            parameters: Type.Object({ index: Type.Integer() }),
+            execute: async (_id, args) => {
+              expect((args as { index: number }).index).toBe(++executed);
+              if (executed === 3) throw new Fault("not_found", 404);
+              return {
+                content: [{ type: "text", text: "Read complete" }],
+                details: {},
+              };
+            },
+          },
+        ],
+      }),
+    );
+    expect(result).toMatchObject({
+      status: "succeeded",
+      text: "Review completed",
+      tools: 12,
+      turns: batches + 1,
+    });
+    expect(executed).toBe(12);
+    expect(
+      result.transcript.filter((m) => m.role === "toolResult"),
+    ).toHaveLength(12);
+  }
+});
+
+test("uncapped tools still stop immediately on permission revocation after the ninth read", async () => {
+  let executed = 0;
+  const runner = new PiRunner(() =>
+    stream(
+      message(
+        Array.from({ length: 12 }, (_, index) => ({
+          type: "toolCall" as const,
+          id: `read-${index}`,
+          name: "read",
+          arguments: {},
+        })),
+        "toolUse",
+      ),
+    ),
+  );
+  await expect(
+    runner.run(
+      input({
+        maxTools: undefined,
+        guard: async () => {
+          if (executed >= 9) throw new Fault("run_revoked", 409);
+        },
+        tools: [
+          {
+            name: "read",
+            label: "Read",
+            description: "Read",
+            parameters: Type.Object({}),
+            execute: async () => {
+              executed++;
+              return { content: [], details: {} };
+            },
+          },
+        ],
+      }),
+    ),
+  ).rejects.toThrow("run_revoked");
+  expect(executed).toBe(9);
+});
+
 test("invalid tool arguments never reach executor and bounded loop stops", async () => {
   let executed = 0;
   let calls = 0;

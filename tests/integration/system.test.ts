@@ -1577,6 +1577,92 @@ suite("PostgreSQL integration (isolated database)", () => {
     );
     expect(sent?.parse_mode).toBeUndefined();
   });
+  test("workspace requests execute twelve tools and finish within their model-turn limit", async () => {
+    const w = await seed();
+    const r = await store.change(w.id, (v) => {
+      v.settings.maxTurns = 2;
+      return createRun(
+        v,
+        "101",
+        "Review the current work",
+        "101",
+        7,
+        "gpt-4.1-mini",
+        { replyTo: 42 },
+      );
+    });
+    let modelCalls = 0;
+    const runner = new PiRunner((model) => {
+      modelCalls++;
+      const message = {
+        role: "assistant" as const,
+        content:
+          modelCalls === 1
+            ? Array.from({ length: 12 }, (_, index) => ({
+                type: "toolCall" as const,
+                id: `review-read-${index}`,
+                name: "query_work_handoff",
+                arguments: { limit: 1 },
+              }))
+            : [
+                {
+                  type: "text" as const,
+                  text: "Review completed after twelve reads.",
+                },
+              ],
+        api: model.api,
+        provider: model.provider,
+        model: model.id,
+        stopReason: modelCalls === 1 ? ("toolUse" as const) : ("stop" as const),
+        timestamp: Date.now(),
+        usage: {
+          input: 10,
+          output: 10,
+          totalTokens: 20,
+          cacheRead: 0,
+          cacheWrite: 0,
+          cost: {
+            input: 0.000004,
+            output: 0.000016,
+            cacheRead: 0,
+            cacheWrite: 0,
+            total: 0.00002,
+          },
+        },
+      };
+      const stream = new AssistantMessageEventStream();
+      stream.push({ type: "done", reason: message.stopReason, message });
+      stream.end(message);
+      return stream;
+    });
+    const executor = new Executor(store, setup, runner);
+    await executor.execute(w.id, r.id);
+    await executor.execute(w.id, r.id);
+    const saved = await store.read(w.id);
+    expect(modelCalls).toBe(2);
+    expect(saved.runs[0]).toMatchObject({
+      status: "succeeded",
+      result: "Review completed after twelve reads.",
+    });
+    expect(saved.runs[0]?.error).toBeUndefined();
+    expect(Object.values(saved.runs[0]?.tools ?? {})).toHaveLength(12);
+    expect(
+      Object.values(saved.runs[0]?.tools ?? {}).every(
+        (t) => t.state === "done",
+      ),
+    ).toBe(true);
+    expect(saved.runs[0]?.attempts.every((a) => a.status === "settled")).toBe(
+      true,
+    );
+    expect(saved.deliveries).toHaveLength(1);
+    expect(saved.deliveries[0]).toMatchObject({
+      chatId: "101",
+      topicId: 7,
+      runId: r.id,
+      state: "pending",
+    });
+  });
+
   test("tool-only turn exhaustion delivers one notice to the original chat and topic", async () => {
     const w = await seed();
     const r = await store.change(w.id, (v) => {

@@ -47,6 +47,8 @@ const failures: Record<string, string> = {
     "I couldn’t finish before the request timed out. You can send a smaller request or ask the administrator to review the timeout.",
   turn_limit:
     "I couldn’t finish this response within the available turns. Try narrowing the request.",
+  tool_limit:
+    "This request was stopped by a tool-call limit. Ask the workspace administrator to inspect the request before trying again.",
   output_limit:
     "I couldn’t finish this response within the available output. Try asking for a smaller part.",
   provider_outcome_unknown:

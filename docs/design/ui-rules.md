@@ -204,6 +204,19 @@ when implementing or reviewing a change.
   search support for the repository selector.
 - **Exceptions:** Other form selectors retain their existing behavior.
 
+### Assistant requests have no fixed tool-call quota
+
+- **Preference:** Let ordinary assistant requests make the tool calls needed to
+  complete their work; do not stop a review after an arbitrary fixed call count.
+- **Scope:** Pi chat requests and authorized application/extension tools. Existing
+  workspace model-turn and spending controls remain separate.
+- **Source:** 2026-10-09 — user rejected the fixed eight-tool-call limit after two
+  Telegram PR-review requests exhausted it.
+- **Exceptions:** Permission checks, actor/tenant boundaries, cancellation,
+  approval pauses, request timeout and provider limits still apply. Internal
+  summarization and follow-up classification remain tool-free; test/evaluation
+  callers may deliberately bound tool execution.
+
 ### Codex tasks have no configurable execution quotas
 
 - **Preference:** Remove maximum execution cycles, automatic check repairs,

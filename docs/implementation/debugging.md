@@ -33,6 +33,11 @@ Interpret the states separately:
 - `turn_limit` means all allowed model turns were consumed before a final answer.
   Tool calls consume turns too. Check redundant retrieval and tool failures before
   deciding to increase **Workspace settings → Maximum model turns** and its budget.
+- `tool_limit` on older builds means the chat assistant attempted a ninth tool
+  call, even if model turns and budget remained. Normal workspace requests now
+  have no fixed tool-call count limit; model-turn, spending, timeout, cancellation
+  and permission checks still apply. A model turn can contain several tool calls.
+  Explicit internal/evaluation caps retain a specific limit failure message.
 - No matching connected repository means the coding request has no resolved
   target. Use its full connected repository name; confirm workspace selection and
   actor grants. Do not assume a coding task started.
