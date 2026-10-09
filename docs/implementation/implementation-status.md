@@ -1,5 +1,21 @@
 # Implementation evidence
 
+## Simplified Verify workflow, 2026-10-09
+
+Verify now runs quality/database checks, the complete browser suite in one job,
+and application container checks. Code Truth's separate service installation,
+typechecking and image smoke, plus the Codex image/lifecycle job, were removed.
+The browser matrix was removed; its single job has a 30-minute budget. The existing
+required `checks` gate waits for all three remaining verification jobs and rejects
+failed, skipped or cancelled results. Release deployment separately retains its
+Codex image builds and lifecycle smoke before transfer.
+
+Validation: workflow configuration/dependencies, Biome, strict TypeScript,
+production build, all **645 deterministic tests** and all **137 browser tests**
+passed locally. The application image built and passed its Node runtime contract,
+isolated Compose migration/readiness/setup checks, and backup/restore rehearsal.
+No application or test implementation changed.
+
 ## Independent model-provider browser fixtures, 2026-10-09
 
 The model-provider browser fixture now marks its disposable deployment claimed

@@ -22,13 +22,14 @@ the hierarchy cannot be prepared. The initialization follows
 
 The outer Compose project is `repodesk-actions-runner`, separate from production's
 `repodesk`. Its container is limited to two CPUs and 4 GiB of memory. One runner
-executes one job at a time; browser shards queue rather than running simultaneously.
+executes one job at a time; verification jobs queue rather than running simultaneously.
 The private repository's Actions secrets continue to provide deployment SSH access.
 
-The Codex verification job allows 30 minutes for both image builds and the lifecycle
-smoke. In [run 37892580454](https://github.com/stonega/repodesk/actions/runs/37892580454/job/113696583835),
-the builds took about eight minutes and the previous ten-minute job limit cancelled
-the smoke after 104 seconds. Other verification jobs retain their ten-minute limits.
+Verify runs quality/database checks, one browser job for the complete suite, and
+application container checks. The browser job allows 30 minutes; quality and
+application container jobs allow ten minutes each. Code Truth service checks and
+the separate Codex image/lifecycle job are excluded from Verify. The release deploy
+job still builds and smoke-tests the Codex images before transferring the release.
 
 ## Install
 

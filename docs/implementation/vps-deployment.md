@@ -90,11 +90,12 @@ configured by you, will pause the deploy job for GitHub approval.
 
 Commit and push the workflow and scripts before creating the release tag, then
 publish a stable release from that tag. In Actions, inspect **Deploy release to
-VPS**. Verification includes deterministic PostgreSQL and browser tests, Docker
-smokes (including real Docker coding tasks with fake local Codex/GitHub) and a
-backup/restore rehearsal. The deploy job builds three amd64 images and transfers
-them with the base Compose file, Codex overlay and deployment helpers. SSH key
-files are temporary and removed when the step exits.
+VPS**. Verification includes deterministic PostgreSQL tests, the complete browser
+suite in one job, application container checks and a backup/restore rehearsal.
+The deploy job separately builds three amd64 images and runs the Codex lifecycle
+smoke with fake local Codex/GitHub before transferring the images with the base
+Compose file, Codex overlay and deployment helpers. SSH key files are temporary
+and removed when the step exits.
 
 The workflow transfers the image tag and archive SHA-256 checksum. The host verifies
 the archive before import, loads the image and resolves the tag to that daemon's

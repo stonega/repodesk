@@ -313,8 +313,9 @@ PostgreSQL service. Browser fixtures and fake transports exist only in `tests/`;
 they are excluded from the Docker image. If your host configures an HTTP proxy,
 set `NO_PROXY=localhost,127.0.0.1` for tests (including the local model HTTP fixture).
 
-GitHub's **Verify** workflow runs quality/database checks, four browser shards,
-application/Code Truth container checks, and Codex lifecycle smoke checks concurrently.
+GitHub's **Verify** workflow runs quality/database checks, one browser job for the
+complete suite, and application container checks. It excludes the separate Code
+Truth service install/typecheck/image smoke and Codex image/lifecycle job.
 All verification, release deployment and Codex diagnostics jobs target self-hosted
 Linux x64 runners with the labels `self-hosted`, `linux` and `x64`. Register an
 online runner available to this repository before running these workflows. Use an
@@ -328,20 +329,15 @@ runner agents sharing those resources can conflict. Parallel execution requires
 multiple available runners; a single runner queues the jobs and runs them serially.
 For the existing VPS, use the [dedicated Actions runner deployment](self-hosted-runner.md)
 with its own Docker daemon and network so verification does not share production ports.
-Each browser shard uses one worker and its own PostgreSQL service, preserving serial
-test groups and avoiding shared fixture state. The final `checks` job requires every
-job to succeed, including when verification is called by the release workflow.
-Browser installation downloads only Chromium's headless shell. Docker builds cache
-all stages in GitHub Actions with a separate scope per image; Compose reuses the
-smoke-tested application image instead of building it again. Supervisor tool
-installation is cached independently of application source changes.
-
-The [sequential run on 2026-10-06](https://github.com/stonega/repodesk/actions/runs/37424202425)
-took 7m08s, including 2m40s for browser tests and 1m39s for Codex image builds/smoke.
-The target is about two minutes with warm caches and available runners; fresh caches,
-dependency updates and runner queues can take longer. Confirm actual wall time in
-GitHub after the workflow lands.
-Parallel jobs reduce waiting time but require more self-hosted runner capacity.
+The browser job uses one worker and its own PostgreSQL service, preserving serial
+test groups. It allows 30 minutes for the complete suite. The final `checks` job
+requires every job to succeed, including when verification is called by the release
+workflow.
+Browser installation downloads only Chromium's headless shell. The application
+Docker build caches all stages in GitHub Actions; Compose reuses the smoke-tested
+image instead of building it again. Release deployment separately builds and
+smoke-tests Codex images before transferring them. Confirm actual wall time in
+GitHub; cold caches, dependency updates and runner queues can take longer.
 
 The skill **Test draft policy** control is a deterministic validation/preview,
 not a claim that a live model obeyed the skill. The Pi fake-provider tests exercise

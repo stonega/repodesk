@@ -41,4 +41,6 @@ For a release, run `bash scripts/verify-skills.sh quality` and
 `bash scripts/verify-skills.sh release-browser`. The latter prepares the same
 environment and runs the entire browser suite instead of only the skills-related
 suites. Container builds, Compose smoke/restore and Codex lifecycle smoke checks
-still require Docker, as described in the release runbook and verification workflow.
+still require Docker. Verify runs the application container and Compose checks;
+the release deploy job runs the Codex lifecycle smoke. See the release runbook and
+deployment workflow.
