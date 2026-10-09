@@ -10,6 +10,7 @@
 - `restore-rehearsal.sh`: restore into a disposable sibling DB, verify, remove it.
 - `start-local.sh`: start the configured local Podman stack; pass `--build` to rebuild images.
 - `deploy-vps.sh`: release-bundle host cutover with locking, backup, migrations and readiness checks; see [VPS deployment](../docs/implementation/vps-deployment.md).
+- `update-host.mjs`: dependency-free Node host daemon for approved panel updates; verifies GitHub release/CI identity, builds pinned Docker images and invokes the protected cutover. See [installation](../docs/implementation/updates.md).
 
 `src/db/migrate.ts` is the one-shot schema/job migration entry point. No ordinary
 startup command registers webhooks, connects accounts or starts paid evaluations.
@@ -42,5 +43,5 @@ For a release, run `bash scripts/verify-skills.sh quality` and
 environment and runs the entire browser suite instead of only the skills-related
 suites. Container builds, Compose smoke/restore and Codex lifecycle smoke checks
 still require Docker. Verify runs the application container and Compose checks;
-the release deploy job runs the Codex lifecycle smoke. See the release runbook and
-deployment workflow.
+run the Codex lifecycle smoke explicitly when validating runner changes. See the
+release runbook and [host update installation](../docs/implementation/updates.md).

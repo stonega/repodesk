@@ -14,6 +14,7 @@ import { equal } from "./setup/credentials.ts";
 import type { SetupService } from "./setup/service.ts";
 import { updateSchema } from "./telegram/router.ts";
 import { Ingress } from "./telegram/webhook.ts";
+import { ReleaseUpdates } from "./updates/releases.ts";
 export function createApp(
   store: Store,
   setup: SetupService,
@@ -23,6 +24,7 @@ export function createApp(
   encryptionKey?: string,
   deviceAuth?: LocalDeviceAuth,
   review?: ReviewService,
+  updates = new ReleaseUpdates(store),
 ) {
   const app = new Hono();
   const ingress = new Ingress(store, setup, github.users);
@@ -116,6 +118,7 @@ export function createApp(
       encryptionKey,
       deviceAuth,
       review,
+      updates,
     ),
   );
   app.get("/", async (c) => {

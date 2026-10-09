@@ -1,5 +1,30 @@
 # Implementation evidence
 
+## GitHub release checks and host updates (2026-10-09)
+
+Signed-in pages check the configured repository's latest stable release and show
+an arrow after the bottom-right version when a newer numeric version is available.
+The shared modal shows formatted changelog/update notes and an operator-only
+Update now action. Installation queues an atomic host request after checking
+release identity, notes, commit, session/origin/CSRF and updater heartbeat. Durable
+reservations and audit fence concurrent/replayed/uncertain requests. Only the
+separate host daemon builds images and invokes the backup/migration/readiness
+cutover. It checks successful Verify evidence for the pinned commit. The GitHub
+deployment workflow is removed; no Actions write credential is required.
+Workspace accounts can review notes. See [installation and recovery](updates.md).
+
+Actual host provisioning and VPS installation remain staging gates. No live
+update is performed by deterministic tests or browser fixtures.
+
+Validation: lint, strict typecheck, production build and **661 deterministic tests**
+passed with disposable PostgreSQL and host proxies disabled. **Nine browser
+scenarios** passed for updates and session expiry. Desktop/mobile screenshots
+were reviewed for version placement, loading, populated/empty notes, pending
+locks, request errors and offline guidance. The Docker app image built and passed
+its Node runtime smoke; Compose configuration, host-script syntax and the systemd
+unit validated. Host tests cover pinned builds, failed verification, interrupted
+cutover fencing and a real Node daemon heartbeat without network/Docker work.
+
 ## Explicit application test discovery in Verify, 2026-10-09
 
 Quality now runs `bun test ./tests`. Bare `bun test` recursively discovered the

@@ -69,6 +69,9 @@ worker heartbeat. `/admin/*` deep links load the SPA; `/api/*` failures remain J
 The web pages show the application version at the bottom right. The build reads
 it from `package.json`; update its `version` when preparing a release and rebuild
 the assets or Docker image to display the new version.
+Signed-in pages check GitHub releases automatically. A newer release adds an arrow
+after the version and opens its changelog/update modal. Enable installation with
+the [host updater](updates.md); GitHub Actions performs verification only.
 
 ## Local Telegram polling (no public URL)
 
@@ -319,7 +322,7 @@ Truth service install/typecheck/image smoke and Codex image/lifecycle job.
 Quality runs `bun test ./tests` so Bun does not recursively discover the optional
 service's tests. Running bare `bun test` from the repository root also discovers
 `services/code-truth/tests`, which requires that service's separate dependencies.
-All verification, release deployment and Codex diagnostics jobs target self-hosted
+All verification and Codex diagnostics jobs target self-hosted
 Linux x64 runners with the labels `self-hosted`, `linux` and `x64`. Register an
 online runner available to this repository before running these workflows. Use an
 Ubuntu host with Git, Bash, Node 24, Docker Engine and Compose v2, with Docker access
@@ -334,12 +337,12 @@ For the existing VPS, use the [dedicated Actions runner deployment](self-hosted-
 with its own Docker daemon and network so verification does not share production ports.
 The browser job uses one worker and its own PostgreSQL service, preserving serial
 test groups. It allows 30 minutes for the complete suite. The final `checks` job
-requires every job to succeed, including when verification is called by the release
-workflow.
+requires every job to succeed. Panel updates require successful Verify evidence
+for the release commit; installation runs on the host updater.
 Browser installation downloads only Chromium's headless shell. The application
 Docker build caches all stages in GitHub Actions; Compose reuses the smoke-tested
-image instead of building it again. Release deployment separately builds and
-smoke-tests Codex images before transferring them. Confirm actual wall time in
+image instead of building it again. The [host updater](updates.md) builds pinned
+release images locally, without a GitHub deployment job. Confirm actual wall time in
 GitHub; cold caches, dependency updates and runner queues can take longer.
 
 The skill **Test draft policy** control is a deterministic validation/preview,

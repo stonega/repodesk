@@ -1,0 +1,22 @@
+[Unit]
+Description=RepoDesk host release updater
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# The daemon needs the deployment user's Docker and filesystem access.
+# Set User to that account when provisioning; root is the service default.
+WorkingDirectory=/opt/repodesk
+ExecStart=/usr/bin/node /opt/repodesk/updater/update-host.mjs /opt/repodesk repodesk stonega/repodesk
+Restart=always
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=30
+UMask=0022
+# Optional read-only GitHub credential file for API limits/private source access.
+# Environment=UPDATES_GITHUB_TOKEN_FILE=/opt/repodesk/secrets/update-read-token
+
+[Install]
+WantedBy=multi-user.target

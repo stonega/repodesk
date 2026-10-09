@@ -26,6 +26,12 @@ const schema = z.object({
   CODE_TRUTH_URL: z.string().url().optional(),
   CODE_TRUTH_TOKEN: z.string().min(32).optional(),
   PI_EXTENSIONS_FILE: z.string().trim().min(1).optional(),
+  UPDATES_GITHUB_REPOSITORY: z
+    .string()
+    .regex(/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/)
+    .default("stonega/repodesk"),
+  UPDATES_GITHUB_TOKEN: z.string().trim().min(1).optional(),
+  UPDATES_DIRECTORY: z.string().startsWith("/").optional(),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   ENCRYPTION_KEY: z.string().regex(/^[0-9a-f]{64}$/i),
   NODE_ENV: z
@@ -35,6 +41,9 @@ const schema = z.object({
 export function config(env = process.env) {
   const data = schema.parse({
     ...env,
+    UPDATES_GITHUB_TOKEN: env.UPDATES_GITHUB_TOKEN_FILE
+      ? readFileSync(env.UPDATES_GITHUB_TOKEN_FILE, "utf8").trim()
+      : env.UPDATES_GITHUB_TOKEN || undefined,
     GITHUB_APP_PRIVATE_KEY: env.GITHUB_APP_PRIVATE_KEY_FILE
       ? readFileSync(env.GITHUB_APP_PRIVATE_KEY_FILE, "utf8")
       : env.GITHUB_APP_PRIVATE_KEY,

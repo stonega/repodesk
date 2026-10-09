@@ -23,13 +23,14 @@ the hierarchy cannot be prepared. The initialization follows
 The outer Compose project is `repodesk-actions-runner`, separate from production's
 `repodesk`. Its container is limited to two CPUs and 4 GiB of memory. One runner
 executes one job at a time; verification jobs queue rather than running simultaneously.
-The private repository's Actions secrets continue to provide deployment SSH access.
+Release installation runs on the host updater. Its deployment SSH secrets are
+unused; the optional Codex diagnostics workflow can still use SSH credentials.
 
 Verify runs quality/database checks, one browser job for the complete suite, and
 application container checks. The browser job allows 30 minutes; quality and
 application container jobs allow ten minutes each. Code Truth service checks and
-the separate Codex image/lifecycle job are excluded from Verify. The release deploy
-job still builds and smoke-tests the Codex images before transferring the release.
+the separate Codex image/lifecycle job are excluded from Verify. The host updater
+builds app/Codex release images locally before its protected cutover.
 
 ## Install
 

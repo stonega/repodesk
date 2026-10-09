@@ -77,6 +77,7 @@ const workspaceActor = (w: Workspace, admin: Admin) => {
 };
 
 import type { GitHubService } from "../github/service.ts";
+import type { ReleaseUpdates } from "../updates/releases.ts";
 
 export function adminRoutes(
   store: Store,
@@ -87,6 +88,7 @@ export function adminRoutes(
   encryptionKey?: string,
   deviceAuth?: LocalDeviceAuth,
   review?: ReviewService,
+  updates?: ReleaseUpdates,
 ) {
   const app = new Hono<Env>();
   const site = new SiteService(store, origin);
@@ -129,6 +131,16 @@ export function adminRoutes(
       await store.pool.query("SELECT claimed FROM deployment WHERE id=true")
     ).rows[0];
     return c.json({ initialized: !!row?.claimed });
+  });
+  app.get("/api/admin/updates", async (c) => {
+    requireThat(updates, "updates_unavailable", 503);
+    return c.json(await updates.view(c.get("session").admin));
+  });
+  app.post("/api/admin/operator/updates", async (c) => {
+    requireThat(updates, "updates_unavailable", 503);
+    return c.json(
+      await updates.start(c.get("session").admin, await c.req.json()),
+    );
   });
   app.post("/api/setup/claim", async (c) => {
     await throttle(store.pool, "claim");

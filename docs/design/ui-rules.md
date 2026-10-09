@@ -175,6 +175,20 @@ when implementing or reviewing a change.
   bottom of the page.
 - **Exceptions:** Toasts and dialogs may cover the label while open.
 
+### Available updates open release notes from the version indicator
+
+- **Preference:** When GitHub has a newer stable release, show an indicator
+  immediately after the application version. Clicking it opens a modal containing
+  the changelog, update notes and an explicit update action.
+- **Scope:** Shared signed-in admin/setup shell at desktop and mobile widths.
+  Preserve the muted bottom-right version and shared modal close, focus, pending
+  lock and primary-action-then-Cancel behavior.
+- **Source:** 2026-10-09 — user requested automatic GitHub release checks, an
+  indicator after the version and a modal to update with changelogs/update notes.
+- **Exceptions:** Only deployment administrators can start updates; other signed-in
+  accounts can review notes. An installation without a ready host updater shows
+  setup guidance. Sign-in keeps the version without an update action.
+
 ### Workspace pause belongs in Settings with confirmation
 
 - **Preference:** Use Workspace settings for a dedicated Pause workspace action

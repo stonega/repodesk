@@ -1,0 +1,27 @@
+@origin = http://localhost:3000
+@session = replace-with-session-cookie
+@csrf = replace-with-session-csrf
+
+### Release notes and available update (any signed-in account)
+GET {{origin}}/api/admin/updates
+Cookie: repodesk_session={{session}}
+
+### Start the reviewed release (deployment operator only)
+# Copy release.id and release.fingerprint from the GET response.
+# This queues an update for the installed host daemon; it does not dispatch Actions.
+POST {{origin}}/api/admin/operator/updates
+Cookie: repodesk_session={{session}}
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"releaseId":42,"fingerprint":"replace-with-reviewed-release-fingerprint"}
+
+### Explicit retry after reviewing a failed host job's logs
+POST {{origin}}/api/admin/operator/updates
+Cookie: repodesk_session={{session}}
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"releaseId":42,"fingerprint":"replace-with-reviewed-release-fingerprint","retry":true}

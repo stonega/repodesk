@@ -1,39 +1,39 @@
-# Release deployment to a custom VPS
+# Release deployment on a custom VPS
 
-The repository includes `.github/workflows/deploy.yml`. Publishing a **stable
-GitHub Release** runs the reusable verification workflow, builds and smoke-tests
-the exact release tag, and transfers application, Codex supervisor and task images
-over verified SSH.
-Drafts, prereleases and tag pushes alone do not deploy. The workflow must be
-included in the released tag. No registry account or token is required.
-
-This automates the Docker stack: app, worker, migrations, PostgreSQL and the Codex
-runner. The runner starts automatically, with persistent state and a host-generated
-private token; workspace users only enable the plugin and connect their account.
-It does not deploy the optional Code Truth service or the local Podman overlay.
-Use a dedicated stack; do not point it at an existing local Podman installation. The VPS must be Linux x86_64 with Docker Engine, Compose v2
-(supporting `up --wait`), Bash, gzip, `sha256sum` and `flock`, and enough disk for the loaded
-images, release archive and database backup. The self-hosted Linux x64 Actions runner
-must meet the [workflow prerequisites](setup.md) and be able to reach the VPS's SSH
-port. The deploy user needs Docker access without interactive sudo.
+RepoDesk now installs approved GitHub releases through a host-side updater.
+The previous `.github/workflows/deploy.yml` is removed. GitHub Actions verifies
+code; it does not transfer images or deploy to the VPS. Publishing a stable
+release makes it available in the panel's version indicator. A deployment
+administrator reviews its notes and starts installation explicitly.
+See [host updater installation](updates.md) for the service and panel contract.
 
 ## Provision the host once
 
-Create a dedicated deploy user and install its SSH public key. Keep the private
-key in GitHub only. With that user, create a deployment directory (default
-`/opt/repodesk`, owned by the deploy user) with this layout:
+Use a dedicated Linux x86_64 Docker stack with Docker Engine, Compose v2
+(supporting `up --wait`), Node 24, Git, Bash, gzip, sha256sum and flock. Reserve
+enough disk for local builds, three images, release archives and database backups.
+The updater service requires noninteractive Docker and deployment-directory access.
+It handles app, worker, migrations, PostgreSQL and the Docker Codex runner. The
+optional Code Truth service and local Podman overlay remain separate.
+
+Keep the running deployment directory and Compose project stable. The default
+root is `/opt/repodesk`, and the default project is `repodesk`:
 
 ```text
 /opt/repodesk/
   .env
   secrets/encryption-key
-  secrets/codex-runner-token # generated once on first Codex release
-  releases/                 # created by the workflow
-  backups/                  # protected pre-migration dumps
-  .current-release          # written after a successful readiness check
+  secrets/codex-runner-token
+  updater/update-host.mjs
+  updates/requests/
+  updates/results/
+  updates/logs/
+  releases/
+  backups/
+  .current-release
 ```
 
-Use `.env.example` as a reference, but provide a dedicated VPS configuration:
+Provide dedicated runtime configuration in mode-600 `.env`:
 
 ```dotenv
 POSTGRES_PASSWORD=replace-with-a-long-random-URL-safe-password
@@ -42,121 +42,72 @@ TELEGRAM_TRANSPORT=webhook
 APP_PORT=3000
 ```
 
-Keep `.env` mode 600 and `secrets/` mode 700. Generate a new encryption key for a
-new stack with `openssl rand -hex 32 > secrets/encryption-key`. Ensure the runtime
-Node user can read the mounted key (for example, file mode 644 inside the private
-mode-700 directory). Preserve this key across releases and back it up separately.
-An existing database requires its original key and password.
-On SELinux hosts, the mounted key also needs a container-readable label. Configure
-that label through your host policy; Unix file permissions alone are insufficient.
-The deployment checks key readability inside the image before stopping writers.
+Keep `secrets/` mode 700. Generate a new encryption key only for a new database:
+`openssl rand -hex 32 > secrets/encryption-key`. The runtime Node user must be
+able to read the mounted key (for example mode 644 within that private directory).
+Preserve the original encryption key, database password, Compose project and
+Codex runner state across updates. On SELinux hosts, apply container-readable
+labels through host policy. The cutover verifies secret access before stopping
+writers. Configure encrypted off-host backups and retention separately.
 
-Configure the host HTTPS reverse proxy to forward to `127.0.0.1:3000`. PostgreSQL
-is never exposed publicly. On a new stack, use an SSH tunnel to claim `/setup`
-before opening public access. Complete bot/model setup and explicitly activate
-and register the webhook afterward; deployment does not register webhooks or
-connect accounts. Configure encrypted off-host backups and retention separately.
+Route host HTTPS to the app's loopback port (default `127.0.0.1:3000`). PostgreSQL
+and the updater have no public ports. Use an SSH tunnel to claim a new `/setup`
+before opening public access, then configure and activate the bot separately.
+Installation never registers webhooks, connects accounts or sends Telegram messages.
 
-## Configure GitHub
+A first installation can use the documented Compose setup and Docker Codex
+configuration; install the host updater after the stack is healthy. Existing
+release-bundle deployments retain their original project/root. No GitHub SSH
+secrets, production deployment environment or Actions write token is required.
 
-Create a GitHub Actions environment named **production**. Add the following
-environment secrets (repository secrets also work):
+## Host release build and cutover
 
-| Secret | Value |
-| --- | --- |
-| `VPS_HOST` | VPS DNS name or IPv4 address |
-| `VPS_USER` | Dedicated SSH deploy username |
-| `VPS_SSH_KEY` | Complete private SSH key, without a passphrase |
-| `VPS_KNOWN_HOSTS` | Verified OpenSSH known-hosts entry for the VPS |
+The daemon checks the selected release ID, fingerprint and tag commit against
+GitHub and requires a successful Verify run for that commit. It fetches the exact
+commit, validates its package version, builds app, Codex task and supervisor images
+and smoke-tests the app's Node runtime. Builds run on the host before stopping any
+services. It writes a checksummed image archive and release files to a fresh
+numeric bundle directory, then invokes the existing `scripts/deploy-vps.sh`.
 
-Obtain the host key through a trusted host console and verify its fingerprint
-before saving the known-hosts entry. `ssh-keyscan` can collect a candidate, but
-alone does not verify the host's identity. For a custom port the entry uses
-`[hostname]:port`. The workflow requires strict host-key verification.
+The script:
 
-Optional environment/repository variables:
-
-| Variable | Default | Constraint |
-| --- | --- | --- |
-| `VPS_PORT` | `22` | SSH port, 1–65535 |
-| `VPS_PATH` | `/opt/repodesk` | Absolute directory; letters, digits, `/`, `_`, `-` |
-| `VPS_PROJECT` | `repodesk` | Stable Compose project name; lowercase letters, digits, `_`, `-` |
-
-Keep `VPS_PATH` and `VPS_PROJECT` stable to preserve the PostgreSQL volume.
-Environment protection rules must permit release tags. Required reviewers, if
-configured by you, will pause the deploy job for GitHub approval.
-
-## Publish and monitor
-
-Commit and push the workflow and scripts before creating the release tag, then
-publish a stable release from that tag. In Actions, inspect **Deploy release to
-VPS**. Verification includes deterministic PostgreSQL tests, the complete browser
-suite in one job, application container checks and a backup/restore rehearsal.
-The deploy job separately builds three amd64 images and runs the Codex lifecycle
-smoke with fake local Codex/GitHub before transferring the images with the base
-Compose file, Codex overlay and deployment helpers. SSH key files are temporary
-and removed when the step exits.
-
-The workflow transfers the image tag and archive SHA-256 checksum. The host verifies
-the archive before import, loads the image and resolves the tag to that daemon's
-immutable local `sha256:` image ID. Classic Docker and containerd image stores can
-report different IDs for the same exported archive, so the runner's image ID is
-not used as a lookup key on the VPS.
-Unlike a registry `@sha256:` manifest digest, this identifies the image imported
-by `docker image load`. It then:
-
-1. Acquires a host lock, verifies the archive and imports immutable image IDs.
-2. Generates/reuses the runner token and image configuration, validates Compose
-   and runtime secret access, and pulls PostgreSQL. Keeps the current bot and
-   runner available while existing coding attempts reach a durable checkpoint.
-3. Stops app/worker, then checks the existing runner again to catch an attempt
-   started just before shutdown. Task containers and the provider proxy continue
-   under the old runner until implementation, checks or publication finish. Only
-   then replaces the runner, checks readiness, and starts the database.
-4. Writes a restrictive database dump and verifies its archive listing.
-5. Runs migrations once; starts neither writer if migration fails.
-6. Starts app/worker without building or pulling their image, waits for both
-   health checks, and retries `/readyz` inside the app container for up to two
-   minutes (at most 24 attempts, five seconds between attempts). This allows the
-   first Telegram long poll to finish. Failed requests report their HTTP status
-   or a timeout without logging response bodies.
+1. Acquires the deployment lock, verifies the archive and imports immutable local
+   image IDs. Concurrent host/manual cutovers cannot overlap.
+2. Preserves the Codex token/state, validates Compose and secret access and pulls
+   the pinned PostgreSQL image before stopping writers.
+3. Waits for safe coding checkpoints, stops app/worker and checks again for a
+   just-started attempt before replacing the runner. Existing task containers
+   finish their current phases; they are not cancelled to accelerate an update.
+4. Saves a restrictive PostgreSQL custom dump and verifies its archive listing.
+5. Runs migrations once; writers remain stopped if migration fails.
+6. Starts app/worker and checks readiness for up to two minutes, allowing the
+   first Telegram long poll to finish. Response bodies are not printed in checks.
 7. Updates `.current-release` only on success and removes the transfer archive.
 
-GitHub serializes deployment workflows without cancelling an active cutover.
-An identical bundle cannot overwrite its earlier backup. To retry, use **Re-run
-all jobs**: the run attempt receives a fresh release directory and backup name.
-Deployment includes a brief outage while writers stop, backup and migrations run.
-Coding attempts at `ready`, terminal outcomes or an authentication pause are safe
-checkpoints; their private volumes, patch, usage and attempt identity survive the
-runner replacement. Running preparation, model turns, checks and publication are
-never cancelled to accelerate a release. The task image is imported alongside
-the supervisor; task containers already running keep their original image.
-
-The checkpoint wait defaults to 1800 seconds across both checks. A timeout defers
-the release and leaves the old runner and tasks intact. If writers have already
-stopped for the second check, the script restarts only the existing writer services
-that were running before shutdown; no image or schema has changed yet. Operators
-can shorten the wait by exporting `CODEX_DEPLOY_CHECKPOINT_TIMEOUT_SECONDS` (1–1800)
-when invoking the deployment script. This is a deployment wait, not a task execution
-limit. Retry the release after its active attempts reach checkpoints.
-Other application/provider jobs still follow the worker's normal shutdown policy.
+The checkpoint budget defaults to 1800 seconds across both checks. It can be
+shortened with `CODEX_DEPLOY_CHECKPOINT_TIMEOUT_SECONDS` (1–1800) in the host
+service environment. A timeout before cutover leaves the old runner intact and
+restarts only writers that were running before the second wait. This is an update
+wait, not a coding execution limit. The updater's queue/results survive app
+replacement. Inspect progress in the modal and protected host logs.
 
 ## Failure and recovery
 
-Missing runtime configuration, required commands, invalid bundle metadata and
-archive checksum failures produce explicit preflight errors. Preflight failures
-leave running writers untouched. Checkpoint deferral preserves the current runner
-and restores previously running writers if needed. Once the runner replacement
-or database cutover begins, a
-backup, migration, startup or readiness failure stops app/worker and leaves the
-previous `.current-release` marker unchanged. A marker is a record of the last
-successful deployment, not evidence that those containers are still running.
-The workflow fails visibly; it does not automatically revert a migrated schema.
+Release/CI verification or image-build failures leave running services untouched.
+Missing configuration, checksums, invalid bundles, secret access and checkpoint
+failures are explicit preflight errors. Once runner replacement or database
+cutover begins, backup, migration, startup or readiness failure stops app/worker
+and preserves the previous `.current-release`. That marker records the last
+successful release; it does not prove the old services are still running.
 
-Use the failed release directory to inspect migration status and protected
-backups. Roll forward with a corrected release. Only restart a previous image
-after verifying its schema compatibility; use the explicit project, project
-directory, Compose files and all three environment files:
+Inspect the failed bundle and protected logs/backups. Prefer rolling forward
+with a corrected release. An explicit Retry update creates a fresh bundle and
+backup. An agent restart during cutover records an uncertain outcome rather than
+replaying it. Reconcile host processes and schema before clearing its reservation.
+Never remove volumes or restore/revert automatically. Use
+[the recovery runbook](release-runbook.md) for data and unknown delivery outcomes.
+
+Only restart a previous image after confirming schema compatibility:
 
 ```sh
 cd /opt/repodesk
@@ -169,26 +120,12 @@ docker compose --project-directory "$PWD" -p repodesk \
   up -d --no-deps --no-build --pull never --wait app worker
 ```
 
-For releases preceding Docker runner integration, omit `codex.env` and the Codex
-overlay. Preserve `secrets/codex-runner-token` and the project's
-`codex_runner_state` volume together; replacing either breaks credential recovery.
-The runner is internal and exposes no host port. Only its trusted supervisor
-receives the Docker socket. See [container execution](codex-podman.md).
-
-Temporary runner connection failures leave queued and active coding tasks
-retryable. A verified attempt awaiting slot cleanup has a durable cleanup identity;
-the worker retries that idempotent cleanup after restart without erasing the result,
-charging its usage twice, or dropping ordered follow-ups. Uncertain publication
-still reconciles the existing reservation and never blindly repeats a GitHub write.
-
-Use the configured path/project if changed. Do not remove volumes or restore a
-database automatically. Follow [the recovery runbook](release-runbook.md) for
-restore and reconciliation of unknown delivery/provider outcomes. Retained
-release directories, images and backups require an operator retention policy.
-
-This workflow has local deterministic and container validation; an actual VPS
-release deployment remains unverified until host provisioning, GitHub secrets
-and a successful release run are complete.
+For bundles before Docker Codex integration, omit `codex.env` and its overlay.
+Preserve `secrets/codex-runner-token` and `codex_runner_state` together. Temporary
+runner outages keep queued tasks retryable; durable cleanup/publication identities
+prevent double charges and blind repeated GitHub writes. Apply retention to old
+images, bundles, backups and updater logs. A full real-host update remains a
+staging gate until provisioning and cutover are exercised.
 
 ## Custom domain from the panel
 

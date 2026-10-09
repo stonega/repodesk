@@ -140,6 +140,8 @@ and encryption key stay operator-level deployment settings.
 | `/api/admin/workspaces/:id/deletion` | Request/status of authorized purge |
 | `/api/admin/workspaces/:id/plugins` | Read/update the workspace-scoped Pi extension registry with optimistic revisions and atomic audit |
 | `/api/admin/operator/*` | Deployment-wide health and restricted controls |
+| `/api/admin/updates` | Authenticated latest stable release, changelog and installation status |
+| `/api/admin/operator/updates` | Operator-only approved update/retry queued to the host daemon; session/origin/CSRF and release fingerprint required |
 
 Group access cards display the last known Telegram group title with the ID below it,
 falling back to the ID when the title is unknown. Titles are captured on linking and

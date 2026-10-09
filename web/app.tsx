@@ -79,6 +79,7 @@ import { ToastProvider, useToast } from "./toast.tsx";
 import { Usage } from "./usage.tsx";
 import { WorkflowSummary } from "./workflow-summary.tsx";
 import "./style.css";
+import { ApplicationUpdate } from "./application-update.tsx";
 import { SiteDomain } from "./site-domain.tsx";
 
 let csrf = "";
@@ -4064,6 +4065,7 @@ function Shell() {
           : `layout layout-auth${setupLayout ? " layout-setup" : ""}`
       }
     >
+      <ApplicationUpdate session={current} request={api} />
       <aside>
         <div className="brand">
           <img

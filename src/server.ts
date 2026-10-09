@@ -12,6 +12,7 @@ import { GitHubService } from "./github/service.ts";
 import { RuntimeLogger } from "./observability/logs.ts";
 import { ReviewService } from "./review-bot/service.ts";
 import { SetupService } from "./setup/service.ts";
+import { ReleaseUpdates } from "./updates/releases.ts";
 
 const cfg = config();
 const pool = database(cfg.DATABASE_URL);
@@ -46,6 +47,15 @@ const app = createApp(
     ? new LocalRunnerClient(cfg.CODEX_RUNNER_URL, cfg.CODEX_RUNNER_TOKEN)
     : undefined,
   new ReviewService(store, githubApp, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN),
+  new ReleaseUpdates(
+    store,
+    cfg.UPDATES_GITHUB_REPOSITORY,
+    cfg.UPDATES_GITHUB_TOKEN,
+    undefined,
+    undefined,
+    undefined,
+    cfg.UPDATES_DIRECTORY,
+  ),
 );
 const server = serve({ fetch: app.fetch, hostname: "0.0.0.0", port: cfg.PORT });
 log.write("app_started");

@@ -13,6 +13,7 @@ import { RuntimeLogger } from "../../src/observability/logs.ts";
 import { ReviewService } from "../../src/review-bot/service.ts";
 import { SetupService } from "../../src/setup/service.ts";
 import { TelegramPoller } from "../../src/telegram/polling.ts";
+import { ReleaseUpdates } from "../../src/updates/releases.ts";
 import { githubTransport } from "../github-fixture.ts";
 
 const rootUrl = process.env.TEST_DATABASE_URL;
@@ -101,6 +102,13 @@ const server = serve({
     "ab".repeat(32),
     undefined,
     new ReviewService(store, reviewApps, "ab".repeat(32), browserOrigin),
+    new ReleaseUpdates(
+      store,
+      undefined,
+      undefined,
+      undefined,
+      async () => new Response(null, { status: 404 }),
+    ),
   ).fetch,
   hostname: "127.0.0.1",
   port: browserPort,
