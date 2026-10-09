@@ -11,6 +11,12 @@ import {
   PiRunner,
   selectedModel,
 } from "../src/agent/runtime.ts";
+import { database } from "../src/db/pool.ts";
+import { Store } from "../src/db/repositories.ts";
+import { GitHubApp } from "../src/github/app.ts";
+import { githubExtension } from "../src/github/extension.ts";
+import { GitHubMetadata } from "../src/github/metadata.ts";
+import { GitHubPullRequests } from "../src/github/pull-requests.ts";
 
 const model = selectedModel("gpt-4.1-mini");
 let calls = 0;
@@ -209,6 +215,51 @@ try {
 } finally {
   await rm(extensionDir, { recursive: true, force: true });
 }
+// No database, GitHub or model calls: verify the packaged default tools and skill in Node.
+const githubStore = new Store(database("postgres://unused@127.0.0.1/unused"));
+try {
+  const workspaceId = "00000000-0000-4000-8000-000000000001";
+  const githubApp = new GitHubApp({
+    id: 1,
+    clientId: "fake",
+    clientSecret: "fake",
+    privateKey: "fake",
+    slug: "fixture",
+  });
+  const catalog = ExtensionCatalog.fromSnapshot(
+    [],
+    [
+      githubExtension(
+        githubStore,
+        workspaceId,
+        {
+          revision: 1,
+          installationId: 1,
+          repositories: [{ id: 1, full_name: "example/repository" }],
+        },
+        new GitHubMetadata(githubStore, githubApp),
+        new GitHubPullRequests(githubStore, githubApp),
+      ),
+    ],
+  );
+  const runner = new PiRunner((_model, context) => {
+    assert.ok(context.systemPrompt?.includes("# RepoDesk GitHub"));
+    for (const name of [
+      "find_connected_repository",
+      "query_github_metadata",
+      "propose_github_issue",
+      "propose_github_pull_request_action",
+    ])
+      assert.ok(context.tools?.some((tool) => tool.name === name));
+    return emit([{ type: "text", text: "github ready" }], "stop");
+  }, catalog);
+  assert.equal(
+    (await runner.run({ ...input, workspaceId })).text,
+    "github ready",
+  );
+} finally {
+  await githubStore.pool.end();
+}
 process.stdout.write(
   `${JSON.stringify({
     node: process.version,
@@ -219,5 +270,6 @@ process.stdout.write(
     cancellation: true,
     boundedTurns: true,
     piExtensions: true,
+    githubDefaults: true,
   })}\n`,
 );

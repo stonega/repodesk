@@ -4,7 +4,7 @@ Implemented: guided GitHub App creation, workspace-scoped web authorization,
 installation/repository selection, disconnect, and short-lived read-only installation
 tokens for Code Truth, preconfigured authenticated Review Bot webhook intake on
 public HTTPS deployments, plus Telegram issue drafts with explicit approval and
-repository-scoped issue submission. No personal token is accepted by the web panel.
+repository-scoped issue submission and approved PR merge/close actions. No personal token is accepted by the web panel.
 
 ## Create the App from the panel
 
@@ -25,7 +25,7 @@ repository-scoped issue submission. No personal token is accepted by the web pan
    organization Members read access,
    `pull_request`, `issue_comment` and `pull_request_review_comment` webhook
    subscriptions, and the deployment's callbacks. These permissions support
-   Codex checkout and PR publication; coding policies and task authorization
+   Codex checkout, PR publication and approved PR merge/close actions; coding policies and task authorization
    still control each operation. The callback accepts exactly this permission set
    and rejects missing grants or additional permissions.
    With a public HTTPS domain, webhook delivery is enabled at
@@ -248,7 +248,7 @@ RepoDesk requests Contents, Issues and Pull requests write permissions plus Meta
 and organization Members read, and keeps its own session/tenant checks. Installation tokens remain scoped to
 the selected repository and operation; Code Truth receives only source-read tokens.
 
-## Update an existing App for Codex
+## Update an existing App for Codex and PR actions
 
 Changing RepoDesk's new-App manifest does not update Apps already registered on
 GitHub. For an existing App, open its **Permissions & events → Repository
@@ -310,6 +310,61 @@ existing approval retention and workspace-deletion policy.
 
 See [the example and deterministic verification](../../examples/github-issue.md).
 API reference: [Create an issue](https://docs.github.com/en/rest/issues/issues#create-an-issue).
+
+## Merge or close a PR from Telegram
+
+The GitHub tools and bundled [`repodesk-github` skill](../../skills/repodesk-github/SKILL.md)
+load by default whenever the workspace has a connected installation and selected
+repositories. This covers existing workspaces as well as new ones; no custom plugin
+manifest, Code Truth service, coding enablement or manual skill activation is needed
+for repository reads or issue/PR proposals. Coding-maintainer grants require enabled
+Codex settings; workspace owners/admins can propose PR actions independently.
+The registered tool set describes the current build; old conversation replies about
+missing tools do not override it. Updating the source or GitHub App permissions does
+not update an already-running deployment's agent code. Roll out the updated app and
+worker through the release process before expecting the new merge tool in Telegram.
+
+Ask “Merge example/workspace PR #233 using squash” or “Close example/workspace
+PR #215”. The built-in `propose_github_pull_request_action` tool reads the PR and
+shows its repository, number, title, link, target branch and action with the existing
+**Approve** / **Reject** controls. A merge also displays its current head commit and
+merge method (`merge` by default, or `squash`/`rebase`). Only the requester can
+approve, within 15 minutes. Each PR requires its own approval. Coding task approval
+and Direct execution never authorize a merge.
+
+The requester must be an active workspace owner/admin or a maintainer of that
+repository in enabled Codex settings. Linked GitHub accounts also need fresh
+write/admin repository access. Only active, selected installation repositories are
+eligible. Private PR actions use private Telegram chats; scheduled runs cannot
+propose PR writes. These gates are rechecked at approval and before execution.
+
+The new-App manifest already includes the necessary grants. **Existing Apps** must
+set Contents and Pull requests to **Read and write** and accept the installation's
+permission update as described above; reconnecting alone does not grant access.
+Proposal reads use a repository-scoped Pull-requests-read token. Execution obtains a
+separate token: Contents-write/Pull-requests-read for merge, or Pull-requests-write
+for close. Metadata/source-read tokens never merge or close PRs.
+
+Immediately before execution, the worker rereads the PR and rejects changed heads,
+titles or target branches, closed/merged PRs, and draft merges. The merge request
+includes the approved head SHA, so GitHub rejects a concurrent head update. This
+version uses GitHub's synchronous merge API; merge queues and stacked PRs require
+GitHub's separate flow. No rule-bypass option is requested; the App's configured
+GitHub rules and bypass grants still determine what GitHub permits. Closing never
+merges or deletes a branch. GitHub's close endpoint has no head-SHA condition; a
+concurrent change after the final read can still occur. The merge endpoint likewise
+does not atomically pin the target branch or title after that final read.
+
+The application commits a durable reservation before one mutation attempt.
+Duplicate callbacks, concurrent workers and restarts never repeat a reserved
+action. Timeouts, server errors and interrupted sends become **unknown**; inspect
+the PR in GitHub before making a new request. Known rejections and missing grants
+produce a scoped recovery message. Credentials and GitHub response diagnostics stay
+out of Telegram/model context and routine logs. Approval records follow the existing
+retention and workspace-deletion policy. See [the runnable journey](../../examples/github-pull-request.md).
+
+References: [Merge a pull request](https://docs.github.com/en/rest/pulls/pulls#merge-a-pull-request),
+[Update a pull request](https://docs.github.com/en/rest/pulls/pulls#update-a-pull-request).
 
 ## Fetch GitHub accounts in member forms
 

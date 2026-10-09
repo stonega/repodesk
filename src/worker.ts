@@ -7,6 +7,7 @@ import { database } from "./db/pool.ts";
 import { Store } from "./db/repositories.ts";
 import { configuredGitHubApp } from "./github/app.ts";
 import { GitHubIssues } from "./github/issues.ts";
+import { GitHubPullRequests } from "./github/pull-requests.ts";
 import { GitHubApps } from "./github/registry.ts";
 import { GitHubUsers } from "./github/users.ts";
 import { startWorker } from "./jobs/queue.ts";
@@ -61,6 +62,7 @@ const stop = await startWorker(
       : undefined,
     cfg.ENCRYPTION_KEY,
   ),
+  new GitHubPullRequests(store, githubApps),
 );
 log.write("worker_started");
 let stopping = false;

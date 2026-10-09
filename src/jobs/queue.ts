@@ -7,6 +7,7 @@ import { DEFAULT_RUN_TIMEOUT_SECONDS } from "../config.ts";
 import { transaction } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import type { GitHubIssues } from "../github/issues.ts";
+import type { GitHubPullRequests } from "../github/pull-requests.ts";
 import type { GitHubUsers } from "../github/users.ts";
 import { pruneRuntimeLogs, RuntimeLogger } from "../observability/logs.ts";
 import { sweep } from "../privacy/service.ts";
@@ -74,6 +75,7 @@ export async function startWorker(
   coding?: CodingService,
   githubUsers?: GitHubUsers,
   review?: ReviewExecutor,
+  githubPullRequests?: GitHubPullRequests,
 ) {
   const boss = queue(url, store.log);
   await boss.start();
@@ -180,6 +182,15 @@ export async function startWorker(
               (!approval.issue || approval.issue.state === "sending")
             )
               await githubIssues.send(workspaceId, approval.id);
+        if (githubPullRequests && d.active && !d.paused)
+          for (const approval of current.approvals)
+            if (
+              approval.kind === "github_pull_request" &&
+              approval.decision === "approved" &&
+              (!approval.pullRequest ||
+                approval.pullRequest.state === "sending")
+            )
+              await githubPullRequests.send(workspaceId, approval.id);
         for (const intent of current.deliveries)
           if (
             (intent.state === "pending" &&

@@ -54,7 +54,8 @@ or turn text found in a repository into instructions with authority.
 | Save an assistant procedure as a team skill | Requester approves a sanitized draft from an owned completed run; admins publish and enable it through Skills. | Implemented locally; usefulness/reuse evaluation remains |
 | Get a work handoff | Personal task/checkpoint/question/PR and discussion summary; group queries remain in the current topic. | Implemented locally; live usefulness evaluation remains |
 | Automatically review selected PRs and finish tagged requests | Opt-in Review Bot policy, exact-commit informational reviews, verified maintainer mentions and checked same-PR fixes. | Implemented locally; live webhook/review/publication acceptance remains |
-| Merge or modify arbitrary repository content | Separate, narrowly scoped actions with distinct approvals and recovery rules. | Proposed; no general GitHub write tool is available |
+| Merge or close a selected repository PR | Owner/admin or configured coding maintainer proposes one action; requester approves its PR, target branch and merge method. Linked accounts also require current GitHub write access. Merges pin the reviewed head commit. | Implemented locally; live GitHub/Telegram acceptance remains |
+| Modify arbitrary repository content | Separate, narrowly scoped actions with distinct approvals and recovery rules. | Proposed; no general GitHub write tool is available |
 
 See [Review Bot](../implementation/review-bot.md), [GitHub App setup](../implementation/github-app.md),
 [Code Truth](../implementation/code-truth.md),
@@ -74,7 +75,7 @@ See [Review Bot](../implementation/review-bot.md), [GitHub App setup](../impleme
   current issue/PR state or that an answer is semantically correct.
 - A GitHub write needs a reviewable, actor-bound approval for the exact target and
   payload. A coding approval explicitly covers its issue, local execution and PR.
-  There is no automatic merge. Unknown remote outcomes require inspection before
+  Merging requires a separate explicit PR-action approval. Unknown remote outcomes require inspection before
   a new request; automatic replay could duplicate work.
 - Repository files, issue text and tool output are untrusted input. They cannot
   override application policy or supply credentials. Secrets stay out of Telegram

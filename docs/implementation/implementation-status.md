@@ -24,6 +24,43 @@ action changes in the shared checkout were preserved and excluded from this
 verification. No production rollout, live model call, GitHub write or Telegram
 send was performed.
 
+## Default GitHub tools/skill and approved PR actions, 2026-10-09
+
+Connected workspaces now receive app-owned repository lookup, issue/PR metadata,
+issue proposals and merge/close proposals by default, alongside the bundled
+[`repodesk-github` skill](../../skills/repodesk-github/SKILL.md). Existing workspaces
+need no plugin manifest or skill-catalog migration, and custom skill records remain
+intact. Registered tools describe the current build even when retained conversations
+contain older replies about missing capabilities. Optional Code Truth and coding
+execution retain their own configuration requirements.
+
+PR actions require an active owner/admin or configured coding maintainer, current
+write/admin access for linked GitHub accounts, a selected repository and a separate
+requester approval for each PR. Telegram previews identify the exact action, PR,
+target branch, and merge method/head commit. The worker rereads the PR, rechecks
+authority and deployment state, commits a reservation, then attempts one scoped
+mutation. Changed/draft/closed PRs fail safely; merges include the reviewed head SHA.
+Concurrent workers, duplicate approvals and restarts cannot repeat a reserved write.
+Uncertain outcomes require GitHub inspection. Safe tool/result guidance explains
+permission updates and PR-state failures without exposing upstream diagnostics.
+
+The App manifest already requested Contents and Pull requests write permissions;
+older installations still require GitHub permission-update acceptance. Running app
+and worker processes must be updated through the release flow to expose the new
+tool. This adds no dependency or database migration. No deployment, live GitHub
+write, Telegram send or model call was performed. Native Telegram desktop/mobile
+rendering, real installation-grant changes and live PR outcomes remain staging gates.
+See [setup and limits](github-app.md#merge-or-close-a-pr-from-telegram) and
+[the runnable journey](../../examples/github-pull-request.md).
+
+Validation: `bun run check`, strict typechecking, production build and all **642
+deterministic tests** passed against disposable PostgreSQL. The **17 PR-action
+checks** cover default-agent tool/skill exposure for existing workspaces, unchanged
+custom catalogs, disconnect, exact approval, actor/tenant/privacy boundaries,
+permission revocation, changed PRs, scoped token grants, duplicate sends and safe
+unknown outcomes. The Node runtime contract passed on the host and in the built
+application Docker image, confirming the bundled skill and core tools are packaged.
+
 ## Actionable coding checkout failures, 2026-10-09
 
 Coding preparation now distinguishes a missing configured base branch from other

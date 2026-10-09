@@ -1084,6 +1084,11 @@ Use this format for each preference:
   controls. GitHub handles review, merge permissions and merge confirmation;
   the links do not execute these actions in Telegram. Explicit task commands
   remain available. Notification permissions and chat/topic isolation still apply.
+  2026-10-09 — the user requested PR write capability after a Telegram merge
+  request could only read metadata. An explicit conversational merge/close request
+  now creates a separate actor-bound approval with the exact PR and action;
+  coding-task Merge links continue to open GitHub. Merge approvals show the target
+  branch, method and head commit, and results explain confirmed outcomes or recovery.
 
 ### Telegram tasks show clear progress and outcomes
 

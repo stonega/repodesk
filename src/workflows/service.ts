@@ -10,6 +10,7 @@ import {
 } from "../domain.ts";
 import { checkIssueApproval } from "../github/issues.ts";
 import { workflowRepositoriesAllowed } from "../github/metadata-policy.ts";
+import { checkPullApproval } from "../github/pull-requests.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import { approveSkill } from "../skills/proposals.ts";
 import {
@@ -177,6 +178,8 @@ export function decide(
   if (accept && approval.kind === "skill") approveSkill(w, approval);
   if (accept && approval.kind === "github_issue")
     checkIssueApproval(w, approval);
+  if (accept && approval.kind === "github_pull_request")
+    checkPullApproval(w, approval);
   if (accept && approval.kind === "workflow") {
     authorize(w, actor);
     const workflow = w.workflows.find((f) => f.id === approval.target);

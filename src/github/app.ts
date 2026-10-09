@@ -391,6 +391,8 @@ export class GitHubApp {
       | "coding_read"
       | "issues_read"
       | "pulls_read"
+      | "pulls_write"
+      | "merge"
       | "review" = "contents",
   ) {
     requireThat(
@@ -406,17 +408,21 @@ export class GitHubApp {
         permissions:
           permission === "review"
             ? { pull_requests: "write", issues: "write" }
-            : permission === "issues_read"
-              ? { issues: "read" }
-              : permission === "pulls_read"
-                ? { pull_requests: "read" }
-                : permission === "issues"
-                  ? { issues: "write" }
-                  : permission === "publish"
-                    ? { contents: "write", pull_requests: "write" }
-                    : permission === "coding_read"
-                      ? { contents: "read", pull_requests: "read" }
-                      : { contents: "read" },
+            : permission === "pulls_write"
+              ? { pull_requests: "write" }
+              : permission === "merge"
+                ? { contents: "write", pull_requests: "read" }
+                : permission === "issues_read"
+                  ? { issues: "read" }
+                  : permission === "pulls_read"
+                    ? { pull_requests: "read" }
+                    : permission === "issues"
+                      ? { issues: "write" }
+                      : permission === "publish"
+                        ? { contents: "write", pull_requests: "write" }
+                        : permission === "coding_read"
+                          ? { contents: "read", pull_requests: "read" }
+                          : { contents: "read" },
       },
     );
     return z
@@ -559,6 +565,64 @@ export class GitHubApp {
       branch,
       headSha: sha,
     };
+  }
+  async actOnPullRequest(
+    token: string,
+    repository: string,
+    number: number,
+    action: "merge" | "close",
+    headSha: string,
+    mergeMethod?: "merge" | "squash" | "rebase",
+  ) {
+    // One attempt only. A lost acknowledgement must never replay an external write.
+    try {
+      const response = await this.transport(
+        `https://api.github.com/repos/${repository}/pulls/${number}${action === "merge" ? "/merge" : ""}`,
+        {
+          method: action === "merge" ? "PUT" : "PATCH",
+          headers: {
+            accept: "application/vnd.github+json",
+            "content-type": "application/json",
+            "X-GitHub-Api-Version": "2026-03-10",
+            authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(
+            action === "merge"
+              ? { sha: headSha, merge_method: mergeMethod }
+              : { state: "closed" },
+          ),
+          redirect: "error",
+          signal: AbortSignal.timeout(10000),
+        },
+      );
+      if ([401, 403, 404].includes(response.status))
+        throw new Fault("github_pr_access_denied", 403);
+      if (response.status === 409) throw new Fault("github_pr_changed", 409);
+      if (response.status === 405)
+        throw new Fault("github_pr_not_mergeable", 409);
+      if ([400, 422, 429].includes(response.status))
+        throw new Fault("github_pr_rejected", 409);
+      requireThat(response.status === 200, "github_pr_outcome_unknown", 409);
+      if (action === "merge") {
+        const result = z
+          .object({ merged: z.boolean() })
+          .parse(await response.json());
+        requireThat(result.merged, "github_pr_not_mergeable", 409);
+      } else {
+        z.object({
+          number: z.literal(number),
+          state: z.literal("closed"),
+          merged: z.literal(false),
+        }).parse(await response.json());
+      }
+      return {
+        state: action === "merge" ? ("merged" as const) : ("closed" as const),
+        url: `https://github.com/${repository}/pull/${number}`,
+      };
+    } catch (error) {
+      if (error instanceof Fault) throw error;
+      throw new Fault("github_pr_outcome_unknown", 409);
+    }
   }
   async createIssue(
     token: string,

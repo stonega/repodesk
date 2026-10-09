@@ -21,6 +21,7 @@ import {
 import type { GitHubApp } from "../github/app.ts";
 import { githubExtension } from "../github/extension.ts";
 import { GitHubMetadata } from "../github/metadata.ts";
+import { GitHubPullRequests } from "../github/pull-requests.ts";
 import { GitHubApps } from "../github/registry.ts";
 import { repositoryAccess } from "../github/user-access.ts";
 import { audit } from "../workspaces/policy.ts";
@@ -292,6 +293,9 @@ export class PluginService {
           workspace.github,
           this.githubApp
             ? new GitHubMetadata(this.store, this.githubApp)
+            : undefined,
+          this.githubApp
+            ? new GitHubPullRequests(this.store, this.githubApp)
             : undefined,
         ),
       );

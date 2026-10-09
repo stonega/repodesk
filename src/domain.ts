@@ -266,6 +266,7 @@ export interface Approval {
     | "instruction"
     | "deletion"
     | "github_issue"
+    | "github_pull_request"
     | "coding_task"
     | "skill";
   target: string;
@@ -279,6 +280,12 @@ export interface Approval {
     startedAt: string;
     url?: string;
     number?: number;
+    error?: string;
+  };
+  pullRequest?: {
+    state: "sending" | "merged" | "closed" | "failed" | "unknown";
+    startedAt: string;
+    url?: string;
     error?: string;
   };
 }

@@ -29,6 +29,16 @@ See [implementation plan](../implementation/team-workflows-plan.md) and
 
 ## Pi integration boundary
 
+GitHub is the core workflow. Connected workspaces automatically load the bundled
+[`repodesk-github` skill](../../skills/repodesk-github/SKILL.md) and app-owned repository
+lookup, metadata reads, issue proposals and PR merge/close proposals. This applies
+to existing workspaces without a custom plugin manifest or catalog migration.
+The skill is appended to the ordinary agent system instructions on every interactive
+run, alongside registered tools; it never grants permissions. Optional Code Truth
+and Codex execution still require their own configuration. Custom workspace skill
+drafts, publication, enablement and pinned versions remain independently managed.
+Internal compaction/follow-up classification does not load extension tools or skills.
+
 Pi's coding-agent documentation describes skills as `SKILL.md` packages with metadata,
 instructions and optional supporting files, loaded on demand. The format includes
 names/descriptions and optional tool metadata. This describes the coding-agent harness;

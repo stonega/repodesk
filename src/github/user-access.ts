@@ -45,8 +45,9 @@ export function invalidateGitHubWork(w: Workspace, actor: string) {
   for (const a of w.approvals) {
     if (
       a.actor === actor &&
-      ["github_issue", "coding_task"].includes(a.kind) &&
+      ["github_issue", "github_pull_request", "coding_task"].includes(a.kind) &&
       !a.issue &&
+      !a.pullRequest &&
       a.decision !== "rejected"
     )
       a.decision = "revoked";
