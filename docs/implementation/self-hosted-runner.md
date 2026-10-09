@@ -25,6 +25,11 @@ The outer Compose project is `repodesk-actions-runner`, separate from production
 executes one job at a time; browser shards queue rather than running simultaneously.
 The private repository's Actions secrets continue to provide deployment SSH access.
 
+The Codex verification job allows 30 minutes for both image builds and the lifecycle
+smoke. In [run 37892580454](https://github.com/stonega/repodesk/actions/runs/37892580454/job/113696583835),
+the builds took about eight minutes and the previous ten-minute job limit cancelled
+the smoke after 104 seconds. Other verification jobs retain their ten-minute limits.
+
 ## Install
 
 Use the operator-provided SSH access recorded in [debugging](debugging.md).
