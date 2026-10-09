@@ -1077,8 +1077,12 @@ Use this format for each preference:
 - **Preference:** Make it clear whether an accepted request is working, waiting
   for input, stopping, complete or failed. Longer coding tasks use short progress
   notices based on confirmed application/runner stages. Explain failures with a
-  useful next step and identify when an administrator must act. Acknowledge a stop
-  request separately from confirmed termination when execution is still active.
+  useful next step and identify when an administrator must act.
+  Explain known failure causes with their saved repository and branch when relevant,
+  rather than only asking the user to inspect the panel. Give the configuration
+  location and next action for recovery; keep credentials and raw logs private.
+  Acknowledge a stop request separately from confirmed termination when execution
+  is still active.
   Maintain one task progress message, editing the acknowledgement as confirmed
   stages change, including checks, repairs and longer-stage updates. Keep native
   inline **Status** and **Cancel** controls on that message while applicable.
@@ -1097,6 +1101,8 @@ Use this format for each preference:
   follow-ups.
   2026-10-07 — user showed repeated check/repair notices and requested editing one
   progress message, with new messages only when useful, to keep Telegram conversational.
+  2026-10-09 — user showed a generic Docket checkout failure and requested the
+  detailed cause in the user-facing reply.
 - **Exceptions:** Keep short private replies on native thinking previews without
   an extra immediate queued acknowledgement. Unaddressed group traffic stays
   silent. Revocation and destination policy can prevent a notification. Unknown

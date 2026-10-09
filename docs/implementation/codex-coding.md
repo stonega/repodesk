@@ -18,6 +18,16 @@ parallel; tasks sharing one workspace's ChatGPT login serialize Codex phases whi
 preparation, checks and publication can overlap. See the
 [runner guide](codex-podman.md#lifecycle-and-recovery) for resource limits and recovery.
 
+Checkout failures report a safe cause before Codex starts. When the configured
+base branch is missing, Telegram outcomes, requested status and the admin task
+summary name the repository and branch and point to **Plugins → Codex →
+Repositories** to fix the setting before a new request. Other clone failures
+explain that checkout failed and suggest checking GitHub access and branch settings.
+Raw Git output and credentials remain private. Missing PR branches are not
+misreported as missing configured base branches; uncertain publication keeps its
+existing unknown-outcome handling. Old failures saved only as a generic code
+cannot recover their original cause after an upgrade.
+
 Pi receives `start_development_task` only when at least one repository explicitly
 uses **Direct** policy, and its target list includes only those repositories.
 **Reviewed** repositories, including older configurations without a development

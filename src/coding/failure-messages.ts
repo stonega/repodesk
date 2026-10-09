@@ -1,4 +1,5 @@
 import { attachmentErrors } from "../telegram/attachments.ts";
+import type { CodingPayload } from "./config.ts";
 
 const messages: Record<string, string> = {
   coding_conversation_failed:
@@ -21,6 +22,10 @@ const messages: Record<string, string> = {
     "The coding runner could not be reached. Ask the workspace administrator to check its connection.",
   coding_execution_failed:
     "The coding task could not finish. Ask the workspace administrator to inspect it in the panel.",
+  coding_base_branch_missing:
+    "The configured base branch does not exist in the repository. Ask the workspace administrator to update the base branch in Plugins → Codex → Repositories, then start a new request.",
+  coding_checkout_failed:
+    "The repository could not be checked out, so Codex did not start. Ask the workspace administrator to check the GitHub connection and repository branch settings, then start a new request.",
   coding_failed:
     "The coding task could not finish. Ask the workspace administrator to inspect it in the panel.",
   coding_checks_failed:
@@ -51,7 +56,14 @@ const messages: Record<string, string> = {
     "The connection to your Codex provider failed. Ask the workspace operator to check the provider connection.",
 };
 
-export function codingFailureMessage(code: string) {
+export function codingFailureMessage(
+  code: string,
+  payload?: Pick<CodingPayload, "repository" | "baseBranch">,
+) {
+  if (payload && code === "coding_base_branch_missing")
+    return `The configured base branch “${payload.baseBranch}” does not exist in ${payload.repository}, so Codex did not start. Ask the workspace administrator to update the base branch in Plugins → Codex → Repositories, then start a new request.`;
+  if (payload && code === "coding_checkout_failed")
+    return `Could not check out ${payload.repository}, so Codex did not start. Ask the workspace administrator to check the GitHub connection and repository branch settings, then start a new request.`;
   const text = messages[code] ?? attachmentErrors[code];
   if (!text)
     return "I couldn’t finish this task. Ask the workspace administrator to inspect it in the panel.";

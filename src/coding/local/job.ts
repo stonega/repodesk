@@ -10,6 +10,7 @@ import {
   verificationCommands,
 } from "../development.ts";
 import { CodexAuthError, codexAuthFailure } from "./auth-failure.ts";
+import { checkoutFailureCode } from "./checkout-failure.ts";
 import { runConversation } from "./conversation.ts";
 import { CodexConversationError } from "./conversation-failure.ts";
 import { prepareOpenCodeReview } from "./open-code-review.ts";
@@ -34,6 +35,7 @@ const gitEnv = {
   GIT_CONFIG_NOSYSTEM: "1",
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_TERMINAL_PROMPT: "0",
+  LC_ALL: "C",
 };
 
 async function command(
@@ -98,26 +100,35 @@ function git(args: string[], cwd = repo, auth = false) {
   return command(
     "git",
     ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", ...args],
-    { cwd, env },
+    { cwd, env, stderr: true },
   );
 }
 async function clone(job: Job) {
-  await git(
-    [
-      "clone",
-      "--no-checkout",
-      "--single-branch",
-      "--branch",
-      job.development?.review
-        ? job.payload.baseBranch
-        : (job.development?.pr?.branch ?? job.payload.baseBranch),
-      "--",
-      `https://github.com/${job.payload.repository}.git`,
-      repo,
-    ],
-    "/task",
-    true,
-  );
+  const branch = job.development?.review
+    ? job.payload.baseBranch
+    : (job.development?.pr?.branch ?? job.payload.baseBranch);
+  try {
+    await git(
+      [
+        "clone",
+        "--no-checkout",
+        "--single-branch",
+        "--branch",
+        branch,
+        "--",
+        `https://github.com/${job.payload.repository}.git`,
+        repo,
+      ],
+      "/task",
+      true,
+    );
+  } catch (error) {
+    await writeFile(
+      "/task/failure-code",
+      checkoutFailureCode(error, branch, job.payload.baseBranch),
+    );
+    throw new Error("coding_checkout_failed");
+  }
   if (job.development?.review) {
     const review = job.development.review;
     await git(

@@ -907,6 +907,41 @@ const url = process.env.TEST_DATABASE_URL;
       ).toEqual(grants);
     }
   });
+  test("a missing base branch produces one scoped actionable Telegram failure without implementation or publication", async () => {
+    const f = await fixture();
+    const other = await fixture();
+    await f.tick();
+    const stopped = await f.tick({
+      state: "failed",
+      phase: "prepare",
+      error: "coding_base_branch_missing",
+    });
+    expect(stopped.state).toBe("failed");
+    expect(stopped.error).toBe("coding_base_branch_missing");
+    expect(stopped.tokens).toBe(0);
+    expect(stopped.canImplement).toBe(false);
+    expect(f.publications).toHaveLength(0);
+    await f.tick();
+    const notices = (await store.read(f.w.id)).deliveries.filter(
+      (d) => d.id === `development:${f.task.id}:stopped:1`,
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({
+      actor: "101",
+      chatId: "101",
+      topicId: 3,
+    });
+    expect(notices[0]?.text).toContain("example/workspace");
+    expect(notices[0]?.text).toContain("“develop”");
+    expect(notices[0]?.text).toContain("does not exist");
+    expect(notices[0]?.text).toContain("Plugins → Codex → Repositories");
+    expect(
+      (await store.read(other.w.id)).deliveries.some((d) =>
+        d.id.includes(f.task.id),
+      ),
+    ).toBe(false);
+  });
+
   test("failed result-validation issues persist in the fenced tenant attempt without publication", async () => {
     const f = await fixture();
     await f.tick();

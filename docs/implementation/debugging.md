@@ -74,6 +74,13 @@ Interpret the states separately:
   An operator-authorized live VPS retest on 0.1.21 completed the same wallshader
   request with 694350 reported tokens and passing repository checks; this workload
   would exceed the removed 200000-token guard.
+- `coding_base_branch_missing` means Git reported that the configured base branch
+  does not exist during preparation. Confirm the saved branch in **Plugins →
+  Codex → Repositories** and choose an existing intended branch before a new request.
+  `coding_checkout_failed` means cloning failed for another reason; it does not
+  prove that a branch is missing or permission was revoked. Both failures stop
+  before Codex starts and return safe repository context to Telegram. Older builds
+  preserve only `coding_execution_failed` for these failures.
 - `coding_result_invalid` means the final JSON failed application validation.
   The updated runner generates field constraints from the validator and allows
   one read-only result correction before stopping. Inspect `resultIssues` in the

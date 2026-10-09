@@ -1,5 +1,32 @@
 # Implementation evidence
 
+## Actionable coding checkout failures, 2026-10-09
+
+Coding preparation now distinguishes a missing configured base branch from other
+clone failures. The task container records only an allowed failure code; the
+supervisor preserves it through restart. Telegram outcomes, requested status and
+the saved admin task display name the authorized repository and missing branch,
+explain that Codex did not start, and point to Plugins → Codex → Repositories before
+a new request. Missing PR branches do not claim that the base branch is absent;
+uncertain publication retains its existing reconciliation behavior. Old generic
+failures cannot reconstruct discarded Git diagnostics.
+
+Saved task rows use labeled details on mobile so the longer explanation remains
+fully readable. Existing task actions and Stop confirmation remain in place.
+The UI rules record the user's request for specific failure causes and recovery.
+No dependency, database migration or deployment configuration was added.
+
+Validation: Biome, strict TypeScript, build and **625 deterministic tests** passed
+against disposable PostgreSQL, plus the Node runtime contract and **8 browser
+checks**. Saved failures were visually inspected at 1280px and 390px. Application,
+task and supervisor images built; application migration/health/setup smoke, the
+full fake-provider Docker lifecycle (including a real local missing-branch clone
+and restart), and Docker-overlay Compose validation passed. Tests cover one scoped
+failure notice, duplicate polls, unknown/missing markers, tenant isolation, both
+Reviewed and Direct workflows, and no implementation/publication after checkout
+failure. No live provider call, GitHub write, Telegram send or production rollout
+was performed.
+
 ## Shared model providers and GitHub App icon, 2026-10-08
 
 Setup now includes Workspace → Model → Telegram → GitHub. Operators save an

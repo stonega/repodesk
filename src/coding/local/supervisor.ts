@@ -26,6 +26,7 @@ import {
   verificationCommands,
 } from "../development.ts";
 import { resultIssues, safeResultIssues } from "../result-validation.ts";
+import { checkoutFailureCodes } from "./checkout-failure.ts";
 import { conversationFailureCodes } from "./conversation-failure.ts";
 import { DeviceAuth } from "./device-auth.ts";
 import { type ContainerEngine, containerArgs } from "./podman.ts";
@@ -527,6 +528,13 @@ export class RunnerSupervisor implements LocalRunner {
           r.phase === "publish"
             ? "coding_publication_unknown"
             : "coding_execution_failed";
+        if (r.phase === "prepare") {
+          const code = (
+            await this.copyResult(r, "failure-code").catch(() => "")
+          ).trim();
+          if (checkoutFailureCodes.some((allowed) => allowed === code))
+            r.error = code;
+        }
         if (r.phase === "publish" && r.input.development) {
           try {
             r.publishedSha = z

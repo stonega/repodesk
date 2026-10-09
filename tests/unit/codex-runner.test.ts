@@ -228,6 +228,47 @@ test("a selected provider and model stay bound to the task proxy across supervis
   ).toBe(403);
 });
 
+test("checkout failures survive restart without starting Codex or exposing unrecognized markers", async () => {
+  for (const [marker, error] of [
+    ["coding_base_branch_missing\n", "coding_base_branch_missing"],
+    ["coding_checkout_failed", "coding_checkout_failed"],
+    ["coding_check_failed", "coding_execution_failed"],
+    ["token=private-value", "coding_execution_failed"],
+    [undefined, "coding_execution_failed"],
+  ]) {
+    const f = await fixture();
+    const readText = f.engine.readText.bind(f.engine);
+    f.engine.readText = async (container, path, maxBytes) => {
+      if (path.endsWith("failure-code")) {
+        if (marker === undefined) throw Error("Missing stage marker");
+        return marker;
+      }
+      return readText(container, path, maxBytes);
+    };
+    await f.supervisor.start(f.input);
+    f.fail();
+    const status = await f.supervisor.status(
+      f.input.workspaceId,
+      f.input.taskId,
+    );
+    expect(status).toMatchObject({ state: "failed", phase: "prepare", error });
+    expect(JSON.stringify(status)).not.toContain("private-value");
+    const restarted = new RunnerSupervisor(f.settings, f.engine);
+    await restarted.initialize();
+    expect(await restarted.status(f.input.workspaceId, f.input.taskId)).toEqual(
+      status,
+    );
+    expect(
+      f.calls
+        .filter((call) => call.args[0] === "create")
+        .map((call) => call.args.at(-1)),
+    ).toEqual(["prepare"]);
+    await expect(
+      f.supervisor.publish(f.input.workspaceId, f.input.taskId, "write-token"),
+    ).rejects.toThrow("coding_task_not_ready");
+  }
+});
+
 test("OCR preparation failure stops before model credentials or publication are issued", async () => {
   const f = await fixture();
   const readText = f.engine.readText.bind(f.engine);

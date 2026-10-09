@@ -5,7 +5,7 @@ import type { DevelopmentTask } from "../../src/coding/development.ts";
 const workspaceId = "d2ce2eab-3b09-4e8e-858e-75c20d832517";
 const endpoint = `/api/admin/workspaces/${workspaceId}/plugins/coding`;
 
-async function fixture(page: Page) {
+async function fixture(page: Page, failed = false) {
   const now = new Date().toISOString();
   const reviewed: CodingTask = {
     id: "1e8f2aab-3b09-4e8e-858e-75c20d832517",
@@ -50,6 +50,12 @@ async function fixture(page: Page) {
     canPublish: false,
     cancelRequested: false,
   };
+  if (failed)
+    for (const task of [reviewed, continuous]) {
+      task.state = "failed";
+      task.error = "coding_base_branch_missing";
+      task.payload.baseBranch = "develop";
+    }
   const data: CodingPage = {
     revision: 1,
     settings: {
@@ -105,6 +111,46 @@ async function fixture(page: Page) {
 }
 
 for (const width of [1280, 390]) {
+  test(`saved checkout failures explain the branch and recovery at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const f = await fixture(page, true);
+    for (const task of [f.reviewed, f.continuous]) {
+      const row = page.getByRole("row").filter({ hasText: task.payload.title });
+      await expect(row).toContainText(
+        "The configured base branch “develop” does not exist in example/repo",
+      );
+      await expect(row).toContainText("Codex did not start");
+      await expect(row).toContainText("Plugins → Codex → Repositories");
+      await expect(row).toContainText("start a new request");
+      const errorBounds = await row
+        .locator("td")
+        .nth(2)
+        .locator("p")
+        .first()
+        .boundingBox();
+      const regionBounds = await page
+        .getByRole("region", { name: "Coding tasks" })
+        .boundingBox();
+      if (!errorBounds || !regionBounds)
+        throw Error("Missing task failure display");
+      expect(errorBounds.x).toBeGreaterThanOrEqual(regionBounds.x);
+      expect(errorBounds.x + errorBounds.width).toBeLessThanOrEqual(
+        regionBounds.x + regionBounds.width,
+      );
+      await expect(
+        row.getByRole("button", {
+          name: `Stop coding task ${task.payload.title}`,
+        }),
+      ).toHaveCount(0);
+    }
+    await expect(page.locator("body")).toHaveJSProperty("scrollWidth", width);
+    await page
+      .getByRole("region", { name: "Coding tasks" })
+      .screenshot({ path: test.info().outputPath("checkout-failures.png") });
+    expect(f.cancellations).toEqual([]);
+  });
   for (const mode of ["reviewed", "continuous"] as const) {
     test(`${mode} Stop requires confirmation at ${width}px`, async ({
       page,

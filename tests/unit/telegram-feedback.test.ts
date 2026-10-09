@@ -182,3 +182,21 @@ test("messages hide unknown codes and expose only verified runner stages", () =>
   );
   expect(codingStatusLabel({ state: "failed" })).toBe("Could not complete");
 });
+
+test("checkout failure messages identify the saved repository and missing branch with recovery guidance", () => {
+  const payload = { repository: "example/docket", baseBranch: "develop" };
+  const message = codingFailureMessage("coding_base_branch_missing", payload);
+  expect(message).toContain("example/docket");
+  expect(message).toContain("“develop”");
+  expect(message).toContain("does not exist");
+  expect(message).toContain("Codex did not start");
+  expect(message).toContain("Plugins → Codex → Repositories");
+  expect(message).toContain("start a new request");
+  expect(codingFailureMessage("coding_base_branch_missing")).toContain(
+    "base branch does not exist",
+  );
+  const fallback = codingFailureMessage("coding_checkout_failed", payload);
+  expect(fallback).toContain("example/docket");
+  expect(fallback).toContain("GitHub connection");
+  expect(fallback).not.toContain("does not exist");
+});

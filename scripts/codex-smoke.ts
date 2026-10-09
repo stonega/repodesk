@@ -33,6 +33,8 @@ const parallelTaskId = randomUUID();
 const parallelKey = taskKey(workspaceId, parallelTaskId);
 const failedTaskId = randomUUID();
 const failedKey = taskKey(workspaceId, failedTaskId);
+const checkoutTaskId = randomUUID();
+const checkoutKey = taskKey(workspaceId, checkoutTaskId);
 const deviceTaskId = randomUUID();
 const deviceKey = taskKey(workspaceId, deviceTaskId);
 const developmentIds = [
@@ -87,11 +89,16 @@ const {writeFileSync,readFileSync}=require('node:fs');
 const args=process.argv.slice(2);
 if(args.includes('clone')) {
  const git=a=>execFileSync('/usr/bin/git',a,{cwd:'/task',stdio:'ignore',env:{...process.env,GIT_AUTHOR_DATE:'2026-10-05T00:00:00Z',GIT_COMMITTER_DATE:'2026-10-05T00:00:00Z'}});
+ const job=JSON.parse(readFileSync('/input/job.json','utf8'));
+ if(job.payload.body==='Missing base branch fixture') {
+   git(['init','--initial-branch=main','/task/source']);
+   git(['-C','/task/source','-c','user.name=Smoke','-c','user.email=smoke@example.invalid','commit','--allow-empty','-m','fixture']);
+   execFileSync('/usr/bin/git',args.map(a=>a.startsWith('https://github.com/')?'/task/source':a),{cwd:'/task',stdio:'inherit',env:process.env});
+ }
  git(['init','--initial-branch=develop','/task/repo']);
  writeFileSync('/task/repo/README.md','old\\n');
  git(['-C','/task/repo','add','README.md']);
  git(['-C','/task/repo','-c','user.name=Smoke','-c','user.email=smoke@example.invalid','commit','-m','fixture']);
- const job=JSON.parse(readFileSync('/input/job.json','utf8'));
  if(job.development?.pr) {
    writeFileSync('/task/repo/README.md','fixed\\n');
    git(['-C','/task/repo','add','--all']);
@@ -279,6 +286,43 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     readToken: "fake-read-token",
     providerApiKey: "fake-panel-provider-key",
   };
+  await request("/tasks", {
+    ...input,
+    taskId: checkoutTaskId,
+    payload: { ...input.payload, body: "Missing base branch fixture" },
+  });
+  for (let attempt = 0; ; attempt++) {
+    const status = (await request(
+      `/tasks/${workspaceId}/${checkoutTaskId}`,
+    )) as LocalStatus;
+    if (status.state === "failed") {
+      if (
+        status.error !== "coding_base_branch_missing" ||
+        status.phase !== "prepare" ||
+        status.threadId
+      )
+        throw Error(
+          "Missing base branch did not retain its safe preparation failure",
+        );
+      break;
+    }
+    if (attempt > 30) throw Error("Missing base branch fixture did not fail");
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  await restartSupervisor();
+  const checkoutFailure = (await request(
+    `/tasks/${workspaceId}/${checkoutTaskId}`,
+  )) as LocalStatus;
+  if (checkoutFailure.error !== "coding_base_branch_missing")
+    throw Error("Checkout failure did not survive supervisor restart");
+  const implementations = await engine([
+    "ps",
+    "--all",
+    "--format",
+    "{{.Names}}",
+  ]);
+  if (implementations.split("\n").includes(`${checkoutKey}-implement`))
+    throw Error("Codex ran after a failed checkout");
   const parallelInputs = [
     { ...input, payload: { ...input.payload, body: "Parallel fixture" } },
     {
@@ -749,13 +793,14 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   for (const id of developmentIds)
     await request(`/tasks/${workspaceId}/${id}/erase`, {});
   console.log(
-    `${engineName} smoke passed: parallel tasks/capacity/restart, provider/device tasks, question checkpoint/reconstruction, deployment checkpoint/restart, repeated repair, fresh/same-PR publication, remote-head fencing, device continuation, auth expiry/restart/reconnect, usage, erasure and cancellation.`,
+    `${engineName} smoke passed: missing base branch/restart, parallel tasks/capacity/restart, provider/device tasks, question checkpoint/reconstruction, deployment checkpoint/restart, repeated repair, fresh/same-PR publication, remote-head fencing, device continuation, auth expiry/restart/reconnect, usage, erasure and cancellation.`,
   );
 } catch (error) {
   for (const task of [
     key,
     parallelKey,
     failedKey,
+    checkoutKey,
     deviceKey,
     ...developmentKeys,
   ])
@@ -778,8 +823,15 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     "--force",
     "--ignore",
     name,
-    ...[key, parallelKey, failedKey, deviceKey, ...developmentKeys].flatMap(
-      (taskKey) => [...phases, "input"].map((phase) => `${taskKey}-${phase}`),
+    ...[
+      key,
+      parallelKey,
+      failedKey,
+      checkoutKey,
+      deviceKey,
+      ...developmentKeys,
+    ].flatMap((taskKey) =>
+      [...phases, "input"].map((phase) => `${taskKey}-${phase}`),
     ),
   ]).catch(() => {});
   for (const volume of [
@@ -793,6 +845,8 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     `${failedKey}-input`,
     `${failedKey}-work`,
     `${failedKey}-publish`,
+    `${checkoutKey}-input`,
+    `${checkoutKey}-work`,
     `${deviceKey}-input`,
     `${deviceKey}-work`,
     `${deviceKey}-publish`,

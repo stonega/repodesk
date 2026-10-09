@@ -125,7 +125,7 @@ export function developmentStatus(task: DevelopmentTask) {
         : task.pr
           ? "Your PR is ready for review."
           : "The recorded checks passed. Publication has not been requested.",
-    failed: codingFailureMessage(task.error ?? ""),
+    failed: codingFailureMessage(task.error ?? "", task.payload),
     cancelled: "Your task has stopped.",
     unknown:
       task.progress?.stage === "publish" ? publicationUnknown : taskUnknown,
@@ -147,7 +147,7 @@ export function reviewedStatus(task: CodingTask) {
         ? active(task)
         : stageMessage("publish"),
     succeeded: "The recorded checks passed. Your PR is ready for review.",
-    failed: codingFailureMessage(task.error ?? ""),
+    failed: codingFailureMessage(task.error ?? "", task.payload),
     cancelled: "Your task has stopped.",
     unknown:
       task.progress?.stage === "publish" ? publicationUnknown : taskUnknown,

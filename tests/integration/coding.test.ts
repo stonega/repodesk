@@ -598,6 +598,37 @@ const url = process.env.TEST_DATABASE_URL;
     await service.purgeDeletedWorkspaceAuth(id);
     expect(purged).toEqual([id]);
   });
+  test("Reviewed checkout failures return the missing branch and recovery step once", async () => {
+    const { id, taskId } = await fixture();
+    const local = localFixture();
+    const { service } = provider({ local: local.runner });
+    await service.advance(id, taskId);
+    await ready(id);
+    await service.advance(id, taskId);
+    local.set({
+      state: "failed",
+      phase: "prepare",
+      error: "coding_base_branch_missing",
+    });
+    await ready(id);
+    await service.advance(id, taskId);
+    await ready(id);
+    await service.advance(id, taskId);
+    const stopped = await read(id);
+    expect(stopped.state).toBe("failed");
+    expect(stopped.error).toBe("coding_base_branch_missing");
+    expect(local.calls.filter((c) => c === "start")).toHaveLength(1);
+    expect(local.calls).not.toContain("publish");
+    const notices = (await store.read(id)).deliveries.filter((d) =>
+      d.id.startsWith(`coding:${taskId}:failed:`),
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.text).toContain(stopped.payload.repository);
+    expect(notices[0]?.text).toContain(`“${stopped.payload.baseBranch}”`);
+    expect(notices[0]?.text).toContain("does not exist");
+    expect(notices[0]?.text).toContain("Plugins → Codex → Repositories");
+  });
+
   test("Podman tasks retain approval and duplicate protection through fresh publication", async () => {
     const { id, taskId } = await fixture();
     await store.change(id, (w) => {

@@ -675,7 +675,7 @@ export class DevelopmentExecutor {
           await this.notice(
             w,
             t,
-            `${t.state === "unknown" ? (t.progress?.stage === "publish" ? publicationUnknown : taskUnknown) : t.state === "cancelled" ? "Your task has stopped." : codingFailureMessage(t.error)}${t.pr ? `\n${t.pr.url}` : ""}`,
+            `${t.state === "unknown" ? (t.progress?.stage === "publish" ? publicationUnknown : taskUnknown) : t.state === "cancelled" ? "Your task has stopped." : codingFailureMessage(t.error, t.payload)}${t.pr ? `\n${t.pr.url}` : ""}`,
             `stopped:${t.fence}`,
           );
         }
@@ -749,7 +749,7 @@ export class DevelopmentExecutor {
           await this.notice(
             w,
             t,
-            `${t.state === "unknown" ? (t.progress?.stage === "publish" ? publicationUnknown : taskUnknown) : codingFailureMessage(code)}${t.pr ? `\n${t.pr.url}` : ""}`,
+            `${t.state === "unknown" ? (t.progress?.stage === "publish" ? publicationUnknown : taskUnknown) : codingFailureMessage(code, t.payload)}${t.pr ? `\n${t.pr.url}` : ""}`,
             `stopped:${t.fence}`,
           );
         }

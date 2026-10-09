@@ -38,6 +38,12 @@ these steps are not part of automated setup or tests.
    requester should get a readable next step. Inspect the panel separately for
    a Telegram delivery failure; an unknown original send must not automatically
    retry. An uncertain edit can safely retry the same known message.
+   Configure a nonexistent base branch for the test repository and start a coding
+   request. Its failure and `/status` reply should name the repository and missing
+   branch, explain that Codex did not start, and point to Plugins → Codex →
+   Repositories before a new request. Confirm the same saved details on desktop
+   and mobile in the panel. Restore the intended branch; the failed task must not
+   restart automatically. No raw Git output or token should appear in the reply.
 
 9. After a task publishes its PR, send “Can you review it?”, “Explain what
    changed”, and an unrelated question in the same Topic, including a Reply to its

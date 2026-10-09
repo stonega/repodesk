@@ -562,7 +562,7 @@ export function Coding({
           </p>
         ) : (
           <div className="usage-table-scroll">
-            <table>
+            <table className="coding-task-table">
               <thead>
                 <tr>
                   <th>Task</th>
@@ -575,7 +575,7 @@ export function Coding({
               <tbody>
                 {tasks.map((task) => (
                   <tr key={task.id}>
-                    <td>
+                    <td data-label="Task">
                       {task.payload.title}
                       <br />
                       <small>
@@ -591,18 +591,18 @@ export function Coding({
                       <br />
                       <code>{task.id}</code>
                     </td>
-                    <td>
+                    <td data-label="Repository / base">
                       {task.payload.repository}
                       <br />
                       <code>{task.payload.baseBranch}</code>
                     </td>
-                    <td>
+                    <td data-label="Status">
                       {codingStatusLabel(task)}
                       {task.questionText && <p>{task.questionText}</p>}
                       {task.error && (
                         <p>
                           {taskFailures[task.error] ??
-                            codingFailureMessage(task.error)}
+                            codingFailureMessage(task.error, task.payload)}
                         </p>
                       )}
                       {!task.continuous && task.threadId && (
@@ -619,7 +619,7 @@ export function Coding({
                           </p>
                         )}
                     </td>
-                    <td>
+                    <td data-label="Links">
                       {task.issue && (
                         <p>
                           <a
@@ -650,7 +650,7 @@ export function Coding({
                         </p>
                       )}
                     </td>
-                    <td>
+                    <td data-label="Actions">
                       {![
                         "succeeded",
                         "failed",
