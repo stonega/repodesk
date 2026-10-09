@@ -1,5 +1,22 @@
 # Implementation evidence
 
+## Explicit application test discovery in Verify, 2026-10-09
+
+Quality now runs `bun test ./tests`. Bare `bun test` recursively discovered the
+optional Code Truth service tests after its dependency installation was removed
+from Verify. In [the first simplified run](https://github.com/stonega/repodesk/actions/runs/37900099896/job/113720384516),
+two service test files could not load `tar` and another service test timed out.
+The earlier local check retained the service's installed dependencies and missed
+this clean-checkout failure. Browser and application container jobs passed in that
+run; the final gate correctly rejected the failed quality job.
+
+Validation used an isolated checkout with only the root frozen-lockfile install
+and no Code Truth dependencies. The missing-package error was reproduced with a
+service test. The scoped CI command then passed all **616 application tests** in
+**70 files**, with no service tests discovered. Biome, strict TypeScript, production
+build and the Node runtime contract also passed there. Application behavior,
+dependencies and test implementations are unchanged.
+
 ## Simplified Verify workflow, 2026-10-09
 
 Verify now runs quality/database checks, the complete browser suite in one job,

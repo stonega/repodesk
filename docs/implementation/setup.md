@@ -289,7 +289,7 @@ GitHub App creation opens its owner/name dialog before continuing to GitHub.
 ```sh
 bun run check
 bun run typecheck
-bun test
+bun test ./tests
 bun run build
 bun run test:runtime
 ```
@@ -303,7 +303,7 @@ Integration tests create and drop uniquely named disposable databases; the test
 PostgreSQL user needs `CREATEDB`. They never operate on the application database.
 
 ```sh
-TEST_DATABASE_URL=postgres://postgres:test@localhost:5432/postgres bun test
+TEST_DATABASE_URL=postgres://postgres:test@localhost:5432/postgres bun test ./tests
 bunx playwright install chromium
 TEST_DATABASE_URL=postgres://postgres:test@localhost:5432/postgres bun run test:browser
 ```
@@ -316,6 +316,9 @@ set `NO_PROXY=localhost,127.0.0.1` for tests (including the local model HTTP fix
 GitHub's **Verify** workflow runs quality/database checks, one browser job for the
 complete suite, and application container checks. It excludes the separate Code
 Truth service install/typecheck/image smoke and Codex image/lifecycle job.
+Quality runs `bun test ./tests` so Bun does not recursively discover the optional
+service's tests. Running bare `bun test` from the repository root also discovers
+`services/code-truth/tests`, which requires that service's separate dependencies.
 All verification, release deployment and Codex diagnostics jobs target self-hosted
 Linux x64 runners with the labels `self-hosted`, `linux` and `x64`. Register an
 online runner available to this repository before running these workflows. Use an
