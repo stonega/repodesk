@@ -124,8 +124,10 @@ For bundles before Docker Codex integration, omit `codex.env` and its overlay.
 Preserve `secrets/codex-runner-token` and `codex_runner_state` together. Temporary
 runner outages keep queued tasks retryable; durable cleanup/publication identities
 prevent double charges and blind repeated GitHub writes. Apply retention to old
-images, bundles, backups and updater logs. A full real-host update remains a
-staging gate until provisioning and cutover are exercised.
+images, bundles, backups and updater logs. Provisioning and a direct cutover were
+verified on the recorded VPS on 2026-10-09 for `cfffdfc` (v0.1.32), with protected
+backup, migration 017, healthy services, public readiness and updater queue access.
+A future release initiated through the modal still needs a live staging check.
 
 ## Custom domain from the panel
 

@@ -13,8 +13,15 @@ cutover. It checks successful Verify evidence for the pinned commit. The GitHub
 deployment workflow is removed; no Actions write credential is required.
 Workspace accounts can review notes. See [installation and recovery](updates.md).
 
-Actual host provisioning and VPS installation remain staging gates. No live
-update is performed by deterministic tests or browser fixtures.
+Direct VPS deployment was verified on 2026-10-09 for `cfffdfc` (v0.1.32) at the
+recorded deployment host. App, worker, Codex runner and the host updater are
+healthy; public `/readyz` returns ready and `/admin` serves the new version and
+indicator mount. The app's UID-1000 process verified queue read/write access,
+a fresh updater heartbeat and migration 017. The pre-migration backup is protected
+with mode 600. The updater uses a private Node v24.21.0 binary extracted from the
+verified app image, preserving the host's existing global runtime configuration.
+Installing a subsequent published release through the modal remains a live
+staging gate. Deterministic tests and browser fixtures do not perform deployment.
 
 Validation: lint, strict typecheck, production build and **661 deterministic tests**
 passed with disposable PostgreSQL and host proxies disabled. **Nine browser

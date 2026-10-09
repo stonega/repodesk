@@ -97,8 +97,13 @@ a migrated image automatically. Retain backups and prune old sources/logs/releas
 images through an operator policy; successful source checkouts are removed.
 
 [updates.http](../../examples/updates.http) documents the API. Local tests use fake
-GitHub, host commands and queue fixtures. Actual host provisioning and a complete
-VPS update remain live staging gates; development does not perform them.
+GitHub, host commands and queue fixtures. Host provisioning and a direct VPS
+cutover were verified on 2026-10-09 for `cfffdfc` (v0.1.32), including public
+readiness and queue access from the app. This host uses
+`/opt/repodesk/updater/node` (v24.21.0, extracted from the verified app image) in
+its installed service instead of a global Node installation. A subsequent
+published-release installation initiated through the modal remains a live staging
+gate; deterministic development checks do not deploy.
 
 API references: [GitHub Releases](https://docs.github.com/en/rest/releases/releases),
 [Verify run lookup](https://docs.github.com/en/rest/actions/workflow-runs).
