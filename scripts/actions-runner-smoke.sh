@@ -13,7 +13,7 @@ cleanup() {
 trap cleanup EXIT
 
 docker run --detach --pull=never --name "$smoke_name" \
-  --privileged --init --cpus=2 --memory=4g --memory-swap=4g \
+  --privileged --init --cpus=2 --memory=2g --memory-swap=2g \
   --volume "$smoke_name-runner:/opt/actions-runner" \
   --volume "$smoke_name-docker:/var/lib/docker" \
   "$runner_image" >/dev/null

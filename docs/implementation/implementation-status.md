@@ -1,5 +1,28 @@
 # Implementation evidence
 
+## Three isolated Actions runners (2026-10-10)
+
+The Actions Compose deployment now provides `runner`, `runner-2` and `runner-3`.
+Each service has separate registration/work and Docker-data volumes, so up to
+three jobs can execute concurrently without sharing Docker daemons, CI database
+ports or disposable stacks. The original service and volume names are preserved.
+Each runner has a two-CPU ceiling and 2 GiB memory limit, for a combined 6-GiB
+memory ceiling on the recorded four-CPU, 8-GiB VPS. CPU capacity remains shared
+with production; the browser suite still executes on one Playwright worker.
+
+Validation: lint, strict TypeScript, build, **683 deterministic tests** against
+disposable PostgreSQL, the Node runtime contract and shell/Compose checks passed.
+The runner image built locally and passed Docker-in-Docker resource-limit and
+cleanup smoke tests locally and on the VPS under the new 2-GiB limit. All three
+deployed daemons passed simultaneous HTTP checks on the same internal port and
+nested CPU/memory/PID-limit checks. See [runner operations](self-hosted-runner.md).
+
+The recorded VPS now has `repodesk-vps` (original ID 21), `repodesk-vps-2` (ID 22)
+and `repodesk-vps-3` (ID 23) online with healthy Compose containers. The original
+registration and Docker volumes remain. Production readiness is HTTP 200. No
+application release or workflow dispatch was performed by this change; complete
+Verify timings with three runners remain unmeasured.
+
 ## Operations summaries and modal controls (2026-10-10)
 
 `/admin/operations` now shows labeled health values, deployment activity,

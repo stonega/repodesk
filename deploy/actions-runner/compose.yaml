@@ -1,24 +1,42 @@
 name: repodesk-actions-runner
+x-runner: &runner
+  build: .
+  image: repodesk-actions-runner:local
+  # Docker-in-Docker requires privilege, but has its own socket, data and network.
+  privileged: true
+  init: true
+  restart: unless-stopped
+  cpus: 2
+  # Three runners share an 8-GiB VPS; leave 2 GiB for production and the host.
+  mem_limit: 2g
+  stop_grace_period: 2m
+  healthcheck:
+    test: [CMD-SHELL, "docker info >/dev/null 2>&1 && pgrep -u runner -f Runner.Listener >/dev/null"]
+    start_period: 2m
+    interval: 15s
+    timeout: 5s
+    retries: 4
 services:
   runner:
-    build: .
-    image: repodesk-actions-runner:local
-    # Docker-in-Docker requires privilege, but has its own socket, data and network.
-    privileged: true
-    init: true
-    restart: unless-stopped
-    cpus: 2
-    mem_limit: 4g
-    stop_grace_period: 2m
+    <<: *runner
+    # Keep the original service and volume names to preserve its registration.
     volumes:
       - runner:/opt/actions-runner
       - docker:/var/lib/docker
-    healthcheck:
-      test: [CMD-SHELL, "docker info >/dev/null 2>&1 && pgrep -u runner -f Runner.Listener >/dev/null"]
-      start_period: 2m
-      interval: 15s
-      timeout: 5s
-      retries: 4
+  runner-2:
+    <<: *runner
+    volumes:
+      - runner-2:/opt/actions-runner
+      - docker-2:/var/lib/docker
+  runner-3:
+    <<: *runner
+    volumes:
+      - runner-3:/opt/actions-runner
+      - docker-3:/var/lib/docker
 volumes:
   runner:
   docker:
+  runner-2:
+  docker-2:
+  runner-3:
+  docker-3:

@@ -1,6 +1,6 @@
 # Automatic VPS storage cleanup
 
-Host release images and the isolated CI Docker daemon have separate retention
+Host release images and the three isolated CI Docker daemons have separate retention
 policies. Neither policy removes production database or Codex task volumes,
 runner registration, credentials, backups or release metadata.
 
@@ -77,9 +77,11 @@ enabled with a 2GB target; separate Buildx builders have their own cache policie
 
 Update the runner through [its installation workflow](self-hosted-runner.md#install),
 copying `daemon.json` and `cleanup.sh` alongside the Dockerfile, entrypoint and
-Compose file. Rebuild/recreate it only when GitHub reports the runner idle. Keep
-the outer runner and Docker named volumes; no registration or production service
-restart is needed. An installation still using the previous runner image has no
+Compose file. Rebuild/recreate each affected service only when GitHub reports
+its runner idle. Keep each service's separate outer registration and Docker named
+volumes. Existing registrations and production services remain in place. The hook
+runs independently on each runner's own Docker daemon. An installation still
+using the previous runner image has no
 post-job cleanup hook.
 
 ## Recorded VPS activation, 2026-10-10
