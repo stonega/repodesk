@@ -353,7 +353,15 @@ for (const width of [1280, 390, 320]) {
           throw new Error("Notification and version controls must be visible");
         expect(bounds.x).toBeGreaterThanOrEqual(16);
         expect(bounds.x + bounds.width).toBeLessThanOrEqual(width - 16);
-        expect(bounds.y + bounds.height).toBeLessThan(versionBounds.y);
+        if (width <= 800) {
+          await expect(page.locator(".mobile-header")).toBeVisible();
+          expect(versionBounds.y).toBe(0);
+          expect(bounds.y).toBeGreaterThan(
+            versionBounds.y + versionBounds.height,
+          );
+        } else {
+          expect(bounds.y + bounds.height).toBeLessThan(versionBounds.y);
+        }
         expect(retryBounds.x).toBeGreaterThan(
           messageBounds.x + messageBounds.width,
         );
