@@ -171,8 +171,17 @@ Webhook remains the default transport; polling starts only when explicitly confi
    `/linktoken` can link a group in which that user is a Telegram administrator.
 
 Telegram ID entry alone never proves identity. Extra panel accounts are created
-under Operations; enroll their Telegram IDs in Members and issue a one-use identity
-link from Operations. They have no deployment-operator privileges.
+from **New** in Operations → Panel accounts. The dialog collects the username and
+password; the created account ID appears on the page. Enroll the intended Telegram
+ID in Members, then choose **Issue link** in Operations → Identity verification.
+Select the workspace and enter the panel account ID in the dialog. The one-use
+identity link appears on the page after submission. Extra accounts have no
+deployment-operator privileges.
+
+Operations also offers **Recover access** for an existing workspace owner/admin
+and **Inspect run** for redacted run status, each in its own dialog. Cancel
+discards input; failures retain it for retry. Deployment-wide pause/resume opens
+a confirmation dialog before changing activity.
 
 Group collection is off by default. Disable BotFather privacy where appropriate,
 recheck visibility under Group access, and explicitly consent with `/capture on`

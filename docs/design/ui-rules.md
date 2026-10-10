@@ -1014,15 +1014,20 @@ when implementing or reviewing a change.
   workflows, skills/imports, instructions, runs, panel accounts,
   plugins, repositories/networks and GitHub Apps. Related repository, plugin,
   member, workflow, skill and instruction editors also use these dialogs.
+  Operations shows service/deployment status and action results as readable
+  summaries; panel account creation, identity verification, access recovery and
+  run inspection open focused dialogs. Deployment pause/resume uses confirmation.
 - **Source:** 2026-09-20 — user requested preferring modals for Add actions
   across the app instead of inline forms.
 - **Source update:** 2026-10-08 — user showed the Review Bot repository card
   with selectors, checkboxes and Save settings, and objected to using the same
   UI for display and editing. Show saved repository settings in a compact list
   or summary; open New/Edit in a modal.
+  2026-10-10 — user requested refactoring `/admin/operations` to replace inline
+  forms with summaries and modal editing.
 - **Exceptions:** Sign-in/bootstrap, policy forms,
   workspace creation in the setup wizard, approval decisions and
-  recovery controls stay on their pages. Field editing
+  recovery controls outside Operations stay on their pages. Field editing
   within a modal may remain inline. Applying repository/network changes edits
   a draft; the existing Save Code Truth step persists it. GitHub confirmation
   still takes place on GitHub. The policy-form exception does not cover saved

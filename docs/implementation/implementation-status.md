@@ -1,5 +1,27 @@
 # Implementation evidence
 
+## Operations summaries and modal controls (2026-10-10)
+
+`/admin/operations` now shows labeled health values, deployment activity,
+workspace setup status and operator audit records without inline forms. New
+panel accounts, identity verification, workspace access recovery and redacted
+run inspection open focused dialogs. Account and verification results stay in
+separate readable summaries. Cancel discards drafts; failures retain input;
+pending actions show operation-specific progress and lock dismissal/duplicates.
+
+Deployment pause/resume requires confirmation with the loaded revision. A
+conflict keeps the error in the dialog and requires reloading before confirming
+again, with the primary action and Cancel kept together. Initial loading keeps
+labels and skeleton values visible; failed loads show unavailable states and a
+retry toast. Workspace-dependent actions require loaded, non-removed choices.
+Background refresh retains content and the dialog trigger's focus.
+
+Validation: lint, strict TypeScript, build, **683 deterministic tests** against
+disposable PostgreSQL and **18 Operations browser scenarios** passed. Desktop
+(1280px) and mobile (390px) summary/editor, loading, empty, pending and error
+screenshots were inspected, including light/dark layouts. No dependency,
+migration, deployment, live account connection or external message was added.
+
 ## Automatic Docker storage retention (2026-10-10)
 
 Added an optional daily host cleanup timer and a dry-run-first release image

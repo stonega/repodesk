@@ -63,11 +63,13 @@ export function RecordForm({
   fields,
   save,
   label = "Save changes",
+  pendingLabel = "Saving…",
 }: {
   value: unknown;
   fields: FormField[];
   save: (value: unknown) => Promise<unknown>;
   label?: string;
+  pendingLabel?: string;
 }) {
   const initial = JSON.stringify(value);
   const [draft, setDraft] = useState<Record<string, unknown>>(() =>
@@ -290,7 +292,7 @@ export function RecordForm({
       )}
       <ModalActions>
         <button type="submit" disabled={busy}>
-          {busy ? "Saving…" : label}
+          {busy ? pendingLabel : label}
         </button>
       </ModalActions>
     </form>

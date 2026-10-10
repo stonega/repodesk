@@ -116,6 +116,17 @@ Pausing cancels queued/running assistant work and pending run deliveries; resumi
 allows new work and does not restart cancelled runs or deliveries. Model capacity
 is shown in deployment Model settings.
 
+Operations keeps health metrics, deployment activity, workspace setup status and
+operator audit records in read-only summaries. New panel accounts, identity
+verification links, workspace access recovery and redacted run inspection open
+focused dialogs. Cancel discards input, failed requests preserve the draft, and
+pending requests lock dismissal and duplicate submission. Deployment pause/resume
+requires confirmation with the loaded deployment revision; conflicts require
+reloading before confirming again. Workspace-dependent actions remain disabled
+until active workspace choices load. Successful actions refresh the affected
+summaries and show a toast; account/link and diagnostic results remain readable
+on the page.
+
 The first-run wizard accepts bot credentials; Model settings accepts provider
 credentials as write-only inputs in P0, encrypting them with a Docker-injected
 application key. Environment-provided
