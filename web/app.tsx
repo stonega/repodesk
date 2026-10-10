@@ -68,6 +68,7 @@ import { RuntimeLogs } from "./logs.tsx";
 import { MemberRepositories } from "./member-repositories.tsx";
 import { CreateModal, Modal, ModalActions, ModalPending } from "./modal.tsx";
 import { ModelProvidersPanel } from "./model-providers.tsx";
+import { Pagination } from "./pagination.tsx";
 import { Plugins } from "./plugins.tsx";
 import { prefixFields, RecordForm } from "./record-form.tsx";
 import { RunAttempts } from "./run-attempts.tsx";
@@ -205,31 +206,17 @@ function Pager({
   };
   if (!alwaysShow && total <= pageSize && offset === 0) return null;
   return (
-    <nav className="row pagination" aria-label="Pagination">
-      <IconButton
-        icon="previous"
-        label="Previous page"
-        type="button"
-        disabled={loading || offset === 0}
-        onClick={() => goTo(Math.max(0, offset - pageSize))}
-      />
-      <span>
-        {loading ? (
-          <Skeleton width="8rem" />
-        ) : data ? (
-          `${total > offset ? offset + 1 : 0}–${total > offset ? Math.min(offset + pageSize, total) : 0} of ${total}`
-        ) : (
-          "Page unavailable"
-        )}
-      </span>
-      <IconButton
-        icon="next"
-        label="Next page"
-        type="button"
-        disabled={loading || offset + pageSize >= total}
-        onClick={() => goTo(offset + pageSize)}
-      />
-    </nav>
+    <Pagination
+      loading={loading}
+      previousDisabled={offset === 0}
+      nextDisabled={offset + pageSize >= total}
+      onPrevious={() => goTo(Math.max(0, offset - pageSize))}
+      onNext={() => goTo(offset + pageSize)}
+    >
+      {data
+        ? `${total > offset ? offset + 1 : 0}–${total > offset ? Math.min(offset + pageSize, total) : 0} of ${total}`
+        : "Page unavailable"}
+    </Pagination>
   );
 }
 function Notice({

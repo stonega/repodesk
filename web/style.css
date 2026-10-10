@@ -1810,6 +1810,10 @@ aside .field > span {
     padding: 0;
     z-index: 10;
   }
+  body:has(.mobile-header) .toast {
+    top: calc(76px + env(safe-area-inset-top, 0px));
+    bottom: auto;
+  }
   .mobile-header {
     position: sticky;
     top: 0;
@@ -1997,6 +2001,7 @@ aside .field > span {
 .log-table {
   table-layout: fixed;
   min-width: 600px;
+  font-size: 12px;
 }
 .log-table th:first-child {
   width: 23%;
@@ -2033,8 +2038,9 @@ aside .field > span {
   background: var(--ui-danger-soft);
   color: var(--ui-danger);
 }
-.log-older {
-  margin-top: 16px;
+.log-pagination {
+  color: var(--ui-muted);
+  font-size: 12px;
 }
 
 .plugin-toolbar {

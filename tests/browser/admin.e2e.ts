@@ -875,7 +875,7 @@ test.describe
           page.getByText("telegram_polling_failed", { exact: true }),
         ).toBeVisible();
         await page
-          .getByRole("button", { name: "Older logs", exact: true })
+          .getByRole("button", { name: "Next page", exact: true })
           .click();
         await expect(page.getByText(/Viewing older entries/)).toBeVisible();
         await page

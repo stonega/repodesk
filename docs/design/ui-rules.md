@@ -19,6 +19,7 @@ when implementing or reviewing a change.
 | Action labels and controls | [Edit/New labels](#edit-and-add-buttons-use-short-labels), [shared icons](#common-action-buttons-use-reicon), [dropdown styling](#dropdown-inputs-share-the-workspace-selector-style) |
 | Dialog actions | [Cancel order](#modal-cancel-follows-the-primary-action), [close controls](#modal-close-controls-use-a-plain-x), [secondary actions](#dialog-support-actions-use-secondary-buttons) |
 | Feedback and loading | [Toasts and error placement](#routine-action-confirmations-and-request-errors-use-toasts), [visible loading layout](#loading-keeps-the-layout-visible) |
+| Log pagination and density | [Shared pagination and compact log text](#logs-reuse-run-pagination-with-compact-text) |
 
 ## Maintenance
 
@@ -646,6 +647,19 @@ when implementing or reviewing a change.
   can read every retained run message in their workspace, including private runs.
   Telegram linking is unnecessary for deployment administrators to view messages;
   execution and mutation controls retain their existing authorization requirements.
+
+### Logs reuse run pagination with compact text
+
+- **Preference:** Use the Runs pagination component below the logs table, with
+  previous/next chevrons and a visible range/page summary. Keep log rows and the
+  pagination summary compact with smaller text, retaining readable details and
+  44px action targets.
+- **Scope:** Runtime logs in the admin panel at desktop and mobile widths.
+- **Source:** 2026-10-10 — user showed the logs table's lone downward arrow,
+  requested reusing Runs pagination and allowed a smaller font size.
+- **Exceptions:** Logs use cursor pagination and have no total count; show the
+  current range and page rather than inventing a total. Filters, search and Latest
+  logs return to the first page; automatic refresh pauses on older pages.
 
 ### Run attempts use a horizontal timeline
 

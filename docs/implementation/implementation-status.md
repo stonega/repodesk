@@ -1,5 +1,28 @@
 # Implementation evidence
 
+## Shared runtime log pagination (2026-10-10)
+
+Runtime logs now reuse the Runs pagination component below the table, with
+previous/next chevrons, a current range/page summary and 12px row/pagination text.
+Cursor history supports returning through older pages without changing the API
+or inventing a total count. Filters, search and Latest logs reset history;
+automatic updates pause on older pages and resume on return to the latest page.
+Loading disables both navigation actions, failed pages retain previous-page
+recovery, and empty pages keep the pager visible. Log request errors use the shared
+retry toast; mobile admin toasts sit below the header to avoid covering pagination.
+
+Deterministic browser coverage includes desktop/mobile cursor navigation,
+filter/search resets, loading/error/empty recovery, keyboard pagination, 44px
+action targets and paused/resumed polling. No dependency or API change was added.
+
+Validation: `bun run check`, strict TypeScript, production build and all **669
+deterministic tests** passed with disposable PostgreSQL. All **50 browser
+scenarios** across Logs, Runs, admin and loading/recovery passed with isolated
+server/artifact settings after a shared-output run lost a Playwright trace during
+cleanup. Populated light/dark and loading/error/empty screenshots were inspected
+at 1280px and 390px; error toasts leave the mobile pager accessible. No deployment
+was performed.
+
 ## Retryable GitHub verification for coding tasks (2026-10-10)
 
 Temporary GitHub permission-sync failures no longer permanently cancel Reviewed

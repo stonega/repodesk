@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { IconButton } from "./icon-button.tsx";
+import { Pagination } from "./pagination.tsx";
 import { Select } from "./select.tsx";
 import { SkeletonRows } from "./skeleton.tsx";
+import { ErrorToast } from "./toast.tsx";
 
 type LogEntry = {
   id: string;
@@ -30,7 +32,11 @@ export function RuntimeLogs({
   const [service, setService] = useState("");
   const [search, setSearch] = useState("");
   const [queryText, setQueryText] = useState("");
-  const [before, setBefore] = useState<string>();
+  const [cursors, setCursors] = useState<{ before: string; offset: number }[]>(
+    [],
+  );
+  const before = cursors.at(-1)?.before;
+  const offset = cursors.at(-1)?.offset ?? 0;
   const [auto, setAuto] = useState(true);
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState<{
@@ -54,6 +60,7 @@ export function RuntimeLogs({
       if (fetching) return;
       fetching = true;
       setLoading(true);
+      setError("");
       try {
         const page = await request(`/api/admin/operator/logs?${query}`);
         if (live) {
@@ -95,7 +102,7 @@ export function RuntimeLogs({
           onSubmit={(event) => {
             event.preventDefault();
             setQueryText(search.trim());
-            setBefore(undefined);
+            setCursors([]);
             setRevision((value) => value + 1);
           }}
         >
@@ -106,7 +113,7 @@ export function RuntimeLogs({
               value={level}
               onChange={(event) => {
                 setLevel(event.target.value);
-                setBefore(undefined);
+                setCursors([]);
               }}
             >
               <option value="">All levels</option>
@@ -122,7 +129,7 @@ export function RuntimeLogs({
               value={service}
               onChange={(event) => {
                 setService(event.target.value);
-                setBefore(undefined);
+                setCursors([]);
               }}
             >
               <option value="">All services</option>
@@ -150,7 +157,7 @@ export function RuntimeLogs({
             />
             Auto-refresh every 5 seconds
           </label>
-          {(!auto || error) && (
+          {!auto && (
             <button
               type="button"
               disabled={loading}
@@ -164,7 +171,7 @@ export function RuntimeLogs({
             label="Latest logs"
             type="button"
             onClick={() => {
-              setBefore(undefined);
+              setCursors([]);
               setRevision((value) => value + 1);
             }}
           />
@@ -177,12 +184,17 @@ export function RuntimeLogs({
               : ""}
           {before && " Viewing older entries; automatic refresh is paused."}
         </p>
-        {error && (
-          <p className="notice" role="alert">
-            {error}
-          </p>
-        )}
       </section>
+      <ErrorToast message={error}>
+        <button
+          type="button"
+          aria-label="Retry loading logs"
+          disabled={loading}
+          onClick={() => setRevision((value) => value + 1)}
+        >
+          Retry
+        </button>
+      </ErrorToast>
       <section
         className="card"
         aria-label="Runtime log entries"
@@ -191,7 +203,9 @@ export function RuntimeLogs({
         {!page && !error && <SkeletonRows label="Runtime log entries" />}
         {page?.items.length === 0 && (
           <p>
-            No logs match these filters. New service events will appear here.
+            {before
+              ? "No logs on this page. Use Previous page to return to newer entries."
+              : "No logs match these filters. New service events will appear here."}
           </p>
         )}
         {!!page?.items.length && (
@@ -240,17 +254,26 @@ export function RuntimeLogs({
             </tbody>
           </table>
         )}
-        {page?.nextBefore && (
-          <IconButton
-            icon="older"
-            label="Older logs"
-            className="log-older"
-            type="button"
-            disabled={loading}
-            onClick={() => setBefore(page.nextBefore)}
-          />
-        )}
       </section>
+      <Pagination
+        className="log-pagination"
+        loading={loading || (!page && !error)}
+        previousDisabled={!before}
+        nextDisabled={!page?.nextBefore}
+        onPrevious={() => setCursors((value) => value.slice(0, -1))}
+        onNext={() => {
+          if (!page?.nextBefore) return;
+          const cursor = {
+            before: page.nextBefore,
+            offset: offset + page.items.length,
+          };
+          setCursors((value) => [...value, cursor]);
+        }}
+      >
+        {page
+          ? `${page.items.length ? `${offset + 1}–${offset + page.items.length}` : "No events"} · Page ${cursors.length + 1}`
+          : "Page unavailable"}
+      </Pagination>
       <p className="muted">
         Events are retained for 7 days, with cleanup limiting history to 10,000
         entries. Capture begins with this update; earlier container output is
