@@ -394,9 +394,11 @@ key rotation and staging release checks.
 ## Runtime logs
 
 Open **Deployment → Runtime logs** at `/admin/logs` (deployment operators only).
-Filter by severity or service, search event/error codes or run IDs, load older entries,
-and toggle five-second auto-refresh. Older pages pause auto-refresh to preserve your
-place. The panel stores new structured API/worker/polling/run/delivery events; it does
+Filter by severity or service, search event/error codes or run IDs, and browse with
+the arrows inside the entries card. The Auto-refresh menu offers 10 seconds,
+30 seconds, one minute (default), five minutes or Off. Refresh now reloads the
+current page; Latest logs returns to the newest entries. Older pages pause automatic
+refresh to preserve your place. The panel stores new structured API/worker/polling/run/delivery events; it does
 not import earlier container output. Workspace run metadata is shown only to its
 operator and disappears from the panel after workspace deletion.
 

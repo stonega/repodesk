@@ -22,6 +22,32 @@ disposable PostgreSQL and **18 Operations browser scenarios** passed. Desktop
 screenshots were inspected, including light/dark layouts. No dependency,
 migration, deployment, live account connection or external message was added.
 
+## In-card log pagination and refresh menu (2026-10-10)
+
+Runtime logs now keep the shared pager inside the entries card, below the table
+and outside its horizontal scroll area. Blue chevrons surround a regular 14px
+current range; the separate Page label is removed. Cursor history, filter/search
+resets, loading locks and empty/error recovery remain supported. The API still
+has no total count, so the reference's total is not invented.
+
+The five-second checkbox is replaced by an Auto-refresh menu with 10-second,
+30-second, one-minute (default), five-minute and Off choices. A left checkmark
+identifies the selection; Refresh now sits below a divider and reloads the current
+page. Latest logs still returns to the newest page. Changing intervals replaces
+the timer without fetching immediately; pending requests and older pages pause
+automatic refresh. Refresh now disables during requests. The shared popup supports
+a bounded wider menu and upward placement when needed on mobile; its existing
+dropdown defaults remain unchanged. Arrow/Home/End navigation, Escape, Tab and
+outside dismissal preserve focus and touch targets.
+
+Validation: lint, strict TypeScript, production build and all **683 deterministic
+tests** passed with disposable PostgreSQL and host proxies disabled. **39 browser
+scenarios** across Logs, Runs, dropdowns and admin passed, including a corrected
+timer-test selector; the focused dropdown/log run passed all 12 scenarios.
+Populated and open-menu screenshots were inspected in both themes at 1280px and
+390px, plus loading/error/empty states at both widths. No dependency or API change
+was added; no deployment was performed.
+
 ## Automatic Docker storage retention (2026-10-10)
 
 Added an optional daily host cleanup timer and a dry-run-first release image

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { IconButton } from "./icon-button.tsx";
+import { LogRefresh } from "./log-refresh.tsx";
 import { Pagination } from "./pagination.tsx";
 import { Select } from "./select.tsx";
 import { SkeletonRows } from "./skeleton.tsx";
@@ -37,7 +38,7 @@ export function RuntimeLogs({
   );
   const before = cursors.at(-1)?.before;
   const offset = cursors.at(-1)?.offset ?? 0;
-  const [auto, setAuto] = useState(true);
+  const [refreshInterval, setRefreshInterval] = useState(60000);
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState<{
     query: string;
@@ -78,13 +79,18 @@ export function RuntimeLogs({
       }
     };
     void refresh();
-    const timer =
-      auto && !before ? setInterval(() => void refresh(), 5000) : undefined;
     return () => {
       live = false;
-      if (timer) clearInterval(timer);
     };
-  }, [request, query, auto, before, revision]);
+  }, [request, query, revision]);
+  useEffect(() => {
+    if (!refreshInterval || before || loading) return;
+    const timer = setInterval(
+      () => setRevision((value) => value + 1),
+      refreshInterval,
+    );
+    return () => clearInterval(timer);
+  }, [refreshInterval, before, loading]);
   const page = result?.query === query ? result.page : undefined;
   return (
     <>
@@ -149,23 +155,12 @@ export function RuntimeLogs({
           <IconButton icon="search" label="Search logs" type="submit" />
         </form>
         <div className="row">
-          <label className="log-auto">
-            <input
-              type="checkbox"
-              checked={auto}
-              onChange={(event) => setAuto(event.target.checked)}
-            />
-            Auto-refresh every 5 seconds
-          </label>
-          {!auto && (
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => setRevision((value) => value + 1)}
-            >
-              Refresh logs
-            </button>
-          )}
+          <LogRefresh
+            interval={refreshInterval}
+            loading={loading}
+            onIntervalChange={setRefreshInterval}
+            onRefresh={() => setRevision((value) => value + 1)}
+          />
           <IconButton
             icon="latest"
             label="Latest logs"
@@ -182,7 +177,9 @@ export function RuntimeLogs({
             : result
               ? `Updated ${new Date(result.at).toLocaleTimeString()}. Newest entries first.`
               : ""}
-          {before && " Viewing older entries; automatic refresh is paused."}
+          {!!refreshInterval &&
+            before &&
+            " Viewing older entries; automatic refresh is paused."}
         </p>
       </section>
       <ErrorToast message={error}>
@@ -209,71 +206,80 @@ export function RuntimeLogs({
           </p>
         )}
         {!!page?.items.length && (
-          <table className="log-table">
-            <caption className="muted">Recent runtime events</caption>
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Level</th>
-                <th>Service</th>
-                <th>Event & details</th>
-              </tr>
-            </thead>
-            <tbody>
-              {page.items.map((entry) => (
-                <tr key={entry.id}>
-                  <td>
-                    <time dateTime={entry.at}>
-                      {new Date(entry.at).toLocaleString()}
-                    </time>
-                  </td>
-                  <td>
-                    <span className={`log-level log-${entry.level}`}>
-                      {entry.level === "warn" ? "warning" : entry.level}
-                    </span>
-                  </td>
-                  <td>{entry.service === "app" ? "API" : "Worker"}</td>
-                  <td>
-                    <code>{entry.event}</code>
-                    <div>{entry.message}</div>
-                    {entry.code && (
-                      <div className="mono">Code: {entry.code}</div>
-                    )}
-                    {entry.retry_delay_ms != null && (
-                      <div>
-                        Retry delay: {Math.round(entry.retry_delay_ms / 1000)}{" "}
-                        seconds
-                      </div>
-                    )}
-                    {entry.run_id && (
-                      <div className="mono">Run: {entry.run_id}</div>
-                    )}
-                  </td>
+          <section
+            className="log-table-scroll"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users need to scroll the table horizontally.
+            tabIndex={0}
+            aria-label="Runtime events table"
+          >
+            <table className="log-table">
+              <caption className="muted">Recent runtime events</caption>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Level</th>
+                  <th>Service</th>
+                  <th>Event & details</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {page.items.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>
+                      <time dateTime={entry.at}>
+                        {new Date(entry.at).toLocaleString()}
+                      </time>
+                    </td>
+                    <td>
+                      <span className={`log-level log-${entry.level}`}>
+                        {entry.level === "warn" ? "warning" : entry.level}
+                      </span>
+                    </td>
+                    <td>{entry.service === "app" ? "API" : "Worker"}</td>
+                    <td>
+                      <code>{entry.event}</code>
+                      <div>{entry.message}</div>
+                      {entry.code && (
+                        <div className="mono">Code: {entry.code}</div>
+                      )}
+                      {entry.retry_delay_ms != null && (
+                        <div>
+                          Retry delay: {Math.round(entry.retry_delay_ms / 1000)}{" "}
+                          seconds
+                        </div>
+                      )}
+                      {entry.run_id && (
+                        <div className="mono">Run: {entry.run_id}</div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
         )}
+        <Pagination
+          className="log-pagination"
+          loading={loading || (!page && !error)}
+          previousDisabled={!before}
+          nextDisabled={!page?.nextBefore}
+          onPrevious={() => setCursors((value) => value.slice(0, -1))}
+          onNext={() => {
+            if (!page?.nextBefore) return;
+            const cursor = {
+              before: page.nextBefore,
+              offset: offset + page.items.length,
+            };
+            setCursors((value) => [...value, cursor]);
+          }}
+        >
+          {page
+            ? page.items.length
+              ? `${offset + 1}–${offset + page.items.length}`
+              : "No events"
+            : "Page unavailable"}
+        </Pagination>
       </section>
-      <Pagination
-        className="log-pagination"
-        loading={loading || (!page && !error)}
-        previousDisabled={!before}
-        nextDisabled={!page?.nextBefore}
-        onPrevious={() => setCursors((value) => value.slice(0, -1))}
-        onNext={() => {
-          if (!page?.nextBefore) return;
-          const cursor = {
-            before: page.nextBefore,
-            offset: offset + page.items.length,
-          };
-          setCursors((value) => [...value, cursor]);
-        }}
-      >
-        {page
-          ? `${page.items.length ? `${offset + 1}–${offset + page.items.length}` : "No events"} · Page ${cursors.length + 1}`
-          : "Page unavailable"}
-      </Pagination>
       <p className="muted">
         Events are retained for 7 days, with cleanup limiting history to 10,000
         entries. Capture begins with this update; earlier container output is

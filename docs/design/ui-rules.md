@@ -19,7 +19,7 @@ when implementing or reviewing a change.
 | Action labels and controls | [Edit/New labels](#edit-and-add-buttons-use-short-labels), [shared icons](#common-action-buttons-use-reicon), [dropdown styling](#dropdown-inputs-share-the-workspace-selector-style) |
 | Dialog actions | [Cancel order](#modal-cancel-follows-the-primary-action), [close controls](#modal-close-controls-use-a-plain-x), [secondary actions](#dialog-support-actions-use-secondary-buttons) |
 | Feedback and loading | [Toasts and error placement](#routine-action-confirmations-and-request-errors-use-toasts), [visible loading layout](#loading-keeps-the-layout-visible) |
-| Log pagination and density | [Shared pagination and compact log text](#logs-reuse-run-pagination-with-compact-text) |
+| Log pagination and density | [Shared pagination and compact log text](#logs-reuse-run-pagination-with-compact-text), [refresh menu](#logs-use-an-auto-refresh-menu) |
 
 ## Maintenance
 
@@ -659,16 +659,36 @@ when implementing or reviewing a change.
 
 ### Logs reuse run pagination with compact text
 
-- **Preference:** Use the Runs pagination component below the logs table, with
-  previous/next chevrons and a visible range/page summary. Keep log rows and the
-  pagination summary compact with smaller text, retaining readable details and
-  44px action targets.
+- **Preference:** Use the shared Runs pagination component inside the logs data
+  card, below the table and outside its horizontal scrolling area. Show blue
+  previous/next chevrons around a compact current range, with regular 14px text
+  and a soft blue hover background on the arrows. Omit the separate Page label.
+  Keep log rows at 12px, readable details and 44px action targets.
 - **Scope:** Runtime logs in the admin panel at desktop and mobile widths.
 - **Source:** 2026-10-10 — user showed the logs table's lone downward arrow,
   requested reusing Runs pagination and allowed a smaller font size.
+  2026-10-10 — user requested moving pagination inside the data card and supplied
+  a compact arrow/range reference, superseding the outside-card placement and
+  range/page summary.
 - **Exceptions:** Logs use cursor pagination and have no total count; show the
-  current range and page rather than inventing a total. Filters, search and Latest
+  current range rather than inventing the reference's total. Filters, search and Latest
   logs return to the first page; automatic refresh pauses on older pages.
+
+### Logs use an auto-refresh menu
+
+- **Preference:** Replace the auto-refresh checkbox with a compact gray
+  “Auto-refresh: 1m” menu trigger. Offer Every 10 seconds, Every 30 seconds,
+  Every minute, Every 5 minutes and Off, with a checkmark beside the selection.
+  Put Refresh now with a refresh icon below a divider in the same menu; default
+  to one minute. Retain the latest-page shortcut. Support keyboard navigation,
+  Escape and outside-click dismissal, visible focus and 44px targets.
+- **Scope:** Runtime logs on desktop and mobile; reuse the shared dropdown surface.
+- **Source:** 2026-10-10 — user supplied the Auto-refresh menu in
+  `Screenshot From 2026-10-09 16-33-01.png` as the replacement for the five-second
+  checkbox.
+- **Exceptions:** Older pages pause automatic refresh regardless of the selected
+  interval. Refresh now reloads the current page; Latest logs returns to the first
+  page. In-flight requests disable Refresh now and pause the timer to prevent overlap.
 
 ### Run attempts use a horizontal timeline
 

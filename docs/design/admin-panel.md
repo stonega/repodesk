@@ -235,13 +235,18 @@ compact grid of configuration labels and values. One Edit button opens a single
 form with the explanations and all changeable values; the fixed missed-run grace
 remains read-only.
 
-Runtime logs share the Runs previous/next pagination component below the table,
-with smaller row and pagination text. Cursor history allows returning to earlier
-pages; the summary shows the current event range and page without a total count.
+Runtime logs share the Runs previous/next pagination component inside the data
+card, below the table, with 12px rows and a regular 14px current range between blue
+chevrons. Cursor history allows returning to earlier pages; the summary omits the
+Page label and has no total count.
 Filters, search and Latest logs reset pagination, and automatic refresh pauses on
 older pages. Loading disables both page actions; failed loads retain a route back
 to the previous page. Pagination remains visible after empty or failed loads and
 outside the table's horizontal scrolling area on mobile.
+An Auto-refresh menu replaces the checkbox, with 10-second, 30-second, one-minute
+(default), five-minute and Off options, plus Refresh now below a divider. Manual
+refresh retains the current page and disables during requests; the timer pauses
+while a request is pending. Latest logs remains the shortcut to the first page.
 The Overview connection cards link the configured Telegram bot handle and connected
 GitHub account name to their respective profiles in new tabs when those identities
 are available. The Manage buttons continue to open their existing dialogs.

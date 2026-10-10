@@ -919,13 +919,21 @@ test.describe
           path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/runtime-logs-desktop.png`,
           fullPage: true,
         });
-        await page.getByLabel("Auto-refresh every 5 seconds").uncheck();
+        await page
+          .getByRole("button", { name: "Auto-refresh", exact: true })
+          .click();
+        await page
+          .getByRole("menuitemradio", { name: "Off", exact: true })
+          .click();
         log.write("telegram_polling_failed", {
           error: new Fault("telegram_rate_limited"),
         });
         await log.flush();
         await page
-          .getByRole("button", { name: "Refresh logs", exact: true })
+          .getByRole("button", { name: "Auto-refresh", exact: true })
+          .click();
+        await page
+          .getByRole("menuitem", { name: "Refresh now", exact: true })
           .click();
         await expect(
           page.getByText("Code: telegram_rate_limited", { exact: true }),
@@ -2685,14 +2693,22 @@ test.describe
       }
       await page.goto("/admin/logs");
       await expect(
-        page.getByLabel("Auto-refresh every 5 seconds"),
-      ).toBeChecked();
+        page.getByRole("button", { name: "Auto-refresh", exact: true }),
+      ).toHaveText("Auto-refresh: 1m");
       await expect(
         page.getByRole("button", { name: "Refresh logs", exact: true }),
       ).toHaveCount(0);
-      await page.getByLabel("Auto-refresh every 5 seconds").uncheck();
+      await page
+        .getByRole("button", { name: "Auto-refresh", exact: true })
+        .click();
+      await page
+        .getByRole("menuitemradio", { name: "Off", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "Auto-refresh", exact: true })
+        .click();
       await expect(
-        page.getByRole("button", { name: "Refresh logs", exact: true }),
+        page.getByRole("menuitem", { name: "Refresh now", exact: true }),
       ).toBeVisible();
     });
     test("expired cookie redirects the interface to sign-in", async ({
