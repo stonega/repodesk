@@ -1575,6 +1575,11 @@ and browser history preserve the list offset. Workspace read and mutation
 permissions are unchanged. See [the API contract](../design/admin-panel.md) and
 [runnable requests](../../examples/runs.http).
 
+2026-10-10: Pagination now follows the run list and its loading/empty states.
+Desktop (1280px) and mobile (390px) screenshots were inspected for populated,
+loading, empty and error states. All 10 Runs browser scenarios, 661 deterministic
+tests with disposable PostgreSQL, lint, strict TypeScript and the build passed.
+
 Compatibility: list items no longer contain full run records, and the default
 page size changes from 100 to 25. Clients needing details must use the detail
 endpoint; clients needing 100 summaries can specify `limit=100`. The workspace

@@ -601,6 +601,8 @@ when implementing or reviewing a change.
   a Back to Runs link that preserves the list's pagination.
   Fetch a bounded page of summaries for the list, with previous/next controls;
   fetch messages and technical detail only when opening an individual run.
+  Place pagination below the run list, after its loading or empty state when
+  there are no cards to display.
 - **Scope:** Runs & delivery in the workspace admin panel, on desktop and mobile.
 - **Source:** 2026-09-28 — user showed a tall run card and asked for compact
   items that open a detailed message list when clicked.
@@ -610,6 +612,8 @@ when implementing or reviewing a change.
   superseding the earlier dialog preference.
   2026-10-08 — user requested less information in the runs API, a detail API
   for full records, and a paginated UI list.
+  2026-10-10 — user requested moving Runs & delivery pagination to the bottom
+  of the list.
 - **Exceptions:** Deployment administrators and eligible workspace owners/admins
   can read every retained run message in their workspace, including private runs.
   Telegram linking is unnecessary for deployment administrators to view messages;

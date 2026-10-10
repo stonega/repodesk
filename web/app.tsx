@@ -3285,7 +3285,6 @@ function RunListPage({ id, offset }: { id: string; offset: number }) {
       }
     >
       {error && <Notice error>{error}</Notice>}
-      <Pager data={data} pageSize={25} loading={loading} alwaysShow />
       {!data && loading && (
         <section aria-label="Runs" aria-busy="true">
           <SkeletonRows label="Run summaries" rows={3} />
@@ -3308,6 +3307,7 @@ function RunListPage({ id, offset }: { id: string; offset: number }) {
           to={`/admin/runs/${r.id}?${detailParams.toString()}`}
         />
       ))}
+      <Pager data={data} pageSize={25} loading={loading} alwaysShow />
     </Page>
   );
 }

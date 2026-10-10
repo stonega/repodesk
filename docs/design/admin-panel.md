@@ -172,8 +172,9 @@ lists and tool checkboxes. Bound IDs and concurrency versions remain in request
 payloads without becoming editable fields. Failed saves preserve drafts and show
 field errors; pending saves block modal dismissal and duplicate submission.
 
-The runs list requests 25 summaries at a time, with previous/next controls and a
-URL offset preserved through detail navigation, reload and browser history.
+The runs list requests 25 summaries at a time, with previous/next controls below
+the list and a URL offset preserved through detail navigation, reload and browser
+history. Pagination follows loading and empty states too.
 `GET /api/admin/workspaces/:id/runs?offset=0&limit=25` returns
 `{ mode, items, total, offset, limit }`. Offset defaults to 0 and must be a
 non-negative safe integer; limit defaults to 25 and must be an integer from 1 to
