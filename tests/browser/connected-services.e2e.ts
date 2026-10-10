@@ -143,7 +143,9 @@ test("failed service details can retry and webhook registration remains explicit
   await expect(
     card.getByRole("button", { name: "Copy Homepage URL" }),
   ).toBeDisabled();
-  await page.getByRole("button", { name: "Try again" }).click();
+  await page
+    .getByRole("button", { name: "Retry loading site settings" })
+    .click();
   await expect.poll(() => held.length).toBe(2);
   await held[1]?.fulfill({ json: { ...site, telegramTransport: "webhook" } });
   await expect(card.getByText("Status: Registration required")).toBeVisible();

@@ -213,8 +213,13 @@ export function ReviewBot({
         !editing &&
         !removing && (
           <ErrorToast message={error}>
-            <button type="button" disabled={busy} onClick={() => void reload()}>
-              Reload saved settings
+            <button
+              type="button"
+              aria-label="Retry loading saved settings"
+              disabled={busy}
+              onClick={() => void reload()}
+            >
+              Retry
             </button>
           </ErrorToast>
         )}

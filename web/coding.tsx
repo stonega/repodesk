@@ -314,10 +314,11 @@ export function Coding({
         <ErrorToast message={error}>
           <button
             type="button"
+            aria-label="Retry loading coding settings"
             disabled={busy || loading}
             onClick={() => void load()}
           >
-            Reload coding settings
+            Retry
           </button>
         </ErrorToast>
       )}

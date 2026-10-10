@@ -122,8 +122,12 @@ export function SiteDomain({ request }: { request: Request }) {
     <>
       {error && (
         <ErrorToast message={error}>
-          <button type="button" onClick={() => setReload((value) => value + 1)}>
-            Try again
+          <button
+            type="button"
+            aria-label="Retry loading site settings"
+            onClick={() => setReload((value) => value + 1)}
+          >
+            Retry
           </button>
         </ErrorToast>
       )}

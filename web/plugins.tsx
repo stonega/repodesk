@@ -274,10 +274,11 @@ export function Plugins({
               <ErrorToast message={error}>
                 <button
                   type="button"
+                  aria-label="Retry loading saved plugins"
                   disabled={busy || loading}
                   onClick={() => void load(true)}
                 >
-                  Reload saved plugins
+                  Retry
                 </button>
               </ErrorToast>
             )}
@@ -413,10 +414,11 @@ export function Plugins({
               <ErrorToast message={error}>
                 <button
                   type="button"
+                  aria-label="Retry loading saved plugins"
                   disabled={busy || loading}
                   onClick={() => void load(true)}
                 >
-                  Reload saved plugins
+                  Retry
                 </button>
               </ErrorToast>
             )}

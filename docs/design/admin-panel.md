@@ -236,7 +236,13 @@ workspace form.
 Review Bot, Codex, Code Truth, plugin and site settings request failures use a
 floating error toast with the existing reload/retry control. These toasts use
 alert semantics and remain until dismissed or recovered, without shifting the
-page. Form validation and errors in open dialogs remain beside their controls.
+page. Shared toasts use a neutral surface and subtle border/shadow, with a red
+error icon or green confirmation icon. Retry stays inline beside the message
+with a short visible label and descriptive accessible name; retry and dismissal
+retain 44px touch targets. Long messages wrap within the viewport in both themes,
+and toasts leave space above the version/update control. Browser connection
+failures read “Couldn’t connect to RepoDesk.” Form validation and errors in open
+dialogs remain beside their controls.
 The compact account footer groups the username and sign-out icon, with a light/dark
 theme button at the right. Themes apply across the panel, sign-in and setup pages.
 The browser remembers explicit choices; otherwise the initial theme follows the

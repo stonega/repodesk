@@ -55,7 +55,7 @@ async function expectSignIn(page: Page) {
     page.getByText("Your session expired. Sign in again."),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Reload coding settings" }),
+    page.getByRole("button", { name: "Retry loading coding settings" }),
   ).toHaveCount(0);
 }
 

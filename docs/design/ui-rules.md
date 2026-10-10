@@ -289,11 +289,18 @@ when implementing or reviewing a change.
 - **Source update:** 2026-10-08 — user showed the Review Bot “Configure the GitHub
   webhook first.” error with “Reload saved settings” and requested toasts for this
   kind of notification. Applies to comparable plugin and settings request errors.
+- **Source update:** 2026-10-10 — user rejected the appearance of the “Failed to
+  fetch” toast with its large “Reload coding settings” button. Use a neutral
+  surface, subtle border/shadow and a small colored status icon. Keep the message,
+  a compact inline Retry action and the borderless close control aligned; retain
+  44px action targets and clearance above the version/update control. Use a
+  descriptive accessible retry name and readable connection-error wording.
+  Applies to shared admin toasts in both themes at desktop and mobile widths.
 - **Exceptions:** Field/form validation errors, saved readiness warnings, ongoing
   progress and setup guidance stay beside their relevant controls. Dialog errors
   stay inside the open dialog so they remain visible and keyboard-accessible.
   Copy-link feedback retains its brief check icon as specified below.
-  Errors use alert semantics and error styling, distinct from informational notices.
+  Errors use alert semantics and a red status icon, distinct from confirmations.
 
 ### Edit and add buttons use short labels
 

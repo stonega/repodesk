@@ -121,7 +121,7 @@ function Toast({
     >
       <Icon
         className="toast-icon"
-        size={22}
+        size={20}
         weight="Outline"
         aria-hidden="true"
       />
@@ -131,10 +131,17 @@ function Toast({
           aria-live={error ? "assertive" : "polite"}
           aria-atomic="true"
         >
-          {message}
+          {error &&
+          [
+            "Failed to fetch",
+            "Load failed",
+            "NetworkError when attempting to fetch resource.",
+          ].includes(message)
+            ? "Couldn’t connect to RepoDesk."
+            : message}
         </p>
-        {children && <div className="toast-actions">{children}</div>}
       </div>
+      {children && <div className="toast-actions">{children}</div>}
       <IconButton icon="close" label="Dismiss notification" onClick={dismiss} />
     </section>
   );

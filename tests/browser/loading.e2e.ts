@@ -300,34 +300,150 @@ for (const width of [1280, 390]) {
   });
 }
 
-test("Codex ends the loading state on failure and recovers through retry", async ({
-  page,
-}) => {
-  const held = await fixture(page);
-  for (const route of held.splice(0))
-    await route.fulfill({
-      status: 503,
-      json: { error: "coding_runner_unavailable" },
+for (const width of [1280, 390, 320]) {
+  for (const theme of ["light", "dark"] as const) {
+    test(`Codex connection errors stay compact and recover through retry at ${width}px in ${theme}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ colorScheme: theme });
+      await page.clock.install();
+      const held = await fixture(page);
+      const heading = page.getByRole("heading", { name: "Codex", exact: true });
+      const position = await heading.boundingBox();
+      for (const route of held.splice(0)) await route.abort("failed");
+      const toast = page.getByRole("region", {
+        name: "Notification",
+        exact: true,
+      });
+      const alert = toast.getByRole("alert");
+      const retry = toast.getByRole("button", {
+        name: "Retry loading coding settings",
+      });
+      const dismiss = toast.getByRole("button", {
+        name: "Dismiss notification",
+      });
+      await expect(alert).toHaveText("Couldn’t connect to RepoDesk.");
+      await expect(retry).toHaveText("Retry");
+      await expect(toast).toHaveCSS("position", "fixed");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      expect(await heading.boundingBox()).toEqual(position);
+      const config = page.getByRole("region", {
+        name: "Codex configuration",
+        exact: true,
+      });
+      await expect(config).toHaveAttribute("aria-busy", "false");
+      await expect(page.locator(".coding-detail .skeleton")).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "Edit Codex configuration" }),
+      ).toBeDisabled();
+      const assertLayout = async () => {
+        const bounds = await toast.boundingBox();
+        const messageBounds = await alert.boundingBox();
+        const retryBounds = await retry.boundingBox();
+        const dismissBounds = await dismiss.boundingBox();
+        const versionBounds = await page.locator(".app-version").boundingBox();
+        if (
+          !bounds ||
+          !messageBounds ||
+          !retryBounds ||
+          !dismissBounds ||
+          !versionBounds
+        )
+          throw new Error("Notification and version controls must be visible");
+        expect(bounds.x).toBeGreaterThanOrEqual(16);
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(width - 16);
+        expect(bounds.y + bounds.height).toBeLessThan(versionBounds.y);
+        expect(retryBounds.x).toBeGreaterThan(
+          messageBounds.x + messageBounds.width,
+        );
+        expect(dismissBounds.x).toBeGreaterThan(
+          retryBounds.x + retryBounds.width,
+        );
+        expect(retryBounds.height).toBeGreaterThanOrEqual(44);
+        expect(dismissBounds.height).toBeGreaterThanOrEqual(44);
+        expect(dismissBounds.width).toBeGreaterThanOrEqual(44);
+        expect(
+          Math.abs(
+            retryBounds.y +
+              retryBounds.height / 2 -
+              messageBounds.y -
+              messageBounds.height / 2,
+          ),
+        ).toBeLessThan(2);
+        expect(
+          await toast.evaluate((el) => el.scrollWidth <= el.clientWidth),
+        ).toBe(true);
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        ).toBe(true);
+      };
+      await assertLayout();
+      await page.screenshot({
+        path: test.info().outputPath("connection-error.png"),
+        fullPage: true,
+      });
+      await toast.screenshot({ path: test.info().outputPath("toast.png") });
+      await page.clock.fastForward(7000);
+      for (const route of held.splice(0)) await route.abort("failed");
+      await expect(toast).toBeVisible();
+      await retry.focus();
+      await page.keyboard.press("Tab");
+      await expect(dismiss).toBeFocused();
+      await page.keyboard.press("Shift+Tab");
+      await expect(retry).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect.poll(() => held.length).toBeGreaterThan(0);
+      await expect(config).toHaveAttribute("aria-busy", "true");
+      await expect(toast).toHaveCount(0);
+      await page.screenshot({
+        path: test.info().outputPath("retry-pending.png"),
+        fullPage: true,
+      });
+      const longError =
+        "Settings changed in another session. Reload and review your edits before saving the repository configuration again.";
+      for (const route of held.splice(0))
+        await route.fulfill({ status: 503, json: { error: longError } });
+      await expect(alert).toHaveText(longError);
+      await assertLayout();
+      await page.screenshot({
+        path: test.info().outputPath("long-error.png"),
+        fullPage: true,
+      });
+      await retry.click();
+      await expect.poll(() => held.length).toBeGreaterThan(0);
+      for (const route of held.splice(0)) await route.fulfill({ json: data });
+      await expect(toast).toHaveCount(0);
+      await expect(
+        config.getByText("ChatGPT connected", { exact: true }),
+      ).toBeVisible();
+      await expect(config.locator("form, input, select")).toHaveCount(0);
+      await expect(
+        page.getByText("No coding repositories configured."),
+      ).toBeVisible();
+      await page.screenshot({
+        path: test.info().outputPath("recovered.png"),
+        fullPage: true,
+      });
+      await page.clock.fastForward(5001);
+      await expect.poll(() => held.length).toBeGreaterThan(0);
+      for (const route of held.splice(0)) await route.abort("failed");
+      await expect(alert).toHaveText("Couldn’t connect to RepoDesk.");
+      await expect(
+        config.getByText("ChatGPT connected", { exact: true }),
+      ).toBeVisible();
+      await dismiss.focus();
+      await page.keyboard.press("Enter");
+      await expect(toast).toHaveCount(0);
+      await page.clock.fastForward(5001);
+      await expect.poll(() => held.length).toBeGreaterThan(0);
+      for (const route of held.splice(0)) await route.abort("failed");
+      await expect(toast).toHaveCount(0);
     });
-  await expect(page.getByRole("alert")).toBeVisible();
-  const config = page.getByRole("region", {
-    name: "Codex configuration",
-    exact: true,
-  });
-  await expect(config).toHaveAttribute("aria-busy", "false");
-  await expect(page.locator(".coding-detail .skeleton")).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Edit Codex configuration" }),
-  ).toBeDisabled();
-  await page.getByRole("button", { name: "Reload coding settings" }).click();
-  await expect.poll(() => held.length).toBe(1);
-  await expect(config).toHaveAttribute("aria-busy", "true");
-  for (const route of held.splice(0)) await route.fulfill({ json: data });
-  await expect(page.getByRole("alert")).toHaveCount(0);
-  await expect(
-    config.getByText("ChatGPT connected", { exact: true }),
-  ).toBeVisible();
-});
+  }
+}
 
 test("Usage retains its summary labels and table columns while loading", async ({
   page,

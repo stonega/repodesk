@@ -1,5 +1,24 @@
 # Implementation evidence
 
+## Compact shared notifications (2026-10-10)
+
+Shared admin toasts now use a neutral surface, subtle border/shadow and small
+colored status icon. Recovery actions show Retry inline beside the message, with
+descriptive accessible names; retry and close controls keep 44px touch targets.
+Network failures read “Couldn’t connect to RepoDesk.” Long messages wrap on narrow
+screens, and notifications leave clearance above the version/update control.
+Error persistence, manual dismissal and confirmation auto-dismiss/hover/focus
+behavior are retained. Dialog errors remain inside their editors.
+
+Validation: lint, strict TypeScript, production build and **661 deterministic
+tests** passed with disposable PostgreSQL. **45 focused browser scenarios** passed
+across loading/recovery, Review Bot, provider/configuration editors, site settings,
+connected services, session expiry and shared save confirmations. Network-error
+coverage includes keyboard retry/dismissal, persistent errors, long messages,
+pending retry, recovered saved summaries and retained values after refresh failure
+at 1280px, 390px and 320px in both themes. Desktop/mobile screenshots were reviewed.
+No dependency or migration was added. No deployment was performed.
+
 ## GitHub release checks and host updates (2026-10-09)
 
 Signed-in pages check the configured repository's latest stable release and show

@@ -147,8 +147,13 @@ export function CodeTruth({
       )}
       {error && (
         <ErrorToast message={error}>
-          <button type="button" disabled={busy} onClick={() => void load()}>
-            Reload Code Truth
+          <button
+            type="button"
+            aria-label="Retry loading Code Truth"
+            disabled={busy}
+            onClick={() => void load()}
+          >
+            Retry
           </button>
         </ErrorToast>
       )}

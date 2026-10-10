@@ -462,7 +462,9 @@ for (const width of [1280, 390])
     await expect(toast.getByRole("alert")).toHaveText(
       "Configure the GitHub webhook first.",
     );
-    await toast.getByRole("button", { name: "Reload saved settings" }).click();
+    await toast
+      .getByRole("button", { name: "Retry loading saved settings" })
+      .click();
     await expect(toast).toHaveCount(0);
     f.failures.save = "";
     await toggle.click();
