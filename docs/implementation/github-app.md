@@ -440,12 +440,22 @@ This is an additive rollout, not mandatory GitHub identity enrollment for all me
 
 The worker refreshes each account about every five minutes, in bounded batches
 independently of Telegram polling and job maintenance. `/github sync` refreshes
-immediately. Snapshots older than ten minutes, workspace connection revisions that
+immediately unless GitHub has imposed a retained rate-limit cooldown. Snapshots
+older than ten minutes, workspace connection revisions that
 have changed, missing permission fields and failed API calls deny linked repository
-access. Downgrades cancel that actor's queued/active assistant work, pending GitHub
+access. Temporary API failures keep the last confirmed snapshot as comparison data,
+without authorizing repository actions or renewing its timestamp. Coding tasks keep
+their attempt and wait for automatic permission verification; already-running local
+work can finish under its original grant, while new runner starts, auth resumes,
+results and publication wait. Rate-limit responses respect GitHub's retry/reset
+headers and increase the sync backoff after repeated failures. Safe sync-failure
+codes are recorded without upstream messages or credentials.
+Downgrades cancel that actor's queued/active assistant work, pending GitHub
 approvals and coding tasks. Already completed remote actions and group replies cannot
 be undone. Remote permission changes have a polling delay; no real-time webhook
-revocation is claimed.
+revocation is claimed. Completed coding results and confirmed PRs retain their
+saved status; a later follow-up must pass current authorization. Previously
+cancelled tasks are not automatically restarted by a successful sync.
 
 `/github disconnect` deletes the encrypted user credential and pending authorization
 state, clears permission grants, and cancels pending work. Member deactivation

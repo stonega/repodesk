@@ -18,6 +18,10 @@ export const logEvents = {
     "error",
     "Worker maintenance failed; it will retry.",
   ],
+  github_user_sync_failed: [
+    "warn",
+    "GitHub account permissions could not be synced. Inspect the safe failure code.",
+  ],
   telegram_polling_connected: ["info", "Telegram polling connected."],
   telegram_updates_received: [
     "info",
@@ -53,6 +57,9 @@ export const logEvents = {
 export type LogEvent = keyof typeof logEvents;
 export type LogService = "app" | "worker";
 const codes = new Set([
+  "github_access_denied",
+  "github_rate_limited",
+  "github_unavailable",
   "code_truth_unavailable",
   "code_truth_tools_changed",
   "code_truth_disabled",

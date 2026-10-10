@@ -11,7 +11,7 @@ import type {
   LocalStart,
   LocalStatus,
 } from "../../src/coding/local/protocol.ts";
-import { proposeCoding } from "../../src/coding/policy.ts";
+import { cancelCoding, proposeCoding } from "../../src/coding/policy.ts";
 import { CodingService, saveCoding } from "../../src/coding/service.ts";
 import { migrate } from "../../src/db/migrate.ts";
 import { database } from "../../src/db/pool.ts";
@@ -97,6 +97,82 @@ const url = process.env.TEST_DATABASE_URL;
       present(w.codingTasks?.[0]).nextPollAt = undefined;
     });
   }
+  test("Reviewed execution waits for GitHub verification without cancelling, while Stop and permission loss still stop it", async () => {
+    for (const action of ["recover", "stop", "revoke"] as const) {
+      const f = await fixture();
+      let cancelled = 0,
+        polled = 0;
+      const runner: LocalRunner = {
+        async start() {
+          throw new Error("Unexpected start");
+        },
+        async status() {
+          polled++;
+          return { state: "running", phase: "implement" };
+        },
+        async cancel() {
+          cancelled++;
+        },
+        async publish() {
+          throw new Error("Unexpected publication");
+        },
+      };
+      const service = new CodingService(
+        store,
+        new GitHubApps(
+          store,
+          "ab".repeat(32),
+          new GitHubApp(githubFixtureConfig, githubTransport()),
+        ),
+        runner,
+      );
+      await store.change(f.id, (w) => {
+        present(w.codingTasks?.[0]).state = "running";
+        present(w.members.find((m) => m.id === "101")).github = {
+          id: 42,
+          login: "fixture",
+          status: "unavailable",
+          connectionRevision: 1,
+          syncedAt: new Date().toISOString(),
+          repositories: [
+            {
+              id: 7001,
+              full_name: "example/workspace",
+              permissions: { pull: true, push: true, admin: false },
+            },
+          ],
+        };
+      });
+      await ready(f.id);
+      await service.advance(f.id, f.taskId);
+      expect(present((await store.read(f.id)).codingTasks?.[0])).toMatchObject({
+        state: "running",
+        error: "github_user_access_unavailable",
+      });
+      expect(cancelled).toBe(0);
+      expect(polled).toBe(0);
+      await store.change(f.id, (w) => {
+        const access = present(
+          present(w.members.find((m) => m.id === "101")).github,
+        );
+        if (action === "stop") cancelCoding(w, "101", f.taskId);
+        else {
+          access.status = "connected";
+          present(access.repositories[0]).permissions = {
+            pull: true,
+            push: action === "recover",
+            admin: false,
+          };
+        }
+      });
+      await ready(f.id);
+      await service.advance(f.id, f.taskId);
+      expect(present((await store.read(f.id)).codingTasks?.[0]).state).toBe(
+        action === "recover" ? "running" : "cancelled",
+      );
+      expect(cancelled).toBe(action === "recover" ? 0 : 1);
+    }
+  });
   test("Reviewed task buttons show current status and retain initiator cancellation after grant removal", async () => {
     const f = await fixture();
     const queued = present(

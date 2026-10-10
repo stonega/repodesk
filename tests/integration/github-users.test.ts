@@ -11,6 +11,7 @@ import { repositoryAccess } from "../../src/github/user-access.ts";
 import { hash } from "../../src/setup/credentials.ts";
 import { SetupService } from "../../src/setup/service.ts";
 import { Ingress } from "../../src/telegram/webhook.ts";
+import { createRun } from "../../src/workspaces/service.ts";
 import { workspace } from "../fixtures.ts";
 import { githubFixtureConfig, githubTransport } from "../github-fixture.ts";
 
@@ -29,6 +30,9 @@ const url = process.env.TEST_DATABASE_URL;
       repoCount = 2;
     let refreshCount = 0,
       badRefresh = false;
+    let transient = false;
+    let rateLimited = false,
+      permissionReads = 0;
     const baseTransport = githubTransport();
     const transport = (async (
       input: RequestInfo | URL,
@@ -59,6 +63,13 @@ const url = process.env.TEST_DATABASE_URL;
       if (path === "https://api.github.com/user")
         return Response.json({ id: githubId, login: `user-${githubId}` });
       if (path.includes("/user/installations/501/repositories?")) {
+        permissionReads++;
+        if (rateLimited)
+          return Response.json(
+            { message: "Secondary rate limit" },
+            { status: 403, headers: { "retry-after": "60" } },
+          );
+        if (transient) throw new Error("private upstream diagnostic");
         if (deny) return Response.json({}, { status: 401 });
         return Response.json({
           repositories: Array.from({ length: repoCount }, (_, i) => ({
@@ -235,6 +246,119 @@ const url = process.env.TEST_DATABASE_URL;
         code: "github_identity_already_linked",
       });
       await confirm(state, "303", false);
+    });
+    test("temporary sync failures deny actions without revoking work; recovery retains grants and confirmed loss fences tasks", async () => {
+      const active = randomUUID(),
+        completed = randomUUID(),
+        unrelated = randomUUID(),
+        contributed = randomUUID();
+      let runId = "";
+      await store.change(id, async (w, sql) => {
+        runId = createRun(
+          w,
+          "202",
+          "Read repository",
+          "202",
+          0,
+          "test-model",
+        ).id;
+        for (const [task, state, actor] of [
+          [active, "working", "202"],
+          [completed, "review", "202"],
+          [unrelated, "working", "303"],
+          [contributed, "working", "101"],
+        ])
+          await sql.query(
+            "INSERT INTO coding_tasks(workspace_id,id,data) VALUES($1,$2,$3)",
+            [
+              id,
+              task,
+              JSON.stringify({ actor, state, cancelRequested: false }),
+            ],
+          );
+        await sql.query(
+          "INSERT INTO coding_task_inputs(workspace_id,task_id,revision,source_key,data) VALUES($1,$2,1,'permission-fixture',$3)",
+          [id, contributed, JSON.stringify({ actor: "202" })],
+        );
+      });
+      const prior = (await store.read(id)).members.find(
+        (m) => m.id === "202",
+      )?.github;
+      transient = true;
+      await store.change(id, (w, sql) => service.users.sync(sql, w, "202"));
+      let w = await store.read(id);
+      let access = w.members.find((m) => m.id === "202")?.github;
+      expect(access?.status).toBe("unavailable");
+      expect(access?.syncError).toBe("github_unavailable");
+      expect(access?.syncedAt).toBe(prior?.syncedAt);
+      expect(access?.repositories).toEqual(prior?.repositories);
+      expect(repositoryAccess(w, "202", 7001)).toBe(false);
+      expect(w.runs.find((r) => r.id === runId)?.cancelled).toBe(false);
+      expect(JSON.stringify(access)).not.toContain(
+        "private upstream diagnostic",
+      );
+      transient = false;
+      await store.change(id, (w, sql) => service.users.sync(sql, w, "202"));
+      w = await store.read(id);
+      access = w.members.find((m) => m.id === "202")?.github;
+      expect(repositoryAccess(w, "202", 7001, true)).toBe(true);
+      expect(access?.syncError).toBeUndefined();
+      expect(w.runs.find((r) => r.id === runId)?.cancelled).toBe(false);
+      push = false;
+      await store.change(id, (w, sql) => service.users.sync(sql, w, "202"));
+      const tasks = (
+        await store.pool.query(
+          "SELECT id,data FROM coding_tasks WHERE workspace_id=$1 ORDER BY id",
+          [id],
+        )
+      ).rows;
+      expect(tasks.find((t) => t.id === active)?.data).toMatchObject({
+        cancelRequested: true,
+        error: "github_user_access_denied",
+      });
+      expect(tasks.find((t) => t.id === completed)?.data).toMatchObject({
+        state: "review",
+        cancelRequested: false,
+      });
+      expect(tasks.find((t) => t.id === contributed)?.data).toMatchObject({
+        cancelRequested: true,
+        error: "github_user_access_denied",
+      });
+      expect(tasks.find((t) => t.id === unrelated)?.data.cancelRequested).toBe(
+        false,
+      );
+      push = true;
+      await store.change(id, (w, sql) => service.users.sync(sql, w, "202"));
+    });
+    test("rate-limited permission sync observes cooldown, backs off and recovers without revocation", async () => {
+      rateLimited = true;
+      for (const minimum of [300000, 600000]) {
+        const started = Date.now();
+        await store.change(id, (w, sql) => service.users.sync(sql, w, "202"));
+        const access = (await store.read(id)).members.find(
+          (m) => m.id === "202",
+        )?.github;
+        expect(access?.syncError).toBe("github_rate_limited");
+        expect(Date.parse(access?.retryAt ?? "")).toBeGreaterThanOrEqual(
+          started + minimum,
+        );
+        const reads = permissionReads;
+        await store.change(id, (w, sql) => service.users.sync(sql, w, "202"));
+        expect(permissionReads).toBe(reads);
+        await store.change(id, (w) => {
+          const member = w.members.find((m) => m.id === "202");
+          if (member?.github) member.github.retryAt = new Date(0).toISOString();
+        });
+      }
+      rateLimited = false;
+      await store.change(id, (w, sql) => service.users.sync(sql, w, "202"));
+      expect(repositoryAccess(await store.read(id), "202", 7001, true)).toBe(
+        true,
+      );
+      expect(
+        (await store.read(id)).members.find((m) => m.id === "202")?.github
+          ?.retryAt,
+      ).toBeUndefined();
     });
     test("sync replaces permissions and cancels work on downgrade; unavailable and stale snapshots deny", async () => {
       push = false;

@@ -182,6 +182,12 @@ test("messages hide unknown codes and expose only verified runner stages", () =>
     "Stopping",
   );
   expect(codingStatusLabel({ state: "failed" })).toBe("Could not complete");
+  expect(codingFailureMessage("github_user_access_unavailable")).toContain(
+    "retry automatically",
+  );
+  expect(codingFailureMessage("github_user_access_unavailable")).not.toContain(
+    "administrator",
+  );
 });
 
 test("checkout failure messages identify the saved repository and missing branch with recovery guidance", () => {

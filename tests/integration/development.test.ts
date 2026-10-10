@@ -565,6 +565,112 @@ const url = process.env.TEST_DATABASE_URL;
     expect((await f.tick()).state).toBe("working");
     expect(f.starts).toHaveLength(1);
   });
+  async function accessState(
+    workspaceId: string,
+    status: "connected" | "unavailable",
+    push = true,
+  ) {
+    await store.change(workspaceId, (w) => {
+      const member = present(w.members.find((m) => m.id === "101"));
+      member.github = {
+        id: 42,
+        login: "fixture",
+        status,
+        connectionRevision: 1,
+        syncedAt: new Date().toISOString(),
+        repositories: [
+          {
+            id: 7001,
+            full_name: "example/workspace",
+            permissions: { pull: true, push, admin: false },
+          },
+        ],
+      };
+    });
+  }
+  test("temporary GitHub access loss retains the attempt, blocks publication and recovers once", async () => {
+    const f = await fixture();
+    await f.tick();
+    await f.tick({ state: "succeeded", result: result(), tokens: 20 });
+    const running = await f.tick();
+    const attemptId = running.attemptId;
+    const cancellations = f.cancels.length;
+    await accessState(f.w.id, "unavailable");
+    const ready: LocalStatus = {
+      state: "ready",
+      checkPassed: true,
+      tokens: 40,
+      result: result({ status: "completed" }),
+    };
+    for (let i = 0; i < 2; i++) {
+      const held = await f.tick(ready);
+      expect(held.state).toBe("working");
+      expect(held.attemptId).toBe(attemptId);
+      expect(held.cancelRequested).toBe(false);
+      expect(held.error).toBe("github_user_access_unavailable");
+    }
+    expect(f.publications).toHaveLength(0);
+    expect(f.cancels).toHaveLength(cancellations);
+    const notices = (await store.read(f.w.id)).deliveries.filter((d) =>
+      d.id.includes(":access-unavailable:"),
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.text).toContain("retry automatically");
+    await accessState(f.w.id, "connected");
+    expect((await f.tick(ready)).state).toBe("publishing");
+    expect(f.publications).toEqual([present(attemptId)]);
+    const done = await f.tick({
+      state: "succeeded",
+      prUrl: "https://github.com/example/workspace/pull/43",
+      publishedSha: "b".repeat(40),
+      tokens: 40,
+    });
+    await accessState(f.w.id, "unavailable");
+    expect((await f.tick()).state).toBe("review");
+    expect((await f.read()).pr).toEqual(done.pr);
+    expect(f.publications).toHaveLength(1);
+    await expect(f.append("Another change")).rejects.toThrow(
+      "github_user_access_unavailable",
+    );
+  });
+  test("Stop and confirmed permission loss still cancel during access recovery", async () => {
+    for (const action of ["stop", "permission", "maintainer"] as const) {
+      const f = await fixture();
+      await f.tick();
+      await accessState(f.w.id, "unavailable");
+      await f.tick();
+      if (action === "stop")
+        await store.change(f.w.id, (w, sql) =>
+          cancelDevelopment(sql, w, "101", f.task.id),
+        );
+      else if (action === "permission")
+        await accessState(f.w.id, "connected", false);
+      else
+        await store.change(f.w.id, (w) => {
+          present(present(w.coding).settings.repositories[0]).maintainers = [
+            "202",
+          ];
+        });
+      const stopped = await f.tick();
+      expect(stopped.state).toBe("cancelled");
+      expect(stopped.error).not.toBe("github_user_access_unavailable");
+      expect(f.cancels).toHaveLength(1);
+      expect(f.publications).toHaveLength(0);
+    }
+  });
+  test("permission unavailability before runner start releases only its undispatched reservation", async () => {
+    const f = await fixture(original, "101", [photo]);
+    f.onDownload(() => accessState(f.w.id, "unavailable"));
+    const held = await f.tick();
+    expect(held.state).toBe("queued");
+    expect(held.attemptId).toBeUndefined();
+    expect(held.attempts).toBe(0);
+    expect(f.starts).toHaveLength(0);
+    f.onDownload(async () => {});
+    await accessState(f.w.id, "connected");
+    await f.tick();
+    expect(f.starts).toHaveLength(1);
+  });
   test("question survives restart, releases attempt and answers continue the same PR", async () => {
     const f = await fixture();
     await f.tick();

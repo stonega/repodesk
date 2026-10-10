@@ -1,5 +1,36 @@
 # Implementation evidence
 
+## Retryable GitHub verification for coding tasks (2026-10-10)
+
+Temporary GitHub permission-sync failures no longer permanently cancel Reviewed
+or Direct coding tasks. Unavailable/expired verification blocks new execution,
+auth resume, result processing and publication while retaining the task attempt.
+Already-running isolated work can finish under its original grant; successful
+permission sync resumes progression without repeating start or publication.
+Rate limits are distinct from permission denials, respect server cooldowns and
+increase sync backoff after repeated failures. Last confirmed permission data
+remains comparison-only while unavailable and keeps its original timestamp.
+
+Confirmed permission loss atomically fences pending durable tasks for the actor
+and tasks containing that actor's inputs. Stop, membership and configuration
+revocation remain effective during recovery. Completed review-state results and
+confirmed PRs retain their saved status; follow-ups still reauthorize access.
+The panel and Telegram give specific verification/denial guidance. A safe
+`github_user_sync_failed` runtime event records the failure category without raw
+upstream diagnostics. Old cancelled records are not automatically restarted.
+See the [incident evidence](../../postmortem/2026-10-09-github-access-task-cancellation.md)
+and [recovery journey](../../examples/github-coding-permission-recovery.md).
+
+Validation: Biome, strict TypeScript, production build, Node runtime contract and
+**669 deterministic tests** passed with disposable PostgreSQL and host proxies
+disabled. **10 coding-task browser scenarios** passed at 1280px and 390px;
+desktop/mobile permission recovery and denial displays were visually inspected.
+Tests cover unchanged-attempt recovery, duplicate polls, publication blocking,
+undispatched reservation cleanup, rate-limit cooldown/backoff, explicit Stop,
+confirmed loss, contributor boundaries and preserved completed PR status.
+No dependency or migration was added. No deployment, live model call, GitHub
+mutation or Telegram send was performed.
+
 ## PR #9 conflict resolution (2026-10-10)
 
 Reconciled PR #9 (`a325040`) with main (`13d7932`), retaining the mobile

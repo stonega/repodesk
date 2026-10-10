@@ -152,5 +152,7 @@ coding-maintainer grants and write approvals remain independent application chec
 Unlinked users retain operator-managed repository permissions; linked users must
 satisfy the upstream check, including after disconnect. Snapshots expire after ten
 minutes and refresh about every five minutes or via `/github sync`. Failed syncs
-deny linked repository access; permission loss invalidates pending work. See
+deny linked repository access. Temporary API failures hold coding task progression
+for automatic retry; confirmed permission loss invalidates pending work. Completed
+coding results retain their history, and follow-ups recheck current access. See
 [implementation and rollout limits](../implementation/github-app.md#connect-a-verified-telegram-members-github-account).

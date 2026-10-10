@@ -3,6 +3,7 @@ import { operator } from "../admin/auth.ts";
 import type { Store } from "../db/repositories.ts";
 import { type Admin, Fault, requireThat, type Workspace } from "../domain.ts";
 import type { GitHubApps } from "../github/registry.ts";
+import { githubAccessPending } from "../github/user-access.ts";
 import { ModelProviders } from "../models/service.ts";
 import { decrypt, encrypt } from "../setup/credentials.ts";
 import { clearProgress, recordProgress } from "../telegram/feedback.ts";
@@ -151,6 +152,8 @@ export class CodingService {
         Date.parse(t.nextPollAt ?? "1970-01-01") > Date.now()
       )
         return;
+      if (t.cancelRequested && t.error === "github_user_access_unavailable")
+        t.error = undefined;
       if (t.payload.backend !== "podman") {
         t.state = ["queued", "issue_created"].includes(t.state)
           ? "cancelled"
@@ -178,6 +181,11 @@ export class CodingService {
         checkCodingTask(w, t);
         requireThat(d.active && !d.paused, "deployment_paused", 409);
       } catch (error) {
+        if (githubAccessPending(error) && !t.cancelRequested) {
+          t.error = "github_user_access_unavailable";
+          t.nextPollAt = new Date(Date.now() + 30000).toISOString();
+          return;
+        }
         if (
           t.state === "running" ||
           t.state === "publishing" ||
@@ -192,6 +200,7 @@ export class CodingService {
           return;
         }
       }
+      if (t.error === "github_user_access_unavailable") t.error = undefined;
       t.lease = lease;
       t.nextPollAt = new Date(Date.now() + 120000).toISOString();
       return structuredClone(t);
@@ -275,6 +284,16 @@ export class CodingService {
       const snapshot = await this.store.read(workspaceId);
       const current = snapshot.codingTasks?.find((t) => t.id === id);
       if (!current || current.lease !== lease) return;
+      if (
+        reason === "github_user_access_unavailable" &&
+        !current.cancelRequested &&
+        !["creating_issue", "dispatching", "starting_publication"].includes(
+          current.state,
+        )
+      ) {
+        await this.update(workspaceId, id, lease, { error: reason });
+        return;
+      }
       if (
         reason === "coding_device_auth_required" &&
         task.payload.authMode === "device_code" &&
@@ -404,7 +423,8 @@ export class CodingService {
         Date.parse(task.createdAt) + this.authWait(task) + 7200000 > Date.now(),
         "coding_task_timeout",
       );
-    } catch {
+    } catch (error) {
+      if (githubAccessPending(error) && !latest.cancelRequested) throw error;
       cancelled = true;
     }
     if (

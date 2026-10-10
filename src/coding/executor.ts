@@ -7,7 +7,9 @@ import {
   requireThat,
   type Workspace,
 } from "../domain.ts";
+import { GitHubRateLimitError } from "../github/app.ts";
 import type { GitHubApps } from "../github/registry.ts";
+import { githubAccessPending } from "../github/user-access.ts";
 import { ModelProviders } from "../models/service.ts";
 import { decrypt, fingerprint } from "../setup/credentials.ts";
 import { loadSourceAttachments } from "../telegram/attachments.ts";
@@ -143,11 +145,28 @@ export class DevelopmentExecutor {
         Date.parse(t.nextPollAt ?? "1970-01-01") > Date.now()
       )
         return;
-      try {
-        await this.allowed(w, sql, t);
-      } catch (error) {
-        t.cancelRequested = true;
-        t.error = reason(error);
+      if (t.cancelRequested && t.error === "github_user_access_unavailable")
+        t.error = undefined;
+      // Completed artifacts remain history. Follow-ups reauthorize in appendDevelopment.
+      if (
+        t.state === "review" &&
+        !t.cancelRequested &&
+        !t.contentRemoved &&
+        !t.cleanupAttemptId
+      )
+        return;
+      if (!t.cancelRequested && !t.contentRemoved && !t.cleanupAttemptId) {
+        try {
+          await this.allowed(w, sql, t);
+          if (t.error === "github_user_access_unavailable") t.error = undefined;
+        } catch (error) {
+          if (githubAccessPending(error)) {
+            await this.holdAccess(w, sql, t, error);
+            return;
+          }
+          t.cancelRequested = true;
+          t.error = reason(error);
+        }
       }
       if (
         !t.cancelRequested &&
@@ -176,7 +195,14 @@ export class DevelopmentExecutor {
       ) {
         t.state = "cancelled";
         clearProgress(w, "development", t.id);
-        notifyDevelopment(w, t, "Your task has stopped.", "cancel:stopped");
+        notifyDevelopment(
+          w,
+          t,
+          t.error === "github_user_access_denied"
+            ? codingFailureMessage(t.error, t.payload)
+            : "Your task has stopped.",
+          "cancel:stopped",
+        );
         await taskSave(sql, t);
         return;
       }
@@ -238,7 +264,9 @@ export class DevelopmentExecutor {
               ? publishing
                 ? publicationUnknown
                 : taskUnknown
-              : "Your task has stopped. Messages already sent cannot be undone.",
+              : t.error === "github_user_access_denied"
+                ? codingFailureMessage(t.error, t.payload)
+                : "Your task has stopped. Messages already sent cannot be undone.",
             "cancel:stopped",
           );
         });
@@ -689,6 +717,29 @@ export class DevelopmentExecutor {
         });
         return;
       }
+      if (githubAccessPending(error) && !task.cancelRequested) {
+        await this.update(
+          task,
+          lease,
+          async (w, sql, t) => {
+            // An authorization race before start must not leave an undispatched reservation.
+            if (
+              task.state === "queued" &&
+              !task.attemptId &&
+              !dispatched &&
+              t.attemptId
+            ) {
+              await finishAttempt(sql, t);
+              t.attemptId = undefined;
+              t.attempts--;
+              t.state = "queued";
+            }
+            await this.holdAccess(w, sql, t, error);
+          },
+          false,
+        );
+        return;
+      }
       if (
         code === "coding_device_auth_required" &&
         task.payload.authMode === "device_code" &&
@@ -755,6 +806,36 @@ export class DevelopmentExecutor {
         }
       });
     }
+  }
+  private async holdAccess(
+    w: Workspace,
+    sql: Sql,
+    task: DevelopmentTask,
+    error: unknown,
+  ) {
+    if (task.cancelRequested) {
+      task.lease = undefined;
+      task.leaseUntil = undefined;
+      task.nextPollAt = undefined;
+      await taskSave(sql, task);
+      return;
+    }
+    task.error = "github_user_access_unavailable";
+    task.lease = undefined;
+    task.leaseUntil = undefined;
+    task.nextPollAt = new Date(
+      Math.max(
+        Date.now() + 30000,
+        error instanceof GitHubRateLimitError ? error.retryAt : 0,
+      ),
+    ).toISOString();
+    await this.notice(
+      w,
+      task,
+      codingFailureMessage(task.error, task.payload),
+      `access-unavailable:${task.fence}`,
+    );
+    await taskSave(sql, task);
   }
   private async deviceConnected(workspaceId: string) {
     const device = this.runner as LocalRunner & Partial<LocalDeviceAuth>;

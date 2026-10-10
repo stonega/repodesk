@@ -111,6 +111,43 @@ async function fixture(page: Page, failed = false) {
 }
 
 for (const width of [1280, 390]) {
+  test(`saved permission failures distinguish automatic recovery from stopped work at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const f = await fixture(page);
+    f.continuous.error = "github_user_access_unavailable";
+    f.reviewed.state = "cancelled";
+    f.reviewed.error = "github_user_access_denied";
+    await page.reload();
+    const tasks = page.getByRole("region", { name: "Coding tasks" });
+    const recovering = tasks
+      .getByRole("row")
+      .filter({ hasText: "Continuous fixture task" });
+    await expect(recovering).toContainText(
+      "Waiting for GitHub access verification",
+    );
+    await expect(recovering).toContainText("RepoDesk will retry automatically");
+    await expect(recovering).not.toContainText("Stopped");
+    await expect(recovering).not.toContainText("administrator");
+    await expect(
+      recovering.getByRole("button", { name: /Stop/ }),
+    ).toBeEnabled();
+    const stopped = tasks
+      .getByRole("row")
+      .filter({ hasText: "Reviewed fixture task" });
+    await expect(stopped).toContainText("Stopped");
+    await expect(stopped).toContainText("/github sync");
+    await expect(stopped).not.toContainText("couldn’t finish this task");
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await tasks.screenshot({
+      path: test.info().outputPath("permission-recovery.png"),
+    });
+  });
   test(`saved checkout failures explain the branch and recovery at ${width}px`, async ({
     page,
   }) => {

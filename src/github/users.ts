@@ -5,7 +5,7 @@ import { Fault, requireThat, type Workspace } from "../domain.ts";
 import { decrypt, encrypt, hash, token } from "../setup/credentials.ts";
 import { audit, authorize, eligible } from "../workspaces/policy.ts";
 import { deliver } from "../workspaces/service.ts";
-import type { GitHubApp } from "./app.ts";
+import { type GitHubApp, GitHubRateLimitError } from "./app.ts";
 import { availableGitHubAccount } from "./member-account.ts";
 import type { GitHubApps } from "./registry.ts";
 import { type GitHubUserAccess, invalidateGitHubWork } from "./user-access.ts";
@@ -22,6 +22,15 @@ export class GitHubUsers {
   }
   private scope(w: Workspace, actor: string) {
     return `github-user:${w.id}:${actor}`;
+  }
+  private async invalidateWork(sql: Sql, w: Workspace, actor: string) {
+    invalidateGitHubWork(w, actor);
+    await sql.query(
+      `UPDATE coding_tasks SET data=data || '{"cancelRequested":true,"error":"github_user_access_denied"}'::jsonb,updated_at=now()
+       WHERE workspace_id=$1 AND data->>'state' NOT IN ('review','failed','cancelled','unknown')
+       AND (data->>'actor'=$2 OR id IN (SELECT task_id FROM coding_task_inputs WHERE workspace_id=$1 AND data->>'actor'=$2))`,
+      [w.id, actor],
+    );
   }
   private async app(w: Workspace) {
     requireThat(
@@ -229,7 +238,7 @@ export class GitHubUsers {
     );
     const member = w.members.find((m) => m.id === actor);
     requireThat(member, "access_denied", 403);
-    invalidateGitHubWork(w, actor);
+    await this.invalidateWork(sql, w, actor);
     member.github = access;
     member.githubAccount = { id: access.id, login: access.login };
     await sql.query("DELETE FROM github_user_flows WHERE state_hash=$1", [
@@ -254,7 +263,11 @@ export class GitHubUsers {
       )
     ).rows[0];
     requireThat(row, "github_account_not_connected", 409);
+    if (Date.parse(member.github.retryAt ?? "") > Date.now())
+      return member.github;
     let access: GitHubUserAccess;
+    let denied = false;
+    let retryAt = Date.now() + 5 * 60000;
     try {
       const app = await this.app(w);
       requireThat(
@@ -306,34 +319,68 @@ export class GitHubUsers {
         identity.id,
         identity.login,
       );
-    } catch {
+    } catch (error) {
+      denied =
+        error instanceof Fault &&
+        [
+          "github_access_denied",
+          "github_authorization_expired",
+          "github_authorization_failed",
+          "github_connection_changed",
+          "github_identity_changed",
+        ].includes(error.code);
+      if (error instanceof GitHubRateLimitError)
+        retryAt = Math.max(
+          Date.now() +
+            Math.min(
+              3600000,
+              300000 * 2 ** Math.min(member.github.syncFailures ?? 0, 4),
+            ),
+          error.retryAt,
+        );
+      const syncError = denied
+        ? "github_access_denied"
+        : error instanceof GitHubRateLimitError
+          ? "github_rate_limited"
+          : "github_unavailable";
       access = {
         ...member.github,
         status: "unavailable",
-        syncedAt: new Date().toISOString(),
-        repositories: [],
+        repositories: denied ? [] : member.github.repositories,
+        syncError,
+        ...(error instanceof GitHubRateLimitError
+          ? {
+              retryAt: new Date(retryAt).toISOString(),
+              syncFailures: (member.github.syncFailures ?? 0) + 1,
+            }
+          : {}),
       };
+      this.store.log.write("github_user_sync_failed", {
+        workspaceId: w.id,
+        error: new Fault(syncError, 503),
+      });
     }
     const prior = member.github;
     const lost =
-      access.status !== "connected" ||
-      prior.id !== access.id ||
-      prior.connectionRevision !== access.connectionRevision ||
-      prior.repositories.some((r) => {
-        const next = access.repositories.find(
-          (n) => n.id === r.id && n.full_name === r.full_name,
-        );
-        return (
-          !next ||
-          (r.permissions?.push && !next.permissions?.push) ||
-          (r.permissions?.admin && !next.permissions?.admin)
-        );
-      });
-    if (lost) invalidateGitHubWork(w, actor);
+      denied ||
+      (access.status === "connected" &&
+        (prior.id !== access.id ||
+          prior.connectionRevision !== access.connectionRevision ||
+          prior.repositories.some((r) => {
+            const next = access.repositories.find(
+              (n) => n.id === r.id && n.full_name === r.full_name,
+            );
+            return (
+              !next ||
+              (r.permissions?.push && !next.permissions?.push) ||
+              (r.permissions?.admin && !next.permissions?.admin)
+            );
+          })));
+    if (lost) await this.invalidateWork(sql, w, actor);
     member.github = access;
     await sql.query(
-      "UPDATE github_user_accounts SET next_sync_at=now()+interval '5 minutes' WHERE workspace_id=$1 AND actor=$2",
-      [w.id, actor],
+      "UPDATE github_user_accounts SET next_sync_at=$3 WHERE workspace_id=$1 AND actor=$2",
+      [w.id, actor, new Date(retryAt)],
     );
     if (
       lost ||
@@ -359,7 +406,7 @@ export class GitHubUsers {
         status: "disconnected",
         repositories: [],
       };
-    invalidateGitHubWork(w, actor);
+    await this.invalidateWork(sql, w, actor);
     audit(w, actor, "github.user_disconnected", actor);
   }
   async syncDue() {
@@ -386,7 +433,7 @@ export class GitHubUsers {
                 status: "disconnected",
                 repositories: [],
               };
-            invalidateGitHubWork(w, row.actor);
+            await this.invalidateWork(sql, w, row.actor);
             return;
           }
           await this.sync(sql, w, row.actor);

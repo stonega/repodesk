@@ -13,6 +13,11 @@ export interface GitHubAppConfig {
   organization?: string;
 }
 const accountSchema = z.object({ login: z.string().min(1).max(100) });
+export class GitHubRateLimitError extends Fault {
+  constructor(readonly retryAt: number) {
+    super("github_rate_limited", 503);
+  }
+}
 const installationSchema = z.object({
   id: z.number().int().positive(),
   app_id: z.number().int().positive(),
@@ -98,6 +103,31 @@ export class GitHubApp {
           ...(signal ? [signal] : []),
         ]),
       });
+      if (response.status === 403 || response.status === 429) {
+        const error = z
+          .object({ message: z.string() })
+          .safeParse(await response.json().catch(() => null));
+        if (
+          response.status === 429 ||
+          response.headers.get("x-ratelimit-remaining") === "0" ||
+          response.headers.has("retry-after") ||
+          (error.success &&
+            /secondary rate limit|abuse detection/i.test(error.data.message))
+        ) {
+          const after = Number(response.headers.get("retry-after"));
+          const reset = Number(response.headers.get("x-ratelimit-reset"));
+          throw new GitHubRateLimitError(
+            Math.max(
+              Date.now() + 60000,
+              Number.isFinite(after) ? Date.now() + after * 1000 : 0,
+              response.headers.get("x-ratelimit-remaining") === "0" &&
+                Number.isFinite(reset)
+                ? reset * 1000
+                : 0,
+            ),
+          );
+        }
+      }
       if ([401, 403, 404].includes(response.status))
         throw new Fault("github_access_denied", 403);
       if (

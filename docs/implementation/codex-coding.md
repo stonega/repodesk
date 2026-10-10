@@ -18,6 +18,18 @@ parallel; tasks sharing one workspace's ChatGPT login serialize Codex phases whi
 preparation, checks and publication can overlap. See the
 [runner guide](codex-podman.md#lifecycle-and-recovery) for resource limits and recovery.
 
+Temporary GitHub permission-sync failures hold task progression for automatic
+retry, retaining the same attempt and checkout. Already-running local work can
+finish under its original grant; new execution, auth resumes, result delivery and
+PR publication wait until current access is verified. Confirmed permission loss,
+configuration changes and explicit Stop still cancel pending execution. Published
+PRs and completed results retain their saved status; follow-ups reauthorize access.
+Rate limits use GitHub's cooldown and increasing sync backoff. An unavailable
+permission check reports automatic recovery; a confirmed denial points to
+`/github sync` or `/github connect` before a new request. Cancelled tasks from older
+builds require explicit recovery and are not restarted automatically. See the
+[permission recovery journey](../../examples/github-coding-permission-recovery.md).
+
 Checkout failures report a safe cause before Codex starts. When the configured
 base branch is missing, Telegram outcomes, requested status and the admin task
 summary name the repository and branch and point to **Plugins → Codex →

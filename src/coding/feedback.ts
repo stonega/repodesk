@@ -39,6 +39,7 @@ export function codingStatusLabel(task: {
   phase?: string;
   pr?: unknown;
   prUrl?: string;
+  error?: string;
 }) {
   if (
     [
@@ -52,6 +53,13 @@ export function codingStatusLabel(task: {
     task.cancelRequested
   )
     return "Stopping";
+  if (
+    task.error === "github_user_access_unavailable" &&
+    !["review", "succeeded", "failed", "cancelled", "unknown"].includes(
+      task.state,
+    )
+  )
+    return "Waiting for GitHub access verification";
   if (["working", "running"].includes(task.state)) {
     if (
       task.progress?.unavailable ||
@@ -110,6 +118,8 @@ function active(task: {
     : "Waiting for the runner to confirm the current stage.";
 }
 export function developmentStatus(task: DevelopmentTask) {
+  if (task.error === "github_user_access_unavailable" && !task.cancelRequested)
+    return `${task.payload.repository}: ${codingFailureMessage(task.error, task.payload)}${task.pr ? `\n${task.pr.url}` : ""}`;
   const labels: Record<DevelopmentTask["state"], string> = {
     queued: "Your task is queued.",
     working: active(task),
@@ -126,13 +136,18 @@ export function developmentStatus(task: DevelopmentTask) {
           ? "Your PR is ready for review."
           : "The recorded checks passed. Publication has not been requested.",
     failed: codingFailureMessage(task.error ?? "", task.payload),
-    cancelled: "Your task has stopped.",
+    cancelled:
+      task.error === "github_user_access_denied"
+        ? codingFailureMessage(task.error, task.payload)
+        : "Your task has stopped.",
     unknown:
       task.progress?.stage === "publish" ? publicationUnknown : taskUnknown,
   };
   return `${task.payload.repository}: ${labels[task.state]}${task.pr ? `\n${task.pr.url}` : ""}`;
 }
 export function reviewedStatus(task: CodingTask) {
+  if (task.error === "github_user_access_unavailable" && !task.cancelRequested)
+    return `${task.payload.repository}: ${codingFailureMessage(task.error, task.payload)}`;
   const labels: Record<CodingTask["state"], string> = {
     queued: "Your coding request is queued.",
     creating_issue: "I’m creating the approved issue.",
@@ -148,7 +163,10 @@ export function reviewedStatus(task: CodingTask) {
         : stageMessage("publish"),
     succeeded: "The recorded checks passed. Your PR is ready for review.",
     failed: codingFailureMessage(task.error ?? "", task.payload),
-    cancelled: "Your task has stopped.",
+    cancelled:
+      task.error === "github_user_access_denied"
+        ? codingFailureMessage(task.error, task.payload)
+        : "Your task has stopped.",
     unknown:
       task.progress?.stage === "publish" ? publicationUnknown : taskUnknown,
     auth_required: codingFailureMessage("coding_device_auth_required"),

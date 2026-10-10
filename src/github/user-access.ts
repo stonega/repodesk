@@ -1,4 +1,5 @@
-import { requireThat, type Workspace } from "../domain.ts";
+import { codingTerminal } from "../coding/config.ts";
+import { Fault, requireThat, type Workspace } from "../domain.ts";
 import type { GitHubRepository } from "./app.ts";
 
 export interface GitHubUserAccess {
@@ -8,6 +9,22 @@ export interface GitHubUserAccess {
   connectionRevision: number;
   syncedAt: string;
   repositories: GitHubRepository[];
+  syncError?:
+    | "github_access_denied"
+    | "github_rate_limited"
+    | "github_unavailable";
+  retryAt?: string;
+  syncFailures?: number;
+}
+export function githubAccessPending(error: unknown) {
+  return (
+    error instanceof Fault &&
+    [
+      "github_user_access_unavailable",
+      "github_unavailable",
+      "github_rate_limited",
+    ].includes(error.code)
+  );
 }
 // Existing unlinked members retain the operator-managed policy. Linking adds
 // an upstream boundary; disconnecting cannot remove that boundary.
@@ -35,6 +52,19 @@ export function authorizeRepository(
   repositoryId: number,
   write = false,
 ) {
+  const access = w.members.find((m) => m.id === actor)?.github;
+  if (
+    access &&
+    access.status !== "disconnected" &&
+    access.syncError !== "github_access_denied"
+  )
+    requireThat(
+      access.status === "connected" &&
+        access.connectionRevision === w.github?.revision &&
+        Date.parse(access.syncedAt) > Date.now() - 10 * 60000,
+      "github_user_access_unavailable",
+      503,
+    );
   requireThat(
     repositoryAccess(w, actor, repositoryId, write),
     "github_user_access_denied",
@@ -53,7 +83,8 @@ export function invalidateGitHubWork(w: Workspace, actor: string) {
       a.decision = "revoked";
   }
   for (const task of w.codingTasks ?? [])
-    if (task.actor === actor) task.cancelRequested = true;
+    if (task.actor === actor && !codingTerminal(task.state))
+      task.cancelRequested = true;
   // A queued answer may contain source material retrieved under prior permissions.
   for (const run of w.runs)
     if (

@@ -37,7 +37,6 @@ export function codingDestination(
     409,
   );
   const input = codingInput.parse(value);
-  authorizeRepository(w, actor, input.repositoryId, true);
   const target = w.coding.settings.repositories.find(
     (r) => r.repositoryId === input.repositoryId,
   );
@@ -53,6 +52,7 @@ export function codingDestination(
     "github_repository_not_connected",
     409,
   );
+  authorizeRepository(w, actor, input.repositoryId, true);
   return codingPayload.parse({
     ...input,
     repository: repo.full_name,
@@ -69,6 +69,12 @@ export function checkCodingPayload(
   actor: string,
   payload: CodingPayload,
 ) {
+  requireThat(
+    w.coding?.revision === payload.configRevision &&
+      w.github?.revision === payload.githubRevision,
+    "coding_configuration_changed",
+    409,
+  );
   const { repositoryId, title, body } = payload;
   requireThat(
     fingerprint(codingDestination(w, actor, { repositoryId, title, body })) ===
@@ -180,6 +186,7 @@ export function approveCoding(w: Workspace, approval: Approval) {
   notifyCoding(w, w.codingTasks.at(-1) as CodingTask);
 }
 export function checkCodingTask(w: Workspace, task: CodingTask) {
+  requireThat(!task.cancelRequested, "coding_cancelled", 409);
   checkCodingPayload(w, task.actor, task.payload);
   audience(w, task.actor, task.chatId);
   const run = w.runs.find((r) => r.id === task.runId);

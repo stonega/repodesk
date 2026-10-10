@@ -2,6 +2,10 @@ import { attachmentErrors } from "../telegram/attachments.ts";
 import type { CodingPayload } from "./config.ts";
 
 const messages: Record<string, string> = {
+  github_user_access_unavailable:
+    "GitHub access could not be verified. RepoDesk will retry automatically; new execution and PR publication wait until access is verified.",
+  github_user_access_denied:
+    "The linked GitHub account does not have the required repository access. Run /github sync in your private bot chat, or reconnect with /github connect. Start a new request after access is restored.",
   coding_conversation_failed:
     "Codex could not complete the conversation. Ask the workspace administrator to inspect the task before trying again.",
   coding_codex_failed: "The Codex process stopped before completing the task.",
@@ -67,7 +71,8 @@ export function codingFailureMessage(
   const text = messages[code] ?? attachmentErrors[code];
   if (!text)
     return "I couldn’t finish this task. Ask the workspace administrator to inspect it in the panel.";
-  return /Ask|Wait|Start|State|Request/.test(text)
+  return code === "github_user_access_unavailable" ||
+    /Ask|Wait|Start|State|Request/.test(text)
     ? text
     : `${text} Ask the workspace administrator to inspect the task before trying again.`;
 }

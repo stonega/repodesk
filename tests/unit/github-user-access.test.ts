@@ -119,3 +119,21 @@ test("permission revocation cancels actor work and pending writes without touchi
   expect(w.deliveries[0]?.state).toBe("cancelled");
   expect(other.cancelled).toBe(false);
 });
+test("unavailable and expired snapshots block actions with a retryable error; confirmed denials do not", () => {
+  const w = linked();
+  const access = w.members.find((m) => m.id === "202")?.github;
+  if (!access) throw new Error("fixture");
+  for (const state of ["unavailable", "stale"] as const) {
+    access.status = state === "stale" ? "connected" : "unavailable";
+    access.syncedAt = new Date(Date.now() - 11 * 60000).toISOString();
+    expect(repositoryAccess(w, "202", 7001)).toBe(false);
+    expect(() => authorizeRepository(w, "202", 7001)).toThrow(
+      "github_user_access_unavailable",
+    );
+  }
+  access.status = "unavailable";
+  access.syncError = "github_access_denied";
+  expect(() => authorizeRepository(w, "202", 7001)).toThrow(
+    "github_user_access_denied",
+  );
+});
