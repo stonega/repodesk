@@ -75,6 +75,7 @@ function deploy(
   arch = "x86_64",
   duplicate = false,
   codex = false,
+  local = false,
 ) {
   const root = mkdtempSync(join(tmpdir(), "repodesk-deploy-test-"));
   try {
@@ -86,16 +87,21 @@ function deploy(
     if (failure !== "configuration")
       writeFileSync(join(root, ".env"), "POSTGRES_PASSWORD=fixture\n");
     writeFileSync(join(release, "compose.yaml"), "services: {}\n");
-    writeFileSync(join(release, "image-id"), `${imageId}\n`);
+    writeFileSync(
+      join(release, "image-id"),
+      `${local && failure !== "local-image-changed" ? importedImageId : imageId}\n`,
+    );
     writeFileSync(join(release, "image-tag"), `${imageTag}\n`);
-    writeFileSync(
-      join(release, "image-sha256"),
-      `${createHash("sha256").update("fixture").digest("hex")}\n`,
-    );
-    writeFileSync(
-      join(release, "image.tar.gz"),
-      failure === "archive" ? "damaged" : "fixture",
-    );
+    if (!local) {
+      writeFileSync(
+        join(release, "image-sha256"),
+        `${createHash("sha256").update("fixture").digest("hex")}\n`,
+      );
+      writeFileSync(
+        join(release, "image.tar.gz"),
+        failure === "archive" ? "damaged" : "fixture",
+      );
+    }
     if (codex) {
       writeFileSync(join(release, "codex-compose.yaml"), "services: {}\n");
       writeFileSync(
@@ -107,6 +113,16 @@ function deploy(
           join(release, "codex-job-tag"),
           `repodesk-codex-job:release-${"b".repeat(40)}\n`,
         );
+      if (local) {
+        writeFileSync(
+          join(release, "codex-supervisor-id"),
+          `sha256:${"d".repeat(64)}\n`,
+        );
+        writeFileSync(
+          join(release, "codex-job-id"),
+          `sha256:${(failure === "local-job-changed" ? "f" : "e").repeat(64)}\n`,
+        );
+      }
       copyFileSync(
         join(import.meta.dir, "../../deploy/codex/release-config.mjs"),
         join(release, "codex-release-config.mjs"),
@@ -126,20 +142,30 @@ function deploy(
       mkdirSync(join(root, "backups"));
       writeFileSync(join(root, "backups/pre-release-123-1.dump"), "previous");
     }
-    const result = Bun.spawnSync(["bash", script, root, "123-1", "fixture"], {
-      env: {
-        ...process.env,
-        PATH: `${bin}:${process.env.PATH}`,
-        DEPLOY_TEST_LOG: log,
-        DEPLOY_TEST_ROOT: root,
-        DEPLOY_TEST_IMAGE: importedImageId,
-        DEPLOY_TEST_TAG: imageTag,
-        DEPLOY_TEST_FAILURE: failure,
-        DEPLOY_TEST_ARCH: arch,
-        DEPLOY_TEST_READY_COUNT: join(root, "readiness-count"),
-        DEPLOY_TEST_CHECKPOINT_COUNT: join(root, "checkpoint-count"),
+    const result = Bun.spawnSync(
+      [
+        "bash",
+        script,
+        root,
+        "123-1",
+        "fixture",
+        ...(local ? ["--local-images"] : []),
+      ],
+      {
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          DEPLOY_TEST_LOG: log,
+          DEPLOY_TEST_ROOT: root,
+          DEPLOY_TEST_IMAGE: importedImageId,
+          DEPLOY_TEST_TAG: imageTag,
+          DEPLOY_TEST_FAILURE: failure,
+          DEPLOY_TEST_ARCH: arch,
+          DEPLOY_TEST_READY_COUNT: join(root, "readiness-count"),
+          DEPLOY_TEST_CHECKPOINT_COUNT: join(root, "checkpoint-count"),
+        },
       },
-    });
+    );
     return {
       exitCode: result.exitCode,
       calls: readFileSync(log, "utf8"),
@@ -160,6 +186,28 @@ function deploy(
 }
 
 describe("VPS release cutover", () => {
+  test("local verified images deploy without saving, loading or requiring an archive", () => {
+    const result = deploy("", "x86_64", false, true, true);
+    expect(result.exitCode).toBe(0);
+    expect(result.current).toBe("123-1\n");
+    expect(result.releaseEnvironment).toBe(`APP_IMAGE=${importedImageId}\n`);
+    expect(result.calls).not.toContain("image load");
+    expect(result.calls).not.toContain("image save");
+    expect(result.calls).toContain("pg_dump");
+    expect(result.calls).toContain("--no-build --pull never");
+  });
+
+  for (const failure of ["local-image-changed", "local-job-changed"]) {
+    test(`${failure} rejects a retagged local image before stopping writers`, () => {
+      const result = deploy(failure, "x86_64", false, true, true);
+      expect(result.exitCode).not.toBe(0);
+      expect(result.current).toBe("previous\n");
+      expect(result.calls).not.toContain("stop app worker");
+      expect(result.calls).not.toContain("pg_dump");
+      expect(result.stderr).toContain("no longer match");
+    });
+  }
+
   test("pins the imported daemon's ID when the runner's ID is different", () => {
     const result = deploy();
     expect(result.exitCode).toBe(0);

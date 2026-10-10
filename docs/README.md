@@ -44,6 +44,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [VPS release deployment](implementation/vps-deployment.md) | Host provisioning, local release builds, protected cutover and failure recovery |
 | [Panel updates](implementation/updates.md) | Automatic release checks, version indicator, changelog modal and host updater installation |
 | [Self-hosted Actions runner](implementation/self-hosted-runner.md) | VPS runner installation, separate CI Docker daemon, registration and operations |
+| [Automatic storage cleanup](implementation/storage-cleanup.md) | Daily host release retention, CI post-job cleanup and safe activation |
 | [Debugging](implementation/debugging.md) | Operator-provided VPS access and missing-reply diagnosis |
 | [Telegram experience](user/telegram-experience.md) | Proposed commands, onboarding, and example conversations |
 

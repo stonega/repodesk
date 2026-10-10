@@ -18,6 +18,9 @@ Content-Type: application/json
 {"releaseId":42,"fingerprint":"replace-with-reviewed-release-fingerprint"}
 
 ### Explicit retry after reviewing a failed host job's logs
+# If attempt.error is insufficient_disk_space, free deployment filesystem space
+# before retrying. Local-image updates retain a minimum 1GiB reserve; builds and
+# database backups can need more. Keep current/task images and persisted data.
 POST {{origin}}/api/admin/operator/updates
 Cookie: repodesk_session={{session}}
 Origin: {{origin}}

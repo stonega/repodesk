@@ -47,3 +47,17 @@ docker exec "$smoke_name" docker run --rm --pull=never \
     }
     console.log("Nested Docker resource-limit smoke passed.");
   '
+
+# Run the actual post-job hook as the listener user. It must remove an unused
+# disposable volume while retaining a stopped container's volume and image.
+docker exec "$smoke_name" docker volume create cleanup-unused >/dev/null
+docker exec "$smoke_name" docker create --name cleanup-retained --pull=never \
+  --network=none --volume cleanup-retained:/evidence "$runner_image" >/dev/null
+docker exec "$smoke_name" runuser -u runner -- /usr/local/bin/actions-runner-cleanup.sh
+if docker exec "$smoke_name" docker volume inspect cleanup-unused >/dev/null 2>&1; then
+  echo 'CI cleanup left an unreferenced disposable volume.' >&2
+  exit 1
+fi
+docker exec "$smoke_name" docker volume inspect cleanup-retained >/dev/null
+docker exec "$smoke_name" docker image inspect "$runner_image" >/dev/null
+echo 'CI post-job cleanup smoke passed; referenced storage was retained.'

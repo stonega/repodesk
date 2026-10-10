@@ -1,0 +1,9 @@
+{
+  "labels": ["repodesk.ci=true"],
+  "builder": {
+    "gc": {
+      "enabled": true,
+      "defaultKeepStorage": "2GB"
+    }
+  }
+}

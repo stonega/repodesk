@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily RepoDesk Docker storage cleanup
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=15m
+Persistent=true
+Unit=repodesk-cleanup.service
+
+[Install]
+WantedBy=timers.target

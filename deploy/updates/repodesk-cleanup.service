@@ -1,0 +1,11 @@
+[Unit]
+Description=RepoDesk unused release images and build cache cleanup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/repodesk
+ExecStart=/usr/bin/node /opt/repodesk/updater/cleanup-host.mjs /opt/repodesk --apply
+TimeoutStartSec=15m
+UMask=0077

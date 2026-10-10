@@ -32,4 +32,7 @@ RUN curl --fail --silent --show-error --location \
     && apt-get clean
 
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/actions-runner-entrypoint
+COPY daemon.json /etc/docker/daemon.json
+COPY --chmod=0755 cleanup.sh /usr/local/bin/actions-runner-cleanup.sh
+ENV ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/usr/local/bin/actions-runner-cleanup.sh
 ENTRYPOINT ["/usr/local/bin/actions-runner-entrypoint"]

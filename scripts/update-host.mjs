@@ -1,6 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomInt, randomUUID } from "node:crypto";
-import { createReadStream } from "node:fs";
 import {
   copyFile,
   mkdir,
@@ -9,10 +8,12 @@ import {
   readFile,
   rename,
   rm,
+  statfs,
   writeFile,
 } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { withStorageLock } from "./cleanup-host.mjs";
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 export function validateRequest(request, repository) {
@@ -150,10 +151,23 @@ function commandRunner(log, token) {
       );
     });
 }
+async function requireUpdateSpace(root, readSpace) {
+  const disk = await readSpace(root);
+  if (disk.bavail * disk.bsize < 1024 ** 3)
+    throw Error("insufficient_disk_space");
+}
+
 /** Build pinned release images locally, then reuse the protected host cutover. */
-export async function installRelease(request, config, run, transport = fetch) {
+export async function installRelease(
+  request,
+  config,
+  run,
+  transport = fetch,
+  readSpace = statfs,
+) {
   await verifySelection(request, config.repository, config.token, transport);
   await requireVerifiedCommit(request, config.token, transport);
+  await requireUpdateSpace(config.root, readSpace);
   const source = join(config.root, "updates", "sources", request.requestId);
   const releaseId = `${Date.now()}-${randomInt(1, 100000000)}`;
   const bundle = join(config.root, "releases", releaseId);
@@ -188,6 +202,9 @@ export async function installRelease(request, config, run, transport = fetch) {
     );
     if (pkg.version !== request.tag.replace(/^v/, ""))
       throw Error("release_changed");
+    // A daemon that imports the shared maintenance lock needs its companion
+    // module. Reject incompatible source before building or stopping writers.
+    await readFile(join(source, "scripts/cleanup-host.mjs"));
     const image = `repodesk:release-${request.commit}`;
     const supervisor = `repodesk-codex-supervisor:release-${request.commit}`;
     const job = `repodesk-codex-job:release-${request.commit}`;
@@ -195,7 +212,8 @@ export async function installRelease(request, config, run, transport = fetch) {
       ["app", image],
       ["codex-job", job],
       ["codex-supervisor", supervisor],
-    ])
+    ]) {
+      await requireUpdateSpace(config.root, readSpace);
       await run("docker", [
         "build",
         "--platform",
@@ -206,6 +224,7 @@ export async function installRelease(request, config, run, transport = fetch) {
         tag,
         source,
       ]);
+    }
     await run("docker", [
       "run",
       "--rm",
@@ -216,29 +235,24 @@ export async function installRelease(request, config, run, transport = fetch) {
       image,
       "dist/runtime-contract.js",
     ]);
-    await run("bash", [
-      "-o",
-      "pipefail",
-      "-c",
-      'docker image save "$1" "$2" "$3" | gzip > "$4"',
-      "archive",
-      image,
-      supervisor,
-      job,
-      join(bundle, "image.tar.gz"),
-    ]);
-    const hash = createHash("sha256");
-    for await (const chunk of createReadStream(join(bundle, "image.tar.gz")))
-      hash.update(chunk);
-    await writeFile(join(bundle, "image-sha256"), hash.digest("hex"), {
-      mode: 0o600,
-    });
+    // These images are already on the deployment daemon. Pin their IDs rather
+    // than duplicating them in an archive and importing them on the same host.
     for (const [name, value] of [
       ["image-tag", image],
       ["codex-supervisor-tag", supervisor],
       ["codex-job-tag", job],
-    ])
+    ]) {
       await writeFile(join(bundle, name), value, { mode: 0o600 });
+      const id = await run(
+        "docker",
+        ["image", "inspect", "--format", "{{.Id}}", value],
+        true,
+      );
+      if (!/^sha256:[a-f0-9]{64}$/.test(id)) throw Error("update_failed");
+      await writeFile(join(bundle, name.replace(/-tag$/, "-id")), id, {
+        mode: 0o600,
+      });
+    }
     for (const [from, to] of [
       ["compose.yaml", "compose.yaml"],
       ["scripts/deploy-vps.sh", "deploy-vps.sh"],
@@ -249,14 +263,24 @@ export async function installRelease(request, config, run, transport = fetch) {
       await copyFile(join(source, from), join(bundle, to));
     // Recheck external metadata immediately before the first possible cutover.
     await verifySelection(request, config.repository, config.token, transport);
+    await requireUpdateSpace(config.root, readSpace);
     await run("bash", [
       join(bundle, "deploy-vps.sh"),
       config.root,
       releaseId,
       config.project,
+      "--local-images",
     ]);
     // Install the next daemon atomically; the service restarts after recording success.
     await mkdir(join(config.root, "updater"), { recursive: true, mode: 0o700 });
+    await copyFile(
+      join(source, "scripts/cleanup-host.mjs"),
+      join(config.root, "updater/cleanup-host.mjs.pending"),
+    );
+    await rename(
+      join(config.root, "updater/cleanup-host.mjs.pending"),
+      join(config.root, "updater/cleanup-host.mjs"),
+    );
     await copyFile(
       join(source, "scripts/update-host.mjs"),
       join(config.root, "updater/update-host.mjs.pending"),
@@ -311,7 +335,12 @@ export async function processRequest(
     await log.write(
       `Starting verified update ${request.repository}@${request.tag} (${request.commit}).\n`,
     );
-    await execute(request, config, commandRunner(log, config.token));
+    const acquired = await withStorageLock(
+      config.root,
+      () => execute(request, config, commandRunner(log, config.token)),
+      true,
+    );
+    if (!acquired) throw Error("storage_lock_busy");
     await atomicJson(path, {
       requestId: request.requestId,
       fingerprint: request.fingerprint,
@@ -319,11 +348,16 @@ export async function processRequest(
     });
     return true;
   } catch (error) {
-    const code = ["release_changed", "verification_failed"].includes(
-      error.message,
-    )
-      ? error.message
-      : "update_failed";
+    const code =
+      error.code === "ENOSPC"
+        ? "insufficient_disk_space"
+        : [
+              "release_changed",
+              "verification_failed",
+              "insufficient_disk_space",
+            ].includes(error.message)
+          ? error.message
+          : "update_failed";
     await log.write(
       `Update failed: ${code}. Inspect the release, Verify result and preceding build/cutover output.\n`,
     );

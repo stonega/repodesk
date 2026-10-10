@@ -4,8 +4,10 @@ Signed-in users automatically check the configured GitHub repository's latest
 published stable release. A newer numeric version adds an update arrow immediately
 after the version label (bottom right on desktop, in the mobile admin header,
 or in the mobile setup footer). Click it to review the formatted changelog,
-release-specific upgrade notes and deployment consequences in a modal. HTML,
-scripts and remote images stay literal; links allow only HTTP/HTTPS. Missing
+release-specific upgrade notes and deployment consequences in a modal. The compact
+28px circle, 16px arrow and 5px status dot retain a 44px tap target and keyboard
+focus styling in both themes. HTML, scripts and remote images stay literal;
+links allow only HTTP/HTTPS. Missing
 notes have an explicit empty state. Sign-in keeps the version without an action.
 
 Checks run when the session opens, every minute while the page is visible and on
@@ -33,6 +35,7 @@ On the provisioned host, copy the checked-in daemon and service template:
 ```sh
 sudo install -d -m 700 /opt/repodesk/updater
 sudo install -m 700 scripts/update-host.mjs /opt/repodesk/updater/update-host.mjs
+sudo install -m 700 scripts/cleanup-host.mjs /opt/repodesk/updater/cleanup-host.mjs
 # The app image's node user is UID/GID 1000. Root daemon can read its private queue.
 sudo install -d -o 1000 -g 1000 -m 700 /opt/repodesk/updates /opt/repodesk/updates/requests
 sudo install -m 644 deploy/updates/repodesk-updater.service /etc/systemd/system/repodesk-updater.service
@@ -76,10 +79,25 @@ submission. No file is written by a release check or modal open.
 The host verifies the exact published stable release and a successful Verify run
 for its commit, fetches that commit, checks package version, builds app/Codex
 images locally, and smoke-tests the Node app image. It rechecks release metadata
-immediately before passing a checksummed bundle to `deploy-vps.sh`. The cutover
-waits for safe coding checkpoints, stops writers, backs up PostgreSQL, migrates,
+immediately before passing the bundle to `deploy-vps.sh --local-images`. The
+bundle records all three local image IDs; the script checks the release tags
+still resolve to those IDs before stopping writers. Saving and reloading images
+on the same daemon is unnecessary. Manual transferred archives retain checksum
+verification and import support. The cutover waits for safe coding checkpoints,
+stops writers, backs up PostgreSQL, migrates,
 starts writers and confirms readiness. A changed release or unverified commit
 fails before any cutover. Expect a brief outage; the queue and results survive it.
+
+The updater requires at least 1GiB free on the deployment filesystem before
+checkout, each image build and cutover. This is a minimum reserve, not an estimate
+of build or database-backup size. A disk-space failure is shown explicitly in the
+modal; free space before using **Retry update**. Keep a retention policy for
+unused release images and build cache, preserving running/retained release and
+task images, database volumes, credentials and backups. The updater does not
+automatically prune host resources; the separately installed
+[daily cleanup timer](storage-cleanup.md) provides that policy and shares the
+updater's storage lock. Older releases still use the archive path;
+the direct local-image path takes effect in a release containing this correction.
 
 The modal polls queued/running/completed/failed status and offers Reload after
 success. Installed version is checked after reload, separately from daemon
@@ -102,9 +120,11 @@ GitHub, host commands and queue fixtures. Host provisioning and a direct VPS
 cutover were verified on 2026-10-09 for `cfffdfc` (v0.1.32), including public
 readiness and queue access from the app. This host uses
 `/opt/repodesk/updater/node` (v24.21.0, extracted from the verified app image) in
-its installed service instead of a global Node installation. A subsequent
-published-release installation initiated through the modal remains a live staging
-gate; deterministic development checks do not deploy.
+its installed service instead of a global Node installation. The in-app v0.1.34
+retry succeeded on 2026-10-10 after recovering disk capacity, and the reloaded
+browser showed v0.1.34. That release used the original archive path; installing
+the new direct local-image path remains a future-release live check. See
+[the recovery evidence](../../postmortem/2026-10-10-in-app-update-disk-space.md).
 
 API references: [GitHub Releases](https://docs.github.com/en/rest/releases/releases),
 [Verify run lookup](https://docs.github.com/en/rest/actions/workflow-runs).

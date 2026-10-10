@@ -209,6 +209,7 @@ export class ReleaseUpdates {
                 "update_interrupted",
                 "release_changed",
                 "verification_failed",
+                "insufficient_disk_space",
               ])
               .optional(),
           })

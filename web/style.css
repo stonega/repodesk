@@ -85,22 +85,38 @@ body {
   pointer-events: auto;
 }
 .app-version .app-update-indicator {
+  position: relative;
   color: var(--ui-accent);
-  background: var(--ui-surface);
+  background: transparent;
   border-radius: 50%;
+}
+.app-version .app-update-indicator::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  background: var(--ui-surface);
+}
+.app-version .app-update-indicator:hover:not(:disabled) {
+  background: transparent;
+}
+.app-version .app-update-indicator:hover:not(:disabled)::before {
+  background: var(--ui-accent-soft);
+}
+.app-update-indicator svg {
+  position: relative;
+  width: 16px;
+  height: 16px;
 }
 .app-version .app-update-indicator::after {
   content: "";
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 6px;
-  height: 6px;
+  top: 10px;
+  right: 10px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--ui-success);
-}
-.app-version .app-update-indicator {
-  position: relative;
 }
 .update-summary {
   display: flex;

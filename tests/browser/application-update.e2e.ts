@@ -54,6 +54,63 @@ async function signIn(page: Page, port: string, operator = true) {
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
 }
+test("compact update indicator keeps its tap target and keyboard access in both themes", async ({
+  page,
+}, testInfo) => {
+  await page.route("**/api/admin/updates", (route) =>
+    route.fulfill({ json: available }),
+  );
+  await signIn(page, new URL(String(testInfo.project.use.baseURL)).port);
+  await page.getByRole("link", { name: "Operations", exact: true }).click();
+  const indicator = page.getByRole("button", {
+    name: `Update available: ${nextTag}`,
+  });
+  const modal = page.getByRole("dialog", { name: "Update RepoDesk" });
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate((value) => {
+        document.documentElement.dataset.theme = value;
+      }, theme);
+      await page
+        .getByRole("heading", { name: "Operations", exact: true })
+        .click();
+      await expect(indicator).toBeVisible();
+      const size = await indicator.evaluate((button) => {
+        const bounds = button.getBoundingClientRect();
+        const glyph = button.querySelector("svg")?.getBoundingClientRect();
+        const circle = getComputedStyle(button, "::before");
+        const dot = getComputedStyle(button, "::after");
+        return {
+          target: [bounds.width, bounds.height],
+          glyph: [glyph?.width, glyph?.height],
+          circle: [circle.width, circle.height],
+          dot: [dot.width, dot.height],
+          border: getComputedStyle(button).borderWidth,
+        };
+      });
+      expect(size).toEqual({
+        target: [44, 44],
+        glyph: [16, 16],
+        circle: ["28px", "28px"],
+        dot: ["5px", "5px"],
+        border: "0px",
+      });
+      await page.screenshot({
+        path: testInfo.outputPath(`update-indicator-${width}-${theme}.png`),
+      });
+      // The transparent padding remains clickable outside the smaller circle.
+      await indicator.click({ position: { x: 22, y: 4 } });
+      await expect(modal).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(indicator).toBeFocused();
+      await expect(indicator).toHaveCSS("outline-style", "solid");
+      await page.keyboard.press("Enter");
+      await expect(modal).toBeVisible();
+      await page.keyboard.press("Escape");
+    }
+  }
+});
 test("version indicator opens release notes; pending update is locked and queues once", async ({
   page,
 }, testInfo) => {
@@ -266,6 +323,30 @@ test("failed host jobs require an explicit retry; offline and unknown outcomes c
     .click();
   await expect(modal).toContainText("Update queued or running");
   expect(posts).toBe(1);
+  view = {
+    ...available,
+    attempt: { state: "failed", error: "insufficient_disk_space" },
+  };
+  await page.reload();
+  await page.getByRole("button", { name: /Update available/ }).click();
+  await expect(modal).toContainText("not have enough free disk space");
+  await expect(
+    modal.getByRole("button", { name: "Retry update", exact: true }),
+  ).toBeEnabled();
+  await page.screenshot({
+    path: testInfo.outputPath("update-disk-space-desktop.png"),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: testInfo.outputPath("update-disk-space-mobile.png"),
+    fullPage: true,
+  });
+  await modal
+    .getByRole("button", { name: "Retry update", exact: true })
+    .click();
+  await expect(modal).toContainText("Update queued or running");
+  expect(posts).toBe(2);
   view = { ...available, updaterReady: false };
   await page.reload();
   await page.getByRole("button", { name: /Update available/ }).click();
@@ -289,5 +370,5 @@ test("failed host jobs require an explicit retry; offline and unknown outcomes c
   await expect(
     modal.getByRole("button", { name: /Update now|Retry update/ }),
   ).toHaveCount(0);
-  expect(posts).toBe(1);
+  expect(posts).toBe(2);
 });

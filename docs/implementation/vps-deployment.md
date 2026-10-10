@@ -66,13 +66,16 @@ The daemon checks the selected release ID, fingerprint and tag commit against
 GitHub and requires a successful Verify run for that commit. It fetches the exact
 commit, validates its package version, builds app, Codex task and supervisor images
 and smoke-tests the app's Node runtime. Builds run on the host before stopping any
-services. It writes a checksummed image archive and release files to a fresh
-numeric bundle directory, then invokes the existing `scripts/deploy-vps.sh`.
+services. It records the locally built app, supervisor and task image IDs with
+release files in a fresh numeric bundle directory and invokes
+`scripts/deploy-vps.sh --local-images`. The same-daemon path requires no duplicate
+image archive. Manual transferred archives retain checksum/import verification.
 
 The script:
 
-1. Acquires the deployment lock, verifies the archive and imports immutable local
-   image IDs. Concurrent host/manual cutovers cannot overlap.
+1. Acquires the deployment lock and checks local release tags still match the
+   verified image IDs, or verifies/imports a transferred archive. Concurrent
+   host/manual cutovers cannot overlap.
 2. Preserves the Codex token/state, validates Compose and secret access and pulls
    the pinned PostgreSQL image before stopping writers.
 3. Waits for safe coding checkpoints, stops app/worker and checks again for a
@@ -82,7 +85,7 @@ The script:
 5. Runs migrations once; writers remain stopped if migration fails.
 6. Starts app/worker and checks readiness for up to two minutes, allowing the
    first Telegram long poll to finish. Response bodies are not printed in checks.
-7. Updates `.current-release` only on success and removes the transfer archive.
+7. Updates `.current-release` only on success and removes any transfer archive.
 
 The checkpoint budget defaults to 1800 seconds across both checks. It can be
 shortened with `CODEX_DEPLOY_CHECKPOINT_TIMEOUT_SECONDS` (1–1800) in the host
@@ -127,7 +130,9 @@ prevent double charges and blind repeated GitHub writes. Apply retention to old
 images, bundles, backups and updater logs. Provisioning and a direct cutover were
 verified on the recorded VPS on 2026-10-09 for `cfffdfc` (v0.1.32), with protected
 backup, migration 017, healthy services, public readiness and updater queue access.
-A future release initiated through the modal still needs a live staging check.
+The modal's v0.1.34 retry was verified on 2026-10-10 after recovering disk space;
+it used that release's original archive path. A published release containing the
+new direct local-image path still needs its live check.
 
 ## Custom domain from the panel
 

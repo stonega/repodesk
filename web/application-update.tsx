@@ -202,11 +202,13 @@ export function ApplicationUpdate({
                 : attempt.state === "succeeded"
                   ? "Update completed. Reload to check the installed version."
                   : attempt.state === "failed"
-                    ? attempt.error === "verification_failed"
-                      ? "Verification has not passed for this release. Check GitHub Verify before retrying."
-                      : attempt.error === "release_changed"
-                        ? "The release changed before installation. Close this dialog and review the latest release."
-                        : "The update failed. Review the host update logs and resolve the cause before retrying."
+                    ? attempt.error === "insufficient_disk_space"
+                      ? "The server does not have enough free disk space to install this update. Ask the deployment administrator to free space before retrying."
+                      : attempt.error === "verification_failed"
+                        ? "Verification has not passed for this release. Check GitHub Verify before retrying."
+                        : attempt.error === "release_changed"
+                          ? "The release changed before installation. Close this dialog and review the latest release."
+                          : "The update failed. Review the host update logs and resolve the cause before retrying."
                     : "The update was interrupted or its outcome is unconfirmed. Check the host before starting another update."}
             </p>
           )}

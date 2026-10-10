@@ -147,6 +147,7 @@ test("pinned local builds and runtime smoke precede protected host cutover", asy
         "deploy/codex/release-config.mjs",
         "deploy/codex/wait-checkpoint.mjs",
         "scripts/update-host.mjs",
+        "scripts/cleanup-host.mjs",
       ]) {
         await mkdir(dirname(join(source, file)), { recursive: true });
         await writeFile(
@@ -155,8 +156,8 @@ test("pinned local builds and runtime smoke precede protected host cutover", asy
         );
       }
     }
-    if (command === "bash" && args.includes("archive"))
-      await writeFile(args.at(-1) ?? "", "fixture-image-archive");
+    if (command === "docker" && args[0] === "image")
+      return `sha256:${"c".repeat(64)}`;
     return args.includes("rev-parse") ? commit : "";
   };
   try {
@@ -178,7 +179,76 @@ test("pinned local builds and runtime smoke precede protected host cutover", asy
     expect(
       commands.some((args) => args.includes("fetch") && args.includes(commit)),
     ).toBe(true);
-    expect(commands[cutover]?.slice(-2)[1]).toBe("repodesk");
+    expect(commands[cutover]?.slice(-2)).toEqual([
+      "repodesk",
+      "--local-images",
+    ]);
+    expect(commands.some((args) => args.includes("archive"))).toBe(false);
+    const bundle = commands[cutover]?.[1];
+    expect(bundle).toBeDefined();
+    expect(
+      await readFile(join(dirname(bundle ?? ""), "image-id"), "utf8"),
+    ).toBe(`sha256:${"c".repeat(64)}`);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+test("low disk space rejects installation before builds or cutover and exposes a safe failure", async () => {
+  const root = await mkdtemp(join(tmpdir(), "repodesk-host-space-"));
+  const config = { root, project: "repodesk", repository: request.repository };
+  const commands: string[] = [];
+  try {
+    for (const child of ["results", "logs"])
+      await mkdir(join(root, "updates", child), { recursive: true });
+    await host.processRequest(request, config, async () => {
+      await host.installRelease(
+        request,
+        config,
+        async (command: string) => {
+          commands.push(command);
+          return "";
+        },
+        transport,
+        async () => ({ bavail: 64, bsize: 1024 ** 2 }),
+      );
+    });
+    expect(commands).toEqual([]);
+    expect(
+      JSON.parse(
+        await readFile(
+          join(root, "updates", "results", `${request.requestId}.json`),
+          "utf8",
+        ),
+      ),
+    ).toMatchObject({ state: "failed", error: "insufficient_disk_space" });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+test("missing maintenance companion aborts before image builds or cutover", async () => {
+  const root = await mkdtemp(join(tmpdir(), "repodesk-host-companion-"));
+  const commands: string[][] = [];
+  const run = async (command: string, args: string[]) => {
+    commands.push([command, ...args]);
+    if (command === "git" && args.includes("checkout"))
+      await writeFile(
+        join(args[1] ?? "", "package.json"),
+        '{"version":"0.1.33"}',
+      );
+    return args.includes("rev-parse") ? commit : "";
+  };
+  try {
+    await expect(
+      host.installRelease(
+        request,
+        { root, project: "repodesk", repository: request.repository },
+        run,
+        transport,
+      ),
+    ).rejects.toThrow();
+    expect(
+      commands.some((args) => args[0] === "docker" || args[0] === "bash"),
+    ).toBe(false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

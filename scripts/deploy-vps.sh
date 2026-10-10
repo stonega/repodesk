@@ -11,6 +11,8 @@ fail() {
 deploy_root="${1:?Usage: deploy-vps.sh DEPLOY_ROOT RELEASE_ID COMPOSE_PROJECT}"
 release_id="${2:?Missing release ID}"
 project="${3:?Missing Compose project}"
+image_source="${4:---archive}"
+[[ "$image_source" = --archive || "$image_source" = --local-images ]] || fail 'Invalid image source.'
 [[ "$deploy_root" = /* && "$deploy_root" != / ]]
 [[ "$release_id" =~ ^[0-9]+-[0-9]+$ ]]
 [[ "$project" =~ ^[a-z0-9][a-z0-9_-]*$ ]]
@@ -18,9 +20,16 @@ cd "$deploy_root"
 deploy_root="$PWD"
 release_dir="$deploy_root/releases/$release_id"
 [[ -f "$deploy_root/.env" ]] || fail "Missing runtime configuration: $deploy_root/.env"
-for file in compose.yaml image-tag image-sha256 image.tar.gz; do
+for file in compose.yaml image-tag; do
   [[ -f "$release_dir/$file" ]] || fail "Missing release artifact: $file"
 done
+if [[ "$image_source" = --local-images ]]; then
+  [[ -f "$release_dir/image-id" ]] || fail 'Missing release artifact: image-id'
+else
+  for file in image-sha256 image.tar.gz; do
+    [[ -f "$release_dir/$file" ]] || fail "Missing release artifact: $file"
+  done
+fi
 for executable in docker flock sha256sum; do
   command -v "$executable" > /dev/null || fail "Required command is not installed: $executable"
 done
@@ -34,19 +43,26 @@ flock -n 9 || { echo 'Another deployment is running.' >&2; exit 1; }
 
 image_tag="$(cat "$release_dir/image-tag")"
 [[ "$image_tag" =~ ^repodesk:release-[a-f0-9]{40}$ ]] || fail 'Invalid release image tag.'
-expected_hash="$(cat "$release_dir/image-sha256")"
-[[ "$expected_hash" =~ ^[a-f0-9]{64}$ ]] || fail 'Invalid image archive checksum.'
-actual_hash="$(sha256sum "$release_dir/image.tar.gz")"
-[[ "${actual_hash%% *}" = "$expected_hash" ]] || fail 'Image archive checksum mismatch.'
+if [[ "$image_source" = --archive ]]; then
+  expected_hash="$(cat "$release_dir/image-sha256")"
+  [[ "$expected_hash" =~ ^[a-f0-9]{64}$ ]] || fail 'Invalid image archive checksum.'
+  actual_hash="$(sha256sum "$release_dir/image.tar.gz")"
+  [[ "${actual_hash%% *}" = "$expected_hash" ]] || fail 'Image archive checksum mismatch.'
+fi
 [[ "$(docker info --format '{{.Architecture}}')" =~ ^(x86_64|amd64)$ ]] || {
   echo 'Release images require an x86_64 VPS.' >&2
   exit 1
 }
-docker image load --input "$release_dir/image.tar.gz"
+if [[ "$image_source" = --archive ]]; then
+  docker image load --input "$release_dir/image.tar.gz"
+fi
 # Classic and containerd stores can report different IDs for the same archive.
 # Resolve the verified archive's tag on this daemon, then pin its immutable ID.
 image_id="$(docker image inspect --format '{{.Id}}' "$image_tag")"
 [[ "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]] || fail 'Docker returned an invalid imported image ID.'
+if [[ "$image_source" = --local-images ]]; then
+  [[ "$(cat "$release_dir/image-id")" = "$image_id" ]] || fail 'Local application image no longer matches the verified build.'
+fi
 printf 'APP_IMAGE=%s\n' "$image_id" > "$release_dir/release.env"
 export APP_IMAGE="$image_id"
 compose=(docker compose --project-directory "$deploy_root" -p "$project"
@@ -65,6 +81,12 @@ if [[ -f "$release_dir/codex-compose.yaml" ]]; then
   supervisor_id="$(docker image inspect --format '{{.Id}}' "$supervisor_tag")"
   job_id="$(docker image inspect --format '{{.Id}}' "$job_tag")"
   [[ "$supervisor_id" =~ ^sha256:[a-f0-9]{64}$ && "$job_id" =~ ^sha256:[a-f0-9]{64}$ ]] || fail 'Invalid imported Codex image ID.'
+  if [[ "$image_source" = --local-images ]]; then
+    for artifact in codex-supervisor-id codex-job-id; do
+      [[ -f "$release_dir/$artifact" ]] || fail "Missing Codex release artifact: $artifact"
+    done
+    [[ "$(cat "$release_dir/codex-supervisor-id")" = "$supervisor_id" && "$(cat "$release_dir/codex-job-id")" = "$job_id" ]] || fail 'Local Codex images no longer match the verified build.'
+  fi
   # Generate once, never print tokens, and preserve credentials across releases.
   docker run --rm --network none --user "$(id -u):$(id -g)" --security-opt label=disable --entrypoint node \
     --volume "$deploy_root:/deployment" --volume "$release_dir:/release" \
@@ -171,5 +193,7 @@ fi
 
 printf '%s\n' "$release_id" > "$deploy_root/.current-release.tmp"
 mv "$deploy_root/.current-release.tmp" "$deploy_root/.current-release"
-rm "$release_dir/image.tar.gz"
+if [[ "$image_source" = --archive ]]; then
+  rm "$release_dir/image.tar.gz"
+fi
 printf 'Deployed release %s (%s). Backup: %s\n' "$release_id" "$image_id" "$backup_path"

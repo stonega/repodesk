@@ -1,5 +1,75 @@
 # Implementation evidence
 
+## Automatic Docker storage retention (2026-10-10)
+
+Added an optional daily host cleanup timer and a dry-run-first release image
+policy. It retains the current release, two complete app/job/supervisor image
+sets, fresh builds and every existing container reference. Image aliases share
+protection; changed/newly referenced images are rechecked. Host containers,
+volumes, credentials, backups and metadata are outside the deletion policy.
+Unused host build cache has a 4GB retention target. Cleanup and verified host
+builds share a storage lock; direct cutovers retain their deployment lock.
+
+The Actions runner image enables Docker-driver cache GC with a 2GB target and
+a bounded synchronous post-job hook. Only a daemon labeled `repodesk.ci=true`
+can remove old unused CI images, unused build cache and unreferenced disposable
+CI volumes. The outer runner/registration and production state stay intact.
+See [retention and activation](storage-cleanup.md).
+
+Verification: lint, strict TypeScript, build, **683 deterministic PostgreSQL tests**,
+Docker runner/application builds, Node runtime contract, Compose configuration,
+shell syntax and systemd units passed. The real isolated runner smoke removed an
+unreferenced test volume and retained a stopped container's volume/image. A
+read-only VPS preview found 50 eligible old release tags. This initial validation
+did not delete VPS resources or restart services.
+
+The operator then approved activation and immediate cleanup. Installed matching
+host scripts using the VPS's existing Node binary and verified their hashes
+against the checked-in working files. The daily timer is enabled and active;
+host cleanup removed the 50 eligible tags and completed with exit status zero.
+The updated runner image passed its real isolated VPS smoke before replacement
+while GitHub reported it idle. Runner ID 21 remains online with its existing
+registration and both outer volumes. Its labeled Docker 29.9.0 daemon and
+configured post-job hook passed immediate live CI cleanup. The filesystem now
+has **60GB free, 39% used**, compared with 7.9GB free before this rollout. Core
+container identities, volume names and the current-release marker are unchanged;
+all containers are healthy and public readiness is HTTP 200. A future naturally
+completed GitHub job remains the live event check for automatic hook invocation.
+
+An unexpected VPS reboot occurred during CI image export. Services recovered
+after boot, and the new image subsequently passed smoke and installation. The
+available journals do not establish its cause; no reboot command was issued by
+this workflow. See [the reboot incident](../../postmortem/2026-10-10-vps-reboot-during-cleanup-rollout.md).
+
+## In-app update disk-space recovery (2026-10-10)
+
+The first v0.1.34 host update built and smoke-tested its images but failed while
+creating an image archive on a full VPS disk. It never entered cutover, so the
+app/worker stayed healthy on v0.1.33. Capacity recovery removed the incomplete
+archive, unused old build cache and obsolete unreferenced RepoDesk release image
+tags while retaining current/recent/requested images and all container references.
+The operator's signed-in Retry update action completed a fresh verified attempt,
+`065610d4-768a-4f7f-8517-46b7b0a2bf12`, installing release bundle
+`1791614204914-36610498`. The reloaded browser shows v0.1.34 and the new member
+GitHub View action.
+App, worker, PostgreSQL and Codex runner are healthy; public readiness returns
+HTTP 200. The updater is active, the backup is mode 600, and 7.9GB remains free.
+See [the incident report](../../postmortem/2026-10-10-in-app-update-disk-space.md).
+
+The local correction deploys same-daemon images by recorded immutable IDs,
+rejects retagging before writers stop, checks a minimum 1GiB reserve before
+checkout/build/cutover, and reports disk-space failures explicitly in the modal.
+Manual archive deployments keep checksum/import verification. This correction
+requires a future published release; the v0.1.34 recovery uses its original
+archive-based updater.
+
+Validation: lint, strict TypeScript, build, **673 deterministic tests**, five
+focused update browser scenarios, Docker app build/Node runtime smoke, Compose
+configuration and host-script syntax passed. Desktop/mobile error and retry
+states were inspected. Tests cover local-image cutover, changed app/task image
+IDs, low disk space, duplicate/interrupted jobs and existing backup, migration,
+checkpoint and readiness boundaries.
+
 ## Member GitHub details behind View (2026-10-10)
 
 The Members & access GitHub column now contains only a View button for every
@@ -150,6 +220,13 @@ separate host daemon builds images and invokes the backup/migration/readiness
 cutover. It checks successful Verify evidence for the pinned commit. The GitHub
 deployment workflow is removed; no Actions write credential is required.
 Workspace accounts can review notes. See [installation and recovery](updates.md).
+
+2026-10-10: The version update indicator uses a compact 28px circle, 16px arrow
+and 5px status dot, with its 44px tap target and keyboard focus retained. Focused
+browser coverage checks both themes at desktop and mobile widths, opening notes
+from the transparent padding and with the keyboard. Desktop/mobile screenshots
+were reviewed in both themes; lint, strict TypeScript, build, 669 deterministic
+tests and 13 focused browser scenarios passed.
 
 Direct VPS deployment was verified on 2026-10-09 for `cfffdfc` (v0.1.32) at the
 recorded deployment host. App, worker, Codex runner and the host updater are

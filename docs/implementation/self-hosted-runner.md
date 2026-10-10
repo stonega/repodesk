@@ -39,7 +39,7 @@ The VPS needs its existing Docker Engine and Compose; no host Node installation
 or production service restart is required. From the repository checkout:
 
 ```sh
-tar -C deploy/actions-runner -cf - Dockerfile entrypoint.sh compose.yaml |
+tar -C deploy/actions-runner -cf - Dockerfile entrypoint.sh daemon.json cleanup.sh compose.yaml |
   ssh root@169.58.58.71 \
     'install -d -m 0755 /opt/repodesk-actions-runner && tar -C /opt/repodesk-actions-runner -xf -'
 ssh root@169.58.58.71 \
@@ -103,8 +103,13 @@ ssh root@169.58.58.71 \
   'docker compose --file /opt/repodesk-actions-runner/compose.yaml restart runner'
 ```
 
-Monitor VPS disk space: CI image layers and release archives can grow independently
-of production storage. Keep the named volumes when recreating the runner container.
+The updated runner cleans unused inner Docker images, build cache and disposable
+test volumes after each job, and configures Docker-driver cache garbage collection.
+The hook checks the CI daemon label before pruning; the outer registration/data
+volumes remain. See [automatic storage cleanup](storage-cleanup.md) for retention,
+verification and activation. Monitor VPS disk space: CI image layers and release
+archives can grow independently of production storage. Keep the named volumes
+when recreating the runner container.
 Pushing the workflow changes makes subsequent verification jobs eligible for this
 runner; registering it alone does not publish a release or deploy the application.
 
