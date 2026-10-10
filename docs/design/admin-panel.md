@@ -35,7 +35,7 @@ Public static assets can load before login, but contain no workspace data or sec
 | Shared instructions | List, edit, scope, provenance, versions, forget | Never lists other users' personal memories by virtue of admin role. |
 | Runs | Compact run summaries link to a dedicated detail page with all workspace run messages, evidence, cost and existing cancel/retry controls; deployment administrators can read messages without linking Telegram | Direct visits and refreshes load the selected run independently of list pagination; Back to Runs retains the workspace and list offset. Workspace owners/admins can inspect every retained run, including private requests, results, transcripts and delivery text. Access stays tenant-scoped; execution and mutations retain Telegram authorization. Retry creates a traceable attempt; uncertain delivery cannot be blindly resent. |
 | Usage and limits | Recorded/estimated usage, daily/monthly caps, reservations and blocked jobs | Changes apply atomically; concurrent workers cannot overspend the displayed cap. |
-| Members & access | Search Telegram names/usernames/IDs and GitHub logins; manage active membership, roles and requests; fetch GitHub account choices in member forms and show profile links | All active members can use the bot; roles determine available actions. GitHub associations require explicit selection and separate member verification. Preserve last-admin protection, tenant boundaries and revocation checks. |
+| Members & access | Search Telegram names/usernames/IDs and GitHub logins; manage active membership, roles and requests; fetch GitHub account choices in member forms; GitHub column contains only View, opening account/profile, status and repository access details | All active members can use the bot; roles determine available actions. GitHub associations require explicit selection and separate member verification. Preserve last-admin protection, tenant boundaries and revocation checks. |
 | Privacy and audit | Retention settings, deletion request/status, configuration/action audit | Destructive changes show scope; logs omit credentials and raw private chat text. |
 | Runtime logs | Operator-only API/worker/polling/run/delivery events; severity/service/search filters, cursor pagination, auto-refresh | Static messages and allowed error codes; no secrets/private text; workspace metadata scoped to its operator; seven-day/10,000-entry retention. |
 | Operator settings | Readiness of global bot/provider credentials, webhook state, allowed models, maintenance controls | Deployment-operator-only; workspace admins cannot modify global bot identity or webhook. |
@@ -80,7 +80,8 @@ GitHub, Codex, Review Bot and Code Truth: a muted surface, subtle border, rounde
 corners, wrapping names, compact badges and a common action area. Compact lists
 and cards with saved policy details share that styling. External repository links
 have accessible names and 44px targets; New/Edit remains separate from saved
-display. Member previews retain five entries and open the complete list in a modal.
+display. Member GitHub columns contain only View, opening account/status information
+and the complete saved repository list in a read-only modal.
 
 Plugin detail pages show saved configuration as labels, values and statuses.
 Review Bot lists repository policies with New in the section heading and Edit

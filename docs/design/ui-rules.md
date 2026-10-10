@@ -15,7 +15,7 @@ when implementing or reviewing a change.
 | --- | --- |
 | Saved display versus editing | [Modal editors](#add-and-create-flows-use-modals), [workspace values](#workspace-settings-show-saved-values-before-editing), [team summary](#team-configuration-uses-one-overview-editor), [model summary](#model-configuration-uses-a-summary-card-and-one-editor) |
 | Plugin detail layout | [Shared plugin layout](#plugin-details-share-card-layouts-and-a-title-switch), [Codex sections](#codex-details-show-configuration-repositories-and-tasks-separately) |
-| Repository display | [Shared repository cards](#repository-cards-share-one-style), [member previews](#member-repository-previews-stay-bounded), [connected repositories](#connected-github-repositories-stay-compact-and-directly-accessible) |
+| Repository display | [Shared repository cards](#repository-cards-share-one-style), [member GitHub details](#member-github-columns-show-only-a-view-button), [connected repositories](#connected-github-repositories-stay-compact-and-directly-accessible) |
 | Action labels and controls | [Edit/New labels](#edit-and-add-buttons-use-short-labels), [shared icons](#common-action-buttons-use-reicon), [dropdown styling](#dropdown-inputs-share-the-workspace-selector-style) |
 | Dialog actions | [Cancel order](#modal-cancel-follows-the-primary-action), [close controls](#modal-close-controls-use-a-plain-x), [secondary actions](#dialog-support-actions-use-secondary-buttons) |
 | Feedback and loading | [Toasts and error placement](#routine-action-confirmations-and-request-errors-use-toasts), [visible loading layout](#loading-keeps-the-layout-visible) |
@@ -103,7 +103,7 @@ when implementing or reviewing a change.
   GitHub links and management actions. Share its muted surface, border, rounded
   corners, typography and spacing throughout the app. Compact lists use the
   same card frame; managed records add their saved details below the heading.
-- **Scope:** Members & access previews and full-list dialogs, Manage GitHub,
+- **Scope:** Members & access GitHub detail dialogs, Manage GitHub,
   Codex, Review Bot and Code Truth repository summaries, on desktop and mobile
   in both themes. Long names wrap inside the card; link and action controls keep
   accessible names, focus styling and comfortable touch targets.
@@ -111,27 +111,32 @@ when implementing or reviewing a change.
   the app after the member repository preview/modal change.
 - **Exceptions:** Repository selectors retain their shared dropdown style.
   Task references remain part of task summaries. Context-specific details,
-  five-item preview limits and New/Edit modal behavior remain applicable.
+  compact connection previews and New/Edit modal behavior remain applicable.
 
-### Member repository previews stay bounded
+### Member GitHub columns show only a View button
 
-- **Preference:** Show at most five repositories with their permission labels in
-  each member's GitHub summary. When more exist, show the total in a Show all
-  action that opens the complete list in a read-only, scrollable modal. Keep long
-  repository names readable without expanding the member table vertically to
-  show the entire list.
-- **Scope:** Repository access summaries in the Members & access table, on desktop
-  and mobile. Reuse the shared modal's close, Escape, focus and scrolling behavior.
+- **Preference:** Show only a visible View button in each member's GitHub column.
+  Open account/profile information, verification or connection status, sync time
+  and the complete saved repository list with permission labels in a read-only,
+  scrollable modal. Keep account details and repository previews out of the table
+  so repository counts and long names do not expand its rows.
+- **Scope:** The Members & access table and its GitHub details, on desktop and
+  mobile in both themes. Reuse shared repository cards and the modal's close,
+  Escape, focus and scrolling behavior. Unlinked accounts still have View and show
+  Not linked in the dialog; unknown/loading data must not imply that status.
 - **Source:** 2026-10-08 — user showed a member row stretched by its full repository
   list and requested five entries with a modal to show all repositories.
-- **Exceptions:** Lists of five or fewer entries need no Show all action. The
-  workspace connection modal retains its separate expandable-list preference.
+- **Source update:** 2026-10-10 — user showed the member table and requested only
+  a View button for GitHub column data, replacing the five-entry preview.
+- **Exceptions:** Member New/Edit dialogs retain their GitHub account selector.
+  The workspace connection modal retains its separate expandable-list preference.
 
 ### Member forms fetch GitHub account choices
 
 - **Preference:** Include a GitHub account field in member forms and automatically
   fetch available accounts from the workspace's connected GitHub installation.
-  Show the saved account and a profile link in the form and member table.
+  Show the saved account and a profile link in the form and member GitHub detail
+  dialog, opened from View in the member table.
 - **Scope:** Add/Edit member dialogs and the Members & access table. Organization
   installations supply organization members; personal installations supply their
   owner and selected-repository collaborators.

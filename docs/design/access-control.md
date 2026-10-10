@@ -13,7 +13,7 @@ role or additional source, destination or repository permissions. Non-members an
 inactive members cannot run bot work.
 
 The **Members & access** page offers a searchable, paginated member table with
-Telegram profiles, IDs, roles, membership, GitHub links and effective access.
+Telegram profiles, IDs, roles, membership, GitHub detail actions and effective access.
 Add/edit dialogs manage role and active membership. Access requests and their
 shareable Telegram link remain on this page. The access policy card, whitelist
 column, whitelist toggle and bulk ID editor have been removed.
@@ -136,7 +136,7 @@ under `/api/setup/workspaces/:id/access-requests/:request/decision`.
 
 Add/Edit member forms automatically fetch GitHub organization members or personal
 repository collaborators. Administrators can associate a fetched account with a
-Telegram member; the table links its profile and shows verification pending.
+Telegram member; View in the table opens its profile and verification status.
 Associations are tenant-scoped profile data and do not create repository grants.
 Verified accounts remain controlled by the member's Telegram connection flow.
 See [account selection and App permissions](../implementation/github-app.md#fetch-github-accounts-in-member-forms).
@@ -144,8 +144,9 @@ See [account selection and App permissions](../implementation/github-app.md#fetc
 Active members can link GitHub through `/github connect` in private Telegram,
 then confirm the account in Telegram. Stable GitHub numeric IDs and repository
 permission snapshots are stored per member and shown in Members & access. Each
-GitHub summary shows up to five repositories with permission labels; when there
-are more, Show all opens the complete saved list in a read-only modal.
+GitHub column contains only a View button, opening account details, connection
+status, sync time and the complete saved repository list with permission labels
+in a read-only modal. Pending and unlinked accounts use the same View action.
 The OAuth callback alone grants nothing. Repository grants intersect GitHub user
 access with the operator-selected installation repositories. Membership, roles,
 coding-maintainer grants and write approvals remain independent application checks.

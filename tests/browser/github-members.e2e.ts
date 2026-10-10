@@ -123,7 +123,7 @@ function repositoryAccess(count: number): NonNullable<Member["github"]> {
 }
 
 for (const width of [1280, 390]) {
-  test(`member repository preview stays at five and opens a complete read-only modal at ${width}px`, async ({
+  test(`member GitHub column only shows View and opens complete read-only details at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -131,43 +131,49 @@ for (const width of [1280, 390]) {
     const f = await fixture(page, false, undefined, { github });
     await page.goto(`/admin/members?workspace=${f.w.id}`);
     const row = page.getByRole("row").filter({ hasText: "ID: 202" });
-    const preview = row.getByRole("list", { name: "Repository access" });
-    await expect(preview.getByRole("listitem")).toHaveCount(5);
-    await expect(preview.getByRole("listitem")).toHaveText([
-      "stonega/repository-1 Admin",
-      "stonega/repository-2 Maintain",
-      "stonega/repository-3 Write",
-      "stonega/repository-4 Triage",
-      "stonega/repository-5 Read",
-    ]);
-    await expect(
-      row.getByText("stonega/repository-6", { exact: true }),
-    ).toHaveCount(0);
+    const githubCell = row.getByRole("cell").nth(3);
+    await expect(githubCell).toHaveText("View");
+    await expect(githubCell.getByRole("button")).toHaveCount(1);
+    await expect(githubCell.getByRole("link")).toHaveCount(0);
+    await expect(githubCell.getByRole("listitem")).toHaveCount(0);
     expect(
       await row.evaluate((element) => element.getBoundingClientRect().height),
-    ).toBeLessThan(600);
-    const showAll = row.getByRole("button", {
-      name: "Show all 60 repositories for stonega",
+    ).toBeLessThan(140);
+    const view = row.getByRole("button", {
+      name: "View GitHub for member 202",
     });
-    await showAll.scrollIntoViewIfNeeded();
+    await view.scrollIntoViewIfNeeded();
     await page.screenshot({
-      path: `/tmp/repodesk-member-repository-preview-${width}.png`,
+      path: `/tmp/repodesk-member-github-view-${width}.png`,
       fullPage: true,
     });
-    await showAll.click();
-    const dialog = page.getByRole("dialog", { name: "stonega repositories" });
+    await view.click();
+    const dialog = page.getByRole("dialog", { name: "stonega GitHub" });
     const items = dialog.getByRole("listitem");
     await expect(items).toHaveCount(60);
+    await expect(items.nth(0)).toHaveText("stonega/repository-1 Admin");
+    await expect(items.nth(1)).toHaveText("stonega/repository-2 Maintain");
+    await expect(items.nth(2)).toHaveText("stonega/repository-3 Write");
+    await expect(items.nth(3)).toHaveText("stonega/repository-4 Triage");
+    await expect(items.nth(4)).toHaveText("stonega/repository-5 Read");
     await expect(items.nth(5)).toHaveText("stonega/repository-6 Admin");
+    await expect(dialog).toContainText("connected · Synced");
+    await expect(
+      dialog.getByText("60 repositories", { exact: true }),
+    ).toBeVisible();
     await expect(dialog.getByRole("textbox")).toHaveCount(0);
     await expect(dialog.getByRole("button", { name: /Save/ })).toHaveCount(0);
     const close = dialog.getByRole("button", {
-      name: "Close stonega repositories",
+      name: "Close stonega GitHub",
     });
     await expect(close).toBeFocused();
     const links = dialog.getByRole("link");
-    await expect(links).toHaveCount(60);
+    await expect(links).toHaveCount(61);
     await expect(links.first()).toHaveAttribute(
+      "href",
+      "https://github.com/stonega",
+    );
+    await expect(links.nth(1)).toHaveAttribute(
       "href",
       "https://github.com/stonega/repository-1",
     );
@@ -210,17 +216,17 @@ for (const width of [1280, 390]) {
     });
     await page.keyboard.press("Escape");
     await expect(dialog).not.toBeVisible();
-    await expect(showAll).toBeFocused();
-    await expect(preview.getByRole("listitem")).toHaveCount(5);
-    await showAll.click();
+    await expect(view).toBeFocused();
+    await expect(githubCell).toHaveText("View");
+    await view.click();
     await close.click();
     await expect(dialog).not.toBeVisible();
-    await expect(showAll).toBeFocused();
+    await expect(view).toBeFocused();
     expect(f.saved()).toBeUndefined();
     expect(f.calls()).toBe(0);
   });
 
-  test(`member repository preview handles zero, one, five and six entries at ${width}px`, async ({
+  test(`member GitHub details handle zero, one, five and six repositories at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -229,19 +235,145 @@ for (const width of [1280, 390]) {
       f.member.github = repositoryAccess(count);
       await page.goto(`/admin/members?workspace=${f.w.id}`);
       const row = page.getByRole("row").filter({ hasText: "ID: 202" });
+      await expect(row.getByRole("cell").nth(3)).toHaveText("View");
+      await row
+        .getByRole("button", { name: "View GitHub for member 202" })
+        .click();
+      const dialog = page.getByRole("dialog", { name: "stonega GitHub" });
       await expect(
-        row.getByRole("link", { name: "stonega", exact: true }),
+        dialog.getByRole("link", { name: "stonega", exact: true }),
       ).toBeVisible();
-      await expect(row.getByRole("listitem")).toHaveCount(Math.min(count, 5));
-      await expect(row.getByRole("button", { name: /Show all/ })).toHaveCount(
-        count > 5 ? 1 : 0,
-      );
+      await expect(dialog.getByRole("listitem")).toHaveCount(count);
+      await expect(
+        dialog.getByText(
+          count === 0
+            ? "No repository access."
+            : `${count} ${count === 1 ? "repository" : "repositories"}`,
+          { exact: true },
+        ),
+      ).toBeVisible();
       expect(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth,
         ),
       ).toBe(true);
+      await page.screenshot({
+        path: `/tmp/repodesk-member-github-${count}-${width}.png`,
+        fullPage: true,
+      });
+      await page.keyboard.press("Escape");
     }
+  });
+
+  test(`member GitHub View shows unlinked and verification-pending accounts at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const f = await fixture(page);
+    for (const pending of [false, true]) {
+      f.member.githubAccount = pending
+        ? { id: 42, login: "stonega" }
+        : undefined;
+      await page.goto(`/admin/members?workspace=${f.w.id}`);
+      const row = page.getByRole("row").filter({ hasText: "ID: 202" });
+      await expect(row.getByRole("cell").nth(3)).toHaveText("View");
+      await expect(row.getByRole("link")).toHaveCount(0);
+      await row
+        .getByRole("button", { name: "View GitHub for member 202" })
+        .click();
+      const dialog = page.getByRole("dialog", {
+        name: pending ? "stonega GitHub" : "Stone GitHub",
+      });
+      await expect(dialog).toContainText(
+        pending ? "Verification pending" : "Not linked",
+      );
+      await expect(dialog.getByRole("listitem")).toHaveCount(0);
+      await expect(dialog.getByRole("combobox")).toHaveCount(0);
+      await expect(dialog.getByRole("button", { name: /Save/ })).toHaveCount(0);
+      await expect(dialog.getByRole("link")).toHaveCount(pending ? 1 : 0);
+      await page.screenshot({
+        path: `/tmp/repodesk-member-github-${pending ? "pending" : "unlinked"}-${width}.png`,
+        fullPage: true,
+      });
+      await page.keyboard.press("Escape");
+    }
+    expect(f.saved()).toBeUndefined();
+    expect(f.calls()).toBe(0);
+  });
+
+  test(`member GitHub View preserves loading, failed-load recovery and empty states at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const f = await fixture(page, false, undefined, {
+      github: repositoryAccess(1),
+    });
+    const release = Promise.withResolvers<void>();
+    let fail = true;
+    await page.route(
+      /\/api\/admin\/workspaces\/[^/]+\/members\?/,
+      async (route) => {
+        await release.promise;
+        if (fail) {
+          await route.fulfill({
+            status: 503,
+            json: { error: "Members unavailable" },
+          });
+        } else {
+          await route.fallback();
+        }
+      },
+    );
+    await page.goto(`/admin/members?workspace=${f.w.id}`);
+    const table = page.getByRole("region", { name: "Member access table" });
+    await expect(
+      table.getByRole("columnheader", { name: "GitHub" }),
+    ).toBeVisible();
+    await expect(
+      table.getByRole("button", { name: /View GitHub/ }),
+    ).toHaveCount(0);
+    await expect(page.getByText("Not linked", { exact: true })).toHaveCount(0);
+    await page.screenshot({
+      path: `/tmp/repodesk-member-github-loading-${width}.png`,
+      fullPage: true,
+    });
+    release.resolve();
+    const notification = page.getByRole("region", { name: "Notification" });
+    await expect(notification.getByRole("alert")).toContainText(
+      "Members unavailable",
+    );
+    await page.screenshot({
+      path: `/tmp/repodesk-member-github-error-${width}.png`,
+      fullPage: true,
+    });
+    fail = false;
+    await notification
+      .getByRole("button", { name: "Retry loading members" })
+      .click();
+    const view = table.getByRole("button", {
+      name: "View GitHub for member 202",
+    });
+    await expect(view).toBeEnabled();
+    await expect(notification).not.toBeVisible();
+    await view.click();
+    await expect(
+      page.getByRole("dialog", { name: "stonega GitHub" }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page
+      .getByLabel("Search members by name, username or ID")
+      .fill("nobody");
+    await expect(page.getByText("No members match your search.")).toBeVisible();
+    await expect(
+      table.getByRole("button", { name: /View GitHub/ }),
+    ).toHaveCount(0);
+    await expect(
+      table.getByRole("columnheader", { name: "GitHub" }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: `/tmp/repodesk-member-github-empty-${width}.png`,
+      fullPage: true,
+    });
   });
 }
 
@@ -278,10 +410,15 @@ for (const width of [1280, 390]) {
       githubRevision: 7,
       version: f.w.memberVersion,
     });
+    await page
+      .getByRole("button", { name: "View GitHub for member 202" })
+      .click();
+    const details = page.getByRole("dialog", { name: "stonega GitHub" });
     await expect(
-      page.getByRole("link", { name: "stonega", exact: true }),
+      details.getByRole("link", { name: "stonega", exact: true }),
     ).toHaveAttribute("href", "https://github.com/stonega");
-    await expect(page.getByText("Verification pending")).toBeVisible();
+    await expect(details.getByText("Verification pending")).toBeVisible();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Edit member 202" }).click();
     await expect(selector).toHaveAttribute("value", "42");
     await expect(selector).toHaveAttribute("aria-expanded", "false");

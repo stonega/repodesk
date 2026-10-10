@@ -2398,11 +2398,18 @@ test.describe
         await expect(
           table.getByRole("columnheader", { name: "GitHub", exact: true }),
         ).toBeVisible();
-        await expect(row("810")).toContainText("linked-github-member");
-        await expect(row("810")).toContainText("example/workspace");
-        await expect(row("810")).toContainText("Read");
-        await expect(row("810")).toContainText("Synced");
-        await expect(row("808")).toContainText("Not linked");
+        await expect(row("810").getByRole("cell").nth(3)).toHaveText("View");
+        await row("810")
+          .getByRole("button", { name: "View GitHub for member 810" })
+          .click();
+        const githubDetails = page.getByRole("dialog", {
+          name: "linked-github-member GitHub",
+        });
+        await expect(githubDetails).toContainText("example/workspace");
+        await expect(githubDetails).toContainText("Read");
+        await expect(githubDetails).toContainText("Synced");
+        await page.keyboard.press("Escape");
+        await expect(row("808").getByRole("cell").nth(3)).toHaveText("View");
         await expect(row("811")).toContainText("Inactive");
         await expect(row("812")).toHaveCount(0);
         const search = page.getByLabel(

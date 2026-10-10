@@ -1,5 +1,25 @@
 # Implementation evidence
 
+## Member GitHub details behind View (2026-10-10)
+
+The Members & access GitHub column now contains only a View button for every
+member. Its shared read-only modal shows the account/profile link, connection or
+verification status, sync time and complete saved repository access list. Unlinked
+accounts show Not linked; verified accounts with no repositories show an explicit
+empty state. Shared repository cards preserve permission labels, wrapping names
+and external links. X/Escape closes the dialog and restores focus to View. Opening
+it makes no additional GitHub request or write. Add/Edit retains its separate
+account selector. Member-load failures now use the shared compact retry toast.
+
+Validation: lint, strict TypeScript, build and all **669 Bun tests** passed against
+disposable PostgreSQL. The combined member, repository-card and admin browser run
+passed **34 scenarios**; the final member suite passed **13 scenarios**, including
+load failure/retry, unlinked/pending accounts, zero/one/five/six repositories, the
+complete 60-repository list, permission labels, focus and editing. Desktop/mobile
+display and dialog screenshots were inspected in both themes, plus loading,
+empty, pending and error states at 1280px and 390px. This replaces the earlier
+five-entry member preview. No dependency, migration or deployment was added.
+
 ## Shared runtime log pagination (2026-10-10)
 
 Runtime logs now reuse the Runs pagination component below the table, with

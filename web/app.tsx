@@ -65,7 +65,7 @@ import { GitHubConnection, GitHubSetup } from "./github.tsx";
 import { GitHubMemberField } from "./github-member-field.tsx";
 import { type ActionIcon, IconButton } from "./icon-button.tsx";
 import { RuntimeLogs } from "./logs.tsx";
-import { MemberRepositories } from "./member-repositories.tsx";
+import { MemberGitHub } from "./member-github.tsx";
 import { CreateModal, Modal, ModalActions, ModalPending } from "./modal.tsx";
 import { ModelProvidersPanel } from "./model-providers.tsx";
 import { Pagination } from "./pagination.tsx";
@@ -77,7 +77,7 @@ import { workspaceFields } from "./settings-fields.ts";
 import { Sidebar } from "./sidebar.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 import { ThemeSwitch } from "./theme-switch.tsx";
-import { ToastProvider, useToast } from "./toast.tsx";
+import { ErrorToast, ToastProvider, useToast } from "./toast.tsx";
 import { Usage } from "./usage.tsx";
 import { WorkflowSummary } from "./workflow-summary.tsx";
 import "./style.css";
@@ -1933,33 +1933,36 @@ function MembersPage({ id }: { id: string }) {
       title="Members & access"
       description="All active workspace members can use the bot. Manage membership, roles and access requests here."
       actions={
-        <>
-          {error && (
-            <Action loading={loading} onClick={async () => reload()}>
-              Try again
-            </Action>
-          )}
-          <IconButton
-            icon="add"
-            label="Add member"
-            showLabel
-            disabled={!data || loading}
-            onClick={() => {
-              setMember({
-                id: "",
-                role: "member",
-                active: true,
-                githubId: "",
-                githubChanged: false,
-              });
-              setEditingMember(false);
-              setOpen(true);
-            }}
-          />
-        </>
+        <IconButton
+          icon="add"
+          label="Add member"
+          showLabel
+          disabled={!data || loading}
+          onClick={() => {
+            setMember({
+              id: "",
+              role: "member",
+              active: true,
+              githubId: "",
+              githubChanged: false,
+            });
+            setEditingMember(false);
+            setOpen(true);
+          }}
+        />
       }
     >
-      {error && <Notice error>{error}</Notice>}
+      <ErrorToast message={error}>
+        <button
+          type="button"
+          className="toast-retry"
+          aria-label="Retry loading members"
+          disabled={loading}
+          onClick={reload}
+        >
+          Retry
+        </button>
+      </ErrorToast>
       <section className="card" aria-label="Workspace members">
         <h2>Members</h2>
         <Field label="Search members by name, username or ID">
@@ -2010,40 +2013,8 @@ function MembersPage({ id }: { id: string }) {
                     </td>
                     <td>{m.role}</td>
                     <td>{m.active ? "Active" : "Removed"}</td>
-                    <td className="github-access">
-                      {m.github ? (
-                        <>
-                          <a
-                            href={`https://github.com/${m.github.login}`}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            <strong>{m.github.login}</strong>
-                          </a>
-                          <div className="muted">
-                            {m.github.status} · Synced{" "}
-                            {new Date(m.github.syncedAt).toLocaleString()}
-                          </div>
-                          <MemberRepositories
-                            key={m.github.id}
-                            login={m.github.login}
-                            repositories={m.github.repositories}
-                          />
-                        </>
-                      ) : m.githubAccount ? (
-                        <>
-                          <a
-                            href={`https://github.com/${m.githubAccount.login}`}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            <strong>{m.githubAccount.login}</strong>
-                          </a>
-                          <div className="muted">Verification pending</div>
-                        </>
-                      ) : (
-                        <span className="muted">Not linked</span>
-                      )}
+                    <td>
+                      <MemberGitHub member={m} disabled={loading} />
                     </td>
                     <td>
                       <span

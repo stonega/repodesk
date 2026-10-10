@@ -185,24 +185,21 @@ for (const width of [1280, 390]) {
       await fixture(page, theme);
       await page.goto(`/admin/members?workspace=${workspaceId}`);
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
-      const preview = page.getByRole("list", { name: "Repository access" });
-      await expect(preview.getByRole("article")).toHaveCount(5);
-      const reference = await appearance(preview.getByRole("article").first());
-      await preview.getByRole("article").first().scrollIntoViewIfNeeded();
+      const view = page.getByRole("button", { name: /View GitHub for member/ });
+      await view.scrollIntoViewIfNeeded();
+      await expect(page.getByRole("article")).toHaveCount(0);
       await page.screenshot({
         path: `/tmp/repodesk-repository-cards-members-${width}-${theme}.png`,
         fullPage: true,
       });
-      await page
-        .getByRole("button", { name: "Show all 7 repositories for example" })
-        .click();
+      await view.click();
       const memberDialog = page.getByRole("dialog", {
-        name: "example repositories",
+        name: "example GitHub",
       });
       await expect(memberDialog.getByRole("article")).toHaveCount(7);
-      expect(
-        await appearance(memberDialog.getByRole("article").first()),
-      ).toEqual(reference);
+      const reference = await appearance(
+        memberDialog.getByRole("article").first(),
+      );
       await page.screenshot({
         path: `/tmp/repodesk-repository-cards-member-modal-${width}-${theme}.png`,
       });

@@ -2796,15 +2796,6 @@ input.plugin-toggle-input:disabled {
   white-space: nowrap;
 }
 
-.member-table td.github-access {
-  min-width: 170px;
-  max-width: 190px;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-.member-repositories-action {
-  margin-top: 8px;
-}
 .site-domain-details dd,
 .site-domain-details a {
   overflow-wrap: anywhere;
