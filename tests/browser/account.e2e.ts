@@ -34,6 +34,8 @@ for (const width of [1280, 390]) {
     await page.emulateMedia({ colorScheme: "light" });
     const signedOut = await fixture(page);
     await page.goto("/admin");
+    if (width <= 800)
+      await page.getByRole("button", { name: "Open navigation" }).click();
     const account = page.locator(".account");
     await expect(account.getByText("stone", { exact: true })).toBeVisible();
     const darkSwitch = account.getByRole("button", {
@@ -52,6 +54,8 @@ for (const width of [1280, 390]) {
       fullPage: true,
     });
     await page.reload();
+    if (width <= 800)
+      await page.getByRole("button", { name: "Open navigation" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     const lightSwitch = account.getByRole("button", {
       name: "Switch to light theme",
@@ -134,6 +138,7 @@ test("long account identities wrap without hiding either control", async ({
   await page.setViewportSize({ width: 320, height: 900 });
   await fixture(page, "a-long-account-name-that-needs-to-wrap-in-the-sidebar");
   await page.goto("/admin");
+  await page.getByRole("button", { name: "Open navigation" }).click();
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
   await expect(
     page.getByRole("button", { name: /Switch to .* theme/ }),

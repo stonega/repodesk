@@ -31,17 +31,31 @@ requires package/download network access. The database is removed on exit.
 For runners with a short command timeout, run `bash scripts/verify-skills.sh quality`
 and `bash scripts/verify-skills.sh browser` separately. Each phase prepares its own
 environment and database; together they run the same checks as the default command.
-Temporary subprocess fixtures use the checkout cache because `/tmp` may be mounted
-with execution disabled.
+Temporary subprocess fixtures use ignored `node_modules/verify-skills-tmp` because
+`/tmp` may be mounted with execution disabled and the host-updater fixture rejects
+deployment paths containing dots (including `.cache`).
+The local font configuration maps Chromium's Linux `sans` system-font alias to
+Liberation Sans so screenshots use proportional UI text even on fontless runners.
 
 For runs API/UI changes, use `bash scripts/verify-skills.sh quality` and
 `bash scripts/verify-skills.sh runs-browser`. The latter runs the runs and admin
 browser suites with the same independent preparation and disposable database.
 
+For mobile navigation and version-label changes, use
+`bash scripts/verify-skills.sh quality` and
+`bash scripts/verify-skills.sh navigation-browser`. The latter prepares the same
+environment and runs sidebar, account, sign-out pending/error, update-dialog and
+session-expiry browser coverage.
+
 For a release, run `bash scripts/verify-skills.sh quality` and
 `bash scripts/verify-skills.sh release-browser`. The latter prepares the same
 environment and runs the entire browser suite instead of only the skills-related
-suites. Container builds, Compose smoke/restore and Codex lifecycle smoke checks
+suites. On runners with per-command time limits, run all three shorter phases:
+`bash scripts/verify-skills.sh release-1-browser`,
+`bash scripts/verify-skills.sh release-2-browser`, and
+`bash scripts/verify-skills.sh release-3-browser`. Each prepares its own database
+and dependencies; together they run every browser test, without filtering or skips.
+Container builds, Compose smoke/restore and Codex lifecycle smoke checks
 still require Docker. Verify runs the application container and Compose checks;
 run the Codex lifecycle smoke explicitly when validating runner changes. See the
 release runbook and [host update installation](../docs/implementation/updates.md).

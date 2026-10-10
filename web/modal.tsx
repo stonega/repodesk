@@ -45,12 +45,14 @@ export function Modal({
   onClose,
   busy = false,
   cancelLabel = "Cancel",
+  presentation = "dialog",
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
   busy?: boolean;
   cancelLabel?: string;
+  presentation?: "dialog" | "sheet";
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [pending, setPending] = useState(false);
@@ -73,9 +75,28 @@ export function Modal({
   return createPortal(
     <dialog
       ref={dialog}
-      className="modal"
+      className={`modal${presentation === "sheet" ? " navigation-sheet" : ""}`}
       aria-label={title}
       aria-busy={locked}
+      onClick={(event) => {
+        if (presentation !== "sheet" || locked) return;
+        if (
+          event.target instanceof Element &&
+          event.target.closest("a[href]")
+        ) {
+          onClose();
+          return;
+        }
+        if (event.target !== event.currentTarget) return;
+        const bounds = event.currentTarget.getBoundingClientRect();
+        if (
+          event.clientX < bounds.left ||
+          event.clientX > bounds.right ||
+          event.clientY < bounds.top ||
+          event.clientY > bounds.bottom
+        )
+          onClose();
+      }}
       onCancel={(event) => {
         event.preventDefault();
         event.stopPropagation();

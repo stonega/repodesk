@@ -54,8 +54,12 @@ for (const width of [1280, 390]) {
     const activity = page.getByRole("region", { name: "Workspace activity" });
     const pause = activity.getByRole("button", { name: "Pause workspace" });
     await expect(activity).toContainText("Active");
+    if (width <= 800)
+      await page.getByRole("button", { name: "Open navigation" }).click();
     const links = await page.locator("aside nav a").allTextContents();
     expect(links.indexOf("Settings")).toBe(links.indexOf("Plugins") + 1);
+    if (width <= 800)
+      await page.getByRole("button", { name: "Close Navigation" }).click();
     await expect(
       page.getByRole("heading", { name: "Model capacity" }),
     ).toHaveCount(0);

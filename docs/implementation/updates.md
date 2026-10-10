@@ -2,7 +2,8 @@
 
 Signed-in users automatically check the configured GitHub repository's latest
 published stable release. A newer numeric version adds an update arrow immediately
-after the bottom-right version label. Click it to review the formatted changelog,
+after the version label (bottom right on desktop, in the mobile admin header,
+or in the mobile setup footer). Click it to review the formatted changelog,
 release-specific upgrade notes and deployment consequences in a modal. HTML,
 scripts and remote images stay literal; links allow only HTTP/HTTPS. Missing
 notes have an explicit empty state. Sign-in keeps the version without an action.

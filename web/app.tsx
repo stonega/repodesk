@@ -73,6 +73,7 @@ import { prefixFields, RecordForm } from "./record-form.tsx";
 import { RunAttempts } from "./run-attempts.tsx";
 import { Select } from "./select.tsx";
 import { workspaceFields } from "./settings-fields.ts";
+import { Sidebar } from "./sidebar.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 import { ThemeSwitch } from "./theme-switch.tsx";
 import { ToastProvider, useToast } from "./toast.tsx";
@@ -4066,7 +4067,7 @@ function Shell() {
       }
     >
       <ApplicationUpdate session={current} request={api} />
-      <aside>
+      <Sidebar enabled={!!current && !setupLayout}>
         <div className="brand">
           <img
             className="brand-mark"
@@ -4167,7 +4168,7 @@ function Shell() {
             )}
           </>
         )}
-      </aside>
+      </Sidebar>
       <main
         className={
           setupLayout ? "setup-main" : !current ? "auth-main" : undefined

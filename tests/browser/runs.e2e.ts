@@ -129,9 +129,13 @@ for (const [mode, width] of [
     const messages = page.getByRole("region", { name: "Messages" });
     await expect(messages).toContainText("Summarize this issue");
     await expect(messages).toContainText("The fix is ready.");
+    if (width <= 800)
+      await page.getByRole("button", { name: "Open navigation" }).click();
     await expect(
       page.getByRole("link", { name: "Runs", exact: true }),
     ).toHaveAttribute("aria-current", "page");
+    if (width <= 800)
+      await page.getByRole("button", { name: "Close Navigation" }).click();
     await expect(
       page.getByRole("button", { name: "Cancel", exact: true }),
     ).toHaveCount(mode === "member" ? 1 : 0);

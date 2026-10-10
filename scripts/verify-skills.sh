@@ -5,8 +5,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 verify_phase="${1:-all}"
 case "$verify_phase" in
-  all|quality|browser|release-browser|runs-browser) ;;
-  *) echo "Usage: bash scripts/verify-skills.sh [all|quality|browser|release-browser|runs-browser]" >&2; exit 2 ;;
+  all|quality|browser|release-browser|release-[123]-browser|runs-browser|navigation-browser) ;;
+  *) echo "Usage: bash scripts/verify-skills.sh [all|quality|browser|release-browser|release-{1,2,3}-browser|runs-browser|navigation-browser]" >&2; exit 2 ;;
 esac
 bun install --frozen-lockfile
 bun install --cwd services/code-truth --frozen-lockfile
@@ -14,7 +14,9 @@ verify_root="$PWD/node_modules/.cache/verify-skills"
 mkdir -p "$verify_root/apt/lists/partial" "$verify_root/apt/archives/partial" "$verify_root/system"
 # Some coding runners mount /tmp with noexec; subprocess fixtures need an
 # executable temporary directory. Keep those fixtures in the ignored checkout.
-export TMPDIR="$verify_root/tmp"
+# The host-updater smoke fixture accepts deployment paths without dots. Keep
+# temporary fixtures outside .cache while retaining an executable ignored path.
+export TMPDIR="$PWD/node_modules/verify-skills-tmp"
 mkdir -p "$TMPDIR"
 apt_options=(-o "Dir::State::lists=$verify_root/apt/lists" -o "Dir::Cache::archives=$verify_root/apt/archives" -o Debug::NoLocking=1)
 if [[ ! -f "$verify_root/system/.ready" ]]; then
@@ -41,6 +43,7 @@ cat > "$verify_root/fonts.conf" <<FONTCONFIG
 <fontconfig>
   <dir>$verify_root/system/usr/share/fonts</dir><cachedir>$verify_root/font-cache</cachedir>
   <alias><family>system-ui</family><prefer><family>Liberation Sans</family></prefer></alias>
+  <alias><family>sans</family><prefer><family>Liberation Sans</family></prefer></alias>
   <alias><family>sans-serif</family><prefer><family>Liberation Sans</family></prefer></alias>
   <alias><family>serif</family><prefer><family>Liberation Serif</family></prefer></alias>
   <alias><family>monospace</family><prefer><family>Liberation Mono</family></prefer></alias>
@@ -71,8 +74,13 @@ if [[ "$verify_phase" != *browser ]]; then
 fi
 if [[ "$verify_phase" == release-browser ]]; then
   bun run test:browser
+elif [[ "$verify_phase" == release-[123]-browser ]]; then
+  verify_shard="${verify_phase#release-}"
+  bun run test:browser --shard="${verify_shard%-browser}/3"
 elif [[ "$verify_phase" == runs-browser ]]; then
   bun run test:browser tests/browser/runs.e2e.ts tests/browser/admin.e2e.ts
+elif [[ "$verify_phase" == navigation-browser ]]; then
+  bun run test:browser tests/browser/sidebar.e2e.ts tests/browser/account.e2e.ts tests/browser/navigation-account.e2e.ts tests/browser/application-update.e2e.ts tests/browser/session-expiry.e2e.ts
 elif [[ "$verify_phase" != quality ]]; then
   bun run test:browser tests/browser/skills-search.e2e.ts tests/browser/team-workflows.e2e.ts tests/browser/admin.e2e.ts
 fi
