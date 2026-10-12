@@ -1,5 +1,41 @@
 # Implementation evidence
 
+## Optional assistant limits and model settings (2026-10-12)
+
+Model calls per run has been removed from Team summaries, editors, workspace
+settings and ordinary assistant execution. Follow-up classification and conversation
+compaction no longer consume a workspace call quota; each internal tool-free pass
+still has its own one-call bound. Migration `018_remove_model_call_limit.sql` removes
+current saved overrides and advances affected workspace versions once. Older clients'
+`maxTurns` is discarded on save. Historical run snapshots remain audit evidence and
+do not enforce call quotas.
+
+Run and monthly USD budgets default to None (`null`), meaning unlimited. Clearing
+a field restores None; entered zero permits only zero-cost requests. Existing
+explicit budgets remain configured. Atomic reservations still enforce configured
+caps, including current and pinned run budgets, concurrent requests and unknown
+charges. Summary/editor, Usage and Telegram accounting show unlimited values clearly.
+
+Context window, maximum output and both token prices are independently optional.
+A blank context window leaves enforcement to the provider for known and custom
+models; there is no invented app context-window cap. Catalog context metadata
+remains available for conversation-memory planning, while the provider-context
+choice is pinned separately on runs. Explicit context/output overrides retain local
+validation. Output allowance uses configured/catalog values or the documented
+automatic allowance for unknown models. Missing custom prices remain unknown,
+retain token usage and are excluded from dollar totals. Finite dollar budgets require
+known prices and reconciliation of earlier unpriced charges. Verified charge
+reconciliation retains authorization and replay protections.
+
+Team save errors now appear above the primary action and Cancel, keeping both
+buttons together on mobile. Version conflicts preserve the reload action and draft.
+Local verification passed lint, strict TypeScript, production build, **701 deterministic
+tests** against disposable PostgreSQL and **19 focused browser scenarios** on an
+isolated port and fixed UI build. Desktop (1280px) and mobile (390px) summaries,
+editors, loading, empty, pending, error, clearing, zero and conflict recovery states
+were checked. No application deployment or live provider/Telegram calls were made
+by this change.
+
 ## Automatic activation after model setup (2026-10-12)
 
 Model settings now contains provider and chat-model summaries with their shared
