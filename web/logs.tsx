@@ -162,7 +162,7 @@ export function RuntimeLogs({
             onRefresh={() => setRevision((value) => value + 1)}
           />
           <IconButton
-            icon="latest"
+            icon="recent"
             label="Latest logs"
             type="button"
             onClick={() => {

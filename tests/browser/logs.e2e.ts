@@ -115,6 +115,14 @@ for (const width of [1280, 390]) {
     const pager = page.getByRole("navigation", { name: "Pagination" });
     const previous = pager.getByRole("button", { name: "Previous page" });
     const next = pager.getByRole("button", { name: "Next page" });
+    const latest = page.getByRole("button", {
+      name: "Latest logs",
+      exact: true,
+    });
+    await expect(latest).toHaveAttribute("title", "Latest logs");
+    const latestBounds = await latest.boundingBox();
+    expect(latestBounds?.width).toBeGreaterThanOrEqual(44);
+    expect(latestBounds?.height).toBeGreaterThanOrEqual(44);
     await expect(pager).toContainText("1–50");
     await expect(previous).toBeDisabled();
     await expect(page.locator(".log-table")).toHaveCSS("font-size", "12px");
@@ -128,6 +136,9 @@ for (const width of [1280, 390]) {
       await page.screenshot({
         path: `test-results/logs-populated-${theme}-${width}.png`,
         fullPage: true,
+      });
+      await page.getByRole("region", { name: "Log controls" }).screenshot({
+        path: `test-results/logs-controls-${theme}-${width}.png`,
       });
     }
     const scroll = page.getByRole("region", {
@@ -182,11 +193,15 @@ for (const width of [1280, 390]) {
     expect(requests.at(-1)?.get("q")).toBe("run_started");
     await next.click();
     await expect(pager).toContainText("51–100");
-    await page
-      .getByRole("button", { name: "Latest logs", exact: true })
-      .click();
+    await latest.focus();
+    await page.keyboard.press("Enter");
     await expect(pager).toContainText("1–50");
     await expect(previous).toBeDisabled();
+    await expect(latest).toBeFocused();
+    expect(requests.at(-1)?.has("before")).toBe(false);
+    expect(requests.at(-1)?.get("level")).toBe("warn");
+    expect(requests.at(-1)?.get("service")).toBe("worker");
+    expect(requests.at(-1)?.get("q")).toBe("run_started");
   });
 
   test(`logs keep pagination usable through loading, failure and empty pages at ${width}px`, async ({

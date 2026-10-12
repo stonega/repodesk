@@ -680,12 +680,16 @@ when implementing or reviewing a change.
   “Auto-refresh: 1m” menu trigger. Offer Every 10 seconds, Every 30 seconds,
   Every minute, Every 5 minutes and Off, with a checkmark beside the selection.
   Put Refresh now with a refresh icon below a divider in the same menu; default
-  to one minute. Retain the latest-page shortcut. Support keyboard navigation,
-  Escape and outside-click dismissal, visible focus and 44px targets.
+  to one minute. The Latest logs shortcut uses an outline clock to communicate
+  recency, with its descriptive accessible name and hover title; a lone upward
+  arrow is too ambiguous for returning to the newest entries. Support keyboard
+  navigation, Escape and outside-click dismissal, visible focus and 44px targets.
 - **Scope:** Runtime logs on desktop and mobile; reuse the shared dropdown surface.
 - **Source:** 2026-10-10 — user supplied the Auto-refresh menu in
   `Screenshot From 2026-10-09 16-33-01.png` as the replacement for the five-second
   checkbox.
+  2026-10-12 — user requested a more accurate Latest logs icon because the upward
+  arrow was confusing. The outline clock is the implementation choice.
 - **Exceptions:** Older pages pause automatic refresh regardless of the selected
   interval. Refresh now reloads the current page; Latest logs returns to the first
   page. In-flight requests disable Refresh now and pause the timer to prevent overlap.
