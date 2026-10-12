@@ -48,7 +48,15 @@ export function reconcileCharge(
   const run = visibleRuns(w, actor).find((r) => r.id === runId);
   requireThat(run, "not_found", 404);
   const attempt = run.attempts.find((a) => a.id === attemptId);
-  requireThat(attempt?.status === "unknown", "charge_not_reconcilable", 409);
+  requireThat(
+    attempt &&
+      (attempt.status === "unknown" ||
+        (attempt.status === "settled" &&
+          attempt.pricingUnknown &&
+          attempt.actual === undefined)),
+    "charge_not_reconcilable",
+    409,
+  );
   requireThat(
     Number.isFinite(actualUsd) &&
       actualUsd >= 0 &&

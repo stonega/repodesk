@@ -39,7 +39,8 @@ export function proposeWorkflow(
     403,
   );
   requireThat(
-    spec.budgetUsd <= w.settings.runBudgetUsd,
+    w.settings.runBudgetUsd === null ||
+      spec.budgetUsd <= w.settings.runBudgetUsd,
     "budget_exceeds_workspace_limit",
   );
   const skill = w.skills.find(

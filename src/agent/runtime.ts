@@ -24,6 +24,7 @@ import { type Deployment, Fault, requireThat } from "../domain.ts";
 import type { ExtensionCatalog, ExtensionHost } from "./extensions.ts";
 import {
   DEFAULT_MODEL_BASE_URL,
+  DEFAULT_MODEL_MAX_OUTPUT,
   type ModelCapabilities,
   type ModelOptions,
   type ThinkingLevel,
@@ -33,32 +34,60 @@ models.setProvider(openaiProvider());
 export function modelCapabilities(
   id: string,
   options: ModelOptions = {},
-): ModelCapabilities | undefined {
-  if (options.modelLimits)
-    return { limits: options.modelLimits, source: "operator" };
+): ModelCapabilities {
   const catalog = models.getModel("openai", id);
-  return catalog
-    ? {
-        limits: {
-          contextWindow: catalog.contextWindow,
-          maxOutputTokens: catalog.maxTokens,
-        },
-        source: "catalog",
-      }
-    : undefined;
+  const contextWindow =
+    options.modelLimits?.contextWindow ?? catalog?.contextWindow;
+  const maxOutputTokens =
+    options.modelLimits?.maxOutputTokens ??
+    Math.min(
+      catalog?.maxTokens ?? DEFAULT_MODEL_MAX_OUTPUT,
+      contextWindow === undefined ? Infinity : contextWindow - 1,
+    );
+  requireThat(
+    maxOutputTokens > 0 &&
+      (options.providerContext ||
+        options.modelLimits?.contextWindow === undefined ||
+        maxOutputTokens < options.modelLimits.contextWindow),
+    "model_output_limit_exceeded",
+  );
+  return {
+    limits: {
+      ...(contextWindow === undefined ? {} : { contextWindow }),
+      maxOutputTokens,
+    },
+    source:
+      options.modelLimits &&
+      Object.values(options.modelLimits).some((v) => v !== undefined)
+        ? "operator"
+        : catalog
+          ? "catalog"
+          : "default",
+  };
 }
 export function selectedModel(
   id: string,
   options: ModelOptions = {},
-): Model<"openai-completions"> {
+): Model<"openai-completions"> & {
+  pricingKnown: boolean;
+  providerContext: boolean;
+} {
   const catalog = models.getModel("openai", id);
   const pricing = options.modelPricing;
-  const cost = pricing
-    ? { ...pricing, cacheRead: pricing.input, cacheWrite: pricing.input }
-    : catalog?.cost;
-  requireThat(cost, "custom_model_pricing_required");
+  const inputPrice = pricing?.input ?? catalog?.cost.input;
+  const outputPrice = pricing?.output ?? catalog?.cost.output;
+  const pricingKnown = inputPrice !== undefined && outputPrice !== undefined;
+  const cost = {
+    input: pricingKnown ? (inputPrice ?? 0) : 0,
+    output: pricingKnown ? (outputPrice ?? 0) : 0,
+    cacheRead: pricingKnown
+      ? (pricing?.input ?? catalog?.cost.cacheRead ?? 0)
+      : 0,
+    cacheWrite: pricingKnown
+      ? (pricing?.input ?? catalog?.cost.cacheWrite ?? 0)
+      : 0,
+  };
   const capabilities = modelCapabilities(id, options);
-  requireThat(capabilities, "model_limits_required");
   return {
     id,
     name: catalog?.name ?? id,
@@ -69,8 +98,13 @@ export function selectedModel(
       options.thinkingLevel !== undefined && options.thinkingLevel !== "off",
     input: catalog?.input ?? ["text", "image"],
     cost,
+    pricingKnown,
+    providerContext:
+      options.providerContext ??
+      options.modelLimits?.contextWindow === undefined,
     thinkingLevelMap: { xhigh: "xhigh", max: "max" },
-    contextWindow: capabilities.limits.contextWindow,
+    // Pi requires numeric metadata. An unknown provider window imposes no local cap.
+    contextWindow: capabilities.limits.contextWindow ?? Number.MAX_SAFE_INTEGER,
     maxTokens: capabilities.limits.maxOutputTokens,
     compat: {
       supportsDeveloperRole: false,
@@ -86,7 +120,7 @@ export interface AgentInput {
   workspaceId?: string;
   actor: string;
   runId: string;
-  model: Model<Api>;
+  model: Model<Api> & { pricingKnown?: boolean; providerContext?: boolean };
   apiKey: string;
   thinkingLevel?: ThinkingLevel;
   system: string;
@@ -94,7 +128,9 @@ export interface AgentInput {
   images?: ImageContent[];
   transcript: AgentMessage[];
   tools: AgentTool[];
-  maxTurns: number;
+  // Internal tool-free passes and evaluation callers may impose an explicit cap.
+  // Ordinary workspace requests have no model-call count limit.
+  maxTurns?: number;
   // Internal tool-free passes and evaluation callers may impose an explicit cap.
   // Ordinary workspace requests have no tool-call count limit.
   maxTools?: number;
@@ -241,7 +277,10 @@ export class PiRunner implements AgentRunner {
           input.signal.throwIfAborted();
           await input.guard();
         }
-        requireThat(turns < input.maxTurns, "turn_limit");
+        requireThat(
+          input.maxTurns === undefined || turns < input.maxTurns,
+          "turn_limit",
+        );
         const bytes = Buffer.byteLength(JSON.stringify(context));
         let imageAllowance = 0;
         const budgetContext = {
@@ -280,9 +319,13 @@ export class PiRunner implements AgentRunner {
         );
         let maxTokens =
           input.maxOutputTokens ??
-          Math.min(model.maxTokens, model.contextWindow - inputTokens);
+          (input.model.providerContext
+            ? model.maxTokens
+            : Math.min(model.maxTokens, model.contextWindow - inputTokens));
         requireThat(
-          maxTokens > 0 && inputTokens + maxTokens <= model.contextWindow,
+          maxTokens > 0 &&
+            (input.model.providerContext ||
+              inputTokens + maxTokens <= model.contextWindow),
           "model_context_limit_exceeded",
         );
         // Text bytes and the image allowance conservatively estimate input tokens. Output also
@@ -292,6 +335,11 @@ export class PiRunner implements AgentRunner {
         if (input.remainingBudget) {
           const budgets = await input.remainingBudget();
           const available = Math.min(budgets.run, budgets.workspace);
+          requireThat(
+            input.model.pricingKnown !== false || available === Infinity,
+            "model_pricing_required_for_budget",
+            409,
+          );
           const error =
             budgets.run <= budgets.workspace
               ? "run_budget_exhausted"
@@ -425,7 +473,7 @@ export class PiRunner implements AgentRunner {
         }
       },
       shouldStopAfterTurn: async () =>
-        turns >= input.maxTurns ||
+        (input.maxTurns !== undefined && turns >= input.maxTurns) ||
         !!blocked ||
         input.signal.aborted ||
         !!(await input.shouldPause?.()),
@@ -495,7 +543,7 @@ export class PiRunner implements AgentRunner {
         last.stopReason === "length"
           ? "output_limit"
           : last.stopReason !== "stop"
-            ? turns >= input.maxTurns
+            ? input.maxTurns !== undefined && turns >= input.maxTurns
               ? "turn_limit"
               : "incomplete_response"
             : text.trim()

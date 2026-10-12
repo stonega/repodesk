@@ -16,18 +16,14 @@ Content-Type: application/json
   "password": "REPLACE_WITH_UNIQUE_PASSWORD"
 }
 
-### After saving the workspace, bot token, model, and receiver, activate.
+### Saving the workspace chat model activates automatically once the bot receiver
+### and an enabled published skill are ready. No separate activation request is needed.
 ### A personal Telegram owner link is optional; an empty membership denies bot use.
 @session = REPLACE_SESSION_COOKIE
 @csrf = REPLACE_CSRF_TOKEN
 @workspaceId = REPLACE_WORKSPACE_UUID
 @telegramUserId = REPLACE_TELEGRAM_USER_ID
 @requestId = REPLACE_REQUEST_UUID
-
-POST {{baseUrl}}/api/setup/activate
-Origin: {{baseUrl}}
-Cookie: repodesk_session={{session}}
-X-CSRF-Token: {{csrf}}
 
 ### Get the request link, pending requests, active members, and membership version.
 GET {{baseUrl}}/api/setup/workspaces/{{workspaceId}}/access
@@ -110,6 +106,6 @@ Content-Type: application/json
   }
 }
 
-### Custom bot models also require modelLimits and modelPricing in selection.
+### Custom bot models optionally override modelLimits and modelPricing in selection.
 ### Codex and Review Bot settings accept the same providerId/model selection in settings.model.
 ### Codex/Review use a Responses-compatible provider/model; Review can inherit Codex.

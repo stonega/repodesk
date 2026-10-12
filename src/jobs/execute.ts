@@ -126,6 +126,7 @@ export class Executor {
         modelBaseUrl: deployment.modelBaseUrl ?? DEFAULT_MODEL_BASE_URL,
         thinkingLevel: deployment.thinkingLevel ?? "off",
         modelPricing: deployment.modelPricing,
+        providerContext: deployment.modelLimits?.contextWindow === undefined,
         modelLimits: modelCapabilities(r.model, deployment)?.limits,
       };
       if (r.extensionVersion === undefined && !r.transcript.length)
@@ -234,7 +235,8 @@ export class Executor {
               a.status = "unknown";
             else {
               a.status = "settled";
-              a.actual = Math.max(0, message.usage.cost.total);
+              if (!a.pricingUnknown)
+                a.actual = Math.max(0, message.usage.cost.total);
               a.tokens = {
                 input: message.usage.input,
                 output: message.usage.output,
@@ -317,11 +319,6 @@ export class Executor {
       }
       const completed =
         tail?.role === "assistant" && tail.stopReason === "stop";
-      requireThat(
-        completed || claimed.attempts.length < claimed.settings.maxTurns,
-        "turn_limit",
-        409,
-      );
       if (!completed) await draft?.start();
       const input: AgentInput = {
         cacheKey: claimed.threadId
@@ -352,10 +349,6 @@ export class Executor {
           fence,
           signal,
         ),
-        maxTurns: Math.max(
-          1,
-          claimed.settings.maxTurns - claimed.attempts.length,
-        ),
         remainingBudget: async () => {
           const w = await this.store.read(workspaceId);
           const r = w.runs.find((r) => r.id === runId);
@@ -378,6 +371,12 @@ export class Executor {
             );
             const budgets = remainingBudgets(w, r);
             requireThat(
+              input.model.pricingKnown !== false ||
+                Math.min(budgets.run, budgets.workspace) === Infinity,
+              "model_pricing_required_for_budget",
+              409,
+            );
+            requireThat(
               Number.isFinite(amount) && amount >= 0 && amount <= budgets.run,
               "run_budget_exhausted",
               409,
@@ -397,6 +396,9 @@ export class Executor {
                   : undefined,
               reserved: amount,
               status: "reserved",
+              ...(input.model.pricingKnown === false
+                ? { pricingUnknown: true }
+                : {}),
               at: new Date().toISOString(),
             });
             return id;
@@ -450,10 +452,6 @@ export class Executor {
         context = buildContext(await this.store.read(workspaceId), claimed);
         input.system = context.system;
         input.prompt = context.prompt;
-        input.maxTurns = Math.max(
-          1,
-          claimed.settings.maxTurns - claimed.attempts.length,
-        );
       }
       if (!completed && !transcript.length) {
         const attachments = await loadAttachments(

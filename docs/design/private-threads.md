@@ -122,7 +122,7 @@ After a bounded summary finishes in the same run, the retrigger threshold is 85%
 (2026-10-07). This leaves headroom while avoiding an immediate second summary when
 the first batch lands just above the original trigger because tool schemas grew.
 Larger retained history still requires another bounded batch. Provider capacity,
-output, turn and dollar checks remain in force.
+output and configured dollar checks remain in force.
 
 The same configured model summarizes older sources and the previous frozen summary
 using a dedicated tool-free Pi execution. It preserves subjects, goals, constraints,
@@ -134,9 +134,10 @@ unchanged and append messages until the next threshold crossing. Original messag
 remain stored under the existing retention policy and are retrieved only as needed.
 
 Summarization has separate durable checkpoints and no extension hooks/tools or
-Telegram previews. It shares the requesting run's dollar, turn and time budgets,
-lease, cancellation and current-access guards. At least one provider turn is left
-for the answer. A completed summary checkpoint is reused after a crash; ambiguous
+Telegram previews. It shares the requesting run's configured dollar budgets and
+deadline, lease, cancellation and current-access guards. There is no workspace
+model-call quota; each tool-free summary pass remains bounded to one call.
+A completed summary checkpoint is reused after a crash; ambiguous
 provider charges remain reserved and are never automatically replayed. Invalid or
 oversized summaries are rejected. If budget, minimal recent context or extension
 input cannot fit, the run reports the appropriate limit rather than discarding

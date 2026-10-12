@@ -315,7 +315,7 @@ export function applicationTools(
             format: a.format,
             skillId: a.skillId,
             windowDays: a.windowDays,
-            budgetUsd: r.settings.runBudgetUsd,
+            budgetUsd: r.settings.runBudgetUsd ?? 0.1,
             github: a.repositoryIds
               ? { revision: w.github?.revision, repositoryIds: a.repositoryIds }
               : undefined,

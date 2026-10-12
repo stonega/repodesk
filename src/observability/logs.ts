@@ -113,6 +113,8 @@ const codes = new Set([
   "followup_sources_changed",
   "discussion_sources_changed",
   "custom_model_pricing_required",
+  "model_pricing_required_for_budget",
+  "unpriced_usage_requires_reconciliation",
   "execution_failed",
   "run_revoked",
   "run_timeout",

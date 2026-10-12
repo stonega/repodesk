@@ -296,7 +296,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         {
           params: {
             chat_id: "101",
-            text: "RepoDesk is not active yet. Ask a deployment admin to activate it in Model settings.",
+            text: "RepoDesk setup is not complete yet. Ask a deployment admin to check the model settings and Telegram connection. The bot activates automatically when ready.",
           },
         },
       ]);

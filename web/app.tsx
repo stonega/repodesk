@@ -137,9 +137,7 @@ async function api<T>(
                           `${issue.path}: ${issue.message}`,
                       )
                       .join(" ")
-                  : data.error === "model_limits_required"
-                    ? "Enter the custom model's context window and maximum output tokens."
-                    : (data.error ?? "Request failed"),
+                  : (data.error ?? "Request failed"),
       data.issues ?? [],
       response.status,
     );
@@ -911,275 +909,19 @@ function SetupCelebration({ onStart }: { onStart: () => void }) {
   );
 }
 function ModelSettings({ workspaceId }: { workspaceId: string }) {
-  const { data, error, reload, loading } = useData<Progress>(
-    "/api/setup/progress",
-  );
-  const [identity, setIdentity] = useState<{ url: string; command: string }>();
-  useEffect(() => {
-    const timer = setInterval(reload, 5000);
-    return () => clearInterval(timer);
-  }, [reload]);
-  if (!data)
-    return (
-      <Page
-        title="Model settings"
-        description="Connect your model provider, then activate the assistant when its receiver and skills are ready."
-      >
-        {error ? (
-          <Notice error>{error}</Notice>
-        ) : (
-          <ModelProvidersPanel request={api} workspaceId={workspaceId} />
-        )}
-      </Page>
-    );
-  const workspace = data.workspaces.find((w) => w.id === workspaceId);
-  const missing = [
-    !workspace && "Create a workspace in Setup.",
-    !data.credentials.bot && "Save a Telegram bot token in Setup.",
-    !data.credentials.model &&
-      !workspace?.chatModelConfigured &&
-      "Choose a provider and chat model.",
-    !workspace?.chatModelConfigured &&
-      !data.modelCapabilities &&
-      "Configure the model context window and maximum output.",
-    !data.receiver.ready &&
-      (data.telegramTransport === "polling"
-        ? "Wait for the polling worker to connect."
-        : "Register the Telegram webhook."),
-    workspace &&
-      !workspace.skills.some((s) => s.enabled && s.published) &&
-      "Enable a published skill.",
-  ].filter((item): item is string => typeof item === "string");
+  const { data } = useData<Progress>("/api/setup/progress");
   return (
     <Page
       title="Model settings"
-      description="Connect your model provider, then activate the assistant when its receiver and skills are ready."
+      description="Choose your model provider and chat model. The bot activates automatically when setup is ready."
     >
       <ModelProvidersPanel
         key={workspaceId}
         request={api}
         workspaceId={workspaceId}
-        onSaved={reload}
-        legacyModel={data.model}
+        legacyModel={data?.model}
       />
-      <section className="card" aria-label="Activation">
-        <h2>Activate the bot</h2>
-        <p>
-          {data.telegramTransport === "polling" ? "Polling" : "Webhook"}:{" "}
-          {data.receiver.ready ? "ready" : "pending"}
-        </p>
-        {data.telegramTransport === "webhook" && !data.receiver.ready && (
-          <Action
-            disabled={!data.credentials.bot}
-            onClick={async () => {
-              await api("/api/setup/webhook", "POST", {});
-              reload();
-            }}
-          >
-            Register Telegram webhook
-          </Action>
-        )}
-        {data.telegramTransport === "polling" && data.receiver.error && (
-          <Notice>
-            {data.receiver.error === "polling_webhook_conflict"
-              ? "This bot already has a webhook. Stop the other deployment and remove its webhook before using polling."
-              : data.receiver.error === "telegram_polling_conflict"
-                ? "Another receiver is using this bot. Stop it before retrying."
-                : data.receiver.error === "telegram_unauthorized"
-                  ? "Telegram rejected the saved bot token. Save a valid token in Setup."
-                  : "Polling is not ready. Check the worker and its Telegram connection; it will retry automatically."}
-          </Notice>
-        )}
-        <p>
-          Enabled skills:{" "}
-          {workspace?.skills
-            .filter((s) => s.enabled && s.published)
-            .map((s) => s.name)
-            .join(", ") || "none"}
-          .
-        </p>
-        {!data.active && missing.length > 0 && (
-          <ul aria-label="Remaining activation requirements">
-            {missing.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        )}
-        {!data.active && (
-          <Action
-            disabled={missing.length > 0}
-            onClick={async () => {
-              await api("/api/setup/activate", "POST", {});
-              reload();
-            }}
-          >
-            Activate bot
-          </Action>
-        )}
-        {data.active && (
-          <Notice>
-            Active. Share the access link below and approve people who request
-            access. Others cannot use the bot.
-          </Notice>
-        )}
-        {data.active && workspace && <SetupAccess workspaceId={workspace.id} />}
-        {data.active && workspace && !workspace.ownerVerified && (
-          <details className="setup-advanced">
-            <summary>Link my Telegram account (optional)</summary>
-            <p className="muted">
-              Link your personal Telegram account if you want owner controls in
-              Telegram. It is not required for activation or web access.
-            </p>
-            <Action
-              disabled={!data.receiver.ready}
-              onClick={async () =>
-                setIdentity(
-                  await api(`/api/setup/identity/${workspace.id}`, "POST", {}),
-                )
-              }
-            >
-              Generate Telegram link
-            </Action>
-            {identity && (
-              <Notice>
-                <a href={identity.url} target="_blank" rel="noreferrer">
-                  Link account in Telegram
-                </a>
-                <br />
-                {identity.command}
-                <br />
-                Expires in 15 minutes. Sign in again after linking.
-              </Notice>
-            )}
-          </details>
-        )}
-        {error && (
-          <Action loading={loading} onClick={async () => reload()}>
-            Try again
-          </Action>
-        )}
-      </section>
     </Page>
-  );
-}
-type SetupAccessData = {
-  version: number;
-  requestUrl: string | null;
-  members: { id: string; role: string }[];
-  requests: { id: string; actor: string; username?: string; name?: string }[];
-};
-function SetupAccess({ workspaceId }: { workspaceId: string }) {
-  const path = `/api/setup/workspaces/${workspaceId}/access`;
-  const { data, error, reload, loading } = useData<SetupAccessData>(path);
-  const [actor, setActor] = useState("");
-  useEffect(() => {
-    const timer = setInterval(reload, 5000);
-    return () => clearInterval(timer);
-  }, [reload]);
-  return (
-    <div className="setup-access">
-      <h3>Telegram access</h3>
-      <p className="muted">
-        Share the request link with teammates and approve them here, or add a
-        known Telegram user ID directly. All active members can use the bot.
-      </p>
-      {error && <Notice error>{error}</Notice>}
-      {data?.requestUrl && (
-        <Field label="Request access link">
-          <input
-            readOnly
-            value={data.requestUrl}
-            onFocus={(e) => e.target.select()}
-          />
-        </Field>
-      )}
-      {data && (
-        <>
-          <Field label="Telegram user ID">
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[1-9][0-9]{0,15}"
-              value={actor}
-              onChange={(event) => setActor(event.target.value)}
-              placeholder="Numeric ID"
-            />
-          </Field>
-          <Action
-            disabled={!/^[1-9]\d{0,15}$/.test(actor) || loading}
-            onConflict={reload}
-            onClick={async () => {
-              await api(path, "POST", { actor, version: data.version });
-              setActor("");
-              reload();
-            }}
-          >
-            Add member
-          </Action>
-          <h4>Pending requests</h4>
-          {data.requests.length ? (
-            <ul className="setup-access-list">
-              {data.requests.map((request) => (
-                <li key={request.id}>
-                  <span>
-                    {request.name || request.username
-                      ? `${request.name || request.username} · ${request.actor}`
-                      : request.actor}
-                  </span>
-                  <div className="row">
-                    {(["approved", "rejected"] as const).map((decision) => (
-                      <Action
-                        key={decision}
-                        onConflict={reload}
-                        onClick={async () => {
-                          await api(
-                            `${path}-requests/${request.id}/decision`,
-                            "POST",
-                            { decision, version: data.version },
-                          );
-                          reload();
-                        }}
-                      >
-                        {decision === "approved" ? "Approve" : "Reject"}
-                      </Action>
-                    ))}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="muted">No pending requests.</p>
-          )}
-          <h4>Active members</h4>
-          {data.members.length ? (
-            <ul className="setup-access-list">
-              {data.members.map((member) => (
-                <li key={member.id}>
-                  <span>
-                    {member.id} · {member.role}
-                  </span>
-                  {member.role !== "owner" && (
-                    <Action
-                      onConflict={reload}
-                      onClick={async () => {
-                        await api(`${path}/${member.id}`, "DELETE", {
-                          version: data.version,
-                        });
-                        reload();
-                      }}
-                    >
-                      Revoke
-                    </Action>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="muted">No one has access yet.</p>
-          )}
-        </>
-      )}
-    </div>
   );
 }
 function TelegramCredentialForm({
@@ -1649,8 +1391,9 @@ function TelegramBotDialog({
               />
             </Field>
             <p className="muted">
-              Saving a token turns off the bot until Telegram reception is ready
-              and you reactivate it in Model settings.
+              Saving a token pauses the bot until Telegram reception is ready.
+              It activates automatically once the model and skills are
+              configured.
             </p>
           </>
         )}
@@ -1762,9 +1505,8 @@ function SettingsPage({ id }: { id: string }) {
 }
 function settingValue(key: keyof Settings, value: Settings[keyof Settings]) {
   if (key === "runBudgetUsd" || key === "monthlyBudgetUsd")
-    return `$${String(value)}`;
+    return value === null ? "None" : `$${String(value)}`;
   const units: Partial<Record<keyof Settings, string>> = {
-    maxTurns: "calls",
     retentionDays: "days",
     missedRunMinutes: "minutes",
   };
@@ -1786,6 +1528,7 @@ function WorkspaceSettingsEditor({
 }) {
   const [draft, setDraft] = useState<Settings>(current.settings);
   const [issues, setIssues] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState("");
   return (
     <Modal title="Edit team configuration" onClose={onClose}>
       <form onSubmit={(event) => event.preventDefault()}>
@@ -1793,6 +1536,8 @@ function WorkspaceSettingsEditor({
           const fieldId = `settings-${field.key}`;
           const value = draft[field.key];
           const issue = issues[field.key];
+          const budget =
+            field.key === "runBudgetUsd" || field.key === "monthlyBudgetUsd";
           if (field.min !== undefined && field.min === field.max)
             return (
               <div className="field" key={field.key}>
@@ -1809,18 +1554,19 @@ function WorkspaceSettingsEditor({
                 type={
                   typeof value === "boolean"
                     ? "checkbox"
-                    : typeof value === "number"
+                    : budget || typeof value === "number"
                       ? "number"
                       : "text"
                 }
                 min={field.min}
                 max={field.max}
                 step={field.step}
+                placeholder={budget ? "None" : undefined}
                 checked={typeof value === "boolean" ? value : undefined}
                 value={
                   typeof value === "boolean"
                     ? undefined
-                    : Number.isNaN(value)
+                    : value === null || Number.isNaN(value)
                       ? ""
                       : String(value)
                 }
@@ -1830,13 +1576,16 @@ function WorkspaceSettingsEditor({
                   const next =
                     typeof value === "boolean"
                       ? event.target.checked
-                      : typeof value === "number"
+                      : budget || typeof value === "number"
                         ? event.target.value === ""
-                          ? Number.NaN
+                          ? budget
+                            ? null
+                            : Number.NaN
                           : Number(event.target.value)
                         : event.target.value;
                   setDraft({ ...draft, [field.key]: next });
                   setIssues((previous) => ({ ...previous, [field.key]: "" }));
+                  setFormError("");
                 }}
               />
               <small id={`${fieldId}-help`}>{field.help}</small>
@@ -1848,11 +1597,21 @@ function WorkspaceSettingsEditor({
             </div>
           );
         })}
+        {formError && (
+          <Notice error>
+            {formError}
+            {formError.includes("version_conflict") && (
+              <button type="button" className="secondary" onClick={onConflict}>
+                Reload current version
+              </button>
+            )}
+          </Notice>
+        )}
         <ModalActions>
           <Action
             type="submit"
             resetKey={draft}
-            onConflict={onConflict}
+            onError={setFormError}
             onClick={async () => {
               const parsed = settingsSchema.safeParse(draft);
               if (!parsed.success) {

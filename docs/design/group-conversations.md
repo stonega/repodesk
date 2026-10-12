@@ -74,10 +74,10 @@ delivery are reused. Candidates are runs with a separate classification checkpoi
 completed verdicts can be recovered without another provider call. The main prompt
 and execution transcript never include the classification transcript.
 
-Classification shares dollar/turn limits, deadline, cancellation, permissions and
-fencing with the eventual answer. It leaves at least one provider turn for answering.
-A one-turn workspace therefore skips automatic follow-up answering; explicit asks
-remain available. Unknown provider outcomes remain reserved and are not replayed.
+Classification shares configured dollar budgets, deadline, cancellation, permissions
+and fencing with the eventual answer. Its tool-free verdict uses one model call;
+there is no workspace model-call quota to prevent the eventual answer. Unknown
+provider outcomes remain reserved and are not replayed.
 Source hashes include speaker identity; edits, removal or revoked access stop stale
 classification. Failure before acceptance does not send an error message to the group.
 

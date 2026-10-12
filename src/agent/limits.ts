@@ -1,4 +1,4 @@
-import type { Run, Workspace } from "../domain.ts";
+import { type Run, requireThat, type Workspace } from "../domain.ts";
 import type { ModelLimits } from "./model-settings.ts";
 
 // Internal caps remain available to bounded evaluations; workspaces use automatic capacity.
@@ -22,14 +22,29 @@ export function remainingBudgets(
 ) {
   const month = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
   const own = run.attempts.reduce((n, a) => n + (a.actual ?? a.reserved), 0);
-  const total = workspace.runs
+  const monthly = workspace.runs
     .flatMap((r) => r.attempts)
-    .filter((a) => Date.parse(a.at) >= month)
-    .reduce((n, a) => n + (a.actual ?? a.reserved), 0);
+    .filter((a) => Date.parse(a.at) >= month);
+  const total = monthly.reduce((n, a) => n + (a.actual ?? a.reserved), 0);
+  const runLimit = Math.min(
+    run.settings.runBudgetUsd ?? Infinity,
+    workspace.settings.runBudgetUsd ?? Infinity,
+  );
+  const monthlyLimit = workspace.settings.monthlyBudgetUsd ?? Infinity;
+  requireThat(
+    !(
+      Number.isFinite(runLimit) &&
+      run.attempts.some((a) => a.pricingUnknown && a.actual === undefined)
+    ) &&
+      !(
+        Number.isFinite(monthlyLimit) &&
+        monthly.some((a) => a.pricingUnknown && a.actual === undefined)
+      ),
+    "unpriced_usage_requires_reconciliation",
+    409,
+  );
   return {
-    run:
-      Math.min(run.settings.runBudgetUsd, workspace.settings.runBudgetUsd) -
-      own,
-    workspace: workspace.settings.monthlyBudgetUsd - total,
+    run: runLimit - own,
+    workspace: monthlyLimit - total,
   };
 }

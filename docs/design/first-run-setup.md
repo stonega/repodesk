@@ -39,9 +39,9 @@ This is our application design, not built-in behavior supplied by Pi or Docker.
 | --- | --- | --- |
 | Create admin | Username and password on the first-run entry | Atomically verify unclaimed state, create the local deployment-admin account and a revocable session. |
 | 1. Workspace | Enter a workspace name, select an IANA timezone, then continue | Continue saves the draft before advancing. Budget and retention policies can be adjusted later in Workspace settings. |
-| 2. Model | Add an OpenAI-compatible provider in its dialog, saving a base API URL and key to fetch the model list; select a bot chat model | Continue saves a workspace-specific selection. Providers are reused across the same operator’s workspaces and by Codex/Review Bot. Custom bot models require capacity and prices in Advanced settings. |
+| 2. Model | Add an OpenAI-compatible provider in its dialog, saving a base API URL and key to fetch the model list; select a bot chat model | Continue saves a workspace-specific selection and activates the bot automatically when its token, receiver and enabled published skill are ready. Providers are reused across the same operator’s workspaces and by Codex/Review Bot. Capacity and prices are optional overrides in Advanced settings. |
 | 3. Connect Telegram | Enter a BotFather token in a write-only field, then Continue | Validate bot identity and show its username without returning the token. |
-| 4. GitHub App | Click Connect GitHub; confirm authorization and choose repositories during GitHub installation | The setup page verifies one accessible installation and connects its granted repositories, then shows a RepoDesk welcome dialog with confetti. Get started opens the workspace. Detailed controls remain in Plugins. The bot stays inactive until model settings, a skill and activation are completed in the panel. |
+| 4. GitHub App | Click Connect GitHub; confirm authorization and choose repositories during GitHub installation | The setup page verifies one accessible installation and connects its granted repositories, then shows a RepoDesk welcome dialog with confetti. Get started opens the workspace. Detailed controls remain in Plugins. Bot activation finishes automatically once the saved model, Telegram receiver and skill prerequisites are ready. |
 
 After manifest registration, setup offers the RepoDesk PNG and an App-owner settings
 link. GitHub requires the owner to upload the icon under Display information; the
@@ -62,7 +62,7 @@ cancel before creating the workspace or finish GitHub connection later in the
 admin panel.
 After activation, the web administrator can share an access-request link,
 approve requests, directly allow a numeric Telegram ID, or revoke a member in
-Model settings. The bot denies ordinary use until a member is explicitly allowed.
+Members & access. The bot denies ordinary use until a member is explicitly allowed.
 Linking the administrator's personal Telegram account later grants owner actions
 in Telegram. Optional group linking and detailed workspace policies can be
 configured after activation.
@@ -116,6 +116,13 @@ does not enable model work or schedules.
 
 Allow setup to resume from any authenticated step. Missing bot or model
 configuration keeps the bot inactive and shows next actions in the dashboard.
+Successful model setup activates the bot immediately when prerequisites are ready.
+When Telegram setup or skills complete later, receiver/worker recovery activates
+the saved configuration automatically, including after a restart. The deployment
+pause setting is preserved. Model settings has no activation step or access form;
+use Members & access for enrollment and Operations for account verification.
+Webhook registration remains an explicit action in Site domain.
+
 An empty membership is valid at activation and denies all ordinary bot use until
 the administrator enrolls or approves an active member. Owner linking is optional.
 
@@ -131,7 +138,7 @@ routes available.
 - `/api/setup/claim`: atomically verify unclaimed state and create the initial admin account from a username and password.
 - `/api/setup/progress`: authenticated resumable draft/checklist.
 - `/api/setup/validate/*`: scoped bot/model/config checks with redacted errors.
-- `/api/setup/activate`: idempotent prerequisite validation and activation.
+- `/api/setup/activate`: compatibility API for idempotent prerequisite validation and activation; the UI activates automatically.
 
 Claiming ownership and account creation are one atomic operation. An abandoned
 first page cannot reserve ownership indefinitely.

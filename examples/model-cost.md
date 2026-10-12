@@ -34,6 +34,9 @@ No plugin installation, extra API credentials or migration is required.
 
 These are application accounting estimates based on recorded model usage and
 configured prices (or an operator's reconciliation), not provider billing data.
+Run and monthly budgets default to None (unlimited). For an unknown custom model,
+prices may be omitted; the report counts unpriced calls separately and excludes
+their costs from dollar totals. Enter both prices before configuring a finite budget.
 Unknown/reserved amounts are not confirmed charges. Retention limits history to
 up to 90 days. The report is a snapshot; subsequent calls, including generation of
 the final answer, are excluded. Asking the bot uses the normal model budget.

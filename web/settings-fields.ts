@@ -17,24 +17,16 @@ export const workspaceFields: {
   {
     key: "runBudgetUsd",
     label: "Run budget (USD)",
-    help: "Maximum estimated spend per run. No fixed dollar ceiling. 0 permits only zero-cost requests.",
+    help: "Maximum estimated spend per run. Leave blank for None (no limit). 0 permits only zero-cost requests.",
     min: 0,
     step: "any",
   },
   {
     key: "monthlyBudgetUsd",
     label: "Monthly budget (USD)",
-    help: "Total workspace spend per UTC month. Both run and monthly budgets apply.",
+    help: "Total workspace spend per UTC month. Leave blank for None (no limit). Any configured run and monthly budgets apply.",
     min: 0,
     step: "any",
-  },
-  {
-    key: "maxTurns",
-    label: "Model calls per run",
-    help: "1–20 calls. Runs also have a 90-second deadline and an eight-tool-call limit.",
-    min: 1,
-    max: 20,
-    step: 1,
   },
   {
     key: "retentionDays",

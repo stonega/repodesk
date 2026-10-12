@@ -1,7 +1,8 @@
 # Telegram experience
 
 Implemented local pilot interface. A working deployment requires the operator to
-finish the web setup and activate a dedicated Telegram bot. No public bot is shipped.
+finish the web setup for a dedicated Telegram bot. Activation happens automatically
+after successful model setup once its receiver and enabled published skill are ready. No public bot is shipped.
 
 RepoDesk's main use is asking about selected GitHub repositories and reviewing
 GitHub actions from Telegram. The AI helps interpret the request; repository access,
@@ -50,10 +51,13 @@ PRs or change tasks. See [examples and pilot checks](../../examples/team-workflo
 
 ## Get started
 
-The operator first creates the local admin, configures the bot, registers the
-verification webhook and verifies the owner's Telegram identity. The owner confirms
-timezone and budgets, chooses skills, then activates processing. Setup can resume
-before those credentials exist.
+The operator first creates the local admin and workspace, saves the chat model,
+and configures the bot. Webhook deployments explicitly register the receiver in
+Site domain; polling deployments connect through the worker. Processing activates
+automatically once the receiver and an enabled published skill are ready. Approve
+users in Members & access before they can use the bot. Personal Telegram owner
+linking is optional and available through Operations. Setup can resume before
+those credentials exist.
 
 Send `/start` privately. Use `/timezone Asia/Taipei` (substitute your zone) to confirm
 workspace time. `/workspace <workspace UUID>` selects an enrolled workspace. People

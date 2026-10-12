@@ -228,7 +228,7 @@ export function createRun(
   if (workflow) {
     run.task = `${task}\nRequired format: ${workflow.spec.format}`;
     run.settings.runBudgetUsd = Math.min(
-      run.settings.runBudgetUsd,
+      run.settings.runBudgetUsd ?? Infinity,
       workflow.spec.budgetUsd,
     );
   }

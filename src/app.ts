@@ -149,7 +149,6 @@ export function createApp(
         "runBudgetUsd",
         "maxInputChars",
         "maxOutputTokens",
-        "maxTurns",
         "missedRunMinutes",
         "paused",
         "version",

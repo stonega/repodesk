@@ -229,10 +229,10 @@ test("Pi fake stream validates and executes tools sequentially, checkpoints orde
   expect(events.at(-1)).toBe("agent_end");
 });
 test("uncapped requests complete more than eight tool calls across batches and model turns", async () => {
-  for (const batchSize of [2, 12]) {
+  for (const batchSize of [1, 12]) {
     let sent = 0;
     let executed = 0;
-    const batches = 12 / batchSize;
+    const batches = 24 / batchSize;
     const runner = new PiRunner(() => {
       sent++;
       return stream(
@@ -252,7 +252,7 @@ test("uncapped requests complete more than eight tool calls across batches and m
     const result = await runner.run(
       input({
         maxTools: undefined,
-        maxTurns: batches + 1,
+        maxTurns: undefined,
         tools: [
           {
             name: "read",
@@ -274,13 +274,13 @@ test("uncapped requests complete more than eight tool calls across batches and m
     expect(result).toMatchObject({
       status: "succeeded",
       text: "Review completed",
-      tools: 12,
+      tools: 24,
       turns: batches + 1,
     });
-    expect(executed).toBe(12);
+    expect(executed).toBe(24);
     expect(
       result.transcript.filter((m) => m.role === "toolResult"),
-    ).toHaveLength(12);
+    ).toHaveLength(24);
   }
 });
 
@@ -550,15 +550,14 @@ test("compatible endpoint receives the custom model, key and exact thinking leve
   }
 });
 
-test("unknown model pricing must be explicit and known model metadata stays isolated", () => {
-  expect(() => selectedModel("team/custom")).toThrow(
-    "custom_model_pricing_required",
-  );
+test("optional prices remain unknown for custom models and catalog overrides stay isolated", () => {
+  expect(selectedModel("team/custom").pricingKnown).toBe(false);
   const custom = selectedModel("team/custom", {
     modelPricing: { input: 0, output: 0 },
     modelLimits: { contextWindow: 128000, maxOutputTokens: 16000 },
   });
   expect(custom.cost.input).toBe(0);
+  expect(custom.pricingKnown).toBe(true);
   const first = selectedModel("gpt-4.1-mini", {
     modelBaseUrl: "http://localhost:1234/v1",
     thinkingLevel: "high",
@@ -567,8 +566,51 @@ test("unknown model pricing must be explicit and known model metadata stays isol
   expect(first.baseUrl).not.toBe(second.baseUrl);
   expect(second.reasoning).toBe(false);
   expect(second.cost.input).toBeGreaterThan(0);
+  const partial = selectedModel("gpt-4.1-mini", { modelPricing: { input: 0 } });
+  expect(partial.cost.input).toBe(0);
+  expect(partial.cost.output).toBe(second.cost.output);
+  expect(partial.pricingKnown).toBe(true);
+  expect(
+    selectedModel("team/custom", { modelPricing: { input: 0 } }).pricingKnown,
+  ).toBe(false);
 });
 
+test("unpriced custom models run without dollar caps but finite budgets reject before dispatch", async () => {
+  for (const budgets of [
+    { run: Infinity, workspace: Infinity },
+    { run: 1, workspace: Infinity },
+    { run: Infinity, workspace: 1 },
+    { run: 0, workspace: Infinity },
+  ]) {
+    let sent = 0;
+    let reserved = 0;
+    const runner = new PiRunner(() => {
+      sent++;
+      return stream(message([{ type: "text", text: "Done" }]));
+    });
+    const promise = runner.run(
+      input({
+        model: selectedModel("team/unpriced"),
+        remainingBudget: async () => budgets,
+        reserve: async () => {
+          reserved++;
+          return "attempt";
+        },
+      }),
+    );
+    if (budgets.run === Infinity && budgets.workspace === Infinity) {
+      expect((await promise).text).toBe("Done");
+      expect(sent).toBe(1);
+      expect(reserved).toBe(1);
+    } else {
+      await expect(promise).rejects.toThrow(
+        "model_pricing_required_for_budget",
+      );
+      expect(sent).toBe(0);
+      expect(reserved).toBe(0);
+    }
+  }
+});
 test("model capacity and explicit input limits reject before reservation or dispatch", async () => {
   let reservations = 0;
   let calls = 0;
@@ -578,6 +620,7 @@ test("model capacity and explicit input limits reject before reservation or disp
   });
   const model = {
     ...selectedModel("gpt-4.1-mini"),
+    providerContext: false,
     contextWindow: 5000,
     maxTokens: 3000,
   };
@@ -607,6 +650,31 @@ test("model capacity and explicit input limits reject before reservation or disp
   expect(calls).toBe(1);
 });
 
+test("blank context windows defer oversized input to the provider for known and custom models", async () => {
+  for (const id of ["gpt-4.1-mini", "team/custom"]) {
+    let calls = 0;
+    const model = { ...selectedModel(id), contextWindow: 1000 };
+    expect(model.providerContext).toBe(true);
+    const runner = new PiRunner(() => {
+      calls++;
+      return stream(message([{ type: "text", text: "Provider accepted" }]));
+    });
+    const base = input({
+      model,
+      prompt: "x".repeat(150000),
+      maxInputChars: undefined,
+    });
+    expect((await runner.run(base)).text).toBe("Provider accepted");
+    expect(calls).toBe(1);
+    const explicit = selectedModel(id, {
+      modelLimits: { contextWindow: 1000 },
+    });
+    await expect(runner.run({ ...base, model: explicit })).rejects.toThrow(
+      "model_context_limit_exceeded",
+    );
+    expect(calls).toBe(1);
+  }
+});
 test("automatic input capacity permits a tool result that exceeded the old 16K cap", async () => {
   let calls = 0;
   const runner = new PiRunner(() =>
@@ -673,6 +741,7 @@ test("automatic output shrinks to remaining context and supports zero-cost model
   let sent = 0;
   const model = {
     ...selectedModel("gpt-4.1-mini"),
+    providerContext: false,
     contextWindow: 5000,
     maxTokens: 3000,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },

@@ -34,11 +34,21 @@ test("model configuration validates URL, model ID, thinking and prices", () => {
     { modelKey: " " },
     { thinkingLevel: "extreme" },
     { modelPricing: { input: -1, output: 1 } },
-    { modelPricing: { input: 1 } },
+    { modelPricing: { output: Infinity } },
+    { modelLimits: { contextWindow: 0 } },
     { arbitrarySetting: true },
   ]) {
     expect(credentialsSchema.safeParse({ version: 1, ...patch }).success).toBe(
       false,
     );
   }
+  for (const patch of [
+    { modelPricing: { input: 1 } },
+    { modelPricing: { output: 0 } },
+    { modelLimits: { contextWindow: 1000000 } },
+    { modelLimits: { maxOutputTokens: 200000 } },
+  ])
+    expect(credentialsSchema.safeParse({ version: 1, ...patch }).success).toBe(
+      true,
+    );
 });

@@ -357,18 +357,16 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         "remove",
         "edit",
         "budget",
-        "turns",
         "expire",
       ]) {
         const { w, run } = await candidate();
         let gates = 0;
         let answers = 0;
-        if (mode === "turns" || mode === "expire")
+        if (mode === "expire")
           await store.change(w.id, (w) => {
             const r = w.runs.find((r) => r.id === run.id);
             if (!r?.followup) throw Error("run");
-            if (mode === "turns") r.settings.maxTurns = 1;
-            else r.followup.expiresAt = new Date(0).toISOString();
+            r.followup.expiresAt = new Date(0).toISOString();
           });
         const runner: AgentRunner = {
           async run(i) {

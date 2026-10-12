@@ -150,6 +150,7 @@ export class TelegramPoller {
         let delay = 1000;
         try {
           await this.pollOnce(signal);
+          await this.setup.autoActivate();
         } catch (error) {
           if (signal.aborted) break;
           delay = pollingRetryDelay(error);

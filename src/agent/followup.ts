@@ -34,11 +34,6 @@ export async function classifyFollowup(
   if (gate.decision === "reply") return run;
   const tail = gate.transcript.at(-1) as AgentMessage | undefined;
   const complete = tail?.role === "assistant" && tail.stopReason === "stop";
-  requireThat(
-    complete || run.attempts.length < run.settings.maxTurns - 1,
-    "followup_turn_limit",
-    409,
-  );
   const result = complete
     ? {
         text: tail.content

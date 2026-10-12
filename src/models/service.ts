@@ -264,7 +264,11 @@ export class ModelProviders {
     const capabilities = modelCapabilities(selection.model, options);
     return {
       model: selection.model,
-      options: { ...options, modelLimits: capabilities?.limits },
+      options: {
+        ...options,
+        modelLimits: capabilities?.limits,
+        providerContext: selection.modelLimits?.contextWindow === undefined,
+      },
       provider: {
         id: provider.id,
         version: provider.version,

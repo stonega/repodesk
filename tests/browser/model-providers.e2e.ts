@@ -2,11 +2,19 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, type Route, test } from "@playwright/test";
 import { database } from "../../src/db/pool.ts";
-import { passwordHash } from "../../src/setup/credentials.ts";
+import { Store } from "../../src/db/repositories.ts";
+import { encrypt, hash, passwordHash } from "../../src/setup/credentials.ts";
 import { workspace } from "../fixtures.ts";
 import { chooseOption } from "./dropdown-helpers.ts";
+
+function browserDbPath() {
+  return (
+    process.env.BROWSER_DB_PATH ??
+    join(tmpdir(), "repodesk-browser-3107-db.json")
+  );
+}
 
 async function fixture(page: Page) {
   const db = JSON.parse(
@@ -75,6 +83,247 @@ async function addProvider(page: Page) {
   return catalog.providers[0].id as string;
 }
 for (const width of [1280, 390]) {
+  test(`model settings keeps its layout without activation during loading and errors at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { w } = await fixture(page);
+    const path = `**/api/admin/workspaces/${w.id}/models`;
+    let held: Route | undefined;
+    await page.route(path, (route) => {
+      held = route;
+    });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    const providers = page.getByRole("region", { name: "Model providers" });
+    const chat = page.getByRole("region", { name: "Bot chat model" });
+    await expect(providers.locator(".skeleton").first()).toBeVisible();
+    await expect(
+      chat.getByRole("heading", { name: "Bot chat model" }),
+    ).toBeVisible();
+    await expect(
+      providers.getByRole("button", { name: "New model provider" }),
+    ).toBeDisabled();
+    await expect(
+      page.getByRole("region", { name: "Activation", exact: true }),
+    ).toHaveCount(0);
+    await page.screenshot({
+      path: test.info().outputPath("model-loading.png"),
+      fullPage: true,
+    });
+    await held?.fulfill({ status: 503, json: { error: "unavailable" } });
+    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(providers).toBeVisible();
+    await expect(chat).toBeVisible();
+    await page.screenshot({
+      path: test.info().outputPath("model-load-error.png"),
+      fullPage: true,
+    });
+    await page.unroute(path);
+    await page.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(providers).toContainText("No providers yet");
+    await expect(providers.locator(".skeleton")).toHaveCount(0);
+    await expect(page.locator("body")).toHaveJSProperty("scrollWidth", width);
+  });
+  test(`model save activates automatically without an activation card at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { w } = await fixture(page);
+    const db = JSON.parse(await readFile(browserDbPath(), "utf8"));
+    const pool = database(db.url);
+    try {
+      const store = new Store(pool);
+      // No earlier workspace may make this disposable deployment ready during
+      // the pending/failed-save assertions, including in polling-mode suites.
+      await pool.query(
+        "UPDATE workspaces SET data=data-'chatModel' WHERE id<>$1",
+        [w.id],
+      );
+      const d = await store.deployment();
+      d.active = false;
+      d.bot = { id: "999", username: "fixture_bot", visibleAll: true };
+      d.credentials.bot = encrypt(
+        "ab".repeat(32),
+        "bot",
+        "999:fixture-bot-token",
+      );
+      delete d.credentials.model;
+      d.webhookReady = true;
+      await store.saveDeployment(pool, d);
+      await pool.query(
+        "INSERT INTO telegram_polling(bot_id,credential_hash,ready_at) VALUES($1,$2,now()) ON CONFLICT(bot_id) DO UPDATE SET credential_hash=$2,ready_at=now(),error=NULL",
+        [d.bot.id, hash(d.credentials.bot)],
+      );
+    } finally {
+      await pool.end();
+    }
+    const active = async () =>
+      (await (await page.request.get("/api/setup/progress")).json()).active;
+    const noActivationStep = async () => {
+      await expect(
+        page.getByRole("region", { name: "Activation", exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("heading", { name: "Activate the bot" }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "Activate bot", exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("heading", { name: "Telegram access" }),
+      ).toHaveCount(0);
+    };
+    await noActivationStep();
+    await page.screenshot({
+      path: test.info().outputPath("automatic-activation-empty.png"),
+      fullPage: true,
+    });
+    const provider = await addProvider(page);
+    expect(await active()).toBe(false);
+    const chat = page.getByRole("region", { name: "Bot chat model" });
+    await chat.getByRole("button", { name: "Edit chat model" }).click();
+    const editor = page.getByRole("dialog", { name: "Edit chat model" });
+    await chooseOption(
+      editor.getByLabel("Model provider", { exact: true }),
+      provider,
+    );
+    await chooseOption(
+      editor.getByLabel("Model", { exact: true }),
+      "gpt-4.1-mini",
+    );
+    const path = `**/api/admin/workspaces/${w.id}/models`;
+    let pending: Route | undefined;
+    await page.route(path, (route) => {
+      if (route.request().method() === "PUT") pending = route;
+      else void route.continue();
+    });
+    await editor.getByRole("button", { name: "Save chat model" }).click();
+    await expect.poll(() => !!pending).toBe(true);
+    await expect(
+      editor.getByRole("button", { name: "Saving…" }),
+    ).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(editor).toBeVisible();
+    expect(await active()).toBe(false);
+    await page.screenshot({
+      path: test.info().outputPath("automatic-activation-pending.png"),
+      fullPage: true,
+    });
+    await pending?.fulfill({
+      status: 409,
+      json: { error: "model_not_available" },
+    });
+    await expect(editor.getByRole("alert")).toBeVisible();
+    await expect(editor.getByLabel("Model", { exact: true })).toHaveAttribute(
+      "value",
+      "gpt-4.1-mini",
+    );
+    expect(await active()).toBe(false);
+    await page.screenshot({
+      path: test.info().outputPath("automatic-activation-error.png"),
+      fullPage: true,
+    });
+    await page.unroute(path);
+    await editor.getByRole("button", { name: "Save chat model" }).click();
+    await expect(editor).toHaveCount(0);
+    await expect.poll(active).toBe(true);
+    await expect(chat).toContainText("gpt-4.1-mini");
+    await expect(chat.locator("input,form")).toHaveCount(0);
+    await noActivationStep();
+    await page.reload();
+    await expect(chat).toContainText("gpt-4.1-mini");
+    await noActivationStep();
+    await expect(page.locator("body")).toHaveJSProperty("scrollWidth", width);
+    await page.screenshot({
+      path: test.info().outputPath("automatic-activation-saved.png"),
+      fullPage: true,
+    });
+  });
+  test(`custom chat capacity and prices are independently optional at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { w } = await fixture(page);
+    const provider = await addProvider(page);
+    const chat = page.getByRole("region", { name: "Bot chat model" });
+    const edit = chat.getByRole("button", { name: "Edit chat model" });
+    await edit.click();
+    const editor = page.getByRole("dialog", { name: "Edit chat model" });
+    await chooseOption(
+      editor.getByLabel("Model provider", { exact: true }),
+      provider,
+    );
+    await chooseOption(
+      editor.getByLabel("Model", { exact: true }),
+      "team/custom-model",
+    );
+    await editor.getByText("Advanced model settings", { exact: true }).click();
+    for (const name of [
+      "Model context window (tokens)",
+      "Model maximum output (tokens)",
+      "Input price (USD / million tokens)",
+      "Output price (USD / million tokens)",
+    ])
+      await expect(editor.getByLabel(name)).toHaveValue("");
+    await expect(editor).toContainText("All four fields are optional");
+    await expect(editor).toContainText(
+      "A blank context window lets the provider enforce its limit",
+    );
+    await expect(
+      editor.getByLabel("Model context window (tokens)"),
+    ).toHaveAttribute("placeholder", "Provider default (optional)");
+    await page.screenshot({
+      path: test.info().outputPath("model-optional-editor.png"),
+      fullPage: true,
+    });
+    await editor
+      .getByRole("button", { name: "Save chat model" })
+      .scrollIntoViewIfNeeded();
+    await expect(
+      editor.getByLabel("Output price (USD / million tokens)"),
+    ).toBeVisible();
+    await page.screenshot({
+      path: test.info().outputPath("model-optional-editor-bottom.png"),
+      fullPage: true,
+    });
+    await editor.getByRole("button", { name: "Save chat model" }).click();
+    await expect(editor).toHaveCount(0);
+    await expect(chat).toContainText("team/custom-model");
+    await expect(chat.locator("input,form")).toHaveCount(0);
+    let saved = await (
+      await page.request.get(`/api/admin/workspaces/${w.id}/models`)
+    ).json();
+    expect(saved.selection.modelLimits).toBeUndefined();
+    expect(saved.selection.modelPricing).toBeUndefined();
+    await expect(chat).toContainText("Provider default");
+    await edit.click();
+    await editor.getByText("Advanced model settings", { exact: true }).click();
+    await editor.getByLabel("Model context window (tokens)").fill("1000000");
+    await editor.getByLabel("Input price (USD / million tokens)").fill("0");
+    await editor.getByRole("button", { name: "Save chat model" }).click();
+    await expect(editor).toHaveCount(0);
+    saved = await (
+      await page.request.get(`/api/admin/workspaces/${w.id}/models`)
+    ).json();
+    expect(saved.selection.modelLimits).toEqual({ contextWindow: 1000000 });
+    expect(saved.selection.modelPricing).toEqual({ input: 0 });
+    await edit.click();
+    await editor.getByText("Advanced model settings", { exact: true }).click();
+    await editor.getByLabel("Model context window (tokens)").fill("");
+    await editor.getByLabel("Input price (USD / million tokens)").fill("");
+    await editor.getByRole("button", { name: "Save chat model" }).click();
+    await expect(editor).toHaveCount(0);
+    saved = await (
+      await page.request.get(`/api/admin/workspaces/${w.id}/models`)
+    ).json();
+    expect(saved.selection.modelLimits).toBeUndefined();
+    expect(saved.selection.modelPricing).toBeUndefined();
+    await expect(page.locator("body")).toHaveJSProperty("scrollWidth", width);
+    await page.screenshot({
+      path: test.info().outputPath("model-optional-summary.png"),
+      fullPage: true,
+    });
+  });
   test(`provider and chat display/editor remain separate, with failed and pending saves at ${width}px`, async ({
     page,
   }) => {

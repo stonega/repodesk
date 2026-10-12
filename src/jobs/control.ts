@@ -38,7 +38,7 @@ export async function deliverAccessHelp(store: Store, setup: SetupService) {
       const text = allowed
         ? deployment.active
           ? "You already have access. Send /help to get started."
-          : "RepoDesk is not active yet. Ask a deployment admin to activate it in Model settings."
+          : "RepoDesk setup is not complete yet. Ask a deployment admin to check the model settings and Telegram connection. The bot activates automatically when ready."
         : request?.status === "pending"
           ? "Your access request is pending. A workspace admin will review it."
           : rejected

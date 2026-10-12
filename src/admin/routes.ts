@@ -211,7 +211,7 @@ export function adminRoutes(
   );
   app.put("/api/admin/workspaces/:id/models", async (c) =>
     c.json(
-      await setup.models.saveChat(
+      await setup.saveChatModel(
         c.get("session").admin,
         validId(c.req.param("id")),
         await c.req.json(),

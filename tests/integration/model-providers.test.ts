@@ -228,7 +228,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       }),
     ).rejects.toThrow("version_conflict");
   });
-  test("bot selection is workspace-specific and unavailable models or unknown capacity cannot be saved", async () => {
+  test("bot selection is workspace-specific and custom metadata is optional", async () => {
     const path = `/api/admin/workspaces/${w.id}/models`;
     expect(
       (
@@ -245,15 +245,17 @@ const rootUrl = process.env.TEST_DATABASE_URL;
           selection: { providerId, model: "team/custom-model" },
         })
       ).status,
-    ).toBe(400);
+    ).toBe(200);
     const response = await request(path, "PUT", {
-      revision: 0,
+      revision: 1,
       selection: { providerId, model: "gpt-4.1-mini" },
     });
     expect(response.status).toBe(200);
     expect((await store.read(w.id)).chatModel?.selection.model).toBe(
       "gpt-4.1-mini",
     );
+    const resolved = await setup.models.chat(await store.read(w.id));
+    expect(resolved?.options.providerContext).toBe(true);
     expect((await store.read(sibling.id)).chatModel).toBeUndefined();
     expect(
       (

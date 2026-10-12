@@ -24,7 +24,9 @@ Content-Type: application/json
 }
 
 ### Capacity values above are examples: replace with your provider's documented limits.
-### Set modelLimits to null to restore bundled catalog values for a known model ID.
+### Both capacity values and prices are optional, including independent overrides.
+### Set modelLimits to null to restore automatic catalog/app default capacity.
+### Unknown model prices require unlimited budgets; configure prices before finite budgets.
 
 ### Save workspace budgets (replace workspace ID and its current version)
 PUT {{baseUrl}}/api/admin/workspaces/REPLACE_WORKSPACE_ID/settings
@@ -38,8 +40,7 @@ Content-Type: application/json
   "settings": {
     "name": "My team",
     "timezone": "Asia/Taipei",
-    "runBudgetUsd": 0.1,
-    "monthlyBudgetUsd": 10,
-    "maxTurns": 5
+    "runBudgetUsd": null,
+    "monthlyBudgetUsd": null
   }
 }

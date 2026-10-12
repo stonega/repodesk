@@ -44,6 +44,7 @@ export const settingsSchema = z.preprocess(
     delete settings.language;
     delete settings.maxInputChars;
     delete settings.maxOutputTokens;
+    delete settings.maxTurns;
     return settings;
   },
   z
@@ -51,9 +52,8 @@ export const settingsSchema = z.preprocess(
       name: z.string().trim().min(1).max(80),
       timezone,
       retentionDays: z.number().int().min(1).max(90).default(30),
-      monthlyBudgetUsd: z.number().finite().min(0).default(10),
-      runBudgetUsd: z.number().finite().min(0).default(0.1),
-      maxTurns: z.number().int().min(1).max(20).default(3),
+      monthlyBudgetUsd: z.number().finite().min(0).nullable().default(null),
+      runBudgetUsd: z.number().finite().min(0).nullable().default(null),
       missedRunMinutes: z.literal(5).default(5),
       paused: z.boolean().default(false),
     })
@@ -374,6 +374,7 @@ export interface Run {
     id: string;
     reserved: number;
     actual?: number;
+    pricingUnknown?: boolean;
     purpose?: "compaction" | "followup";
     tokens?: {
       input: number;

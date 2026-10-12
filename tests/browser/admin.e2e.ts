@@ -34,7 +34,7 @@ test.describe
         await pool.end();
       }
     });
-    test("first visit follows setup into panel model settings and activation", async ({
+    test("first visit follows setup into panel model settings with automatic activation", async ({
       page,
     }) => {
       await page.goto("/");
@@ -240,7 +240,7 @@ test.describe
       ).toBeVisible();
       await expect(
         page.getByRole("button", { name: "Activate bot", exact: true }),
-      ).toBeDisabled();
+      ).toHaveCount(0);
       const modelCard = page.getByRole("region", { name: "Bot chat model" });
       const providerCard = page.getByRole("region", {
         name: "Model providers",
@@ -274,9 +274,9 @@ test.describe
       await modelDialog
         .getByRole("button", { name: "Save chat model" })
         .click();
-      await expect(modelDialog.getByRole("alert")).toContainText(
-        "token prices",
-      );
+      await expect(modelDialog).toHaveCount(0);
+      await expect(modelCard).toContainText("team/custom-model");
+      await modelCard.getByRole("button", { name: "Edit chat model" }).click();
       await modelDialog
         .getByText("Advanced model settings", { exact: true })
         .click();
@@ -369,39 +369,24 @@ test.describe
       });
       await page.setViewportSize({ width: 1280, height: 900 });
       if (process.env.BROWSER_TELEGRAM_TRANSPORT === "polling") {
-        await expect(page.getByText(/Polling: ready/)).toBeVisible({
-          timeout: 10000,
-        });
-        await expect(
-          page.getByRole("button", { name: "Activate bot", exact: true }),
-        ).toBeEnabled();
-        await page.getByRole("button", { name: "Activate bot" }).click();
-        await expect(
-          page.getByText(/Active. Share the access link/),
-        ).toBeVisible();
-        await expect(page.getByText("No one has access yet.")).toBeVisible();
-        await expect(
-          page.getByText("Link my Telegram account (optional)"),
-        ).toBeVisible();
-        await page.getByLabel("Telegram user ID").fill("202");
-        await page.getByRole("button", { name: "Add member" }).click();
-        await expect(page.getByText("202 · member")).toBeVisible();
-        await page.getByRole("button", { name: "Revoke" }).click();
-        await expect(page.getByText("No one has access yet.")).toBeVisible();
+        await expect
+          .poll(
+            async () =>
+              (await (await page.request.get("/api/setup/progress")).json())
+                .active,
+          )
+          .toBe(true);
       } else {
-        await expect(
-          page.getByRole("button", { name: "Register Telegram webhook" }),
-        ).toBeVisible();
-        await page
-          .getByRole("button", { name: "Register Telegram webhook" })
-          .click();
-        await expect(
-          page.getByText(/Webhook mode requires a public HTTPS address/),
-        ).toBeVisible();
-        await expect(
-          page.getByRole("button", { name: "Activate bot", exact: true }),
-        ).toBeDisabled();
+        expect(
+          (await (await page.request.get("/api/setup/progress")).json()).active,
+        ).toBe(false);
       }
+      await expect(
+        page.getByRole("region", { name: "Activation", exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("heading", { name: "Telegram access" }),
+      ).toHaveCount(0);
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await page.screenshot({
@@ -439,6 +424,13 @@ test.describe
       const teamCard = page.getByRole("region", { name: "Team" });
       await expect(teamCard).toContainText("Browser team");
       await expect(teamCard).toContainText("5 minutes");
+      for (const label of ["Run budget (USD)", "Monthly budget (USD)"])
+        await expect(
+          teamCard.getByRole("listitem").filter({ hasText: label }),
+        ).toContainText("None");
+      await expect(
+        teamCard.getByText("Model calls per run", { exact: true }),
+      ).toHaveCount(0);
       await expect(
         teamCard.getByRole("button", { name: "Edit team configuration" }),
       ).toHaveCount(1);
@@ -462,18 +454,21 @@ test.describe
       await expect(
         callsDialog.getByLabel("Missed-run grace (minutes)"),
       ).toHaveCount(0);
-      await callsDialog
-        .getByRole("spinbutton", { name: "Model calls per run" })
-        .fill("21");
+      await expect(
+        callsDialog.getByLabel("Model calls per run", { exact: true }),
+      ).toHaveCount(0);
+      await expect(callsDialog.getByLabel("Run budget (USD)")).toHaveValue("");
+      await expect(callsDialog.getByLabel("Monthly budget (USD)")).toHaveValue(
+        "",
+      );
+      await callsDialog.getByLabel("Run budget (USD)").fill("-1");
       await page
         .getByRole("button", { name: "Save configuration", exact: true })
         .click();
-      await expect(
-        callsDialog.getByRole("spinbutton", { name: "Model calls per run" }),
-      ).toHaveAttribute("aria-invalid", "true");
-      await callsDialog
-        .getByRole("spinbutton", { name: "Model calls per run" })
-        .fill("20");
+      await expect(callsDialog.getByLabel("Run budget (USD)")).toHaveAttribute(
+        "aria-invalid",
+        "true",
+      );
       await callsDialog.getByLabel("Run budget (USD)").fill("200");
       await page.screenshot({
         path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/workspace-settings-desktop.png`,
@@ -535,7 +530,12 @@ test.describe
         teamCard
           .getByRole("listitem")
           .filter({ hasText: "Model calls per run" }),
-      ).toContainText("20 calls");
+      ).toHaveCount(0);
+      await expect(
+        teamCard
+          .getByRole("listitem")
+          .filter({ hasText: "Monthly budget (USD)" }),
+      ).toContainText("None");
       await expect(
         teamCard.getByRole("listitem").filter({ hasText: "Run budget (USD)" }),
       ).toContainText("$200");

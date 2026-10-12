@@ -113,12 +113,6 @@ export async function compactTopic(
       if (r.compaction?.state !== "started") {
         const plan = compactionPlan(w, r, input);
         if (!plan) return { run: structuredClone(r) };
-        // Leave at least one provider turn for the user's answer.
-        requireThat(
-          r.attempts.length < r.settings.maxTurns - 1,
-          "compaction_turn_limit",
-          409,
-        );
         r.compaction = plan;
       }
       requireThat(
@@ -140,11 +134,6 @@ export async function compactTopic(
     );
     const tail = plan.transcript.at(-1) as AgentMessage | undefined;
     const complete = tail?.role === "assistant" && tail.stopReason === "stop";
-    requireThat(
-      complete || run.attempts.length < run.settings.maxTurns - 1,
-      "compaction_turn_limit",
-      409,
-    );
     const result = complete
       ? {
           text: tail.content

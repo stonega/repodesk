@@ -118,6 +118,7 @@ export async function startWorker(
           store.log.write("log_storage_unavailable");
         }
       }
+      await setup.autoActivate();
       const d = await store.deployment();
       for (const workspaceId of await store.ids()) {
         await store.change(workspaceId, async (w, sql) => {

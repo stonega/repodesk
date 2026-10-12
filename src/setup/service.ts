@@ -11,8 +11,10 @@ import type { Store } from "../db/repositories.ts";
 import {
   type Admin,
   type Deployment,
+  Fault,
   requireThat,
   type Settings,
+  type Workspace,
 } from "../domain.ts";
 import { ModelProviders, type ModelTransport } from "../models/service.ts";
 import {
@@ -29,6 +31,30 @@ import { decideAccessRequest } from "../workspaces/access-requests.ts";
 import { audit, revokeWork } from "../workspaces/policy.ts";
 import { newWorkspace } from "../workspaces/service.ts";
 import { decrypt, encrypt, hash, token } from "./credentials.ts";
+
+function activationModelReady(d: Deployment, w: Workspace) {
+  try {
+    if (w.chatModel) {
+      const selection = w.chatModel.selection;
+      const provider = d.modelProviders?.find(
+        (p) => p.id === selection.providerId && p.operatorId === w.operatorId,
+      );
+      if (!provider?.credential || !provider.models.includes(selection.model))
+        return false;
+      selectedModel(selection.model, {
+        ...selection,
+        modelBaseUrl: provider.baseUrl,
+      });
+    } else {
+      if (!d.credentials.model) return false;
+      selectedModel(d.model, d);
+    }
+    return true;
+  } catch (error) {
+    if (error instanceof Fault || error instanceof z.ZodError) return false;
+    throw error;
+  }
+}
 export class SetupService {
   readonly models: ModelProviders;
   constructor(
@@ -104,6 +130,11 @@ export class SetupService {
       );
     });
     return { id: w.id };
+  }
+  async saveChatModel(admin: Admin, id: string, input: unknown) {
+    await this.models.saveChat(admin, id, input);
+    await this.autoActivate(admin.id);
+    return this.models.workspace(admin, id);
   }
   async saveCredentials(
     admin: Admin,
@@ -184,6 +215,7 @@ export class SetupService {
         [admin.id],
       );
     });
+    await this.autoActivate(admin.id);
     return this.progress(admin);
   }
   async identityToken(admin: Admin, id: string) {
@@ -369,7 +401,47 @@ export class SetupService {
       current.version++;
       await this.store.saveDeployment(sql, current);
     });
+    await this.autoActivate(admin.id);
     return result;
+  }
+  async autoActivate(operatorId?: string) {
+    if ((await this.store.deployment()).active) return true;
+    return transaction(this.store.pool, async (sql) => {
+      const d = await this.store.deployment(sql, true);
+      if (d.active) return true;
+      if (
+        !d.bot ||
+        !d.credentials.bot ||
+        !(await this.receiverStatus(d, sql)).ready
+      )
+        return false;
+      const rows = await sql.query<{ data: Workspace }>(
+        "SELECT w.data FROM workspaces w JOIN admins a ON a.id=w.operator_id WHERE a.operator=true AND ($1::uuid IS NULL OR w.operator_id=$1) ORDER BY w.id FOR UPDATE OF w",
+        [operatorId ?? null],
+      );
+      const ready = rows.rows
+        .map((r) => r.data)
+        .find(
+          (w) =>
+            !w.deletion &&
+            w.skills.some((s) => s.enabled && s.published.length) &&
+            activationModelReady(d, w),
+        );
+      if (!ready) return false;
+      d.active = true;
+      d.ownerVerified = rows.rows.some(
+        (r) =>
+          !r.data.deletion &&
+          r.data.members.some((m) => m.role === "owner" && m.active),
+      );
+      d.version++;
+      await this.store.saveDeployment(sql, d);
+      await sql.query(
+        "INSERT INTO operator_audit(actor,action,target) VALUES($1,'deployment.activated','deployment')",
+        [ready.operatorId],
+      );
+      return true;
+    });
   }
   async activate(admin: Admin) {
     operator(admin);
@@ -411,6 +483,7 @@ export class SetupService {
         "workspace_and_skill_required",
         409,
       );
+      if (d.active) return;
       d.active = true;
       d.ownerVerified = rows.rows.some((r) =>
         r.data.members.some(

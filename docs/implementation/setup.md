@@ -58,8 +58,10 @@ granted repositories and shows a RepoDesk welcome dialog with confetti. Click
 **Get started** to enter the workspace. If more
 than one installation is accessible, use Plugins to choose the right account.
 Selecting **All repositories** in GitHub connects all repositories currently
-accessible to the authorizing user through that installation. Entering the panel
-does not activate the bot. Configure the model and activate under **Model settings**.
+accessible to the authorizing user through that installation. Successful model
+setup activates the bot automatically once the Telegram receiver and an enabled
+published skill are ready. If Telegram connects later, activation finishes
+automatically; there is no activation step in **Model settings**.
 Bot and model credentials are write-only and encrypted
 with AES-256-GCM; the database does not contain the runtime encryption key.
 
@@ -97,12 +99,13 @@ container access; keep the containing `secrets/` directory private.
 
 Save a workspace and bot token in Setup. Selecting polling explicitly opts the worker
 into outbound Telegram requests using the saved bot credential, including before
-activation so receiver readiness can be checked. Wait for **Polling: ready**, finish
-model settings, then activate. The bot denies ordinary requests until the web
-administrator approves or allows Telegram users from Setup. Personal Telegram
+activation so receiver readiness can be checked. Save the chat model; the bot
+activates automatically after the polling worker connects. The bot denies ordinary
+requests until the web administrator approves or allows Telegram users from
+**Members & access**. Personal Telegram
 account linking is optional and can happen later. The model, tenant and approval
 requirements are identical in both modes. No webhook or tunnel is needed. The setup
-page updates receiver status automatically every five seconds in both transport modes.
+progress API reports receiver readiness in both transport modes.
 An allowed user who messages the bot before activation receives a throttled setup
 notice instead of an AI response.
 
@@ -147,7 +150,7 @@ Webhook remains the default transport; polling starts only when explicitly confi
 1. Configure an HTTPS reverse proxy and set `PUBLIC_ORIGIN` to its exact origin,
    without a trailing slash. Restart the app and worker after origin changes.
 2. Enter a dedicated BotFather token in Setup. Save calls `getMe` and shows its identity.
-3. Click **Register Telegram webhook** under Model settings in the admin panel. This reconciles `getWebhookInfo` and
+3. Click **Register Telegram webhook** under **Site domain** in the admin panel. This reconciles `getWebhookInfo` and
    `setWebhook` without dropping pending updates. Only verification/control interactions
    work until activation. Alternatively, explicitly run
    `REGISTER_STAGING_WEBHOOK=yes bun run register:webhook` with host configuration.
@@ -155,9 +158,10 @@ Webhook remains the default transport; polling starts only when explicitly confi
    level under **Model settings**. The default base URL is
    `https://api.openai.com/v1`, model `gpt-4.1-mini`, and thinking `off`.
    Choose a suggested model or enter any custom ID. Set budgets and enabled skills.
-5. Review readiness under Model settings and activate. No Telegram owner or member is required at
-   activation; an empty membership means the bot denies ordinary use. Share the
-   request-access link there and approve a user, or enroll a known numeric ID.
+5. Successful model setup activates the bot automatically when its Telegram receiver
+   and an enabled published skill are ready. No Telegram owner or member is required
+   at activation; an empty membership means the bot denies ordinary use. Share the
+   request-access link in **Members & access** and approve a user, or enroll a known numeric ID.
    The web administrator can also manage workspace settings, skills and access in
    the admin panel before linking a personal Telegram account. Runs & delivery
    shows every retained workspace run's request, response, transcript and delivery
@@ -191,13 +195,17 @@ who are not workspace members, and does not import old history.
 ## OpenAI-compatible model settings
 
 The setup wizard saves Telegram credentials before moving to GitHub. The admin
-panel's **Model settings** page saves model credentials separately and shows
-activation requirements. Errors leave entered values in place. A saved credential
+panel's **Model settings** page shows provider and chat-model summaries with modal
+editors. A successful model save activates the bot automatically once its Telegram
+receiver and an enabled published skill are ready. The worker retries that transition
+when later prerequisites become ready or after restart. Replacing a bot token
+temporarily disables reception until it is ready again, then activation is automatic.
+Deployment pause and member approvals remain independent. Errors leave entered values in place. A saved credential
 can be retained by leaving its write-only field blank. Model settings shows saved
 values in a compact summary card, with only configured/missing status for the API
 key. Click **Edit** to open the model configuration modal. Open **Advanced model
 settings** inside it for thinking level, capacity overrides and token prices,
-including the required values for custom models. Cancel discards the draft; saving
+including optional overrides for custom models. Cancel discards the draft; saving
 closes the modal and updates the summary. You can return to those controls later.
 Activation never displays credentials.
 
@@ -219,10 +227,14 @@ support streaming Chat Completions, tool calling, `max_completion_tokens`, and
 `store:false`. Provider-specific thinking formats are not configured by this form.
 
 Known OpenAI IDs use Pi's bundled price metadata unless you supply a price override.
-Custom IDs require input/output USD prices per million tokens for budget estimates;
-use explicit zeros for a free local model. Overrides also price cached input at the
-input rate and persist until replaced. Review both prices when changing models or
-providers; recorded costs are estimates, not an upstream billing guarantee.
+Each price is optional and can be overridden independently. Missing custom-model
+prices remain unknown; explicit zeros identify a free model. Unknown-price calls
+can run with unlimited workspace budgets, retain token counts and are excluded from
+dollar totals. A finite run/month budget requires known input and output prices
+before dispatch (`model_pricing_required_for_budget`). Unpriced historical calls
+also block finite budgets until their actual costs are reconciled. An input override
+prices cached input at that rate. Review prices when changing models/providers;
+recorded costs are estimates, not an upstream billing guarantee.
 
 The worker pins model capacity, endpoint, thinking level and prices at the first execution of a run.
 Later thinking/price edits apply to future runs. If an endpoint changes, unfinished
@@ -236,11 +248,17 @@ See [the API example](../../examples/model-settings.http) and
 
 Known model IDs use the bundled Pi catalog for context window and maximum output.
 The catalog is versioned package data, not a live provider discovery request. Proxies
-may differ: operators can override both values in **Model configuration** using their
-provider's documented token limits. Unknown custom IDs require both values; the app
-no longer invents 128K/16K capabilities. Existing custom configurations need these
-values before the next run. Saving Telegram credentials remains available meanwhile.
-Set `modelLimits: null` to return to catalog values. Omitted overrides persist for the
+may differ: operators can override either value in **Model configuration** using their
+provider's documented token limits. Both capacity fields and both prices are optional
+in Advanced model settings. A blank context window lets the provider enforce its
+own limit, including for known models; the app does not reject input using an assumed
+window. Catalog context metadata remains available for conversation-memory planning.
+Unknown models have no assumed context capacity and use up to 16,384 output tokens
+unless overridden; this output allowance is app policy, not a claimed provider
+capability. When a context window is explicitly configured, automatic output fits
+its remaining capacity and explicit output must leave room for input. Clear fields in the chat model
+editor to remove overrides. Set `modelLimits: null` to return to automatic values in
+the legacy deployment API. Omitted overrides there persist for the
 same model/endpoint; changing either clears them unless explicitly supplied again.
 Model limits are pinned at first execution, alongside endpoint, thinking and pricing.
 
@@ -258,17 +276,23 @@ from older clients; migration `010_automatic_response_settings.sql` removes them
 current workspace settings while retaining historical run snapshots.
 
 Before each model call, serialized UTF-8 input bytes provide a conservative token
-estimate. Output allowance is the minimum of model maximum output, remaining context
-capacity, and what the remaining USD budgets can reserve. This is not an exact
+estimate. Output allowance fits the model's configured/catalog/default output allowance,
+any explicitly configured context window, and what the remaining USD budgets can
+reserve. With no context override, the provider enforces its context limit. This is not an exact
 provider tokenizer count. Tool definitions, history and tool results all count.
 The worker never silently summarizes context or translates the model's response.
 Bounded evaluation scripts can still supply internal input/output caps.
 
 USD run/month budgets accept finite non-negative amounts without the old $5/$1,000
 ceilings. Both budgets are checked transactionally before each dispatch; unknown
-charges remain reserved. Zero permits only zero-cost requests. Calls per run accept
-integers from 1 to 20 (default 3); the run deadline and eight-tool-call limit remain
-operational bounds. Set `RUN_TIMEOUT_SECONDS` in `.env` (default 300, range 1–1800)
+charges remain reserved. Run and monthly budgets default to None (no limit), saved
+as `null`. Clear either budget field to restore None; an entered zero permits only
+zero-cost requests. Existing explicit dollar budgets remain configured until edited.
+Model calls per run has been removed; older clients' `maxTurns` is discarded and
+migration `018_remove_model_call_limit.sql` removes current saved overrides. Historical
+run snapshots remain audit evidence and no longer impose call quotas. Ordinary
+assistant requests have no fixed model-call or tool-call quota. Set
+`RUN_TIMEOUT_SECONDS` in `.env` (default 300, range 1–1800)
 and redeploy to change the total wall-time allowance per execution. Reasoning
 models can need more than the previous 90 seconds. Queue expiry is set 60 seconds
 beyond this limit. Existing queued jobs retain their original queue expiry; let
@@ -282,7 +306,7 @@ overspend before dispatch.
 The form reports individual invalid fields; API validation includes safe `issues`
 with field paths and messages, never submitted values. Runtime logs preserve
 `input_budget_exceeded`, `model_output_limit_exceeded`, `model_context_limit_exceeded`
-and `model_limits_required`. Changes apply to new runs; failed runs are not retried
+and `model_pricing_required_for_budget`. Changes apply to new runs; failed runs are not retried
 automatically. Large outputs still use the existing Telegram reply truncation; this
 change does not introduce long-message delivery or remove the response-length prompt.
 
@@ -535,8 +559,10 @@ Workspace deletion removes its selection; shared provider configuration remains.
 Chat uses Chat Completions. Codex and OCR delegation use the Codex Responses path;
 select a compatible model/provider for those services. `/models` does not prove
 protocol support or provide standard capacity/pricing data. Known bot models use
-the bundled Pi catalog; custom models require documented limits and token prices.
-Use Advanced model settings to supply or override those values. No paid model call
+the bundled Pi catalog. Blank context windows defer to the provider; custom models
+use an automatic app output allowance and unknown prices when overrides are omitted.
+Use Advanced model settings to supply
+any independently optional value. No paid model call
 is made by provider discovery. Old deployment chat settings and saved Codex keys
 remain supported until the service switches to a shared provider. ChatGPT device
 code sign-in remains an independent option.

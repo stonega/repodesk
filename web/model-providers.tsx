@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import {
-  modelLimitsSchema,
+  DEFAULT_MODEL_MAX_OUTPUT,
+  modelLimitOverridesSchema,
+  modelOptionsSchema,
   type ThinkingLevel,
   thinkingLevels,
 } from "../src/agent/model-settings.ts";
@@ -53,30 +55,41 @@ export function selectionFromForm(
   const output = String(values.get("modelMaxOutput") ?? "");
   const inputPrice = String(values.get("modelInputPrice") ?? "");
   const outputPrice = String(values.get("modelOutputPrice") ?? "");
-  if (!!context !== !!output) throw new Error("Enter both model limits.");
-  if (!!inputPrice !== !!outputPrice)
-    throw new Error("Enter both token prices.");
-  if (context && output) {
-    const parsed = modelLimitsSchema.safeParse({
-      contextWindow: Number(context),
-      maxOutputTokens: Number(output),
+  if (context || output) {
+    const parsed = modelLimitOverridesSchema.safeParse({
+      ...(context ? { contextWindow: Number(context) } : {}),
+      ...(output ? { maxOutputTokens: Number(output) } : {}),
     });
     if (!parsed.success)
       throw new Error(
         parsed.error.issues[0]?.message ?? "Check the model limits.",
       );
   }
-  return {
+  const result = {
     ...selection,
     modelLimits:
-      context && output
-        ? { contextWindow: Number(context), maxOutputTokens: Number(output) }
+      context || output
+        ? {
+            ...(context ? { contextWindow: Number(context) } : {}),
+            ...(output ? { maxOutputTokens: Number(output) } : {}),
+          }
         : undefined,
     modelPricing:
-      inputPrice && outputPrice
-        ? { input: Number(inputPrice), output: Number(outputPrice) }
+      inputPrice || outputPrice
+        ? {
+            ...(inputPrice ? { input: Number(inputPrice) } : {}),
+            ...(outputPrice ? { output: Number(outputPrice) } : {}),
+          }
         : undefined,
   };
+  const pricing = modelOptionsSchema.shape.modelPricing.safeParse(
+    result.modelPricing,
+  );
+  if (!pricing.success)
+    throw new Error(
+      pricing.error.issues[0]?.message ?? "Check the token prices.",
+    );
+  return result;
 }
 export function ModelPicker({
   request,
@@ -216,9 +229,11 @@ export function ModelPicker({
         >
           <summary>Advanced model settings</summary>
           <p className="muted">
-            Known models use catalog capacity and token prices. For a custom
-            model, enter its documented limits and prices. Use 0 for a free
-            model.
+            All four fields are optional. Leave blank to use catalog values. A
+            blank context window lets the provider enforce its limit. Unknown
+            models use up to {DEFAULT_MODEL_MAX_OUTPUT.toLocaleString()} output
+            tokens unless overridden. Missing prices remain unknown; dollar
+            budgets require both prices. Use 0 for a free model.
           </p>
           <label className="field" htmlFor={`${fieldId}-thinking`}>
             <span>Thinking level</span>
@@ -251,7 +266,7 @@ export function ModelPicker({
                 step="1"
                 disabled={disabled}
                 defaultValue={value.modelLimits?.contextWindow ?? ""}
-                placeholder="Catalog value"
+                placeholder="Provider default (optional)"
               />
             </label>
             <label className="field">
@@ -263,7 +278,7 @@ export function ModelPicker({
                 step="1"
                 disabled={disabled}
                 defaultValue={value.modelLimits?.maxOutputTokens ?? ""}
-                placeholder="Catalog value"
+                placeholder="Automatic (optional)"
               />
             </label>
             <label className="field">
@@ -275,7 +290,7 @@ export function ModelPicker({
                 step="any"
                 disabled={disabled}
                 defaultValue={value.modelPricing?.input ?? ""}
-                placeholder="Catalog price"
+                placeholder="Automatic (optional)"
               />
             </label>
             <label className="field">
@@ -287,7 +302,7 @@ export function ModelPicker({
                 step="any"
                 disabled={disabled}
                 defaultValue={value.modelPricing?.output ?? ""}
-                placeholder="Catalog price"
+                placeholder="Automatic (optional)"
               />
             </label>
           </div>
@@ -543,8 +558,8 @@ export function ModelProvidersPanel({
               <dt>Context window</dt>
               <dd>
                 {page ? (
-                  (page.selection?.modelLimits?.contextWindow.toLocaleString() ??
-                  "Catalog")
+                  (page.selection?.modelLimits?.contextWindow?.toLocaleString() ??
+                  "Provider default")
                 ) : (
                   <Skeleton />
                 )}
@@ -554,8 +569,8 @@ export function ModelProvidersPanel({
               <dt>Maximum output</dt>
               <dd>
                 {page ? (
-                  (page.selection?.modelLimits?.maxOutputTokens.toLocaleString() ??
-                  "Catalog")
+                  (page.selection?.modelLimits?.maxOutputTokens?.toLocaleString() ??
+                  "Automatic")
                 ) : (
                   <Skeleton />
                 )}
@@ -565,10 +580,10 @@ export function ModelProvidersPanel({
               <dt>Input price</dt>
               <dd>
                 {page ? (
-                  page.selection?.modelPricing ? (
+                  page.selection?.modelPricing?.input !== undefined ? (
                     `$${page.selection.modelPricing.input} / million tokens`
                   ) : (
-                    "Catalog"
+                    "Automatic"
                   )
                 ) : (
                   <Skeleton />
@@ -579,10 +594,10 @@ export function ModelProvidersPanel({
               <dt>Output price</dt>
               <dd>
                 {page ? (
-                  page.selection?.modelPricing ? (
+                  page.selection?.modelPricing?.output !== undefined ? (
                     `$${page.selection.modelPricing.output} / million tokens`
                   ) : (
-                    "Catalog"
+                    "Automatic"
                   )
                 ) : (
                   <Skeleton />

@@ -1,5 +1,34 @@
 # Implementation evidence
 
+## Automatic activation after model setup (2026-10-12)
+
+Model settings now contains provider and chat-model summaries with their shared
+modal editors. The separate Activate the bot card, activation action and duplicate
+inline access form are removed. Members & access retains enrollment, revocation
+and access requests; Operations retains optional Telegram account verification.
+Setup and token-replacement guidance describe automatic activation.
+
+A successful workspace chat-model save attempts activation on the server. Saved
+bot credentials, a ready receiver and an enabled published skill in a workspace
+with a valid operator-owned model selection remain prerequisites. If Telegram or
+skills complete later, receiver/worker recovery activates automatically, including
+after restart. Legacy model credential saves also reconcile readiness. Activation
+locks and rechecks configuration, commits its audit once, preserves deployment
+pause and accepts empty membership without granting anyone access. Failed writes
+leave activation inactive and retain the saved model for recovery. The manual API
+remains compatible and validates receiver readiness before returning idempotently.
+Webhook registration remains explicit in Site domain; no model generation call is
+used as a setup test.
+
+Validation: lint, strict TypeScript, production build and all **701 deterministic
+tests** across 79 files passed with disposable PostgreSQL. **27 admin/provider
+browser scenarios** passed in webhook mode and **five focused setup/loading/save
+scenarios** passed in polling mode. A final **13 focused model/setup browser
+scenarios** also passed before commit. Desktop (1280px) and mobile (390px) saved,
+empty, editor, loading, pending and error screenshots were inspected. This change
+adds no dependency or migration and performs no deployment, live account
+connection, Telegram send or model call.
+
 ## Three isolated Actions runners (2026-10-10)
 
 The Actions Compose deployment now provides `runner`, `runner-2` and `runner-3`.

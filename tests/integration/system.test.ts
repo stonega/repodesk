@@ -945,8 +945,8 @@ suite("PostgreSQL integration (isolated database)", () => {
           expect(options.maxInputChars).toBeUndefined();
           expect(options.maxOutputTokens).toBeUndefined();
           expect(await options.remainingBudget?.()).toEqual({
-            run: 0.1,
-            workspace: 10,
+            run: Infinity,
+            workspace: Infinity,
           });
           expect(options.model.contextWindow).toBe(128000);
           expect(options.model.maxTokens).toBe(16000);
@@ -979,10 +979,10 @@ suite("PostgreSQL integration (isolated database)", () => {
         version: current.version,
         modelLimits: null,
       });
-      expect(reset.status).toBe(400);
-      expect((await reset.json()).error).toBe("model_limits_required");
+      expect(reset.status).toBe(200);
+      expect((await reset.json()).modelCapabilities.source).toBe("default");
       const switched = await request(path, "PUT", {
-        version: current.version,
+        version: (await store.deployment()).version,
         model: "gpt-4.1-mini",
       });
       expect(switched.status).toBe(200);
@@ -1003,11 +1003,13 @@ suite("PostgreSQL integration (isolated database)", () => {
       version: w.version,
       settings: {
         ...w.settings,
-        maxTurns: 21,
+        retentionDays: 91,
       },
     });
     expect(invalid.status).toBe(400);
-    expect((await invalid.json()).issues[0].path).toBe("settings.maxTurns");
+    expect((await invalid.json()).issues[0].path).toBe(
+      "settings.retentionDays",
+    );
     expect((await store.read(w.id)).version).toBe(w.version);
     const negative = await request(path, "PUT", {
       version: w.version,
@@ -1028,6 +1030,7 @@ suite("PostgreSQL integration (isolated database)", () => {
       },
     });
     expect(saved.status).toBe(200);
+    expect((await saved.json()).settings).not.toHaveProperty("maxTurns");
     expect((await store.read(w.id)).settings).not.toHaveProperty(
       "maxOutputTokens",
     );
@@ -1078,6 +1081,144 @@ suite("PostgreSQL integration (isolated database)", () => {
     expect(saved.runs[0]?.settings).toEqual(legacy);
     await store.pool.query(migration);
     expect((await store.read(w.id)).version).toBe(saved.version);
+  });
+  test("model-call migration removes current overrides once and preserves history and budgets", async () => {
+    const w = await seed();
+    const run = createRun(w, "101", "legacy", "101", 0, "gpt-4.1-mini");
+    const legacy = {
+      ...w.settings,
+      maxTurns: 1,
+      runBudgetUsd: 100,
+      monthlyBudgetUsd: 1000,
+    };
+    await store.pool.query("UPDATE workspaces SET data=$2 WHERE id=$1", [
+      w.id,
+      JSON.stringify({
+        ...w,
+        settings: legacy,
+        runs: [{ ...run, settings: legacy }],
+      }),
+    ]);
+    const migration = await readFile(
+      "migrations/018_remove_model_call_limit.sql",
+      "utf8",
+    );
+    await store.pool.query(migration);
+    const saved = await store.read(w.id);
+    expect(saved.settings).not.toHaveProperty("maxTurns");
+    expect(saved.settings.runBudgetUsd).toBe(100);
+    expect(saved.settings.monthlyBudgetUsd).toBe(1000);
+    expect(saved.version).toBe(w.version + 1);
+    expect(saved.runs[0]?.settings).toEqual(legacy);
+    await store.pool.query(migration);
+    expect((await store.read(w.id)).version).toBe(saved.version);
+  });
+  test("settings save unlimited budgets, zero and explicit caps without resurrecting retired controls", async () => {
+    const w = await seed();
+    const path = `/api/admin/workspaces/${w.id}/settings`;
+    let current = await (await request(path)).json();
+    expect(current.settings.runBudgetUsd).toBeNull();
+    expect(current.settings.monthlyBudgetUsd).toBeNull();
+    for (const budget of [100, null, 0]) {
+      const response = await request(path, "PUT", {
+        version: current.version,
+        settings: {
+          ...current.settings,
+          maxTurns: 1,
+          runBudgetUsd: budget,
+          monthlyBudgetUsd: budget,
+        },
+      });
+      expect(response.status).toBe(200);
+      current = await response.json();
+      expect(current.settings.runBudgetUsd).toBe(budget);
+      expect(current.settings.monthlyBudgetUsd).toBe(budget);
+      expect(current.settings).not.toHaveProperty("maxTurns");
+      expect((await store.read(w.id)).settings).toEqual(current.settings);
+    }
+  });
+  test("unlimited reservations permit positive costs while either zero cap blocks them", async () => {
+    for (const [runBudgetUsd, monthlyBudgetUsd, error] of [
+      [null, null, undefined],
+      [0, null, "run_budget_exhausted"],
+      [null, 0, "workspace_budget_exhausted"],
+    ] as const) {
+      const w = await seed();
+      const r = await store.change(w.id, (v) => {
+        v.settings.runBudgetUsd = runBudgetUsd;
+        v.settings.monthlyBudgetUsd = monthlyBudgetUsd;
+        return createRun(v, "101", "test", "101", 0, "gpt-4.1-mini");
+      });
+      await new Executor(store, setup, {
+        async run(input) {
+          expect(input.maxTurns).toBeUndefined();
+          await input.reserve(100);
+          return {
+            text: "Done",
+            status: "succeeded",
+            turns: 1,
+            tools: 0,
+            transcript: [],
+          };
+        },
+      }).execute(w.id, r.id);
+      const saved = (await store.read(w.id)).runs[0];
+      expect(saved?.status).toBe(error ? "failed" : "succeeded");
+      expect(saved?.error).toBe(error);
+      expect(saved?.attempts).toHaveLength(error ? 0 : 1);
+    }
+  });
+  test("unpriced model calls retain token usage without reporting a free charge", async () => {
+    const w = await seed();
+    const r = await store.change(w.id, (v) =>
+      createRun(v, "101", "test", "101", 0, "team/unpriced"),
+    );
+    await new Executor(store, setup, {
+      async run(input) {
+        expect(input.model.pricingKnown).toBe(false);
+        const id = await input.reserve(0);
+        await input.checkpoint(
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "Done" }],
+            api: input.model.api,
+            provider: input.model.provider,
+            model: input.model.id,
+            stopReason: "stop",
+            timestamp: Date.now(),
+            usage: {
+              input: 10,
+              output: 10,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 20,
+              cost: {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                total: 0,
+              },
+            },
+          },
+          id,
+        );
+        return {
+          text: "Done",
+          status: "succeeded",
+          turns: 1,
+          tools: 0,
+          transcript: [],
+        };
+      },
+    }).execute(w.id, r.id);
+    const attempt = (await store.read(w.id)).runs[0]?.attempts[0];
+    expect(attempt).toMatchObject({
+      status: "settled",
+      pricingUnknown: true,
+      tokens: { input: 10, output: 10 },
+    });
+    expect(attempt?.actual).toBeUndefined();
   });
   test("concurrent versioned settings writes cannot overwrite each other", async () => {
     const w = await seed();
@@ -1577,10 +1718,9 @@ suite("PostgreSQL integration (isolated database)", () => {
     );
     expect(sent?.parse_mode).toBeUndefined();
   });
-  test("workspace requests execute twelve tools and finish within their model-turn limit", async () => {
+  test("workspace requests execute twelve tools and finish without a model-turn limit", async () => {
     const w = await seed();
     const r = await store.change(w.id, (v) => {
-      v.settings.maxTurns = 2;
       return createRun(
         v,
         "101",
@@ -1663,31 +1803,44 @@ suite("PostgreSQL integration (isolated database)", () => {
     });
   });
 
-  test("tool-only turn exhaustion delivers one notice to the original chat and topic", async () => {
+  test("workspace requests exceed the former model-call maximum and deliver once", async () => {
     const w = await seed();
     const r = await store.change(w.id, (v) => {
-      v.settings.maxTurns = 3;
-      return createRun(v, "101", "Investigate", "-100100", 7, "gpt-4.1-mini", {
-        replyTo: 42,
-      });
+      const run = createRun(
+        v,
+        "101",
+        "Investigate",
+        "-100100",
+        7,
+        "gpt-4.1-mini",
+        {
+          replyTo: 42,
+        },
+      );
+      Object.assign(run.settings, { maxTurns: 1 });
+      return run;
     });
     let modelCalls = 0;
     const runner = new PiRunner((model) => {
       const stream = new AssistantMessageEventStream();
+      modelCalls++;
       const message = {
         role: "assistant" as const,
-        content: [
-          {
-            type: "toolCall" as const,
-            id: `read-${++modelCalls}`,
-            name: "read_chat_context",
-            arguments: {},
-          },
-        ],
+        content:
+          modelCalls <= 21
+            ? [
+                {
+                  type: "toolCall" as const,
+                  id: `read-${modelCalls}`,
+                  name: "read_chat_context",
+                  arguments: {},
+                },
+              ]
+            : [{ type: "text" as const, text: "Investigation complete." }],
         api: model.api,
         provider: model.provider,
         model: model.id,
-        stopReason: "toolUse" as const,
+        stopReason: modelCalls <= 21 ? ("toolUse" as const) : ("stop" as const),
         timestamp: Date.now(),
         usage: {
           input: 10,
@@ -1704,7 +1857,7 @@ suite("PostgreSQL integration (isolated database)", () => {
           },
         },
       };
-      stream.push({ type: "done", reason: "toolUse", message });
+      stream.push({ type: "done", reason: message.stopReason, message });
       stream.end(message);
       return stream;
     });
@@ -1712,11 +1865,10 @@ suite("PostgreSQL integration (isolated database)", () => {
     await executor.execute(w.id, r.id);
     await executor.execute(w.id, r.id);
     const saved = await store.read(w.id);
-    expect(modelCalls).toBe(3);
+    expect(modelCalls).toBe(22);
     expect(saved.runs[0]).toMatchObject({
-      status: "partial",
-      result: "",
-      error: "turn_limit",
+      status: "succeeded",
+      result: "Investigation complete.",
     });
     expect(saved.runs[0]?.attempts.every((a) => a.status === "settled")).toBe(
       true,
@@ -1731,7 +1883,7 @@ suite("PostgreSQL integration (isolated database)", () => {
       runId: r.id,
       state: "pending",
     });
-    expect(intent?.text).toContain("available turns");
+    expect(intent?.text).toContain("Investigation complete.");
     expect(intent?.text).not.toContain(r.id);
     const before = calls.length;
     const delivery = new DeliveryWorker(store, setup);

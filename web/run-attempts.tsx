@@ -38,8 +38,14 @@ export function RunAttempts({ attempts }: { attempts: Run["attempts"] }) {
                   <DataDetails
                     value={{
                       at: attempt.at,
-                      reserved: attempt.reserved,
-                      actual: attempt.actual,
+                      reserved:
+                        attempt.pricingUnknown && attempt.actual === undefined
+                          ? "Unknown price"
+                          : attempt.reserved,
+                      actual:
+                        attempt.pricingUnknown && attempt.actual === undefined
+                          ? "Unknown price"
+                          : attempt.actual,
                     }}
                   />
                   {(attempt.id ||

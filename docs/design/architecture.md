@@ -162,10 +162,15 @@ workers resolve that registry per run and check its revision at every guard. A l
 manifest remains the fallback until the operator saves panel settings. The OpenAI catalog supplies known model metadata; execution
 uses Pi's OpenAI-compatible Chat Completions adapter with operator-configured base
 URL, custom model ID, encrypted key, thinking level and estimated token prices.
-Known model capacity comes from the bundled Pi catalog; custom IDs require operator-supplied
-context/output token limits. Workspace language and byte/token controls have been removed. Before each dispatch,
+Known model capacity comes from the bundled Pi catalog; custom IDs have no assumed
+context window and allow up to 16,384 output tokens unless overridden. Capacity and prices
+are independently optional overrides. Missing custom prices remain unknown and
+exclude those calls from dollar totals; finite dollar budgets require known prices.
+A blank context window lets the provider enforce its limit for both known and custom
+models; catalog context metadata remains a hint for conversation-memory planning.
+Workspace language and byte/token controls have been removed. Before each dispatch,
 serialized input bytes conservatively estimate tokens. Output allowance automatically
-fits model capacity, remaining context and remaining dollar budgets. USD budgets
+fits the output allowance, any explicitly configured context window and remaining dollar budgets. USD budgets
 are independently configurable; fixed pilot dollar/output ceilings no longer apply.
 The worker pins model capacity/endpoint/thinking/prices on first execution and stops an unfinished
 run if its endpoint changes. The coding-agent dependency supplies the extension loader; no built-in coding,
@@ -206,7 +211,9 @@ cannot prove a claim follows from its citation. Thinking blocks are never persis
 Per-call reservations precede dispatch and reconcile completed usage. Provider retries
 are disabled. The worker checks cancellation every second and between tool/model
 steps, with configurable run deadlines (five minutes by default), model capacity and
-budget limits, and eight tool calls maximum. `RUN_TIMEOUT_SECONDS` accepts 1–1800
+optional budget limits, with no fixed model-call or tool-call quota. Workspace run
+and monthly budgets default to `null` (unlimited); zero permits only zero-cost
+requests. Explicit workflow budgets remain independent. `RUN_TIMEOUT_SECONDS` accepts 1–1800
 seconds. New queue jobs expire 60 seconds after the configured run deadline; the
 120-second conversation lease is renewed by the one-second guard. Deadline expiry
 is recorded as `failed (run_timeout)`, distinct from user cancellation and worker

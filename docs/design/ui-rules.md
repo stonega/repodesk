@@ -47,9 +47,24 @@ when implementing or reviewing a change.
   API model discovery and reuse for bot chat, code review, Codex and other services.
 - **Exceptions:** ChatGPT device-code sign-in remains an independent Codex option.
   Existing deployment/per-workspace model credentials remain a compatibility path
-  until replaced. Custom bot models still need documented capacity and prices.
+  until replaced. Bot model capacity and prices are optional overrides.
   Provider records use New/Edit dialogs and saved summaries; the setup chat-model
   selector is a guided form. API keys are edited only on the provider record.
+
+### Model setup activates the bot automatically
+
+- **Preference:** Remove the separate Activate the bot step and card. Successfully
+  saving the bot chat model activates the bot automatically once setup is ready;
+  no second activation action is required.
+- **Scope:** Authenticated workspace setup and Model settings. Model settings keeps
+  provider/model summaries and modal editors. Access requests and membership stay
+  in Members & access; Telegram account verification remains available in Operations.
+- **Source:** 2026-10-12 — user showed the Activate the bot card and requested
+  removing this step and automatic activation after successful model setup.
+- **Exceptions:** A saved bot token, ready Telegram receiver and enabled published
+  skill remain prerequisites. If they complete later, activation finishes
+  automatically. Webhook registration stays explicit in Site domain; deployment
+  pause, membership and external-action approvals retain their existing controls.
 
 ### Newly created GitHub Apps use RepoDesk branding
 
@@ -253,13 +268,28 @@ when implementing or reviewing a change.
 - **Preference:** Let ordinary assistant requests make the tool calls needed to
   complete their work; do not stop a review after an arbitrary fixed call count.
 - **Scope:** Pi chat requests and authorized application/extension tools. Existing
-  workspace model-turn and spending controls remain separate.
+  optional workspace spending controls remain separate.
 - **Source:** 2026-10-09 — user rejected the fixed eight-tool-call limit after two
   Telegram PR-review requests exhausted it.
 - **Exceptions:** Permission checks, actor/tenant boundaries, cancellation,
   approval pauses, request timeout and provider limits still apply. Internal
   summarization and follow-up classification remain tool-free; test/evaluation
   callers may deliberately bound tool execution.
+
+### Assistant model calls have no workspace quota
+
+- **Preference:** Remove Model calls per run from saved summaries, editors,
+  settings storage and ordinary assistant execution. Do not retain hidden saved
+  overrides. Run and monthly USD budgets default to None, meaning no limit;
+  clearing either field restores None. Keep an entered zero distinct from None.
+- **Scope:** Workspace configuration and Pi requests, including follow-up
+  classification and conversation compaction.
+- **Source:** 2026-10-12 — user requested completely removing Model calls per run
+  and making run/month budget defaults None with no limit.
+- **Exceptions:** Explicit saved dollar caps still apply. Permissions,
+  cancellation, deadlines and provider limits remain. Internal tool-free
+  summary/classification passes and evaluation callers may bound their own calls.
+  Historical run snapshots remain audit evidence and do not impose call quotas.
 
 ### Codex tasks have no configurable execution quotas
 
@@ -553,7 +583,7 @@ when implementing or reviewing a change.
   RepoDesk with confetti and a Get started button that opens the workspace.
   Keep detailed GitHub controls in Plugins and show that page to the deployment
   administrator even before Telegram account linking. Keep optional workspace
-  policies in Workspace settings, and detailed model management and bot activation in
+  policies in Workspace settings, and detailed model management in
   the admin panel.
 - **Scope:** Authenticated setup at `/setup`, including desktop and mobile.
 - **Source update:** 2026-10-08 — user requested a model-provider step during first
@@ -576,8 +606,8 @@ when implementing or reviewing a change.
   linking so those settings remain discoverable.
 - **Exceptions:** Multiple accessible installations still require review in
   Plugins to preserve workspace scope.
-  Custom models still require documented capacity and token prices
-  before activation. A published enabled skill and a ready Telegram receiver
+  Model capacity and token prices are independently optional overrides.
+  A published enabled skill and a ready Telegram receiver
   remain activation requirements. Owner-only Telegram actions require separately
   linking a personal Telegram account.
 
@@ -729,8 +759,9 @@ when implementing or reviewing a change.
 - **Scope:** Model settings in the admin panel.
 - **Source:** 2026-10-06 — user showed the inline model form and requested the
   Overview team-card layout with an edit modal.
-- **Exceptions:** Activation readiness and bot activation remain separate from
-  model configuration. Setup steps retain their guided forms.
+- **Exceptions:** Setup steps retain their guided forms. Bot activation follows
+  successful model setup automatically when its prerequisites are ready; there is
+  no separate activation card or action.
 
 ### Connected GitHub repositories stay compact and directly accessible
 
@@ -1124,14 +1155,30 @@ Use this format for each preference:
 ### Settings explain limits and validation
 
 - **Preference:** Show readable field labels, units, applicable ranges and adjacent
-  validation errors. Model capacity comes from catalog metadata or an explicit
-  operator configuration; cost budgets are independently configurable. Do not hide
+  validation errors. Model capacity comes from catalog metadata, an explicit
+  operator configuration; blank context windows defer enforcement to the provider.
+  Automatic output allowances for unknown models are identified as app policy;
+  cost budgets are independently configurable. Do not hide
   arbitrary pilot caps behind a generic `invalid_request`.
 - **Scope:** Workspace execution limits and model configuration in the admin panel.
 - **Source:** 2026-09-20 — user approved replacing unexplained fixed ranges with
   model-aware validation and clear field feedback.
 - **Exceptions:** Operational retention and scheduling policies may keep documented
   fixed limits; identify them as application policies, not model capabilities.
+
+### Model capacity and prices are optional overrides
+
+- **Preference:** Make context window, maximum output and both token prices
+  independently optional. Clearing a field restores automatic handling. Known
+  models use catalog metadata; distinguish unknown prices from explicit zero.
+- **Scope:** Model selection and advanced settings in setup and the admin panel.
+- **Source:** 2026-10-12 — user requested making all four model settings optional.
+  The user clarified that the provider should handle context limits when the
+  context window is blank; do not substitute an app context-window cap.
+- **Exceptions:** Unknown models use a documented automatic output allowance,
+  not a claimed provider capability. Finite dollar budgets require known prices; missing prices
+  leave costs unavailable instead of treating the provider as free. Explicit capacity
+  overrides must leave room for input.
 
 ### Let the model manage response language and capacity
 

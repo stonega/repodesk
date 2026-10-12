@@ -66,11 +66,28 @@ export function queryModelCost(
   const totals = emptyTotals();
   const models = new Map<string, ReturnType<typeof emptyTotals>>();
   let monthlyAccountedUsd = 0;
+  let unpricedCalls = 0;
+  let monthlyUnpricedCalls = 0;
   for (const item of w.runs) {
     if (scope === "self" && item.actor !== run.actor) continue;
     for (const attempt of item.attempts) {
       const at = Date.parse(attempt.at);
       if (!Number.isFinite(at) || at > now.getTime()) continue;
+      if (attempt.pricingUnknown && attempt.actual === undefined) {
+        if (at >= month) monthlyUnpricedCalls++;
+        if (at >= start) {
+          unpricedCalls++;
+          const model = models.get(item.model) ?? emptyTotals();
+          for (const summary of [totals, model]) {
+            summary.calls++;
+            if (attempt.status === "settled") summary.settledCalls++;
+            else if (attempt.status === "reserved") summary.reservedCalls++;
+            else summary.unknownCalls++;
+          }
+          models.set(item.model, model);
+        }
+        continue;
+      }
       const accounted = attempt.actual ?? attempt.reserved;
       if (at >= month) monthlyAccountedUsd += accounted;
       if (at < start) continue;
@@ -100,6 +117,7 @@ export function queryModelCost(
     start: start ? new Date(start).toISOString() : null,
     asOf: now.toISOString(),
     totals,
+    ...(unpricedCalls ? { unpricedCalls } : {}),
     byModel: [...models]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([model, summary]) => ({ model, ...summary })),
@@ -108,10 +126,16 @@ export function queryModelCost(
           monthlyBudget: {
             limitUsd: w.settings.monthlyBudgetUsd,
             accountedUsd: monthlyAccountedUsd,
-            remainingUsd: w.settings.monthlyBudgetUsd - monthlyAccountedUsd,
+            ...(monthlyUnpricedCalls
+              ? { unpricedCalls: monthlyUnpricedCalls }
+              : {}),
+            remainingUsd:
+              w.settings.monthlyBudgetUsd === null || monthlyUnpricedCalls > 0
+                ? null
+                : w.settings.monthlyBudgetUsd - monthlyAccountedUsd,
           },
         }
       : {}),
-    note: "Recorded application costs, not a provider invoice. Settled costs use recorded usage and configured prices or operator reconciliation. Reserved and unknown amounts are not confirmed charges. Only retained accounting is included (up to 90 days); later calls, including the final answer to this query, are excluded.",
+    note: "Recorded application costs, not a provider invoice. Settled costs use recorded usage and configured prices or operator reconciliation. Unpriced calls are excluded from dollar totals. Reserved and unknown amounts are not confirmed charges. Only retained accounting is included (up to 90 days); later calls, including the final answer to this query, are excluded.",
   };
 }

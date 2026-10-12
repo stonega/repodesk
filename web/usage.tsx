@@ -5,7 +5,7 @@ import { IconButton } from "./icon-button.tsx";
 import { Skeleton, SkeletonCells } from "./skeleton.tsx";
 
 interface UsagePage {
-  budget: number;
+  budget: number | null;
   totalUsd: number;
   total: number;
   offset: number;
@@ -99,7 +99,11 @@ export function Usage({
             <span className="muted">Monthly limit</span>
             <strong>
               {data ? (
-                money(data.budget)
+                data.budget === null ? (
+                  "None"
+                ) : (
+                  money(data.budget)
+                )
               ) : error ? (
                 "—"
               ) : (
@@ -110,7 +114,7 @@ export function Usage({
         </div>
         <p className="muted" id="usage-note">
           Recorded spend includes unresolved reservations. All amounts are in
-          USD.
+          USD. Calls marked Unknown price are excluded from dollar totals.
         </p>
         <section
           className="usage-table-scroll"
@@ -156,9 +160,15 @@ export function Usage({
                       {statuses[item.status]}
                     </span>
                   </td>
-                  <td className="usage-money">{money(item.reserved)}</td>
                   <td className="usage-money">
-                    {item.actual === undefined ? (
+                    {item.pricingUnknown && item.actual === undefined
+                      ? "Unknown price"
+                      : money(item.reserved)}
+                  </td>
+                  <td className="usage-money">
+                    {item.pricingUnknown && item.actual === undefined ? (
+                      "Unknown price"
+                    ) : item.actual === undefined ? (
                       <span>
                         <span aria-hidden="true">—</span>
                         <span className="sr-only">Not yet reported</span>

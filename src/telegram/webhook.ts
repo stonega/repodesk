@@ -894,8 +894,11 @@ export class Ingress {
       }
       case "usage": {
         const attempts = w.runs.flatMap((r) => r.attempts);
+        const unpriced = attempts.filter(
+          (a) => a.pricingUnknown && a.actual === undefined,
+        ).length;
         reply(
-          `Recorded usage: $${attempts.reduce((sum, a) => sum + (a.actual ?? a.reserved), 0).toFixed(4)} including reservations. Monthly cap: $${w.settings.monthlyBudgetUsd}. Unknown charges remain reserved.`,
+          `Recorded usage: $${attempts.reduce((sum, a) => sum + (a.actual ?? a.reserved), 0).toFixed(4)} including reservations. Monthly cap: ${w.settings.monthlyBudgetUsd === null ? "None (no limit)" : `$${w.settings.monthlyBudgetUsd}`}. Unknown charges remain reserved.${unpriced ? ` Prices are unavailable for ${unpriced} calls; their costs are excluded.` : ""}`,
         );
         break;
       }

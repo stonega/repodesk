@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
+import { remainingBudgets } from "../../src/agent/limits.ts";
 import { queryModelCost } from "../../src/agent/model-cost.ts";
 import { applicationTools } from "../../src/agent/tools.ts";
 import type { Store } from "../../src/db/repositories.ts";
 import type { Run, Workspace } from "../../src/domain.ts";
+import { reconcileCharge } from "../../src/jobs/recovery.ts";
 import { createRun } from "../../src/workspaces/service.ts";
 import { workspace } from "../fixtures.ts";
 
@@ -140,6 +142,48 @@ test("empty history is explicit and forged scopes and identity filters are rejec
   expect(() => queryModelCost(w, run, {}, now)).toThrow(
     "model_cost_requires_private_chat",
   );
+});
+
+test("unlimited monthly budgets retain usage without inventing a finite remaining balance", () => {
+  const { w, run } = fixture("303");
+  run.attempts = [attempt({ actual: 3 })];
+  const result = queryModelCost(w, run, { scope: "workspace" }, now);
+  expect(result.monthlyBudget).toEqual({
+    limitUsd: null,
+    accountedUsd: 3,
+    remainingUsd: null,
+  });
+});
+
+test("unpriced settled calls keep their count, block finite caps and permit verified reconciliation", () => {
+  const { w, run } = fixture("303");
+  const unpriced = attempt({
+    pricingUnknown: true,
+    reserved: 0,
+    actual: undefined,
+  });
+  run.attempts = [unpriced];
+  w.settings.runBudgetUsd = 10;
+  w.settings.monthlyBudgetUsd = 50;
+  const result = queryModelCost(w, run, { scope: "workspace" }, now);
+  expect(result.totals.calls).toBe(1);
+  expect(result.totals.settledUsd).toBe(0);
+  expect(result.unpricedCalls).toBe(1);
+  expect(result.monthlyBudget?.remainingUsd).toBeNull();
+  expect(() => remainingBudgets(w, run, now)).toThrow(
+    "unpriced_usage_requires_reconciliation",
+  );
+  expect(() =>
+    reconcileCharge(w, "202", run.id, unpriced.id, 3, "invoice"),
+  ).toThrow("access_denied");
+  reconcileCharge(w, "303", run.id, unpriced.id, 3, "invoice");
+  expect(remainingBudgets(w, run, now)).toEqual({ run: 7, workspace: 47 });
+  expect(
+    queryModelCost(w, run, { scope: "workspace" }, now).totals.settledUsd,
+  ).toBe(3);
+  expect(() =>
+    reconcileCharge(w, "303", run.id, unpriced.id, 4, "invoice"),
+  ).toThrow("charge_not_reconcilable");
 });
 
 test("tool replay returns the durable snapshot and rechecks admin permissions", async () => {
