@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import {
   DEFAULT_MODEL_MAX_OUTPUT,
+  type ModelCurrency,
+  modelCurrencies,
   modelLimitOverridesSchema,
   modelOptionsSchema,
   type ThinkingLevel,
@@ -55,6 +57,10 @@ export function selectionFromForm(
   const output = String(values.get("modelMaxOutput") ?? "");
   const inputPrice = String(values.get("modelInputPrice") ?? "");
   const outputPrice = String(values.get("modelOutputPrice") ?? "");
+  const currency = String(
+    values.get("modelCurrency") ?? "USD",
+  ) as ModelCurrency;
+  const usdRate = String(values.get("modelUsdRate") ?? "");
   if (context || output) {
     const parsed = modelLimitOverridesSchema.safeParse({
       ...(context ? { contextWindow: Number(context) } : {}),
@@ -75,10 +81,13 @@ export function selectionFromForm(
           }
         : undefined,
     modelPricing:
-      inputPrice || outputPrice
+      inputPrice || outputPrice || currency !== "USD"
         ? {
             ...(inputPrice ? { input: Number(inputPrice) } : {}),
             ...(outputPrice ? { output: Number(outputPrice) } : {}),
+            ...(currency !== "USD"
+              ? { currency, ...(usdRate ? { usdRate: Number(usdRate) } : {}) }
+              : {}),
           }
         : undefined,
   };
@@ -138,6 +147,7 @@ export function ModelPicker({
     }
   }, [autoFocus, catalog, fieldId]);
   const provider = catalog?.providers?.find((p) => p.id === value?.providerId);
+  const currency = value?.modelPricing?.currency ?? "USD";
   return (
     <>
       <label className="field" htmlFor={`${fieldId}-provider`}>
@@ -281,8 +291,50 @@ export function ModelPicker({
                 placeholder="Automatic (optional)"
               />
             </label>
+            <label className="field" htmlFor={`${fieldId}-currency`}>
+              <span>Price currency</span>
+              <Select
+                id={`${fieldId}-currency`}
+                name="modelCurrency"
+                aria-label="Price currency"
+                value={currency}
+                disabled={disabled}
+                onChange={(event) =>
+                  onChange({
+                    ...value,
+                    modelPricing: {
+                      ...value.modelPricing,
+                      currency: event.target.value as ModelCurrency,
+                      usdRate: undefined,
+                    },
+                  })
+                }
+              >
+                {modelCurrencies.map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            {currency !== "USD" && (
+              <label className="field">
+                <span>USD exchange rate (1 {currency} = USD)</span>
+                <input
+                  key={currency}
+                  name="modelUsdRate"
+                  type="number"
+                  min="0"
+                  max="10000"
+                  step="any"
+                  disabled={disabled}
+                  defaultValue={value.modelPricing?.usdRate ?? ""}
+                  aria-describedby={`${fieldId}-currency-help`}
+                />
+              </label>
+            )}
             <label className="field">
-              <span>Input price (USD / million tokens)</span>
+              <span>Input price ({currency} / million tokens)</span>
               <input
                 name="modelInputPrice"
                 type="number"
@@ -294,7 +346,7 @@ export function ModelPicker({
               />
             </label>
             <label className="field">
-              <span>Output price (USD / million tokens)</span>
+              <span>Output price ({currency} / million tokens)</span>
               <input
                 name="modelOutputPrice"
                 type="number"
@@ -306,6 +358,12 @@ export function ModelPicker({
               />
             </label>
           </div>
+          <p className="muted" id={`${fieldId}-currency-help`}>
+            Currency applies to entered prices. Catalog prices, budgets and
+            usage totals use USD. For another currency, enter the USD value of
+            one unit; the saved exchange rate is used for accounting until you
+            edit it.
+          </p>
         </details>
       )}
     </>
@@ -330,6 +388,10 @@ export function ModelProvidersPanel({
   const [page, setPage] = useState<WorkspaceModels>();
   const [error, setError] = useState("");
   const [formError, setFormError] = useState("");
+  const modelFeedback = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (formError) modelFeedback.current?.scrollIntoView({ block: "nearest" });
+  }, [formError]);
   const [busy, setBusy] = useState(false);
   const [providerDraft, setProviderDraft] = useState<{
     original?: ProviderView;
@@ -409,18 +471,20 @@ export function ModelProvidersPanel({
           autoFocus={!onContinue}
           disabled={busy}
         />
-        {formError && (
-          <p className="notice" role="alert">
-            {formError}
-          </p>
-        )}
-        {!onContinue && (
-          <ModalActions>
-            <button type="submit" disabled={!selection?.model || busy}>
-              {busy ? "Saving…" : "Save chat model"}
-            </button>
-          </ModalActions>
-        )}
+        <div ref={modelFeedback}>
+          {formError && (
+            <p className="notice" role="alert">
+              {formError}
+            </p>
+          )}
+          {!onContinue && (
+            <ModalActions>
+              <button type="submit" disabled={!selection?.model || busy}>
+                {busy ? "Saving…" : "Save chat model"}
+              </button>
+            </ModalActions>
+          )}
+        </div>
       </fieldset>
     </form>
   );
@@ -581,7 +645,7 @@ export function ModelProvidersPanel({
               <dd>
                 {page ? (
                   page.selection?.modelPricing?.input !== undefined ? (
-                    `$${page.selection.modelPricing.input} / million tokens`
+                    `${page.selection.modelPricing.input} ${page.selection.modelPricing.currency ?? "USD"} / million tokens`
                   ) : (
                     "Automatic"
                   )
@@ -595,7 +659,7 @@ export function ModelProvidersPanel({
               <dd>
                 {page ? (
                   page.selection?.modelPricing?.output !== undefined ? (
-                    `$${page.selection.modelPricing.output} / million tokens`
+                    `${page.selection.modelPricing.output} ${page.selection.modelPricing.currency ?? "USD"} / million tokens`
                   ) : (
                     "Automatic"
                   )
@@ -604,6 +668,20 @@ export function ModelProvidersPanel({
                 )}
               </dd>
             </div>
+            {(!page ||
+              (page.selection?.modelPricing?.currency !== undefined &&
+                page.selection.modelPricing.currency !== "USD")) && (
+              <div>
+                <dt>USD exchange rate</dt>
+                <dd>
+                  {page ? (
+                    `1 ${page.selection?.modelPricing?.currency} = ${page.selection?.modelPricing?.usdRate} USD`
+                  ) : (
+                    <Skeleton />
+                  )}
+                </dd>
+              </div>
+            )}
           </dl>
         )}
       </section>

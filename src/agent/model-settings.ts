@@ -44,6 +44,45 @@ export type ModelCapabilities = {
   limits: { contextWindow?: number; maxOutputTokens: number };
   source: "catalog" | "operator" | "default";
 };
+export const modelCurrencies = [
+  "USD",
+  "CNY",
+  "TWD",
+  "HKD",
+  "EUR",
+  "GBP",
+  "JPY",
+  "SGD",
+] as const;
+export type ModelCurrency = (typeof modelCurrencies)[number];
+export const modelPricingSchema = z
+  .object({
+    input: z.number().finite().min(0).max(10000).optional(),
+    output: z.number().finite().min(0).max(10000).optional(),
+    currency: z.enum(modelCurrencies).optional(),
+    // USD per one unit of the selected currency; pinned with each run's prices.
+    usdRate: z
+      .number()
+      .finite()
+      .positive("Enter a USD exchange rate greater than zero.")
+      .max(10000, "The USD exchange rate must be at most 10,000.")
+      .optional(),
+  })
+  .strict()
+  .refine((v) => (v.currency ?? "USD") === "USD" || v.usdRate !== undefined, {
+    path: ["usdRate"],
+    message: "Enter the USD exchange rate for this currency.",
+  })
+  .refine(
+    (v) =>
+      (v.currency ?? "USD") !== "USD" ||
+      v.usdRate === undefined ||
+      v.usdRate === 1,
+    {
+      path: ["usdRate"],
+      message: "The USD exchange rate must be 1 for USD prices.",
+    },
+  );
 export const modelOptionsSchema = z.object({
   modelBaseUrl: z
     .string()
@@ -65,13 +104,7 @@ export const modelOptionsSchema = z.object({
     .optional(),
   modelLimits: modelLimitOverridesSchema.nullable().optional(),
   thinkingLevel: z.enum(thinkingLevels).optional(),
-  modelPricing: z
-    .object({
-      input: z.number().finite().min(0).max(10000).optional(),
-      output: z.number().finite().min(0).max(10000).optional(),
-    })
-    .strict()
-    .optional(),
+  modelPricing: modelPricingSchema.optional(),
 });
 export type ModelOptions = z.infer<typeof modelOptionsSchema> & {
   // Run snapshots pin catalog metadata separately from the context enforcement choice.

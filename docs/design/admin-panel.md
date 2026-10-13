@@ -255,6 +255,10 @@ status, thinking level, effective capacity and price overrides. One Edit icon op
 the model configuration modal; basic fields and advanced settings retain their
 validation and write-only key behavior. Cancel discards changes, failed saves keep
 the draft, and successful saves close the modal and refresh the summary.
+Price overrides support USD, CNY, TWD, HKD, EUR, GBP, JPY and SGD. Non-USD prices
+require an operator-entered USD exchange rate (USD per one currency unit). Saved
+prices show their currency code and rate; switching currency retains entered prices
+and clears the prior rate. Catalog prices and budget/usage accounting stay in USD.
 The sidebar workspace selector uses a panel-styled menu with a selected state and
 the operator-only New workspace action, which opens the setup wizard with a blank
 workspace form.

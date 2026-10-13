@@ -107,5 +107,8 @@ Content-Type: application/json
 }
 
 ### Custom bot models optionally override modelLimits and modelPricing in selection.
+### Example price override: { "input": 10, "output": 30, "currency": "CNY", "usdRate": 0.14 }
+### usdRate is USD per currency unit, saved until edited; the example is not a live quote.
+### Currency defaults to USD; catalog fallback prices, budgets and usage remain USD.
 ### Codex and Review Bot settings accept the same providerId/model selection in settings.model.
 ### Codex/Review use a Responses-compatible provider/model; Review can inherit Codex.

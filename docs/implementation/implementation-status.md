@@ -1,5 +1,30 @@
 # Implementation evidence
 
+## Model-price currency selection (2026-10-13)
+
+Bot chat model price overrides in setup and Model settings now support USD, CNY,
+TWD, HKD, EUR, GBP, JPY and SGD. Existing prices default to USD. Non-USD selections
+require an explicit positive `usdRate` (USD per currency unit), retained until edited.
+The runtime converts only entered overrides, including input overrides used for
+cache pricing; catalog fallback costs already use USD. Budgets and usage totals
+remain USD. Original prices, currency and rate are pinned in each run, so later
+edits do not revalue history. Prices remain independently optional, with unknown
+custom prices distinguished from zero. No automatic exchange-rate lookup is used.
+
+The shared dropdown and modal editor retain entered prices when currency changes,
+clear the previous rate, and show currency codes and the saved rate in summaries.
+Cancel discards drafts; failed saves retain them; pending saves lock dismissal and
+duplicate submission. Model save errors scroll into view with Save and Cancel on
+mobile.
+
+Validation of the isolated currency change passed Biome, strict TypeScript, the
+production build and **704 deterministic tests** against disposable PostgreSQL.
+All **16 model-settings browser scenarios** passed, including non-USD setup,
+reload persistence, validation, cancellation, save failure and pending locks. Saved
+summaries/editors were inspected at 1280px and 390px in both themes; loading, empty,
+pending and error states were also inspected at both widths. No dependency or
+migration was added, and no deployment or live provider/Telegram call was performed.
+
 ## Optional assistant limits and model settings (2026-10-12)
 
 Model calls per run has been removed from Team summaries, editors, workspace

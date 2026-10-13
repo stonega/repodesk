@@ -31,6 +31,7 @@ import type {
 import type {
   ModelCapabilities,
   ModelLimits,
+  ModelOptions,
   ThinkingLevel,
 } from "../src/agent/model-settings.ts";
 import type {
@@ -453,7 +454,7 @@ interface Progress {
   model: string;
   modelBaseUrl: string;
   thinkingLevel: ThinkingLevel;
-  modelPricing?: { input: number; output: number };
+  modelPricing?: ModelOptions["modelPricing"];
   modelLimits?: ModelLimits | null;
   modelCapabilities?: ModelCapabilities;
   webhookReady: boolean;

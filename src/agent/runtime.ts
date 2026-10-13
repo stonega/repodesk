@@ -27,6 +27,7 @@ import {
   DEFAULT_MODEL_MAX_OUTPUT,
   type ModelCapabilities,
   type ModelOptions,
+  modelPricingSchema,
   type ThinkingLevel,
 } from "./model-settings.ts";
 export const models = createModels();
@@ -73,18 +74,27 @@ export function selectedModel(
   providerContext: boolean;
 } {
   const catalog = models.getModel("openai", id);
-  const pricing = options.modelPricing;
-  const inputPrice = pricing?.input ?? catalog?.cost.input;
-  const outputPrice = pricing?.output ?? catalog?.cost.output;
+  const pricing = options.modelPricing
+    ? modelPricingSchema.parse(options.modelPricing)
+    : undefined;
+  const rate =
+    (pricing?.currency ?? "USD") === "USD" ? 1 : (pricing?.usdRate ?? 1);
+  // Catalog prices already use USD; convert only operator-entered overrides.
+  const inputOverride =
+    pricing?.input === undefined ? undefined : pricing.input * rate;
+  const outputOverride =
+    pricing?.output === undefined ? undefined : pricing.output * rate;
+  const inputPrice = inputOverride ?? catalog?.cost.input;
+  const outputPrice = outputOverride ?? catalog?.cost.output;
   const pricingKnown = inputPrice !== undefined && outputPrice !== undefined;
   const cost = {
     input: pricingKnown ? (inputPrice ?? 0) : 0,
     output: pricingKnown ? (outputPrice ?? 0) : 0,
     cacheRead: pricingKnown
-      ? (pricing?.input ?? catalog?.cost.cacheRead ?? 0)
+      ? (inputOverride ?? catalog?.cost.cacheRead ?? 0)
       : 0,
     cacheWrite: pricingKnown
-      ? (pricing?.input ?? catalog?.cost.cacheWrite ?? 0)
+      ? (inputOverride ?? catalog?.cost.cacheWrite ?? 0)
       : 0,
   };
   const capabilities = modelCapabilities(id, options);

@@ -1180,6 +1180,20 @@ Use this format for each preference:
   leave costs unavailable instead of treating the provider as free. Explicit capacity
   overrides must leave room for input.
 
+### Model prices have a selectable currency
+
+- **Preference:** Let operators select the currency of model price overrides and
+  show its code with saved prices. Use the shared dropdown in the existing model
+  editor; keep entered prices when switching currency.
+- **Scope:** Bot chat model prices in setup and Model settings. Existing prices
+  default to USD. Non-USD prices include an explicit positive USD exchange rate;
+  saved summaries show that rate. Currency changes clear the previous rate.
+- **Source:** 2026-10-13 — user requested support for setting model-price 币种.
+- **Exceptions:** Catalog prices, budgets and usage accounting remain in USD.
+  Only entered overrides use the selected currency; prices remain optional.
+  Exchange rates are operator-entered and retained until edited, with no automatic
+  exchange-rate lookup.
+
 ### Let the model manage response language and capacity
 
 - **Preference:** Do not show workspace Reply language, Input byte budget or Output

@@ -166,6 +166,12 @@ Known model capacity comes from the bundled Pi catalog; custom IDs have no assum
 context window and allow up to 16,384 output tokens unless overridden. Capacity and prices
 are independently optional overrides. Missing custom prices remain unknown and
 exclude those calls from dollar totals; finite dollar budgets require known prices.
+Price overrides optionally include a currency and an operator-entered `usdRate`
+(USD per currency unit). Currency defaults to USD for existing records. The runtime
+converts only entered prices, including the input override used for cache prices;
+catalog fallback costs already use USD. Each run pins the original currency and
+rate alongside its price overrides, so later edits do not revalue historical usage.
+No automatic exchange-rate lookup is performed.
 A blank context window lets the provider enforce its limit for both known and custom
 models; catalog context metadata remains a hint for conversation-memory planning.
 Workspace language and byte/token controls have been removed. Before each dispatch,

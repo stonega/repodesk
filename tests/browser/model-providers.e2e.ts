@@ -324,6 +324,202 @@ for (const width of [1280, 390]) {
       fullPage: true,
     });
   });
+  test(`chat price currency persists with validation, cancellation and save recovery at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { w } = await fixture(page);
+    const provider = await addProvider(page);
+    const chat = page.getByRole("region", { name: "Bot chat model" });
+    const edit = chat.getByRole("button", { name: "Edit chat model" });
+    const editor = page.getByRole("dialog", { name: "Edit chat model" });
+    const open = async () => {
+      await edit.click();
+      await editor
+        .getByText("Advanced model settings", { exact: true })
+        .click();
+    };
+    await edit.click();
+    await chooseOption(
+      editor.getByLabel("Model provider", { exact: true }),
+      provider,
+    );
+    await chooseOption(
+      editor.getByLabel("Model", { exact: true }),
+      "team/custom-model",
+    );
+    await editor.getByText("Advanced model settings", { exact: true }).click();
+    await expect(editor.getByLabel("Price currency")).toHaveAttribute(
+      "value",
+      "USD",
+    );
+    await editor.getByLabel("Input price (USD / million tokens)").fill("10");
+    await editor.getByLabel("Output price (USD / million tokens)").fill("30");
+    await chooseOption(editor.getByLabel("Price currency"), "CNY");
+    await expect(
+      editor.getByLabel("Input price (CNY / million tokens)"),
+    ).toHaveValue("10");
+    const rate = editor.getByLabel("USD exchange rate (1 CNY = USD)");
+    const save = editor.getByRole("button", { name: "Save chat model" });
+    await save.click();
+    await expect(editor.getByRole("alert")).toContainText(
+      "Enter the USD exchange rate",
+    );
+    await rate.fill("0");
+    await save.click();
+    await expect(editor.getByRole("alert")).toBeVisible();
+    await rate.fill("0.14");
+    await page.screenshot({
+      path: test.info().outputPath("currency-editor.png"),
+      fullPage: true,
+    });
+    await page.route(
+      `**/api/admin/workspaces/${w.id}/models`,
+      async (route) => {
+        if (route.request().method() === "PUT")
+          await route.fulfill({
+            status: 503,
+            json: { error: "fixture_save_failure" },
+          });
+        else await route.continue();
+      },
+    );
+    await save.click();
+    await expect(editor.getByRole("alert")).toContainText(
+      "fixture_save_failure",
+    );
+    await expect(save).toBeInViewport({ ratio: 1 });
+    await expect(
+      editor.getByRole("button", { name: "Cancel", exact: true }),
+    ).toBeInViewport({ ratio: 1 });
+    await expect(rate).toHaveValue("0.14");
+    await expect(
+      editor.getByLabel("Input price (CNY / million tokens)"),
+    ).toHaveValue("10");
+    await page.screenshot({
+      path: test.info().outputPath("currency-error.png"),
+      fullPage: true,
+    });
+    await page.unroute(`**/api/admin/workspaces/${w.id}/models`);
+    let release: (() => void) | undefined;
+    await page.route(
+      `**/api/admin/workspaces/${w.id}/models`,
+      async (route) => {
+        if (route.request().method() === "PUT")
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        await route.continue();
+      },
+    );
+    await save.click();
+    await expect(
+      editor.getByRole("button", { name: "Saving…" }),
+    ).toBeDisabled();
+    await expect(editor.getByLabel("Price currency")).toBeDisabled();
+    await expect(
+      editor.getByRole("button", { name: "Cancel", exact: true }),
+    ).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(editor).toBeVisible();
+    await page.screenshot({
+      path: test.info().outputPath("currency-pending.png"),
+      fullPage: true,
+    });
+    await expect.poll(() => !!release).toBe(true);
+    release?.();
+    await expect(editor).toHaveCount(0);
+    await page.unroute(`**/api/admin/workspaces/${w.id}/models`);
+    await expect(chat).toContainText("10 CNY / million tokens");
+    await expect(chat).toContainText("30 CNY / million tokens");
+    await expect(chat).toContainText("1 CNY = 0.14 USD");
+    await expect(chat.locator("input,form,[role=combobox]")).toHaveCount(0);
+    expect(
+      (
+        await (
+          await page.request.get(`/api/admin/workspaces/${w.id}/models`)
+        ).json()
+      ).selection.modelPricing,
+    ).toEqual({ input: 10, output: 30, currency: "CNY", usdRate: 0.14 });
+    await page.reload();
+    await expect(chat).toContainText("10 CNY / million tokens");
+    await page.screenshot({
+      path: test.info().outputPath("currency-summary.png"),
+      fullPage: true,
+    });
+    await page.evaluate(() => localStorage.setItem("repodesk.theme", "dark"));
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(chat).toContainText("10 CNY / million tokens");
+    await page.screenshot({
+      path: test.info().outputPath("currency-summary-dark.png"),
+      fullPage: true,
+    });
+    await open();
+    await expect(rate).toHaveValue("0.14");
+    await save.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: test.info().outputPath("currency-editor-dark.png"),
+      fullPage: true,
+    });
+    await chooseOption(editor.getByLabel("Price currency"), "TWD");
+    await expect(
+      editor.getByLabel("USD exchange rate (1 TWD = USD)"),
+    ).toHaveValue("");
+    await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(chat).toContainText("10 CNY / million tokens");
+    await open();
+    await expect(editor.getByLabel("Price currency")).toHaveAttribute(
+      "value",
+      "CNY",
+    );
+    await chooseOption(editor.getByLabel("Price currency"), "USD");
+    await expect(editor.getByLabel(/USD exchange rate/)).toHaveCount(0);
+    await expect(
+      editor.getByLabel("Input price (USD / million tokens)"),
+    ).toHaveValue("10");
+    await save.click();
+    await expect(editor).toHaveCount(0);
+    await expect(chat).toContainText("10 USD / million tokens");
+    await expect(chat).not.toContainText("USD exchange rate");
+    await expect(page.locator("body")).toHaveJSProperty("scrollWidth", width);
+  });
+  test(`setup saves non-USD chat prices at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { w } = await fixture(page);
+    const provider = await addProvider(page);
+    await page.goto(`/setup?workspace=${w.id}&step=model`);
+    const chat = page.getByRole("region", { name: "Bot chat model" });
+    await chooseOption(
+      chat.getByLabel("Model provider", { exact: true }),
+      provider,
+    );
+    await chooseOption(
+      chat.getByLabel("Model", { exact: true }),
+      "team/custom-model",
+    );
+    await chat.getByText("Advanced model settings", { exact: true }).click();
+    await chooseOption(chat.getByLabel("Price currency"), "TWD");
+    await chat.getByLabel("USD exchange rate (1 TWD = USD)").fill("0.03");
+    await chat.getByLabel("Input price (TWD / million tokens)").fill("20");
+    await chat.getByLabel("Output price (TWD / million tokens)").fill("60");
+    const next = page.getByRole("button", { name: "Continue to Telegram" });
+    await next.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: test.info().outputPath("setup-currency.png"),
+      fullPage: true,
+    });
+    await next.click();
+    await expect(page).toHaveURL(/step=telegram/);
+    expect(
+      (
+        await (
+          await page.request.get(`/api/admin/workspaces/${w.id}/models`)
+        ).json()
+      ).selection.modelPricing,
+    ).toEqual({ input: 20, output: 60, currency: "TWD", usdRate: 0.03 });
+    await expect(page.locator("body")).toHaveJSProperty("scrollWidth", width);
+  });
   test(`provider and chat display/editor remain separate, with failed and pending saves at ${width}px`, async ({
     page,
   }) => {

@@ -575,6 +575,46 @@ test("optional prices remain unknown for custom models and catalog overrides sta
   ).toBe(false);
 });
 
+test("currency conversion applies only to entered prices, including cache and zero prices", () => {
+  const catalog = selectedModel("gpt-4.1-mini");
+  const converted = selectedModel("team/custom", {
+    modelPricing: { input: 7, output: 21, currency: "CNY", usdRate: 1 / 7 },
+  });
+  expect(converted.pricingKnown).toBe(true);
+  expect(converted.cost).toEqual({
+    input: 1,
+    output: 3,
+    cacheRead: 1,
+    cacheWrite: 1,
+  });
+  const partial = selectedModel("gpt-4.1-mini", {
+    modelPricing: { input: 7, currency: "CNY", usdRate: 1 / 7 },
+  });
+  expect(partial.cost.input).toBe(1);
+  expect(partial.cost.output).toBe(catalog.cost.output);
+  expect(
+    selectedModel("gpt-4.1-mini", {
+      modelPricing: { currency: "TWD", usdRate: 0.03 },
+    }).cost,
+  ).toEqual(catalog.cost);
+  expect(
+    selectedModel("team/custom", {
+      modelPricing: { output: 0, currency: "JPY", usdRate: 0.01 },
+    }).pricingKnown,
+  ).toBe(false);
+  expect(
+    selectedModel("team/custom", {
+      modelPricing: { input: 0, output: 0, currency: "JPY", usdRate: 0.01 },
+    }).pricingKnown,
+  ).toBe(true);
+  expect(() =>
+    selectedModel("team/custom", {
+      modelPricing: { input: 7, output: 21, currency: "CNY" },
+    }),
+  ).toThrow("Enter the USD exchange rate");
+  expect(selectedModel("gpt-4.1-mini").cost).toEqual(catalog.cost);
+});
+
 test("unpriced custom models run without dollar caps but finite budgets reject before dispatch", async () => {
   for (const budgets of [
     { run: Infinity, workspace: Infinity },

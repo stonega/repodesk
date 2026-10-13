@@ -19,12 +19,15 @@ Content-Type: application/json
   "modelKey": "REPLACE_WITH_API_KEY",
   "model": "team/custom-reasoner",
   "thinkingLevel": "high",
-  "modelPricing": { "input": 1, "output": 3 },
+  "modelPricing": { "input": 10, "output": 30, "currency": "CNY", "usdRate": 0.14 },
   "modelLimits": { "contextWindow": 128000, "maxOutputTokens": 16000 }
 }
 
 ### Capacity values above are examples: replace with your provider's documented limits.
 ### Both capacity values and prices are optional, including independent overrides.
+### Currency defaults to USD; non-USD prices require a positive usdRate (USD per unit).
+### The example rate is illustrative, not a current exchange-rate quote.
+### Catalog fallback prices, budgets and usage totals remain USD; runs pin their rate.
 ### Set modelLimits to null to restore automatic catalog/app default capacity.
 ### Unknown model prices require unlimited budgets; configure prices before finite budgets.
 

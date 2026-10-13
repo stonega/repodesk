@@ -34,6 +34,9 @@ No plugin installation, extra API credentials or migration is required.
 
 These are application accounting estimates based on recorded model usage and
 configured prices (or an operator's reconciliation), not provider billing data.
+Entered prices may use another currency with an operator-saved USD exchange rate.
+Accounting converts those overrides to USD using each run's pinned rate; catalog
+fallback prices are already USD. Editing the rate does not revalue earlier usage.
 Run and monthly budgets default to None (unlimited). For an unknown custom model,
 prices may be omitted; the report counts unpriced calls separately and excludes
 their costs from dollar totals. Enter both prices before configuring a finite budget.

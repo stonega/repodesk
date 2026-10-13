@@ -313,6 +313,82 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         ?.id,
     ).toBe(providerId);
   });
+  test("currency prices persist per workspace and execution pins the rate with USD costs", async () => {
+    const path = `/api/admin/workspaces/${sibling.id}/models`;
+    const modelPricing = {
+      currency: "CNY" as const,
+      usdRate: 0.14,
+      input: 10,
+      output: 30,
+    };
+    expect(
+      (
+        await request(path, "PUT", {
+          revision: 0,
+          selection: {
+            providerId,
+            model: "team/custom-model",
+            modelPricing: { currency: "CNY", input: 10 },
+          },
+        })
+      ).status,
+    ).toBe(400);
+    expect((await store.read(sibling.id)).chatModel).toBeUndefined();
+    expect(
+      (
+        await request(path, "PUT", {
+          revision: 0,
+          selection: { providerId, model: "team/custom-model", modelPricing },
+        })
+      ).status,
+    ).toBe(200);
+    expect((await request(path)).status).toBe(200);
+    expect(
+      (await store.read(sibling.id)).chatModel?.selection.modelPricing,
+    ).toEqual(modelPricing);
+    expect(
+      (await store.read(w.id)).chatModel?.selection.modelPricing,
+    ).toBeUndefined();
+    const run = await store.change(sibling.id, (current) =>
+      createRun(current, "101", "Currency fixture", "101", 0, "gpt-4.1"),
+    );
+    if (!run) throw Error("run fixture missing");
+    const executor = new Executor(store, setup, {
+      async run(input) {
+        await input.guard();
+        expect(input.model.cost.input).toBeCloseTo(1.4);
+        expect(input.model.cost.output).toBeCloseTo(4.2);
+        return {
+          text: "Currency fixture answer.",
+          transcript: [],
+          status: "succeeded",
+          turns: 1,
+          tools: 0,
+        };
+      },
+    });
+    await executor.execute(sibling.id, run.id);
+    expect(
+      (await store.read(sibling.id)).runs.find((r) => r.id === run.id)
+        ?.modelOptions?.modelPricing,
+    ).toEqual(modelPricing);
+    expect(
+      (
+        await request(path, "PUT", {
+          revision: 1,
+          selection: {
+            providerId,
+            model: "team/custom-model",
+            modelPricing: { ...modelPricing, usdRate: 0.2 },
+          },
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (await store.read(sibling.id)).runs.find((r) => r.id === run.id)
+        ?.modelOptions?.modelPricing,
+    ).toEqual(modelPricing);
+  });
   test("Codex and review resolve different models from one provider, without putting its key in runner metadata", async () => {
     const current = await store.read(w.id);
     const first = await setup.models.runner(current, {
