@@ -55,13 +55,6 @@ test("synced read access permits issue proposals but does not confer coding acce
       enabled: true,
       backend: "podman",
       authMode: "provider_key",
-      repositories: [
-        {
-          repositoryId: 7001,
-          baseBranch: "main",
-          maintainers: ["202"],
-        },
-      ],
     },
   };
   expect(() =>

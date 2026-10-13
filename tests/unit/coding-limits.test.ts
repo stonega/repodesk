@@ -50,21 +50,14 @@ test("older settings clients cannot preserve retired execution overrides", () =>
     settings: {
       enabled: true,
       backend: "podman",
-      repositories: [
-        {
-          repositoryId: 1,
-          baseBranch: "develop",
-          maintainers: ["101"],
-          development: {
-            ...legacy,
-            executionMode: "direct",
-            publishByDefault: true,
-          },
-        },
-      ],
+      development: {
+        ...legacy,
+        executionMode: "direct",
+        publishByDefault: true,
+      },
     },
   });
-  expect(save.settings.repositories[0]?.development).toEqual({
+  expect(save.settings.development).toEqual({
     executionMode: "direct",
     publishByDefault: true,
   });

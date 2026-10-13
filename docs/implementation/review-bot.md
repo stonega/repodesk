@@ -3,7 +3,7 @@
 Status: implemented locally; live GitHub and Codex acceptance remains a release gate.
 
 Review Bot is a built-in plugin at **Plugins → Review Bot**. It automatically
-reviews PRs in selected repositories and accepts directly addressed GitHub comments.
+reviews PRs in the workspace’s connected GitHub repositories and accepts directly addressed GitHub comments.
 Its primary review framework is [Open Code Review](https://open-codereview.ai/docs)
 (OCR), using the official [delegation workflow](https://github.com/alibaba/open-code-review/blob/main/pages/src/content/docs/en/integrations/delegate.md).
 OCR selects reviewable files and resolves review rules; Codex supplies the analysis
@@ -16,8 +16,9 @@ custom runner images must include this JSON-capable OCR version.
 
 ## Configure
 
-1. Connect the GitHub App and repositories to the workspace. Enable Codex, configure
-   the repositories and assign active maintainers. Review Bot selects from these targets.
+1. Connect the GitHub App to the workspace and enable Codex with model credentials.
+   Repository access comes from the GitHub connection; neither plugin has a separate
+   repository allowlist or maintainer grant.
 2. Open Review Bot. New Apps created through RepoDesk retain GitHub's generated
    webhook secret automatically. If **Webhook secret** shows **Not configured**,
    configure an existing secret or generate one; generated secrets appear once in
@@ -34,25 +35,29 @@ custom runner images must include this JSON-capable OCR version.
    in RepoDesk does not update or verify GitHub's webhook configuration. Local
    registrations retain an inactive placeholder until a public HTTPS receiver is
    configured.
-4. Choose **New** in Repositories, choose an automatic review owner and save the
-   repository in the dialog. The page shows saved repository names, owners and
-   policy values. **Edit** opens the same editor; Cancel discards changes, failed
-   saves retain them, and removal requires confirmation. Enable Review Bot.
-   Automatic reviews and tagged requests are independently configurable per repository.
-   The same operator/App installation repository can have Review Bot enabled in only
-   one workspace, preventing duplicate reviews and ambiguous request routing.
-5. To accept fixes, enable **Direct** execution for that repository in Codex and
-   **Allow explicitly requested fixes to the same PR** in Review Bot. Members must
-   verify their GitHub account through the existing Telegram connection flow.
-   Admin-selected GitHub profile associations alone do not authorize requests.
+4. Open **Configuration → Edit** to configure automatic reviews, tagged requests,
+   explicitly requested fixes and the review model once for the plugin, then enable
+   Review Bot. Saved values appear in a read-only summary. Cancel discards drafts;
+   failed saves retain them. There is no repository list or automatic review owner.
+5. To accept fixes, choose **Direct** in Codex Configuration and enable requested
+   fixes in Review Bot Configuration. Members verify their GitHub account through
+   `/github connect`; an admin-selected profile alone cannot authorize requests.
 
-Automatic reviews are a standing, revisioned workspace policy grant owned by the
-selected maintainer. The sender of an ordinary PR event does not authorize a write.
-Tagged requests require an active, verified maintainer with current repository access;
-fixes also require push access. The App must have Contents read and Pull requests
-read permissions for checkout; review/progress publication uses repository-scoped
-Pull requests/Issues write tokens. Fix publication uses a separate Contents/Pull
-requests write token. Write tokens never enter model execution or repository checks.
+Automatic reviews use the enabled operator-owned plugin's standing GitHub App
+installation grant, independent of individual members. Tagged review/answer requests
+require active membership, a verified GitHub identity and current GitHub read access;
+fixes require write access. The same App/repository has one Review Bot workspace
+for unambiguous routing. If later connection changes introduce overlap, ingress
+selects the lowest enabled workspace ID and queued/running work in the other
+workspace loses its grant before new execution or publication. App permissions and repository scope remain enforced by
+GitHub. Write tokens never enter model execution or checks.
+
+Migration `019_github_plugin_permissions.sql` removes legacy repository/reviewer
+settings and advances revisions. Each workflow option remains enabled only if all
+prior targets enabled it; fixes also require the resulting Codex Direct policy.
+Where plugin-wide routing overlaps, the lowest workspace ID remains enabled and
+conflicting workspaces are disabled for operator review. The migration is idempotent
+and does not restart old tasks or rewrite historical approvals/grants.
 
 ## Behavior
 
@@ -108,7 +113,7 @@ policy without another approval click. General questions remain read-only.
 A required question checkpoints the task. A tagged answer from the original
 requester continues the same task with a new input revision and runner attempt.
 Other accepted requests queue independently and serialize work on the PR. Fixes
-currently support same-repository PRs targeting the configured Codex base branch;
+currently support same-repository PRs using their actual GitHub base branch;
 fork PRs support reviews and answers. Merge and deployment retain their separate
 authorization boundaries.
 
@@ -131,8 +136,9 @@ commit together. Stable comment/head keys handle semantic duplicates, and expiri
 fenced leases protect execution across workers. The worker polls durable tasks;
 no process or in-memory promise waits for a user.
 
-Review policies, membership, verified GitHub identity, connection/configuration
-revisions and repository grants are rechecked before execution and publication.
+Review policies, App repository scope and configuration revisions are rechecked
+before execution and publication. Tagged tasks additionally recheck membership,
+verified GitHub identity and current GitHub permissions.
 The author and content hash of each authorizing comment are fetched again; editing
 or deleting it prevents subsequent publication. External text cannot expand grants.
 Installation removal/suspension and repository removal request cancellation.

@@ -14,6 +14,7 @@ test("installation metadata pagination returns every repository without App perm
       repositories: Array.from({ length: page === 1 ? 100 : 1 }, (_, i) => ({
         id: (page - 1) * 100 + i + 1,
         full_name: `example/repo-${(page - 1) * 100 + i + 1}`,
+        default_branch: "release/next",
         private: true,
         archived: false,
         disabled: false,
@@ -29,6 +30,7 @@ test("installation metadata pagination returns every repository without App perm
   expect(repositories[100]).toEqual({
     id: 101,
     full_name: "example/repo-101",
+    default_branch: "release/next",
     private: true,
     archived: false,
     disabled: false,

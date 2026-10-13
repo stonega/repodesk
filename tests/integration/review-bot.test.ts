@@ -130,7 +130,9 @@ class Runner implements LocalRunner {
     w.github = {
       revision: 1,
       installationId: 501,
-      repositories: [{ id: 7001, full_name: "example/workspace" }],
+      repositories: [
+        { id: 7001, full_name: "example/workspace", default_branch: "main" },
+      ],
     };
     const member = w.members.find((m) => m.id === "101");
     if (!member) throw Error("Missing member");
@@ -154,29 +156,16 @@ class Runner implements LocalRunner {
         enabled: true,
         backend: "podman",
         authMode: "provider_key",
-        repositories: [
-          {
-            repositoryId: 7001,
-            baseBranch: "main",
-            maintainers: ["101"],
-            development: { executionMode: "direct", publishByDefault: false },
-          },
-        ],
+        development: { executionMode: "direct", publishByDefault: false },
       },
     };
     w.reviewBot = {
       revision: 1,
       settings: {
         enabled: true,
-        repositories: [
-          {
-            repositoryId: 7001,
-            reviewer: "101",
-            autoReview: true,
-            acceptRequests: true,
-            allowFixes: true,
-          },
-        ],
+        autoReview: true,
+        acceptRequests: true,
+        allowFixes: true,
       },
     };
     await store.pool.query(
@@ -405,6 +394,62 @@ class Runner implements LocalRunner {
     });
     expect(f.runner.pushes).toHaveLength(0);
   });
+  test("automatic reviews use the App policy without a member's private grant", async () => {
+    const f = await fixture();
+    await store.change(f.w.id, (w) => {
+      w.members = [];
+    });
+    await f.accept();
+    const task = await f.task();
+    expect(task.actor).toBe(f.w.operatorId);
+    await f.executor.advance(f.w.id, task.id);
+    expect(f.runner.starts).toHaveLength(1);
+    expect(f.runner.starts[0]?.development?.mode).toBe("analysis");
+    expect(f.runner.starts[0]?.development?.review?.action).toBe("review");
+    expect(f.runner.pushes).toHaveLength(0);
+  });
+  test("tagged reviews use GitHub read access and never acquire a fix grant", async () => {
+    const f = await fixture();
+    await store.change(f.w.id, (w) => {
+      const access = w.members.find((m) => m.id === "101")?.github;
+      if (!access?.repositories[0]?.permissions) throw Error("Missing access");
+      access.repositories[0].permissions.push = false;
+    });
+    await f.mention("@deepx-fixture[bot] review");
+    expect((await f.task()).mode).toBe("review");
+    await f.mention("@deepx-fixture[bot] fix this", 97);
+    expect((await store.read(f.w.id)).reviewTasks).toHaveLength(1);
+  });
+  test("connection overlap routes each PR once and revokes the losing workspace's task", async () => {
+    const first = await fixture(),
+      second = await fixture();
+    await store.pool.query(
+      "UPDATE workspaces SET operator_id=$2::uuid,data=jsonb_set(data,'{operatorId}',to_jsonb(($2::uuid)::text)) WHERE id=$1",
+      [second.w.id, first.w.operatorId],
+    );
+    const [winner, loser] = [first.w.id, second.w.id].sort();
+    if (!winner || !loser) throw Error("Missing workspace");
+    await store.change(winner, (w) => {
+      if (w.github) w.github.repositories = [];
+    });
+    await first.accept();
+    const prior = (await store.read(loser)).reviewTasks?.[0];
+    if (!prior) throw Error("Missing original task");
+    await store.change(winner, (w) => {
+      if (w.github) {
+        w.github.repositories = first.w.github?.repositories ?? [];
+        w.github.revision++;
+      }
+    });
+    await first.accept();
+    expect((await store.read(winner)).reviewTasks).toHaveLength(1);
+    expect((await store.read(loser)).reviewTasks).toHaveLength(1);
+    await first.executor.advance(loser, prior.id);
+    expect((await store.read(loser)).reviewTasks?.[0]?.state).toBe("cancelled");
+    expect(first.runner.starts).toHaveLength(0);
+    await first.accept();
+    expect((await store.read(winner)).reviewTasks).toHaveLength(1);
+  });
   test("drafts, unselected repositories and ordinary issue comments do not run", async () => {
     const f = await fixture();
     await f.accept("pull_request", {
@@ -445,9 +490,11 @@ class Runner implements LocalRunner {
   });
   test("explicit fixes run checks and update the existing PR without creating an issue or PR", async () => {
     const f = await fixture();
+    f.pull.base.ref = "release/maintenance";
     await f.mention();
     const t = await f.task();
     await f.executor.advance(f.w.id, t.id);
+    expect(f.runner.starts[0]?.payload.baseBranch).toBe("release/maintenance");
     expect(f.runner.starts[0]?.development?.mode).toBe("work");
     expect(f.runner.starts[0]?.development?.pr?.branch).toBe("feature/api");
     f.runner.states.set(t.attemptId, {
@@ -679,7 +726,12 @@ class Runner implements LocalRunner {
       id: randomUUID(),
       reviewBot: {
         revision: 0,
-        settings: { enabled: false, repositories: [] },
+        settings: {
+          enabled: false,
+          autoReview: true,
+          acceptRequests: true,
+          allowFixes: false,
+        },
       },
     };
     await store.pool.query(

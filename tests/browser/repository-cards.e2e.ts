@@ -22,12 +22,9 @@ async function fixture(page: Page, theme: "light" | "dark") {
       enabled: true,
       backend: "podman",
       authMode: "provider_key",
-      repositories: [
-        { repositoryId: 1, baseBranch: "main", maintainers: ["101"] },
-      ],
     },
     repositories,
-    members: [{ id: "101", active: true, username: "maintainer" }],
+
     tasks: [],
     providerApiKeyConfigured: true,
     legacyActionsConfiguration: false,
@@ -36,23 +33,11 @@ async function fixture(page: Page, theme: "light" | "dark") {
     revision: 1,
     settings: {
       enabled: true,
-      repositories: [
-        {
-          repositoryId: 1,
-          reviewer: "101",
-          autoReview: true,
-          acceptRequests: true,
-          allowFixes: false,
-        },
-      ],
+      autoReview: true,
+      acceptRequests: true,
+      allowFixes: false,
     },
-    repositories: [
-      {
-        id: 1,
-        full_name: name,
-        maintainers: [{ id: "101", name: "Maintainer" }],
-      },
-    ],
+
     tasks: [],
     webhookUrl: "https://example.com/github/webhook/operator",
     webhookConfigured: true,
@@ -219,20 +204,6 @@ for (const width of [1280, 390]) {
       await page.keyboard.press("Escape");
 
       for (const [route, label, detail, edit, editor] of [
-        [
-          "codex",
-          name,
-          "Maintainers: 101",
-          "Edit coding repository 1",
-          "Edit coding repository",
-        ],
-        [
-          "review-bot",
-          name,
-          "Automatic review owner",
-          `Edit ${name}`,
-          "Edit Review Bot repository",
-        ],
         [
           "code-truth",
           "Repository 1",

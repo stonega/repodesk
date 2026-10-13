@@ -22,7 +22,7 @@ import { encrypt } from "../../src/setup/credentials.ts";
 import { selectTaskControl } from "../../src/telegram/task-controls.ts";
 import { decide } from "../../src/workflows/service.ts";
 import { createRun } from "../../src/workspaces/service.ts";
-import { workspace } from "../fixtures.ts";
+import { grantGitHubAccess, workspace } from "../fixtures.ts";
 import { githubFixtureConfig, githubTransport } from "../github-fixture.ts";
 
 function present<T>(value: T | undefined): T {
@@ -61,7 +61,9 @@ const url = process.env.TEST_DATABASE_URL;
     w.github = {
       revision: 1,
       installationId: 501,
-      repositories: [{ id: 7001, full_name: "example/workspace" }],
+      repositories: [
+        { id: 7001, full_name: "example/workspace", default_branch: "develop" },
+      ],
     };
     w.coding = {
       revision: 1,
@@ -69,15 +71,9 @@ const url = process.env.TEST_DATABASE_URL;
         enabled: true,
         backend: "podman",
         authMode: "provider_key",
-        repositories: [
-          {
-            repositoryId: 7001,
-            baseBranch: "develop",
-            maintainers: ["101"],
-          },
-        ],
       },
     };
+    grantGitHubAccess(w, ["101"]);
     const run = createRun(w, "101", "Fix recap", "-100100", 3, "gpt-4.1-mini");
     run.status = "running";
     const a = proposeCoding(w, "101", run.id, "call", {
@@ -218,7 +214,7 @@ const url = process.env.TEST_DATABASE_URL;
       "queued",
     );
     await store.change(f.id, (w) => {
-      present(present(w.coding).settings.repositories[0]).maintainers = [];
+      present(w.members.find((m) => m.id === "101")?.github).repositories = [];
     });
     await expect(
       tap(present(queued.buttons?.[0]?.[0]?.callback_data)),
@@ -313,9 +309,16 @@ const url = process.env.TEST_DATABASE_URL;
   test("automatic-check migration removes stored overrides and invalidates old grants only once", async () => {
     const { id } = await fixture();
     await store.change(id, (w) => {
-      Object.assign(present(present(w.coding).settings.repositories[0]), {
-        setupCommand: "exit 91",
-        checkCommand: "exit 92",
+      Object.assign(present(w.coding).settings, {
+        repositories: [
+          {
+            repositoryId: 7001,
+            baseBranch: "develop",
+            maintainers: ["101"],
+            setupCommand: "exit 91",
+            checkCommand: "exit 92",
+          },
+        ],
       });
     });
     const before = await store.read(id);
@@ -325,16 +328,96 @@ const url = process.env.TEST_DATABASE_URL;
     );
     await store.pool.query(migration);
     const migrated = await store.read(id);
-    expect(migrated.coding?.settings.repositories[0]).not.toHaveProperty(
-      "setupCommand",
-    );
-    expect(migrated.coding?.settings.repositories[0]).not.toHaveProperty(
-      "checkCommand",
-    );
+    expect(
+      (
+        present(migrated.coding).settings as unknown as {
+          repositories: object[];
+        }
+      ).repositories[0],
+    ).not.toHaveProperty("setupCommand");
+    expect(
+      (
+        present(migrated.coding).settings as unknown as {
+          repositories: object[];
+        }
+      ).repositories[0],
+    ).not.toHaveProperty("checkCommand");
     expect(migrated.coding?.revision).toBe(present(before.coding).revision + 1);
     expect(migrated.version).toBe(before.version + 1);
     await store.pool.query(migration);
     expect((await store.read(id)).version).toBe(migrated.version);
+    await provider().service.tick(id);
+    expect((await read(id)).state).toBe("cancelled");
+  });
+  test("native GitHub permission migration removes grants once and preserves historical approvals", async () => {
+    const { id } = await fixture();
+    await store.change(id, (w) => {
+      Object.assign(present(w.coding).settings, {
+        repositories: [
+          {
+            repositoryId: 7001,
+            baseBranch: "custom",
+            maintainers: ["101"],
+            development: { executionMode: "direct", publishByDefault: true },
+          },
+          {
+            repositoryId: 7002,
+            baseBranch: "main",
+            maintainers: ["202"],
+            development: { executionMode: "reviewed", publishByDefault: false },
+          },
+        ],
+      });
+      Object.assign(w, {
+        reviewBot: {
+          revision: 1,
+          settings: {
+            enabled: true,
+            repositories: [
+              {
+                repositoryId: 7001,
+                reviewer: "101",
+                autoReview: true,
+                acceptRequests: true,
+                allowFixes: true,
+              },
+              {
+                repositoryId: 7002,
+                reviewer: "202",
+                autoReview: false,
+                acceptRequests: true,
+                allowFixes: true,
+              },
+            ],
+          },
+        },
+      });
+    });
+    const before = await store.read(id);
+    const migration = await readFile(
+      "migrations/019_github_plugin_permissions.sql",
+      "utf8",
+    );
+    await store.pool.query(migration);
+    const after = await store.read(id);
+    expect(after.coding?.settings).not.toHaveProperty("repositories");
+    expect(after.coding?.settings.development).toEqual({
+      executionMode: "reviewed",
+      publishByDefault: false,
+    });
+    expect(after.reviewBot?.settings).toEqual({
+      enabled: true,
+      autoReview: false,
+      acceptRequests: true,
+      allowFixes: false,
+    });
+    expect(after.coding?.revision).toBe(2);
+    expect(after.reviewBot?.revision).toBe(2);
+    expect(after.approvals).toEqual(before.approvals);
+    expect(after.codingTasks).toEqual(before.codingTasks);
+    expect(after.version).toBe(before.version + 1);
+    await store.pool.query(migration);
+    expect((await store.read(id)).version).toBe(after.version);
     await provider().service.tick(id);
     expect((await read(id)).state).toBe("cancelled");
   });
@@ -366,7 +449,9 @@ const url = process.env.TEST_DATABASE_URL;
           expect(w.approvals.filter((a) => a.runId === run.id)).toHaveLength(1);
           expect(w.codingTasks).toHaveLength(1); // Only the previously approved fixture task.
         } else {
-          await expect(action).rejects.toThrow("coding_maintainer_required");
+          await expect(action).rejects.toThrow(
+            "github_user_connection_required",
+          );
           expect(
             (await store.read(id)).approvals.filter((a) => a.runId === run.id),
           ).toHaveLength(0);
@@ -381,8 +466,9 @@ const url = process.env.TEST_DATABASE_URL;
       const { id } = await fixture();
       if (explicit)
         await store.change(id, (w) => {
-          present(present(w.coding).settings.repositories[0]).development =
-            developmentPolicy.parse({ executionMode: "reviewed" });
+          present(w.coding).settings.development = developmentPolicy.parse({
+            executionMode: "reviewed",
+          });
         });
       const { host } = await codingHost(id);
       try {
@@ -399,18 +485,16 @@ const url = process.env.TEST_DATABASE_URL;
       }
     }
   });
-  test("mixed policies advertise only Direct targets and preserve policy errors before reviewed fallback", async () => {
+  test("Direct targets use connected repositories and filter by GitHub write access", async () => {
     const { id } = await fixture();
     await store.change(id, (w) => {
       present(w.github).repositories.push({
         id: 7002,
-        full_name: "example/direct",
+        full_name: "example/unavailable",
+        default_branch: "main",
       });
-      present(w.coding).settings.repositories.push({
-        repositoryId: 7002,
-        baseBranch: "main",
-        maintainers: ["101"],
-        development: developmentPolicy.parse({ executionMode: "direct" }),
+      present(w.coding).settings.development = developmentPolicy.parse({
+        executionMode: "direct",
       });
     });
     const { host, input, run } = await codingHost(id);
@@ -418,18 +502,18 @@ const url = process.env.TEST_DATABASE_URL;
       const start = present(
         host.tools.find((t) => t.name === "start_development_task"),
       );
-      expect(start.description).toContain("example/direct");
-      expect(start.description).not.toContain("example/workspace");
+      expect(start.description).toContain("example/workspace");
+      expect(start.description).not.toContain("example/unavailable");
       const source = present(
         (await store.read(id)).messages.find((s) => s.runId === run.id),
       );
       await expect(
         start.execute(
-          "rejected-start",
-          { repositoryId: 7001, sourceIds: [source.id] },
+          "denied-start",
+          { repositoryId: 7002, sourceIds: [source.id] },
           input.signal,
         ),
-      ).rejects.toThrow("coding_direct_execution_disabled");
+      ).rejects.toThrow("github_user_access_denied");
       expect(
         (
           await store.pool.query(
@@ -438,32 +522,11 @@ const url = process.env.TEST_DATABASE_URL;
           )
         ).rowCount,
       ).toBe(0);
-      const proposal = present(
-        host.tools.find((t) => t.name === "propose_coding_task"),
-      );
-      const approvedFlow = await proposal.execute(
-        "reviewed-proposal",
-        { repositoryId: 7001, title: "Implement fix", body: "Implement fix" },
-        input.signal,
-      );
-      expect(approvedFlow.content).toEqual([
-        {
-          type: "text",
-          text: expect.stringContaining('"status":"awaiting_approval"'),
-        },
-      ]);
-      const task = await start.execute(
-        "direct-start",
-        { repositoryId: 7002, sourceIds: [source.id] },
-        input.signal,
-      );
-      expect(task.content).toEqual([
-        { type: "text", text: expect.stringContaining('"state":"queued"') },
-      ]);
     } finally {
       await host.close();
     }
   });
+
   test("permission changes during token minting prevent issue creation", async () => {
     const { id, taskId } = await fixture();
     const local = localFixture();
@@ -471,7 +534,8 @@ const url = process.env.TEST_DATABASE_URL;
       local: local.runner,
       onToken: async () => {
         await store.change(id, (w) => {
-          present(present(w.coding).settings.repositories[0]).maintainers = [];
+          present(w.members.find((m) => m.id === "101")?.github).repositories =
+            [];
         });
       },
     });
@@ -702,7 +766,7 @@ const url = process.env.TEST_DATABASE_URL;
     expect(notices[0]?.text).toContain(stopped.payload.repository);
     expect(notices[0]?.text).toContain(`“${stopped.payload.baseBranch}”`);
     expect(notices[0]?.text).toContain("does not exist");
-    expect(notices[0]?.text).toContain("Plugins → Codex → Repositories");
+    expect(notices[0]?.text).toContain("GitHub repository settings");
   });
 
   test("Podman tasks retain approval and duplicate protection through fresh publication", async () => {

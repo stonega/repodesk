@@ -126,7 +126,14 @@ export const developmentRun = z.preprocess(
       taskId: z.uuid(),
       revision: z.number().int().positive(),
       mode: z.enum(["intake", "work", "analysis"]),
-      inputs: z.array(developmentInput).min(1).max(100),
+      inputs: z
+        .array(
+          developmentInput.extend({
+            actor: z.union([developmentInput.shape.actor, z.uuid()]),
+          }),
+        )
+        .min(1)
+        .max(100),
       context: z.string().max(40000).default(""),
       media: developmentMedia.optional(),
       review: z
@@ -152,7 +159,22 @@ export const developmentRun = z.preprocess(
         })
         .optional(),
     })
-    .strict(),
+    .strict()
+    .superRefine((run, ctx) => {
+      if (
+        run.inputs.some(
+          (input) =>
+            !developmentInput.shape.actor.safeParse(input.actor).success,
+        ) &&
+        !(run.mode === "analysis" && run.review?.action === "review")
+      )
+        ctx.addIssue({
+          code: "custom",
+          path: ["inputs"],
+          message:
+            "Operator-owned inputs are only valid for read-only PR reviews",
+        });
+    }),
 );
 export type DevelopmentRun = z.infer<typeof developmentRun>;
 export function developmentEvidence(

@@ -370,8 +370,8 @@ describe("work handoffs", () => {
       task = developmentTask(w),
       r = requestRun(w);
     workHandoff(w, r, [task], {});
-    fixtureValue(fixtureValue(w.coding).settings.repositories[0]).maintainers =
-      ["303"];
+    fixtureValue(w.members.find((m) => m.id === "101")?.github).repositories =
+      [];
     expect(runAllowed(w, r)).toBe(false);
     const next = teamWorkspace(),
       selected = developmentTask(next),

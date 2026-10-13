@@ -46,7 +46,7 @@ export const pullActionGuidance: Readonly<Record<string, string>> = {
   github_access_denied:
     "Check the GitHub App's accepted Pull requests permission and repository access.",
   github_pr_maintainer_required:
-    "PR actions require an active workspace owner/admin or a configured maintainer of this repository in enabled Codex settings.",
+    "PR actions require an active workspace owner/admin or a verified GitHub collaborator with current write access to this repository.",
   github_user_access_denied:
     "Your linked GitHub account needs current write/admin access to this repository. Sync or reconnect your GitHub account after access changes.",
   github_pr_changed: "The PR changed. Review it and request a new proposal.",
@@ -83,13 +83,7 @@ function actionDestination(
   authorize(w, actor);
   requireThat(!w.settings.paused, "access_denied", 403);
   requireThat(
-    eligible(w, actor, true) ||
-      (w.coding?.settings.enabled &&
-        w.coding.settings.repositories.some(
-          (r) =>
-            r.repositoryId === input.repositoryId &&
-            r.maintainers.includes(actor),
-        )),
+    eligible(w, actor, true) || !!w.members.find((m) => m.id === actor)?.github,
     "github_pr_maintainer_required",
     403,
   );

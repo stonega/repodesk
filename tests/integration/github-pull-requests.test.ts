@@ -539,9 +539,6 @@ const url = process.env.TEST_DATABASE_URL;
         settings: {
           ...emptyCoding,
           enabled: true,
-          repositories: [
-            { repositoryId: 7001, baseBranch: "main", maintainers: ["202"] },
-          ],
         },
       };
       const member = w.members.find((m) => m.id === "202");
@@ -565,12 +562,14 @@ const url = process.env.TEST_DATABASE_URL;
     await approve(f, id);
     await store.change(f.w.id, (w) => {
       requireThat(w.coding, "missing coding settings");
-      w.coding.settings.repositories = [];
+      const member = w.members.find((m) => m.id === "202");
+      requireThat(member?.github, "missing github access");
+      member.github.repositories = [];
     });
     await p.service.send(f.w.id, id);
     expect(p.writes()).toHaveLength(0);
     expect((await saved(f, id))?.pullRequest?.error).toBe(
-      "github_pr_maintainer_required",
+      "github_user_access_denied",
     );
   });
 

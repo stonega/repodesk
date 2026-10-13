@@ -9,10 +9,16 @@ import { developmentPolicy } from "./development-policy.ts";
 export const branchName = z
   .string()
   .min(1)
-  .max(150)
+  .max(255)
   .refine(
     (s) =>
-      /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(s) &&
+      !s.startsWith("-") &&
+      !Array.from(s).some(
+        (character) =>
+          character.charCodeAt(0) <= 32 || character.charCodeAt(0) === 127,
+      ) &&
+      !/[~^:?*[\\]/.test(s) &&
+      !s.includes("@{") &&
       !s.includes("..") &&
       !s.includes("//") &&
       s
@@ -34,35 +40,25 @@ function withoutCommands(value: unknown) {
   delete clean.checkCommand;
   return clean;
 }
-export const codingRepositorySchema = z.preprocess(
-  withoutCommands,
+// Older clients cannot restore the retired repository/maintainer grants.
+export function withoutRepositoryGrants(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const clean = { ...value } as Record<string, unknown>;
+  delete clean.repositories;
+  return clean;
+}
+export const codingSettingsSchema = z.preprocess(
+  withoutRepositoryGrants,
   z
     .object({
-      repositoryId: z.number().int().positive(),
-      baseBranch: branchName,
+      enabled: z.boolean(),
+      backend: z.literal("podman"),
+      authMode: z.enum(["provider_key", "device_code"]).default("provider_key"),
       development: developmentPolicy.optional(),
-      maintainers: z
-        .array(z.string().regex(/^[1-9]\d{0,15}$/))
-        .min(1)
-        .max(100),
+      model: modelSelectionSchema.optional(),
     })
     .strict(),
 );
-export const codingSettingsSchema = z
-  .object({
-    enabled: z.boolean(),
-    backend: z.literal("podman"),
-    authMode: z.enum(["provider_key", "device_code"]).default("provider_key"),
-    repositories: z.array(codingRepositorySchema).max(12),
-    model: modelSelectionSchema.optional(),
-  })
-  .strict()
-  .refine(
-    (s) =>
-      new Set(s.repositories.map((r) => r.repositoryId)).size ===
-      s.repositories.length,
-    "Select each repository only once",
-  );
 export const codingSaveSchema = z
   .object({
     revision: z.number().int().nonnegative(),
@@ -80,7 +76,6 @@ export const emptyCoding: CodingSettings = {
   enabled: false,
   backend: "podman",
   authMode: "provider_key",
-  repositories: [],
 };
 export const codingInput = z
   .object({
@@ -159,7 +154,6 @@ export interface CodingPage {
   revision: number;
   settings: CodingSettings;
   repositories: { id: number; full_name: string; private?: boolean }[];
-  members: { id: string; active: boolean; username?: string }[];
   tasks: CodingTask[];
   developmentTasks?: DevelopmentTask[];
 }

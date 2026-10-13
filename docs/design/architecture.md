@@ -274,7 +274,9 @@ An optional separately deployed Bun service reuses the Code Truth MCP/indexing c
 
 ### Codex implementation tasks
 
-Optional repository-scoped maintainer grants permit approved issue-to-PR tasks.
+The enabled Codex plugin uses verified GitHub write access for approved issue-to-PR
+tasks, without a separate repository allowlist or maintainer grant. Workflow settings
+apply once to the workspace and the base branch comes from GitHub.
 These use separate tenant `codingTasks` records and a worker polling loop, so the
 chat lease/deadline does not span remote implementation. The application reserves
 issue creation and local publication before sending; uncertain writes never replay.
@@ -309,8 +311,8 @@ workspace-scoped PR jobs atomically. JSONB task records carry original inputs,
 source hashes, policy/configuration revisions, runner attempts and committed
 publication reservations. A separate worker tick claims fenced leases and
 reconciles stable-ID runner starts and unknown review/comment outcomes.
-Automatic reviews use a maintainer-owned standing policy; user tags use verified
-GitHub identities and current repository grants. Review turns remain read-only;
+Automatic reviews use an operator-owned standing App installation policy; user tags
+use verified GitHub identities and current GitHub repository permissions. Review turns remain read-only;
 fixes require verified checks and a distinct publication token. Progress and
 results return to the PR, independently of Telegram destinations.
 

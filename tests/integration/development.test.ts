@@ -47,7 +47,7 @@ import {
 } from "../../src/telegram/task-controls.ts";
 import { Ingress } from "../../src/telegram/webhook.ts";
 import { createRun } from "../../src/workspaces/service.ts";
-import { workspace } from "../fixtures.ts";
+import { grantGitHubAccess, workspace } from "../fixtures.ts";
 import { githubFixtureConfig, githubTransport } from "../github-fixture.ts";
 
 function present<T>(value: T | undefined): T {
@@ -116,7 +116,12 @@ const url = process.env.TEST_DATABASE_URL;
       revision: 1,
       installationId: 501,
       repositories: [
-        { id: 7001, full_name: "example/workspace", private: true },
+        {
+          id: 7001,
+          full_name: "example/workspace",
+          default_branch: "develop",
+          private: true,
+        },
       ],
     };
     w.coding = {
@@ -125,16 +130,10 @@ const url = process.env.TEST_DATABASE_URL;
         enabled: true,
         backend: "podman",
         authMode: "provider_key",
-        repositories: [
-          {
-            repositoryId: 7001,
-            baseBranch: "develop",
-            maintainers: ["101", "202"],
-            development: developmentPolicy.parse({ executionMode: "direct" }),
-          },
-        ],
+        development: developmentPolicy.parse({ executionMode: "direct" }),
       },
     };
+    grantGitHubAccess(w, ["101", "202"]);
     const run = createRun(w, "101", text, chatId, 3, "gpt-4.1-mini", {
       replyTo: 10,
       botId: "999",
@@ -510,7 +509,9 @@ const url = process.env.TEST_DATABASE_URL;
         } else
           await store.change(f.w.id, async (w, sql) => {
             if (change === "permission")
-              present(w.coding?.settings.repositories[0]).maintainers = [];
+              present(
+                w.members.find((m) => m.id === "101")?.github,
+              ).repositories = [];
             if (change === "cancel")
               await cancelDevelopment(sql, w, "101", f.task.id);
             const source = present(
@@ -634,7 +635,7 @@ const url = process.env.TEST_DATABASE_URL;
     );
   });
   test("Stop and confirmed permission loss still cancel during access recovery", async () => {
-    for (const action of ["stop", "permission", "maintainer"] as const) {
+    for (const action of ["stop", "permission", "membership"] as const) {
       const f = await fixture();
       await f.tick();
       await accessState(f.w.id, "unavailable");
@@ -647,9 +648,7 @@ const url = process.env.TEST_DATABASE_URL;
         await accessState(f.w.id, "connected", false);
       else
         await store.change(f.w.id, (w) => {
-          present(present(w.coding).settings.repositories[0]).maintainers = [
-            "202",
-          ];
+          present(w.members.find((m) => m.id === "101")).active = false;
         });
       const stopped = await f.tick();
       expect(stopped.state).toBe("cancelled");
@@ -999,7 +998,7 @@ const url = process.env.TEST_DATABASE_URL;
       expect((await second.read()).usageUnknown).toBe(false);
       const w = await store.read(first.w.id);
       expect(w.coding?.revision).toBe(1);
-      expect(w.coding?.settings.repositories[0]?.development).toEqual({
+      expect(w.coding?.settings.development).toEqual({
         executionMode: "direct",
         publishByDefault: false,
       });
@@ -1040,7 +1039,7 @@ const url = process.env.TEST_DATABASE_URL;
     expect(notices[0]?.text).toContain("example/workspace");
     expect(notices[0]?.text).toContain("“develop”");
     expect(notices[0]?.text).toContain("does not exist");
-    expect(notices[0]?.text).toContain("Plugins → Codex → Repositories");
+    expect(notices[0]?.text).toContain("GitHub repository settings");
     expect(
       (await store.read(other.w.id)).deliveries.some((d) =>
         d.id.includes(f.task.id),
@@ -1112,7 +1111,7 @@ const url = process.env.TEST_DATABASE_URL;
     const f = await fixture();
     await f.tick();
     await store.change(f.w.id, (w) => {
-      present(present(w.coding).settings.repositories[0]).maintainers = ["202"];
+      present(w.members.find((m) => m.id === "101")?.github).repositories = [];
     });
     await store.change(f.w.id, (w, sql) =>
       cancelDevelopment(sql, w, "101", f.task.id),
@@ -2268,7 +2267,7 @@ const url = process.env.TEST_DATABASE_URL;
       ),
     );
     await store.change(f.w.id, (w) => {
-      present(present(w.coding).settings.repositories[0]).maintainers = ["202"];
+      present(w.members.find((m) => m.id === "101")?.github).repositories = [];
     });
     let revokedSends = 0;
     const revokedSetup = {
@@ -2514,7 +2513,7 @@ const url = process.env.TEST_DATABASE_URL;
     await expect(select()).rejects.toThrow("access_denied");
     await store.change(f.w.id, (w) => {
       present(w.deliveries.find((d) => d.id === started.id)).state = "sent";
-      present(present(w.coding).settings.repositories[0]).maintainers = ["202"];
+      present(w.members.find((m) => m.id === "101")?.github).repositories = [];
     });
     await expect(select()).rejects.toThrow();
     // The initiator retains cancellation authority when their maintainer grant is removed.

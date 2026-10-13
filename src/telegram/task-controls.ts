@@ -18,6 +18,7 @@ import {
   requireThat,
   type Workspace,
 } from "../domain.ts";
+import { authorizeVerifiedRepository } from "../github/user-access.ts";
 import { audience, authorize } from "../workspaces/policy.ts";
 import { deliver, visibleRuns } from "../workspaces/service.ts";
 import { runStatus } from "./feedback.ts";
@@ -80,18 +81,10 @@ function allowed(w: Workspace, actor: string, target: Target, stop: boolean) {
   else if (target.kind === "c") {
     const t = target.value;
     audience(w, actor, t.chatId);
-    if (stop)
-      requireThat(
-        t.actor === actor ||
-          w.coding?.settings.repositories.some(
-            (r) =>
-              r.repositoryId === t.payload.repositoryId &&
-              r.maintainers.includes(actor),
-          ),
-        "access_denied",
-        403,
-      );
-    else {
+    if (stop) {
+      if (t.actor !== actor)
+        authorizeVerifiedRepository(w, actor, t.payload.repositoryId, true);
+    } else {
       requireThat(
         t.actor === actor || t.chatId !== t.actor,
         "access_denied",

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { type Approval, requireThat, type Workspace } from "../domain.ts";
-import { authorizeRepository } from "../github/user-access.ts";
+import { authorizeVerifiedRepository } from "../github/user-access.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import { clearProgress, deliverTaskProgress } from "../telegram/feedback.ts";
 import { pullRequestButtons, taskButtons } from "../telegram/task-buttons.ts";
@@ -37,29 +37,21 @@ export function codingDestination(
     409,
   );
   const input = codingInput.parse(value);
-  const target = w.coding.settings.repositories.find(
-    (r) => r.repositoryId === input.repositoryId,
-  );
-  requireThat(target, "coding_maintainer_required", 403);
-  requireThat(
-    target.maintainers.includes(actor),
-    "coding_maintainer_required",
-    403,
-  );
   const repo = w.github?.repositories.find((r) => r.id === input.repositoryId);
   requireThat(
     repo && w.github?.installationId,
     "github_repository_not_connected",
     409,
   );
-  authorizeRepository(w, actor, input.repositoryId, true);
+  authorizeVerifiedRepository(w, actor, input.repositoryId, true);
+  requireThat(repo.default_branch, "github_default_branch_unavailable", 409);
   return codingPayload.parse({
     ...input,
     repository: repo.full_name,
     installationId: w.github.installationId,
     githubRevision: w.github.revision,
     configRevision: w.coding.revision,
-    baseBranch: target.baseBranch,
+    baseBranch: repo.default_branch,
     backend: "podman",
     authMode: w.coding.settings.authMode ?? "provider_key",
   });
@@ -200,17 +192,9 @@ export function cancelCoding(w: Workspace, actor: string, id: string) {
   authorize(w, actor);
   const task = w.codingTasks?.find((t) => t.id === id);
   requireThat(task, "not_found", 404);
-  // Initiators may stop their task even after a maintainer grant is removed.
-  requireThat(
-    task.actor === actor ||
-      w.coding?.settings.repositories.some(
-        (r) =>
-          r.repositoryId === task.payload.repositoryId &&
-          r.maintainers.includes(actor),
-      ),
-    "coding_maintainer_required",
-    403,
-  );
+  // Initiators can still stop their task after losing repository access.
+  if (task.actor !== actor)
+    authorizeVerifiedRepository(w, actor, task.payload.repositoryId, true);
   if (codingTerminal(task.state) || task.cancelRequested) return task;
   task.cancelRequested = true;
   clearProgress(w, "coding", task.id);

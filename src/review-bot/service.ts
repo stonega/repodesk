@@ -12,7 +12,7 @@ import { type Admin, Fault, requireThat, type Workspace } from "../domain.ts";
 import type { GitHubApps } from "../github/registry.ts";
 import { ModelProviders } from "../models/service.ts";
 import { decrypt, encrypt, fingerprint } from "../setup/credentials.ts";
-import { audit, eligible } from "../workspaces/policy.ts";
+import { audit } from "../workspaces/policy.ts";
 import {
   emptyReview,
   type ReviewPage,
@@ -21,7 +21,12 @@ import {
   reviewTerminal,
 } from "./config.ts";
 import { reviewMention } from "./mentions.ts";
-import { checkReview, reviewActor, reviewAuthority } from "./policy.ts";
+import {
+  checkReview,
+  reviewActor,
+  reviewAuthority,
+  reviewDestination,
+} from "./policy.ts";
 
 const githubActor = z.object({
   id: z.number().int().positive().safe(),
@@ -102,30 +107,6 @@ export class ReviewService {
       botHandle: app ? `${app.config.slug}[bot]` : undefined,
       webhookUrl: `${origin}/github/webhook/${w.operatorId}`,
       webhookConfigured: !!(await this.hookSecret(w.operatorId)),
-      repositories: (w.github?.repositories ?? []).flatMap((repo) => {
-        const coding =
-          w.coding?.settings.enabled &&
-          w.coding.settings.repositories.find(
-            (r) => r.repositoryId === repo.id,
-          );
-        return coding
-          ? [
-              {
-                id: repo.id,
-                full_name: repo.full_name,
-                maintainers: coding.maintainers
-                  .filter((id) => eligible(w, id))
-                  .map((id) => ({
-                    id,
-                    name:
-                      w.members.find((m) => m.id === id)?.name ??
-                      w.members.find((m) => m.id === id)?.username ??
-                      id,
-                  })),
-              },
-            ]
-          : [];
-      }),
       tasks: [...(w.reviewTasks ?? [])].reverse(),
     };
   }
@@ -174,9 +155,7 @@ export class ReviewService {
       ]);
       if (input.settings.enabled) {
         requireThat(
-          input.settings.repositories.length &&
-            w.github?.installationId &&
-            w.coding?.settings.enabled,
+          w.github?.installationId && w.coding?.settings.enabled,
           "review_repository_required",
           409,
         );
@@ -185,24 +164,12 @@ export class ReviewService {
           "review_webhook_required",
           409,
         );
-        for (const target of input.settings.repositories) {
-          const coding = w.coding.settings.repositories.find(
-            (r) => r.repositoryId === target.repositoryId,
-          );
-          requireThat(
-            w.github.repositories.some((r) => r.id === target.repositoryId) &&
-              coding?.maintainers.includes(target.reviewer) &&
-              eligible(w, target.reviewer),
-            "review_reviewer_required",
-            409,
-          );
-          requireThat(
-            !target.allowFixes ||
-              coding?.development?.executionMode === "direct",
-            "coding_direct_execution_disabled",
-            409,
-          );
-        }
+        requireThat(
+          !input.settings.allowFixes ||
+            w.coding.settings.development?.executionMode === "direct",
+          "coding_direct_execution_disabled",
+          409,
+        );
         const others = await sql.query(
           "SELECT data FROM workspaces WHERE id<>$1 AND data->>'operatorId'=$2 AND data#>>'{reviewBot,settings,enabled}'='true'",
           [w.id, w.operatorId],
@@ -211,10 +178,8 @@ export class ReviewService {
           requireThat(
             data.deletion ||
               data.github?.installationId !== w.github.installationId ||
-              !data.reviewBot?.settings.repositories.some((r) =>
-                input.settings.repositories.some(
-                  (t) => t.repositoryId === r.repositoryId,
-                ),
+              !data.github?.repositories.some((r) =>
+                w.github?.repositories.some((t) => t.id === r.id),
               ),
             "review_repository_already_configured",
             409,
@@ -300,17 +265,16 @@ export class ReviewService {
       return { accepted: true };
     }
     const data = eventSchema.parse(raw);
-    const ids = (
-      await this.store.pool.query(
-        "SELECT id FROM workspaces WHERE data->>'operatorId'=$1 AND data#>>'{github,installationId}'=$2 AND data#>>'{reviewBot,settings,enabled}'='true'",
-        [operatorId, String(data.installation.id)],
-      )
-    ).rows as { id: string }[];
-    for (const { id } of ids)
+    const destination = await reviewDestination(
+      this.store,
+      operatorId,
+      data.installation.id,
+      data.repository.id,
+    );
+    for (const id of destination ? [destination] : [])
       await this.store.change(id, async (w, sql) => {
-        const target = w.reviewBot?.settings.repositories.find(
-          (r) => r.repositoryId === data.repository.id,
-        );
+        const target = w.reviewBot?.settings;
+        const repositoryId = data.repository.id;
         if (
           !target ||
           w.deletion ||
@@ -319,7 +283,7 @@ export class ReviewService {
           !w.reviewBot?.settings.enabled ||
           !w.github.repositories.some(
             (r) =>
-              r.id === target.repositoryId &&
+              r.id === repositoryId &&
               r.full_name === data.repository.full_name,
           )
         )
@@ -342,7 +306,7 @@ export class ReviewService {
           for (const t of tasks)
             if (
               t.number === number &&
-              t.payload.repositoryId === target.repositoryId &&
+              t.payload.repositoryId === repositoryId &&
               (data.action === "closed" || t.automatic)
             )
               t.cancelRequested = true;
@@ -356,7 +320,7 @@ export class ReviewService {
           source: ReviewTask["sources"][number] | undefined;
         const automatic = event === "pull_request";
         let key = automatic
-          ? `auto:${target.repositoryId}:${number}:${data.pull_request?.head.sha}`
+          ? `auto:${repositoryId}:${number}:${data.pull_request?.head.sha}`
           : `comment:${event}:${data.comment?.id}`;
         if (tasks.some((t) => t.key === key)) {
           const resumable =
@@ -381,12 +345,12 @@ export class ReviewService {
           )
             return;
           mode = "review";
-          actor = target.reviewer;
+          actor = w.operatorId;
           text = "Review this pull request.";
           for (const t of tasks)
             if (
               t.automatic &&
-              t.payload.repositoryId === target.repositoryId &&
+              t.payload.repositoryId === repositoryId &&
               t.number === number &&
               !reviewTerminal(t.state)
             )
@@ -409,7 +373,7 @@ export class ReviewService {
             actor = reviewActor(
               w,
               data.comment.user.id,
-              target.repositoryId,
+              repositoryId,
               mention.mode === "fix",
             );
           } catch {
@@ -419,7 +383,7 @@ export class ReviewService {
             .reverse()
             .find(
               (t) =>
-                t.payload.repositoryId === target.repositoryId &&
+                t.payload.repositoryId === repositoryId &&
                 t.number === number &&
                 !reviewTerminal(t.state),
             );
@@ -473,8 +437,8 @@ export class ReviewService {
         )
           throw new Fault("review_capacity_reached", 429);
         const coding = w.coding;
-        const repository = coding?.settings.repositories.find(
-          (r) => r.repositoryId === target.repositoryId,
+        const repository = w.github.repositories.find(
+          (r) => r.id === repositoryId,
         );
         if (
           !coding?.settings.enabled ||
@@ -489,12 +453,12 @@ export class ReviewService {
           actor,
           githubUserId,
           payload: codingPayload.parse({
-            repositoryId: target.repositoryId,
+            repositoryId: repositoryId,
             repository: data.repository.full_name,
             installationId: data.installation.id,
             githubRevision: w.github.revision,
             configRevision: coding.revision,
-            baseBranch: branchName.parse(repository.baseBranch),
+            baseBranch: branchName.parse(repository.default_branch),
             backend: "podman",
             authMode: coding.settings.authMode,
             title: `PR #${number}`,

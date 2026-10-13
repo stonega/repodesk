@@ -1673,139 +1673,66 @@ test.describe
       const configuration = coding.getByRole("region", {
         name: "Codex configuration",
       });
-      const repositories = coding.getByRole("region", {
-        name: "Coding repositories",
-      });
       const tasks = coding.getByRole("region", { name: "Coding tasks" });
       await expect(configuration).toBeVisible();
-      await expect(repositories).toBeVisible();
+      await expect(
+        coding.getByRole("heading", { name: "Repositories", exact: true }),
+      ).toHaveCount(0);
       await expect(tasks).toBeVisible();
-      await expect(configuration.getByText("Disabled")).toBeVisible();
+      await expect(
+        configuration
+          .getByText("Status", { exact: true })
+          .locator("..")
+          .getByText("Disabled", { exact: true }),
+      ).toBeVisible();
       await expect(
         configuration.getByText("Local containers", { exact: true }),
       ).toBeVisible();
       await expect(page.locator(".plugin-back-link svg")).toBeVisible();
-      await repositories
-        .getByRole("button", { name: "Add coding repository" })
+      await configuration
+        .getByRole("button", { name: "Edit Codex configuration" })
         .click();
       const codingDialog = page.getByRole("dialog", {
-        name: "Add coding repository",
+        name: "Edit Codex configuration",
       });
-      await expect(codingDialog.getByText("@maintainer")).toBeVisible();
-      await expect(codingDialog.getByText("Telegram ID 101")).toBeVisible();
-      await expect(codingDialog.locator(".coding-maintainers")).toHaveCSS(
-        "border-top-width",
-        "0px",
-      );
-      await expect(codingDialog.getByLabel("Workflow filename")).toHaveCount(0);
-      await codingDialog
-        .getByRole("combobox", { name: "Repository", exact: true })
-        .fill("example/workspace");
-      await codingDialog
-        .getByRole("option", { name: "example/workspace", exact: true })
-        .click();
-      await codingDialog
-        .getByLabel("Development / base branch")
-        .fill("develop");
       await expect(
-        codingDialog.getByLabel("Local setup command (optional)"),
+        codingDialog.getByLabel("Development / base branch"),
       ).toHaveCount(0);
-      await expect(codingDialog.getByLabel("Local check command")).toHaveCount(
-        0,
-      );
-      await codingDialog.screenshot({
-        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/coding-add-desktop.png`,
-      });
-      await page.setViewportSize({ width: 390, height: 844 });
-      await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
-      await codingDialog.screenshot({
-        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/coding-add-mobile.png`,
-      });
-      await page.setViewportSize({ width: 1280, height: 720 });
-      await codingDialog
-        .getByRole("button", { name: "Save coding repository" })
-        .click();
-      await expect(codingDialog.getByRole("alert")).toHaveText(
-        "Select at least one maintainer.",
-      );
-      await codingDialog.getByRole("checkbox", { name: /@maintainer/ }).check();
-      await expect(codingDialog.getByLabel("Execution policy")).toHaveAttribute(
-        "value",
-        "reviewed",
-      );
+      await expect(
+        codingDialog.getByText("Maintainers", { exact: true }),
+      ).toHaveCount(0);
       await chooseOption(codingDialog.getByLabel("Execution policy"), "direct");
       await codingDialog
         .getByLabel(
           "Publish verified implementations as PRs ready for review by default",
         )
         .check();
-      for (const label of [
-        "Maximum execution cycles",
-        "Automatic check repairs per cycle",
-        "Active execution time (seconds)",
-        "Codex token limit",
-      ])
-        await expect(codingDialog.getByLabel(label)).toHaveCount(0);
       await codingDialog
-        .getByRole("button", { name: "Save coding repository" })
+        .getByRole("button", { name: "Save configuration", exact: true })
         .click();
       await expect(codingDialog).toHaveCount(0);
       await page
         .getByRole("switch", { name: "Enable Codex implementation" })
         .click();
-      await expect(configuration.getByText("Enabled")).toBeVisible();
+      await expect(
+        configuration
+          .getByText("Status", { exact: true })
+          .locator("..")
+          .getByText("Enabled", { exact: true }),
+      ).toBeVisible();
       const configDialog = page.getByRole("dialog", {
         name: "Edit Codex configuration",
       });
       await page.reload();
-      await expect(configuration.getByText("Enabled")).toBeVisible();
-      await expect(configuration.getByText("1", { exact: true })).toBeVisible();
-      await expect(coding.getByText(/Maintainers: 101/)).toBeVisible();
-      await coding
-        .getByRole("button", { name: "Edit coding repository 7001" })
-        .click();
-      const codingEdit = page.getByRole("dialog", {
-        name: "Edit coding repository",
-      });
       await expect(
-        codingEdit.getByLabel("Local setup command (optional)"),
-      ).toHaveCount(0);
-      await expect(codingEdit.getByLabel("Local check command")).toHaveCount(0);
-      await expect(codingEdit.getByLabel("Execution policy")).toHaveAttribute(
-        "value",
-        "direct",
-      );
+        configuration
+          .getByText("Status", { exact: true })
+          .locator("..")
+          .getByText("Enabled", { exact: true }),
+      ).toBeVisible();
       await expect(
-        codingEdit.getByLabel(
-          "Publish verified implementations as PRs ready for review by default",
-        ),
-      ).toBeChecked();
-      for (const label of [
-        "Maximum execution cycles",
-        "Automatic check repairs per cycle",
-        "Active execution time (seconds)",
-        "Codex token limit",
-      ])
-        await expect(codingEdit.getByLabel(label)).toHaveCount(0);
-      await expect(
-        codingEdit.getByRole("combobox", { name: "Repository", exact: true }),
-      ).toHaveAttribute("aria-expanded", "false");
-      await codingEdit.screenshot({
-        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/coding-policy-desktop.png`,
-      });
-      await page.setViewportSize({ width: 390, height: 844 });
-      await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
-      await codingEdit.screenshot({
-        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/coding-policy-mobile.png`,
-      });
-      await page.setViewportSize({ width: 1280, height: 720 });
-      await codingEdit
-        .getByLabel("Development / base branch")
-        .fill("other-branch");
-      await codingEdit
-        .getByRole("button", { name: "Cancel", exact: true })
-        .click();
-      await expect(coding.getByText(/Base: develop/)).toBeVisible();
+        configuration.getByText("Direct", { exact: true }),
+      ).toBeVisible();
       await coding.screenshot({
         path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/coding-desktop.png`,
       });
@@ -1817,7 +1744,12 @@ test.describe
       await page
         .getByRole("switch", { name: "Enable Codex implementation" })
         .click();
-      await expect(configuration.getByText("Disabled")).toBeVisible();
+      await expect(
+        configuration
+          .getByText("Status", { exact: true })
+          .locator("..")
+          .getByText("Disabled", { exact: true }),
+      ).toBeVisible();
       await expect(coding.getByLabel("Execution backend")).toHaveCount(0);
       await configuration
         .getByRole("button", { name: "Edit Codex configuration" })

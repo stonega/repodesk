@@ -1,6 +1,6 @@
 # GitHub work through Telegram
 
-Status: **product direction with local implementation**, updated 2026-10-07. This page describes the main
+Status: **product direction with local implementation**, updated 2026-10-12. This page describes the main
 user journey. The capability table separates local implementation from proposed
 work; [implementation evidence](../implementation/implementation-status.md) records
 what was verified and which live gates remain.
@@ -28,7 +28,7 @@ the bridge between the user's intent and scoped application tools.
    access does not follow automatically from a Telegram message or GitHub URL.
 2. The operator enables Code Truth and configures branches for source questions.
    Eligible members can propose issues; the operator separately grants selected
-   repository maintainers access to coding tasks.
+   verified GitHub collaborators access to coding tasks.
 3. A member asks a question or requests a GitHub action in a private chat or an
    explicitly linked group. The bot binds the request to the workspace, actor,
    chat/topic and current repository configuration.
@@ -49,18 +49,24 @@ or turn text found in a repository into instructions with authority.
 | --- | --- | --- |
 | Ask how selected code works | Code Truth indexes configured branches and exposes source-query tools with commit provenance and workspace grants. It requires its optional service and plugin setup. | Implemented locally; live repository/model evaluation remains |
 | File a GitHub issue | AI drafts repository, title and full body; the requester approves before the GitHub App creates it. | Implemented locally; live GitHub submission remains unverified |
-| Delegate a feature or fix | A configured repository maintainer approves issue creation, Codex execution and a PR; task status and links return to Telegram. | Implemented locally; repository setup and live execution remain |
+| Delegate a feature or fix | A verified GitHub collaborator with write access approves issue creation, Codex execution and a PR; task status and links return to Telegram. | Implemented locally; repository setup and live execution remain |
 | Ask for PR/issue status or a PR digest | Read-only selected repository metadata with numbered items, reviewers, merge windows, dates, links and explicit paging coverage. Approved daily/weekly workflows pin repository sources and destination. | Implemented locally; live GitHub/model report evaluation remains |
 | Save an assistant procedure as a team skill | Requester approves a sanitized draft from an owned completed run; admins publish and enable it through Skills. | Implemented locally; usefulness/reuse evaluation remains |
 | Get a work handoff | Personal task/checkpoint/question/PR and discussion summary; group queries remain in the current topic. | Implemented locally; live usefulness evaluation remains |
-| Automatically review selected PRs and finish tagged requests | Opt-in Review Bot policy, exact-commit informational reviews, verified maintainer mentions and checked same-PR fixes. | Implemented locally; live webhook/review/publication acceptance remains |
-| Merge or close a selected repository PR | Owner/admin or configured coding maintainer proposes one action; requester approves its PR, target branch and merge method. Linked accounts also require current GitHub write access. Merges pin the reviewed head commit. | Implemented locally; live GitHub/Telegram acceptance remains |
+| Automatically review selected PRs and finish tagged requests | Opt-in Review Bot policy, exact-commit informational reviews, verified GitHub collaborator mentions and checked same-PR fixes. | Implemented locally; live webhook/review/publication acceptance remains |
+| Merge or close a selected repository PR | Owner/admin or a verified GitHub collaborator proposes one action; requester approves its PR, target branch and merge method. Linked accounts also require current GitHub write access. Merges pin the reviewed head commit. | Implemented locally; live GitHub/Telegram acceptance remains |
 | Modify arbitrary repository content | Separate, narrowly scoped actions with distinct approvals and recovery rules. | Proposed; no general GitHub write tool is available |
 
 See [Review Bot](../implementation/review-bot.md), [GitHub App setup](../implementation/github-app.md),
 [Code Truth](../implementation/code-truth.md),
 [Codex tasks](../implementation/codex-coding.md) and the
 [Telegram guide](../user/telegram-experience.md) for the implemented paths.
+
+Codex and Review Bot follow GitHub's repository permissions without separate plugin
+repository lists or maintainer grants. Workflow settings apply once to the plugin;
+Codex uses GitHub's default branch. Automatic reviews use the enabled App installation
+policy; tagged work uses verified users' current read/write permissions. Workspace
+connection scope and active membership remain tenant boundaries.
 
 ## Product boundaries
 
@@ -91,7 +97,7 @@ See [Review Bot](../implementation/review-bot.md), [GitHub App setup](../impleme
 [Continuous Codex collaboration](codex-collaboration.md) was implemented locally
 on 2026-10-05; live acceptance remains pending. Pi receives and relays original requirements;
 Codex investigates code and owns technical decisions, implementation, clarification
-and verification. A clear authenticated maintainer instruction can authorize a
+and verification. A clear authenticated GitHub collaborator instruction can authorize a
 bounded task under repository policy without a second approval click. The application
 records and rechecks that grant; models cannot grant themselves authority.
 Follow-ups and answers to Codex questions continue the same durable task and draft

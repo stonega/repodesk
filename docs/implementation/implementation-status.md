@@ -25,6 +25,64 @@ summaries/editors were inspected at 1280px and 390px in both themes; loading, em
 pending and error states were also inspected at both widths. No dependency or
 migration was added, and no deployment or live provider/Telegram call was performed.
 
+## VPS deployment of GitHub plugin permissions (2026-10-13)
+
+The recorded VPS serves package v0.1.36 from manual archive bundle
+`1791874171029-72300379`. Its immutable source snapshot is
+`bd6c3dc446f33b72e3bd68793b31769de0617a4f`, based on `68630a5` plus the
+GitHub permission changes below. The bundle retains its source archive and image
+checksum metadata; this snapshot does not identify a published GitHub release.
+
+The app, worker, Codex runner and PostgreSQL are healthy, and
+`https://dev.stonegate.me/readyz` returned HTTP 200 after cutover. Running app,
+worker and supervisor image IDs match the verified snapshot. Migrations 018 and
+019 are applied; no workspace retains legacy Codex or Review Bot repository arrays.
+The deployment waited for durable coding checkpoints and verified the mode-600
+backup `/opt/repodesk/backups/pre-release-1791874171029-72300379.dump` before
+migration. Existing configuration, secrets, volumes, updater and all three Actions
+runners remain in place.
+
+All three release images built locally. The Node runtime contract, isolated
+Compose app/worker health and migration rerun, offline Open Code Review preparation
+and deterministic Docker Codex checkpoint/authentication/publication smoke checks
+passed. Local fixture containers and volumes were removed. These checks do not
+complete the live Telegram/model pilot or the published-release local-image updater
+gate.
+
+## GitHub permissions for Codex and Review Bot (2026-10-12)
+
+Codex and Review Bot no longer have repository lists, Add/Edit/Remove actions,
+maintainer grants or automatic review owners. Their saved configuration summaries
+open shared modal editors for plugin-wide workflow settings. GitHub owns repository
+permissions; Codex uses the repository's GitHub default branch. Verified write access
+is required for coding. Tagged fixes use the PR’s actual base/head instead of a
+separate configured branch. Tagged reviews/answers require verified read access;
+fixes require write access. Automatic reviews use the enabled operator-owned App policy.
+Workspace membership, tenant connection scope, request approvals and scoped App tokens
+remain enforced before execution/publication. Task initiators can still stop their own
+work after losing GitHub access.
+
+Migration `019_github_plugin_permissions.sql` removes current plugin repository grants,
+advances affected revisions and preserves historical task/approval evidence. Mixed
+legacy execution choices become Reviewed; publication and review options remain enabled
+only when all previous targets agreed. Fixes also require the resulting Direct policy.
+Conflicting Review Bot destinations retain the lowest workspace ID and disable the
+others for operator review. Later connection overlaps route once to the same stable
+workspace choice. Tasks in other workspaces reauthorize before further execution
+or publication. Reapplying the migration makes no further change. Older clients
+cannot restore repository grants on save.
+
+Validation passed Biome, strict TypeScript, production build, the host Node runtime
+contract and **707 deterministic tests** against disposable PostgreSQL. **82 browser
+scenarios** passed across the affected plugins, authentication/loading/task/card flows
+and the existing admin journey. A final **44-scenario** pass verified the Codex feedback
+placement and device/authentication flows; two focused Review Bot page-error recovery
+checks also passed. Desktop (1280px) and mobile (390px), both themes, saved summaries,
+editors, loading, empty, pending, errors and conflict recovery were inspected. Save
+failures retain drafts and keep feedback, Save and Cancel visible together. No dependency
+was added. No deployment, live account connection, GitHub/Telegram send or model call
+was performed; existing live release gates remain.
+
 ## Optional assistant limits and model settings (2026-10-12)
 
 Model calls per run has been removed from Team summaries, editors, workspace

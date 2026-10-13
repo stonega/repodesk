@@ -1,5 +1,8 @@
 import { z } from "zod";
-import type { CodingPayload } from "../coding/config.ts";
+import {
+  type CodingPayload,
+  withoutRepositoryGrants,
+} from "../coding/config.ts";
 import type {
   DevelopmentResult,
   DevelopmentRun,
@@ -7,28 +10,18 @@ import type {
 import type { RuntimeProvider } from "../models/config.ts";
 import { modelSelectionSchema } from "../models/config.ts";
 
-export const reviewRepository = z
-  .object({
-    repositoryId: z.number().int().positive(),
-    reviewer: z.string().regex(/^[1-9]\d{0,15}$/),
-    autoReview: z.boolean().default(true),
-    acceptRequests: z.boolean().default(true),
-    allowFixes: z.boolean().default(false),
-  })
-  .strict();
-export const reviewSettings = z
-  .object({
-    enabled: z.boolean(),
-    repositories: z.array(reviewRepository).max(12),
-    model: modelSelectionSchema.optional(),
-  })
-  .strict()
-  .refine(
-    (s) =>
-      new Set(s.repositories.map((r) => r.repositoryId)).size ===
-      s.repositories.length,
-    "Select each repository only once",
-  );
+export const reviewSettings = z.preprocess(
+  withoutRepositoryGrants,
+  z
+    .object({
+      enabled: z.boolean(),
+      autoReview: z.boolean().default(true),
+      acceptRequests: z.boolean().default(true),
+      allowFixes: z.boolean().default(false),
+      model: modelSelectionSchema.optional(),
+    })
+    .strict(),
+);
 export const reviewSave = z
   .object({
     revision: z.number().int().nonnegative(),
@@ -40,7 +33,12 @@ export interface ReviewConfig {
   revision: number;
   settings: ReviewSettings;
 }
-export const emptyReview: ReviewSettings = { enabled: false, repositories: [] };
+export const emptyReview: ReviewSettings = {
+  enabled: false,
+  autoReview: true,
+  acceptRequests: true,
+  allowFixes: false,
+};
 export type ReviewState =
   | "queued"
   | "starting"
@@ -109,10 +107,5 @@ export interface ReviewPage {
   botHandle?: string;
   webhookUrl: string;
   webhookConfigured: boolean;
-  repositories: {
-    id: number;
-    full_name: string;
-    maintainers: { id: string; name: string }[];
-  }[];
   tasks: ReviewTask[];
 }

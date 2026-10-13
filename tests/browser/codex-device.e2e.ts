@@ -17,10 +17,9 @@ async function fixture(page: Page, state: CodingPage["deviceAuth"]) {
       enabled: false,
       backend: "podman",
       authMode: "device_code",
-      repositories: [],
     },
     repositories: [],
-    members: [],
+
     tasks: [],
     legacyActionsConfiguration: false,
     providerApiKeyConfigured: false,

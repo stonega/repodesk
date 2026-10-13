@@ -518,10 +518,10 @@ request is part of build/test or this implementation change.
 
 ## Optional Codex feature and bug implementation
 
-Configure repository development branches and Telegram maintainers under
-**Plugins → Codex implementation**. Codex prepares the environment and selects
-verification automatically; only the repository binding, maintainers and updated
-App permissions need configuring. Follow [the complete setup](codex-coding.md)
+Configure credentials and the workspace-wide workflow under **Plugins → Codex**.
+Codex uses GitHub’s default branch and verified collaborator permissions; there are
+no plugin repository or maintainer grants. Codex prepares the environment and selects
+verification automatically. Members connect GitHub with `/github connect`. Follow [the complete setup](codex-coding.md)
 and [the Podman runner guide](codex-podman.md) with
 `deploy/codex/compose.yaml`. Configure the custom Responses provider endpoint/model
 in deployment settings, then save the workspace API key in **Plugins → Codex

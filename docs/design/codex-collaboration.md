@@ -63,8 +63,8 @@ and configured policy. Ambiguous intent does not authorize repository writes.
 | Expand to another repository or an operation outside the grant | Obtain explicit authorization for the expanded scope. |
 | Merge, deploy, change permissions or access secrets | Outside the initial development grant; no implicit authorization. |
 
-Authorization is distinct from ongoing eligibility. Current membership, maintainer
-grant, repository connection, destination, configuration and deployment controls
+Authorization is distinct from ongoing eligibility. Current membership, verified GitHub write
+access, repository connection, destination, configuration and deployment controls
 are rechecked before execution and publication. Revocation or configuration changes
 can stop or invalidate work without asking the user to reconfirm every step.
 

@@ -7,12 +7,12 @@ import { githubAccessPending } from "../github/user-access.ts";
 import { ModelProviders } from "../models/service.ts";
 import { decrypt, encrypt } from "../setup/credentials.ts";
 import { clearProgress, recordProgress } from "../telegram/feedback.ts";
-import { membersWithProfiles } from "../workspaces/member-profile.ts";
-import { audit, eligible } from "../workspaces/policy.ts";
+import { audit } from "../workspaces/policy.ts";
 import {
   type CodingPage,
   type CodingTask,
   codingSaveSchema,
+  codingSettingsSchema,
   codingTerminal,
   emptyCoding,
 } from "./config.ts";
@@ -32,22 +32,8 @@ export function codingView(w: Workspace, admin: Admin): CodingPage {
     providerApiKeyConfigured: !!w.coding?.providerApiKey,
     legacyActionsConfiguration: !!w.coding && settings.backend !== "podman",
     revision: w.coding?.revision ?? 0,
-    settings: {
-      enabled: settings.enabled,
-      backend: "podman",
-      authMode: settings.authMode ?? "provider_key",
-      model: settings.model,
-      repositories: settings.repositories.map((target) => ({
-        repositoryId: target.repositoryId,
-        baseBranch: target.baseBranch,
-        maintainers: [...target.maintainers],
-        development: target.development,
-      })),
-    },
+    settings: codingSettingsSchema.parse({ ...settings, backend: "podman" }),
     repositories: w.github?.installationId ? w.github.repositories : [],
-    members: membersWithProfiles(w)
-      .filter((m) => eligible(w, m.id))
-      .map(({ id, active, username }) => ({ id, active, username })),
     tasks: [...(w.codingTasks ?? [])].reverse(),
   };
 }
@@ -64,21 +50,6 @@ export function saveCoding(
     "version_conflict",
     409,
   );
-  for (const target of input.settings.enabled
-    ? input.settings.repositories
-    : []) {
-    requireThat(
-      w.github?.installationId &&
-        w.github.repositories.some((r) => r.id === target.repositoryId),
-      "github_repository_not_connected",
-      409,
-    );
-    requireThat(
-      target.maintainers.every((id) => eligible(w, id)),
-      "coding_maintainer_inactive",
-      409,
-    );
-  }
   if (input.settings.model)
     requireThat(
       input.providerApiKey === undefined,

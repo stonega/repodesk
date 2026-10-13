@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
-import { NavLink } from "react-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CodingPage, CodingSettings } from "../src/coding/config.ts";
 import { codingFailureMessage } from "../src/coding/failure-messages.ts";
 import { codingStatusLabel } from "../src/coding/feedback.ts";
@@ -7,8 +6,6 @@ import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { ModelPicker } from "./model-providers.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
-import { RepositoryCard } from "./repository-card.tsx";
-import { RepositorySelect } from "./repository-select.tsx";
 import { Select } from "./select.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 import { ErrorToast } from "./toast.tsx";
@@ -20,7 +17,6 @@ type Request = <T>(
   body?: unknown,
   signal?: AbortSignal,
 ) => Promise<T>;
-type Repository = CodingSettings["repositories"][number];
 function message(error: unknown) {
   if (error instanceof Error && error.name === "TimeoutError")
     return "The connection request timed out. Recheck connection before trying sign-in again.";
@@ -28,8 +24,6 @@ function message(error: unknown) {
   if (code.startsWith("version_conflict"))
     return "Settings changed in another session. Reload and review your edits.";
   const messages: Record<string, string> = {
-    coding_maintainer_inactive:
-      "Select maintainers who currently have workspace access.",
     github_repository_not_connected:
       "Connect the selected repository in GitHub before saving.",
     coding_device_auth_required:
@@ -50,7 +44,7 @@ function message(error: unknown) {
       "The Codex runner could not be reached. Recheck connection after it is available.",
     coding_outcome_unknown:
       "The sign-in response could not be confirmed. Recheck connection before trying again.",
-    invalid_request: "Check the branch and maintainer selections.",
+    invalid_request: "Check the configuration fields.",
   };
   return messages[code] ?? code;
 }
@@ -115,8 +109,12 @@ export function Coding({
   const [busy, setBusy] = useState(false);
   const [deviceAction, setDeviceAction] = useState<"start" | "status">();
   const [loading, setLoading] = useState(false);
-  const [editing, setEditing] = useState<Repository>();
   const [configEditing, setConfigEditing] = useState(false);
+  const configActions = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (configEditing && error && !busy)
+      configActions.current?.scrollIntoView({ block: "nearest" });
+  }, [configEditing, error, busy]);
   const [configDraft, setConfigDraft] = useState<CodingSettings>();
   const [keyDraft, setKeyDraft] = useState("");
   const [removeKey, setRemoveKey] = useState(false);
@@ -126,7 +124,7 @@ export function Coding({
     repository: string;
   }>();
   const [stopError, setStopError] = useState("");
-  const preserveSettings = !!editing || configEditing;
+  const preserveSettings = configEditing;
   const refresh = useCallback(
     async (signal: AbortSignal) => {
       try {
@@ -185,7 +183,6 @@ export function Coding({
     setRefreshError("");
     try {
       setData(await request<CodingPage>(endpoint));
-      setEditing(undefined);
       setConfigEditing(false);
       setConfigDraft(undefined);
       setKeyDraft("");
@@ -201,7 +198,6 @@ export function Coding({
     setData(undefined);
     setError("");
     setRefreshError("");
-    setEditing(undefined);
     setConfigEditing(false);
     setConfigDraft(undefined);
     setKeyDraft("");
@@ -224,7 +220,6 @@ export function Coding({
           ...(providerApiKey !== undefined ? { providerApiKey } : {}),
         }),
       );
-      setEditing(undefined);
       setConfigEditing(false);
       setConfigDraft(undefined);
       setKeyDraft("");
@@ -310,7 +305,7 @@ export function Coding({
           />
         </PluginDetailHeading>
       )}
-      {error && !editing && !configEditing && (
+      {error && !configEditing && (
         <ErrorToast message={error}>
           <button
             type="button"
@@ -356,6 +351,11 @@ export function Coding({
             }}
           />
         </div>
+        <p className="muted">
+          Repository access follows your connected GitHub account and GitHub
+          App. Tasks use the repository’s default branch. Manage access in
+          GitHub.
+        </p>
         {data && <RunnerSetupNotice />}
         <dl className="plugin-summary">
           <div>
@@ -402,8 +402,24 @@ export function Coding({
             <dd>{data ? credentialStatus : pendingValue}</dd>
           </div>
           <div>
-            <dt>Repositories</dt>
-            <dd>{data ? data.settings.repositories.length : pendingValue}</dd>
+            <dt>Execution policy</dt>
+            <dd>
+              {data
+                ? data.settings.development?.executionMode === "direct"
+                  ? "Direct"
+                  : "Reviewed"
+                : pendingValue}
+            </dd>
+          </div>
+          <div>
+            <dt>Publish by default</dt>
+            <dd>
+              {data
+                ? data.settings.development?.publishByDefault
+                  ? "Enabled"
+                  : "Disabled"
+                : pendingValue}
+            </dd>
           </div>
           <div>
             <dt>Tasks</dt>
@@ -421,109 +437,9 @@ export function Coding({
         {data?.legacyActionsConfiguration && (
           <p className="notice" role="status">
             This workspace still has a GitHub Actions configuration. Save the
-            repository configuration to use the local runner.
+            configuration to use the local runner.
           </p>
         )}
-      </section>
-      <section
-        className="card"
-        aria-label="Coding repositories"
-        aria-busy={!data && !error}
-      >
-        <div className="plugin-card-heading">
-          <div>
-            <h2>Repositories</h2>
-            <p className="muted">
-              Choose where selected maintainers can start coding tasks.
-            </p>
-          </div>
-          <IconButton
-            icon="add"
-            label="Add coding repository"
-            showLabel
-            disabled={!data?.repositories.length || busy || loading}
-            onClick={() => {
-              setError("");
-              setEditing({
-                repositoryId: 0,
-                baseBranch: "develop",
-                maintainers: [],
-              });
-            }}
-          />
-        </div>
-        {!data && !error && (
-          <SkeletonRows label="Coding repositories" rows={2} />
-        )}
-        {data && !data.repositories.length && (
-          <p>
-            Use Manage GitHub on{" "}
-            <NavLink to={`/admin/overview?workspace=${workspaceId}`}>
-              Overview
-            </NavLink>{" "}
-            to connect a repository for coding tasks.
-          </p>
-        )}
-        {data && !data.settings.repositories.length && (
-          <p>No coding repositories configured.</p>
-        )}
-        <div className="repository-list repository-list-stacked">
-          {data?.settings.repositories.map((repo) => {
-            const repository = data.repositories.find(
-              (r) => r.id === repo.repositoryId,
-            );
-            return (
-              <RepositoryCard
-                key={repo.repositoryId}
-                name={
-                  repository?.full_name ??
-                  `Repository ${repo.repositoryId} (disconnected)`
-                }
-                url={
-                  repository
-                    ? `https://github.com/${repository.full_name}`
-                    : undefined
-                }
-                actions={
-                  <>
-                    <IconButton
-                      icon="edit"
-                      label={`Edit coding repository ${repo.repositoryId}`}
-                      disabled={busy || loading}
-                      onClick={() => {
-                        setError("");
-                        setEditing(structuredClone(repo));
-                      }}
-                    />
-                    <IconButton
-                      icon="delete"
-                      label={`Remove coding repository ${repo.repositoryId}`}
-                      disabled={busy || loading}
-                      onClick={() => {
-                        if (
-                          confirm(
-                            "Remove this coding repository? Active tasks will receive cancellation requests.",
-                          )
-                        )
-                          void save({
-                            ...data.settings,
-                            repositories: data.settings.repositories.filter(
-                              (r) => r.repositoryId !== repo.repositoryId,
-                            ),
-                          });
-                      }}
-                    />
-                  </>
-                }
-              >
-                <p className="repository-card-note">
-                  Base: <code>{repo.baseBranch}</code> · Maintainers:{" "}
-                  {repo.maintainers.join(", ")}
-                </p>
-              </RepositoryCard>
-            );
-          })}
-        </div>
       </section>
       <section
         className="card"
@@ -547,7 +463,7 @@ export function Coding({
             <button
               type="button"
               className="secondary"
-              disabled={busy || loading || !!editing}
+              disabled={busy || loading || configEditing}
               onClick={() => void load()}
             >
               Check progress
@@ -559,7 +475,7 @@ export function Coding({
         ) : !tasks.length ? (
           <p>
             No tasks yet. Ask the bot in Telegram to implement a feature or fix
-            a bug in a configured repository.
+            a bug in a connected repository.
           </p>
         ) : (
           <div className="usage-table-scroll">
@@ -732,20 +648,8 @@ export function Coding({
           }}
         >
           <RunnerSetupNotice />
-          {error && (
-            <p className="notice" role="alert">
-              {error}{" "}
-              <button
-                type="button"
-                className="secondary"
-                disabled={busy || loading}
-                onClick={() => void load()}
-              >
-                Reload coding settings
-              </button>
-            </p>
-          )}
           <form
+            className="record-form"
             onSubmit={(event) => {
               event.preventDefault();
               void save(
@@ -961,204 +865,83 @@ export function Coding({
                 )}
               </>
             )}
+            <label className="field" htmlFor="coding-execution-mode">
+              <span>Execution policy</span>
+              <Select
+                id="coding-execution-mode"
+                disabled={busy}
+                value={configDraft.development?.executionMode ?? "reviewed"}
+                onChange={(event) =>
+                  setConfigDraft({
+                    ...configDraft,
+                    development: {
+                      publishByDefault:
+                        configDraft.development?.publishByDefault ?? false,
+                      executionMode: event.target.value as
+                        | "reviewed"
+                        | "direct",
+                    },
+                  })
+                }
+              >
+                <option value="reviewed">
+                  Reviewed — approve each new implementation
+                </option>
+                <option value="direct">
+                  Direct — your clear instruction starts Codex
+                </option>
+              </Select>
+              <small>
+                Applies to connected repositories where you have GitHub write
+                access.
+              </small>
+            </label>
+            <label className="form-check">
+              <input
+                type="checkbox"
+                disabled={busy}
+                checked={configDraft.development?.publishByDefault ?? false}
+                onChange={(event) =>
+                  setConfigDraft({
+                    ...configDraft,
+                    development: {
+                      executionMode:
+                        configDraft.development?.executionMode ?? "reviewed",
+                      publishByDefault: event.target.checked,
+                    },
+                  })
+                }
+              />
+              Publish verified implementations as PRs ready for review by
+              default
+            </label>
             <p className="muted">
               Saving configuration invalidates pending approvals and requests
               cancellation of active tasks using older settings.
             </p>
-            <ModalActions>
-              <button type="submit" disabled={busy}>
-                Save configuration
-              </button>
-            </ModalActions>
+            <div ref={configActions}>
+              {error && (
+                <p className="notice" role="alert">
+                  {error}{" "}
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={busy || loading}
+                    onClick={() => void load()}
+                  >
+                    Reload coding settings
+                  </button>
+                </p>
+              )}
+              <ModalActions>
+                <button type="submit" disabled={busy}>
+                  {busy ? "Saving…" : "Save configuration"}
+                </button>
+              </ModalActions>
+            </div>
           </form>
         </Modal>
       )}
-      {editing && data && (
-        <Modal
-          title={
-            editing.repositoryId
-              ? "Edit coding repository"
-              : "Add coding repository"
-          }
-          busy={busy}
-          onClose={() => {
-            setEditing(undefined);
-            setError("");
-          }}
-        >
-          {error && (
-            <p role="alert">
-              {error}
-              <button
-                type="button"
-                disabled={busy || loading}
-                onClick={() => void load()}
-              >
-                Reload coding settings
-              </button>
-            </p>
-          )}
-          <RepositoryEditor
-            key={editing.repositoryId}
-            initial={editing}
-            data={data}
-            submit={(repo) =>
-              void save({
-                ...data.settings,
-                repositories: [
-                  ...data.settings.repositories.filter(
-                    (r) => r.repositoryId !== editing.repositoryId,
-                  ),
-                  repo,
-                ],
-              })
-            }
-          />
-        </Modal>
-      )}
     </section>
-  );
-}
-function RepositoryEditor({
-  initial,
-  data,
-  submit,
-}: {
-  initial: Repository;
-  data: CodingPage;
-  submit: (r: Repository) => void;
-}) {
-  const [draft, setDraft] = useState(initial);
-  const [validation, setValidation] = useState("");
-  const policy = draft.development ?? {
-    executionMode: "reviewed",
-    publishByDefault: false,
-  };
-  return (
-    <form
-      className="coding-repository-form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!draft.maintainers.length) {
-          setValidation("Select at least one maintainer.");
-          return;
-        }
-        submit(draft);
-      }}
-    >
-      <RepositorySelect
-        repositories={data.repositories.filter(
-          (r) =>
-            r.id === initial.repositoryId ||
-            !data.settings.repositories.some((s) => s.repositoryId === r.id),
-        )}
-        value={draft.repositoryId}
-        onChange={(repositoryId) => setDraft({ ...draft, repositoryId })}
-      />
-      <div className="field">
-        <label htmlFor="coding-base-branch">Development / base branch</label>
-        <input
-          id="coding-base-branch"
-          aria-describedby="coding-base-branch-help"
-          required
-          maxLength={150}
-          value={draft.baseBranch}
-          onChange={(e) => setDraft({ ...draft, baseBranch: e.target.value })}
-        />
-        <small id="coding-base-branch-help">
-          Use an existing branch. Task branches and pull requests start here.
-        </small>
-      </div>
-      <fieldset className="plugin-workspaces">
-        <legend>Development collaboration</legend>
-        <label className="field" htmlFor="coding-execution-mode">
-          <span>Execution policy</span>
-          <Select
-            id="coding-execution-mode"
-            value={policy.executionMode}
-            onChange={(e) =>
-              setDraft({
-                ...draft,
-                development: {
-                  ...policy,
-                  executionMode: e.target.value as "reviewed" | "direct",
-                },
-              })
-            }
-          >
-            <option value="reviewed">
-              Reviewed — approve each new implementation
-            </option>
-            <option value="direct">
-              Direct — maintainer's clear instruction starts Codex
-            </option>
-          </Select>
-          <small>
-            Codex makes technical decisions. Analysis requests allow
-            investigation only. Existing tasks stop if their policy changes.
-          </small>
-        </label>
-        <label className="coding-maintainer-row">
-          <input
-            type="checkbox"
-            checked={policy.publishByDefault}
-            onChange={(e) =>
-              setDraft({
-                ...draft,
-                development: { ...policy, publishByDefault: e.target.checked },
-              })
-            }
-          />
-          <span>
-            Publish verified implementations as PRs ready for review by default
-          </span>
-        </label>
-        <small>
-          Codex continues implementation and check repairs until the task is
-          complete, needs your input, or is stopped. Waiting for an answer
-          releases the runner slot.
-        </small>
-      </fieldset>
-      <fieldset className="coding-maintainers">
-        <legend>Maintainers</legend>
-        <div className="coding-maintainer-list">
-          {[
-            ...data.members,
-            ...draft.maintainers
-              .filter((id) => !data.members.some((m) => m.id === id))
-              .map((id) => ({ id, active: false, username: undefined })),
-          ].map((m) => (
-            <label key={m.id} className="coding-maintainer-row">
-              <input
-                type="checkbox"
-                checked={draft.maintainers.includes(m.id)}
-                onChange={(e) => {
-                  setValidation("");
-                  setDraft({
-                    ...draft,
-                    maintainers: e.target.checked
-                      ? [...draft.maintainers, m.id]
-                      : draft.maintainers.filter((id) => id !== m.id),
-                  });
-                }}
-              />
-              <span className="coding-maintainer-identity">
-                <span>
-                  {m.username ? `@${m.username.replace(/^@/, "")}` : m.id}
-                </span>
-                <small>
-                  {m.username ? `Telegram ID ${m.id}` : "Telegram user ID"}
-                  {!m.active && " · Access removed"}
-                </small>
-              </span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      {validation && <p role="alert">{validation}</p>}
-      <ModalActions>
-        <button type="submit">Save coding repository</button>
-      </ModalActions>
-    </form>
   );
 }

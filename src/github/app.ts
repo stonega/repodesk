@@ -27,6 +27,7 @@ const installationSchema = z.object({
 const repositorySchema = z.object({
   id: z.number().int().positive(),
   full_name: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
+  default_branch: z.string().min(1).max(255).optional(),
   private: z.boolean().optional(),
   archived: z.boolean().optional(),
   disabled: z.boolean().optional(),

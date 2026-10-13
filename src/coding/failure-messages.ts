@@ -4,6 +4,10 @@ import type { CodingPayload } from "./config.ts";
 const messages: Record<string, string> = {
   github_user_access_unavailable:
     "GitHub access could not be verified. RepoDesk will retry automatically; new execution and PR publication wait until access is verified.",
+  github_user_connection_required:
+    "Connect your GitHub account with /github connect in your private bot chat before starting repository work.",
+  github_default_branch_unavailable:
+    "GitHub's default branch is unavailable. Ask the workspace operator to refresh the GitHub connection, then start a new request.",
   github_user_access_denied:
     "The linked GitHub account does not have the required repository access. Run /github sync in your private bot chat, or reconnect with /github connect. Start a new request after access is restored.",
   coding_conversation_failed:
@@ -27,7 +31,7 @@ const messages: Record<string, string> = {
   coding_execution_failed:
     "The coding task could not finish. Ask the workspace administrator to inspect it in the panel.",
   coding_base_branch_missing:
-    "The configured base branch does not exist in the repository. Ask the workspace administrator to update the base branch in Plugins → Codex → Repositories, then start a new request.",
+    "The configured base branch does not exist in the repository. Ask the workspace administrator to update the base branch in GitHub repository settings, then start a new request.",
   coding_checkout_failed:
     "The repository could not be checked out, so Codex did not start. Ask the workspace administrator to check the GitHub connection and repository branch settings, then start a new request.",
   coding_failed:
@@ -43,7 +47,7 @@ const messages: Record<string, string> = {
   github_repository_not_connected:
     "This repository is not connected to the workspace. Ask the workspace operator to check its GitHub connection.",
   coding_maintainer_required:
-    "You do not have coding access to this repository. Ask the workspace administrator to review your maintainer access.",
+    "You do not have coding access to this repository. Check your repository permissions in GitHub, then run /github sync in your private bot chat.",
   coding_direct_execution_disabled:
     "This repository requires reviewed approval. Request a coding proposal and approve it before execution.",
   coding_configuration_changed:
@@ -65,7 +69,7 @@ export function codingFailureMessage(
   payload?: Pick<CodingPayload, "repository" | "baseBranch">,
 ) {
   if (payload && code === "coding_base_branch_missing")
-    return `The configured base branch “${payload.baseBranch}” does not exist in ${payload.repository}, so Codex did not start. Ask the workspace administrator to update the base branch in Plugins → Codex → Repositories, then start a new request.`;
+    return `The configured base branch “${payload.baseBranch}” does not exist in ${payload.repository}, so Codex did not start. Ask the workspace administrator to update the base branch in GitHub repository settings, then start a new request.`;
   if (payload && code === "coding_checkout_failed")
     return `Could not check out ${payload.repository}, so Codex did not start. Ask the workspace administrator to check the GitHub connection and repository branch settings, then start a new request.`;
   const text = messages[code] ?? attachmentErrors[code];

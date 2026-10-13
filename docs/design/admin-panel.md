@@ -218,7 +218,7 @@ permits them, and team configuration labels, with skeletons for unknown counts,
 connection details and saved settings. Select the layout by route; pending Overview
 data must never show the audit table. Keep saved values visible during refreshes.
 Unknown values and records use skeletons; dependent actions stay disabled until
-the data arrives. Codex keeps its Configuration, Repositories and Coding tasks
+the data arrives. Codex keeps its Configuration and Coding tasks
 cards visible, and initial errors end the skeleton state with an actionable retry.
 Skeletons respect reduced motion and expose named regions with busy states.
 

@@ -134,6 +134,15 @@ The modal's v0.1.34 retry was verified on 2026-10-10 after recovering disk space
 it used that release's original archive path. A published release containing the
 new direct local-image path still needs its live check.
 
+A manual archive cutover on 2026-10-13 deployed package v0.1.36 from the verified
+worktree snapshot `bd6c3dc446f33b72e3bd68793b31769de0617a4f`, using bundle
+`1791874171029-72300379`. Its source archive and checksum metadata remain in the
+bundle. Migration 019 removed legacy Codex and Review Bot repository grants;
+post-cutover checks found no remaining plugin repository arrays. The protected
+pre-release backup passed archive verification, all application containers were
+healthy and public readiness returned HTTP 200. This verifies the transferred
+archive path; the published-release local-image updater gate remains separate.
+
 ## Custom domain from the panel
 
 Sign in as a deployment administrator and open **Deployment → Site domain**.

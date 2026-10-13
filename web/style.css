@@ -2319,17 +2319,6 @@ input.plugin-toggle-input:disabled {
 .repository-card-details .plugin-summary {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
-.coding-repository-form .field {
-  margin-bottom: 16px;
-}
-.coding-repository-form .field small {
-  color: var(--ui-muted);
-  font-size: 13px;
-  line-height: 1.45;
-}
-.coding-repository-form textarea {
-  min-height: 68px;
-}
 .repository-select {
   position: relative;
 }
@@ -2408,59 +2397,6 @@ input.plugin-toggle-input:disabled {
   padding: 12px;
   margin: 0;
   color: var(--ui-muted);
-}
-.coding-maintainers {
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-.coding-maintainers legend {
-  padding: 0;
-  margin-bottom: 6px;
-  font-size: 13px;
-  font-weight: 600;
-}
-.coding-maintainer-list {
-  max-height: 220px;
-  overflow-y: auto;
-  border: 1px solid var(--ui-border);
-  border-radius: 10px;
-}
-.coding-maintainer-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 56px;
-  padding: 9px 13px;
-  cursor: pointer;
-}
-.coding-maintainer-row + .coding-maintainer-row {
-  border-top: 1px solid var(--ui-border);
-}
-.coding-maintainer-row:hover {
-  background: var(--ui-surface-muted);
-}
-.coding-maintainer-row input {
-  flex: 0 0 auto;
-  margin: 0;
-}
-.coding-maintainer-identity {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-.coding-repository-form .coding-maintainer-identity > span {
-  font-weight: 600;
-}
-.coding-repository-form .coding-maintainer-identity small {
-  color: var(--ui-muted);
-  font-size: 12px;
-}
-.coding-repository-form .modal-actions {
-  margin-top: 20px;
 }
 .plugin-item {
   overflow-wrap: anywhere;

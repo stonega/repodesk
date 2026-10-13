@@ -6,7 +6,7 @@ import {
 import { codingDestination } from "../src/coding/policy.ts";
 import type { Workspace } from "../src/domain.ts";
 import { createRun } from "../src/workspaces/service.ts";
-import { workspace } from "./fixtures.ts";
+import { grantGitHubAccess, workspace } from "./fixtures.ts";
 
 export function fixtureValue<T>(value: T | undefined | null): T {
   if (value === undefined || value === null)
@@ -20,8 +20,18 @@ export function teamWorkspace() {
     revision: 1,
     installationId: 501,
     repositories: [
-      { id: 7001, full_name: "example/private", private: true },
-      { id: 7002, full_name: "example/public", private: false },
+      {
+        id: 7001,
+        full_name: "example/private",
+        default_branch: "main",
+        private: true,
+      },
+      {
+        id: 7002,
+        full_name: "example/public",
+        default_branch: "main",
+        private: false,
+      },
     ],
   };
   w.coding = {
@@ -30,11 +40,9 @@ export function teamWorkspace() {
       enabled: true,
       backend: "podman",
       authMode: "provider_key",
-      repositories: [
-        { repositoryId: 7001, baseBranch: "main", maintainers: ["101", "303"] },
-      ],
     },
   };
+  grantGitHubAccess(w, ["101", "303"]);
   return w;
 }
 export function requestRun(

@@ -71,6 +71,41 @@ export function authorizeRepository(
     403,
   );
 }
+/** Coding/review actions use verified GitHub access, with no unlinked fallback. */
+export function verifiedRepositoryAccess(
+  w: Workspace,
+  actor: string,
+  repositoryId: number,
+  write = false,
+) {
+  const repository = w.github?.repositories.find((r) => r.id === repositoryId);
+  return (
+    !!w.members.find((m) => m.id === actor)?.github &&
+    !!w.github?.installationId &&
+    !!repository &&
+    !repository.archived &&
+    !repository.disabled &&
+    repositoryAccess(w, actor, repositoryId, write)
+  );
+}
+export function authorizeVerifiedRepository(
+  w: Workspace,
+  actor: string,
+  repositoryId: number,
+  write = false,
+) {
+  requireThat(
+    w.members.find((m) => m.id === actor)?.github,
+    "github_user_connection_required",
+    403,
+  );
+  authorizeRepository(w, actor, repositoryId, write);
+  requireThat(
+    verifiedRepositoryAccess(w, actor, repositoryId, write),
+    "github_user_access_denied",
+    403,
+  );
+}
 export function invalidateGitHubWork(w: Workspace, actor: string) {
   for (const a of w.approvals) {
     if (

@@ -9,10 +9,9 @@ const coding: CodingPage = {
     enabled: true,
     backend: "podman",
     authMode: "device_code",
-    repositories: [],
   },
   repositories: [],
-  members: [],
+
   tasks: [],
   legacyActionsConfiguration: false,
   providerApiKeyConfigured: false,

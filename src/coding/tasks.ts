@@ -44,18 +44,10 @@ export function checkDevelopment(
   if (stopping && actor === task.actor) return;
   checkCodingPayload(w, task.actor, task.payload);
   if (actor !== task.actor) checkCodingPayload(w, actor, task.payload);
-  const repository = w.coding?.settings.repositories.find(
-    (r) => r.repositoryId === task.payload.repositoryId,
-  );
-  requireThat(repository, "coding_repository_not_configured", 409);
   requireThat(
-    repository.maintainers.includes(actor),
-    "coding_maintainer_required",
-    403,
-  );
-  requireThat(
-    fingerprint(developmentPolicy.parse(repository.development ?? {})) ===
-      fingerprint(task.policy),
+    fingerprint(
+      developmentPolicy.parse(w.coding?.settings.development ?? {}),
+    ) === fingerprint(task.policy),
     "coding_configuration_changed",
     409,
   );
@@ -158,10 +150,7 @@ export async function startDevelopment(
   const run = w.runs.find((r) => r.id === runId);
   requireThat(run, "not_found", 404);
   const sources = currentRequirement(w, actor, run, sourceIds);
-  const policy = developmentPolicy.parse(
-    w.coding?.settings.repositories.find((r) => r.repositoryId === repositoryId)
-      ?.development ?? {},
-  );
+  const policy = developmentPolicy.parse(w.coding?.settings.development ?? {});
   requireThat(
     policy.executionMode === "direct",
     "coding_direct_execution_disabled",

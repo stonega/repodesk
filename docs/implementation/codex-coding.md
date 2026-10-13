@@ -7,7 +7,7 @@ tests do not start a coding task, connect an account or send a message. A live
 end-to-end GitHub/Codex staging run remains a release gate.
 
 The [continuous collaboration design](../design/codex-collaboration.md) is now
-implemented behind per-repository **Direct** execution policy. Existing settings
+implemented behind workspace-wide **Direct** execution policy. Existing settings
 remain **Reviewed** when the new policy is omitted. The reviewed issue-to-PR
 workflow below is preserved; direct tasks use original received messages and do
 not require creating an issue.
@@ -32,16 +32,17 @@ builds require explicit recovery and are not restarted automatically. See the
 
 Checkout failures report a safe cause before Codex starts. When the configured
 base branch is missing, Telegram outcomes, requested status and the admin task
-summary name the repository and branch and point to **Plugins → Codex →
-Repositories** to fix the setting before a new request. Other clone failures
+summary name the repository and branch and point to **GitHub repository settings**
+to fix the default branch before a new request. Other clone failures
 explain that checkout failed and suggest checking GitHub access and branch settings.
 Raw Git output and credentials remain private. Missing PR branches are not
 misreported as missing configured base branches; uncertain publication keeps its
 existing unknown-outcome handling. Old failures saved only as a generic code
 cannot recover their original cause after an upgrade.
 
-Pi receives `start_development_task` only when at least one repository explicitly
-uses **Direct** policy, and its target list includes only those repositories.
+Pi receives `start_development_task` when the plugin uses **Direct** policy and
+GitHub repositories are connected. Its target list includes only repositories where
+the verified user has current GitHub write access.
 **Reviewed** repositories, including older configurations without a development
 policy, use `propose_coding_task` and an actor-bound Telegram approval. A rejected
 direct start reports `coding_direct_execution_disabled`; it is a policy rejection
@@ -49,8 +50,8 @@ before any GitHub checkout, not evidence of repository reachability failure.
 
 ## Continuous collaboration
 
-In the repository editor, select **Direct** to allow a current maintainer's clear
-instruction to authorize a task. Set whether verified implementations
+In the configuration editor, select **Direct** to allow a verified GitHub
+collaborator's clear instruction to authorize a task. Set whether verified implementations
 publish a PR by default. Codex has no application-imposed execution-cycle,
 repair-count, active-time or token quotas. It continues authorized work until
 completion, a necessary question, cancellation or failure. Provider/account
@@ -144,7 +145,7 @@ patches. Permission/configuration changes, bot changes and removed source contex
 stop execution. Source expiry and soft deletion scrub relational private content
 immediately and retry idempotent container/volume erasure until confirmed.
 
-GET additionally returns `developmentTasks`; repository settings accept optional
+GET additionally returns `developmentTasks`; plugin settings accept optional
 `development: { executionMode, publishByDefault }`.
 The existing cancellation route handles continuous
 task IDs. The migration creates tenant-scoped task/input/grant/attempt/event tables;
@@ -164,36 +165,32 @@ rebuilds token totals from reported usage. It does not restart stopped tasks.
    coding workflow. GitHub token permission rejections report
    `github_app_permissions_missing`; update the App permissions and accept the
    installation permission update in GitHub before retrying.
-3. Under **Plugins → Codex implementation**, add each repository with a base
-   branch and active Telegram maintainer IDs. Codex handles environment preparation
-   and verification automatically; neither Add nor Edit asks for commands.
-   Choose **Custom provider API key** or **ChatGPT device code**
-   in the panel. The custom provider endpoint and model are deployment settings;
-   its key is saved per workspace (with an optional deployment fallback). Device
-   code sign-in shows a link and one-time code in the panel. Both authentication
-   methods support connected public and private repositories; repository access
-   uses the workspace GitHub App. Enable the extension after signing in.
-   Starting sign-in displays progress and times out after 20 seconds if no response
-   arrives. Use **Recheck connection** to recover runner availability or an
-   uncertain sign-in response without closing the editor or losing its draft.
-4. Keep **Reviewed** for actor-bound issue/branch approval, or explicitly select
-   **Direct** per repository after validating the dedicated live pilot journey.
+3. Under **Plugins → Codex**, configure the shared provider/model or ChatGPT
+   device-code sign-in. Enable the plugin after connecting credentials.
+   Sign-in progress is bounded; Recheck connection preserves the editor's draft.
+4. Configure **Reviewed** or **Direct**, and PR publication by default, in the
+   Configuration dialog. These workflow choices apply to every connected repository.
+   Codex reads the repository's default branch from GitHub; branch settings and
+   collaborator access are managed in GitHub. There is no extra repository editor,
+   maintainer list or plugin repository grant.
+5. Each member connects and verifies their GitHub account with `/github connect`
+   in their private bot chat. Current GitHub write access is required to start,
+   continue or publish coding work. Read-only/unlinked users cannot start tasks.
 
-The Add and Edit repository selectors search connected repositories by owner or
-name, ignoring case. Use Arrow keys and Enter or select a result directly; Escape
-closes the results before dismissing the dialog. Configured repositories are
-excluded from Add, and Edit keeps its current repository available.
-
-The repository editor shows a saved Telegram username when available, alongside
-the numeric user ID. Maintainer grants remain bound to numeric IDs.
+Migration `019_github_plugin_permissions.sql` removes legacy repository/maintainer
+settings and advances affected configuration revisions, invalidating older work.
+It preserves Direct only when all previous targets used Direct; mixed policies use
+Reviewed. Publish-by-default remains enabled only when all prior targets enabled it.
+Historical task/approval evidence remains intact. Older clients' repository arrays
+are discarded on save and cannot restore grants.
 
 No repository Actions workflow or Actions permission is required. Coding provider
 usage through a custom provider is billed separately from Pi chat usage.
 
 The operator API is `GET|PUT /api/admin/workspaces/:id/plugins/coding`.
 PUT accepts `{ revision, settings: { enabled, backend: "podman", authMode:
-"provider_key" | "device_code", repositories:
-[{ repositoryId, baseBranch, maintainers, development? }] },
+"provider_key" | "device_code", development?: { executionMode:
+"reviewed" | "direct", publishByDefault: boolean }, model? },
 providerApiKey? }`. Omit `providerApiKey` to retain it; send `null` to remove
 the saved key. Responses return only `providerApiKeyConfigured` and device
 connection status, never credentials. Device sign-in uses `POST
@@ -204,8 +201,8 @@ See the [HTTP example](../../examples/coding/settings.http).
 
 ## Approval and execution
 
-A configured maintainer can ask the bot to implement a feature or fix in a selected
-repository. The `propose_coding_task` tool drafts the exact repository, base
+An active workspace member with verified GitHub write access can ask the bot to
+implement a feature or fix in a connected repository. The `propose_coding_task` tool drafts the exact repository, base
 branch, issue title and body. A Telegram approval binds the initiating actor to
 creating the issue, running Codex locally, pushing a task branch and opening a
 PR. Approval expires after 15 minutes. Another actor cannot approve it.
@@ -213,7 +210,8 @@ PR. Approval expires after 15 minutes. Another actor cannot approve it.
 Model authentication does not grant repository access. The worker uses the
 connected GitHub App to mint a fresh installation token scoped to the selected
 repository and the current operation, for both public and private repositories.
-Maintainer, connected-repository and approval/direct-policy checks still apply.
+Current GitHub write access, workspace connection scope and approval/direct-policy
+checks still apply.
 The worker creates the issue after a durable reservation. The supervisor uses
 separate preparation, environment initialization, implementation, verification and publication containers. Only the
 preparation container gets a repository read token; Codex and checks run without a
@@ -223,7 +221,7 @@ rechecks actor, repository, configuration and deployment authority. It rejects
 
 Each task has an issue link, status and, on success, a PR link. Ask for status or
 stop by task UUID. Operators can inspect and stop tasks in Plugins. The initiator
-may stop their own task after a maintainer grant is removed.
+may stop their own task after GitHub access is removed.
 
 ## Recovery and prior configurations
 

@@ -62,10 +62,9 @@ async function fixture(page: Page, failed = false) {
       enabled: true,
       backend: "podman",
       authMode: "device_code",
-      repositories: [],
     },
     repositories: [],
-    members: [],
+
     tasks: [reviewed],
     developmentTasks: [continuous],
     legacyActionsConfiguration: false,
@@ -159,7 +158,7 @@ for (const width of [1280, 390]) {
         "The configured base branch “develop” does not exist in example/repo",
       );
       await expect(row).toContainText("Codex did not start");
-      await expect(row).toContainText("Plugins → Codex → Repositories");
+      await expect(row).toContainText("GitHub repository settings");
       await expect(row).toContainText("start a new request");
       const errorBounds = await row
         .locator("td")

@@ -197,7 +197,7 @@ test("checkout failure messages identify the saved repository and missing branch
   expect(message).toContain("“develop”");
   expect(message).toContain("does not exist");
   expect(message).toContain("Codex did not start");
-  expect(message).toContain("Plugins → Codex → Repositories");
+  expect(message).toContain("GitHub repository settings");
   expect(message).toContain("start a new request");
   expect(codingFailureMessage("coding_base_branch_missing")).toContain(
     "base branch does not exist",

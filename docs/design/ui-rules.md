@@ -14,7 +14,7 @@ when implementing or reviewing a change.
 | Decision | Relevant preferences |
 | --- | --- |
 | Saved display versus editing | [Modal editors](#add-and-create-flows-use-modals), [workspace values](#workspace-settings-show-saved-values-before-editing), [team summary](#team-configuration-uses-one-overview-editor), [model summary](#model-configuration-uses-a-summary-card-and-one-editor) |
-| Plugin detail layout | [Shared plugin layout](#plugin-details-share-card-layouts-and-a-title-switch), [Codex sections](#codex-details-show-configuration-repositories-and-tasks-separately) |
+| Plugin detail layout | [Shared plugin layout](#plugin-details-share-card-layouts-and-a-title-switch), [Codex sections](#codex-details-show-configuration-and-tasks-separately) |
 | Repository display | [Shared repository cards](#repository-cards-share-one-style), [member GitHub details](#member-github-columns-show-only-a-view-button), [connected repositories](#connected-github-repositories-stay-compact-and-directly-accessible) |
 | Action labels and controls | [Edit/New labels](#edit-and-add-buttons-use-short-labels), [shared icons](#common-action-buttons-use-reicon), [dropdown styling](#dropdown-inputs-share-the-workspace-selector-style) |
 | Dialog actions | [Cancel order](#modal-cancel-follows-the-primary-action), [close controls](#modal-close-controls-use-a-plain-x), [secondary actions](#dialog-support-actions-use-secondary-buttons) |
@@ -124,7 +124,8 @@ when implementing or reviewing a change.
   accessible names, focus styling and comfortable touch targets.
 - **Source:** 2026-10-08 — user requested a unified repository card style across
   the app after the member repository preview/modal change.
-- **Exceptions:** Repository selectors retain their shared dropdown style.
+- **Exceptions:** Codex and Review Bot have no plugin repository lists as of
+  2026-10-12. Repository selectors elsewhere retain their shared dropdown style.
   Task references remain part of task summaries. Context-specific details,
   compact connection previews and New/Edit modal behavior remain applicable.
 
@@ -324,7 +325,8 @@ when implementing or reviewing a change.
 - **Preference:** Opening Edit shows the saved repository and keeps its dropdown
   closed. Open search on a click, typing or arrow-key interaction, rather than
   automatically when the modal focuses the input.
-- **Scope:** Coding repository selectors, including Add and Edit dialogs.
+- **Scope:** Historical coding repository selectors, removed on 2026-10-12.
+  This rule still applies to comparable repository selectors elsewhere.
 - **Source:** 2026-10-06 — user requested automatic selection of the current
   repository and a closed dropdown when opening Edit.
 - **Exceptions:** None recorded.
@@ -395,16 +397,32 @@ when implementing or reviewing a change.
   additional skeleton loader at end” beside Code Truth and Codex. This exception
   applies to the catalog grid; plugin detail loading retains its skeletons.
 
-### Codex details show configuration, repositories and tasks separately
+### Codex details show configuration and tasks separately
 
-- **Preference:** Divide the Codex detail page into three cards: a compact
-  configuration summary with an Edit action that opens a configuration dialog,
-  a repository list with New in its heading, and coding tasks.
-- **Scope:** Codex plugin detail page on desktop and mobile.
-- **Source:** 2026-09-29 — user requested three parts, a configuration summary and
-  edit dialog in the first card, and Add repository in the repository list card.
-- **Exceptions:** Repository editing remains in its own dialog; task controls
-  remain with their tasks.
+- **Preference:** Show a compact configuration summary with an Edit action opening
+  a dialog, followed by coding tasks. Remove the repository list and its management
+  actions; GitHub owns repository access.
+- **Scope:** Codex plugin detail page on desktop and mobile. Workflow settings apply
+  once to the workspace's connected repositories.
+- **Source:** 2026-09-29 — user requested separate configuration, repository and task
+  cards. 2026-10-12 — user removed the extra repository permission layer in Codex
+  and Review Bot in favor of GitHub's native permissions.
+- **Exceptions:** Task repository references remain in task summaries.
+
+### GitHub owns Codex and Review Bot repository permissions
+
+- **Preference:** Do not duplicate GitHub repository permissions with plugin
+  repository lists, Add/Edit/Remove controls, maintainer grants or review-owner
+  selection. Explain GitHub access in the saved configuration summary. Keep
+  workflow choices in one plugin-wide modal editor.
+- **Scope:** Codex and Review Bot on desktop and mobile. Codex uses GitHub's default
+  branch; verified user permissions govern requested work and App installation
+  permissions govern automatic reviews.
+- **Source:** 2026-10-12 — user described the repository permission controls as
+  overdesigned and requested GitHub's existing permission system.
+- **Exceptions:** Workspace membership, tenant connection scope, action approvals,
+  model credentials, webhook settings and task controls remain separate concerns.
+  Code Truth's repository/index configuration is outside this request.
 
 ### Plugin details share card layouts and a title switch
 
@@ -412,7 +430,8 @@ when implementing or reviewing a change.
   plugins: compact configuration summaries and separate cards for repositories
   and operational details where applicable. Place the Enable switch at the right
   of the page title with space between them. The switch saves independently;
-  configuration editors focus on the remaining settings.
+  configuration editors focus on the remaining settings. Codex and Review Bot
+  omit repository cards and configure their workflows once for the plugin.
 - **Scope:** Installed plugin detail pages on desktop and mobile.
 - **Source:** 2026-10-05 — user requested consistent plugin details based on the
   Codex screenshot and an Enable toggle to the right of the title.
@@ -460,7 +479,8 @@ when implementing or reviewing a change.
   the relevant control and a distinct maintainer choice list. Show each available
   Telegram username with its numeric ID so an operator can identify the person
   before granting coding access. Keep the action row separated from the list.
-- **Scope:** Add and edit coding repository dialogs in the Codex plugin.
+- **Scope:** Historical Add/Edit coding repository dialogs; these controls were
+  removed on 2026-10-12 in favor of native GitHub permissions.
 - **Source:** 2026-09-29 — user showed the Add coding repository dialog, asked to
   fix its UI issues, and requested Telegram usernames in the user list.
 - **Exceptions:** When no username is known, show the numeric Telegram ID alone.

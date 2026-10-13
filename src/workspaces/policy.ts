@@ -88,11 +88,7 @@ function allowedRun(
             repositoryAccess(w, run.actor, id) &&
             w.github?.repositories.some((repo) => repo.id === id) &&
             w.coding?.settings.enabled &&
-            w.coding.settings.repositories.some(
-              (repo) =>
-                repo.repositoryId === id &&
-                repo.maintainers.includes(run.actor),
-            ),
+            !!w.members.find((m) => m.id === run.actor)?.github,
         ) &&
         (run.handoffRead.codingRevision === undefined ||
           run.handoffRead.codingRevision === w.coding?.revision))) &&

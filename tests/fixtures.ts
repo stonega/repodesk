@@ -42,3 +42,22 @@ export function spec(w: Workspace) {
     skillId: w.skills[0]?.id,
   });
 }
+
+/** Deterministic upstream GitHub permissions for repository-work fixtures. */
+export function grantGitHubAccess(w: Workspace, actors: string[]) {
+  for (const actor of actors) {
+    const member = w.members.find((m) => m.id === actor);
+    if (!member) throw new Error("Missing fixture member");
+    member.github = {
+      id: Number(actor),
+      login: `fixture-${actor}`,
+      status: "connected",
+      connectionRevision: w.github?.revision ?? 0,
+      syncedAt: new Date().toISOString(),
+      repositories: (w.github?.repositories ?? []).map((r) => ({
+        ...r,
+        permissions: { pull: true, push: true, admin: false },
+      })),
+    };
+  }
+}

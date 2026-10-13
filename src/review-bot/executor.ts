@@ -13,7 +13,7 @@ import { ModelProviders } from "../models/service.ts";
 import { decrypt, fingerprint } from "../setup/credentials.ts";
 import { type ReviewTask, reviewTerminal } from "./config.ts";
 import { progressMarker, ReviewGitHub, reviewMarker } from "./github.ts";
-import { checkReview } from "./policy.ts";
+import { checkReview, reviewDestination } from "./policy.ts";
 
 const reason = (error: unknown) =>
   error instanceof Fault ? error.code : "review_failed";
@@ -45,6 +45,16 @@ export class ReviewExecutor {
   private async guard(workspaceId: string, task: ReviewTask) {
     const w = await this.store.read(workspaceId);
     checkReview(w, task);
+    requireThat(
+      (await reviewDestination(
+        this.store,
+        w.operatorId,
+        task.payload.installationId,
+        task.payload.repositoryId,
+      )) === w.id,
+      "review_configuration_changed",
+      409,
+    );
     const d = await this.store.deployment();
     requireThat(d.active && !d.paused, "deployment_paused", 409);
     return w;
@@ -115,6 +125,17 @@ export class ReviewExecutor {
       const t = w.reviewTasks?.find((t) => t.id === task.id);
       if (!t || t.lease !== lease || t.cancelRequested) return false;
       checkReview(w, t);
+      requireThat(
+        (await reviewDestination(
+          this.store,
+          w.operatorId,
+          t.payload.installationId,
+          t.payload.repositoryId,
+        )) === w.id,
+        "review_configuration_changed",
+        409,
+      );
+
       const d = await this.store.deployment(sql);
       requireThat(d.active && !d.paused, "deployment_paused", 409);
       t.state = state;
@@ -376,8 +397,7 @@ export class ReviewExecutor {
     }
     if (task.mode === "fix")
       requireThat(
-        pull.head.repo?.full_name === task.payload.repository &&
-          pull.base.ref === task.payload.baseBranch,
+        pull.head.repo?.full_name === task.payload.repository,
         "coding_pr_target_changed",
         409,
       );

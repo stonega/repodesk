@@ -637,8 +637,12 @@ for (const width of [1280, 390]) {
       fullPage: true,
     });
     await page.goto(`/admin/plugins/review-bot?workspace=${w.id}`);
-    await page.getByRole("button", { name: "Edit review model" }).click();
-    const review = page.getByRole("dialog", { name: "Edit review model" });
+    await page
+      .getByRole("button", { name: "Edit Review Bot configuration" })
+      .click();
+    const review = page.getByRole("dialog", {
+      name: "Edit Review Bot configuration",
+    });
     await review.getByLabel("Use the Codex model").uncheck();
     await chooseOption(
       review.getByLabel("Model provider", { exact: true }),
@@ -648,10 +652,10 @@ for (const width of [1280, 390]) {
       review.getByLabel("Model", { exact: true }),
       "gpt-4.1-mini",
     );
-    await review.getByRole("button", { name: "Save review model" }).click();
+    await review.getByRole("button", { name: "Save configuration" }).click();
     await expect(review).toHaveCount(0);
     await expect(
-      page.getByRole("region", { name: "Review model" }),
+      page.getByRole("region", { name: "Review Bot configuration" }),
     ).toContainText("gpt-4.1-mini");
     await page.screenshot({
       path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/model-review-${width}.png`,

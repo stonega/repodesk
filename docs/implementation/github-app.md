@@ -317,8 +317,8 @@ The GitHub tools and bundled [`repodesk-github` skill](../../skills/repodesk-git
 load by default whenever the workspace has a connected installation and selected
 repositories. This covers existing workspaces as well as new ones; no custom plugin
 manifest, Code Truth service, coding enablement or manual skill activation is needed
-for repository reads or issue/PR proposals. Coding-maintainer grants require enabled
-Codex settings; workspace owners/admins can propose PR actions independently.
+for repository reads or issue/PR proposals. Workspace owners/admins and verified
+GitHub collaborators with write access can propose PR actions independently of Codex.
 The registered tool set describes the current build; old conversation replies about
 missing tools do not override it. Updating the source or GitHub App permissions does
 not update an already-running deployment's agent code. Roll out the updated app and
@@ -332,9 +332,9 @@ merge method (`merge` by default, or `squash`/`rebase`). Only the requester can
 approve, within 15 minutes. Each PR requires its own approval. Coding task approval
 and Direct execution never authorize a merge.
 
-The requester must be an active workspace owner/admin or a maintainer of that
-repository in enabled Codex settings. Linked GitHub accounts also need fresh
-write/admin repository access. Only active, selected installation repositories are
+The requester must be an active workspace owner/admin or a verified GitHub
+collaborator with current write/admin repository access. Linked accounts always
+require fresh GitHub permissions; there is no extra Codex maintainer grant. Only active, selected installation repositories are
 eligible. Private PR actions use private Telegram chats; scheduled runs cannot
 propose PR writes. These gates are rechecked at approval and before execution.
 
@@ -432,11 +432,11 @@ Permission synchronization uses GitHub's
 Only repositories also selected in the workspace connection are imported.
 Read/triage/write/maintain/admin flags are kept as upstream repository permissions.
 Linked users' repository lookup, source retrieval and issue proposals require read
-access; coding additionally requires GitHub write/admin access and the operator's
-existing coding-maintainer grant. Existing unlinked members retain the previous
-operator-managed repository policy. Linking adds the upstream restriction; subsequent
-disconnect does not restore that member's previous unrestricted repository access.
-This is an additive rollout, not mandatory GitHub identity enrollment for all members.
+access. Codex requires a verified GitHub connection and current write/admin access.
+Review Bot tagged requests require verified read access; fixes require write access.
+Both plugins use GitHub permissions without local repository or maintainer grants.
+Other GitHub read/issue paths retain the existing unlinked operator policy. Linking
+adds the upstream boundary; disconnect never restores unrestricted repository access.
 
 The worker refreshes each account about every five minutes, in bounded batches
 independently of Telegram polling and job maintenance. `/github sync` refreshes

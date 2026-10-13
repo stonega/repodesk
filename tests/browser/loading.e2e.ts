@@ -9,10 +9,9 @@ const data: CodingPage = {
     enabled: true,
     backend: "podman",
     authMode: "device_code",
-    repositories: [],
   },
   repositories: [],
-  members: [],
+
   tasks: [],
   legacyActionsConfiguration: false,
   providerApiKeyConfigured: false,
@@ -248,11 +247,7 @@ for (const width of [1280, 390]) {
       name: "Codex configuration",
       exact: true,
     });
-    for (const name of [
-      "Codex configuration",
-      "Coding repositories",
-      "Coding tasks",
-    ]) {
+    for (const name of ["Codex configuration", "Coding tasks"]) {
       const card = page.getByRole("region", { name, exact: true });
       await expect(card).toBeVisible();
       await expect(card).toHaveAttribute("aria-busy", "true");
@@ -266,9 +261,9 @@ for (const width of [1280, 390]) {
     ).toBeDisabled();
     await expect(
       page.getByRole("button", { name: "Add coding repository" }),
-    ).toBeDisabled();
+    ).toHaveCount(0);
     await expect(
-      page.getByText("No coding repositories configured."),
+      page.getByRole("region", { name: "Coding repositories", exact: true }),
     ).toHaveCount(0);
     await expect(page.getByText(/Loading Codex settings/)).toHaveCount(0);
     await expect
@@ -295,8 +290,8 @@ for (const width of [1280, 390]) {
       page.getByRole("button", { name: "Edit Codex configuration" }),
     ).toBeEnabled();
     await expect(
-      page.getByText("No coding repositories configured."),
-    ).toBeVisible();
+      page.getByRole("region", { name: "Coding repositories", exact: true }),
+    ).toHaveCount(0);
   });
 }
 
@@ -429,8 +424,8 @@ for (const width of [1280, 390, 320]) {
       ).toBeVisible();
       await expect(config.locator("form, input, select")).toHaveCount(0);
       await expect(
-        page.getByText("No coding repositories configured."),
-      ).toBeVisible();
+        page.getByRole("region", { name: "Coding repositories", exact: true }),
+      ).toHaveCount(0);
       await page.screenshot({
         path: test.info().outputPath("recovered.png"),
         fullPage: true,
