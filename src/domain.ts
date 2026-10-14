@@ -479,6 +479,11 @@ export interface Workspace {
   memberVersion: number;
   members: Member[];
   accessRequests?: AccessRequest[];
+  accessLinkClaims?: {
+    hash: string;
+    actor: string;
+    expiresAt: string;
+  }[];
   chats: Chat[];
   messages: Source[];
   threads?: ConversationThread[];

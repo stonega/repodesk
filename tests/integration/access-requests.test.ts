@@ -145,6 +145,125 @@ const url = process.env.TEST_DATABASE_URL;
         : [],
     },
   });
+  async function invite() {
+    const response = await api(`${w.id}/access-requests`);
+    expect(response.status).toBe(200);
+    const page = await response.json();
+    return new URL(page.requestUrl).searchParams.get("start") ?? "";
+  }
+  test("an invite automatically enrolls its first account and never enrolls a second account", async () => {
+    const start = await invite();
+    const first = message(404, `/start ${start}`);
+    const second = message(505, `/start ${start}`);
+    await Promise.all([
+      ingress.accept(first),
+      ingress.accept(second),
+      ingress.accept(first),
+    ]);
+    const current = await store.read(w.id);
+    const enrolled = ["404", "505"].filter((actor) => eligible(current, actor));
+    expect(enrolled).toHaveLength(1);
+    expect(
+      current.members.find((member) => member.id === enrolled[0]),
+    ).toMatchObject({
+      role: "member",
+      active: true,
+      name: "New user",
+      username: "new_user",
+    });
+    expect(current.memberVersion).toBe(w.memberVersion + 1);
+    expect(current.accessRequests ?? []).toHaveLength(0);
+    expect(current.accessLinkClaims).toHaveLength(1);
+    expect(current.runs).toHaveLength(0);
+    expect(current.messages).toHaveLength(0);
+    expect(JSON.stringify(current)).not.toContain(start);
+    expect(
+      (
+        await store.pool.query(
+          "SELECT workspace_id FROM telegram_selections WHERE actor=$1",
+          [enrolled[0]],
+        )
+      ).rows[0]?.workspace_id,
+    ).toBe(w.id);
+    const winner = Number(enrolled[0]);
+    await ingress.accept(message(winner, `/start ${start}`));
+    expect((await store.read(w.id)).memberVersion).toBe(current.memberVersion);
+    await store.change(w.id, (workspace) => {
+      const member = workspace.members.find((m) => m.id === String(winner));
+      if (!member) throw Error("Missing fixture member");
+      member.active = false;
+      workspace.memberVersion++;
+    });
+    await ingress.accept(message(winner, `/start ${start}`));
+    expect(eligible(await store.read(w.id), String(winner))).toBe(false);
+  });
+  test("invites reject forged or expired tokens and non-private or unverified senders", async () => {
+    const start = await invite();
+    const bot = { id: "999", username: "fixture_bot" };
+    const expiredUrl = setup.accessLinks.view(
+      w,
+      bot,
+      new Date(Date.now() - 86_401_000),
+    ).requestUrl;
+    const expired = new URL(required(expiredUrl)).searchParams.get("start");
+    await ingress.accept(message(404, `/start ${expired}`));
+    await ingress.accept(message(404, `/start ${start.slice(0, -1)}!`));
+    for (const change of [
+      (u: Update) => {
+        required(u.message).chat.id = 505;
+      },
+      (u: Update) => {
+        required(required(u.message).from).is_bot = true;
+      },
+      (u: Update) => {
+        required(u.message).sender_chat = { id: -100100, type: "supergroup" };
+      },
+    ]) {
+      const update = message(404, `/start ${start}`);
+      change(update);
+      await ingress.accept(update);
+    }
+    await store.pool.query(
+      "INSERT INTO chat_bindings(chat_id,workspace_id) VALUES($1,$2)",
+      ["-100100", w.id],
+    );
+    await ingress.accept(message(404, `/start ${start}`, -100100));
+    const edited = message(404, `/start ${start}`);
+    edited.edited_message = edited.message;
+    delete edited.message;
+    await ingress.accept(edited);
+    expect(eligible(await store.read(w.id), "404")).toBe(false);
+    expect((await store.read(w.id)).accessLinkClaims).toBeUndefined();
+    await ingress.accept(message(404, `/start ${start}`));
+    expect(eligible(await store.read(w.id), "404")).toBe(true);
+  });
+  test("an invite enrolls before activation and resolves a pending request without approval", async () => {
+    const start = await invite();
+    await ingress.accept(callback());
+    const deployment = await store.deployment();
+    deployment.active = false;
+    await store.saveDeployment(store.pool, deployment);
+    try {
+      const update = message(404, `/start ${start}`);
+      required(update.message).message_thread_id = 44;
+      await ingress.accept(update);
+      const current = await store.read(w.id);
+      expect(eligible(current, "404")).toBe(true);
+      expect(current.accessRequests?.[0]?.status).toBe("approved");
+      expect(current.runs).toHaveLength(0);
+      await deliverAccessHelp(store, setup);
+      expect(
+        calls.some(
+          (call) =>
+            call.params.message_thread_id === 44 &&
+            String(call.params.text).includes("setup is not complete"),
+        ),
+      ).toBe(true);
+    } finally {
+      deployment.active = true;
+      await store.saveDeployment(store.pool, deployment);
+    }
+  });
   test("migration removes legacy restrictions without enrolling listed strangers or changing work", async () => {
     const legacy = {
       ...w,
@@ -348,7 +467,7 @@ const url = process.env.TEST_DATABASE_URL;
     const page = await response.json();
     expect(page.items[0].actor).toBe("404");
     expect(page.items[0].name).toBe("New user");
-    expect(page.requestUrl).toContain(`start=access_${w.id}`);
+    expect(page.requestUrl).toContain("start=access_");
     const path = `${w.id}/access-requests/${page.items[0].id}/decision`;
     const outcomes = await Promise.all([
       api(path, "POST", { decision: "approved", version: page.version }),
@@ -517,12 +636,12 @@ const url = process.env.TEST_DATABASE_URL;
         });
       });
       const page = await (await api(`${w.id}/access-requests`)).json();
-      expect(page.requestUrl).toContain(`start=access_${w.id}`);
+      expect(page.requestUrl).toContain("start=access_");
 
       await ingress.accept(message(404, "/start"));
       await deliverAccessHelp(store, setup);
       expect(calls.at(-1)?.params.text).toContain(
-        "Ask your admin for the workspace's request-access link",
+        "Ask your admin for a new invite link",
       );
       calls.length = 0;
 

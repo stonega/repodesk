@@ -869,9 +869,7 @@ export function adminRoutes(
         return c.json({
           version: w.memberVersion,
           items: (w.accessRequests ?? []).filter((r) => r.status === "pending"),
-          requestUrl: deployment.bot
-            ? `https://t.me/${deployment.bot.username}?start=access_${w.id}`
-            : null,
+          ...setup.accessLinks.view(w, deployment.bot),
         });
       }
       case "chats":

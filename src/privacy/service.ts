@@ -56,6 +56,7 @@ export function sweep(w: Workspace, now = new Date()) {
     w.chats = [];
     w.members = [];
     w.accessRequests = [];
+    w.accessLinkClaims = [];
     w.deletion.purgedAt ??= now.toISOString();
     return;
   }
@@ -83,6 +84,9 @@ export function sweep(w: Workspace, now = new Date()) {
       discardFollowup(w, run);
     }
   }
+  w.accessLinkClaims = w.accessLinkClaims?.filter(
+    (claim) => Date.parse(claim.expiresAt) > now.getTime(),
+  );
   const cutoff = now.getTime() - w.settings.retentionDays * 86400000;
   w.repositorySelections = w.repositorySelections?.filter(
     (s) => Date.parse(s.at) > cutoff,

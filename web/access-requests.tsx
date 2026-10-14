@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { AccessRequest } from "../src/domain.ts";
 import { IconButton } from "./icon-button.tsx";
 import { SkeletonRows } from "./skeleton.tsx";
-import { useToast } from "./toast.tsx";
+import { ErrorToast, useToast } from "./toast.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 type Requests = {
@@ -32,22 +32,61 @@ export function AccessRequests({
   const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshAt, setRefreshAt] = useState<number>();
+  const [seconds, setSeconds] = useState(10);
+  const latestLoad = useRef(0);
+  const memberVersion = useRef<number | undefined>(undefined);
+  const changed = useRef(onChange);
+  changed.current = onChange;
   const load = useCallback(async () => {
+    const sequence = ++latestLoad.current;
     setLoading(true);
     setError("");
-    setCopyStatus(null);
     try {
-      setData(await request<Requests>(endpoint));
+      const next = await request<Requests>(endpoint);
+      if (sequence !== latestLoad.current) return;
+      setData(next);
+      setCopyStatus(null);
+      setRefreshAt(Date.now() + 10_000);
+      setSeconds(10);
+      if (
+        memberVersion.current !== undefined &&
+        memberVersion.current !== next.version
+      )
+        changed.current();
+      memberVersion.current = next.version;
     } catch (error) {
-      setError((error as Error).message);
+      if (sequence === latestLoad.current) setError((error as Error).message);
     } finally {
-      setLoading(false);
+      if (sequence === latestLoad.current) setLoading(false);
     }
   }, [endpoint, request]);
+  useEffect(() => {
+    void endpoint;
+    setData(undefined);
+    setRefreshAt(undefined);
+    memberVersion.current = undefined;
+    return () => {
+      latestLoad.current++;
+    };
+  }, [endpoint]);
   useEffect(() => {
     void refreshKey;
     void load();
   }, [load, refreshKey]);
+  useEffect(() => {
+    if (!data?.requestUrl || !refreshAt || error || loading || busy) return;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((refreshAt - Date.now()) / 1000));
+      setSeconds(remaining);
+      if (remaining === 0) {
+        clearInterval(timer);
+        void load();
+      }
+    };
+    const timer = setInterval(tick, 250);
+    return () => clearInterval(timer);
+  }, [data?.requestUrl, refreshAt, error, loading, busy, load]);
   useEffect(
     () => () => {
       if (copyResetTimer.current !== null) clearTimeout(copyResetTimer.current);
@@ -97,25 +136,32 @@ export function AccessRequests({
     <section className="card" aria-label="Access requests">
       <div className="row between">
         <h2>Access requests{data ? ` (${data.items.length})` : ""}</h2>
-        {error && (
-          <button
-            type="button"
-            disabled={busy || loading}
-            onClick={() => void load()}
-          >
-            Reload access requests
-          </button>
-        )}
       </div>
       <p>
-        Approve to add the user as a member and allow bot access. Admin
-        permissions are managed separately.
+        Invite links add members automatically. Requests sent without an invite
+        still need approval. Admin permissions are managed separately.
       </p>
       {data?.requestUrl && (
         <div className="card access-link-card">
           <div className="access-link-details">
-            <h3>Share this link with people who need access</h3>
+            <h3>Share this link with someone who needs access</h3>
             <p className="access-link-url">{data.requestUrl}</p>
+            <p className="muted">
+              One Telegram account per link. No approval required. Copied links
+              remain valid for 24 hours.
+            </p>
+            <p
+              className="muted"
+              role="timer"
+              aria-label="Invite link refresh"
+              aria-live="off"
+            >
+              {error
+                ? "Link refresh paused."
+                : loading
+                  ? "Updating link…"
+                  : `New link in ${seconds}s`}
+            </p>
           </div>
           <IconButton
             icon={copyStatus === "copied" ? "done" : "copy"}
@@ -128,16 +174,24 @@ export function AccessRequests({
           />
         </div>
       )}
-      {copyStatus === "failed" && (
-        <p className="notice" role="alert">
-          Could not copy the link. Select the URL above to copy it.
-        </p>
-      )}
-      {error && (
-        <p className="notice" role="alert">
-          {error}
-        </p>
-      )}
+      <ErrorToast
+        message={
+          copyStatus === "failed"
+            ? "Could not copy the link. Select the URL to copy it."
+            : error
+        }
+      >
+        {error && (
+          <button
+            type="button"
+            aria-label="Reload access requests"
+            disabled={busy || loading}
+            onClick={() => void load()}
+          >
+            Retry
+          </button>
+        )}
+      </ErrorToast>
       {loading && !data && !error && (
         <SkeletonRows label="Access requests" rows={2} />
       )}

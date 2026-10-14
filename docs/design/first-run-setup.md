@@ -60,9 +60,12 @@ reloads and GitHub callbacks continue setup for that workspace. The Telegram bot
 is deployment-wide and can be retained when already configured. Operators can
 cancel before creating the workspace or finish GitHub connection later in the
 admin panel.
-After activation, the web administrator can share an access-request link,
-approve requests, directly allow a numeric Telegram ID, or revoke a member in
-Members & access. The bot denies ordinary use until a member is explicitly allowed.
+After activation, the web administrator can share a single-account invite link,
+approve ordinary access requests, directly allow a numeric Telegram ID, or revoke
+a member in Members & access. Invites add regular members automatically without
+approval. The displayed link refreshes every 10 seconds with a countdown; copied
+tokens remain valid for 24 hours. The bot denies ordinary use until membership is
+granted through an invite, an approved request or direct enrollment.
 Linking the administrator's personal Telegram account later grants owner actions
 in Telegram. Optional group linking and detailed workspace policies can be
 configured after activation.

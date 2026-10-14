@@ -45,7 +45,7 @@ export async function deliverAccessHelp(store: Store, setup: SetupService) {
             ? "Your access request was rejected. Contact your workspace admin or request again after 24 hours."
             : workspace
               ? "You do not have access to this workspace yet. Tap Request access to ask an admin to approve you."
-              : "You do not have workspace access yet. Ask your admin for the workspace's request-access link, then open it to request access. First-time owners verify their identity from web setup.";
+              : "This invite link is unavailable or you do not have workspace access yet. Ask your admin for a new invite link. Each link works for one Telegram account. First-time owners verify their identity from web setup.";
       const result = await (await setup.client()).call<{ message_id: number }>(
         "sendMessage",
         {

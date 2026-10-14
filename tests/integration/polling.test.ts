@@ -342,7 +342,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       );
       const access = await setup.access(admin, w.id);
       expect(access.members).toHaveLength(0);
-      expect(access.requestUrl).toContain(`access_${w.id}`);
+      expect(access.requestUrl).toContain("start=access_");
       updates = async () => [message(10, "/ask denied")];
       await poller.pollOnce(signal());
       expect((await store.read(w.id)).runs).toHaveLength(0);

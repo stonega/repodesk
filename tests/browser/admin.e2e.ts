@@ -2188,9 +2188,7 @@ test.describe
         await expect(
           requests.getByRole("heading", { name: "Access requests (2)" }),
         ).toBeVisible();
-        const accessLink = requests.getByText(
-          new RegExp(`start=access_${workspaceId}`),
-        );
+        const accessLink = requests.getByText(/start=access_/);
         await expect(accessLink).toBeVisible();
         await expect(requests.getByRole("textbox")).toHaveCount(0);
         await page
@@ -2238,13 +2236,13 @@ test.describe
         await applicant
           .getByRole("button", { name: "Approve access", exact: true })
           .click();
-        await expect(requests.getByRole("alert")).toContainText(
+        await expect(page.locator(".toast").getByRole("alert")).toContainText(
           "Reload the current version",
         );
-        await requests
+        await page
           .getByRole("button", { name: "Reload access requests" })
           .click();
-        await expect(requests.getByRole("alert")).toHaveCount(0);
+        await expect(page.locator(".toast").getByRole("alert")).toHaveCount(0);
         await applicant
           .getByRole("button", { name: "Approve access", exact: true })
           .click();

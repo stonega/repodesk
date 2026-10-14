@@ -1,5 +1,33 @@
 # Implementation evidence
 
+## Single-account invites and link countdown (2026-10-14)
+
+Members & access now shows a signed Telegram invite that refreshes every 10 seconds
+with a countdown. Its first actual Telegram sender receives regular membership
+automatically, without an approval decision. Each token binds to one account in
+the workspace's locked inbox transaction. Concurrent claims and duplicate events
+cannot enroll another account; replay after revocation cannot restore access.
+Existing active roles are preserved, inactive administrators rejoin as members,
+and revoked owners still require recovery. Bot identity, tenant, private-chat
+sender, signature and expiry checks remain application boundaries.
+
+Copied links remain valid for 24 hours independently of the display refresh.
+Only hashed claims are persisted; expired claims and workspace purge remove them.
+Redemption records membership/audit and default private selection, resolves a prior
+pending request, and queues the fixed welcome reply without model/tool execution.
+It also works before activation. Ordinary requests and old workspace-ID links
+still require manual approval.
+
+The read-only link card retains its monospace URL and one-second copied icon,
+keeps the URL visible during refresh, and pauses with an error toast and Retry on
+failure. Membership changes discovered by refresh update the member table.
+
+Verification: `bun run check`, `bun run typecheck`, `bun test` against isolated
+PostgreSQL (751 passing tests), and `bun run build`; eight focused Playwright
+checks cover countdown/rotation, copying, member refresh, loading, pending,
+error/retry, navigation cleanup and existing manual decisions. Rendered states
+were inspected at 1280px and 390px. No live Telegram calls were used.
+
 ## VPS deployment of skills and provider metadata (2026-10-14)
 
 The recorded VPS serves package v0.1.36 from clean commit

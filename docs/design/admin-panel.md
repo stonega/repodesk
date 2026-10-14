@@ -332,7 +332,10 @@ See [workflow API examples](../../examples/workflows.http).
 ### Access request review (implemented)
 
 The **Members & access** page includes **Access requests** and a shareable
-Telegram request link. Pending rows show the Telegram ID, available display name and
+Telegram invite link that refreshes every 10 seconds with a countdown. Each token
+immediately adds one Telegram account as a regular member; copied links expire
+after 24 hours. Requests sent without an invite still need review.
+Pending rows show the Telegram ID, available display name and
 username, and request time. **Approve access** grants active regular membership and bot
 access; **Reject request** dismisses the request without granting access. Actions
 are disabled while saving, conflicts keep the request visible for reload, and successful

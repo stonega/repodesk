@@ -1014,16 +1014,22 @@ when implementing or reviewing a change.
 
 ### Shareable access links use a card and copy action
 
-- **Preference:** Display the Telegram access-request URL as monospace text in a
+- **Preference:** Display the Telegram invite URL as monospace text in a
   regular card with a copy icon button, rather than as a read-only input. After a
   successful copy, show a check icon for one second, then restore the copy icon.
-  Do not show a separate success message.
-- **Scope:** The shareable request link in Members & access → Access requests.
+  Do not show a separate success message. Refresh the displayed invite link
+  automatically every 10 seconds and show a countdown. Explain that opening it
+  grants regular membership immediately and that each token works for one Telegram
+  account. Keep the current link visible during refresh and offer Retry on failure.
+- **Scope:** The shareable invite link in Members & access → Access requests.
 - **Source:** 2026-09-27 — user requested a common card and copy icon button for
   the link shown in the access-request section. 2026-09-28 — user requested a
   one-second done icon in place of the “Link copied.” message.
   2026-10-10 — user requested a monospace font for the access-request link.
-- **Exceptions:** None recorded.
+  2026-10-14 — user requested automatic membership without approval, one account
+  per token, and a link that updates every 10 seconds with a countdown.
+- **Exceptions:** Ordinary access requests without an invite still need approval.
+  The countdown controls the displayed link; copied links remain valid for 24 hours.
 
 ### Workspace settings version is a title badge
 

@@ -10,7 +10,11 @@
 GET {{origin}}/api/admin/workspaces/{{workspace}}/members?offset=0
 Cookie: {{cookie}}
 
-### Pending requests, current membership version, and shareable Telegram link
+### Pending requests, membership version, and a signed single-account invite
+# requestUrl grants regular membership automatically to the first Telegram account.
+# Share the returned URL; do not construct a link from the workspace ID.
+# UI fetches a new link every 10 seconds and shows a countdown.
+# Copied tokens expire after 24 hours (expiresAt); refreshAt marks the next display update.
 GET {{origin}}/api/admin/workspaces/{{workspace}}/access-requests
 Cookie: {{cookie}}
 

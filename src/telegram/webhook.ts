@@ -148,6 +148,58 @@ export class Ingress {
         return { accepted: true, callbackText };
       }
       if (
+        cmd?.name === "start" &&
+        cmd.args.startsWith("access_") &&
+        !/^access_[0-9a-f-]{36}$/.test(cmd.args)
+      ) {
+        if (
+          !msg?.from ||
+          msg.from.is_bot ||
+          msg.sender_chat ||
+          msg.chat.type !== "private" ||
+          msg.chat.id !== msg.from.id
+        )
+          return { ignored: true };
+        const actor = String(msg.from.id);
+        if (
+          !workspace ||
+          !this.setup.accessLinks.redeem(workspace, cmd.args.slice(7), botId, {
+            id: actor,
+            username: msg.from.username,
+            name:
+              [msg.from.first_name, msg.from.last_name]
+                .filter(Boolean)
+                .join(" ") || undefined,
+          })
+        ) {
+          await this.accessHelp(sql, update, d);
+          return { ignored: true };
+        }
+        await sql.query(
+          "INSERT INTO telegram_selections(actor,workspace_id) VALUES($1,$2) ON CONFLICT(actor) DO NOTHING",
+          [actor, workspace.id],
+        );
+        await sql.query(
+          "UPDATE inbox SET workspace_id=$3 WHERE bot_id=$1 AND update_id=$2",
+          [botId, update.update_id, workspace.id],
+        );
+        if (d.active && !d.paused)
+          deliver(
+            workspace,
+            actor,
+            actor,
+            "You have access. Send /help to get started.",
+            {
+              id: `event:${update.update_id}:access`,
+              topicId: msg.message_thread_id,
+              replyTo: msg.message_id,
+            },
+          );
+        else await this.accessHelp(sql, update, d, workspace);
+        await this.store.save(sql, workspace);
+        return { accepted: true };
+      }
+      if (
         !workspace ||
         (msg?.chat.type === "private" &&
           msg.from &&
@@ -328,15 +380,18 @@ export class Ingress {
         ? cmd.args.slice(7)
         : undefined;
     if (requestedId !== undefined && c?.type === "private") {
-      if (
-        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+      const legacy =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
           requestedId,
-        )
-      )
-        return;
+        );
+      const workspaceId = legacy
+        ? requestedId
+        : d.bot &&
+          this.setup.accessLinks.resolve(requestedId, d.bot.id)?.workspaceId;
+      if (!workspaceId) return;
       const row = await sql.query(
         "SELECT data FROM workspaces WHERE id=$1 AND NOT (data ? 'deletion') FOR UPDATE",
-        [requestedId],
+        [workspaceId],
       );
       return row.rows[0]?.data as Workspace | undefined;
     }

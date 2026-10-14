@@ -31,6 +31,7 @@ import {
   pollingStatus,
   type TelegramTransport,
 } from "../telegram/polling-state.ts";
+import { AccessLinks } from "../workspaces/access-links.ts";
 import { decideAccessRequest } from "../workspaces/access-requests.ts";
 import { audit, revokeWork } from "../workspaces/policy.ts";
 import { newWorkspace } from "../workspaces/service.ts";
@@ -58,6 +59,7 @@ function activationModelReady(d: Deployment, w: Workspace) {
 }
 export class SetupService {
   readonly models: ModelProviders;
+  readonly accessLinks: AccessLinks;
   constructor(
     public store: Store,
     private key: string,
@@ -68,6 +70,7 @@ export class SetupService {
     modelTransport: ModelTransport = fetch,
   ) {
     this.models = new ModelProviders(store, key, modelTransport);
+    this.accessLinks = new AccessLinks(key);
   }
   async client(d?: Deployment) {
     d ??= await this.store.deployment();
@@ -265,9 +268,7 @@ export class SetupService {
       requests: (w.accessRequests ?? []).filter(
         (request) => request.status === "pending",
       ),
-      requestUrl: d.bot
-        ? `https://t.me/${d.bot.username}?start=access_${w.id}`
-        : null,
+      ...this.accessLinks.view(w, d.bot),
     };
   }
   async allowMember(admin: Admin, id: string, actor: string, version: number) {
