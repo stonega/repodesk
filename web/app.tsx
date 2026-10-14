@@ -3358,7 +3358,7 @@ function Operations() {
         </button>
       </ErrorToast>
       <section className="card" aria-label="Service health" aria-busy={loading}>
-        <div className="row">
+        <div className="card-heading">
           <h2>Service health</h2>
           <NavLink to="/admin/logs">View runtime logs</NavLink>
         </div>
@@ -3389,38 +3389,40 @@ function Operations() {
         aria-label="Deployment activity"
         aria-busy={progress.loading}
       >
-        <div className="row">
-          <h2>Deployment activity</h2>
-          {progress.data ? (
-            <span className="pill">{paused ? "Paused" : "Active"}</span>
-          ) : progress.loading ? (
-            <Skeleton width="5em" />
-          ) : (
-            <span className="muted">Unavailable</span>
-          )}
+        <div className="card-heading">
+          <div className="row">
+            <h2>Deployment activity</h2>
+            {progress.data ? (
+              <span className="pill">{paused ? "Paused" : "Active"}</span>
+            ) : progress.loading ? (
+              <Skeleton width="5em" />
+            ) : (
+              <span className="muted">Unavailable</span>
+            )}
+          </div>
+          <button
+            type="button"
+            className={paused ? undefined : "danger"}
+            disabled={!progress.data || !!progress.error}
+            onClick={() => {
+              setPauseError("");
+              if (progress.data)
+                setConfirming({
+                  paused: progress.data.paused,
+                  version: progress.data.version,
+                });
+            }}
+          >
+            {pauseAction}
+          </button>
         </div>
         <p className="muted">
           Pause assistant execution and run delivery across all workspaces, or
           resume when the deployment is ready.
         </p>
-        <button
-          type="button"
-          className={paused ? undefined : "danger"}
-          disabled={!progress.data || !!progress.error}
-          onClick={() => {
-            setPauseError("");
-            if (progress.data)
-              setConfirming({
-                paused: progress.data.paused,
-                version: progress.data.version,
-              });
-          }}
-        >
-          {pauseAction}
-        </button>
       </section>
       <section className="card" aria-label="Run diagnostics">
-        <div className="row">
+        <div className="card-heading">
           <h2>Run diagnostics</h2>
           <button type="button" onClick={() => setEditor("diagnostic")}>
             Inspect run
@@ -3454,7 +3456,7 @@ function Operations() {
         )}
       </section>
       <section className="card" aria-label="Panel accounts">
-        <div className="row">
+        <div className="card-heading">
           <h2>Panel accounts</h2>
           <IconButton
             icon="add"
@@ -3473,7 +3475,7 @@ function Operations() {
             <DataDetails value={accountResult} />
           </>
         )}
-        <div className="row">
+        <div className="card-heading">
           <h3>Identity verification</h3>
           <button
             type="button"
@@ -3500,7 +3502,7 @@ function Operations() {
         )}
       </section>
       <section className="card" aria-label="Recover workspace access">
-        <div className="row">
+        <div className="card-heading">
           <h2>Recover workspace access</h2>
           <button
             type="button"

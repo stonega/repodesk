@@ -16,7 +16,7 @@ when implementing or reviewing a change.
 | Saved display versus editing | [Modal editors](#add-and-create-flows-use-modals), [workspace values](#workspace-settings-show-saved-values-before-editing), [team summary](#team-configuration-uses-one-overview-editor), [model summary](#model-configuration-uses-a-summary-card-and-one-editor) |
 | Plugin detail layout | [Shared plugin layout](#plugin-details-share-card-layouts-and-a-title-switch), [Codex sections](#codex-details-show-configuration-and-tasks-separately) |
 | Repository display | [Shared repository cards](#repository-cards-share-one-style), [member GitHub details](#member-github-columns-show-only-a-view-button), [connected repositories](#connected-github-repositories-stay-compact-and-directly-accessible) |
-| Action labels and controls | [Edit/New labels](#edit-and-add-buttons-use-short-labels), [shared icons](#common-action-buttons-use-reicon), [dropdown styling](#dropdown-inputs-share-the-workspace-selector-style) |
+| Action labels and controls | [Card action placement](#card-actions-stay-at-the-top-right), [Edit/New labels](#edit-and-add-buttons-use-short-labels), [shared icons](#common-action-buttons-use-reicon), [dropdown styling](#dropdown-inputs-share-the-workspace-selector-style) |
 | Dialog actions | [Cancel order](#modal-cancel-follows-the-primary-action), [close controls](#modal-close-controls-use-a-plain-x), [secondary actions](#dialog-support-actions-use-secondary-buttons) |
 | Feedback and loading | [Toasts and error placement](#routine-action-confirmations-and-request-errors-use-toasts), [visible loading layout](#loading-keeps-the-layout-visible) |
 | Log pagination and density | [Shared pagination and compact log text](#logs-reuse-run-pagination-with-compact-text), [refresh menu](#logs-use-an-auto-refresh-menu) |
@@ -365,16 +365,33 @@ when implementing or reviewing a change.
   Copy-link feedback retains its brief check icon as specified below.
   Errors use alert semantics and a red status icon, distinct from confirmations.
 
+### Card actions stay at the top right
+
+- **Preference:** Put the card's management action at the top-right inside its
+  padding, opposite the title. Keep the action right-aligned on mobile and let
+  long titles wrap in the remaining space. Related subsection actions follow
+  the same placement beside their subsection heading.
+- **Scope:** Site domain and Operations cards, and comparable management cards
+  in subsequent UI work. Status badges stay with their title.
+- **Source:** 2026-10-14 — user showed the Admin panel address card and requested
+  its button at the top-right, then requested the same rule on Operations.
+- **Exceptions:** Dialog submit/cancel controls follow the modal action rules;
+  contextual links and result-specific controls stay with their content.
+
 ### Edit and add buttons use short labels
 
 - **Preference:** Use exactly “Edit” for edit buttons and “New” for add/create
   entry buttons, including hover titles. Let the surrounding section or row
   identify the object instead of repeating it in the visible label.
+  Labeled New buttons include a plus icon before the text, using the shared
+  IconButton component.
 - **Scope:** Admin and setup surfaces, including plugin configuration,
   repositories, members, skills, workflows, workspace creation and domain
   configuration.
 - **Source:** 2026-10-05 — user requested “Edit” or “New” for Edit/Add buttons
   throughout the app, instead of labels such as “Edit Codex configuration”.
+- **Source update:** 2026-10-14 — user requested adding a plus icon to the New
+  button label while updating Site domain and Operations card actions.
 - **Exceptions:** Screen-reader names may identify the target to distinguish
   repeated controls. Dialog headings stay descriptive; save, approval, sign-in
   and other consequential submit actions retain their specific labels.

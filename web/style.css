@@ -622,6 +622,25 @@ p {
   box-shadow: 0 1px 2px #17212b08;
   overflow: auto;
 }
+.card-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 16px;
+}
+.card-heading > :first-child {
+  min-width: 0;
+}
+.card-heading h2,
+.card-heading h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.card-heading > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
 .run-card {
   display: block;
   width: 100%;
