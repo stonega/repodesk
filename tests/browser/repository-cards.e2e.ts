@@ -172,6 +172,8 @@ for (const width of [1280, 390]) {
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       const view = page.getByRole("button", { name: /View GitHub for member/ });
       await view.scrollIntoViewIfNeeded();
+      await expect(view).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      await expect(view).toHaveCSS("border-top-width", "0px");
       await expect(page.getByRole("article")).toHaveCount(0);
       await page.screenshot({
         path: `/tmp/repodesk-repository-cards-members-${width}-${theme}.png`,

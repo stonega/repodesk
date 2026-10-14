@@ -33,7 +33,7 @@ export function MemberGitHub({
     <>
       <button
         type="button"
-        className="secondary"
+        className="text-button"
         aria-label={`View GitHub for member ${member.id}`}
         aria-haspopup="dialog"
         disabled={disabled}

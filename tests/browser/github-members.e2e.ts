@@ -408,11 +408,15 @@ for (const width of [1280, 390]) {
       name: "View GitHub for member 202",
     });
     await view.scrollIntoViewIfNeeded();
+    await expect(view).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(view).toHaveCSS("border-top-width", "0px");
+    expect((await view.boundingBox())?.height).toBeGreaterThanOrEqual(44);
     await page.screenshot({
       path: `/tmp/repodesk-member-github-view-${width}.png`,
       fullPage: true,
     });
-    await view.click();
+    await view.focus();
+    await view.press("Enter");
     const dialog = page.getByRole("dialog", { name: "stonega GitHub" });
     const items = dialog.getByRole("listitem");
     await expect(items).toHaveCount(60);
@@ -482,6 +486,8 @@ for (const width of [1280, 390]) {
     await page.keyboard.press("Escape");
     await expect(dialog).not.toBeVisible();
     await expect(view).toBeFocused();
+    await expect(view).toHaveCSS("outline-style", "solid");
+    await expect(view).toHaveCSS("outline-width", "3px");
     await expect(githubCell).toHaveText("View");
     await view.click();
     await close.click();

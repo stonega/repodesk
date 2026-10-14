@@ -285,6 +285,16 @@ button.secondary {
 button.secondary:hover:not(:disabled) {
   background: var(--ui-accent-soft-hover);
 }
+button.text-button {
+  min-height: 44px;
+  padding: 8px 10px;
+  color: var(--ui-accent);
+  background: transparent;
+  border: 0;
+}
+button.text-button:hover:not(:disabled) {
+  background: var(--ui-accent-soft);
+}
 input,
 textarea,
 select {

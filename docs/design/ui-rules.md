@@ -149,7 +149,9 @@ when implementing or reviewing a change.
 
 ### Member GitHub columns show only a View button
 
-- **Preference:** Show only a visible View button in each member's GitHub column.
+- **Preference:** Show only a visible View text button in each member's GitHub column.
+  Use blue text with no border or filled background at rest, themed hover feedback,
+  visible keyboard focus and a comfortable touch target.
   Open account/profile information, verification or connection status, sync time
   and the complete saved repository list with permission labels in a read-only,
   scrollable modal. Keep account details and repository previews out of the table
@@ -162,6 +164,8 @@ when implementing or reviewing a change.
   list and requested five entries with a modal to show all repositories.
 - **Source update:** 2026-10-10 — user showed the member table and requested only
   a View button for GitHub column data, replacing the five-entry preview.
+- **Source update:** 2026-10-14 — user showed the member row and requested changing
+  View to a text button. This styling preference applies to the member GitHub column.
 - **Exceptions:** Member New/Edit dialogs retain their GitHub account selector.
   The workspace connection modal retains its separate expandable-list preference.
 
