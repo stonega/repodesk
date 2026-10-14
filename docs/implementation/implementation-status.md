@@ -1,5 +1,35 @@
 # Implementation evidence
 
+## VPS deployment of skills and provider metadata (2026-10-14)
+
+The recorded VPS serves package v0.1.36 from clean commit
+`2dd613aae9fe14abf07fcbc15abfc4d87e940571`, deployed through manual archive bundle
+`1791958130084-55435898`. The bundle retains the checksum-verified source archive,
+image metadata and local verification report. This rollout includes GitHub skill
+imports, read-only presets, typed provider metadata, completed-setup navigation
+and the saved-card action layout changes documented below.
+
+Biome, strict TypeScript, the production build, **737 deterministic tests** with
+disposable PostgreSQL and all **239 browser scenarios** passed. All three release
+images built locally. The exact application's Node 24 runtime contract, isolated
+Compose configuration and service health, migration rerun, backup and restore
+rehearsal passed. Disposable test containers and volumes were removed.
+
+The protected cutover waited for durable coding checkpoints and verified the
+mode-600 backup
+`/opt/repodesk/backups/pre-release-1791958130084-55435898.dump`. All 19 existing
+migrations remain applied; this release adds none. App, worker, Codex runner and
+PostgreSQL are healthy. Public health, readiness, the admin page and its scripts
+and stylesheet returned HTTP 200. Running app, worker and supervisor image IDs,
+and the runner's configured task image, match the imported release images.
+
+Runtime configuration, the encryption key and runner token passed preservation
+checks. Database and runner-state volumes, PostgreSQL and all three Actions runner
+container identities were preserved; the host updater remains active. The source
+archive transfer resumed after an SSH disconnect while production remained healthy.
+This verifies the manual archive rollout, without completing the published-release
+local-image updater gate or live GitHub/provider/Telegram acceptance checks.
+
 ## Preset skills use enable/disable only (2026-10-14)
 
 Team recap and Follow-up draft are read-only presets. Their cards show a Preset

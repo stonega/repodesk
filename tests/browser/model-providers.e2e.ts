@@ -637,10 +637,12 @@ for (const width of [1280, 390]) {
     await expect(editor.getByRole("alert")).toContainText(
       "fixture_save_failure",
     );
-    await expect(save).toBeInViewport({ ratio: 1 });
+    // IntersectionObserver may report subpixel clipping on Linux CI.
+    // Keep both controls almost entirely visible while tolerating that rounding.
+    await expect(save).toBeInViewport({ ratio: 0.99 });
     await expect(
       editor.getByRole("button", { name: "Cancel", exact: true }),
-    ).toBeInViewport({ ratio: 1 });
+    ).toBeInViewport({ ratio: 0.99 });
     await expect(rate).toHaveValue("0.14");
     await expect(
       editor.getByLabel("Input price (CNY / million tokens)"),

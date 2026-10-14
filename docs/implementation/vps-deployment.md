@@ -143,6 +143,17 @@ pre-release backup passed archive verification, all application containers were
 healthy and public readiness returned HTTP 200. This verifies the transferred
 archive path; the published-release local-image updater gate remains separate.
 
+The 2026-10-14 manual archive cutover deployed clean commit
+`2dd613aae9fe14abf07fcbc15abfc4d87e940571` (package v0.1.36) in bundle
+`1791958130084-55435898`. The retained source archive and verification report
+identify the exact deployment. Local validation passed 737 deterministic tests,
+239 browser scenarios and exact-image Node/Compose/backup/restore smoke checks.
+The protected pre-release backup passed archive verification; all four production
+services are healthy and public health, readiness, admin and asset checks returned
+HTTP 200. Configuration, secrets, database and runner-state volumes, PostgreSQL
+and CI runner identities were preserved. No migration was added. This remains a
+manual archive deployment, separate from the published-release updater gate.
+
 ## Custom domain from the panel
 
 Sign in as a deployment administrator and open **Deployment → Site domain**.
