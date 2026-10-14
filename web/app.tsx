@@ -84,6 +84,7 @@ import { WorkflowSummary } from "./workflow-summary.tsx";
 import "./style.css";
 import { ApplicationUpdate } from "./application-update.tsx";
 import { SiteDomain } from "./site-domain.tsx";
+import { SkillGitHubUpdate, SkillImport } from "./skill-github.tsx";
 
 let csrf = "";
 const sessionEvents = new EventTarget();
@@ -119,26 +120,28 @@ async function api<T>(
   const data = await response.json();
   if (!response.ok)
     throw new ApiError(
-      response.status === 409 && data.error === "version_conflict"
-        ? `${data.error}. Reload the current version and review your changes before saving again.`
-        : response.status === 401
-          ? path === "/api/admin/auth/login"
-            ? "Invalid username or password."
-            : "Your session expired. Sign in again."
-          : data.error === "setup_incomplete"
-            ? "Finish bot credentials, model configuration and Telegram reception before activating."
-            : data.error === "workspace_and_skill_required"
-              ? "Create a workspace with an enabled published skill before activating."
-              : data.error === "https_origin_required"
-                ? "Webhook mode requires a public HTTPS address. For local use, set TELEGRAM_TRANSPORT=polling and restart the app and worker."
-                : data.issues?.length
-                  ? data.issues
-                      .map(
-                        (issue: { path: string; message: string }) =>
-                          `${issue.path}: ${issue.message}`,
-                      )
-                      .join(" ")
-                  : (data.error ?? "Request failed"),
+      data.error === "preset_skill_read_only"
+        ? "Preset skills are read-only. Only enable and disable are available."
+        : response.status === 409 && data.error === "version_conflict"
+          ? `${data.error}. Reload the current version and review your changes before saving again.`
+          : response.status === 401
+            ? path === "/api/admin/auth/login"
+              ? "Invalid username or password."
+              : "Your session expired. Sign in again."
+            : data.error === "setup_incomplete"
+              ? "Finish bot credentials, model configuration and Telegram reception before activating."
+              : data.error === "workspace_and_skill_required"
+                ? "Create a workspace with an enabled published skill before activating."
+                : data.error === "https_origin_required"
+                  ? "Webhook mode requires a public HTTPS address. For local use, set TELEGRAM_TRANSPORT=polling and restart the app and worker."
+                  : data.issues?.length
+                    ? data.issues
+                        .map(
+                          (issue: { path: string; message: string }) =>
+                            `${issue.path}: ${issue.message}`,
+                        )
+                        .join(" ")
+                    : (data.error ?? "Request failed"),
       data.issues ?? [],
       response.status,
     );
@@ -2364,47 +2367,53 @@ function SkillCardHeader({
       <div className="skill-card-header">
         <div className="skill-card-title">
           <h2>{s.draft.name}</h2>
+          {s.preset && <span className="pill">Preset</span>}
           <span className="pill">
             {s.archived ? "Archived" : s.enabled ? "Enabled" : "Disabled"}
           </span>
         </div>
         <div className="skill-card-controls">
-          <IconButton
-            icon="edit"
-            label="Edit draft"
-            type="button"
-            onClick={onEdit}
-          />
-          {([s.enabled ? "disable" : "enable", "archive"] as const).map(
-            (action) => (
-              <Action
-                icon={
-                  action === "archive"
-                    ? "archive"
-                    : action === "disable"
-                      ? "pause"
-                      : "play"
-                }
-                key={action}
-                danger={action === "archive"}
-                disabled={
-                  s.archived || (action === "enable" && !s.published.length)
-                }
-                onError={(message) =>
-                  setError(
-                    message === "publish_first"
-                      ? "Only published, unarchived skills can be enabled. Reload the page to check this skill’s current status."
-                      : message,
-                  )
-                }
-                onClick={async () => {
-                  await onAction(action);
-                }}
-              >
-                {action}
-              </Action>
-            ),
+          {!s.preset && (
+            <IconButton
+              icon="edit"
+              label="Edit draft"
+              type="button"
+              onClick={onEdit}
+            />
           )}
+          {(s.preset
+            ? ([s.enabled ? "disable" : "enable"] as const)
+            : ([s.enabled ? "disable" : "enable", "archive"] as const)
+          ).map((action) => (
+            <Action
+              icon={
+                action === "archive"
+                  ? "archive"
+                  : action === "disable"
+                    ? "pause"
+                    : "play"
+              }
+              key={action}
+              danger={action === "archive"}
+              disabled={
+                s.archived || (action === "enable" && !s.published.length)
+              }
+              onError={(message) =>
+                setError(
+                  message === "publish_first"
+                    ? "Only published, unarchived skills can be enabled. Reload the page to check this skill’s current status."
+                    : s.preset && message.includes("version_conflict")
+                      ? "This preset changed in another session. Reload the page before trying again."
+                      : message,
+                )
+              }
+              onClick={async () => {
+                await onAction(action);
+              }}
+            >
+              {action}
+            </Action>
+          ))}
         </div>
       </div>
 
@@ -2440,7 +2449,7 @@ function SkillsPage({ id }: { id: string }) {
     "Alice: release is ready. Bob: docs are blocked on review.",
   );
   const [importing, setImporting] = useState(false);
-  const [imported, setImported] = useState("");
+  const [updating, setUpdating] = useState<Skill>();
   const [rollbackVersions, setRollbackVersions] = useState<
     Record<string, number>
   >({});
@@ -2479,7 +2488,6 @@ function SkillsPage({ id }: { id: string }) {
             icon="import"
             label="Import skill"
             onClick={() => {
-              setImported("");
               setImporting(true);
             }}
           />
@@ -2575,13 +2583,39 @@ function SkillsPage({ id }: { id: string }) {
                 : "Review before publishing. Publication saves this procedure independently of conversation retention; enable it for team use."}
             </p>
           )}
-          <div className="skill-card-meta">
-            <span>Revision {s.version}</span>
-            <span>
-              {s.published.length} published{" "}
-              {s.published.length === 1 ? "version" : "versions"}
-            </span>
-          </div>
+          {!s.preset && s.githubSource && (
+            <div className="skill-source-summary">
+              <p className="muted">
+                Source:{" "}
+                <a
+                  href={`https://github.com/${s.githubSource.repository}/blob/${encodeURIComponent(s.githubSource.ref)}/${s.githubSource.path.split("/").map(encodeURIComponent).join("/")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {s.githubSource.repository} · {s.githubSource.path}
+                </a>
+                {" · "}
+                {s.githubSource.ref} at {s.githubSource.commit.slice(0, 7)}
+              </p>
+              <button
+                type="button"
+                className="secondary"
+                disabled={s.archived}
+                onClick={() => setUpdating(s)}
+              >
+                Check for updates
+              </button>
+            </div>
+          )}
+          {!s.preset && (
+            <div className="skill-card-meta">
+              <span>Revision {s.version}</span>
+              <span>
+                {s.published.length} published{" "}
+                {s.published.length === 1 ? "version" : "versions"}
+              </span>
+            </div>
+          )}
           <details className="skill-card-preview">
             <summary>Preview instructions & dependent schedules</summary>
             <p className="prose">{s.draft.body}</p>
@@ -2593,85 +2627,87 @@ function SkillsPage({ id }: { id: string }) {
               }}
             />
           </details>
-          <div className="skill-card-footer">
-            <div className="skill-card-actions">
-              <Action
-                onClick={async () => {
-                  await api(
-                    `/api/admin/workspaces/${id}/skills/${s.id}/action`,
-                    "POST",
-                    { version: s.version, action: "publish" },
-                  );
-                  reload();
-                }}
-              >
-                Publish draft
-              </Action>
-              <span className="skill-card-secondary">
+          {!s.preset && (
+            <div className="skill-card-footer">
+              <div className="skill-card-actions">
                 <Action
                   onClick={async () => {
-                    setResult(
-                      await api(
-                        `/api/admin/workspaces/${id}/skills/${s.id}/test`,
-                        "POST",
-                        { sample },
-                      ),
+                    await api(
+                      `/api/admin/workspaces/${id}/skills/${s.id}/action`,
+                      "POST",
+                      { version: s.version, action: "publish" },
                     );
                     reload();
                   }}
                 >
-                  Test draft policy
+                  Publish draft
                 </Action>
-              </span>
-            </div>
-            {s.published.length > 0 && (
-              <details className="skill-card-versions">
-                <summary>Restore a published version</summary>
-                <p className="muted">
-                  Copies the selected version into the draft and publishes it as
-                  a new version.
-                </p>
-                <div className="skill-card-rollback">
-                  <Field label="Rollback source version">
-                    <Select
-                      value={rollbackVersions[s.id] ?? 1}
-                      onChange={(e) =>
-                        setRollbackVersions((versions) => ({
-                          ...versions,
-                          [s.id]: Number(e.target.value),
-                        }))
-                      }
-                    >
-                      {s.published.map((_, index) => (
-                        // biome-ignore lint/suspicious/noArrayIndexKey: Published versions are immutable and append-only; their position is their version number.
-                        <option key={index + 1} value={index + 1}>
-                          Version {index + 1}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                  <span className="skill-card-secondary">
-                    <Action
-                      onClick={async () => {
+                <span className="skill-card-secondary">
+                  <Action
+                    onClick={async () => {
+                      setResult(
                         await api(
-                          `/api/admin/workspaces/${id}/skills/${s.id}/action`,
+                          `/api/admin/workspaces/${id}/skills/${s.id}/test`,
                           "POST",
-                          {
-                            version: s.version,
-                            action: "rollback",
-                            pin: rollbackVersions[s.id] ?? 1,
-                          },
-                        );
-                        reload();
-                      }}
-                    >
-                      Publish rollback as new version
-                    </Action>
-                  </span>
-                </div>
-              </details>
-            )}
-          </div>
+                          { sample },
+                        ),
+                      );
+                      reload();
+                    }}
+                  >
+                    Test draft policy
+                  </Action>
+                </span>
+              </div>
+              {s.published.length > 0 && (
+                <details className="skill-card-versions">
+                  <summary>Restore a published version</summary>
+                  <p className="muted">
+                    Copies the selected version into the draft and publishes it
+                    as a new version.
+                  </p>
+                  <div className="skill-card-rollback">
+                    <Field label="Rollback source version">
+                      <Select
+                        value={rollbackVersions[s.id] ?? 1}
+                        onChange={(e) =>
+                          setRollbackVersions((versions) => ({
+                            ...versions,
+                            [s.id]: Number(e.target.value),
+                          }))
+                        }
+                      >
+                        {s.published.map((_, index) => (
+                          // biome-ignore lint/suspicious/noArrayIndexKey: Published versions are immutable and append-only; their position is their version number.
+                          <option key={index + 1} value={index + 1}>
+                            Version {index + 1}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <span className="skill-card-secondary">
+                      <Action
+                        onClick={async () => {
+                          await api(
+                            `/api/admin/workspaces/${id}/skills/${s.id}/action`,
+                            "POST",
+                            {
+                              version: s.version,
+                              action: "rollback",
+                              pin: rollbackVersions[s.id] ?? 1,
+                            },
+                          );
+                          reload();
+                        }}
+                      >
+                        Publish rollback as new version
+                      </Action>
+                    </span>
+                  </div>
+                </details>
+              )}
+            </div>
+          )}
         </section>
       ))}
       {(creating || editing) && (
@@ -2697,64 +2733,48 @@ function SkillsPage({ id }: { id: string }) {
           />
         </Modal>
       )}
-      <section className="card">
-        <h2>Test skill policy</h2>
-        <Field label="Sample input for deterministic test">
-          <textarea
-            value={sample}
-            onChange={(e) => setSample(e.target.value)}
-          />
-        </Field>
-        <p>
-          Tests validate policy and show model-visible content. They make no
-          paid model request and publish no message.
-        </p>
-        {result !== undefined && <DataDetails value={result} />}
-      </section>
-      {importing && (
-        <Modal
-          title="Import SKILL.md"
-          onClose={() => {
-            setImporting(false);
-            setImported("");
-          }}
-        >
-          <p>
-            Frontmatter supports name (a lowercase slug), description, and
-            allowed-tools (space separated). Archives, executable bundles, and
-            other metadata are rejected.
-          </p>
-          <Field label="Markdown file">
-            <input
-              type="file"
-              accept=".md,text/markdown"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (file && file.size <= 16384) setImported(await file.text());
-              }}
-            />
-          </Field>
-          <Field label="Markdown contents">
+      {data?.items.some((skill) => !skill.preset) && (
+        <section className="card">
+          <h2>Test skill policy</h2>
+          <Field label="Sample input for deterministic test">
             <textarea
-              rows={8}
-              value={imported}
-              onChange={(e) => setImported(e.target.value)}
+              value={sample}
+              onChange={(e) => setSample(e.target.value)}
             />
           </Field>
-          <ModalActions>
-            <Action
-              onClick={async () => {
-                await api(`/api/admin/workspaces/${id}/skills/import`, "POST", {
-                  markdown: imported,
-                });
-                setImported("");
-                setImporting(false);
-                reload();
-              }}
-            >
-              Import draft
-            </Action>
-          </ModalActions>
+          <p>
+            Tests validate policy and show model-visible content. They make no
+            paid model request and publish no message.
+          </p>
+          {result !== undefined && <DataDetails value={result} />}
+        </section>
+      )}
+      {importing && (
+        <Modal title="Import SKILL.md" onClose={() => setImporting(false)}>
+          <SkillImport
+            id={id}
+            request={api}
+            saved={() => {
+              setImporting(false);
+              reload();
+            }}
+          />
+        </Modal>
+      )}
+      {updating && (
+        <Modal
+          title={`Update ${updating.draft.name}`}
+          onClose={() => setUpdating(undefined)}
+        >
+          <SkillGitHubUpdate
+            id={id}
+            skill={updating}
+            request={api}
+            saved={() => {
+              setUpdating(undefined);
+              reload();
+            }}
+          />
         </Modal>
       )}
     </Page>

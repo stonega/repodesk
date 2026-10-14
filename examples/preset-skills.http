@@ -1,0 +1,31 @@
+### Sign in through the admin panel and supply the session and CSRF token.
+@origin = http://localhost:3000
+@workspace = replace-with-workspace-uuid
+@skill = replace-with-preset-skill-uuid
+@session = replace-with-session-cookie
+@csrf = replace-with-csrf-token
+
+### Preset records have preset=true. Read their revision for concurrent-write checks.
+GET {{origin}}/api/admin/workspaces/{{workspace}}/skills
+Cookie: repodesk_session={{session}}
+
+### Disable a preset. Replace version with its current revision from the catalog.
+POST {{origin}}/api/admin/workspaces/{{workspace}}/skills/{{skill}}/action
+Origin: {{origin}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"version":1,"action":"disable"}
+
+### Enable using the revision returned by the previous action.
+POST {{origin}}/api/admin/workspaces/{{workspace}}/skills/{{skill}}/action
+Origin: {{origin}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"version":2,"action":"enable"}
+
+### Preset edits, policy tests, publishing, rollback and archive return
+### 403 preset_skill_read_only. Custom skills keep those management endpoints.

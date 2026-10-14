@@ -668,12 +668,17 @@ test.describe
       const recap = page.locator(".skill-card").filter({
         has: page.getByRole("heading", { name: "Team recap", exact: true }),
       });
-      await recap
-        .getByText("Restore a published version", { exact: true })
-        .click();
-      await expect(recap.getByLabel("Rollback source version")).toHaveAttribute(
+      await expect(recap.getByText("Preset", { exact: true })).toBeVisible();
+      await expect(
+        recap.getByText("Restore a published version", { exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        recap.getByRole("button", { name: "Edit draft", exact: true }),
+      ).toHaveCount(0);
+      await expect(recap.getByRole("button")).toHaveCount(1);
+      await expect(card.getByLabel("Rollback source version")).toHaveAttribute(
         "value",
-        "1",
+        "2",
       );
       await card
         .getByRole("button", { name: "Publish rollback as new version" })

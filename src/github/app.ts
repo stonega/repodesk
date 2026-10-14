@@ -521,6 +521,20 @@ export class GitHubApp {
       method,
     );
   }
+  /** Read-only resources used by the admin skill importer. */
+  async skillResource(token: string, repository: string, path: string) {
+    requireThat(
+      /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) &&
+        /^(?:|commits\/[^?]+|git\/trees\/[a-f0-9]{40}\?recursive=1|git\/blobs\/[a-f0-9]{40})$/.test(
+          path,
+        ),
+      "invalid_github_skill_url",
+    );
+    return this.request(
+      `https://api.github.com/repos/${repository}${path ? `/${path}` : ""}`,
+      token,
+    );
+  }
   async repositoryMetadata(
     token: string,
     repository: string,

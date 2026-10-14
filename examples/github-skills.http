@@ -1,0 +1,43 @@
+### Authenticate through the admin panel, then supply your session and CSRF token.
+@origin = http://localhost:3000
+@workspace = replace-with-workspace-uuid
+@session = replace-with-session-cookie
+@csrf = replace-with-csrf-token
+@source = https://github.com/owner/repository/tree/main/skills
+
+### Discover SKILL.md files. Connected private repositories use the GitHub App.
+POST {{origin}}/api/admin/workspaces/{{workspace}}/skills/github/discover
+Origin: {{origin}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"url":"{{source}}"}
+
+### Copy commit and paths from discovery; imports create disabled unpublished drafts.
+POST {{origin}}/api/admin/workspaces/{{workspace}}/skills/github/import
+Origin: {{origin}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"url":"{{source}}","commit":"replace-with-discovered-40-character-sha","paths":["skills/recap/SKILL.md","skills/review/SKILL.md"]}
+
+### Review an imported skill's tracked source using its current revision.
+@skill = replace-with-skill-uuid
+POST {{origin}}/api/admin/workspaces/{{workspace}}/skills/{{skill}}/github/check
+Origin: {{origin}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"version":1}
+
+### Save a reviewed update. Set replaceLocal true only after reviewing local edits.
+POST {{origin}}/api/admin/workspaces/{{workspace}}/skills/{{skill}}/github/update
+Origin: {{origin}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"version":1,"commit":"replace-with-previewed-40-character-sha","replaceLocal":false}

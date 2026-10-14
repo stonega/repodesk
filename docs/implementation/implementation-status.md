@@ -1,5 +1,59 @@
 # Implementation evidence
 
+## Preset skills use enable/disable only (2026-10-14)
+
+Team recap and Follow-up draft are read-only presets. Their cards show a Preset
+badge, saved description/instruction preview and one enable/disable action, with
+no editor, archive, publishing, policy test, revision counts or rollback controls.
+Catalog pages containing only presets omit the sample policy form. Custom,
+conversation-created and GitHub-imported skills retain their editors and version
+management.
+
+The API rejects preset edits, tests, publishing, rollback and archive with
+`preset_skill_read_only`. Admin authorization and optimistic revisions still guard
+enable/disable, and disabling keeps existing run/workflow revocation behavior.
+Internal published snapshots and pins remain intact. New seeds are marked as
+presets; unchanged legacy seeds are recognized without rewriting their contents
+or tool grants. Previously customized or archived seeds remain custom, including
+when a customized draft is restored to the original text.
+
+Validation passed Biome, strict TypeScript, production build, the **737-test full
+suite**, and focused policy/API tests after the legacy classification check was
+strengthened. **46 browser scenarios** passed across presets, existing skill search,
+GitHub imports, admin management and team workflows. Seven new preset scenarios
+cover toggle-only controls, read-only previews, pending locks, errors and retained
+custom editing. Desktop (1280px) and mobile (375px), light/dark presets and
+pending/error states were inspected. The initial full run had three unrelated
+budget/model test timeouts; the isolated 51-test suite and full rerun passed.
+No dependency or SQL migration was added. See [preset API examples](../../examples/preset-skills.http).
+
+## GitHub skill imports and source updates (2026-10-14)
+
+Agent skills imports accept GitHub repository, folder and `SKILL.md` links. The
+modal discovers nested skills, reports incompatible files and imports the selected
+files as disabled, unpublished drafts. Connected private repositories use the
+workspace operator's GitHub App with a repository-restricted Contents-read token;
+public reads carry no credentials. No dependencies or SQL migrations were added.
+
+Saved cards show repository/ref/path and imported commit. **Check for updates**
+compares the tracked file, previews current and incoming instructions, and saves
+an update draft. Local edits need explicit replacement. Stale source commits,
+stale skill revisions, removed files and revoked connections preserve saved
+content. Published versions, enablement and scheduled version pins remain intact.
+Updates are initiated in the panel; no automatic syncing or publication is claimed.
+Imports retain the existing Markdown/frontmatter/tool limits and do not include
+supporting bundles or executable files.
+
+Validation passed Biome, strict TypeScript, production build and **732 deterministic
+tests** against disposable PostgreSQL. **22 browser scenarios** passed across the
+GitHub imports, existing skills catalog and team-workflow suites, including eight
+new GitHub scenarios. Desktop (1280px) and mobile (375px) saved summaries, import
+discovery, pending locks, update review and failures were inspected; update review
+and saved updates also passed dark-mode inspection. GitHub API responses were
+deterministic fixtures; live GitHub App acceptance remains unverified.
+See [skill design](../design/agent-skills.md) and
+[runnable API examples](../../examples/github-skills.http).
+
 ## Completed setup navigation (2026-10-14)
 
 Deployment navigation hides Setup when the authenticated progress API reports an

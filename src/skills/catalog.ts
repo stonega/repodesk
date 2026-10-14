@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   requireThat,
+  type Skill,
   type SkillSpec,
   skillSchema,
   type Workspace,
@@ -19,7 +20,7 @@ export function validateSkill(value: unknown) {
   );
   return spec;
 }
-export function starterSkills(): Workspace["skills"] {
+function starterSpecs() {
   return [
     {
       slug: "team-recap",
@@ -45,16 +46,50 @@ export function starterSkills(): Workspace["skills"] {
         "load_skill",
       ],
     });
-    return {
-      id: randomUUID(),
-      version: 1,
-      enabled: true,
-      archived: false,
-      published: [spec],
-      draft: spec,
-      tests: [],
-    };
+    return spec;
   });
+}
+export function starterSkills(): Workspace["skills"] {
+  return starterSpecs().map((spec) => ({
+    preset: true,
+    id: randomUUID(),
+    version: 1,
+    enabled: true,
+    archived: false,
+    published: [spec],
+    draft: spec,
+    tests: [],
+  }));
+}
+/** Recognize only unchanged original seed records in older workspaces. */
+export function isPresetSkill(w: Workspace, skill: Skill) {
+  if (skill.preset !== undefined) return skill.preset;
+  if (
+    skill.origin ||
+    skill.githubSource ||
+    skill.archived ||
+    !skill.published.length
+  )
+    return false;
+  const template = starterSpecs()[w.skills.indexOf(skill)];
+  if (!template) return false;
+  const matches = (spec: SkillSpec) =>
+    spec.slug === template.slug &&
+    spec.name === template.name &&
+    spec.description === template.description &&
+    spec.body === template.body &&
+    spec.settings.sections === template.settings.sections &&
+    spec.settings.maxWords === template.settings.maxWords &&
+    // Older seeds predate the model-cost tool. Neither variant grants anything new.
+    spec.tools
+      .filter((tool) => tool !== "query_model_cost")
+      .sort()
+      .join(" ") ===
+      template.tools
+        .filter((tool) => tool !== "query_model_cost")
+        .sort()
+        .join(" ");
+  return matches(skill.draft) && skill.published.every(matches);
 }
 export function saveSkill(
   w: Workspace,
@@ -74,12 +109,15 @@ export function saveSkill(
     const skill = w.skills.find((s) => s.id === id);
     requireThat(skill, "not_found", 404);
     requireThat(skill.version === version, "version_conflict", 409);
+    requireThat(!isPresetSkill(w, skill), "preset_skill_read_only", 403);
+    skill.preset = false;
     skill.draft = spec;
     skill.version++;
     audit(w, actor, "skill.drafted", id, skill.version);
     return skill;
   }
   const skill = {
+    preset: false,
     id: randomUUID(),
     version: 1,
     enabled: false,
@@ -104,6 +142,12 @@ export function changeSkill(
   const skill = w.skills.find((s) => s.id === id);
   requireThat(skill, "not_found", 404);
   requireThat(skill.version === version, "version_conflict", 409);
+  const preset = isPresetSkill(w, skill);
+  requireThat(
+    !preset || action === "enable" || action === "disable",
+    "preset_skill_read_only",
+    403,
+  );
   if (action === "publish") {
     requireThat(
       !skill.origin ||
@@ -135,6 +179,7 @@ export function changeSkill(
     skill.published.push(structuredClone(previous));
   }
   skill.version++;
+  skill.preset = preset;
   revokeWork(w);
   audit(w, actor, `skill.${action}`, id, skill.version);
   return skill;
@@ -151,6 +196,7 @@ export function testSkill(
   authorize(w, actor, true);
   const skill = w.skills.find((s) => s.id === id);
   requireThat(skill, "not_found", 404);
+  requireThat(!isPresetSkill(w, skill), "preset_skill_read_only", 403);
   const spec = validateSkill(skill.draft);
   const result = {
     at: new Date().toISOString(),

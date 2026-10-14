@@ -54,18 +54,35 @@ The skill manager configures instructions and already-registered tools in P0.
 
 | Control | P0 behavior |
 | --- | --- |
-| Catalog | Search/filter installed and curated skills by name, enabled state and scope; show purpose, version and required tools. |
-| Create/import | Create an instruction skill in an editor or import a single `SKILL.md`; validate metadata, size and tool references. |
-| Detail/editor | Edit name, description, instructions and schema-defined settings; preview the model-visible content. |
+| Catalog | Search/filter skills by name and enabled state; show purpose, required tools and a Preset badge for built-ins. Custom skills also show version metadata. |
+| Create/import | Create an instruction skill, import a Markdown file, or discover and select multiple `SKILL.md` files from a GitHub repository/folder link, including connected private repositories; validate metadata, size and tool references. |
+| Detail/editor | Preview every skill's instructions. Edit name, description, instructions and settings for custom skills; presets are read-only. |
 | Enable/disable | Enable approved published versions per workspace and optionally narrow availability per group/workflow. |
 | Tool permissions | Show required tools and effective allowed subset; unavailable tools block activation or require an explicit reduced capability variant. |
 | Settings | Configure skill-specific values such as recap sections, date window and response length; secrets remain credential references. |
-| Test | Run a draft with explicit sample input, fake/read-only tools and displayed usage limits; no message publishing or schedule activation. |
-| Publish/version | Save drafts, inspect a diff, publish immutable versions and select a prior version for rollback. |
+| Test | Test custom drafts with explicit sample input and fake/read-only tools; no message publishing or schedule activation. |
+| Publish/version | Custom skills save drafts, publish immutable versions and select a prior version for rollback. Presets expose no version management. |
 | Usage | Show authorized runs/workflows using the skill and pinned version; respect run-level visibility. |
-| Archive | Stop new assignment while retaining referenced versions for history; show affected workflows before removal. |
+| Archive | Archive custom skills while retaining referenced versions for history. Presets use enable/disable only. |
 
-The implemented catalog groups management icons beside the title, separates the
+Preset **Team recap** and **Follow-up draft** cards show a Preset badge, saved
+instructions and one enable/disable action. They expose no editor, publication,
+policy test, archive, revision counts or rollback controls. The server enforces
+the same restriction. The policy sample form is hidden when the catalog page
+contains only presets. Custom and GitHub-imported skills retain their management
+controls.
+
+New starter records carry an application-owned preset marker. Existing unchanged
+seed records are recognized by their original position and complete instruction,
+metadata, settings and tool definitions, including the older tool-list variant.
+Previously customized or archived seeds retain custom management; source-imported
+and conversation-created skills remain custom. A successful toggle persists the
+legacy marker. No content or tool grants are changed during recognition.
+Internal revisions and published snapshots remain for stale-write protection,
+run history and workflow pins; presets cannot append or restore versions through
+admin management. See [preset API examples](../../examples/preset-skills.http).
+
+The implemented custom catalog groups management icons beside the title, separates the
 description from revision metadata, and places Publish draft and Test draft policy
 below the instruction preview. Restore a published version expands a version
 selector and rollback action; the selected source is independent for each card.
@@ -89,8 +106,8 @@ mobile. No-match results offer Reset filters; an empty catalog offers creation g
 Starter catalog: team recap, decision/blocker summary and follow-up drafting. These
 are reusable instructions over available chat context, not new autonomous write tools.
 Workspace admins can manage their catalog; only deployment operators register new
-executable tool implementations. Restrict edits to built-ins by offering a workspace
-copy so upgrades do not overwrite local customizations.
+executable tool implementations. Built-in preset definitions are read-only;
+admins create separate custom instructions when they need a different procedure.
 
 ## Records and state
 
@@ -124,10 +141,37 @@ policy restriction: prevent new loads/steps and suspend dependent scheduled work
 reporting why. Do not silently substitute another skill. In-flight calls may finish;
 check current restrictions before subsequent tools and delivery.
 
-P0 imports one Markdown file and rejects executable/archive payloads. Supporting
-reference bundles and reviewed scripted skills are later additions requiring storage,
-path validation and isolated execution. No arbitrary URL-fetch/install operation is
-implicit in “import skill.”
+Imports accept one Markdown file or an HTTPS `github.com` repository, folder
+(`tree`) or `SKILL.md` (`blob`) link. GitHub discovery lists every matching file
+under that scope, including invalid files with reasons. Users explicitly select
+the drafts to import; duplicate slugs fail atomically. A direct file link selects
+only that file. Branch names containing slashes are resolved against GitHub.
+
+Public sources are read without credentials. Private sources must be selected in
+the workspace's GitHub connection and use the operator's existing GitHub App,
+with a short-lived token restricted to that repository and Contents-read. No PAT
+is accepted. Connection and admin authority are rechecked after reads and before
+saving; removing a connected source blocks further updates without deleting its
+approved instructions.
+
+Each imported skill records repository, tracked branch/tag/ref, file path, commit,
+blob SHA and imported draft hash. **Check for updates** opens a review dialog and
+compares that file with the tracked ref. **Save update draft** imports changed
+instructions without publishing, enabling or changing scheduled version pins.
+Local draft edits require an explicit replacement checkbox. The server rechecks
+the skill revision and previewed source commit; a changed repository requires a
+fresh preview. Removed files and upstream failures retain the saved skill.
+Updates are initiated in the panel; automatic publication or background syncing
+is not implemented. Commit links remain pinned to that commit.
+
+GitHub imports retain the Markdown format and limits: UTF-8, at most 16 KB,
+supported frontmatter fields `name`, `description`, `allowed-tools`, and registered
+tool names only. Supporting reference files, scripts, symlinks and archives are
+not imported or executed. Discovery caps at 100 skills and rejects truncated or
+oversized GitHub trees rather than presenting incomplete results as complete.
+Supporting reference bundles and reviewed scripted skills remain later additions.
+Only fixed GitHub API endpoints are fetched; links do not authorize arbitrary URL
+downloads or broader tool access.
 
 ## APIs and acceptance
 

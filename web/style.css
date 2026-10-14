@@ -2977,3 +2977,47 @@ input.plugin-toggle-input:disabled {
 .release-notes-literal {
   white-space: pre-wrap;
 }
+
+/* GitHub skill import and update review. */
+.skill-source-summary {
+  margin-block: 12px;
+}
+.skill-source-summary p,
+.skill-source-path {
+  overflow-wrap: anywhere;
+}
+.skill-source-option {
+  padding-block: 16px;
+  border-top: 1px solid var(--ui-border);
+}
+.skill-source-option p {
+  margin-block: 8px;
+}
+.skill-source-option .check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.skill-source-retry:has(button) {
+  margin-block: 12px;
+}
+.skill-source-discovery,
+.skill-update-comparison {
+  min-width: 0;
+}
+.skill-update-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.skill-update-comparison pre {
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .skill-update-comparison {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

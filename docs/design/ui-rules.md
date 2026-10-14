@@ -925,6 +925,23 @@ when implementing or reviewing a change.
   guidance are the implementation interpretation, scoped to skill cards.
 - **Exceptions:** None recorded.
 
+### Preset skills use enable/disable only
+
+- **Preference:** Show preset skills as read-only saved instructions with a Preset
+  badge and one enable/disable action. Omit Edit, Archive, Publish, Test, revision
+  metadata and version recovery. Hide the policy sample form when the catalog
+  page contains only presets.
+- **Scope:** Built-in starter skills in Agent skills, including unchanged legacy
+  presets. Custom, conversation-created and GitHub-imported skills keep their
+  existing editors and version management. Previously customized legacy entries
+  retain custom controls so their saved work remains usable.
+- **Source:** 2026-10-14 — user requested removing version management and editing
+  for preset skills and supporting only enable/disable. The Preset badge and
+  omission of unrelated management actions apply that instruction to the cards.
+- **Exceptions:** Read-only instruction and dependent-workflow previews remain
+  available. Internal revisions and runtime pins still protect concurrent changes
+  and execution history. This supersedes the version-recovery rule for presets.
+
 ### Skill creation has a labeled header action
 
 - **Preference:** Show the plus icon with a visible “Add skill” label in the
@@ -1476,3 +1493,18 @@ Use this format for each preference:
 - **Source:** 2026-10-06 — user requested moving the Import button before New in
   the Agent skills screenshot and named the `/admin/skills` route.
 - **Exceptions:** None recorded.
+
+### GitHub skill imports select sources and review updates
+
+- **Preference:** Accept GitHub links in the import modal, discover the included
+  skills and let the user choose them. Show saved repository/ref/path on each
+  imported card, with update review in a modal and an explicit replacement choice
+  when a draft has local edits.
+- **Scope:** GitHub-backed instruction skills in Agent skills, including private
+  repositories connected to the workspace. Existing modal, saved-summary and
+  pending-action rules apply on desktop and mobile.
+- **Source:** 2026-10-14 — user requested GitHub skill imports, connected private
+  repository support, multi-skill detection and updates when the source changes.
+  Selection and draft-update review are the implementation interpretation.
+- **Exceptions:** Source update checks are deliberate skill operations, so their
+  labeled card action is permitted by the rule against routine refresh buttons.

@@ -4,6 +4,7 @@ import { publicOrigin, siteDomain } from "../admin/site.ts";
 import type { Store } from "../db/repositories.ts";
 import { type Admin, requireThat, type Workspace } from "../domain.ts";
 import { decrypt, encrypt, hash, token } from "../setup/credentials.ts";
+import { GitHubSkills } from "../skills/github-service.ts";
 import { audit } from "../workspaces/policy.ts";
 import type { GitHubApp, GitHubMemberDirectory } from "./app.ts";
 import type { GitHubPage } from "./config.ts";
@@ -43,6 +44,7 @@ export class GitHubService {
   private apps: GitHubApps;
   readonly repositorySync: RepositorySync;
   readonly users: GitHubUsers;
+  readonly skills: GitHubSkills;
   constructor(
     private store: Store,
     private key: string,
@@ -53,6 +55,7 @@ export class GitHubService {
       app instanceof GitHubApps ? app : new GitHubApps(store, key, app);
     this.repositorySync = new RepositorySync(store, this.apps);
     this.users = new GitHubUsers(store, this.apps, key, origin);
+    this.skills = new GitHubSkills(store, this.apps);
   }
   private async callback() {
     return `${await publicOrigin(this.store, this.origin)}/api/admin/github/callback`;

@@ -231,6 +231,19 @@ export interface Instruction {
   provenance: string;
 }
 export interface Skill {
+  preset?: boolean;
+  githubSource?: {
+    repository: string;
+    ref: string;
+    path: string;
+    commit: string;
+    blobSha: string;
+    draftHash: string;
+    importedAt: string;
+    access: "public" | "connected";
+    repositoryId?: number;
+    installationId?: number;
+  };
   origin?: {
     runId: string;
     actor: string;

@@ -29,7 +29,13 @@ import { requestDeletion } from "../privacy/service.ts";
 import type { ReviewService } from "../review-bot/service.ts";
 import { equal, hash, passwordHash } from "../setup/credentials.ts";
 import type { SetupService } from "../setup/service.ts";
-import { changeSkill, saveSkill, testSkill } from "../skills/catalog.ts";
+import {
+  changeSkill,
+  isPresetSkill,
+  saveSkill,
+  testSkill,
+} from "../skills/catalog.ts";
+import { githubSkillUrl } from "../skills/github-source.ts";
 import { importMarkdown } from "../skills/import.ts";
 import { TelegramError } from "../telegram/client.ts";
 import { nextOccurrences } from "../workflows/schedule.ts";
@@ -899,6 +905,7 @@ export function adminRoutes(
           take(
             w.skills.map((s) => ({
               ...s,
+              preset: isPresetSkill(w, s),
               dependents: w.workflows
                 .filter((f) => f.spec.skillId === s.id)
                 .map((f) => ({
@@ -1233,6 +1240,73 @@ export function adminRoutes(
         audit(w, actor, "instruction.forgotten", i.id, i.version);
       });
       return c.json({ ok: true });
+    },
+  );
+  app.post("/api/admin/workspaces/:id/skills/github/discover", async (c) => {
+    const input = z
+      .object({ url: githubSkillUrl })
+      .strict()
+      .parse(await c.req.json());
+    const id = validId(c.req.param("id"));
+    const actor = workspaceActor(await store.read(id), c.get("session").admin);
+    return c.json(await github.skills.discover(id, actor, input.url));
+  });
+  app.post("/api/admin/workspaces/:id/skills/github/import", async (c) => {
+    const id = validId(c.req.param("id"));
+    const actor = workspaceActor(await store.read(id), c.get("session").admin);
+    return c.json(
+      await github.skills.import(id, actor, await c.req.json()),
+      201,
+    );
+  });
+  app.post(
+    "/api/admin/workspaces/:id/skills/:skill/github/check",
+    async (c) => {
+      const input = z
+        .object({ version })
+        .strict()
+        .parse(await c.req.json());
+      const id = validId(c.req.param("id"));
+      const actor = workspaceActor(
+        await store.read(id),
+        c.get("session").admin,
+      );
+      return c.json(
+        await github.skills.check(
+          id,
+          actor,
+          validId(c.req.param("skill")),
+          input.version,
+        ),
+      );
+    },
+  );
+  app.post(
+    "/api/admin/workspaces/:id/skills/:skill/github/update",
+    async (c) => {
+      const input = z
+        .object({
+          version,
+          commit: z.string().regex(/^[a-f0-9]{40}$/),
+          replaceLocal: z.boolean().default(false),
+        })
+        .strict()
+        .parse(await c.req.json());
+      const id = validId(c.req.param("id"));
+      const actor = workspaceActor(
+        await store.read(id),
+        c.get("session").admin,
+      );
+      return c.json(
+        await github.skills.update(
+          id,
+          actor,
+          validId(c.req.param("skill")),
+          input.version,
+          input.commit,
+          input.replaceLocal,
+        ),
+      );
     },
   );
   app.post("/api/admin/workspaces/:id/skills/import", async (c) => {
