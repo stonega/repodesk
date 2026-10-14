@@ -32,6 +32,8 @@ const url = process.env.TEST_DATABASE_URL;
     let w = workspace();
     let fail = false;
     let changeConnection = false;
+    let changeAuthority = false;
+    let profileType = "User";
     const requests: string[] = [];
     beforeAll(async () => {
       await root.query(`CREATE DATABASE ${name}`);
@@ -53,6 +55,32 @@ const url = process.env.TEST_DATABASE_URL;
         init,
       ) => {
         requests.push(String(input));
+        if (String(input).startsWith("https://api.github.com/users/")) {
+          if (String(input).endsWith("/missing"))
+            return Response.json({}, { status: 404 });
+          if (changeConnection) {
+            changeConnection = false;
+            await store.change(w.id, (current) => {
+              if (current.github) current.github.revision++;
+            });
+          }
+          if (changeAuthority) {
+            changeAuthority = false;
+            const foreign = randomUUID();
+            await store.pool.query(
+              "INSERT INTO admins(id,username,password_hash,operator) VALUES($1,$2,'unused',true)",
+              [foreign, `foreign-${foreign}`],
+            );
+            await store.change(w.id, (current) => {
+              current.operatorId = foreign;
+            });
+          }
+          return Response.json({
+            id: 99,
+            login: "outside-user",
+            type: profileType,
+          });
+        }
         if (String(input).includes("/orgs/example/members")) {
           if (fail)
             return Response.json(
@@ -97,6 +125,8 @@ const url = process.env.TEST_DATABASE_URL;
       );
       fail = false;
       changeConnection = false;
+      changeAuthority = false;
+      profileType = "User";
       requests.length = 0;
     });
     afterAll(async () => {
@@ -180,6 +210,112 @@ const url = process.env.TEST_DATABASE_URL;
           ?.githubAccount,
       ).toBeUndefined();
     });
+    test("custom usernames save canonical identities without fetching organization members or granting access", async () => {
+      fail = true;
+      const response = await edit(undefined, {
+        githubUsername: " @Outside-User ",
+      });
+      expect(response.status).toBe(200);
+      expect(requests).toEqual(["https://api.github.com/users/Outside-User"]);
+      const current = await store.read(w.id);
+      expect(current.members.find((m) => m.id === "202")).toMatchObject({
+        githubAccount: { id: 99, login: "outside-user" },
+      });
+      expect(
+        current.members.find((m) => m.id === "202")?.github,
+      ).toBeUndefined();
+      expect(
+        (
+          await edit(undefined, {
+            id: "303",
+            version: current.memberVersion,
+            githubUsername: "outside-user",
+          })
+        ).status,
+      ).toBe(409);
+      expect(
+        (
+          await edit(null, {
+            version: current.memberVersion,
+            githubRevision: undefined,
+          })
+        ).status,
+      ).toBe(200);
+    });
+    test("custom username failures and invalid input leave membership and associations unchanged", async () => {
+      for (const githubUsername of [
+        "missing",
+        "https://github.com/user",
+        "",
+        "../user",
+      ]) {
+        expect(
+          (await edit(undefined, { githubUsername, role: "admin" })).status,
+        ).toBe(400);
+      }
+      profileType = "Organization";
+      expect(
+        (await edit(undefined, { githubUsername: "organization" })).status,
+      ).toBe(400);
+      expect((await edit(42, { githubUsername: "outside-user" })).status).toBe(
+        400,
+      );
+      const current = await store.read(w.id);
+      expect(current.memberVersion).toBe(w.memberVersion);
+      expect(
+        current.members.find((m) => m.id === "202")?.githubAccount,
+      ).toBeUndefined();
+    });
+    test("custom username saves recheck connection revisions and current authority after lookup", async () => {
+      expect(
+        (
+          await edit(undefined, {
+            githubUsername: "outside-user",
+            githubRevision: 0,
+          })
+        ).status,
+      ).toBe(409);
+      expect(requests).toHaveLength(0);
+      changeConnection = true;
+      expect(
+        (await edit(undefined, { githubUsername: "outside-user" })).status,
+      ).toBe(409);
+      expect(
+        (await store.read(w.id)).members.find((m) => m.id === "202")
+          ?.githubAccount,
+      ).toBeUndefined();
+      changeAuthority = true;
+      expect(
+        (await edit(undefined, { githubUsername: "outside-user" })).status,
+      ).toBe(403);
+    });
+    test("custom usernames cannot replace a member's verified GitHub identity", async () => {
+      await store.change(w.id, (current) => {
+        const member = current.members.find((m) => m.id === "202");
+        if (!member) throw Error("missing fixture member");
+        member.github = {
+          id: 42,
+          login: "fixture-user",
+          status: "connected",
+          connectionRevision: 1,
+          syncedAt: new Date().toISOString(),
+          repositories: [],
+        };
+      });
+      expect(
+        (
+          await edit(undefined, {
+            githubUsername: "outside-user",
+            role: "admin",
+          })
+        ).status,
+      ).toBe(409);
+      expect(
+        (await store.read(w.id)).members.find((m) => m.id === "202")?.github
+          ?.id,
+      ).toBe(42);
+      expect((await store.read(w.id)).memberVersion).toBe(w.memberVersion);
+    });
     test("membership editing preserves associations during GitHub outages", async () => {
       expect((await edit(42)).status).toBe(200);
       const current = await store.read(w.id);
@@ -232,6 +368,9 @@ const url = process.env.TEST_DATABASE_URL;
       });
       expect((await api("members/github")).status).toBe(403);
       expect((await edit(42)).status).toBe(403);
+      expect(
+        (await edit(undefined, { githubUsername: "outside-user" })).status,
+      ).toBe(403);
       expect(requests).toHaveLength(0);
       await store.pool.query(
         "UPDATE admins SET telegram_id='202',operator=false WHERE id=$1",

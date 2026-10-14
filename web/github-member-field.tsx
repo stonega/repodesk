@@ -18,6 +18,7 @@ export function GitHubMemberField({
   account,
   verified,
   value,
+  username,
   onChange,
 }: {
   workspaceId: string;
@@ -25,7 +26,8 @@ export function GitHubMemberField({
   account?: GitHubMember;
   verified: boolean;
   value: string;
-  onChange: (value: string, revision: number) => void;
+  username?: string;
+  onChange: (value: string, revision?: number, username?: string) => void;
 }) {
   const [directory, setDirectory] = useState<GitHubMemberDirectory>();
   const [error, setError] = useState("");
@@ -81,12 +83,22 @@ export function GitHubMemberField({
       <Select
         id="member-github-account"
         value={value}
-        disabled={verified || loading || !directory?.connected}
+        disabled={verified}
         onChange={(event) => {
-          if (directory) onChange(event.target.value, directory.revision);
+          onChange(
+            event.target.value,
+            directory?.revision,
+            event.target.value === "custom"
+              ? ""
+              : String(account?.id) === event.target.value &&
+                  !choices.some((m) => String(m.id) === event.target.value)
+                ? account?.login
+                : undefined,
+          );
         }}
       >
         <option value="">Not linked</option>
+        <option value="custom">Enter a username</option>
         {account && !choices.some((m) => m.id === account.id) && (
           <option value={String(account.id)}>{account.login}</option>
         )}
@@ -96,6 +108,25 @@ export function GitHubMemberField({
           </option>
         ))}
       </Select>
+      {value === "custom" && !verified && (
+        <div className="field">
+          <label htmlFor="member-github-username">Custom GitHub username</label>
+          <input
+            id="member-github-username"
+            value={username ?? ""}
+            placeholder="octocat"
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            onChange={(event) =>
+              onChange("custom", directory?.revision, event.target.value)
+            }
+          />
+          <small className="muted">
+            Enter a person's GitHub username. It will be checked when you save.
+          </small>
+        </div>
+      )}
       {loading && (
         <p className="muted" role="status">
           Fetching GitHub members…
@@ -124,9 +155,9 @@ export function GitHubMemberField({
         <p className="muted">
           {directory.source === "organization"
             ? `Members fetched from ${directory.account}.`
-            : `Owner and collaborators fetched from ${directory.account}'s selected repositories.`}{" "}
-          Choose this person's account. They can verify it with /github connect
-          in Telegram.
+            : `Personal account: ${directory.account}.`}{" "}
+          Choose this person's account or enter a username. They can verify it
+          with /github connect in Telegram.
         </p>
       )}
       {verified && (

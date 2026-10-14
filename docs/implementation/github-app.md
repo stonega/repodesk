@@ -368,25 +368,31 @@ References: [Merge a pull request](https://docs.github.com/en/rest/pulls/pulls#m
 
 ## Fetch GitHub accounts in member forms
 
-Implemented locally, 2026-10-07. Add/Edit member dialogs fetch account choices
+Implemented locally, updated 2026-10-14. Add/Edit member dialogs fetch account choices
 automatically from the workspace's connected installation. Organization installations
-return organization members; personal installations return the owner and collaborators
-of the workspace's selected repositories. Pages are fetched in batches of 100, with
-the existing 2,000-entry limit per list. Accounts are deduplicated by numeric GitHub ID.
-The directory returns only IDs/logins and connection metadata, with no credentials.
-Personal repository lists run in batches of at most eight concurrent requests,
-preserving selected-repository order when merging accounts. The complete directory
-has a 60-second lookup budget; failed or timed-out batches cancel remaining requests
-and return an error instead of partial choices. The dialog also ends a stalled
-request after 65 seconds and offers **Try again**, preserving role and membership
-edits. Normal membership saves remain available if GitHub lookup fails.
+return organization members from `GET /orgs/{org}/members`; personal installations
+return only the owner from the installation account. Neither path uses repository
+metadata or repository collaborators. Personal lookups do not request an installation
+access token. Organization pages contain up to 100 entries, with the existing
+2,000-entry limit; accounts are deduplicated by numeric GitHub ID. Responses expose
+only IDs/logins and connection metadata, with no credentials.
 
-Existing organization installations need **Permissions & events → Organization
-permissions → Members: Read-only**, followed by approval of the installation's updated
-permissions. The form explains this when the grant is missing; it never substitutes a
-partial public-member list. Personal installations use Metadata-read access.
-See GitHub's [organization member API](https://docs.github.com/en/rest/orgs/members#list-organization-members)
-and [collaborator API](https://docs.github.com/en/rest/collaborators/collaborators#list-repository-collaborators).
+The directory has a 60-second lookup budget and returns an error instead of partial
+choices. The dialog ends a stalled request after 65 seconds and offers **Try again**,
+preserving the membership draft. Existing organization installations need
+**Permissions & events → Organization permissions → Members: Read-only**, followed
+by approval of the installation's updated permissions. The form explains missing
+grants and never substitutes a partial public-member list. See GitHub's
+[organization member API](https://docs.github.com/en/rest/orgs/members#list-organization-members).
+
+Choose **Enter a username** to associate someone outside the fetched choices, even
+while the directory is loading or unavailable. Saving resolves the username through
+`GET /users/{username}`, storing GitHub's canonical login and stable numeric ID.
+Leading `@` and surrounding whitespace are accepted. Invalid or unavailable usernames
+and organization names leave the draft open. This public profile lookup requires a
+configured GitHub App in RepoDesk but no organization Members grant or connected
+workspace installation. It does not change verification or repository permissions.
+See GitHub's [user API](https://docs.github.com/en/rest/users/users#get-a-user).
 
 Selecting an account saves a workspace-scoped `member.githubAccount` association.
 It does not create an OAuth token or repository permission snapshot. GitHub supplies
@@ -399,10 +405,15 @@ OAuth confirmation also checks administrator-created associations.
 `GET /api/admin/workspaces/:id/members/github` returns
 `{ connected, revision, account?, source?, members: [{ id, login }] }`.
 `POST /api/admin/workspaces/:id/members` optionally accepts `githubId` (numeric ID,
-or `null` to clear an unverified association) and `githubRevision`. The server
-fetches the chosen identity, rechecks workspace authority and connection revision,
-and saves the association with the versioned membership update in one transaction.
-Omitting these fields preserves the association, including during GitHub outages.
+or `null` to clear an unverified association), or `githubUsername` (a custom username),
+and `githubRevision`. Do not supply both identity fields. A fetched numeric ID needs
+the directory revision and must still appear in the directory. A custom username or
+clear can omit the revision when the directory is unavailable; the server captures
+and rechecks the current revision across the update. An explicit stale revision is
+rejected. The server fetches the chosen identity, rechecks workspace authority and
+connection revision, and saves the association with the versioned membership update
+in one transaction. Omitting identity fields preserves the association, including
+during GitHub outages.
 No new dependency or database migration is required; profiles use workspace JSON.
 See [the runnable request example](../../examples/github-members.http).
 

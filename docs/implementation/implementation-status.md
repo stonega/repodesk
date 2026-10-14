@@ -28,6 +28,30 @@ checks cover countdown/rotation, copying, member refresh, loading, pending,
 error/retry, navigation cleanup and existing manual decisions. Rendered states
 were inspected at 1280px and 390px. No live Telegram calls were used.
 
+## GitHub member choices and custom usernames (2026-10-14)
+
+Member lookup now returns the personal installation owner directly or organization
+members from `GET /orgs/{org}/members`. It no longer inspects repositories or their
+collaborators. Personal lookup requests no installation access token. Organization
+lookup retains Members-read permission checks, pagination, stable-ID deduplication
+and the cancellable 60-second directory budget.
+
+New/Edit member dialogs also offer **Enter a username**, usable during directory
+loading, empty results or lookup failures. Saving resolves the username through
+GitHub's public user API and stores its canonical login and numeric ID as an
+unverified association. Invalid/unavailable users and organization names retain the
+draft. Duplicate identities, stale membership/connection revisions, changed workspace
+authority and replacing verified identities are rejected. Saved custom accounts can
+be reopened, reselected and cleared; assignments create no repository grants.
+
+Biome, strict TypeScript, the production build and **751 deterministic tests** with
+disposable PostgreSQL passed. All **22 member browser scenarios** passed, including
+custom input, failed lookup/save recovery, draft retention, Cancel, verified-account
+protection and pending-save locks. Rendered New/Edit and saved View dialogs were
+inspected at 1280px and 390px, including loading, empty, pending and error states.
+GitHub calls used fake transports; live GitHub acceptance remains pending. No new
+dependency or database migration is needed.
+
 ## VPS deployment of skills and provider metadata (2026-10-14)
 
 The recorded VPS serves package v0.1.36 from clean commit

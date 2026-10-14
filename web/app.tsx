@@ -118,30 +118,41 @@ async function api<T>(
     sessionEvents.dispatchEvent(new Event("expired"));
   }
   const data = await response.json();
+  const githubAccountError: Record<string, string> = {
+    github_member_not_found:
+      "GitHub could not find this account. Check the username and try again.",
+    github_personal_account_required:
+      "Enter a person's GitHub username, rather than an organization name.",
+    github_identity_already_linked:
+      "This GitHub account is already associated with another workspace member.",
+    github_verified_account_requires_member_reconnect:
+      "The member must change their verified account with /github connect in Telegram.",
+  };
   if (!response.ok)
     throw new ApiError(
-      data.error === "preset_skill_read_only"
-        ? "Preset skills are read-only. Only enable and disable are available."
-        : response.status === 409 && data.error === "version_conflict"
-          ? `${data.error}. Reload the current version and review your changes before saving again.`
-          : response.status === 401
-            ? path === "/api/admin/auth/login"
-              ? "Invalid username or password."
-              : "Your session expired. Sign in again."
-            : data.error === "setup_incomplete"
-              ? "Finish bot credentials, model configuration and Telegram reception before activating."
-              : data.error === "workspace_and_skill_required"
-                ? "Create a workspace with an enabled published skill before activating."
-                : data.error === "https_origin_required"
-                  ? "Webhook mode requires a public HTTPS address. For local use, set TELEGRAM_TRANSPORT=polling and restart the app and worker."
-                  : data.issues?.length
-                    ? data.issues
-                        .map(
-                          (issue: { path: string; message: string }) =>
-                            `${issue.path}: ${issue.message}`,
-                        )
-                        .join(" ")
-                    : (data.error ?? "Request failed"),
+      githubAccountError[data.error] ??
+        (data.error === "preset_skill_read_only"
+          ? "Preset skills are read-only. Only enable and disable are available."
+          : response.status === 409 && data.error === "version_conflict"
+            ? `${data.error}. Reload the current version and review your changes before saving again.`
+            : response.status === 401
+              ? path === "/api/admin/auth/login"
+                ? "Invalid username or password."
+                : "Your session expired. Sign in again."
+              : data.error === "setup_incomplete"
+                ? "Finish bot credentials, model configuration and Telegram reception before activating."
+                : data.error === "workspace_and_skill_required"
+                  ? "Create a workspace with an enabled published skill before activating."
+                  : data.error === "https_origin_required"
+                    ? "Webhook mode requires a public HTTPS address. For local use, set TELEGRAM_TRANSPORT=polling and restart the app and worker."
+                    : data.issues?.length
+                      ? data.issues
+                          .map(
+                            (issue: { path: string; message: string }) =>
+                              `${issue.path}: ${issue.message}`,
+                          )
+                          .join(" ")
+                      : (data.error ?? "Request failed")),
       data.issues ?? [],
       response.status,
     );
@@ -1669,6 +1680,7 @@ interface MemberDraft {
   role: string;
   active: boolean;
   githubId: string;
+  githubUsername?: string;
   githubAccount?: Member["githubAccount"];
   github?: Member["github"];
   githubChanged: boolean;
@@ -1691,6 +1703,7 @@ function MembersPage({ id }: { id: string }) {
   });
   const [open, setOpen] = useState(false);
   const [editingMember, setEditingMember] = useState(false);
+  const [memberError, setMemberError] = useState("");
   return (
     <Page
       title="Members & access"
@@ -1710,6 +1723,7 @@ function MembersPage({ id }: { id: string }) {
               githubChanged: false,
             });
             setEditingMember(false);
+            setMemberError("");
             setOpen(true);
           }}
         />
@@ -1805,6 +1819,7 @@ function MembersPage({ id }: { id: string }) {
                               githubChanged: false,
                             });
                             setEditingMember(true);
+                            setMemberError("");
                             setOpen(true);
                           }}
                         />
@@ -1847,14 +1862,17 @@ function MembersPage({ id }: { id: string }) {
             account={member.github ?? member.githubAccount}
             verified={!!member.github}
             value={member.githubId}
-            onChange={(githubId, githubRevision) =>
+            username={member.githubUsername}
+            onChange={(githubId, githubRevision, githubUsername) => {
+              setMemberError("");
               setMember((current) => ({
                 ...current,
                 githubId,
                 githubRevision,
+                githubUsername,
                 githubChanged: true,
-              }))
-            }
+              }));
+            }}
           />
           <Field label="Role">
             <Select
@@ -1879,18 +1897,41 @@ function MembersPage({ id }: { id: string }) {
               }
             />
           </label>
+          {memberError && (
+            <p className="notice" role="alert">
+              {memberError}
+            </p>
+          )}
           <ModalActions>
             <Action
+              onError={setMemberError}
               onClick={async () => {
+                const username = member.githubUsername
+                  ?.trim()
+                  .replace(/^@/, "");
+                if (
+                  member.githubChanged &&
+                  member.githubUsername !== undefined &&
+                  !/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/.test(
+                    username ?? "",
+                  )
+                )
+                  throw Error(
+                    "Enter a valid GitHub username (up to 39 letters, numbers or hyphens).",
+                  );
                 await api(`/api/admin/workspaces/${id}/members`, "POST", {
                   id: member.id,
                   role: member.role,
                   active: member.active,
                   ...(member.githubChanged
                     ? {
-                        githubId: member.githubId
-                          ? Number(member.githubId)
-                          : null,
+                        ...(member.githubUsername !== undefined
+                          ? { githubUsername: username }
+                          : {
+                              githubId: member.githubId
+                                ? Number(member.githubId)
+                                : null,
+                            }),
                         githubRevision: member.githubRevision,
                       }
                     : {}),

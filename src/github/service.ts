@@ -69,8 +69,13 @@ export class GitHubService {
     return {
       connected: true,
       revision,
-      ...(await app.members(w.github.installationId, w.github.repositories)),
+      ...(await app.members(w.github.installationId)),
     };
+  }
+  async memberAccount(w: Workspace, username: string) {
+    const app = await this.apps.get(w.operatorId);
+    requireThat(app, "github_app_not_configured", 409);
+    return app.member(username);
   }
   private async workspace(admin: Admin, id: string) {
     operator(admin);

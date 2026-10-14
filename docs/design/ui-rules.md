@@ -173,9 +173,13 @@ when implementing or reviewing a change.
   dialog, opened from View in the member table.
 - **Scope:** Add/Edit member dialogs and the Members & access table. Organization
   installations supply organization members; personal installations supply their
-  owner and selected-repository collaborators.
+  owner directly. Do not derive member choices from repository metadata. Allow
+  entering a custom GitHub username alongside fetched choices, including when
+  directory lookup fails. Resolve it when saving and retain unverified status.
 - **Source:** 2026-10-07 — user showed the GitHub column and requested the missing
   edit-form link and automatic GitHub member fetching.
+- **Source update:** 2026-10-14 — user requested the personal owner directly,
+  organization members from the API, no repository metadata, and custom usernames.
 - **Exceptions:** GitHub provides no Telegram IDs. An administrator chooses the
   association; the member verifies account ownership through Telegram. Existing
   verified accounts are changed by the member's connection flow.

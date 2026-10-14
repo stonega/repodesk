@@ -21,7 +21,7 @@ import {
   type Workspace,
   workflowSchema,
 } from "../domain.ts";
-import type { GitHubMember } from "../github/app.ts";
+import { type GitHubMember, githubUsernameSchema } from "../github/app.ts";
 import { assignGitHubAccount } from "../github/member-account.ts";
 import { reconcileCharge, resolveDelivery } from "../jobs/recovery.ts";
 import { logQuery, readRuntimeLogs } from "../observability/logs.ts";
@@ -1040,31 +1040,51 @@ export function adminRoutes(
         role: z.enum(["admin", "member"]),
         active: z.boolean(),
         githubId: z.number().int().positive().safe().nullable().optional(),
+        githubUsername: githubUsernameSchema.optional(),
         githubRevision: z.number().int().nonnegative().optional(),
         version,
       })
       .strict()
+      .refine(
+        (input) =>
+          input.githubUsername === undefined || input.githubId === undefined,
+      )
       .parse(await c.req.json());
     let account: GitHubMember | null = null;
-    if (input.githubId != null) {
+    let githubRevision = input.githubRevision;
+    const githubChanged =
+      input.githubId !== undefined || input.githubUsername !== undefined;
+    if (githubChanged) {
       const w = await store.read(validId(c.req.param("id")));
       workspaceActor(w, c.get("session").admin);
       requireThat(w.memberVersion === input.version, "version_conflict", 409);
-      const directory = await github.memberDirectory(w);
-      requireThat(
-        directory.revision === input.githubRevision,
-        "github_connection_changed",
-        409,
-      );
-      account = directory.members.find((m) => m.id === input.githubId) ?? null;
-      requireThat(account, "github_member_not_found", 409);
+      if (input.githubId === null) githubRevision ??= w.github?.revision ?? 0;
+      if (input.githubUsername !== undefined) {
+        githubRevision ??= w.github?.revision ?? 0;
+        requireThat(
+          (w.github?.revision ?? 0) === githubRevision,
+          "github_connection_changed",
+          409,
+        );
+        account = await github.memberAccount(w, input.githubUsername);
+      } else if (input.githubId != null) {
+        const directory = await github.memberDirectory(w);
+        requireThat(
+          directory.revision === githubRevision,
+          "github_connection_changed",
+          409,
+        );
+        account =
+          directory.members.find((m) => m.id === input.githubId) ?? null;
+        requireThat(account, "github_member_not_found", 409);
+      }
     }
     return c.json(
       await change(c, (w, actor) => {
         updateMembership(w, actor, input.version, input);
-        if (input.githubId !== undefined) {
+        if (githubChanged) {
           requireThat(
-            (w.github?.revision ?? 0) === input.githubRevision,
+            (w.github?.revision ?? 0) === githubRevision,
             "github_connection_changed",
             409,
           );

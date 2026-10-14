@@ -52,7 +52,7 @@ test("organization directory paginates, deduplicates stable IDs and exposes only
           { id: 102, login: "last-user" },
         ];
   });
-  const result = await app.members(501, []);
+  const result = await app.members(501);
   expect(result.source).toBe("organization");
   expect(result.members).toHaveLength(101);
   expect(result.members.find((m) => m.id === 2)).toEqual({
@@ -66,84 +66,26 @@ test("organization directory paginates, deduplicates stable IDs and exposes only
   });
 });
 
-test("personal directory fetches only selected repository collaborators and includes the owner", async () => {
-  const { app, calls } = fixture("User", () => [
-    { id: 2, login: "colleague" },
-    { id: 1, login: "example" },
-  ]);
-  const result = await app.members(501, [
-    { id: 7001, full_name: "example/first" },
-    { id: 7002, full_name: "example/second" },
-  ]);
-  expect(result).toEqual({
+test("personal directory returns only its owner without tokens or repository requests", async () => {
+  const { app, calls } = fixture("User", () => {
+    throw Error("Unexpected member request");
+  });
+  expect(await app.members(501)).toEqual({
     account: "example",
-    source: "repositories",
-    members: [
-      { id: 2, login: "colleague" },
-      { id: 1, login: "example" },
-    ],
+    source: "personal",
+    members: [{ id: 1, login: "example" }],
   });
-  expect(
-    calls
-      .filter((c) => c.url.includes("/collaborators"))
-      .map((c) => new URL(c.url).pathname),
-  ).toEqual([
-    "/repos/example/first/collaborators",
-    "/repos/example/second/collaborators",
+  expect(calls.map((call) => new URL(call.url).pathname)).toEqual([
+    "/app/installations/501",
   ]);
-  expect(calls.find((c) => c.url.endsWith("/access_tokens"))?.body).toEqual({
-    permissions: { metadata: "read" },
-  });
-  await expect(
-    app.members(501, [{ id: 99, full_name: "foreign/repo" }]),
-  ).rejects.toThrow("github_access_denied");
 });
 
 test("missing organization permission gives recovery guidance without fetching a partial public list", async () => {
   const { app, calls } = fixture("Organization", () => [], { members: "" });
-  await expect(app.members(501, [])).rejects.toThrow(
+  await expect(app.members(501)).rejects.toThrow(
     "github_members_permission_missing",
   );
   expect(calls).toHaveLength(1);
-});
-
-test("large personal directories fetch bounded batches and keep every selected repository", async () => {
-  const started = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
-  let active = 0;
-  let peak = 0;
-  const { app, calls } = fixture("User", async (url) => {
-    active++;
-    peak = Math.max(peak, active);
-    started.resolve();
-    await release.promise;
-    active--;
-    const index = Number(url.pathname.split("/")[3]?.slice(5));
-    return [
-      { id: index + 2, login: `person-${index}` },
-      { id: 1000, login: `shared-${index}` },
-    ];
-  });
-  const repositories = Array.from({ length: 422 }, (_, index) => ({
-    id: index + 7001,
-    full_name: `example/repo-${index}`,
-  }));
-  const lookup = app.members(501, repositories);
-  await started.promise;
-  const firstBatch = active;
-  release.resolve();
-  const directory = await lookup;
-  expect(firstBatch).toBe(8);
-  expect(peak).toBe(8);
-  expect(
-    calls.filter((call) => call.url.includes("/collaborators")),
-  ).toHaveLength(422);
-  expect(directory.members).toHaveLength(424);
-  expect(directory.members.find((member) => member.id === 1000)).toEqual({
-    id: 1000,
-    login: "shared-421",
-  });
-  expect(directory.members).toContainEqual({ id: 423, login: "person-421" });
 });
 
 function waitForAbort(signal?: AbortSignal) {
@@ -157,7 +99,7 @@ function waitForAbort(signal?: AbortSignal) {
 }
 
 for (const cancellation of ["caller", "deadline"] as const) {
-  test(`personal directory ${cancellation} cancellation stops in-flight requests and queued batches`, async () => {
+  test(`organization directory ${cancellation} cancellation stops the member lookup`, async () => {
     const controller = new AbortController();
     const nativeTimeout = AbortSignal.timeout.bind(AbortSignal);
     const timeout = spyOn(AbortSignal, "timeout").mockImplementation((ms) =>
@@ -167,7 +109,7 @@ for (const cancellation of ["caller", "deadline"] as const) {
     );
     const started = Promise.withResolvers<void>();
     const signals: AbortSignal[] = [];
-    const { app, calls } = fixture("User", (_url, signal) => {
+    const { app, calls } = fixture("Organization", (_url, signal) => {
       if (signal) signals.push(signal);
       started.resolve();
       return waitForAbort(signal);
@@ -175,10 +117,6 @@ for (const cancellation of ["caller", "deadline"] as const) {
     try {
       const lookup = app.members(
         501,
-        Array.from({ length: 20 }, (_, index) => ({
-          id: index + 7001,
-          full_name: `example/repo-${index}`,
-        })),
         cancellation === "caller" ? controller.signal : undefined,
       );
       await started.promise;
@@ -188,11 +126,11 @@ for (const cancellation of ["caller", "deadline"] as const) {
           ? "github_members_timeout"
           : "github_unavailable",
       );
-      expect(signals).toHaveLength(8);
+      expect(signals).toHaveLength(1);
       expect(signals.every((signal) => signal.aborted)).toBe(true);
       expect(
-        calls.filter((call) => call.url.includes("/collaborators")),
-      ).toHaveLength(8);
+        calls.filter((call) => call.url.includes("/orgs/example/members")),
+      ).toHaveLength(1);
     } finally {
       controller.abort();
       timeout.mockRestore();
@@ -200,44 +138,53 @@ for (const cancellation of ["caller", "deadline"] as const) {
   });
 }
 
-test("personal directory failures cancel the batch without returning partial accounts", async () => {
-  const signals: AbortSignal[] = [];
-  const { app, calls } = fixture("User", (url, signal) => {
-    if (signal) signals.push(signal);
-    if (url.pathname.includes("/repo-0/")) throw Error("upstream failure");
-    return waitForAbort(signal);
+test("custom usernames resolve public user IDs and expose only profile fields", async () => {
+  const { app, calls } = fixture("User", (url) => {
+    expect(url.pathname).toBe("/users/Outside-User");
+    return {
+      id: 42,
+      login: "outside-user",
+      type: "User",
+      email: "private@example.com",
+    };
   });
-  await expect(
-    app.members(
-      501,
-      Array.from({ length: 20 }, (_, index) => ({
-        id: index + 7001,
-        full_name: `example/repo-${index}`,
-      })),
-    ),
-  ).rejects.toThrow("github_unavailable");
-  expect(signals.every((signal) => signal.aborted)).toBe(true);
-  expect(
-    calls.filter((call) => call.url.includes("/collaborators")),
-  ).toHaveLength(8);
+  expect(await app.member(" @Outside-User ")).toEqual({
+    id: 42,
+    login: "outside-user",
+  });
+  expect(calls).toHaveLength(1);
+  await expect(app.member("https://github.com/person")).rejects.toThrow();
+  expect(calls).toHaveLength(1);
 });
 
-test("personal directories validate all repository owners before requesting collaborators", async () => {
-  const { app, calls } = fixture("User", () => []);
-  await expect(
-    app.members(501, [
-      { id: 7001, full_name: "example/selected" },
-      { id: 7002, full_name: "foreign/repo" },
-    ]),
-  ).rejects.toThrow("github_access_denied");
-  expect(calls).toHaveLength(1);
+test("custom username lookup rejects organizations, missing profiles and upstream failures", async () => {
+  const { app } = fixture("User", () => ({
+    id: 42,
+    login: "org",
+    type: "Organization",
+  }));
+  await expect(app.member("org")).rejects.toThrow(
+    "github_personal_account_required",
+  );
+  const missing = new GitHubApp(githubFixtureConfig, (async (
+    _input: RequestInfo | URL,
+    _init?: RequestInit,
+  ) => Response.json({}, { status: 404 })) as typeof fetch);
+  await expect(missing.member("missing")).rejects.toThrow(
+    "github_member_not_found",
+  );
+  const failed = new GitHubApp(githubFixtureConfig, (async (
+    _input: RequestInfo | URL,
+    _init?: RequestInit,
+  ) => Response.json({}, { status: 502 })) as typeof fetch);
+  await expect(failed.member("person")).rejects.toThrow("github_unavailable");
 });
 
 test("directory errors do not return partial member lists", async () => {
   const { app } = fixture("Organization", () => ({
     message: "upstream error",
   }));
-  await expect(app.members(501, [])).rejects.toThrow();
+  await expect(app.members(501)).rejects.toThrow();
 });
 
 test("admin account assignments are scoped, unique profile data and preserve verified access", () => {

@@ -3,7 +3,8 @@
 @workspace = REPLACE_WORKSPACE_UUID
 @csrf = REPLACE_CSRF_TOKEN
 
-### Fetch organization members or selected personal-repository collaborators.
+### Fetch organization members from the API or the personal installation owner.
+# Neither path reads repository metadata or collaborators.
 # The complete lookup has a 60-second budget and returns no partial account lists.
 # A stalled lookup returns HTTP 504 with error github_members_timeout; retry it.
 GET {{origin}}/api/admin/workspaces/{{workspace}}/members/github
@@ -29,6 +30,23 @@ Content-Type: application/json
   "version": 1,
   "githubId": 42,
   "githubRevision": 1
+}
+
+### Associate a custom username, including when the directory is unavailable.
+# The server resolves its stable ID and canonical login with GitHub's user API.
+# githubRevision is optional for custom usernames; include it if known.
+# Use the latest membership version. No verification or repository grant is created.
+POST {{origin}}/api/admin/workspaces/{{workspace}}/members
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "id": "303",
+  "role": "member",
+  "active": true,
+  "version": 2,
+  "githubUsername": "octocat"
 }
 
 ### Clear an unverified association using the latest membership version.

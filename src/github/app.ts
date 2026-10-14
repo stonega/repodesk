@@ -44,17 +44,21 @@ const repositorySchema = z.object({
     .optional(),
 });
 export type GitHubRepository = z.infer<typeof repositorySchema>;
+export const githubUsernameSchema = z
+  .string()
+  .trim()
+  .transform((value) => value.replace(/^@/, ""))
+  .pipe(z.string().regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/));
 const memberSchema = z.object({
   id: z.number().int().positive().safe(),
   login: z.string().regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/),
 });
 export type GitHubMember = z.infer<typeof memberSchema>;
-const memberRepositoryBatchSize = 8;
 export interface GitHubMemberDirectory {
   connected: boolean;
   revision: number;
   account?: string;
-  source?: "organization" | "repositories";
+  source?: "organization" | "personal";
   members: GitHubMember[];
 }
 export interface GitHubInstallation {
@@ -271,11 +275,7 @@ export class GitHubApp {
         ),
       );
   }
-  async members(
-    installationId: number,
-    repositories: GitHubRepository[],
-    signal?: AbortSignal,
-  ) {
+  async members(installationId: number, signal?: AbortSignal) {
     const timeout = AbortSignal.timeout(60000);
     const controller = new AbortController();
     const lookupSignal = AbortSignal.any([
@@ -284,11 +284,7 @@ export class GitHubApp {
       ...(signal ? [signal] : []),
     ]);
     try {
-      return await this.fetchMembers(
-        installationId,
-        repositories,
-        lookupSignal,
-      );
+      return await this.fetchMembers(installationId, lookupSignal);
     } catch (error) {
       if (timeout.aborted) throw new Fault("github_members_timeout", 504);
       throw error;
@@ -296,11 +292,7 @@ export class GitHubApp {
       controller.abort();
     }
   }
-  private async fetchMembers(
-    installationId: number,
-    repositories: GitHubRepository[],
-    signal: AbortSignal,
-  ) {
+  private async fetchMembers(installationId: number, signal: AbortSignal) {
     const installation = z
       .object({
         app_id: z.number().int().positive(),
@@ -324,85 +316,60 @@ export class GitHubApp {
       403,
     );
     const organization = installation.account.type === "Organization";
-    if (organization)
-      requireThat(
-        ["read", "write"].includes(installation.permissions.members ?? ""),
-        "github_members_permission_missing",
-        409,
-      );
-    else
-      for (const repository of repositories)
-        requireThat(
-          repository.full_name.split("/")[0]?.toLowerCase() ===
-            installation.account.login.toLowerCase(),
-          "github_access_denied",
-          403,
-        );
+    if (!organization)
+      return {
+        account: installation.account.login,
+        source: "personal" as const,
+        members: [memberSchema.parse(installation.account)],
+      };
+    requireThat(
+      ["read", "write"].includes(installation.permissions.members ?? ""),
+      "github_members_permission_missing",
+      409,
+    );
     const credential = z.object({ token: z.string().min(1).max(8192) }).parse(
       await this.request(
         `https://api.github.com/app/installations/${installationId}/access_tokens`,
         this.jwt(),
         {
-          permissions: organization
-            ? { members: "read" }
-            : { metadata: "read" },
+          permissions: { members: "read" },
         },
         signal,
       ),
     );
     const members = new Map<number, GitHubMember>();
-    if (organization) {
-      for (const member of z
-        .array(memberSchema)
-        .parse(
-          await this.pages(
-            credential.token,
-            `/orgs/${installation.account.login}/members`,
-            undefined,
-            signal,
-          ),
-        ))
-        members.set(member.id, member);
-    } else {
-      members.set(
-        installation.account.id,
-        memberSchema.parse(installation.account),
-      );
-      for (
-        let index = 0;
-        index < repositories.length;
-        index += memberRepositoryBatchSize
-      ) {
-        const batch = await Promise.all(
-          repositories
-            .slice(index, index + memberRepositoryBatchSize)
-            .map(async (repository) =>
-              z
-                .array(memberSchema)
-                .parse(
-                  await this.pages(
-                    credential.token,
-                    `/repos/${repository.full_name}/collaborators`,
-                    undefined,
-                    signal,
-                  ),
-                ),
-            ),
-        );
-        for (const membersInRepository of batch)
-          for (const member of membersInRepository)
-            members.set(member.id, member);
-      }
-    }
+    for (const member of z
+      .array(memberSchema)
+      .parse(
+        await this.pages(
+          credential.token,
+          `/orgs/${installation.account.login}/members`,
+          undefined,
+          signal,
+        ),
+      ))
+      members.set(member.id, member);
     return {
       account: installation.account.login,
-      source: organization
-        ? ("organization" as const)
-        : ("repositories" as const),
+      source: "organization" as const,
       members: [...members.values()].sort((a, b) =>
         a.login.localeCompare(b.login),
       ),
     };
+  }
+  async member(username: string): Promise<GitHubMember> {
+    const login = githubUsernameSchema.parse(username);
+    let profile: unknown;
+    try {
+      profile = await this.request(`https://api.github.com/users/${login}`);
+    } catch (error) {
+      if (error instanceof Fault && error.code === "github_access_denied")
+        throw new Fault("github_member_not_found", 400);
+      throw error;
+    }
+    const result = memberSchema.extend({ type: z.string() }).parse(profile);
+    requireThat(result.type === "User", "github_personal_account_required");
+    return memberSchema.parse(result);
   }
   async installationRepositories(token: string): Promise<GitHubRepository[]> {
     // Installation permissions describe the App, not the authorizing user's role.

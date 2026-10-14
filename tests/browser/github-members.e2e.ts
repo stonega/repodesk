@@ -3,11 +3,263 @@ import type { Member } from "../../src/domain.ts";
 import { workspace } from "../fixtures.ts";
 import { chooseOption } from "./dropdown-helpers.ts";
 
+for (const width of [1280, 390]) {
+  test(`custom usernames remain editable through loading and empty organization results at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const f = await fixture(page);
+    const release = Promise.withResolvers<void>();
+    await page.route("**/members/github", async (route) => {
+      await release.promise;
+      await route.fulfill({
+        json: {
+          connected: true,
+          revision: 7,
+          account: "example",
+          source: "organization",
+          members: [],
+        },
+      });
+    });
+    try {
+      await page.goto(`/admin/members?workspace=${f.w.id}`);
+      await page.getByRole("button", { name: "Edit member 202" }).click();
+      const dialog = page.getByRole("dialog", { name: "Edit member" });
+      await expect(dialog.getByText("Fetching GitHub members…")).toBeVisible();
+      await chooseOption(
+        dialog.getByRole("combobox", { name: "GitHub account" }),
+        "custom",
+      );
+      const username = dialog.getByLabel("Custom GitHub username");
+      await username.fill("outside-user");
+      await page.screenshot({
+        path: `/tmp/repodesk-member-custom-loading-${width}.png`,
+        fullPage: true,
+      });
+      release.resolve();
+      await expect(
+        dialog.getByText("Fetching GitHub members…"),
+      ).not.toBeVisible();
+      await expect(username).toHaveValue("outside-user");
+      await page.screenshot({
+        path: `/tmp/repodesk-member-custom-empty-${width}.png`,
+        fullPage: true,
+      });
+      await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(dialog).not.toBeVisible();
+      expect(f.saved()).toBeUndefined();
+      await page.getByRole("button", { name: "Edit member 202" }).click();
+      await expect(username).toHaveCount(0);
+    } finally {
+      release.resolve();
+    }
+  });
+
+  test(`custom GitHub usernames save, reopen and clear without changing the saved display at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const f = await fixture(page, false, undefined, {}, "personal");
+    await page.goto(`/admin/members?workspace=${f.w.id}`);
+    await page.getByRole("button", { name: "Edit member 202" }).click();
+    const dialog = page.getByRole("dialog", { name: "Edit member" });
+    const selector = dialog.getByRole("combobox", { name: "GitHub account" });
+    await expect(
+      dialog.getByText("Personal account: example.", { exact: false }),
+    ).toBeVisible();
+    await selector.click();
+    await expect(
+      page.getByRole("option", { name: "example", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("option", { name: "colleague", exact: true }),
+    ).toHaveCount(0);
+    await page
+      .getByRole("option", { name: "Enter a username", exact: true })
+      .click();
+    await dialog.getByLabel("Custom GitHub username").fill(" @Outside-User ");
+    await page.screenshot({
+      path: `/tmp/repodesk-member-custom-editor-${width}.png`,
+      fullPage: true,
+    });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await dialog.getByRole("button", { name: "Save membership" }).click();
+    await expect(dialog).not.toBeVisible();
+    expect(f.saved()).toMatchObject({
+      id: "202",
+      githubUsername: "Outside-User",
+      githubRevision: 7,
+    });
+    expect(f.saved()).not.toHaveProperty("githubId");
+    const row = page.getByRole("row").filter({ hasText: "ID: 202" });
+    await expect(row.getByRole("cell").nth(3)).toHaveText("View");
+    await row
+      .getByRole("button", { name: "View GitHub for member 202" })
+      .click();
+    const details = page.getByRole("dialog", { name: "outside-user GitHub" });
+    await expect(details.getByText("Verification pending")).toBeVisible();
+    await expect(
+      details.getByRole("link", { name: "outside-user", exact: true }),
+    ).toHaveAttribute("href", "https://github.com/outside-user");
+    await expect(details.getByRole("textbox")).toHaveCount(0);
+    await page.screenshot({
+      path: `/tmp/repodesk-member-custom-saved-${width}.png`,
+      fullPage: true,
+    });
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Edit member 202" }).click();
+    await expect(selector).toHaveAttribute("value", "99");
+    await expect(
+      dialog.getByRole("link", { name: "View outside-user on GitHub" }),
+    ).toBeVisible();
+    await chooseOption(selector, "custom");
+    await dialog.getByLabel("Custom GitHub username").fill("another-user");
+    await chooseOption(selector, "99");
+    await dialog.getByRole("button", { name: "Save membership" }).click();
+    await expect(dialog).not.toBeVisible();
+    expect(f.saved()).toMatchObject({ githubUsername: "outside-user" });
+    await page.getByRole("button", { name: "Edit member 202" }).click();
+    await chooseOption(selector, "");
+    await dialog.getByRole("button", { name: "Save membership" }).click();
+    await expect(dialog).not.toBeVisible();
+    expect(f.saved()).toMatchObject({ githubId: null });
+    expect(f.saved()).not.toHaveProperty("githubUsername");
+  });
+
+  test(`custom usernames work with unavailable directories and preserve invalid drafts at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const f = await fixture(page, true);
+    await page.goto(`/admin/members?workspace=${f.w.id}`);
+    await page.getByRole("button", { name: "Add member" }).click();
+    const dialog = page.getByRole("dialog", { name: "Add member" });
+    await dialog.getByLabel("Telegram user ID").fill("303");
+    await expect(dialog.getByRole("alert")).toContainText(
+      "Enable Members: read",
+    );
+    await chooseOption(
+      dialog.getByRole("combobox", { name: "GitHub account" }),
+      "custom",
+    );
+    const username = dialog.getByLabel("Custom GitHub username");
+    await username.fill("bad/name");
+    await dialog.getByRole("button", { name: "Save membership" }).click();
+    await expect(
+      dialog
+        .getByRole("alert")
+        .filter({ hasText: "Enter a valid GitHub username" }),
+    ).toBeVisible();
+    expect(f.saved()).toBeUndefined();
+    await username.fill("missing");
+    await dialog.getByRole("button", { name: "Save membership" }).click();
+    await expect(
+      dialog
+        .getByRole("alert")
+        .filter({ hasText: "GitHub could not find this account" }),
+    ).toBeVisible();
+    await expect(username).toHaveValue("missing");
+    await dialog
+      .getByRole("button", { name: "Cancel", exact: true })
+      .scrollIntoViewIfNeeded();
+    const saveBox = await dialog
+      .getByRole("button", { name: "Save membership" })
+      .boundingBox();
+    const cancelBox = await dialog
+      .getByRole("button", { name: "Cancel", exact: true })
+      .boundingBox();
+    expect(saveBox?.y).toBe(cancelBox?.y);
+    await page.screenshot({
+      path: `/tmp/repodesk-member-custom-error-${width}.png`,
+      fullPage: true,
+    });
+    await username.fill("outside-user");
+    await dialog.getByRole("button", { name: "Save membership" }).click();
+    await expect(dialog).not.toBeVisible();
+    expect(f.saved()).toMatchObject({
+      id: "303",
+      githubUsername: "outside-user",
+    });
+    expect(f.saved()).not.toHaveProperty("githubRevision");
+  });
+
+  test(`custom username pending save locks the modal and prevents duplicate submissions at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const f = await fixture(page);
+    const release = Promise.withResolvers<void>();
+    let saves = 0;
+    await page.route(
+      /\/api\/admin\/workspaces\/[^/]+\/members$/,
+      async (route) => {
+        if (route.request().method() !== "POST") return route.fallback();
+        saves++;
+        await release.promise;
+        await route.fallback();
+      },
+    );
+    try {
+      await page.goto(`/admin/members?workspace=${f.w.id}`);
+      await page.getByRole("button", { name: "Edit member 202" }).click();
+      const dialog = page.getByRole("dialog", { name: "Edit member" });
+      await chooseOption(
+        dialog.getByRole("combobox", { name: "GitHub account" }),
+        "custom",
+      );
+      await dialog.getByLabel("Custom GitHub username").fill("outside-user");
+      await dialog.getByRole("button", { name: "Save membership" }).click();
+      await expect.poll(() => saves).toBe(1);
+      await expect(
+        dialog.getByRole("button", { name: "Working…" }),
+      ).toBeDisabled();
+      await expect(
+        dialog.getByRole("button", { name: "Cancel", exact: true }),
+      ).toBeDisabled();
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeVisible();
+      await page.screenshot({
+        path: `/tmp/repodesk-member-custom-pending-${width}.png`,
+        fullPage: true,
+      });
+      release.resolve();
+      await expect(dialog).not.toBeVisible();
+      expect(saves).toBe(1);
+    } finally {
+      release.resolve();
+    }
+  });
+}
+
+test("verified GitHub accounts cannot be edited with custom usernames", async ({
+  page,
+}) => {
+  const f = await fixture(page, false, undefined, {
+    github: repositoryAccess(1),
+  });
+  await page.goto(`/admin/members?workspace=${f.w.id}`);
+  await page.getByRole("button", { name: "Edit member 202" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit member" });
+  await expect(
+    dialog.getByRole("combobox", { name: "GitHub account" }),
+  ).toBeDisabled();
+  await expect(dialog.getByLabel("Custom GitHub username")).toHaveCount(0);
+  await expect(dialog).toContainText(
+    "The member can change it with /github connect.",
+  );
+});
+
 async function fixture(
   page: Page,
   missingPermission = false,
   beforeDirectory?: (call: number) => Promise<void>,
   memberOverrides: Partial<Member> = {},
+  source: "organization" | "personal" = "organization",
 ) {
   const w = workspace();
   let version = w.memberVersion;
@@ -40,19 +292,32 @@ async function fixture(
           connected: true,
           revision: 7,
           account: "example",
-          source: "organization",
-          members: [
-            { id: 42, login: "stonega" },
-            { id: 43, login: "colleague" },
-          ],
+          source,
+          members:
+            source === "personal"
+              ? [{ id: 100, login: "example" }]
+              : [
+                  { id: 42, login: "stonega" },
+                  { id: 43, login: "colleague" },
+                ],
         },
       });
       return;
     }
     if (path.endsWith("/members") && request.method() === "POST") {
       saved = request.postDataJSON();
-      if (saved?.githubId === 42)
+      if (saved?.githubUsername === "missing") {
+        await route.fulfill({
+          status: 400,
+          json: { error: "github_member_not_found" },
+        });
+        return;
+      }
+      if (saved?.githubUsername)
+        member.githubAccount = { id: 99, login: "outside-user" };
+      else if (saved?.githubId === 42)
         member.githubAccount = { id: 42, login: "stonega" };
+      else if (saved?.githubId === null) delete member.githubAccount;
       version++;
       await route.fulfill({ json: [member] });
       return;
@@ -438,7 +703,7 @@ test("missing GitHub permission explains recovery and leaves membership editing 
   await expect(dialog.getByRole("alert")).toContainText("Enable Members: read");
   await expect(
     dialog.getByRole("combobox", { name: "GitHub account" }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   f.recover();
   await dialog.getByRole("button", { name: "Try again", exact: true }).click();
   await expect.poll(() => f.calls()).toBe(2);
@@ -475,7 +740,7 @@ test("stalled member lookups time out and retry without losing the membership dr
     await expect(
       dialog.getByText("Fetching GitHub members…"),
     ).not.toBeVisible();
-    await expect(selector).toBeDisabled();
+    await expect(selector).toBeEnabled();
     await expect(
       dialog.getByRole("combobox", { name: "Role" }),
     ).toHaveAttribute("value", "admin");
