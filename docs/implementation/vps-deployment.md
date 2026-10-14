@@ -154,6 +154,20 @@ HTTP 200. Configuration, secrets, database and runner-state volumes, PostgreSQL
 and CI runner identities were preserved. No migration was added. This remains a
 manual archive deployment, separate from the published-release updater gate.
 
+The later 2026-10-14 cutover deployed clean commit
+`1afd6f5f58b2a5b31a9e1006ec6bcdc7ffadd526` (package v0.1.37) in bundle
+`1791965539905-97510167`, including single-account invites/countdown and GitHub
+member account updates. Its Verify workflow passed; the exact images passed local
+Node runtime, Compose, migration rerun and backup/restore smoke checks. The host
+verified the transferred archive, waited for durable coding checkpoints, verified
+the protected pre-release backup and completed readiness checks. All four services
+are healthy; public health, readiness and admin requests returned HTTP 200, with
+served JavaScript/CSS matching the verified image. Configuration, secrets, database
+and runner volumes and existing PostgreSQL/CI runner identities were preserved.
+No migration was added. Source, CI and post-deployment receipts remain in the
+bundle. This is another manual archive deployment, separate from the published
+release updater gate.
+
 ## Custom domain from the panel
 
 Sign in as a deployment administrator and open **Deployment → Site domain**.

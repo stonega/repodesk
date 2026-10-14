@@ -1,5 +1,27 @@
 # Implementation evidence
 
+## VPS deployment of invites and member account updates (2026-10-14)
+
+The VPS at `https://dev.stonegate.me` serves package v0.1.37 from clean commit
+`1afd6f5f58b2a5b31a9e1006ec6bcdc7ffadd526`, deployed through manual archive bundle
+`1791965539905-97510167`. This includes single-account invites with the ten-second
+link countdown, corrected GitHub member sources/custom usernames and the member
+GitHub View text button.
+
+The commit's [Verify run](https://github.com/stonega/repodesk/actions/runs/38523891650)
+passed. The exact release images also passed local Node runtime, Compose health,
+migration rerun, protected backup and disposable restore checks before transfer.
+The VPS verified the image/source checksums and coding checkpoints, created and
+verified its protected pre-release backup, and completed migration/startup checks.
+All four production services are healthy. Public health, readiness and admin
+requests returned HTTP 200; all three served JavaScript/CSS assets matched the
+verified image. The bundle retains CI, source and post-deployment receipts.
+
+Runtime configuration, encryption key, runner token, persistent database/runner
+volumes and the existing PostgreSQL/CI runner container identities were preserved.
+No migration was added. This verifies a manual archive cutover; the published
+release updater's direct local-image path remains a separate live gate.
+
 ## Single-account invites and link countdown (2026-10-14)
 
 Members & access now shows a signed Telegram invite that refreshes every 10 seconds
@@ -54,7 +76,7 @@ dependency or database migration is needed.
 
 ## VPS deployment of skills and provider metadata (2026-10-14)
 
-The recorded VPS serves package v0.1.36 from clean commit
+The earlier VPS rollout deployed package v0.1.36 from clean commit
 `2dd613aae9fe14abf07fcbc15abfc4d87e940571`, deployed through manual archive bundle
 `1791958130084-55435898`. The bundle retains the checksum-verified source archive,
 image metadata and local verification report. This rollout includes GitHub skill
