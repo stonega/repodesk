@@ -546,15 +546,16 @@ webhook subscription change is needed. Images require a vision-capable model. Se
 ## Shared model providers
 
 **Model settings → Model providers → New** opens the provider editor. Saving sends
-one credential-bearing server-side `GET BASE_URL/models`, with redirects disabled,
-a 15-second timeout and a 1 MiB response limit. A URL with no API path uses `/v1`;
+credential-bearing server-side `GET BASE_URL/models`, with redirects disabled,
+a 15-second timeout and a 1 MiB response limit (8 MiB for OpenRouter/New API).
+A URL with no API path uses `/v1` (OpenRouter uses `/api/v1`, Groq `/openai/v1`);
 other API paths are preserved. Failed discovery leaves the editor open and does
 not replace the saved provider. Edit fetches the current model list again. A changed
 URL requires re-entering the key; a blank key retains it only for the same URL.
 
 Providers are operator-owned records in deployment JSONB, with encrypted keys bound
 to operator/provider IDs. APIs return safe labels, URLs, model IDs and configured
-status. Each workspace saves its bot chat selection; Codex and Review Bot choose
+status and typed price/context metadata. Each workspace saves its bot chat selection; Codex and Review Bot choose
 independently from the same catalog. Removing an in-use provider is rejected.
 A provider update affects new Codex/review attempts; already-running attempts keep
 their sealed credentials and endpoint/model snapshot. Cancel them to stop existing
@@ -563,11 +564,31 @@ Workspace deletion removes its selection; shared provider configuration remains.
 
 Chat uses Chat Completions. Codex and OCR delegation use the Codex Responses path;
 select a compatible model/provider for those services. `/models` does not prove
-protocol support or provide standard capacity/pricing data. Known bot models use
-the bundled Pi catalog. Blank context windows defer to the provider; custom models
-use an automatic app output allowance and unknown prices when overrides are omitted.
-Use Advanced model settings to supply
-any independently optional value. No paid model call
+protocol support. **Provider type** detects exact official URLs or selects an
+adapter explicitly; choose **New API (self-hosted)** for New API instances.
+OpenRouter automatically fetches prices, cache rates and capacity from `/models`.
+New API also reads its public `/api/pricing` without sending the inference key.
+Enter the API key's **New API billing group** to apply the group multiplier; no
+group or inaccessible pricing leaves prices unknown. Per-call and expression
+billing are not converted to token prices.
+
+Official compatible providers use their own Pi catalogs where the model API
+omits prices/limits; unknown reseller models never inherit OpenAI prices solely
+from their names. DeepSeek fetches context/output metadata when present and uses
+a dated official price reference for current Flash/Pro aliases. Both peak/off-peak
+tiers and cache-hit/miss prices remain visible; accounting defaults to peak
+estimates. Advanced chat model settings can explicitly select Off-peak estimates.
+Prices are estimates, not upstream billing guarantees.
+
+The editor and saved summary show automatic information and its source separately
+from overrides. Advanced settings support independent input/output/cache-hit/cache-write
+price overrides with the selected currency. A supplied input override also prices
+cache tokens at that rate unless an explicit cache override is entered. Blank
+context windows still defer enforcement to the provider. Unknown capacity uses
+the documented automatic app output allowance. Unknown prices require unlimited
+budgets. API metadata and manual overrides are pinned with each run. See the
+[standalone module contract](../../src/model-metadata/README.md) and
+[provider API examples](../../examples/model-providers.http). No paid model call
 is made by provider discovery. Old deployment chat settings and saved Codex keys
 remain supported until the service switches to a shared provider. ChatGPT device
 code sign-in remains an independent option.

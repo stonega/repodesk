@@ -36,13 +36,19 @@ export function modelCapabilities(
   id: string,
   options: ModelOptions = {},
 ): ModelCapabilities {
-  const catalog = models.getModel("openai", id);
+  const catalog = options.modelMetadata
+    ? undefined
+    : models.getModel("openai", id);
   const contextWindow =
-    options.modelLimits?.contextWindow ?? catalog?.contextWindow;
+    options.modelLimits?.contextWindow ??
+    options.modelMetadata?.contextWindow ??
+    catalog?.contextWindow;
   const maxOutputTokens =
     options.modelLimits?.maxOutputTokens ??
     Math.min(
-      catalog?.maxTokens ?? DEFAULT_MODEL_MAX_OUTPUT,
+      options.modelMetadata?.maxOutputTokens ??
+        catalog?.maxTokens ??
+        DEFAULT_MODEL_MAX_OUTPUT,
       contextWindow === undefined ? Infinity : contextWindow - 1,
     );
   requireThat(
@@ -61,9 +67,14 @@ export function modelCapabilities(
       options.modelLimits &&
       Object.values(options.modelLimits).some((v) => v !== undefined)
         ? "operator"
-        : catalog
-          ? "catalog"
-          : "default",
+        : options.modelMetadata?.sources.contextWindow === "api" ||
+            options.modelMetadata?.sources.maxOutputTokens === "api"
+          ? "api"
+          : catalog ||
+              options.modelMetadata?.contextWindow ||
+              options.modelMetadata?.maxOutputTokens
+            ? "catalog"
+            : "default",
   };
 }
 export function selectedModel(
@@ -73,7 +84,9 @@ export function selectedModel(
   pricingKnown: boolean;
   providerContext: boolean;
 } {
-  const catalog = models.getModel("openai", id);
+  const catalog = options.modelMetadata
+    ? undefined
+    : models.getModel("openai", id);
   const pricing = options.modelPricing
     ? modelPricingSchema.parse(options.modelPricing)
     : undefined;
@@ -84,29 +97,34 @@ export function selectedModel(
     pricing?.input === undefined ? undefined : pricing.input * rate;
   const outputOverride =
     pricing?.output === undefined ? undefined : pricing.output * rate;
-  const inputPrice = inputOverride ?? catalog?.cost.input;
-  const outputPrice = outputOverride ?? catalog?.cost.output;
+  const automaticPrices = options.modelMetadata?.pricing ?? catalog?.cost;
+  const inputPrice = inputOverride ?? automaticPrices?.input;
+  const outputPrice = outputOverride ?? automaticPrices?.output;
   const pricingKnown = inputPrice !== undefined && outputPrice !== undefined;
   const cost = {
     input: pricingKnown ? (inputPrice ?? 0) : 0,
     output: pricingKnown ? (outputPrice ?? 0) : 0,
     cacheRead: pricingKnown
-      ? (inputOverride ?? catalog?.cost.cacheRead ?? 0)
+      ? pricing?.cacheRead === undefined
+        ? (inputOverride ?? automaticPrices?.cacheRead ?? inputPrice ?? 0)
+        : pricing.cacheRead * rate
       : 0,
     cacheWrite: pricingKnown
-      ? (inputOverride ?? catalog?.cost.cacheWrite ?? 0)
+      ? pricing?.cacheWrite === undefined
+        ? (inputOverride ?? automaticPrices?.cacheWrite ?? inputPrice ?? 0)
+        : pricing.cacheWrite * rate
       : 0,
   };
   const capabilities = modelCapabilities(id, options);
   return {
     id,
-    name: catalog?.name ?? id,
+    name: options.modelMetadata?.name ?? catalog?.name ?? id,
     api: "openai-completions",
     provider: "openai-compatible",
     baseUrl: options.modelBaseUrl ?? DEFAULT_MODEL_BASE_URL,
     reasoning:
       options.thinkingLevel !== undefined && options.thinkingLevel !== "off",
-    input: catalog?.input ?? ["text", "image"],
+    input: options.modelMetadata?.input ?? catalog?.input ?? ["text", "image"],
     cost,
     pricingKnown,
     providerContext:
@@ -340,7 +358,14 @@ export class PiRunner implements AgentRunner {
         );
         // Text bytes and the image allowance conservatively estimate input tokens. Output also
         // respects financial headroom; the atomic reservation below remains authoritative.
-        const inputCost = (inputTokens * model.cost.input) / 1_000_000;
+        const inputCost =
+          (inputTokens *
+            Math.max(
+              model.cost.input,
+              model.cost.cacheRead,
+              model.cost.cacheWrite,
+            )) /
+          1_000_000;
         const outputCost = model.cost.output / 1_000_000;
         if (input.remainingBudget) {
           const budgets = await input.remainingBudget();

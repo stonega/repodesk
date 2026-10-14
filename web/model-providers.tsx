@@ -8,6 +8,11 @@ import {
   type ThinkingLevel,
   thinkingLevels,
 } from "../src/agent/model-settings.ts";
+import { withPriceTier } from "../src/model-metadata/normalize.ts";
+import {
+  type ProviderType,
+  providerTypes,
+} from "../src/model-metadata/types.ts";
 import type {
   ModelSelection,
   ProviderCatalog,
@@ -16,6 +21,7 @@ import type {
 } from "../src/models/config.ts";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
+import { AutomaticModelInfo, providerLabels } from "./model-metadata.tsx";
 import { Select } from "./select.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 import { ErrorToast, useToast } from "./toast.tsx";
@@ -35,6 +41,8 @@ export function modelError(error: unknown) {
         "Choose another provider for each service before removing this one.",
       model_not_available:
         "The selected model is no longer in the provider's model list.",
+      model_price_tier_unavailable:
+        "The selected price tier is no longer available. Choose the model again to review its current prices.",
       custom_model_pricing_required:
         "Enter both token prices in Advanced model settings for this custom model.",
       model_limits_required:
@@ -57,6 +65,8 @@ export function selectionFromForm(
   const output = String(values.get("modelMaxOutput") ?? "");
   const inputPrice = String(values.get("modelInputPrice") ?? "");
   const outputPrice = String(values.get("modelOutputPrice") ?? "");
+  const cacheRead = String(values.get("modelCacheReadPrice") ?? "");
+  const cacheWrite = String(values.get("modelCacheWritePrice") ?? "");
   const currency = String(
     values.get("modelCurrency") ?? "USD",
   ) as ModelCurrency;
@@ -81,10 +91,12 @@ export function selectionFromForm(
           }
         : undefined,
     modelPricing:
-      inputPrice || outputPrice || currency !== "USD"
+      inputPrice || outputPrice || cacheRead || cacheWrite || currency !== "USD"
         ? {
             ...(inputPrice ? { input: Number(inputPrice) } : {}),
             ...(outputPrice ? { output: Number(outputPrice) } : {}),
+            ...(cacheRead ? { cacheRead: Number(cacheRead) } : {}),
+            ...(cacheWrite ? { cacheWrite: Number(cacheWrite) } : {}),
             ...(currency !== "USD"
               ? { currency, ...(usdRate ? { usdRate: Number(usdRate) } : {}) }
               : {}),
@@ -148,6 +160,10 @@ export function ModelPicker({
   }, [autoFocus, catalog, fieldId]);
   const provider = catalog?.providers?.find((p) => p.id === value?.providerId);
   const currency = value?.modelPricing?.currency ?? "USD";
+  const metadata = withPriceTier(
+    provider?.modelMetadata?.find((m) => m.id === value?.model),
+    value?.modelPriceTier,
+  );
   return (
     <>
       <label className="field" htmlFor={`${fieldId}-provider`}>
@@ -232,6 +248,7 @@ export function ModelPicker({
           </button>
         </p>
       )}
+      {advanced && value && <AutomaticModelInfo metadata={metadata} />}
       {advanced && value && (
         <details
           className="setup-advanced"
@@ -239,12 +256,40 @@ export function ModelPicker({
         >
           <summary>Advanced model settings</summary>
           <p className="muted">
-            All four fields are optional. Leave blank to use catalog values. A
-            blank context window lets the provider enforce its limit. Unknown
-            models use up to {DEFAULT_MODEL_MAX_OUTPUT.toLocaleString()} output
-            tokens unless overridden. Missing prices remain unknown; dollar
-            budgets require both prices. Use 0 for a free model.
+            All overrides are optional. Leave blank to use fetched or catalog
+            values. A blank context window lets the provider enforce its limit.
+            Unknown models use up to {DEFAULT_MODEL_MAX_OUTPUT.toLocaleString()}{" "}
+            output tokens unless overridden. Missing prices remain unknown;
+            dollar budgets require both prices. Use 0 for a free model.
           </p>
+          {metadata?.pricingTiers && (
+            <label className="field" htmlFor={`${fieldId}-price-tier`}>
+              <span>Price estimate tier</span>
+              <Select
+                id={`${fieldId}-price-tier`}
+                aria-label="Price estimate tier"
+                value={value.modelPriceTier ?? "peak"}
+                disabled={disabled}
+                onChange={(event) =>
+                  onChange({
+                    ...value,
+                    modelPriceTier: event.target.value as "peak" | "off_peak",
+                  })
+                }
+              >
+                {metadata.pricingTiers.map((tier) => (
+                  <option key={tier.id} value={tier.id}>
+                    {tier.label}
+                  </option>
+                ))}
+              </Select>
+              <span className="muted">
+                Peak is the conservative default. Choose Off-peak only for
+                discounted usage estimates; the actual rate depends on the
+                provider’s billing time.
+              </span>
+            </label>
+          )}
           <label className="field" htmlFor={`${fieldId}-thinking`}>
             <span>Thinking level</span>
             <Select
@@ -357,6 +402,27 @@ export function ModelPicker({
                 placeholder="Automatic (optional)"
               />
             </label>
+            {(["cacheRead", "cacheWrite"] as const).map((key) => (
+              <label className="field" key={key}>
+                <span>
+                  {key === "cacheRead" ? "Input cache-hit" : "Cache write"}{" "}
+                  price ({currency} / million tokens)
+                </span>
+                <input
+                  name={
+                    key === "cacheRead"
+                      ? "modelCacheReadPrice"
+                      : "modelCacheWritePrice"
+                  }
+                  type="number"
+                  min="0"
+                  step="any"
+                  disabled={disabled}
+                  defaultValue={value.modelPricing?.[key] ?? ""}
+                  placeholder="Automatic (optional)"
+                />
+              </label>
+            ))}
           </div>
           <p className="muted" id={`${fieldId}-currency-help`}>
             Currency applies to entered prices. Catalog prices, budgets and
@@ -396,6 +462,7 @@ export function ModelProvidersPanel({
   const [providerDraft, setProviderDraft] = useState<{
     original?: ProviderView;
     version: number;
+    type?: ProviderType;
   }>();
   const [removing, setRemoving] = useState<ProviderView>();
   const [editingModel, setEditingModel] = useState(false);
@@ -532,8 +599,16 @@ export function ModelProvidersPanel({
                   <h3>{provider.name}</h3>
                   <p className="settings-item-value">{provider.baseUrl}</p>
                   <p className="muted">
-                    API key configured · {provider.models.length} models
+                    {providerLabels[provider.type ?? "auto"]} · API key
+                    configured · {provider.models.length} models
                   </p>
+                  {provider.metadataWarning && (
+                    <p className="muted">
+                      {provider.metadataWarning === "newapi_group_required"
+                        ? "Choose the API key’s billing group in Edit to fetch token prices."
+                        : "Pricing API unavailable. Models remain available; use price overrides."}
+                    </p>
+                  )}
                 </div>
                 <div className="row">
                   <IconButton
@@ -587,102 +662,146 @@ export function ModelProvidersPanel({
         {onContinue ? (
           modelForm
         ) : (
-          <dl className="plugin-summary">
-            <div>
-              <dt>Provider</dt>
-              <dd>
-                {page ? (
-                  (selectedProvider?.name ??
-                  (page.legacy
-                    ? "Previous deployment configuration"
-                    : "Not selected"))
-                ) : (
-                  <Skeleton />
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>Model</dt>
-              <dd>
-                {page ? (
-                  (page.selection?.model ??
-                  (page.legacy ? legacyModel : "Not selected"))
-                ) : (
-                  <Skeleton />
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>Thinking</dt>
-              <dd>
-                {page ? (page.selection?.thinkingLevel ?? "off") : <Skeleton />}
-              </dd>
-            </div>
-            <div>
-              <dt>Context window</dt>
-              <dd>
-                {page ? (
-                  (page.selection?.modelLimits?.contextWindow?.toLocaleString() ??
-                  "Provider default")
-                ) : (
-                  <Skeleton />
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>Maximum output</dt>
-              <dd>
-                {page ? (
-                  (page.selection?.modelLimits?.maxOutputTokens?.toLocaleString() ??
-                  "Automatic")
-                ) : (
-                  <Skeleton />
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>Input price</dt>
-              <dd>
-                {page ? (
-                  page.selection?.modelPricing?.input !== undefined ? (
-                    `${page.selection.modelPricing.input} ${page.selection.modelPricing.currency ?? "USD"} / million tokens`
-                  ) : (
-                    "Automatic"
-                  )
-                ) : (
-                  <Skeleton />
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>Output price</dt>
-              <dd>
-                {page ? (
-                  page.selection?.modelPricing?.output !== undefined ? (
-                    `${page.selection.modelPricing.output} ${page.selection.modelPricing.currency ?? "USD"} / million tokens`
-                  ) : (
-                    "Automatic"
-                  )
-                ) : (
-                  <Skeleton />
-                )}
-              </dd>
-            </div>
-            {(!page ||
-              (page.selection?.modelPricing?.currency !== undefined &&
-                page.selection.modelPricing.currency !== "USD")) && (
+          <>
+            <dl className="plugin-summary">
               <div>
-                <dt>USD exchange rate</dt>
+                <dt>Provider</dt>
                 <dd>
                   {page ? (
-                    `1 ${page.selection?.modelPricing?.currency} = ${page.selection?.modelPricing?.usdRate} USD`
+                    (selectedProvider?.name ??
+                    (page.legacy
+                      ? "Previous deployment configuration"
+                      : "Not selected"))
                   ) : (
                     <Skeleton />
                   )}
                 </dd>
               </div>
-            )}
-          </dl>
+              <div>
+                <dt>Model</dt>
+                <dd>
+                  {page ? (
+                    (page.selection?.model ??
+                    (page.legacy ? legacyModel : "Not selected"))
+                  ) : (
+                    <Skeleton />
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Thinking</dt>
+                <dd>
+                  {page ? (
+                    (page.selection?.thinkingLevel ?? "off")
+                  ) : (
+                    <Skeleton />
+                  )}
+                </dd>
+              </div>
+              {selectedProvider?.modelMetadata?.find(
+                (m) => m.id === page?.selection?.model,
+              )?.pricingTiers && (
+                <div>
+                  <dt>Price estimate tier</dt>
+                  <dd>
+                    {page?.selection?.modelPriceTier === "off_peak"
+                      ? "Off-peak"
+                      : "Peak (default)"}
+                  </dd>
+                </div>
+              )}
+              <div>
+                <dt>Context window</dt>
+                <dd>
+                  {page ? (
+                    (page.selection?.modelLimits?.contextWindow?.toLocaleString() ??
+                    "Provider default")
+                  ) : (
+                    <Skeleton />
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Maximum output</dt>
+                <dd>
+                  {page ? (
+                    (page.selection?.modelLimits?.maxOutputTokens?.toLocaleString() ??
+                    "Automatic")
+                  ) : (
+                    <Skeleton />
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Input price</dt>
+                <dd>
+                  {page ? (
+                    page.selection?.modelPricing?.input !== undefined ? (
+                      `${page.selection.modelPricing.input} ${page.selection.modelPricing.currency ?? "USD"} / million tokens`
+                    ) : (
+                      "Automatic"
+                    )
+                  ) : (
+                    <Skeleton />
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Output price</dt>
+                <dd>
+                  {page ? (
+                    page.selection?.modelPricing?.output !== undefined ? (
+                      `${page.selection.modelPricing.output} ${page.selection.modelPricing.currency ?? "USD"} / million tokens`
+                    ) : (
+                      "Automatic"
+                    )
+                  ) : (
+                    <Skeleton />
+                  )}
+                </dd>
+              </div>
+              {(["cacheRead", "cacheWrite"] as const).map((key) => (
+                <div key={key}>
+                  <dt>
+                    {key === "cacheRead"
+                      ? "Cache-hit input price"
+                      : "Cache write price"}
+                  </dt>
+                  <dd>
+                    {!page ? (
+                      <Skeleton />
+                    ) : page.selection?.modelPricing?.[key] === undefined ? (
+                      "Automatic"
+                    ) : (
+                      `${page.selection.modelPricing[key]} ${page.selection.modelPricing.currency ?? "USD"} / million tokens`
+                    )}
+                  </dd>
+                </div>
+              ))}
+              {(!page ||
+                (page.selection?.modelPricing?.currency !== undefined &&
+                  page.selection.modelPricing.currency !== "USD")) && (
+                <div>
+                  <dt>USD exchange rate</dt>
+                  <dd>
+                    {page ? (
+                      `1 ${page.selection?.modelPricing?.currency} = ${page.selection?.modelPricing?.usdRate} USD`
+                    ) : (
+                      <Skeleton />
+                    )}
+                  </dd>
+                </div>
+              )}
+            </dl>
+            <AutomaticModelInfo
+              metadata={withPriceTier(
+                selectedProvider?.modelMetadata?.find(
+                  (m) => m.id === page?.selection?.model,
+                ),
+                page?.selection?.modelPriceTier,
+              )}
+            />
+          </>
         )}
       </section>
       {editingModel && (
@@ -705,7 +824,8 @@ export function ModelProvidersPanel({
           onClose={() => setProviderDraft(undefined)}
         >
           <p className="muted">
-            Saving fetches the model list from this provider. The API key is
+            Saving fetches models and available prices and context metadata.
+            Choose New API for a self-hosted New API server. The API key is
             encrypted and is never shown after saving.
           </p>
           <form
@@ -725,6 +845,14 @@ export function ModelProvidersPanel({
                     id: providerDraft.original?.id,
                     name: values.get("name"),
                     baseUrl: values.get("baseUrl"),
+                    type: values.get("type"),
+                    ...(String(values.get("pricingGroup") ?? "").trim()
+                      ? {
+                          pricingGroup: String(
+                            values.get("pricingGroup"),
+                          ).trim(),
+                        }
+                      : {}),
                     ...(key ? { apiKey: key } : {}),
                   },
                 );
@@ -750,6 +878,29 @@ export function ModelProvidersPanel({
             }}
           >
             <fieldset className="plugin-fields" disabled={busy}>
+              <label className="field" htmlFor="provider-type">
+                <span>Provider type</span>
+                <Select
+                  id="provider-type"
+                  name="type"
+                  aria-label="Provider type"
+                  value={
+                    providerDraft.type ?? providerDraft.original?.type ?? "auto"
+                  }
+                  onChange={(event) =>
+                    setProviderDraft({
+                      ...providerDraft,
+                      type: event.target.value as ProviderType,
+                    })
+                  }
+                >
+                  {providerTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {providerLabels[type]}
+                    </option>
+                  ))}
+                </Select>
+              </label>
               <label className="field">
                 <span>Provider name</span>
                 <input
@@ -788,6 +939,23 @@ export function ModelProvidersPanel({
                   }
                 />
               </label>
+              {(providerDraft.type ?? providerDraft.original?.type) ===
+                "newapi" && (
+                <label className="field">
+                  <span>New API billing group (optional)</span>
+                  <input
+                    name="pricingGroup"
+                    maxLength={100}
+                    defaultValue={providerDraft.original?.pricingGroup ?? ""}
+                    placeholder="For example: default"
+                  />
+                  <span className="muted">
+                    Enter the group assigned to this API key. Group multipliers
+                    affect prices. Leave blank to keep prices unknown. The
+                    public pricing endpoint must be enabled.
+                  </span>
+                </label>
+              )}
               {formError && (
                 <p className="notice" role="alert">
                   {formError}

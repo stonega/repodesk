@@ -1,10 +1,18 @@
 import { z } from "zod";
 import { modelOptionsSchema } from "../agent/model-settings.ts";
+import { detectProvider } from "../model-metadata/normalize.ts";
+import {
+  type ModelMetadata,
+  type ProviderType,
+  providerTypes,
+} from "../model-metadata/types.ts";
 
 export const providerBaseUrl = modelOptionsSchema.shape.modelBaseUrl
   .unwrap()
   .transform((value) =>
-    new URL(value).pathname === "/" ? `${value}/v1` : value,
+    new URL(value).pathname === "/"
+      ? `${value}${detectProvider(value) === "openrouter" ? "/api/v1" : detectProvider(value) === "groq" ? "/openai/v1" : "/v1"}`
+      : value,
   );
 export const modelId = z.string().trim().min(1).max(200).regex(/^\S+$/);
 export const modelSelectionSchema = modelOptionsSchema
@@ -24,6 +32,10 @@ export interface ModelProvider {
   credential: string;
   models: string[];
   fetchedAt: string;
+  type?: ProviderType;
+  pricingGroup?: string;
+  modelMetadata?: ModelMetadata[];
+  metadataWarning?: string;
 }
 export type ProviderView = Omit<ModelProvider, "credential" | "operatorId"> & {
   apiKeyConfigured: boolean;
@@ -45,6 +57,8 @@ export const providerInput = z
     name: z.string().trim().min(1).max(100),
     baseUrl: providerBaseUrl,
     apiKey: z.string().trim().min(1).max(8192).optional(),
+    type: z.enum(providerTypes).optional(),
+    pricingGroup: z.string().trim().min(1).max(100).optional(),
   })
   .strict();
 export const discoveryInput = providerInput.omit({ name: true });

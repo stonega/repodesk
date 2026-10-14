@@ -51,6 +51,24 @@ when implementing or reviewing a change.
   Provider records use New/Edit dialogs and saved summaries; the setup chat-model
   selector is a guided form. API keys are edited only on the provider record.
 
+### Provider types supply automatic model information
+
+- **Preference:** Check the provider type and fetch model prices and context
+  information where the API exposes them. Show automatic information separately
+  from optional overrides, with units and source labels. Retain cached/uncached
+  input rates and both DeepSeek price tiers.
+- **Scope:** Shared provider New/Edit dialogs, setup/chat editors and saved model
+  summaries. OpenRouter, self-hosted New API and official compatible services use
+  a standalone metadata module.
+- **Source:** 2026-10-14 — user requested typed metadata discovery, DeepSeek's two
+  price levels and a standalone module.
+- **Exceptions:** APIs without prices/limits use labeled provider-specific catalogs
+  or dated official reference values where available. Unknown stays unknown.
+  New API requires the key's billing group and a public pricing endpoint. Peak is
+  the conservative default; an explicit tier choice changes estimates. Blank
+  context overrides defer enforcement to the provider. Existing modal, currency,
+  guided-setup and verified-charge reconciliation rules still apply.
+
 ### Model setup activates the bot automatically
 
 - **Preference:** Remove the separate Activate the bot step and card. Successfully

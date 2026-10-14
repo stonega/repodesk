@@ -1,0 +1,61 @@
+@baseUrl = http://localhost:3000
+@csrf = REPLACE_WITH_SESSION_CSRF
+@session = REPLACE_WITH_SESSION_COOKIE
+
+### Read the current provider catalog and deployment version
+GET {{baseUrl}}/api/admin/operator/model-providers
+Cookie: repodesk_session={{session}}
+
+### Save OpenRouter and fetch its model IDs, capacity and token/cache prices
+PUT {{baseUrl}}/api/admin/operator/model-providers
+Origin: {{baseUrl}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "version": 1,
+  "name": "OpenRouter",
+  "type": "openrouter",
+  "baseUrl": "https://openrouter.ai/api/v1",
+  "apiKey": "REPLACE_WITH_API_KEY"
+}
+
+### New API: replace version, endpoint and billing group with the key's actual group
+### Pricing is fetched anonymously from the same server's public /api/pricing.
+### If that endpoint is unavailable, the model list still saves with unknown prices.
+PUT {{baseUrl}}/api/admin/operator/model-providers
+Origin: {{baseUrl}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "version": 2,
+  "name": "Self-hosted New API",
+  "type": "newapi",
+  "baseUrl": "https://newapi.example.com/v1",
+  "pricingGroup": "default",
+  "apiKey": "REPLACE_WITH_API_KEY"
+}
+
+### Select a chat model; blank overrides use saved metadata and provider context handling
+PUT {{baseUrl}}/api/admin/workspaces/REPLACE_WORKSPACE_ID/models
+Origin: {{baseUrl}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "revision": 0,
+  "selection": {
+    "providerId": "REPLACE_WITH_PROVIDER_UUID",
+    "model": "REPLACE_WITH_DISCOVERED_MODEL_ID",
+    "thinkingLevel": "off"
+  }
+}
+
+### Optional modelPricing overrides: input, output, cacheRead and cacheWrite.
+### Prices default to USD / million tokens; non-USD requires a positive usdRate.
+### Provider edits fetch metadata again; existing runs retain pinned prices.
+### DeepSeek's modelPriceTier may be "peak" (default) or "off_peak" for estimates.

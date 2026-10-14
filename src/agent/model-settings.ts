@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ModelMetadata } from "../model-metadata/types.ts";
 
 export const DEFAULT_MODEL_BASE_URL = "https://api.openai.com/v1";
 // Automatic output allowance for models missing catalog metadata.
@@ -42,7 +43,7 @@ export const modelLimitOverridesSchema = z
   );
 export type ModelCapabilities = {
   limits: { contextWindow?: number; maxOutputTokens: number };
-  source: "catalog" | "operator" | "default";
+  source: "api" | "catalog" | "operator" | "default";
 };
 export const modelCurrencies = [
   "USD",
@@ -59,6 +60,8 @@ export const modelPricingSchema = z
   .object({
     input: z.number().finite().min(0).max(10000).optional(),
     output: z.number().finite().min(0).max(10000).optional(),
+    cacheRead: z.number().finite().min(0).max(10000).optional(),
+    cacheWrite: z.number().finite().min(0).max(10000).optional(),
     currency: z.enum(modelCurrencies).optional(),
     // USD per one unit of the selected currency; pinned with each run's prices.
     usdRate: z
@@ -105,10 +108,13 @@ export const modelOptionsSchema = z.object({
   modelLimits: modelLimitOverridesSchema.nullable().optional(),
   thinkingLevel: z.enum(thinkingLevels).optional(),
   modelPricing: modelPricingSchema.optional(),
+  modelPriceTier: z.enum(["peak", "off_peak"]).optional(),
 });
 export type ModelOptions = z.infer<typeof modelOptionsSchema> & {
   // Run snapshots pin catalog metadata separately from the context enforcement choice.
   providerContext?: boolean;
+  // Server-fetched metadata is pinned with run options, never accepted from forms.
+  modelMetadata?: ModelMetadata;
 };
 export const credentialsSchema = modelOptionsSchema
   .extend({

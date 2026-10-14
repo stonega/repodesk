@@ -16,7 +16,11 @@ import {
   type Settings,
   type Workspace,
 } from "../domain.ts";
-import { ModelProviders, type ModelTransport } from "../models/service.ts";
+import {
+  ModelProviders,
+  type ModelTransport,
+  providerModelOptions,
+} from "../models/service.ts";
 import {
   type BotIdentity,
   registerWebhook,
@@ -41,10 +45,7 @@ function activationModelReady(d: Deployment, w: Workspace) {
       );
       if (!provider?.credential || !provider.models.includes(selection.model))
         return false;
-      selectedModel(selection.model, {
-        ...selection,
-        modelBaseUrl: provider.baseUrl,
-      });
+      selectedModel(selection.model, providerModelOptions(provider, selection));
     } else {
       if (!d.credentials.model) return false;
       selectedModel(d.model, d);

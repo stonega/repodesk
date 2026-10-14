@@ -54,6 +54,43 @@ deterministic fixtures; live GitHub App acceptance remains unverified.
 See [skill design](../design/agent-skills.md) and
 [runnable API examples](../../examples/github-skills.http).
 
+## Typed provider pricing and context discovery (2026-10-14)
+
+Provider New/Edit dialogs now include a type: automatic detection, OpenRouter,
+self-hosted New API, OpenAI, DeepSeek, Mistral, Groq, xAI or another compatible API.
+The standalone [model metadata module](../../src/model-metadata/README.md) fetches
+model IDs and available API context/output/token-price data on provider saves.
+OpenRouter token prices are normalized to USD per million tokens. New API adds
+anonymous public pricing discovery, preserves proxy prefixes and requires the
+key's configured billing group before applying token/group/cache ratios. Price
+failures preserve model discovery; per-call and expression billing remain unknown.
+
+Official APIs without price/capacity data use provider-specific bundled Pi catalogs,
+clearly labeled separately from API data. Current DeepSeek Flash/Pro aliases retain
+both peak/off-peak prices and separate cached/uncached input rates from an official
+reference checked 2026-10-14. Peak is the default conservative estimate; advanced
+chat settings can explicitly select Off-peak estimates. This choice is not automatic
+clock/holiday billing. Manual input/output/cache-read/cache-write overrides remain
+independently optional and support the existing currency conversion contract.
+
+Saved summaries and modal editors show automatic information separately from
+overrides, with sources and units. Tier comparisons expand on demand; missing
+metadata is explained without inventing free prices or context caps. A blank context
+override still defers enforcement to the provider. Chat runs pin fetched metadata,
+the selected price tier and overrides; provider updates never revalue history.
+Reservations cover the highest input/cache rate. Ownership, encrypted keys,
+version checks, bounded responses and redirect denial remain enforced. Model lists
+still do not prove inference protocol support.
+
+Validation passed Biome, strict TypeScript, production build, the Node runtime
+contract and **732 deterministic tests** against disposable PostgreSQL. All **20
+model-provider browser scenarios** passed, covering type/group selection, cached
+price overrides, tier persistence, cancellation, pending locks, failed saves,
+loading/empty states and the existing setup/currency/service choices. Saved
+summaries, editors and pending/error states were inspected at 1280px and 390px in
+both themes. No dependency or database migration was added. No deployment or live
+provider inference, account connection or Telegram send was performed.
+
 ## Completed setup navigation (2026-10-14)
 
 Deployment navigation hides Setup when the authenticated progress API reports an

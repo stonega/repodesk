@@ -159,7 +159,7 @@ are pinned to 0.85.1. [Plugins are Pi extensions](llm-extensions.md), loaded fro
 operator registry for explicitly granted workspaces through the headless adapter.
 The Plugins panel stores per-operator revisions and file hashes in deployment JSONB;
 workers resolve that registry per run and check its revision at every guard. A local
-manifest remains the fallback until the operator saves panel settings. The OpenAI catalog supplies known model metadata; execution
+manifest remains the fallback until the operator saves panel settings. The OpenAI catalog supplies legacy model metadata; execution
 uses Pi's OpenAI-compatible Chat Completions adapter with operator-configured base
 URL, custom model ID, encrypted key, thinking level and estimated token prices.
 Known model capacity comes from the bundled Pi catalog; custom IDs have no assumed
@@ -319,7 +319,7 @@ results return to the PR, independently of Telegram destinations.
 ### Shared model provider catalog
 
 Deployment JSONB stores operator-owned provider records with encrypted keys, cached
-model IDs and versions. Workspace JSONB stores the bot chat selection; Codex and
+model IDs, typed price/context metadata and versions. Workspace JSONB stores the bot chat selection; Codex and
 Review Bot settings hold independent selections. Server APIs enforce operator and
 workspace ownership, optimistic versions and in-use removal checks. Discovery is a
 bounded, redirect-denying server GET; remote model metadata supplies choices, never
@@ -328,3 +328,14 @@ the worker. Codex starts carry safe provider/model metadata and a separately
 transmitted key that is sealed in the supervisor. Proxy routing and model allowlists
 are bound to each attempt instead of deployment-global defaults. Existing
 configuration remains readable, and no database migration is required.
+
+The standalone `src/model-metadata` module uses an injected transport and no
+application state. OpenRouter supplies API prices/limits; New API adds its public
+pricing endpoint and an explicitly configured billing group. Official compatible
+services use their own bundled Pi catalog when APIs omit fields. DeepSeek's current
+price reference retains peak/off-peak tiers and cache-hit/miss rates, dated separately
+from live model discovery. Peak rates default to conservative accounting estimates;
+operators can explicitly select Off-peak estimates in advanced chat model settings.
+Unknown prices, per-call billing and unsupported expressions remain unknown.
+Each field labels its source; manual overrides take precedence and run snapshots
+pin metadata. Input reservations cover the highest input/cache rate.

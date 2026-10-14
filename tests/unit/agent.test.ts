@@ -776,6 +776,27 @@ test("automatic output fits remaining dollars and preserves the model response",
   expect(outputLimit).toBeLessThanOrEqual(300);
   expect(reserved).toBeLessThanOrEqual(0.0003);
 });
+test("cached write prices above input rates are covered before provider dispatch", async () => {
+  let reserved = 0;
+  let bytes = 0;
+  const runner = new PiRunner((_model, context) => {
+    bytes = Buffer.byteLength(JSON.stringify(context));
+    return stream(message([{ type: "text", text: "Cache fixture." }]));
+  });
+  await runner.run(
+    input({
+      model: selectedModel("cache-fixture", {
+        modelPricing: { input: 1, output: 0, cacheRead: 0.1, cacheWrite: 2 },
+      }),
+      reserve: async (amount) => {
+        reserved = amount;
+        return "fixture";
+      },
+    }),
+  );
+  expect(bytes).toBeGreaterThan(0);
+  expect(reserved).toBeCloseTo((bytes * 2) / 1_000_000, 9);
+});
 
 test("automatic output shrinks to remaining context and supports zero-cost models", async () => {
   let sent = 0;

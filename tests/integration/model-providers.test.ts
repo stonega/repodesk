@@ -431,4 +431,114 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       "rotated-fixture-secret",
     );
   });
+  test("API metadata persists, remains operator-scoped and is pinned with effective prices for chat execution", async () => {
+    let inputPrice = "0.0000003";
+    const metadataSetup = new SetupService(
+      store,
+      key,
+      origin,
+      undefined,
+      "webhook",
+      async () =>
+        Response.json({
+          data: [
+            {
+              id: "deepseek/fixture",
+              context_length: 131072,
+              top_provider: { max_completion_tokens: 8192 },
+              pricing: {
+                prompt: inputPrice,
+                completion: "0.0000012",
+                input_cache_read: "0.000000006",
+              },
+            },
+          ],
+        }),
+    );
+    const catalog = await metadataSetup.models.save(admin, {
+      version: (await metadataSetup.models.catalog(admin)).version,
+      name: "Metadata API",
+      type: "openrouter",
+      baseUrl: "https://openrouter.ai/api/v1",
+      apiKey: "fixture-metadata-secret",
+    });
+    const provider = catalog.providers.find((p) => p.name === "Metadata API");
+    if (!provider) throw Error("metadata provider missing");
+    expect(provider.type).toBe("openrouter");
+    expect(provider.modelMetadata?.[0]).toMatchObject({
+      contextWindow: 131072,
+      pricing: { input: 0.3, cacheRead: 0.006, output: 1.2 },
+    });
+    expect(JSON.stringify(catalog)).not.toContain("fixture-metadata-secret");
+    expect((await metadataSetup.models.catalog(another)).providers).toEqual([]);
+    const current = await store.read(sibling.id);
+    const response = await request(
+      `/api/admin/workspaces/${sibling.id}/models`,
+      "PUT",
+      {
+        revision: current.chatModel?.revision ?? 0,
+        selection: {
+          providerId: provider.id,
+          model: "deepseek/fixture",
+          modelLimits: { maxOutputTokens: 5000 },
+        },
+      },
+    );
+    expect(response.status).toBe(200);
+    const run = await store.change(sibling.id, (w) =>
+      createRun(w, "101", "Metadata fixture", "101", 0, "gpt-4.1"),
+    );
+    await expect(
+      metadataSetup.models.selected(await store.read(sibling.id), {
+        providerId: provider.id,
+        model: "deepseek/fixture",
+        modelPriceTier: "off_peak",
+      }),
+    ).rejects.toThrow("model_price_tier_unavailable");
+    if (!run) throw Error("metadata run missing");
+    await new Executor(store, metadataSetup, {
+      async run(input) {
+        await input.guard();
+        expect(input.model.contextWindow).toBe(131072);
+        expect(input.model.maxTokens).toBe(5000);
+        expect(input.model.providerContext).toBe(true);
+        expect(input.model.cost.cacheRead).toBe(0.006);
+        expect(input.model.cost.input).toBe(0.3);
+        return {
+          text: "Metadata answer.",
+          transcript: [],
+          status: "succeeded",
+          turns: 1,
+          tools: 0,
+        };
+      },
+    }).execute(sibling.id, run.id);
+    inputPrice = "0.0000009";
+    await metadataSetup.models.save(admin, {
+      version: (await metadataSetup.models.catalog(admin)).version,
+      id: provider.id,
+      name: provider.name,
+      baseUrl: provider.baseUrl,
+    });
+    const pinned = (await store.read(sibling.id)).runs.find(
+      (r) => r.id === run.id,
+    )?.modelOptions;
+    expect(pinned?.modelMetadata?.pricing?.input).toBe(0.3);
+    expect(
+      (await metadataSetup.models.chat(await store.read(sibling.id)))?.options
+        .modelMetadata?.pricing?.input,
+    ).toBe(0.9);
+    expect(
+      (
+        await request(`/api/admin/workspaces/${sibling.id}/models`, "PUT", {
+          revision: (await store.read(sibling.id)).chatModel?.revision,
+          selection: {
+            providerId: provider.id,
+            model: "deepseek/fixture",
+            modelMetadata: provider.modelMetadata?.[0],
+          },
+        })
+      ).status,
+    ).toBe(400);
+  });
 });

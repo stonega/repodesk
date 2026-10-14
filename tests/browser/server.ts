@@ -58,10 +58,55 @@ const setup = new SetupService(
     },
   }),
   process.env.BROWSER_TELEGRAM_TRANSPORT === "polling" ? "polling" : "webhook",
-  async (_input, init) => {
+  async (input, init) => {
     const key = new Headers(init?.headers).get("authorization");
     if (key === "Bearer fixture-bad-key")
       return Response.json({ error: "fixture auth error" }, { status: 401 });
+    if (input.endsWith("/api/pricing")) {
+      if (input.includes("pricing-disabled.example"))
+        return Response.json({ success: false }, { status: 403 });
+      return Response.json({
+        success: true,
+        group_ratio: { default: 1, vip: 0.5 },
+        data: [
+          {
+            model_name: "team/custom-model",
+            quota_type: 0,
+            model_ratio: 0.2,
+            completion_ratio: 1.5,
+            cache_ratio: 0.1,
+            enable_group: ["default", "vip"],
+          },
+        ],
+      });
+    }
+    if (input.includes("openrouter.ai"))
+      return Response.json({
+        data: [
+          {
+            id: "deepseek/fixture",
+            context_length: 131072,
+            top_provider: { max_completion_tokens: 8192 },
+            pricing: {
+              prompt: "0.0000003",
+              completion: "0.0000012",
+              input_cache_read: "0.000000006",
+            },
+          },
+          { id: "zero/fixture", pricing: { prompt: "0", completion: "0" } },
+        ],
+      });
+    if (input.includes("api.deepseek.com"))
+      return Response.json({
+        data: [
+          {
+            id: "deepseek-flash",
+            context_window: 1048576,
+            max_output_tokens: 393216,
+            input_modalities: ["text", "image"],
+          },
+        ],
+      });
     return Response.json({
       data: [
         { id: "gpt-4.1-mini" },

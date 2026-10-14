@@ -5,12 +5,13 @@ import { modelCapabilities, selectedModel } from "../agent/runtime.ts";
 import { transaction } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import { type Admin, Fault, requireThat, type Workspace } from "../domain.ts";
+import { discoverModels, MetadataError } from "../model-metadata/discover.ts";
+import { withPriceTier } from "../model-metadata/normalize.ts";
 import { decrypt, encrypt } from "../setup/credentials.ts";
 import {
   discoveryInput,
   type ModelProvider,
   type ModelSelection,
-  modelId,
   modelSelectionSchema,
   type ProviderCatalog,
   providerInput,
@@ -26,6 +27,19 @@ export type ModelTransport = (
 export function providerView(provider: ModelProvider) {
   const { credential, operatorId: _operatorId, ...safe } = provider;
   return { ...safe, apiKeyConfigured: !!credential };
+}
+export function providerModelOptions(
+  provider: ModelProvider,
+  selection: ModelSelection,
+) {
+  return {
+    ...selection,
+    modelBaseUrl: provider.baseUrl,
+    modelMetadata: withPriceTier(
+      provider.modelMetadata?.find((m) => m.id === selection.model),
+      selection.modelPriceTier,
+    ),
+  };
 }
 export class ModelProviders {
   constructor(
@@ -68,38 +82,21 @@ export class ModelProviders {
         : undefined);
     requireThat(key, "model_provider_key_required");
     try {
-      const response = await this.transport(`${input.baseUrl}/models`, {
-        method: "GET",
-        redirect: "error",
-        signal: AbortSignal.timeout(15000),
-        headers: { authorization: `Bearer ${key}`, accept: "application/json" },
-      });
-      if (response.status === 401 || response.status === 403)
-        throw new Fault("model_provider_auth_failed", 400);
-      requireThat(response.ok, "model_discovery_failed", 502);
-      const reader = response.body?.getReader();
-      requireThat(reader, "model_discovery_invalid", 502);
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-      try {
-        while (true) {
-          const part = await reader.read();
-          if (part.done) break;
-          size += part.value.byteLength;
-          requireThat(size <= 1024 * 1024, "model_discovery_too_large", 502);
-          chunks.push(part.value);
-        }
-      } finally {
-        await reader.cancel();
-      }
-      const result = z
-        .object({ data: z.array(z.object({ id: modelId })).max(5000) })
-        .parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
-      return {
-        models: [...new Set(result.data.map((m) => m.id))].sort(),
-        fetchedAt: new Date().toISOString(),
-      };
+      return await discoverModels(
+        {
+          baseUrl: input.baseUrl,
+          apiKey: key,
+          type: input.type ?? existing?.type,
+          pricingGroup: input.pricingGroup,
+        },
+        this.transport,
+      );
     } catch (error) {
+      if (error instanceof MetadataError)
+        throw new Fault(
+          error.code,
+          error.code === "model_provider_auth_failed" ? 400 : 502,
+        );
       if (error instanceof Fault) throw error;
       throw new Fault("model_discovery_failed", 502);
     }
@@ -112,6 +109,8 @@ export class ModelProviders {
       id: input.id,
       baseUrl: input.baseUrl,
       apiKey: input.apiKey,
+      type: input.type,
+      pricingGroup: input.pricingGroup,
     });
     await transaction(this.store.pool, async (sql) => {
       const d = await this.store.deployment(sql, true);
@@ -125,6 +124,7 @@ export class ModelProviders {
         operatorId: admin.id,
         version: (existing?.version ?? 0) + 1,
         name: input.name,
+        pricingGroup: input.pricingGroup,
         baseUrl: input.baseUrl,
         credential: input.apiKey
           ? encrypt(
@@ -204,6 +204,14 @@ export class ModelProviders {
       "model_not_available",
       409,
     );
+    requireThat(
+      !parsed.modelPriceTier ||
+        provider.modelMetadata
+          ?.find((m) => m.id === parsed.model)
+          ?.pricingTiers?.some((tier) => tier.id === parsed.modelPriceTier),
+      "model_price_tier_unavailable",
+      409,
+    );
     return { provider, selection: parsed };
   }
   async workspace(admin: Admin, id: string): Promise<WorkspaceModels> {
@@ -243,10 +251,10 @@ export class ModelProviders {
         409,
       );
       const { provider } = await this.selected(current, input.selection);
-      selectedModel(input.selection.model, {
-        ...input.selection,
-        modelBaseUrl: provider.baseUrl,
-      });
+      selectedModel(
+        input.selection.model,
+        providerModelOptions(provider, input.selection),
+      );
       current.chatModel = {
         revision: input.revision + 1,
         selection: input.selection,
@@ -260,7 +268,7 @@ export class ModelProviders {
       workspace,
       workspace.chatModel.selection,
     );
-    const options = { ...selection, modelBaseUrl: provider.baseUrl };
+    const options = providerModelOptions(provider, selection);
     const capabilities = modelCapabilities(selection.model, options);
     return {
       model: selection.model,

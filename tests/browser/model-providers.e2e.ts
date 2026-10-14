@@ -83,6 +83,255 @@ async function addProvider(page: Page) {
   return catalog.providers[0].id as string;
 }
 for (const width of [1280, 390]) {
+  test(`typed provider metadata stays separate from overrides with cache-price save recovery at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { w } = await fixture(page);
+    await page.getByRole("button", { name: "New model provider" }).click();
+    const providerEditor = page.getByRole("dialog", {
+      name: "New model provider",
+    });
+    await chooseOption(
+      providerEditor.getByLabel("Provider type"),
+      "openrouter",
+    );
+    await providerEditor.getByLabel("Provider name").fill("Router metadata");
+    await providerEditor
+      .getByLabel("API base URL")
+      .fill("https://openrouter.ai/api/v1");
+    await providerEditor
+      .getByLabel("API key", { exact: true })
+      .fill("fixture-model-key");
+    await providerEditor.getByRole("button", { name: "Save provider" }).click();
+    await expect(providerEditor).toHaveCount(0);
+    const catalog = await (
+      await page.request.get("/api/admin/operator/model-providers")
+    ).json();
+    const providerId = catalog.providers.find(
+      (p: { name: string }) => p.name === "Router metadata",
+    ).id;
+    const providers = page.getByRole("region", { name: "Model providers" });
+    await expect(providers).toContainText("OpenRouter · API key configured");
+    await expect(providers.locator("input")).toHaveCount(0);
+    const chat = page.getByRole("region", { name: "Bot chat model" });
+    await chat.getByRole("button", { name: "Edit chat model" }).click();
+    const editor = page.getByRole("dialog", { name: "Edit chat model" });
+    await chooseOption(editor.getByLabel("Model provider"), providerId);
+    await chooseOption(
+      editor.getByLabel("Model", { exact: true }),
+      "deepseek/fixture",
+    );
+    const automatic = editor.locator(
+      'dl[aria-label="Automatic model information"]',
+    );
+    await expect(automatic).toContainText("131,072 · API");
+    await expect(automatic).toContainText("0.006 USD / million tokens");
+    await editor.getByText("Advanced model settings", { exact: true }).click();
+    for (const name of [
+      "modelContextWindow",
+      "modelMaxOutput",
+      "modelInputPrice",
+      "modelOutputPrice",
+      "modelCacheReadPrice",
+    ])
+      await expect(editor.locator(`input[name="${name}"]`)).toHaveValue("");
+    await editor.locator('input[name="modelCacheReadPrice"]').fill("0.009");
+    await page.screenshot({
+      path: test.info().outputPath("metadata-editor.png"),
+      fullPage: true,
+    });
+    await page.route(`**/api/admin/workspaces/${w.id}/models`, (route) =>
+      route.request().method() === "PUT"
+        ? route.fulfill({
+            status: 503,
+            contentType: "application/json",
+            body: JSON.stringify({ error: "fixture save failure" }),
+          })
+        : route.continue(),
+    );
+    await editor.getByRole("button", { name: "Save chat model" }).click();
+    await expect(editor.getByRole("alert")).toContainText(
+      "fixture save failure",
+    );
+    await expect(
+      editor.locator('input[name="modelCacheReadPrice"]'),
+    ).toHaveValue("0.009");
+    await page.screenshot({
+      path: test.info().outputPath("metadata-error.png"),
+      fullPage: true,
+    });
+    await page.unroute(`**/api/admin/workspaces/${w.id}/models`);
+    let held: Route | undefined;
+    await page.route(`**/api/admin/workspaces/${w.id}/models`, (route) => {
+      if (route.request().method() === "PUT") held = route;
+      else return route.continue();
+    });
+    await editor.getByRole("button", { name: "Save chat model" }).click();
+    await expect(
+      editor.getByRole("button", { name: "Saving…" }),
+    ).toBeDisabled();
+    await expect(
+      editor.getByRole("button", { name: "Cancel", exact: true }),
+    ).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(editor).toBeVisible();
+    await page.screenshot({
+      path: test.info().outputPath("metadata-pending.png"),
+      fullPage: true,
+    });
+    await expect.poll(() => !!held).toBe(true);
+    await held?.continue();
+    await expect(editor).toHaveCount(0);
+    await page.unroute(`**/api/admin/workspaces/${w.id}/models`);
+    await expect(chat).toContainText("0.009 USD / million tokens");
+    await expect(
+      chat.locator('dl[aria-label="Automatic model information"]'),
+    ).toContainText("0.006 USD / million tokens");
+    await expect(chat.locator("input")).toHaveCount(0);
+    await page.reload();
+    await expect(chat).toContainText("0.009 USD / million tokens");
+    await page.screenshot({
+      path: test.info().outputPath("metadata-summary.png"),
+      fullPage: true,
+    });
+    await page.evaluate(() => {
+      document.documentElement.dataset.theme = "dark";
+      localStorage.setItem("repodesk-theme", "dark");
+    });
+    await page.screenshot({
+      path: test.info().outputPath("metadata-summary-dark.png"),
+      fullPage: true,
+    });
+    await chat.getByRole("button", { name: "Edit chat model" }).click();
+    await editor.getByText("Advanced model settings", { exact: true }).click();
+    await expect(
+      editor.locator('input[name="modelCacheReadPrice"]'),
+    ).toHaveValue("0.009");
+    await chooseOption(
+      editor.getByLabel("Model", { exact: true }),
+      "zero/fixture",
+    );
+    await editor.getByText("Advanced model settings", { exact: true }).click();
+    await expect(
+      editor.locator('input[name="modelCacheReadPrice"]'),
+    ).toHaveValue("");
+    await expect(
+      editor.locator('dl[aria-label="Automatic model information"]'),
+    ).toContainText("0 USD / million tokens");
+    await page.screenshot({
+      path: test.info().outputPath("metadata-editor-dark.png"),
+      fullPage: true,
+    });
+    await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(chat).toContainText("deepseek/fixture");
+    await expect(chat).toContainText("0.009 USD / million tokens");
+  });
+  test(`New API group prices and DeepSeek tiers persist as explicit estimates at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await fixture(page);
+    for (const [name, type, url] of [
+      ["New API fixture", "newapi", "https://newapi.example/v1"],
+      ["DeepSeek fixture", "deepseek", "https://api.deepseek.com/v1"],
+    ]) {
+      await page.getByRole("button", { name: "New model provider" }).click();
+      const editor = page.getByRole("dialog", { name: "New model provider" });
+      await chooseOption(editor.getByLabel("Provider type"), type ?? "");
+      await editor.getByLabel("Provider name").fill(name ?? "");
+      await editor.getByLabel("API base URL").fill(url ?? "");
+      await editor
+        .getByLabel("API key", { exact: true })
+        .fill("fixture-model-key");
+      if (name === "New API fixture")
+        await editor.getByLabel("New API billing group (optional)").fill("vip");
+      await page.screenshot({
+        path: test.info().outputPath(`${name}-provider.png`),
+        fullPage: true,
+      });
+      await editor.getByRole("button", { name: "Save provider" }).click();
+      await expect(editor).toHaveCount(0);
+    }
+    const chat = page.getByRole("region", { name: "Bot chat model" });
+    await chat.getByRole("button", { name: "Edit chat model" }).click();
+    const editor = page.getByRole("dialog", { name: "Edit chat model" });
+    const catalog = await (
+      await page.request.get("/api/admin/operator/model-providers")
+    ).json();
+    await chooseOption(
+      editor.getByLabel("Model provider"),
+      catalog.providers.find(
+        (p: { name: string }) => p.name === "New API fixture",
+      ).id,
+    );
+    await chooseOption(
+      editor.getByLabel("Model", { exact: true }),
+      "team/custom-model",
+    );
+    await expect(
+      editor.locator('dl[aria-label="Automatic model information"]'),
+    ).toContainText("0.2 USD / million tokens");
+    await chooseOption(
+      editor.getByLabel("Model provider"),
+      catalog.providers.find(
+        (p: { name: string }) => p.name === "DeepSeek fixture",
+      ).id,
+    );
+    await chooseOption(
+      editor.getByLabel("Model", { exact: true }),
+      "deepseek-flash",
+    );
+    await editor.getByText("Compare price tiers", { exact: true }).click();
+    await expect(editor.locator('dl[aria-label="Peak prices"]')).toBeVisible();
+    await expect(editor.locator('dl[aria-label="Peak prices"]')).toContainText(
+      "0.3 USD / million tokens",
+    );
+    await expect(
+      editor.locator('dl[aria-label="Off-peak prices"]'),
+    ).toContainText("0.15 USD / million tokens");
+    await expect(editor).toContainText("Dated official reference · 2026-10-14");
+    await editor.getByText("Advanced model settings", { exact: true }).click();
+    await expect(editor.getByLabel("Price estimate tier")).toContainText(
+      "Peak",
+    );
+    await chooseOption(editor.getByLabel("Price estimate tier"), "off_peak");
+    await expect(
+      editor.locator('dl[aria-label="Automatic model information"]'),
+    ).toContainText("0.003 USD / million tokens");
+    await page.screenshot({
+      path: test.info().outputPath("deepseek-tier-editor.png"),
+      fullPage: true,
+    });
+    await editor.getByRole("button", { name: "Save chat model" }).click();
+    await expect(editor).toHaveCount(0);
+    await page.reload();
+    await expect(chat).toContainText("Off-peak");
+    await expect(
+      chat.locator('dl[aria-label="Automatic model information"]'),
+    ).toContainText("0.15 USD / million tokens");
+    await page.screenshot({
+      path: test.info().outputPath("deepseek-tier-summary.png"),
+      fullPage: true,
+    });
+    await page.evaluate(() => {
+      document.documentElement.dataset.theme = "dark";
+    });
+    await page.screenshot({
+      path: test.info().outputPath("deepseek-tier-summary-dark.png"),
+      fullPage: true,
+    });
+    await chat.getByRole("button", { name: "Edit chat model" }).click();
+    await editor.getByText("Advanced model settings", { exact: true }).click();
+    await expect(editor.getByLabel("Price estimate tier")).toContainText(
+      "Off-peak",
+    );
+    await page.screenshot({
+      path: test.info().outputPath("deepseek-tier-editor-dark.png"),
+      fullPage: true,
+    });
+    await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+  });
   test(`model settings keeps its layout without activation during loading and errors at ${width}px`, async ({
     page,
   }) => {
@@ -265,7 +514,7 @@ for (const width of [1280, 390]) {
       "Output price (USD / million tokens)",
     ])
       await expect(editor.getByLabel(name)).toHaveValue("");
-    await expect(editor).toContainText("All four fields are optional");
+    await expect(editor).toContainText("All overrides are optional");
     await expect(editor).toContainText(
       "A blank context window lets the provider enforce its limit",
     );
