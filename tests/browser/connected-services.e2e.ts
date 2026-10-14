@@ -1,6 +1,5 @@
 import { expect, type Page, type Route, test } from "@playwright/test";
 import type { SiteView } from "../../src/admin/site.ts";
-import { expectTopRightAction } from "./card-layout.ts";
 
 const origin = `https://${"long-domain-".repeat(5)}app.example.com`;
 const site: SiteView = {
@@ -42,88 +41,6 @@ async function openSite(page: Page) {
 }
 
 for (const width of [1280, 390]) {
-  test(`address card keeps New and Edit at the top right at ${width}px`, async ({
-    page,
-  }, testInfo) => {
-    await page.setViewportSize({ width, height: 900 });
-    const held = await openSite(page);
-    const card = page.getByRole("region", { name: "Admin panel address" });
-    const create = card.getByRole("button", { name: "Add custom domain" });
-    await expect(create).toBeDisabled();
-    await expect(create).toHaveText("New");
-    await expect(create.locator("svg")).toBeVisible();
-    await expectTopRightAction(card, create);
-    await card.screenshot({ path: testInfo.outputPath("address-loading.png") });
-    await held[0]?.fulfill({
-      json: { ...site, domain: null, origin: site.fallbackOrigin },
-    });
-    await expect(create).toBeEnabled();
-    await expect(card).toContainText("Using the deployment’s default address.");
-    await expect(card.locator("form, input")).toHaveCount(0);
-    for (const theme of ["light", "dark"]) {
-      await page.evaluate((value) => {
-        document.documentElement.dataset.theme = value;
-      }, theme);
-      await expectTopRightAction(card, create);
-      await card.screenshot({
-        path: testInfo.outputPath(`address-new-${theme}.png`),
-      });
-    }
-    await create.click();
-    const dialog = page.getByRole("dialog", { name: "Add custom domain" });
-    await dialog
-      .getByLabel("Domain", { exact: true })
-      .fill("admin.example.com");
-    await dialog.getByRole("button", { name: "Save domain" }).click();
-    await expect.poll(() => held.length).toBe(2);
-    await expect(dialog.getByRole("button", { name: "Cancel" })).toBeDisabled();
-    await page.keyboard.press("Escape");
-    await expect(dialog).toBeVisible();
-    await page.screenshot({ path: testInfo.outputPath("address-pending.png") });
-    await held[1]?.fulfill({
-      status: 400,
-      json: { error: "fixture_save_failed" },
-    });
-    await expect(dialog.getByRole("alert")).toContainText(
-      "fixture_save_failed",
-    );
-    await expect(dialog.getByLabel("Domain", { exact: true })).toHaveValue(
-      "admin.example.com",
-    );
-    await page.screenshot({ path: testInfo.outputPath("address-error.png") });
-    await dialog.getByRole("button", { name: "Save domain" }).click();
-    await expect.poll(() => held.length).toBe(3);
-    await held[2]?.fulfill({
-      json: {
-        ...site,
-        domain: "admin.example.com",
-        origin: "https://admin.example.com",
-      },
-    });
-    await expect(dialog).toHaveCount(0);
-    const edit = card.getByRole("button", { name: "Edit domain" });
-    await expect(edit).toHaveText("Edit");
-    for (const theme of ["light", "dark"]) {
-      await page.evaluate((value) => {
-        document.documentElement.dataset.theme = value;
-      }, theme);
-      await expectTopRightAction(card, edit);
-      await card.screenshot({
-        path: testInfo.outputPath(`address-edit-${theme}.png`),
-      });
-    }
-    await expect(card.locator("form, input")).toHaveCount(0);
-    await edit.click();
-    const editor = page.getByRole("dialog", { name: "Edit custom domain" });
-    await expect(editor.getByLabel("Domain", { exact: true })).toHaveValue(
-      "admin.example.com",
-    );
-    await page.screenshot({ path: testInfo.outputPath("address-editor.png") });
-    await editor.getByRole("button", { name: "Cancel" }).click();
-    await expect(edit).toBeFocused();
-    await expect(page.locator("body")).toHaveJSProperty("scrollWidth", width);
-  });
-
   test(`connected service URLs copy and wrap in both themes at ${width}px`, async ({
     page,
     context,

@@ -131,17 +131,12 @@ export function SiteDomain({ request }: { request: Request }) {
           </button>
         </ErrorToast>
       )}
-      <section
-        className="card"
-        aria-label="Admin panel address"
-        aria-busy={!site && !error}
-      >
-        <div className="card-heading">
+      <section className="card" aria-busy={!site && !error}>
+        <div className="row">
           <h2>Admin panel address</h2>
-          <IconButton
-            icon={site?.domain ? "edit" : "add"}
-            label={site?.domain ? "Edit domain" : "Add custom domain"}
-            showLabel
+          <button
+            type="button"
+            aria-label={site?.domain ? "Edit domain" : "Add custom domain"}
             disabled={!site}
             onClick={() => {
               if (!site) return;
@@ -149,7 +144,9 @@ export function SiteDomain({ request }: { request: Request }) {
               setFormError("");
               setEditing(true);
             }}
-          />
+          >
+            {site?.domain ? "Edit" : "New"}
+          </button>
         </div>
         <p>
           {site ? (
