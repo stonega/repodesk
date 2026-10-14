@@ -1,5 +1,21 @@
 # Implementation evidence
 
+## Completed setup navigation (2026-10-14)
+
+Deployment navigation hides Setup when the authenticated progress API reports an
+active deployment. Inactive deployments retain the resumable link. The entry is
+absent until the activation state is known; navigation rechecks it and ignores
+responses from earlier routes or sessions. Deployment pause does not reopen setup.
+New workspace and direct setup routes remain available. Ordinary members do not
+request operator-only setup progress.
+
+Validation passed Biome, strict TypeScript, the production build and **721
+deterministic tests** against disposable PostgreSQL. **29 browser scenarios**
+passed, including 11 focused setup-navigation checks and existing sidebar,
+sign-in and session-expiry checks. Desktop (1280px) and mobile (390px), both themes,
+complete/incomplete, pending and failed status views were inspected. No dependency,
+migration or deployment was added.
+
 ## Model-price currency selection (2026-10-13)
 
 Bot chat model price overrides in setup and Model settings now support USD, CNY,

@@ -62,6 +62,11 @@ accessible to the authorizing user through that installation. Successful model
 setup activates the bot automatically once the Telegram receiver and an enabled
 published skill are ready. If Telegram connects later, activation finishes
 automatically; there is no activation step in **Model settings**.
+The Deployment sidebar hides **Setup** once the server reports the deployment
+as active, including while paused. Inactive deployments retain the entry to resume
+setup; it stays absent while the activation state is unknown. Navigation rechecks
+that state, including when leaving the wizard. **New** in the workspace dropdown
+and direct `/setup` links remain available.
 Bot and model credentials are write-only and encrypted
 with AES-256-GCM; the database does not contain the runtime encryption key.
 

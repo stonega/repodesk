@@ -3854,6 +3854,7 @@ function WorkspacePicker({
 function Shell() {
   const [current, setCurrent] = useState<Session>();
   const [initialized, setInitialized] = useState<boolean>();
+  const [setupActive, setSetupActive] = useState<boolean>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [workspace, setWorkspace] = useState("");
@@ -3915,6 +3916,22 @@ function Shell() {
     void api<{ id: string; name: string }[]>("/api/admin/workspaces")
       .then(setWorkspaces)
       .catch(() => {});
+  }, [current, location.key]);
+  useEffect(() => {
+    void location.key;
+    if (!current?.admin.operator) {
+      setSetupActive(undefined);
+      return;
+    }
+    let live = true;
+    void api<Pick<Progress, "active">>("/api/setup/progress")
+      .then((progress) => {
+        if (live) setSetupActive(progress.active);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
   }, [current, location.key]);
   const chosen = workspace || workspaces[0]?.id || "";
   const selectWorkspace = (id: string) => {
@@ -4032,7 +4049,9 @@ function Shell() {
                   <p className="nav-label">DEPLOYMENT</p>
                   <NavLink to="/admin/model">Model settings</NavLink>
                   <NavLink to="/admin/site">Site domain</NavLink>
-                  <NavLink to="/setup">Setup</NavLink>
+                  {setupActive === false && (
+                    <NavLink to="/setup">Setup</NavLink>
+                  )}
                   <NavLink to="/admin/operations">Operations</NavLink>
                   <NavLink to="/admin/logs">Runtime logs</NavLink>
                 </>

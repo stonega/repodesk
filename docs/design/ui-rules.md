@@ -631,6 +631,19 @@ when implementing or reviewing a change.
   remain activation requirements. Owner-only Telegram actions require separately
   linking a personal Telegram account.
 
+### Completed setup stays out of navigation
+
+- **Preference:** Hide the Setup navigation entry once deployment setup is
+  complete. Show it for an inactive deployment so the operator can resume setup.
+- **Scope:** Deployment navigation in the desktop sidebar and mobile navigation
+  sheet. Use the server's activation state; administrator creation alone does
+  not complete setup. Keep the entry absent until that state is known.
+- **Source:** 2026-10-14 — user showed the Deployment sidebar and requested
+  hiding Setup when setup is completed.
+- **Exceptions:** New workspace still opens the guided setup wizard from the
+  workspace dropdown. Direct setup URLs remain available. Deployment pause
+  does not make setup incomplete.
+
 ### Setup timezone is selected from IANA zones
 
 - **Preference:** Offer a timezone selector with the browser's timezone chosen

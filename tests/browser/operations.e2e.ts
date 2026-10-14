@@ -1,5 +1,6 @@
 import { expect, type Page, type Route, test } from "@playwright/test";
 import { settingsSchema } from "../../src/domain.ts";
+import { expectTopRightAction } from "./card-layout.ts";
 
 const workspaceId = "d2ce2eab-3b09-4e8e-858e-75c20d832517";
 const accountId = "38a85e17-16a5-4578-a308-5c2a1fc624e7";
@@ -93,6 +94,34 @@ async function open(page: Page) {
   await expect(
     page.getByRole("heading", { name: "Operations", exact: true }),
   ).toBeVisible();
+}
+
+async function expectCardActions(page: Page) {
+  for (const [name, role, label] of [
+    ["Service health", "link", "View runtime logs"],
+    ["Deployment activity", "button", /^(Pause|Resume) deployment$/],
+    ["Run diagnostics", "button", "Inspect run"],
+    ["Panel accounts", "button", "Create panel account"],
+    ["Recover workspace access", "button", "Recover access"],
+  ] as const) {
+    const card = page.getByRole("region", { name, exact: true });
+    await expectTopRightAction(
+      card,
+      card.getByRole(role, { name: label, exact: true }),
+    );
+  }
+  const accounts = page.getByRole("region", { name: "Panel accounts" });
+  await expect(
+    accounts
+      .getByRole("button", { name: "Create panel account" })
+      .locator("svg"),
+  ).toBeVisible();
+  await expectTopRightAction(
+    accounts
+      .getByRole("heading", { name: "Identity verification" })
+      .locator(".."),
+    accounts.getByRole("button", { name: "Issue link", exact: true }),
+  );
 }
 
 for (const width of [1280, 390]) {
@@ -250,6 +279,7 @@ for (const width of [1280, 390]) {
       await expect(
         page.getByRole("button", { name: "Recover access", exact: true }),
       ).toBeEnabled();
+      await expectCardActions(page);
       await page.screenshot({
         path: test.info().outputPath("summary.png"),
         fullPage: true,
@@ -460,6 +490,7 @@ for (const width of [1280, 390]) {
     await expect(
       page.getByRole("region", { name: "Deployment activity" }),
     ).toContainText("Paused");
+    await expectCardActions(page);
     await page
       .getByRole("button", { name: "Resume deployment", exact: true })
       .click();
@@ -489,10 +520,20 @@ for (const width of [1280, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 900 });
     await fixture(page, true);
-    const held = new Map<string, Route>();
+    const held = new Map<string, Route[]>();
+    let failLoads = false;
     for (const path of [healthPath, progressPath])
-      await page.route(`**${path}`, (route) => {
-        held.set(path, route);
+      await page.route(`**${path}`, async (route) => {
+        if (failLoads) {
+          await route.fulfill({
+            status: 503,
+            json: { error: "fixture_loading_failed" },
+          });
+          return;
+        }
+        const requests = held.get(path) ?? [];
+        requests.push(route);
+        held.set(path, requests);
       });
     await open(page);
     const service = page.getByRole("region", { name: "Service health" });
@@ -505,12 +546,14 @@ for (const width of [1280, 390]) {
       await expect(
         page.getByRole("button", { name, exact: true }),
       ).toBeDisabled();
+    await expectCardActions(page);
     await page.screenshot({
       path: test.info().outputPath("loading.png"),
       fullPage: true,
     });
     await expect.poll(() => held.size).toBe(2);
-    for (const route of held.values())
+    failLoads = true;
+    for (const route of [...held.values()].flat())
       await route.fulfill({
         status: 503,
         json: { error: "fixture_loading_failed" },
@@ -520,6 +563,7 @@ for (const width of [1280, 390]) {
     );
     await expect(service).toContainText("Unavailable");
     await expect(activity).toContainText("Unavailable");
+    await expectCardActions(page);
     await page.screenshot({
       path: test.info().outputPath("load-error.png"),
       fullPage: true,
@@ -547,6 +591,7 @@ for (const width of [1280, 390]) {
       page.getByRole("button", { name: "Pause deployment", exact: true }),
     ).toBeEnabled();
     await expect(page.locator("body")).toHaveJSProperty("scrollWidth", width);
+    await expectCardActions(page);
     await page.screenshot({
       path: test.info().outputPath("empty.png"),
       fullPage: true,
