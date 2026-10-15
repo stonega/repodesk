@@ -108,7 +108,9 @@ once Telegram updates are being received.
 ### Single-account invite links (implemented, 2026-10-14)
 
 The shareable card now displays a signed invite, refreshed automatically every
-10 seconds with a countdown. In private Telegram, sending its `/start` command
+10 seconds with an animated circular countdown after its title. Timing and
+refresh status remain available to screen readers and on hover, with static
+updates for reduced motion. In private Telegram, sending its `/start` command
 immediately enrolls/reactivates regular membership for the actual sender, without
 an approval step. Each token binds atomically to the first account that uses it;
 another account cannot claim it. Active members also consume a token, preserving

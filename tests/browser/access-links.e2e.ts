@@ -97,8 +97,40 @@ for (const width of [1280, 390]) {
       exact: true,
     });
     const timer = requests.getByRole("timer", { name: "Invite link refresh" });
+    const heading = requests.getByRole("heading", {
+      name: "Share this link with someone who needs access",
+    });
+    const progress = timer.locator(".access-link-timer-progress");
     const link = requests.locator(".access-link-url");
     await expect(timer).toHaveText("New link in 10s");
+    await expect(timer.locator("svg")).toBeVisible();
+    await expect(progress).toHaveAttribute("stroke-dashoffset", "0");
+    await expect(progress).toHaveCSS("transition-duration", "0.25s");
+    await expect(timer.locator(".sr-only")).toHaveCSS(
+      "clip-path",
+      "inset(50%)",
+    );
+    const titleBox = await heading.evaluate((element) => {
+      const finalWord = element.querySelector(
+        ".access-link-heading-end",
+      )?.firstChild;
+      if (!finalWord) throw Error("Missing final title word");
+      const range = document.createRange();
+      range.selectNodeContents(finalWord);
+      const last = range.getBoundingClientRect();
+      return { x: last.x, y: last.y, width: last.width, height: last.height };
+    });
+    const timerBox = await timer.boundingBox();
+    expect(timerBox?.x).toBeGreaterThanOrEqual(
+      (titleBox?.x ?? 0) + (titleBox?.width ?? 0),
+    );
+    expect(
+      Math.abs(
+        (timerBox?.y ?? 0) +
+          (timerBox?.height ?? 0) / 2 -
+          ((titleBox?.y ?? 0) + (titleBox?.height ?? 0) / 2),
+      ),
+    ).toBeLessThan(6);
     await expect(
       requests.getByText("No pending access requests."),
     ).toBeVisible();
@@ -111,8 +143,16 @@ for (const width of [1280, 390]) {
     );
     const first = await link.textContent();
     const initialCalls = f.calls();
-    await page.clock.runFor(9000);
+    await page.clock.runFor(3000);
+    await expect(timer).toHaveText("New link in 7s");
+    await expect(progress).toHaveAttribute("stroke-dashoffset", "30");
+    await page.screenshot({
+      path: `test-results/access-link-circle-${width}.png`,
+      fullPage: true,
+    });
+    await page.clock.runFor(6000);
     await expect(timer).toHaveText("New link in 1s");
+    await expect(progress).toHaveAttribute("stroke-dashoffset", "90");
     expect(f.calls()).toBe(initialCalls);
     const pending = Promise.withResolvers<void>();
     f.hold(pending.promise);
@@ -120,6 +160,10 @@ for (const width of [1280, 390]) {
     try {
       await page.clock.runFor(1000);
       await expect(timer).toHaveText("Updating link…");
+      await expect(timer.locator("svg")).toHaveCSS(
+        "animation-name",
+        "icon-spin",
+      );
       await expect(link).toHaveText(first ?? "");
       await expect(
         requests.getByRole("button", { name: "Copy access link" }),
@@ -133,6 +177,7 @@ for (const width of [1280, 390]) {
     }
     await expect(link).not.toHaveText(first ?? "");
     await expect(timer).toHaveText("New link in 10s");
+    await expect(progress).toHaveAttribute("stroke-dashoffset", "0");
     await expect(
       page.getByRole("row").filter({ hasText: "Joined via invite" }),
     ).toBeVisible();
@@ -193,9 +238,11 @@ for (const width of [1280, 390]) {
     await page.clock.runFor(10_000);
     await expect(page.locator(".toast").getByRole("alert")).toBeVisible();
     await expect(timer).toHaveText("Link refresh paused.");
+    await expect(timer.locator("svg")).toHaveCSS("animation-name", "none");
     await expect(link).toHaveText(first ?? "");
     await page.clock.runFor(30_000);
     expect(f.calls()).toBe(initialCalls + 1);
+    await expect(timer).toHaveText("Link refresh paused.");
     await page.screenshot({
       path: `test-results/access-link-error-${width}.png`,
       fullPage: true,
@@ -251,5 +298,39 @@ for (const width of [1280, 390]) {
     f.fail(false);
     await page.getByRole("button", { name: "Reload access requests" }).click();
     await expect(requests.getByRole("timer")).toHaveText("New link in 10s");
+  });
+
+  test(`invite circle respects reduced motion and still rotates links at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+    const f = await fixture(page);
+    await f.open();
+    const timer = page.getByRole("timer", { name: "Invite link refresh" });
+    const progress = timer.locator(".access-link-timer-progress");
+    const link = page.locator(".access-link-url");
+    await expect(timer).toHaveText("New link in 10s");
+    await expect(progress).toHaveCSS("transition-duration", "0s");
+    const first = await link.textContent();
+    await page.clock.runFor(3000);
+    await expect(timer).toHaveText("New link in 7s");
+    await expect(progress).toHaveAttribute("stroke-dashoffset", "30");
+    await page.screenshot({
+      path: `test-results/access-link-circle-reduced-motion-${width}.png`,
+      fullPage: true,
+    });
+    const pending = Promise.withResolvers<void>();
+    f.hold(pending.promise);
+    try {
+      await page.clock.runFor(7000);
+      await expect(timer).toHaveText("Updating link…");
+      await expect(timer.locator("svg")).toHaveCSS("animation-name", "none");
+      await expect(link).toHaveText(first ?? "");
+    } finally {
+      pending.resolve();
+    }
+    await expect(timer).toHaveText("New link in 10s");
+    await expect(link).not.toHaveText(first ?? "");
   });
 }

@@ -1043,7 +1043,10 @@ when implementing or reviewing a change.
   regular card with a copy icon button, rather than as a read-only input. After a
   successful copy, show a check icon for one second, then restore the copy icon.
   Do not show a separate success message. Refresh the displayed invite link
-  automatically every 10 seconds and show a countdown. Explain that opening it
+  automatically every 10 seconds and show a small animated circular countdown
+  immediately after the card title, without a separate visible countdown text row.
+  Keep the timing and refresh/paused status accessible to screen readers and on hover;
+  respect reduced-motion preferences. Explain that opening it
   grants regular membership immediately and that each token works for one Telegram
   account. Keep the current link visible during refresh and offer Retry on failure.
 - **Scope:** The shareable invite link in Members & access → Access requests.
@@ -1053,6 +1056,8 @@ when implementing or reviewing a change.
   2026-10-10 — user requested a monospace font for the access-request link.
   2026-10-14 — user requested automatic membership without approval, one account
   per token, and a link that updates every 10 seconds with a countdown.
+  2026-10-15 — user requested replacing “New link in 7s” with an animated circle
+  after the invite card title. This placement applies to this card.
 - **Exceptions:** Ordinary access requests without an invite still need approval.
   The countdown controls the displayed link; copied links remain valid for 24 hours.
 

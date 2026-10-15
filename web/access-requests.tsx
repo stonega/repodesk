@@ -33,7 +33,7 @@ export function AccessRequests({
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshAt, setRefreshAt] = useState<number>();
-  const [seconds, setSeconds] = useState(10);
+  const [remainingMs, setRemainingMs] = useState(10_000);
   const latestLoad = useRef(0);
   const memberVersion = useRef<number | undefined>(undefined);
   const changed = useRef(onChange);
@@ -48,7 +48,7 @@ export function AccessRequests({
       setData(next);
       setCopyStatus(null);
       setRefreshAt(Date.now() + 10_000);
-      setSeconds(10);
+      setRemainingMs(10_000);
       if (
         memberVersion.current !== undefined &&
         memberVersion.current !== next.version
@@ -77,8 +77,8 @@ export function AccessRequests({
   useEffect(() => {
     if (!data?.requestUrl || !refreshAt || error || loading || busy) return;
     const tick = () => {
-      const remaining = Math.max(0, Math.ceil((refreshAt - Date.now()) / 1000));
-      setSeconds(remaining);
+      const remaining = Math.max(0, refreshAt - Date.now());
+      setRemainingMs(remaining);
       if (remaining === 0) {
         clearInterval(timer);
         void load();
@@ -132,6 +132,11 @@ export function AccessRequests({
       setCopyStatus("failed");
     }
   };
+  const refreshLabel = error
+    ? "Link refresh paused."
+    : loading
+      ? "Updating link…"
+      : `New link in ${Math.ceil(remainingMs / 1000)}s`;
   return (
     <section className="card" aria-label="Access requests">
       <div className="row between">
@@ -144,23 +149,60 @@ export function AccessRequests({
       {data?.requestUrl && (
         <div className="card access-link-card">
           <div className="access-link-details">
-            <h3>Share this link with someone who needs access</h3>
+            <div className="access-link-heading">
+              <h3>
+                Share this link with someone who needs{" "}
+                <span className="access-link-heading-end">
+                  access
+                  <span
+                    className={`access-link-timer${error || busy ? " is-paused" : ""}`}
+                    role="timer"
+                    aria-label="Invite link refresh"
+                    aria-live="off"
+                    title={refreshLabel}
+                  >
+                    <svg
+                      className={
+                        loading && !error ? "icon-spinning" : undefined
+                      }
+                      width="18"
+                      height="18"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      strokeWidth="2"
+                      aria-hidden="true"
+                      focusable="false"
+                    >
+                      <circle
+                        className="access-link-timer-track"
+                        cx="10"
+                        cy="10"
+                        r="8"
+                      />
+                      <circle
+                        className="access-link-timer-progress"
+                        cx="10"
+                        cy="10"
+                        r="8"
+                        pathLength="100"
+                        strokeDasharray={
+                          loading && !error ? "25 75" : "100 100"
+                        }
+                        strokeDashoffset={
+                          loading && !error ? 0 : 100 - remainingMs / 100
+                        }
+                        transform="rotate(-90 10 10)"
+                      />
+                    </svg>
+                    <span className="sr-only">{refreshLabel}</span>
+                  </span>
+                </span>
+              </h3>
+            </div>
             <p className="access-link-url">{data.requestUrl}</p>
             <p className="muted">
               One Telegram account per link. No approval required. Copied links
               remain valid for 24 hours.
-            </p>
-            <p
-              className="muted"
-              role="timer"
-              aria-label="Invite link refresh"
-              aria-live="off"
-            >
-              {error
-                ? "Link refresh paused."
-                : loading
-                  ? "Updating link…"
-                  : `New link in ${seconds}s`}
             </p>
           </div>
           <IconButton

@@ -761,8 +761,39 @@ p {
 .access-link-details {
   min-width: 0;
 }
-.access-link-details h3 {
-  margin: 0 0 4px;
+.access-link-heading {
+  margin-bottom: 4px;
+}
+.access-link-heading h3 {
+  display: inline;
+  margin: 0;
+}
+.access-link-heading-end {
+  white-space: nowrap;
+}
+.access-link-timer {
+  display: inline-flex;
+  margin-inline-start: 8px;
+  vertical-align: middle;
+  color: var(--ui-accent);
+}
+.access-link-timer.is-paused {
+  color: var(--ui-muted);
+}
+.access-link-timer-track {
+  stroke: var(--ui-border);
+}
+.access-link-timer-progress {
+  stroke: currentColor;
+  transition: stroke-dashoffset 250ms linear;
+}
+.access-link-timer .icon-spinning .access-link-timer-progress {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .access-link-timer-progress {
+    transition: none;
+  }
 }
 .access-link-url {
   margin: 0;

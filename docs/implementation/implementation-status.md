@@ -1,5 +1,19 @@
 # Implementation evidence
 
+## Invite links use a circular countdown (2026-10-15)
+
+The invite card replaces its visible countdown text row with a small animated
+circle immediately after the title, keeping the final word and circle together
+when the title wraps. The ring counts down the existing ten-second refresh,
+spins while refreshing and pauses on errors. Screen-reader text and a hover
+tooltip retain timing/status; reduced motion disables transitions and rotation.
+
+Verification: Biome, strict TypeScript, production build and all 751 deterministic
+tests passed with disposable PostgreSQL. Eight focused browser checks passed at
+1280px and 390px, covering placement, countdown/reset, copying, member updates,
+loading, pending, errors/retry, navigation cleanup and reduced motion. Light/dark
+saved cards and desktop/mobile loading, pending and error previews were inspected.
+
 ## Compact skill instruction previews (2026-10-15)
 
 Preset and custom skills share a compact saved preview: labeled settings in a
