@@ -21,6 +21,8 @@ never offered. Changelogs scroll within the modal; Update and Cancel stay ordere
 Panel updates run on the installation host. The GitHub deployment workflow is
 removed. The remaining Verify workflow supplies evidence that the selected commit
 passed quality, deterministic database tests, browser tests and container checks.
+The container job bounds optional build-cache exports to two minutes and tolerates
+cache-export errors so image smoke, migration and restore checks can still run.
 The host builds images from that exact commit and reuses the existing protected
 [backup/migration/readiness cutover](vps-deployment.md). Publishing a release makes
 it discoverable; installation starts only after a deployment administrator clicks

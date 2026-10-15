@@ -86,7 +86,8 @@ jobs:
           load: true
           tags: deepx-agent:ci
           cache-from: type=gha,scope=verify-app
-          cache-to: type=gha,scope=verify-app,mode=max
+          # Cache uploads are optional and must leave time for smoke/restore checks.
+          cache-to: type=gha,scope=verify-app,mode=max,timeout=2m,ignore-error=true
       - run: docker run --rm --network none --entrypoint node deepx-agent:ci dist/runtime-contract.js
       - name: Compose migration, smoke and restore
         run: |

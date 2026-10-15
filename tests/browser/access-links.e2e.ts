@@ -10,6 +10,7 @@ async function fixture(page: Page) {
   let failure = false;
   let gate: Promise<void> | undefined;
   let joined = false;
+  const members = Promise.withResolvers<void>();
   await page.clock.install({ time: startTime });
   await page.clock.pauseAt(new Date(startTime.getTime() + 1000));
   await page.route("**/api/**", async (route) => {
@@ -37,6 +38,7 @@ async function fixture(page: Page) {
       });
       return;
     }
+    if (path.endsWith("/members")) await members.promise;
     await route.fulfill({
       json:
         path === "/api/setup/status"
@@ -72,6 +74,22 @@ async function fixture(page: Page) {
   });
   return {
     open: () => page.goto(`/admin/members?workspace=${w.id}`),
+    ready: async () => {
+      const timer = page.getByRole("timer", { name: "Invite link refresh" });
+      await expect(timer).toHaveText("New link in 10s");
+      // Member data triggers another initial invite load. Stage it explicitly
+      // and wait for its rendered URL before capturing a baseline or ticking.
+      const issuedAt = new Date(startTime.getTime() + calls * 10_000);
+      members.resolve();
+      await expect(
+        page.getByText("No members match your search."),
+      ).toBeVisible();
+      await expect(page.locator(".access-link-url")).toHaveText(
+        links.view(w, { id: "999", username: "fixture_bot" }, issuedAt)
+          .requestUrl ?? "",
+      );
+      await expect(timer).toHaveText("New link in 10s");
+    },
     calls: () => calls,
     fail: (value: boolean) => {
       failure = value;
@@ -92,6 +110,7 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     const f = await fixture(page);
     await f.open();
+    await f.ready();
     const requests = page.getByRole("region", {
       name: "Access requests",
       exact: true,
@@ -225,6 +244,7 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     const f = await fixture(page);
     await f.open();
+    await f.ready();
     const requests = page.getByRole("region", {
       name: "Access requests",
       exact: true,
@@ -297,6 +317,7 @@ for (const width of [1280, 390]) {
     await expect(page.locator(".toast").getByRole("alert")).toBeVisible();
     f.fail(false);
     await page.getByRole("button", { name: "Reload access requests" }).click();
+    await f.ready();
     await expect(requests.getByRole("timer")).toHaveText("New link in 10s");
   });
 
@@ -307,6 +328,7 @@ for (const width of [1280, 390]) {
     await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
     const f = await fixture(page);
     await f.open();
+    await f.ready();
     const timer = page.getByRole("timer", { name: "Invite link refresh" });
     const progress = timer.locator(".access-link-timer-progress");
     const link = page.locator(".access-link-url");
