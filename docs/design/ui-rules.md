@@ -951,6 +951,23 @@ when implementing or reviewing a change.
   guidance are the implementation interpretation, scoped to skill cards.
 - **Exceptions:** None recorded.
 
+### Skill previews keep settings and tools compact
+
+- **Preference:** Keep expanded instruction previews dense and readable. Show
+  setting labels above their values in a responsive grid and required tools in
+  a wrapping list of small tags. Use a short empty-workflow message instead of
+  a full detail row. Avoid a wide label column, nested separators and a tall
+  single-column tool list. Preserve readable instructions and comfortable action
+  targets.
+- **Scope:** Preset and custom skill catalog previews in Agent skills, on desktop
+  and mobile in both themes. Keep management actions at the top right and saved
+  summaries separate from modal editors.
+- **Source:** 2026-10-15 — user showed the expanded Team recap preview and asked
+  to improve its UI because it wastes too much space. The grid and wrapping tags
+  apply that feedback to comparable skill previews.
+- **Exceptions:** Long instructions and populated dependent workflows retain
+  their complete readable content; compactness must not truncate saved details.
+
 ### Preset skills use enable/disable only
 
 - **Preference:** Show preset skills as read-only saved instructions with a Preset

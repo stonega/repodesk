@@ -1,9 +1,13 @@
 import { expect, type Page, test } from "@playwright/test";
 import type { Skill } from "../../src/domain.ts";
 import { starterSkills } from "../../src/skills/catalog.ts";
+import { expectTopRightAction } from "./card-layout.ts";
 
 const workspaceId = "preset-skills-fixture";
-async function fixture(page: Page, items: Skill[]) {
+async function fixture(
+  page: Page,
+  items: (Skill & { dependents?: unknown[] })[],
+) {
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     await route.fulfill({
@@ -19,7 +23,10 @@ async function fixture(page: Page, items: Skill[]) {
               ? [{ id: workspaceId, name: "Preset skills" }]
               : path.endsWith("/skills")
                 ? {
-                    items: items.map((skill) => ({ ...skill, dependents: [] })),
+                    items: items.map((skill) => ({
+                      ...skill,
+                      dependents: skill.dependents ?? [],
+                    })),
                     total: items.length,
                   }
                 : path === "/api/setup/progress"
@@ -63,6 +70,31 @@ for (const width of [1280, 375]) {
           })
           .click();
         await expect(card.locator(".prose")).toBeVisible();
+        await expect(card.getByLabel("Settings")).toContainText(
+          "Maximum words",
+        );
+        await expect(card.getByLabel("Settings")).toContainText("400");
+        await expect(card.getByLabel("Settings")).toContainText(
+          "Decisions, blockers, next steps",
+        );
+        const tools = card.getByRole("list", { name: "Required tools" });
+        await expect(tools.getByRole("listitem")).toHaveText(skill.draft.tools);
+        const toolsBounds = await tools.boundingBox();
+        expect(toolsBounds?.height).toBeLessThan(width > 640 ? 90 : 160);
+        expect((await card.boundingBox())?.height).toBeLessThan(
+          width > 640 ? 450 : 700,
+        );
+        await expect(
+          card.getByText("No dependent workflows", { exact: true }),
+        ).toBeVisible();
+        await expectTopRightAction(card, card.getByRole("button"));
+        const toggle = card.locator(".skill-card-preview > summary");
+        expect((await toggle.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+        await toggle.focus();
+        await page.keyboard.press("Enter");
+        await expect(card.locator(".prose")).toBeHidden();
+        await page.keyboard.press("Enter");
+        await expect(card.locator(".prose")).toBeVisible();
       }
       await expect(
         page.getByRole("heading", { name: "Test skill policy" }),
@@ -74,8 +106,12 @@ for (const width of [1280, 375]) {
         page.getByText("Restore a published version", { exact: true }),
       ).toHaveCount(0);
       await expect(page.getByRole("dialog")).toHaveCount(0);
+      await page
+        .getByRole("heading", { name: "Agent skills", exact: true })
+        .click();
       await page.screenshot({
         path: test.info().outputPath("preset-skills.png"),
+        fullPage: true,
       });
 
       let release = () => {};
@@ -141,6 +177,82 @@ for (const width of [1280, 375]) {
       card.locator(".skill-card-meta, .skill-card-footer"),
     ).toHaveCount(0);
     await page.screenshot({ path: test.info().outputPath("preset-error.png") });
+  });
+}
+
+for (const width of [1280, 375]) {
+  test(`custom previews retain long content, dependencies and empty tools at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const [preset] = starterSkills();
+    if (!preset) throw Error("Missing preset");
+    const longText = "team_decision_".repeat(30);
+    const custom: Skill & { dependents: unknown[] } = {
+      ...preset,
+      id: "custom-preview",
+      preset: false,
+      draft: {
+        ...preset.draft,
+        name: "Custom recap",
+        body: `${preset.draft.body}\n${longText}`,
+        settings: { maxWords: 400, sections: longText },
+        tools: ["read_chat_context", "propose_instruction"],
+      },
+      dependents: [
+        {
+          id: "weekday-recap",
+          name: "Weekday recap",
+          version: 1,
+          status: "active",
+        },
+      ],
+    };
+    await fixture(page, [custom]);
+    const card = page.locator(".skill-card");
+    await expect(card.locator("input, textarea, select")).toHaveCount(0);
+    const toggle = card.locator(".skill-card-preview > summary");
+    await toggle.click();
+    await expect(card.locator(".prose")).toHaveText(custom.draft.body);
+    await expect(card.getByLabel("Settings").locator("dd").first()).toHaveText(
+      "400",
+    );
+    await expect(card.getByLabel("Settings")).toContainText(longText);
+    await expect(
+      card.getByRole("list", { name: "Required tools" }).getByRole("listitem"),
+    ).toHaveText(custom.draft.tools);
+    await expect(card.locator(".skill-preview-dependents")).toContainText(
+      "Weekday recap",
+    );
+    await expect(card.getByText("No dependent workflows")).toHaveCount(0);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(width);
+    await page.screenshot({
+      path: test.info().outputPath("custom-preview-long.png"),
+      fullPage: true,
+    });
+    await card.getByRole("button", { name: "Edit draft", exact: true }).click();
+    await expect(
+      page.getByRole("dialog", { name: "Edit Custom recap" }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: test.info().outputPath("custom-preview-editor.png"),
+    });
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(card.locator(".prose")).toHaveText(custom.draft.body);
+
+    custom.draft.tools = [];
+    custom.dependents = [];
+    await page.reload();
+    await toggle.click();
+    await expect(card.getByText("No tools required")).toBeVisible();
+    await expect(card.getByText("No dependent workflows")).toBeVisible();
+    await page.screenshot({
+      path: test.info().outputPath("custom-preview-empty.png"),
+      fullPage: true,
+    });
   });
 }
 

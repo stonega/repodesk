@@ -72,6 +72,11 @@ the same restriction. The policy sample form is hidden when the catalog page
 contains only presets. Custom and GitHub-imported skills retain their management
 controls.
 
+Expanded previews show settings in a compact responsive grid and required tools
+as wrapping tags. Instructions remain complete, and an empty dependency list uses
+a short “No dependent workflows” message. The same preview serves preset and
+custom cards; management actions stay at the top right when the header wraps.
+
 New starter records carry an application-owned preset marker. Existing unchanged
 seed records are recognized by their original position and complete instruction,
 metadata, settings and tool definitions, including the older tool-list variant.

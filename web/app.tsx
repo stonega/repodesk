@@ -85,6 +85,7 @@ import "./style.css";
 import { ApplicationUpdate } from "./application-update.tsx";
 import { SiteDomain } from "./site-domain.tsx";
 import { SkillGitHubUpdate, SkillImport } from "./skill-github.tsx";
+import { SkillPreview } from "./skill-preview.tsx";
 
 let csrf = "";
 const sessionEvents = new EventTarget();
@@ -2657,17 +2658,7 @@ function SkillsPage({ id }: { id: string }) {
               </span>
             </div>
           )}
-          <details className="skill-card-preview">
-            <summary>Preview instructions & dependent schedules</summary>
-            <p className="prose">{s.draft.body}</p>
-            <DataDetails
-              value={{
-                settings: s.draft.settings,
-                tools: s.draft.tools,
-                dependents: s.dependents,
-              }}
-            />
-          </details>
+          <SkillPreview spec={s.draft} dependents={s.dependents} />
           {!s.preset && (
             <div className="skill-card-footer">
               <div className="skill-card-actions">

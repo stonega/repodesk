@@ -1023,8 +1023,10 @@ button.github-repository-more:hover:not(:disabled) {
   gap: 10px;
 }
 .skill-card-header {
-  justify-content: space-between;
-  gap: 8px 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px 12px;
 }
 .skill-card-title {
   flex: 1 1 260px;
@@ -1048,9 +1050,6 @@ button.github-repository-more:hover:not(:disabled) {
   gap: 6px 18px;
   color: var(--ui-muted);
   font-size: 12px;
-}
-.skill-card-preview {
-  margin-top: 18px;
 }
 .skill-card-footer {
   border-top: 1px solid var(--ui-border);
@@ -2652,6 +2651,67 @@ input.plugin-toggle-input:disabled {
 .data-details .data-details > div {
   grid-template-columns: 1fr;
   gap: 4px;
+}
+.skill-card-preview {
+  margin: 8px 0 0;
+}
+.skill-preview-toggle {
+  align-content: center;
+  min-height: 44px;
+}
+.skill-preview-content {
+  display: grid;
+  gap: 16px;
+  padding-top: 4px;
+  font-size: 14px;
+}
+.skill-preview-content > .prose {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.plugin-summary.skill-preview-settings {
+  grid-template-columns: minmax(100px, 0.35fr) minmax(0, 1fr);
+  gap: 12px 24px;
+}
+.skill-preview-settings dd {
+  font-weight: 400;
+}
+.skill-preview-tools h3,
+.skill-preview-dependents h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-muted);
+}
+.skill-preview-tools ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.skill-preview-tool {
+  min-width: 0;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  background: var(--ui-surface-muted);
+  line-height: 1.5;
+}
+.skill-preview-tools code {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.skill-preview-tools > p,
+.skill-preview-empty {
+  margin: 0;
+}
+@media (max-width: 640px) {
+  .plugin-summary.skill-preview-settings {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .run-attempts {
   min-width: 0;

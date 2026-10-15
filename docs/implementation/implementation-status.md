@@ -1,5 +1,24 @@
 # Implementation evidence
 
+## Compact skill instruction previews (2026-10-15)
+
+Preset and custom skills share a compact saved preview: labeled settings in a
+responsive grid, required tools as wrapping tags, and a short empty-workflow
+message. Complete instructions and populated dependent-workflow details remain
+readable. Management actions stay at the top right when titles wrap; custom
+editing remains in its modal and presets retain toggle-only controls.
+
+The same Team recap browser fixture shrank from 756px to 393px at a 1280px
+viewport (48%) and from 968px to 625px at 375px (35%). Both themes, expanded and
+collapsed previews, pending/error toggles, long content, empty tools/dependencies
+and saved display/editor separation were checked with deterministic fixtures.
+Biome, strict TypeScript, the production build, all **751 deterministic tests**
+with disposable PostgreSQL and **48 browser scenarios** across skills, GitHub
+imports, workflows and admin management passed. A broader run encountered a
+missing trace artifact during browser cleanup; the 26-scenario admin/preset rerun
+passed with an isolated server and output directory. No dependency or database
+migration was added.
+
 ## VPS deployment of invites and member account updates (2026-10-14)
 
 The VPS at `https://dev.stonegate.me` serves package v0.1.37 from clean commit
