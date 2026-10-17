@@ -1691,7 +1691,7 @@ test.describe
           .getByText("Disabled", { exact: true }),
       ).toBeVisible();
       await expect(
-        configuration.getByText("Local containers", { exact: true }),
+        configuration.getByText("Deployment runtime", { exact: true }),
       ).toBeVisible();
       await expect(page.locator(".plugin-back-link svg")).toBeVisible();
       await configuration

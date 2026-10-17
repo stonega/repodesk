@@ -47,11 +47,19 @@ async function fixture(
             }
           : path === "/api/admin/workspaces"
             ? [{ id: workspaceId, name: "Loading fixture" }]
-            : path === endpoint
-              ? data
-              : path.endsWith("/plugins")
-                ? { revision: 1, entries: [] }
-                : {};
+            : path === "/api/admin/operator/coding-runtime"
+              ? {
+                  revision: 0,
+                  selection: null,
+                  engine: "docker",
+                  environmentDefault: "docker",
+                  retainedTasks: 0,
+                }
+              : path === endpoint
+                ? data
+                : path.endsWith("/plugins")
+                  ? { revision: 1, entries: [] }
+                  : {};
     await route.fulfill({ json });
   });
   await page.goto(`/admin/${routePath}?workspace=${workspaceId}`);
@@ -254,7 +262,7 @@ for (const width of [1280, 390]) {
       await expect(card.locator(".skeleton").first()).toBeVisible();
     }
     await expect(
-      config.getByText("Local containers", { exact: true }),
+      config.getByText("Deployment runtime", { exact: true }),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Edit Codex configuration" }),

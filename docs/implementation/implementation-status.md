@@ -1,5 +1,21 @@
 # Implementation evidence
 
+## v0.1.39 release preparation (2026-10-17)
+
+Release preflight caught Docker-specific credential ownership checks leaking into
+the simulated runtime under the CI runner's UID, plus browser fixtures missing
+the new runtime endpoint and expecting the previous configuration label. Ownership
+preparation now belongs to the Docker driver; real Docker retains its private
+credential permissions and job UID requirements. Browser fixtures supply a valid
+runtime response and assert the current deployment-runtime label.
+
+Biome, strict TypeScript, the production build and all **789 deterministic tests
+across 90 files** passed with disposable PostgreSQL. The **32 runner tests** also
+passed in a network-disabled UID-1001 container, and **23 browser scenarios** passed
+for loading, connection-error recovery and session expiry. Full GitHub Verify and
+exact-image checks remain separate release gates until their results are recorded
+in the published release notes.
+
 ## Telegram PR code and review evidence (2026-10-17)
 
 The default GitHub extension now registers `query_github_pull_request` alongside

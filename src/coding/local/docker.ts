@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
+import { chmod, chown } from "node:fs/promises";
 import { promisify } from "node:util";
-import { Fault } from "../../domain.ts";
+import { Fault, requireThat } from "../../domain.ts";
 import { archiveText, type ContainerEngine } from "./container.ts";
 import type { RunnerSettings } from "./settings.ts";
 
@@ -78,6 +79,25 @@ export class Docker implements ContainerEngine {
             .trim();
         } finally {
           await this.command(["rm", "--force", "--ignore", copier]);
+        }
+      }
+      if (
+        /^deepx-codex-[a-f0-9]{32}-implement:\/auth\/auth\.json$/.test(
+          args[2] ?? "",
+        )
+      ) {
+        const credential = args[1] ?? "";
+        if (process.getuid?.() === 0) {
+          // The root supervisor reads via its group; the job UID owns the copy.
+          await chmod(credential, 0o640);
+          await chown(credential, 1000, 0);
+        } else {
+          requireThat(
+            process.getuid?.() === 1000,
+            "coding_docker_supervisor_uid_invalid",
+            503,
+          );
+          await chmod(credential, 0o600);
         }
       }
       // Preserve the UID of private auth files when copying into a stopped container.

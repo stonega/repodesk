@@ -36,7 +36,15 @@ async function fixture(page: Page, respond: (route: Route) => Promise<void>) {
               }
             : path === "/api/admin/workspaces"
               ? [{ id: workspaceId, name: "Session fixture" }]
-              : {},
+              : path === "/api/admin/operator/coding-runtime"
+                ? {
+                    revision: 0,
+                    selection: null,
+                    engine: "docker",
+                    environmentDefault: "docker",
+                    retainedTasks: 0,
+                  }
+                : {},
     });
   });
   await page.goto(`/admin/plugins/codex?workspace=${workspaceId}`);

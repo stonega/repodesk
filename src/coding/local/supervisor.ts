@@ -1,7 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import {
   chmod,
-  chown,
   mkdir,
   readdir,
   readFile,
@@ -329,20 +328,6 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
           })(),
           { mode: 0o600 },
         );
-        if (this.settings.CODEX_CONTAINER_ENGINE === "docker") {
-          if (process.getuid?.() === 0) {
-            // The root supervisor reads via its group; the job UID owns the copy.
-            await chmod(credential, 0o640);
-            await chown(credential, 1000, 0);
-          } else {
-            requireThat(
-              process.getuid?.() === 1000,
-              "coding_docker_supervisor_uid_invalid",
-              503,
-            );
-            await chmod(credential, 0o600);
-          }
-        }
         await this.engine.copyFile(credential, name, "/auth/auth.json");
       } finally {
         await rm(credential, { force: true });
