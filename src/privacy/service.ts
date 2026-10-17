@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { type Approval, requireThat, type Workspace } from "../domain.ts";
+import { memoryContextValid, pruneMemories } from "../memory/state.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import { pruneSkillSources } from "../skills/proposals.ts";
 import { discardFollowup } from "../telegram/followup.ts";
@@ -43,6 +44,7 @@ export function sweep(w: Workspace, now = new Date()) {
     delete w.coding;
     delete w.chatModel;
     delete w.codingTasks;
+    delete w.memory;
     w.messages = [];
     w.threads = [];
     w.instructions = [];
@@ -99,6 +101,7 @@ export function sweep(w: Workspace, now = new Date()) {
     (t) => Date.parse(t.createdAt) > cutoff,
   );
   w.messages = w.messages.filter((m) => retainedSource(w, m, now.getTime()));
+  pruneMemories(w, now.getTime());
   // Remove derived answers transitively as their sources expire or are removed.
   // Otherwise another thread could retrieve an answer whose private sources were erased.
   let removed: boolean;
@@ -109,6 +112,7 @@ export function sweep(w: Workspace, now = new Date()) {
       if (
         r.sources.some((s) => !retained.has(s.id)) ||
         (r.contextSummary && !validMemory(r.contextSummary, w.messages)) ||
+        !memoryContextValid(w, r, true) ||
         (r.handoffRead && !validMemory(r.handoffRead.references, w.messages)) ||
         (r.followup?.references &&
           !validMemory(r.followup.references, w.messages))
@@ -128,6 +132,7 @@ export function sweep(w: Workspace, now = new Date()) {
         }
         delete r.discussionUpdates;
         delete r.handoffRead;
+        delete r.memoryContext;
         const count = w.messages.length;
         w.messages = w.messages.filter(
           (m) => !(m.runId === r.id && m.role === "assistant"),
@@ -156,6 +161,7 @@ export function sweep(w: Workspace, now = new Date()) {
       r.tools = {};
       delete r.contextSummary;
       delete r.compaction;
+      delete r.memoryContext;
       if (r.followup) {
         r.followup.transcript = [];
         delete r.followup.references;
@@ -181,4 +187,5 @@ export function sweep(w: Workspace, now = new Date()) {
   w.audit = w.audit.filter(
     (a) => Date.parse(a.at) > now.getTime() - 90 * 86400000,
   );
+  pruneMemories(w, now.getTime());
 }

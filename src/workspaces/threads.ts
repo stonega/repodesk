@@ -6,6 +6,7 @@ import {
   type Source,
   type Workspace,
 } from "../domain.ts";
+import { attachMemoryContext, memoryDependencies } from "../memory/state.ts";
 import { validMemory } from "./conversation-memory.ts";
 
 export function retainedSource(w: Workspace, source: Source, now = Date.now()) {
@@ -146,12 +147,14 @@ export function refreshThreadContext(w: Workspace, run: Run) {
       ? structuredClone(summary)
       : undefined;
   run.coverage = `${run.sources.length} retained messages in this conversation. Other conversations are searched only when needed. Earlier messages may have expired.`;
+  attachMemoryContext(w, run);
 }
 
 export function recordThreadAnswer(w: Workspace, run: Run) {
   if (!run.threadId || !run.result) return;
   const id = `answer:${run.id}`;
   if (w.messages.some((m) => m.id === id)) return;
+  const dependencies = [...run.sources, ...memoryDependencies(w, run)];
   w.messages.push({
     id,
     threadId: run.threadId,
@@ -165,13 +168,13 @@ export function recordThreadAnswer(w: Workspace, run: Run) {
     retentionOriginAt: new Date(
       Math.min(
         Date.parse(run.at),
-        ...run.sources.map((s) => Date.parse(s.retentionOriginAt ?? s.at)),
+        ...dependencies.map((s) => Date.parse(s.retentionOriginAt ?? s.at)),
       ),
     ).toISOString(),
     expiresAt: new Date(
       Math.min(
         Date.parse(run.at) + w.settings.retentionDays * 86400000,
-        ...run.sources.map((s) => Date.parse(s.expiresAt)),
+        ...dependencies.map((s) => Date.parse(s.expiresAt)),
       ),
     ).toISOString(),
     directed: true,

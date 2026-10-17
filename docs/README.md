@@ -19,6 +19,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Telegram platform constraints](reference/telegram-platform.md) | What changes when Slack becomes Telegram |
 | [Private conversation threads](design/private-threads.md) | Native Topics, discussion memory, cache-aware compaction and private history |
 | [Group conversations](design/group-conversations.md) | Per-user continuity, shared discussions and natural follow-up triggering |
+| [Long-term memory](design/long-term-memory.md) | Scoped private/shared recall, background extraction, user controls and retention |
 | [Architecture](design/architecture.md) | Implemented local pilot and production boundaries |
 | [Admin panel](design/admin-panel.md) | P0 configuration screens, permissions, APIs and acceptance criteria |
 | [UI rules](design/ui-rules.md) | User design preferences, their scope, and how to apply and maintain them |

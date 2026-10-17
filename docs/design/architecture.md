@@ -209,6 +209,14 @@ are separate from the answer but share its budgets and cancellation. See
 [group conversations](group-conversations.md). Manual recaps and schedules keep their
 existing group coverage.
 
+Long-term recall adds source-linked records and a compact index across a user's
+private conversations or across participants in the same group/Topic. An independent
+worker performs bounded, tool-free extraction and consolidation, with separate
+checkpoints and charges attached to the originating request. Recall and explicit
+remember/forget controls preserve tenant, bot, actor and group/Topic boundaries;
+source changes and retention invalidate derived context. It never becomes approved
+instructions or external-write authority. See [long-term memory](long-term-memory.md).
+
 Every request uses a separate Agent. Run envelopes pin settings, workflow, skill and
 instruction versions and source IDs. Text output citations are checked against that
 source set. Semantic grounding still requires model evaluation; ID validation alone

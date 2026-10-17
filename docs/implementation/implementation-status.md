@@ -41,6 +41,40 @@ builds are required. Live model quality, Telegram delivery and a deployed OpenSa
 repeat remain separate rollout checks. Reviewed legacy task coverage is not implied
 by this Direct-task evidence. See [the conversation journey](../../examples/codex-task-conversation.md).
 
+## Private and shared long-term memory (2026-10-17)
+
+RepoDesk now extracts source-linked historical memory from successful idle
+conversations and consolidates a small recall index. Personal recall crosses
+the same user's private Topics; shared recall crosses participants only within
+the same bot/group/Topic. Workspace, actor, bot and source permissions remain
+enforced. Existing discussion records and context compaction remain separate.
+
+The independent worker checks once per minute, with a 30-minute idle window,
+bounded tool-free Pi extraction/consolidation, durable leases and checkpoints,
+hourly retry backoff, and no automatic replay of unknown provider outcomes.
+Charges use the originating request's pinned model and remaining dollar budgets
+and are recorded as separate memory attempts. Recent input is bounded while full
+retention dependencies remain tracked. State uses existing workspace JSONB;
+there are no added dependencies or SQL migrations.
+
+`query_memories` supports bounded historical recall; direct `manage_memory`
+requests remember the human's actual message, forget a selected record, or toggle
+scoped recall. Shared settings and deletion of another speaker's or mixed-speaker
+records require a workspace owner/admin. Source edits, retention, forgetting and
+workspace deletion invalidate derived context. Content-free tombstones prevent
+forgotten sources from being automatically re-extracted. Memory cannot grant
+external-write authority or become an approved instruction.
+
+The **31 dedicated deterministic memory tests** passed with disposable PostgreSQL.
+An isolated v0.1.39 checkout containing only this feature passed all **820 tests**,
+Biome, strict TypeScript, the production build and the Node runtime contract.
+Coverage includes JSONB identity stability, private/shared isolation, current-user
+intent, ownership, source edits/deletion, long input, redaction, budget failures,
+concurrent claims, usage replay and checkpoint recovery. No live model call,
+Telegram send or deployment was performed. Recall fidelity and live Telegram
+acceptance remain release gates. See [design and limits](../design/long-term-memory.md)
+and [examples](../../examples/long-term-memory.md).
+
 ## v0.1.39 release preparation (2026-10-17)
 
 Release preflight caught Docker-specific credential ownership checks leaking into

@@ -9,6 +9,7 @@ import type { Store } from "../db/repositories.ts";
 import type { GitHubIssues } from "../github/issues.ts";
 import type { GitHubPullRequests } from "../github/pull-requests.ts";
 import type { GitHubUsers } from "../github/users.ts";
+import { MemoryService } from "../memory/service.ts";
 import { pruneRuntimeLogs, RuntimeLogger } from "../observability/logs.ts";
 import { sweep } from "../privacy/service.ts";
 import type { ReviewExecutor } from "../review-bot/executor.ts";
@@ -84,6 +85,7 @@ export async function startWorker(
   const shutdown = new AbortController();
   const id = randomUUID();
   const commandMenu = new TelegramCommandMenu(store, setup);
+  const memories = new MemoryService(store, setup);
   await boss.work<JobData>(
     "run",
     { localConcurrency: 3, pollingIntervalSeconds: 1 },
@@ -295,7 +297,25 @@ export async function startWorker(
   reviewTick();
   const reviewTimer = setInterval(reviewTick, 5000);
   const timer = setInterval(() => void maintain(), 5000);
+  // Memory model calls run independently of ingress, delivery and worker heartbeats.
+  let memoryBusy: Promise<void> | undefined;
+  const memoryTick = () => {
+    if (memoryBusy || shutdown.signal.aborted) return;
+    memoryBusy = (async () => {
+      for (const workspaceId of await store.ids()) {
+        if (shutdown.signal.aborted) break;
+        await memories.tick(workspaceId, shutdown.signal);
+      }
+    })()
+      .catch((error) => store.log.write("worker_maintenance_failed", { error }))
+      .finally(() => {
+        memoryBusy = undefined;
+      });
+  };
+  memoryTick();
+  const memoryTimer = setInterval(memoryTick, 60000);
   return async () => {
+    clearInterval(memoryTimer);
     clearInterval(timer);
     clearInterval(codingTimer);
     clearInterval(githubTimer);
@@ -304,7 +324,7 @@ export async function startWorker(
     shutdown.abort();
     await reviewBusy;
     await Promise.all([polling, boss.stop({ graceful: true, timeout: 10000 })]);
-    await Promise.all([codingBusy, githubBusy, menuBusy]);
+    await Promise.all([codingBusy, githubBusy, menuBusy, memoryBusy]);
     while (busy) await new Promise((resolve) => setTimeout(resolve, 25));
     await store.pool.query("DELETE FROM worker_heartbeats WHERE id=$1", [id]);
   };

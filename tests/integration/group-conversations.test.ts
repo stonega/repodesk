@@ -466,7 +466,12 @@ const rootUrl = process.env.TEST_DATABASE_URL;
           );
         },
       }).execute(w.id, r.id);
-      expect(purposes).toEqual(["followup", "compaction", undefined]);
+      // Tool/policy growth can require more than one bounded summary batch.
+      expect(purposes[0]).toBe("followup");
+      expect(purposes.at(-1)).toBeUndefined();
+      const summaries = purposes.slice(1, -1);
+      expect(summaries.length).toBeGreaterThan(0);
+      expect(summaries.every((purpose) => purpose === "compaction")).toBe(true);
       const saved = (await store.read(w.id)).runs.at(-1);
       expect(saved?.status).toBe("succeeded");
       expect(saved?.contextSummary?.text).toBe("备份决定和待办");

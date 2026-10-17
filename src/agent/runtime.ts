@@ -143,7 +143,7 @@ export function selectedModel(
   };
 }
 export interface AgentInput {
-  purpose?: "compaction" | "followup";
+  purpose?: "compaction" | "followup" | "memory_extract" | "memory_consolidate";
   cacheKey?: string;
   workspaceId?: string;
   actor: string;

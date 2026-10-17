@@ -10,6 +10,7 @@ import {
   workflowRepositoriesAllowed,
 } from "../github/metadata-policy.ts";
 import { repositoryAccess } from "../github/user-access.ts";
+import { memoryContextValid } from "../memory/state.ts";
 import { validMemory } from "./conversation-memory.ts";
 export function eligible(w: Workspace, actor: string, admin = false) {
   const member = w.members.find((m) => m.id === actor && m.active);
@@ -101,6 +102,7 @@ function allowedRun(
     (!run.followup?.references ||
       validMemory(run.followup.references, w.messages)) &&
     (!run.contextSummary || validMemory(run.contextSummary, w.messages)) &&
+    memoryContextValid(w, run) &&
     run.sources.every(
       (s) =>
         Date.parse(s.expiresAt) > Date.now() &&

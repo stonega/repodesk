@@ -4,6 +4,7 @@ import type { PluginSettings } from "./agent/plugin-config.ts";
 import type { CodingConfig, CodingTask } from "./coding/config.ts";
 import type { GitHubConnection } from "./github/config.ts";
 import type { GitHubUserAccess } from "./github/user-access.ts";
+import type { MemoryContext, MemoryState } from "./memory/types.ts";
 import type { ModelProvider, ModelSelection } from "./models/config.ts";
 import type { ReviewConfig, ReviewTask } from "./review-bot/config.ts";
 
@@ -303,6 +304,8 @@ export interface Approval {
   };
 }
 export interface Run {
+  memoryContext?: MemoryContext;
+  memoryMutation?: boolean;
   repository?: { id: number; full_name: string; installationId: number };
   githubRead?: RepositorySources;
   handoffRead?: {
@@ -388,7 +391,11 @@ export interface Run {
     reserved: number;
     actual?: number;
     pricingUnknown?: boolean;
-    purpose?: "compaction" | "followup";
+    purpose?:
+      | "compaction"
+      | "followup"
+      | "memory_extract"
+      | "memory_consolidate";
     tokens?: {
       input: number;
       output: number;
@@ -455,6 +462,7 @@ export interface Audit {
   version?: number;
 }
 export interface Workspace {
+  memory?: MemoryState;
   chatModel?: { revision: number; selection: ModelSelection };
   repositorySelections?: {
     actor: string;
