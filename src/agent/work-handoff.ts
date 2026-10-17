@@ -1,5 +1,6 @@
 import { Type } from "typebox";
 import { z } from "zod";
+import { cloudflareReadAllowed } from "../cloudflare/policy.ts";
 import type {
   DevelopmentInput,
   DevelopmentTask,
@@ -181,6 +182,12 @@ function assistantEntries(w: Workspace, r: Run, cutoff: number): Entry[] {
       Date.parse(run.at) <= cutoff ||
       !readable(w, r, run.actor, run.chatId, run.topicId) ||
       !githubReadAllowed(w, run) ||
+      !cloudflareReadAllowed(w, {
+        ...run,
+        actor: r.actor,
+        chatId: r.chatId,
+        workflowId: r.workflowId,
+      }) ||
       !runAllowed(w, run)
     )
       continue;

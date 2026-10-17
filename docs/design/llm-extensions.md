@@ -41,7 +41,7 @@ continue to return `extension_tool_failed`.
 ## Installation and grants
 
 The Plugins landing page shows compact Installed cards for built-in Code Truth,
-built-in Codex, built-in Review Bot and workspace-registered file extensions. Clicking a card opens
+built-in Codex, built-in Review Bot, built-in Cloudflare and workspace-registered file extensions. Clicking a card opens
 its detail route, where the existing configuration and controls live. The
 Markets section links to a small, dated selection of popular packages from
 [Pi's package catalog](https://pi.dev/packages?type=extension). These are
@@ -210,3 +210,15 @@ The credential-free setup phase resolves OCR files/rules; Codex performs read-on
 analysis from that plan. Its application services own standing review policy, task grants,
 repository permissions, durable publication and GitHub progress comments. It does
 not broaden the executable file-extension API or expose an arbitrary GitHub write tool.
+
+## Predefined Cloudflare
+
+The [Cloudflare plugin](../implementation/cloudflare.md) provides private interactive
+zone/DNS/Pages queries and exact reviewed DNS changes/cache purges. The operator
+configures browser OAuth or an encrypted write-only API token, account and explicit
+zone grants under Plugins → Cloudflare. OAuth uses session-bound PKCE, encrypted
+renewable tokens and explicit reconnect/disconnect. Active members may query;
+owners/admins may propose changes.
+Application services validate actor, scope, destination and approval, reserve writes
+durably and never replay ambiguous outcomes. Pages secrets and arbitrary API access
+are excluded. No extra package or migration is required.

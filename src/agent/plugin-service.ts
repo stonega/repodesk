@@ -1,5 +1,8 @@
 import { isAbsolute } from "node:path";
 import { operator } from "../admin/auth.ts";
+import { cloudflareTools } from "../cloudflare/config.ts";
+import { cloudflareExtension } from "../cloudflare/extension.ts";
+import type { CloudflareService } from "../cloudflare/service.ts";
 import type { CodeTruthClient } from "../code-truth/client.ts";
 import {
   type CodeTruthPage,
@@ -48,6 +51,7 @@ export class PluginService {
     private manifestPath?: string,
     private codeTruth?: CodeTruthClient,
     private githubApp?: GitHubApp | GitHubApps,
+    readonly cloudflare?: CloudflareService,
   ) {}
   private legacy?: Promise<PluginRecord[]>;
   private fallback(): Promise<PluginRecord[]> {
@@ -117,6 +121,8 @@ export class PluginService {
       );
       const builtin = prior?.codeTruth;
       const names = new Set<string>(TOOLS);
+      if (workspace.plugins?.cloudflare?.settings.enabled)
+        for (const name of cloudflareTools) names.add(name);
       names.add("record_discussion");
       names.add("query_discussions");
       if (builtin?.enabled && targetsFor(builtin, workspaceId).length)
@@ -170,6 +176,21 @@ export class PluginService {
       workspaces: [{ id: workspace.id, name: workspace.settings.name }],
     };
   }
+  async cloudflareView(admin: Admin, workspaceId: string) {
+    requireThat(this.cloudflare, "cloudflare_credentials_unavailable", 503);
+    return this.cloudflare.view(admin, workspaceId);
+  }
+  async saveCloudflare(admin: Admin, workspaceId: string, value: unknown) {
+    requireThat(this.cloudflare, "cloudflare_credentials_unavailable", 503);
+    await this.cloudflare.view(admin, workspaceId);
+    const workspace = await this.store.read(workspaceId);
+    return this.cloudflare.save(
+      admin,
+      workspaceId,
+      value,
+      await this.entries(workspace),
+    );
+  }
   async saveCodeTruth(admin: Admin, workspaceId: string, value: unknown) {
     operator(admin);
     const input = codeTruthSaveSchema.parse(value);
@@ -200,6 +221,7 @@ export class PluginService {
               );
       }
       workspace.plugins = {
+        ...prior,
         revision: input.revision + 1,
         entries,
         codeTruth: input.settings,
@@ -280,6 +302,16 @@ export class PluginService {
     const config = workspace.plugins?.codeTruth;
     const targets = config?.enabled ? targetsFor(config, workspaceId) : [];
     const builtins = [];
+    if (workspace.plugins?.cloudflare?.settings.enabled) {
+      requireThat(this.cloudflare, "cloudflare_credentials_unavailable", 503);
+      builtins.push(
+        cloudflareExtension(
+          this.cloudflare,
+          workspaceId,
+          workspace.plugins.revision,
+        ),
+      );
+    }
     if (workspace.coding?.settings.enabled && workspace.github?.installationId)
       builtins.push(codingExtension(this.store, workspace));
     if (

@@ -1,6 +1,7 @@
 import { serve } from "@hono/node-server";
 import { PluginService } from "./agent/plugin-service.ts";
 import { createApp } from "./app.ts";
+import { CloudflareService } from "./cloudflare/service.ts";
 import { CodeTruthClient } from "./code-truth/client.ts";
 import { LocalRunnerClient } from "./coding/local/client.ts";
 import { config } from "./config.ts";
@@ -40,6 +41,12 @@ const app = createApp(
       ? new CodeTruthClient(cfg.CODE_TRUTH_URL, cfg.CODE_TRUTH_TOKEN)
       : undefined,
     githubApp,
+    new CloudflareService(
+      store,
+      cfg.ENCRYPTION_KEY,
+      undefined,
+      cfg.PUBLIC_ORIGIN,
+    ),
   ),
   new GitHubService(store, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN, githubApp),
   cfg.ENCRYPTION_KEY,

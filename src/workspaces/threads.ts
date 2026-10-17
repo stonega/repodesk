@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { cloudflareReadAllowed } from "../cloudflare/policy.ts";
 import {
   type ConversationThread,
   type Run,
@@ -10,7 +11,12 @@ import { attachMemoryContext, memoryDependencies } from "../memory/state.ts";
 import { validMemory } from "./conversation-memory.ts";
 
 export function retainedSource(w: Workspace, source: Source, now = Date.now()) {
+  const origin =
+    source.role === "assistant" && source.runId
+      ? w.runs.find((r) => r.id === source.runId)
+      : undefined;
   return (
+    (!origin || cloudflareReadAllowed(w, origin)) &&
     Date.parse(source.expiresAt) > now &&
     Date.parse(source.retentionOriginAt ?? source.at) >
       now - w.settings.retentionDays * 86400000

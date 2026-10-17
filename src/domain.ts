@@ -281,6 +281,7 @@ export interface Approval {
     | "deletion"
     | "github_issue"
     | "github_pull_request"
+    | "cloudflare_action"
     | "skill";
   target: string;
   version: number;
@@ -288,6 +289,11 @@ export interface Approval {
   payload: unknown;
   expiresAt: string;
   decision?: "approved" | "rejected" | "revoked";
+  cloudflare?: {
+    state: "sending" | "completed" | "failed" | "unknown";
+    startedAt: string;
+    error?: string;
+  };
   issue?: {
     state: "sending" | "created" | "failed" | "unknown";
     startedAt: string;
@@ -307,6 +313,7 @@ export interface Run {
   memoryMutation?: boolean;
   repository?: { id: number; full_name: string; installationId: number };
   githubRead?: RepositorySources;
+  cloudflareRead?: { revision: number; accountId: string };
   handoffRead?: {
     references: MemoryReferences;
     runIds?: string[];

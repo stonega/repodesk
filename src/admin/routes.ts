@@ -5,6 +5,7 @@ import { z } from "zod";
 import { credentialsSchema } from "../agent/model-settings.ts";
 import type { PluginService } from "../agent/plugin-service.ts";
 import { modelCapabilities } from "../agent/runtime.ts";
+import { cloudflareStateWorkspace } from "../cloudflare/oauth.ts";
 import type { LocalDeviceAuth } from "../coding/local/protocol.ts";
 import { codingView, saveCoding } from "../coding/service.ts";
 import { taskGet, taskList, taskSave } from "../coding/task-store.ts";
@@ -695,6 +696,105 @@ export function adminRoutes(
       ),
     );
   });
+  app.get("/api/admin/workspaces/:id/plugins/cloudflare", async (c) =>
+    c.json(
+      await plugins.cloudflareView(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+      ),
+    ),
+  );
+  app.post(
+    "/api/admin/workspaces/:id/plugins/cloudflare/oauth/connect",
+    async (c) => {
+      requireThat(
+        plugins.cloudflare,
+        "cloudflare_credentials_unavailable",
+        503,
+      );
+      const input = z
+        .object({ revision: z.number().int().nonnegative() })
+        .strict()
+        .parse(await c.req.json());
+      return c.json(
+        await plugins.cloudflare.oauth.begin(
+          c.get("session").admin,
+          validId(c.req.param("id")),
+          hash(sessionCookieValue(c) ?? ""),
+          input.revision,
+        ),
+      );
+    },
+  );
+  app.post(
+    "/api/admin/workspaces/:id/plugins/cloudflare/oauth/disconnect",
+    async (c) => {
+      requireThat(
+        plugins.cloudflare,
+        "cloudflare_credentials_unavailable",
+        503,
+      );
+      const input = z
+        .object({ revision: z.number().int().nonnegative() })
+        .strict()
+        .parse(await c.req.json());
+      const revocationConfirmed = await plugins.cloudflare.oauth.disconnect(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+        input.revision,
+      );
+      return c.json({
+        ...(await plugins.cloudflare.view(
+          c.get("session").admin,
+          validId(c.req.param("id")),
+        )),
+        revocationConfirmed,
+      });
+    },
+  );
+  app.get("/api/admin/cloudflare/callback", async (c) => {
+    c.header("Cache-Control", "no-store");
+    c.header("Referrer-Policy", "no-referrer");
+    let id: string | undefined;
+    try {
+      requireThat(
+        plugins.cloudflare,
+        "cloudflare_credentials_unavailable",
+        503,
+      );
+      const input = z
+        .object({
+          state: z.string().max(200),
+          code: z.string().min(1).max(2000).optional(),
+        })
+        .parse(c.req.query());
+      id = cloudflareStateWorkspace(input.state);
+      await plugins.cloudflare.oauth.callback(
+        c.get("session").admin,
+        hash(sessionCookieValue(c) ?? ""),
+        input.state,
+        input.code,
+      );
+      return c.redirect(
+        `/admin/plugins/cloudflare?workspace=${id}&cloudflare=connected`,
+      );
+    } catch {
+      return c.redirect(
+        id
+          ? `/admin/plugins/cloudflare?workspace=${id}&cloudflare=failed`
+          : "/admin/plugins?cloudflare=failed",
+      );
+    }
+  });
+  app.put("/api/admin/workspaces/:id/plugins/cloudflare", async (c) =>
+    c.json(
+      await plugins.saveCloudflare(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+        await c.req.json(),
+      ),
+    ),
+  );
   app.get("/api/admin/workspaces/:id/plugins", async (c) =>
     c.json(
       await plugins.view(c.get("session").admin, validId(c.req.param("id"))),

@@ -69,6 +69,62 @@ unlinked operator reads, member/revocation denial, cross-workspace IDs and retai
 run navigation. No deployment, live model call or Telegram message was performed.
 
 
+## Cloudflare plugin (2026-10-17)
+
+Plugins now includes Cloudflare with a saved summary, title switch and shared modal
+editor. Operators configure an encrypted write-only workspace token, account and up
+to 20 explicit zones. Private interactive Pi requests can query selected zones/DNS
+records and account Pages projects/deployments. Owners/admins can propose exact DNS
+create/update/delete requests and URL/whole-zone cache purges. Existing actor-bound
+approval controls authorize the reviewed payload; application services reserve and
+execute writes. Duplicate workers cannot repeat mutations, and ambiguous outcomes
+stay unknown without automatic retry. Pages environment variables and configuration
+secrets are excluded. Current permissions/scope apply to reads, approvals, execution,
+pending delivery and retained/derived evidence, including group-handoff exclusion.
+
+Cloudflare saves preserve legacy file-plugin fallbacks and other built-ins; Code
+Truth saves now preserve other built-in settings too. No package, migration or new
+environment setting was added. Configuration changes apply without restart.
+Workers, deployment creation, secrets and arbitrary API access remain outside scope.
+
+Validation: Biome, strict TypeScript, production build, Node runtime contract and
+all **863 deterministic tests across 96 files** passed with disposable PostgreSQL,
+including **20 focused Cloudflare tests**. All **8 Cloudflare browser scenarios**
+passed at 1280px/390px; saved/editor, empty, loading, pending, error/recovery and dark
+theme screenshots were inspected. The expanded browser run passed **49 of 50**:
+an existing Codex mobile loading test still measures its unchanged “Deployment
+runtime” value at 48px against a 32px limit, reproduced in isolation. No live
+Cloudflare/model/Telegram calls or deployment were performed. See
+[configuration, API contracts and limits](cloudflare.md) and
+[runnable examples](../../examples/cloudflare.http).
+
+### Cloudflare browser authorization (2026-10-17)
+
+New Cloudflare connections default to browser OAuth; existing API token connections
+retain their authentication method. Operators register a Cloudflare client once,
+then save its write-only secret, client ID and API scopes in the shared Authorization
+editor. Connect uses Authorization Code, S256 PKCE and session/workspace/revision-bound
+state. The callback verifies the configured account before enabling the plugin,
+including the same tool-collision checks as manual enablement. Existing account,
+zone, actor, destination and exact-action approval restrictions still apply.
+
+Access/refresh tokens are encrypted per workspace and connection generation.
+Durable refresh claims serialize workers without changing the plugin revision;
+failed, ambiguous or interrupted refresh requires Reconnect without token replay.
+Disconnect removes local authority before provider revocation, reports unconfirmed
+revocation and fences late refresh results. Client/scopes/authentication changes
+require disconnect first. Client registration, public-client domain verification
+where applicable and live Cloudflare consent acceptance remain operator prerequisites.
+
+Validation: all **863 deterministic tests across 98 files**, including **34 focused
+Cloudflare tests**, and **14 Cloudflare browser scenarios** passed. Desktop/mobile
+saved summaries, both editors, loading, pending, failure,
+reconnect and disconnect states were visually inspected, including dark theme.
+Biome, strict TypeScript, production build and Node runtime contract passed. No
+package, migration or environment variable was added. No live account connection,
+Cloudflare API mutation, Telegram send or deployment was performed. See the
+[registration and connection guide](cloudflare.md#browser-authorization).
+
 ## Codex task conversation (2026-10-17)
 
 Direct continuous development tasks have a durable conversation separate from

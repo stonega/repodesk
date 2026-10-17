@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { cloudflareReadAllowed } from "../cloudflare/policy.ts";
 import {
   type Approval,
   type Run,
@@ -37,6 +38,11 @@ export function completedSkillSource(
   );
   const references = memoryReferences(source.sources);
   requireThat(githubReadAllowed(w, source), "skill_source_unavailable", 404);
+  requireThat(
+    cloudflareReadAllowed(w, source),
+    "skill_source_unavailable",
+    404,
+  );
   requireThat(
     skillSourcesPresent(w, references) &&
       (!source.contextSummary || skillSourcesPresent(w, source.contextSummary)),

@@ -34,6 +34,21 @@ when implementing or reviewing a change.
 
 ## Recorded preferences
 
+### Cloudflare supports browser authorization
+
+- **Preference:** Connect Cloudflare through its browser consent screen, with
+  connection/reconnect status and Disconnect in the plugin detail page. Keep
+  saved OAuth client details in a summary and its credentials in the shared Edit
+  modal; tokens and client secrets stay write-only.
+- **Scope:** The Cloudflare plugin on desktop and mobile. Account and zone
+  restrictions and action approvals apply after authorization.
+- **Source:** 2026-10-17 — user requested using Cloudflare's authentication flow
+  for the integration. Authorization Code with PKCE, server-managed refresh and
+  an operator-configured OAuth client are the implementation choices.
+- **Exceptions:** Existing/manual API token connections remain available as an
+  explicit authentication choice. Client registration in Cloudflare is a one-time
+  operator prerequisite; configuring RepoDesk does not register or publish it.
+
 ### Model providers are reused across services
 
 - **Preference:** Add an OpenAI-compatible API provider with its base URL and

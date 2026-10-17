@@ -1,9 +1,11 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import type { PluginPage, PluginSpec } from "../src/agent/plugin-config.ts";
+import type { CloudflarePage } from "../src/cloudflare/config.ts";
 import type { CodeTruthPage } from "../src/code-truth/config.ts";
 import type { CodingPage } from "../src/coding/config.ts";
 import type { ReviewPage } from "../src/review-bot/config.ts";
+import { Cloudflare } from "./cloudflare.tsx";
 import { CodeTruth } from "./code-truth.tsx";
 import { Coding } from "./coding.tsx";
 import { GitHubConnection } from "./github.tsx";
@@ -107,6 +109,7 @@ export function Plugins({
     codeTruth?: boolean;
     codex?: boolean;
     reviewBot?: boolean;
+    cloudflare?: boolean;
   }>({});
   const path = (suffix = "") =>
     `/admin/plugins${suffix}?workspace=${encodeURIComponent(workspaceId)}`;
@@ -131,6 +134,7 @@ export function Plugins({
       view === "catalog" ||
       (view === "installed" &&
         pluginId !== "code-truth" &&
+        pluginId !== "cloudflare" &&
         pluginId !== "codex" &&
         pluginId !== "review-bot")
     )
@@ -143,9 +147,14 @@ export function Plugins({
       request<CodeTruthPage>(`${endpoint}/code-truth`),
       request<CodingPage>(`${endpoint}/coding`),
       request<ReviewPage>(`${endpoint}/review-bot`),
-    ]).then(([truth, coding, review]) => {
+      request<CloudflarePage>(`${endpoint}/cloudflare`),
+    ]).then(([truth, coding, review, cloudflare]) => {
       if (!active) return;
       setBuiltIns({
+        cloudflare:
+          cloudflare.status === "fulfilled"
+            ? cloudflare.value.settings?.enabled
+            : undefined,
         reviewBot:
           review.status === "fulfilled"
             ? review.value.settings?.enabled
@@ -222,6 +231,7 @@ export function Plugins({
           </p>
         </header>
       ) : (pluginId !== "code-truth" &&
+          pluginId !== "cloudflare" &&
           pluginId !== "codex" &&
           pluginId !== "review-bot") ||
         view === "market" ? (
@@ -324,6 +334,18 @@ export function Plugins({
                       : "Disabled"
                 }
               />
+              <PluginCard
+                to={path("/cloudflare")}
+                name="Cloudflare"
+                summary="DNS, Pages queries and approved cache purges"
+                status={
+                  builtIns.cloudflare === undefined
+                    ? "Built in"
+                    : builtIns.cloudflare
+                      ? "Enabled"
+                      : "Disabled"
+                }
+              />
               {data?.entries.map((entry) => (
                 <PluginCard
                   key={entry.id}
@@ -388,6 +410,14 @@ export function Plugins({
           backTo={path()}
         />
       )}
+      {view === "installed" && pluginId === "cloudflare" && (
+        <Cloudflare
+          key={workspaceId}
+          request={request}
+          workspaceId={workspaceId}
+          backTo={path()}
+        />
+      )}
       {view === "installed" && pluginId === "review-bot" && (
         <ReviewBot
           key={workspaceId}
@@ -401,6 +431,7 @@ export function Plugins({
       )}
       {view === "installed" &&
         pluginId !== "code-truth" &&
+        pluginId !== "cloudflare" &&
         pluginId !== "codex" &&
         pluginId !== "review-bot" && (
           <>

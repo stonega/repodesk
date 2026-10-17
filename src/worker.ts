@@ -1,4 +1,5 @@
 import { PluginService } from "./agent/plugin-service.ts";
+import { CloudflareService } from "./cloudflare/service.ts";
 import { CodeTruthClient } from "./code-truth/client.ts";
 import { LocalRunnerClient } from "./coding/local/client.ts";
 import { CodingService } from "./coding/service.ts";
@@ -31,6 +32,12 @@ const plugins = new PluginService(
     ? new CodeTruthClient(cfg.CODE_TRUTH_URL, cfg.CODE_TRUTH_TOKEN)
     : undefined,
   githubApps,
+  new CloudflareService(
+    store,
+    cfg.ENCRYPTION_KEY,
+    undefined,
+    cfg.PUBLIC_ORIGIN,
+  ),
 );
 const stop = await startWorker(
   store,
@@ -63,6 +70,7 @@ const stop = await startWorker(
     cfg.ENCRYPTION_KEY,
   ),
   new GitHubPullRequests(store, githubApps),
+  plugins.cloudflare,
 );
 log.write("worker_started");
 let stopping = false;

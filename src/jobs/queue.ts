@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { PgBoss } from "pg-boss";
 import type { AgentRunner, RunnerProvider } from "../agent/runtime.ts";
+import type { CloudflareService } from "../cloudflare/service.ts";
 import type { CodingService } from "../coding/service.ts";
 import { pruneDevelopment } from "../coding/tasks.ts";
 import { DEFAULT_RUN_TIMEOUT_SECONDS } from "../config.ts";
@@ -77,6 +78,7 @@ export async function startWorker(
   githubUsers?: GitHubUsers,
   review?: ReviewExecutor,
   githubPullRequests?: GitHubPullRequests,
+  cloudflare?: CloudflareService,
 ) {
   const boss = queue(url, store.log);
   await boss.start();
@@ -194,6 +196,14 @@ export async function startWorker(
                 approval.pullRequest.state === "sending")
             )
               await githubPullRequests.send(workspaceId, approval.id);
+        if (cloudflare && d.active && !d.paused)
+          for (const approval of current.approvals)
+            if (
+              approval.kind === "cloudflare_action" &&
+              approval.decision === "approved" &&
+              (!approval.cloudflare || approval.cloudflare.state === "sending")
+            )
+              await cloudflare.send(workspaceId, approval.id);
         for (const intent of current.deliveries)
           if (
             (intent.state === "pending" &&

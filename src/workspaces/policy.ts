@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { cloudflareReadAllowed } from "../cloudflare/policy.ts";
 import {
   type Audit,
   type Run,
@@ -78,6 +79,7 @@ function allowedRun(
     !w.settings.paused &&
     !run.cancelled &&
     githubReadAllowed(w, run) &&
+    cloudflareReadAllowed(w, run) &&
     (!run.handoffRead ||
       (validMemory(run.handoffRead.references, w.messages) &&
         run.handoffRead.chatIds.every(

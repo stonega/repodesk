@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { CloudflareConfig } from "../cloudflare/config.ts";
 import type { CodeTruthSettings } from "../code-truth/config.ts";
 
 export const pluginSchema = z
@@ -25,6 +26,7 @@ export interface PluginSettings {
   revision: number;
   entries: PluginRecord[];
   codeTruth?: CodeTruthSettings;
+  cloudflare?: CloudflareConfig;
 }
 export interface PluginPage {
   revision: number;

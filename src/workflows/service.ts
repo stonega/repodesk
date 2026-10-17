@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { checkCloudflareApproval } from "../cloudflare/service.ts";
 import {
   type Approval,
   type Instruction,
@@ -175,6 +176,8 @@ export function decide(
     409,
   );
   if (accept && approval.kind === "skill") approveSkill(w, approval);
+  if (accept && approval.kind === "cloudflare_action")
+    checkCloudflareApproval(w, approval);
   if (accept && approval.kind === "github_issue")
     checkIssueApproval(w, approval);
   if (accept && approval.kind === "github_pull_request")
