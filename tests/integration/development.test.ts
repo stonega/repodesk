@@ -5,6 +5,11 @@ import { Pool } from "pg";
 import { ExtensionCatalog } from "../../src/agent/extensions.ts";
 import { type AgentInput, selectedModel } from "../../src/agent/runtime.ts";
 import {
+  askTask,
+  conversationAudience,
+  taskExchanges,
+} from "../../src/coding/conversation-store.ts";
+import {
   type DevelopmentResult,
   developmentPolicy,
 } from "../../src/coding/development.ts";
@@ -280,6 +285,18 @@ const url = process.env.TEST_DATABASE_URL;
       tick,
       append,
       executor,
+      ask: (question: string, callId = randomUUID()) =>
+        store.change(w.id, async (current, sql) => {
+          const target = await taskGet(sql, w.id, task.id);
+          return askTask(
+            sql,
+            current,
+            target,
+            present(current.runs.find((r) => r.id === run.id)),
+            callId,
+            question,
+          );
+        }),
       downloads,
       onDownload: (fn: () => Promise<void>) => {
         onDownload = fn;
@@ -306,6 +323,298 @@ const url = process.env.TEST_DATABASE_URL;
       },
     };
   }
+  test("task questions are durable, idempotent and never revise implementation or publication grants", async () => {
+    const f = await fixture();
+    const before = await f.read(),
+      callId = randomUUID();
+    const question = await f.ask(
+      "Why did you choose pagination cursors?",
+      callId,
+    );
+    const replay = await f.ask(question.question, callId);
+    expect(replay.id).toBe(question.id);
+    expect(await taskExchanges(store.pool, f.task)).toHaveLength(1);
+    await expect(
+      f.ask("Implement a different feature", callId),
+    ).rejects.toThrow("coding_message_conflict");
+    const after = await f.read();
+    expect(after.revision).toBe(before.revision);
+    expect(after.canImplement).toBe(before.canImplement);
+    expect(after.canPublish).toBe(before.canPublish);
+    expect(await taskInputs(store.pool, f.task)).toHaveLength(1);
+    expect(
+      await taskExchanges(store.pool, {
+        workspaceId: randomUUID(),
+        id: f.task.id,
+      }),
+    ).toEqual([]);
+  });
+  test("running tasks accept factual questions, report reading and deliver one confirmed answer across executor restarts", async () => {
+    const f = await fixture();
+    await f.tick();
+    const originalState = await f.read();
+    const message = await f.ask("What caused the dropped page?");
+    const sends: string[] = [];
+    f.runner.message = async (_w, _task, input) => {
+      sends.push(input.id);
+    };
+    await f.tick();
+    expect(sends).toEqual([message.id]);
+    expect((await taskExchanges(store.pool, f.task))[0]?.state).toBe(
+      "received",
+    );
+    await f.tick({
+      state: "running",
+      conversation: {
+        messages: [
+          { id: message.id, question: message.question, state: "read" },
+        ],
+      },
+    });
+    expect((await taskExchanges(store.pool, f.task))[0]?.state).toBe("read");
+    const status: LocalStatus = {
+      state: "running",
+      conversation: {
+        messages: [
+          {
+            id: message.id,
+            question: message.question,
+            state: "answered",
+            answer: "The page cursor was overwritten before it was consumed.",
+          },
+        ],
+      },
+    };
+    await f.tick(status);
+    await f.tick(status);
+    expect((await f.read()).revision).toBe(originalState.revision);
+    expect((await f.read()).state).toBe("working");
+    expect(f.starts).toHaveLength(1);
+    expect(f.publications).toHaveLength(0);
+    expect(
+      (await store.read(f.w.id)).deliveries.filter((d) =>
+        d.text.includes("The page cursor was overwritten"),
+      ),
+    ).toHaveLength(1);
+  });
+  test("an uncertain in-flight question is visible and never replayed as a new task", async () => {
+    const f = await fixture();
+    await f.tick();
+    const message = await f.ask("What is the current blocker?");
+    let sends = 0;
+    f.runner.message = async () => {
+      sends++;
+    };
+    await f.tick();
+    const unknown: LocalStatus = {
+      state: "running",
+      conversation: {
+        messages: [
+          { id: message.id, question: message.question, state: "unknown" },
+        ],
+      },
+    };
+    await f.tick(unknown);
+    await f.tick(unknown);
+    expect((await taskExchanges(store.pool, f.task))[0]?.state).toBe("unknown");
+    expect(sends).toBe(1);
+    expect(f.starts).toHaveLength(1);
+    expect((await f.read()).state).toBe("working");
+  });
+  test("completed-task questions use a separate read-only execution and preserve results, grants and PR publication state", async () => {
+    const f = await fixture();
+    const originalResult = result({ status: "completed" });
+    await store.change(f.w.id, async (_w, sql) => {
+      const t = await taskGet(sql, f.w.id, f.task.id);
+      t.state = "review";
+      t.result = originalResult;
+      t.canImplement = true;
+      t.canPublish = true;
+      await taskSave(sql, t);
+    });
+    const message = await f.ask(
+      "Explain the selected implementation; do not change code.",
+    );
+    await f.tick();
+    expect(f.starts).toHaveLength(1);
+    expect(f.starts[0]?.development?.mode).toBe("analysis");
+    expect(f.starts[0]?.development?.inputs[0]?.text).toBe(original);
+    expect(f.starts[0]?.messages).toEqual([
+      { id: message.id, question: message.question },
+    ]);
+    expect((await f.read()).state).toBe("review");
+    await f.tick({
+      state: "succeeded",
+      result: result({
+        status: "analysis",
+        summary: "Cursor ordering preserves the next page.",
+      }),
+      tokens: 9,
+    });
+    await f.tick();
+    const t = await f.read();
+    expect(t.result).toEqual(originalResult);
+    expect(t.state).toBe("review");
+    expect(t.revision).toBe(1);
+    expect(t.canPublish).toBe(true);
+    expect(t.tokens).toBe(9);
+    expect(t.conversationAttemptId).toBeUndefined();
+    expect(f.erases).toEqual([f.starts[0]?.taskId as string]);
+    expect(f.publications).toHaveLength(0);
+    expect((await taskExchanges(store.pool, f.task))[0]).toMatchObject({
+      state: "answered",
+      answer: "Cursor ordering preserves the next page.",
+    });
+  });
+  test("a factual conversation cannot answer a pending product question or block a queued change after its cleanup", async () => {
+    const f = await fixture();
+    const pending = {
+      id: randomUUID(),
+      text: "Which product behavior do you want?",
+      revision: 1,
+    };
+    await store.change(f.w.id, async (_w, sql) => {
+      const t = await taskGet(sql, f.w.id, f.task.id);
+      t.state = "waiting";
+      t.question = pending;
+      await taskSave(sql, t);
+    });
+    await f.ask("Which files did you inspect?");
+    await f.tick();
+    expect((await f.read()).question).toEqual(pending);
+    await f.append("Use the compact version");
+    await f.tick({
+      state: "succeeded",
+      result: result({
+        status: "analysis",
+        summary: "I inspected pagination.ts.",
+      }),
+      tokens: 3,
+    });
+    expect(f.starts).toHaveLength(1);
+    await f.tick();
+    expect(f.starts).toHaveLength(2);
+    expect(f.starts[1]?.development?.inputs.at(-1)?.text).toBe(
+      "Use the compact version",
+    );
+    expect(f.starts[1]?.development?.inputs.at(-1)?.kind).toBe("answer");
+    expect(f.publications).toHaveLength(0);
+  });
+  test("read-only starts recover a busy reservation with the same attempt identity and no duplicate accounting", async () => {
+    const f = await fixture();
+    await store.change(f.w.id, async (_w, sql) => {
+      const t = await taskGet(sql, f.w.id, f.task.id);
+      t.state = "review";
+      await taskSave(sql, t);
+    });
+    await f.ask("Explain the result");
+    const attempts: LocalStart[] = [];
+    let started = false;
+    f.runner.start = async (input) => {
+      attempts.push(input);
+      if (attempts.length === 1) throw new Fault("coding_runner_busy", 429);
+      started = true;
+    };
+    f.runner.status = async () => {
+      if (!started) throw new Fault("coding_task_not_found", 404);
+      return {
+        state: "succeeded",
+        result: result({
+          status: "analysis",
+          summary: "Read-only explanation",
+        }),
+        tokens: 7,
+      };
+    };
+    await f.tick();
+    await f.tick();
+    await f.tick();
+    await f.tick();
+    await f.tick();
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]?.taskId).toBe(attempts[1]?.taskId);
+    expect(attempts[0]?.development).toEqual(attempts[1]?.development);
+    expect((await f.read()).tokens).toBe(7);
+    expect(f.publications).toHaveLength(0);
+    expect((await f.read()).conversationAttemptId).toBeUndefined();
+  });
+  test("conversation scopes enforce actor, topic, membership and source retention", async () => {
+    const f = await fixture();
+    const w = await store.read(f.w.id),
+      t = await f.read();
+    expect(() =>
+      conversationAudience(w, t, { ...f.run, topicId: 999 }),
+    ).toThrow("access_denied");
+    expect(() =>
+      conversationAudience(w, t, { ...f.run, actor: "202" }),
+    ).toThrow("destination_denied");
+    await f.ask("Private question");
+    await store.change(f.w.id, (w) => {
+      const member = present(w.members.find((m) => m.id === "101"));
+      member.active = false;
+    });
+    await f.tick();
+    expect((await taskExchanges(store.pool, f.task))[0]?.state).toBe(
+      "cancelled",
+    );
+    expect(f.starts).toHaveLength(0);
+    const g = await fixture();
+    await g.ask("Sensitive question");
+    await store.change(g.w.id, async (w, sql) => {
+      present(w.messages.find((s) => s.id === g.source.id)).expiresAt =
+        new Date(0).toISOString();
+      await pruneDevelopment(sql, w);
+    });
+    expect(await taskExchanges(store.pool, g.task)).toEqual([]);
+    expect((await g.read()).contentRemoved).toBe(true);
+  });
+  test("revocation during token minting blocks read-only conversation dispatch", async () => {
+    const f = await fixture();
+    await store.change(f.w.id, async (_w, sql) => {
+      const t = await taskGet(sql, f.w.id, f.task.id);
+      t.state = "review";
+      await taskSave(sql, t);
+    });
+    await f.ask("Explain the implementation");
+    f.onToken(() =>
+      store.change(f.w.id, (w) => {
+        present(w.members.find((m) => m.id === "101")).active = false;
+      }),
+    );
+    await f.tick();
+    expect(f.starts).toHaveLength(0);
+    expect((await taskExchanges(store.pool, f.task))[0]?.state).toBe(
+      "cancelled",
+    );
+    expect((await f.read()).state).toBe("review");
+  });
+  test("Stop cancels and erases a conversation execution without changing a confirmed result", async () => {
+    const f = await fixture(),
+      originalResult = result({ status: "completed" });
+    await store.change(f.w.id, async (_w, sql) => {
+      const t = await taskGet(sql, f.w.id, f.task.id);
+      t.state = "review";
+      t.result = originalResult;
+      await taskSave(sql, t);
+    });
+    await f.ask("Explain the result");
+    await f.tick();
+    const attempt = present(f.starts[0]).taskId;
+    await store.change(f.w.id, (_w, sql) =>
+      cancelDevelopment(sql, _w, "101", f.task.id),
+    );
+    await f.tick();
+    await f.tick();
+    expect(f.cancels).toContain(attempt);
+    expect(f.erases).toContain(attempt);
+    expect((await taskExchanges(store.pool, f.task))[0]?.state).toBe(
+      "cancelled",
+    );
+    expect((await f.read()).result).toEqual(originalResult);
+    expect((await f.read()).conversationAttemptId).toBeUndefined();
+    expect(f.starts).toHaveLength(1);
+    expect(f.publications).toHaveLength(0);
+  });
   test("original message, atomic outbox, duplicates, tenant scope and rollback", async () => {
     const f = await fixture();
     expect((await taskInputs(store.pool, f.task))[0]?.text).toBe(original);

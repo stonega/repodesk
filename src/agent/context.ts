@@ -98,7 +98,14 @@ export function buildContext(w: Workspace, run: Run) {
       ? " Live GitHub facts need item URLs and complete paging. Metadata is not CI/review/impact evidence. Repository schedules pass repositoryIds and use reportWindowUTC for previous complete local days."
       : "");
   return {
-    system: system + topicPolicy + groupPolicy + workPolicy,
+    system:
+      system +
+      topicPolicy +
+      groupPolicy +
+      workPolicy +
+      (w.coding?.settings.enabled && w.github?.installationId
+        ? "\nFor questions about an existing Codex task's current work or technical choices, read development_task_conversation. If its saved evidence is insufficient, ask_development_task can request a factual answer from Codex while work continues or after completion. You may formulate technical follow-up questions within the user's request. This channel does not add implementation requirements, authorize publication or let you answer missing product decisions for the user. Preserve the difference between queued, received, read and answered; never claim the question was answered or a requirement implemented from an acknowledgement. Responses arrive asynchronously in this chat; do not busy-poll or restart implementation just to get an explanation. Ordinary conversations and unrelated PR reviews retain their existing routing."
+        : ""),
     prompt,
     skills,
   };

@@ -49,6 +49,7 @@ const developmentIds = [
   randomUUID(),
   randomUUID(),
   randomUUID(),
+  randomUUID(),
 ] as const;
 const developmentKeys = developmentIds.map((id) => taskKey(workspaceId, id));
 const phases = ["prepare", "setup", "implement", "check", "export", "publish"];
@@ -64,8 +65,9 @@ try {
   );
   await writeFile(
     join(dir, "fake-github.cjs"),
-    `let draft=true;
+    `let draft=true;const actualFetch=global.fetch;
 global.fetch=async(url,options)=>{
+ if(process.env.CODEX_TASK_CHANNEL_URL){const target=new URL(url),channel=new URL(process.env.CODEX_TASK_CHANNEL_URL);if(target.origin===channel.origin&&['/conversation/inbox','/conversation/events'].includes(target.pathname))return actualFetch(url,options);}
  const job=JSON.parse(require('node:fs').readFileSync('/input/job.json','utf8'));
  if(job.development?.pr) {
   const sha=require('node:child_process').execFileSync('/usr/bin/git',['-C','/task/repo','rev-parse','HEAD']).toString().trim();
@@ -131,11 +133,17 @@ if(process.env.CODEX_HOME==='/auth') {
  fs.writeFileSync('/auth/auth.json',JSON.stringify({tokens:{access_token:'refreshed-smoke-account'}}));
 }
 if(process.argv[2]==='app-server') {
+ if(process.env.CODEX_TASK_CHANNEL_TOKEN)process.exit(11);
  const rl=require('node:readline').createInterface({input:process.stdin});
  const send=x=>process.stdout.write(JSON.stringify(x)+'\\n');
+ let conversationResult,conversationMessage;
+ const finishConversation=()=>{send({method:'item/completed',params:{threadId:'smoke-thread',turnId:'smoke-turn',item:{type:'agentMessage',phase:'final_answer',text:JSON.stringify(conversationResult)}}});send({method:'turn/completed',params:{threadId:'smoke-thread',turn:{id:'smoke-turn',status:'completed'}}});};
  rl.on('line',line=>{
   const r=JSON.parse(line); if(r.id===undefined)return;
-  if(r.method==='initialize')return send({id:r.id,result:{}});
+  if(!r.method&&r.id===501){if(!r.result?.success)process.exit(12);send({id:502,method:'item/tool/call',params:{threadId:'smoke-thread',turnId:'smoke-turn',callId:'conversation-answer',tool:'repodesk_task_reply',arguments:{messageId:conversationMessage.id,text:'The current checkout preserves pagination ordering.'}}});return;}
+  if(!r.method&&r.id===502){if(!r.result?.success)process.exit(13);finishConversation();return;}
+  if(r.method==='turn/steer'&&conversationResult){conversationMessage=JSON.parse(r.params.input[0].text.split('Task conversation questions: ')[1])[0];if(r.params.expectedTurnId!=='smoke-turn')process.exit(14);send({id:r.id,result:{turnId:'smoke-turn'}});send({id:501,method:'item/tool/call',params:{threadId:'smoke-thread',turnId:'smoke-turn',callId:'conversation-read',tool:'repodesk_task_read',arguments:{messageId:conversationMessage.id}}});return;}
+  if(r.method==='initialize'){if(fs.readFileSync('/input/job.json','utf8').includes('Conversation channel fixture')&&!r.params.capabilities.experimentalApi)process.exit(15);return send({id:r.id,result:{}});}
   if(r.method==='thread/resume'&&!fs.existsSync(process.env.CODEX_HOME+'/session'))return send({id:r.id,error:{code:-32600,message:'no rollout found for thread id'}});
   if(r.method==='thread/start'||r.method==='thread/resume') {fs.writeFileSync(process.env.CODEX_HOME+'/session','smoke-thread');return send({id:r.id,result:{thread:{id:'smoke-thread'}}});}
   if(r.method==='turn/start') {
@@ -157,6 +165,7 @@ if(process.argv[2]==='app-server') {
    const result={status:intake?'intent':question?'needs_input':'completed',intent:'implement',evidenceRevision:1,evidence:'Fixture',publishRequested:true,summary:'Fixture checked.',question:question?'Keep page one for empty results?':null,title:'Smoke fix',body:'Local smoke checks passed.',verificationCommands:intake||question?[]:text.includes('Verification checks failed.')?['true']:text.includes('Exhaust fixture')?['false']:['test -z "$CODEX_TASK_TOKEN" && test -z "$GITHUB_TOKEN" && test "$(cat README.md)" = fixed']};
    send({id:r.id,result:{turn:{id:'smoke-turn'}}});send({method:'turn/started',params:{threadId:'smoke-thread',turn:{id:'smoke-turn'}}});
    send({method:'thread/tokenUsage/updated',params:{threadId:'smoke-thread',turnId:'smoke-turn',tokenUsage:{total:{totalTokens:20},last:{totalTokens:20}}}});
+   if(text.includes('Conversation channel fixture')){conversationResult=result;fs.writeFileSync('/task/conversation-ready','ready');if(text.includes('Task conversation questions: ')){conversationMessage=JSON.parse(text.split('Task conversation questions: ')[1])[0];send({id:501,method:'item/tool/call',params:{threadId:'smoke-thread',turnId:'smoke-turn',callId:'conversation-read',tool:'repodesk_task_read',arguments:{messageId:conversationMessage.id}}});}return;}
    send({method:'item/completed',params:{threadId:'smoke-thread',turnId:'smoke-turn',item:{type:'agentMessage',phase:'final_answer',text:JSON.stringify(result)}}});
    send({method:'turn/completed',params:{threadId:'smoke-thread',turn:{id:'smoke-turn',status:'completed'}}});return;
   }
@@ -533,17 +542,98 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     },
   };
   const waitFor = async (id: string, expected: string) => {
+    let last: LocalStatus | undefined;
     for (let attempt = 0; attempt < 50; attempt++) {
       const status = (await request(
         `/tasks/${workspaceId}/${id}`,
       )) as LocalStatus;
+      last = status;
       if (status.state === expected) return status;
       if (["failed", "cancelled", "unknown"].includes(status.state))
         throw Error(`Continuous fixture failed: ${JSON.stringify(status)}`);
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
-    throw Error("Continuous fixture timed out");
+    if (last?.phase === "implement") {
+      const diagnostic = await engine([
+        "exec",
+        `${taskKey(workspaceId, id)}-implement`,
+        "node",
+        "--input-type=module",
+        "-e",
+        "const url=process.env.CODEX_TASK_CHANNEL_URL,token=process.env.CODEX_TASK_CHANNEL_TOKEN;console.log(JSON.stringify({url,tokenLength:token?.length}));if(url&&token){try{const r=await fetch(url+'/conversation/inbox',{headers:{authorization:'Bearer '+token},signal:AbortSignal.timeout(3000)});console.log(JSON.stringify({status:r.status,body:await r.json()}))}catch{console.log('Conversation network unavailable')}}",
+      ]).catch(() => "No running implementation diagnostic");
+      console.error(diagnostic);
+    }
+    throw Error(`Continuous fixture timed out: ${JSON.stringify(last)}`);
   };
+  const conversationTaskId = developmentIds[9];
+  await request("/tasks", {
+    ...input,
+    taskId: conversationTaskId,
+    issue: undefined,
+    development: {
+      ...development,
+      taskId: randomUUID(),
+      inputs: [
+        { ...development.inputs[0], text: "Conversation channel fixture" },
+      ],
+    },
+  });
+  for (let attempt = 0; ; attempt++) {
+    const status = (await request(
+      `/tasks/${workspaceId}/${conversationTaskId}`,
+    )) as LocalStatus;
+    if (status.phase === "implement" && status.state === "running") break;
+    if (
+      attempt >= 50 ||
+      ["failed", "unknown", "cancelled"].includes(status.state)
+    )
+      throw Error("Conversation fixture did not reach an active turn");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  const message = {
+    id: randomUUID(),
+    question: "What does the current checkout verify?",
+  };
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await engine([
+        "exec",
+        `${taskKey(workspaceId, conversationTaskId)}-implement`,
+        "node",
+        "-e",
+        "require('fs').accessSync('/task/conversation-ready')",
+      ]);
+      break;
+    } catch {
+      if (attempt >= 50)
+        throw Error("Conversation did not start its native Codex turn");
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+  await request(
+    `/tasks/${workspaceId}/${conversationTaskId}/messages`,
+    message,
+  );
+  await request(
+    `/tasks/${workspaceId}/${conversationTaskId}/messages`,
+    message,
+  );
+  await restartSupervisor();
+  const conversation = await waitFor(conversationTaskId, "ready");
+  if (
+    !conversation.checkPassed ||
+    conversation.tokens !== 20 ||
+    conversation.conversation?.messages.length !== 1 ||
+    conversation.conversation.messages[0]?.state !== "answered" ||
+    conversation.conversation.messages[0]?.answer !==
+      "The current checkout preserves pagination ordering."
+  )
+    throw Error(
+      "Conversation, receipts or active work was lost across restart",
+    );
+  await request(`/tasks/${workspaceId}/${conversationTaskId}/cancel`, {});
+  await request(`/tasks/${workspaceId}/${conversationTaskId}/erase`, {});
   await request("/tasks", {
     ...input,
     taskId: developmentIds[0],
@@ -791,7 +881,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   for (const id of developmentIds)
     await request(`/tasks/${workspaceId}/${id}/erase`, {});
   console.log(
-    `${engineName} smoke passed: missing base branch/restart, parallel tasks/capacity/restart, provider/device tasks, question checkpoint/reconstruction, deployment checkpoint/restart, repeated repair, fresh/same-PR publication, remote-head fencing, device continuation, auth expiry/restart/reconnect, usage, erasure and cancellation.`,
+    `${engineName} smoke passed: missing base branch/restart, parallel tasks/capacity/restart, provider/device tasks, live conversation/receipts/restart, question checkpoint/reconstruction, deployment checkpoint/restart, repeated repair, fresh/same-PR publication, remote-head fencing, device continuation, auth expiry/restart/reconnect, usage, erasure and cancellation.`,
   );
 } catch (error) {
   for (const task of [

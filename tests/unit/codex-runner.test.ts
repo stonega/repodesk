@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { LocalRunnerClient } from "../../src/coding/local/client.ts";
 import {
   archiveText,
   type ContainerEngine,
@@ -170,6 +171,121 @@ async function fixture(concurrency = 4) {
     },
   };
 }
+test("the authenticated task conversation survives restart, scopes its token and scrubs messages on erasure", async () => {
+  const f = await fixture();
+  holdImplementations(f);
+  f.input.issue = undefined;
+  f.input.development = {
+    taskId: randomUUID(),
+    revision: 1,
+    mode: "work",
+    context: "",
+    inputs: [
+      {
+        revision: 1,
+        actor: "101",
+        sourceId: "source",
+        text: "Fix pagination",
+        kind: "request",
+      },
+    ],
+  };
+  await f.supervisor.start(f.input);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  const token = f.calls.find(
+    (c) => c.args[0] === "create" && c.args.at(-1) === "implement",
+  )?.env?.CODEX_TASK_CHANNEL_TOKEN;
+  expect(token).toHaveLength(64);
+  if (!token) throw Error("Missing channel token");
+  expect(() => f.supervisor.providerKey(token)).toThrow("coding_proxy_denied");
+  const app = runnerApp(f.supervisor);
+  expect((await app.request("/conversation/inbox")).status).toBe(401);
+  expect(
+    (
+      await app.request("/conversation/inbox", {
+        headers: { authorization: `Bearer ${f.settings.CODEX_RUNNER_TOKEN}` },
+      })
+    ).status,
+  ).toBe(401);
+  const client = new LocalRunnerClient(
+    "http://runner.test",
+    f.settings.CODEX_RUNNER_TOKEN,
+    ((url, init) => app.request(String(url), init)) as typeof fetch,
+  );
+  const message = { id: randomUUID(), question: "Private task question" };
+  await client.message(f.input.workspaceId, f.input.taskId, message);
+  await client.message(f.input.workspaceId, f.input.taskId, message);
+  expect(await f.supervisor.channelInbox(token)).toEqual([message]);
+  await expect(
+    client.message(f.input.workspaceId, f.input.taskId, {
+      ...message,
+      question: "Changed",
+    }),
+  ).rejects.toThrow("coding_message_conflict");
+  const sessionId = randomUUID();
+  await f.supervisor.channelEvent(token, {
+    action: "claim",
+    id: message.id,
+    sessionId,
+  });
+  const restarted = new RunnerSupervisor(f.settings, f.engine);
+  await restarted.initialize();
+  expect(await restarted.channelInbox(token)).toEqual([]);
+  await restarted.channelEvent(token, {
+    action: "accepted",
+    id: message.id,
+    sessionId,
+  });
+  await restarted.channelEvent(token, {
+    action: "read",
+    id: message.id,
+    sessionId,
+  });
+  await restarted.channelEvent(token, {
+    action: "answer",
+    id: message.id,
+    sessionId,
+    text: "Private answer from the current work",
+  });
+  expect(
+    (await restarted.status(f.input.workspaceId, f.input.taskId)).conversation
+      ?.messages[0]?.state,
+  ).toBe("answered");
+  await expect(
+    restarted.channelEvent(token, {
+      action: "answer",
+      id: randomUUID(),
+      sessionId,
+      text: "Wrong task",
+    }),
+  ).rejects.toThrow("coding_message_not_found");
+  await restarted.cancel(f.input.workspaceId, f.input.taskId);
+  await expect(restarted.channelInbox(token)).rejects.toThrow(
+    "coding_channel_denied",
+  );
+  await restarted.erase(f.input.workspaceId, f.input.taskId);
+  const state = await readFile(
+    join(
+      f.settings.CODEX_RUNNER_STATE,
+      `${taskKey(f.input.workspaceId, f.input.taskId)}.json`,
+    ),
+    "utf8",
+  );
+  expect(state).not.toContain("Private task question");
+  expect(state).not.toContain("Private answer");
+  const erased = new RunnerSupervisor(f.settings, f.engine);
+  await erased.initialize();
+  await expect(erased.start(f.input)).rejects.toThrow("coding_task_stopped");
+});
+test("erasure before reservation durably fences a delayed start without launching a container", async () => {
+  const f = await fixture();
+  await f.supervisor.erase(f.input.workspaceId, f.input.taskId);
+  const restarted = new RunnerSupervisor(f.settings, f.engine);
+  await restarted.initialize();
+  await expect(restarted.start(f.input)).rejects.toThrow("coding_task_stopped");
+  expect(f.calls.filter((c) => c.args[0] === "create")).toHaveLength(0);
+});
 test("a selected provider and model stay bound to the task proxy across supervisor restart", async () => {
   const f = await fixture();
   f.input.providerApiKey = "selected-provider-secret";

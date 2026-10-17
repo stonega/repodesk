@@ -1,5 +1,12 @@
 # Automation
 
+- `codex-conversation-proof.ts`: real pinned Codex app-server with a local fake
+  provider; verifies task tools, live steering, read/reply/progress events and
+  session resume without a paid model call. Optionally set `CODEX_PROTOCOL_BINARY`
+  to a local CLI 0.155.1 binary; otherwise it uses the pinned package through Bun.
+- `codex-smoke.ts`: Docker lifecycle smoke with fake Codex, including live task
+  conversation, duplicate message submission and supervisor restart recovery.
+
 - `build.ts`: backend Node entry points and React Router assets.
 - `operator.ts`: host-only password recovery.
 - `register-webhook.ts`: explicit opt-in staging webhook reconciliation.

@@ -18,6 +18,12 @@ import {
   conversationFailureCode,
   conversationFailureCodes,
 } from "./conversation-failure.ts";
+import {
+  conversationInstructions,
+  conversationPrompt,
+  conversationTools,
+  type JobTaskChannel,
+} from "./job-channel.ts";
 
 /** Private JSONL client. Only completed turns cross the durable application boundary. */
 export async function runConversation(options: {
@@ -33,6 +39,7 @@ export async function runConversation(options: {
   signal?: AbortSignal;
   timeoutMs?: number;
   outputSchema?: typeof developmentOutputSchema;
+  channel?: JobTaskChannel;
 }): Promise<{
   threadId: string;
   turnId: string;
@@ -65,6 +72,10 @@ export async function runConversation(options: {
   let authFailed = false;
   let modelActivity = false;
   let turnError: unknown;
+  let steering = false,
+    polling = false;
+  let turnActive = false;
+  let channelTimer: ReturnType<typeof setInterval> | undefined;
   const authFailure = () =>
     new CodexAuthError(
       threadId || undefined,
@@ -147,7 +158,11 @@ export async function runConversation(options: {
       if (!line.trim()) continue;
       try {
         const message = JSON.parse(line);
-        if (typeof message.id === "number" && pending.has(message.id)) {
+        if (
+          !message.method &&
+          typeof message.id === "number" &&
+          pending.has(message.id)
+        ) {
           const p = pending.get(message.id);
           if (!p) continue;
           // Bind the turn before draining notifications in this same stdout chunk.
@@ -178,6 +193,24 @@ export async function runConversation(options: {
           continue;
         }
         if (message.id !== undefined && message.method) {
+          const p = message.params;
+          if (
+            options.channel &&
+            turnActive &&
+            message.method === "item/tool/call" &&
+            p?.threadId === threadId &&
+            p?.turnId === turnId &&
+            typeof p.callId === "string" &&
+            typeof p.tool === "string" &&
+            !p.namespace
+          ) {
+            void options.channel
+              .handle(p.callId, p.tool, p.arguments)
+              .then((result) => {
+                if (!settled) write({ id: message.id, result });
+              });
+            continue;
+          }
           // No implicit approval or connection-local user wait. Questions use completed-turn envelopes.
           write({
             id: message.id,
@@ -241,6 +274,8 @@ export async function runConversation(options: {
           turnStarted &&
           (!turnId || p?.turn?.id === turnId)
         ) {
+          turnActive = false;
+          steering = false;
           if (p?.turn?.status !== "completed") {
             stop(
               codexAuthFailure(p.turn.error) || authFailed
@@ -271,7 +306,7 @@ export async function runConversation(options: {
     if (options.signal?.aborted) throw new Fault("coding_cancelled", 409);
     await request("initialize", {
       clientInfo: { name: "repodesk", version: "1" },
-      capabilities: { experimentalApi: false },
+      capabilities: { experimentalApi: !!options.channel },
     });
     write({ method: "initialized" });
     const config = {
@@ -307,6 +342,11 @@ export async function runConversation(options: {
         : {}),
     };
     let started: unknown;
+    const startThread = () =>
+      request("thread/start", {
+        ...config,
+        ...(options.channel ? { dynamicTools: conversationTools } : {}),
+      });
     if (options.threadId) {
       try {
         started = await request("thread/resume", {
@@ -320,13 +360,16 @@ export async function runConversation(options: {
         )
           throw error;
         reconstructed = true;
-        started = await request("thread/start", config);
+        started = await startThread();
       }
-    } else started = await request("thread/start", config);
+    } else started = await startThread();
     threadId = z.object({ thread: z.object({ id: z.string() }) }).parse(started)
       .thread.id;
     if (!/^[a-zA-Z0-9-]{1,100}$/.test(threadId)) throw failure();
-    let prompt = options.prompt;
+    let prompt =
+      options.prompt + (options.channel ? `\n${conversationInstructions}` : "");
+    const initial = await options.channel?.pull().catch(() => []);
+    if (initial?.length) prompt += `\n${conversationPrompt(initial)}`;
     // One result-only correction stays in this thread/checkout. This does not
     // retry failed execution, authentication, verification or external writes.
     for (let correction = 0; correction <= 1; correction++) {
@@ -341,6 +384,7 @@ export async function runConversation(options: {
       });
       void completion.catch(() => {});
       turnStarted = true;
+      turnActive = true;
       const begun = await request("turn/start", {
         threadId,
         input: [
@@ -357,7 +401,58 @@ export async function runConversation(options: {
       });
       turnId = z.object({ turn: z.object({ id: z.string() }) }).parse(begun)
         .turn.id;
+      if (correction === 0 && options.channel) {
+        if (initial?.length)
+          await options.channel.accepted(initial).catch(() => {});
+        steering = true;
+        channelTimer = setInterval(() => {
+          if (!steering || !turnActive || polling || settled) return;
+          polling = true;
+          const expectedTurnId = turnId;
+          void (async () => {
+            const messages = await options.channel?.pull();
+            if (!messages?.length) return;
+            if (!steering || !turnActive || settled) {
+              await options.channel?.release(messages);
+              return;
+            }
+            let steerTimer: ReturnType<typeof setTimeout> | undefined;
+            try {
+              await Promise.race([
+                request("turn/steer", {
+                  threadId,
+                  expectedTurnId,
+                  input: [
+                    {
+                      type: "text",
+                      text: conversationPrompt(messages),
+                      text_elements: [],
+                    },
+                  ],
+                }),
+                new Promise((_, reject) => {
+                  steerTimer = setTimeout(
+                    () => reject(Error("Unconfirmed steer")),
+                    10000,
+                  );
+                }),
+              ]);
+              await options.channel?.accepted(messages);
+            } finally {
+              clearTimeout(steerTimer);
+            }
+          })()
+            .catch(() => {
+              /* Persisted claims are reconciled, never blindly steered twice. */
+            })
+            .finally(() => {
+              polling = false;
+            });
+        }, 1000);
+      }
       await completion;
+      steering = false;
+      clearInterval(channelTimer);
       const parsed = parseDevelopmentResult(final);
       if (parsed.success) {
         const usage = usageSummary();
@@ -392,6 +487,8 @@ export async function runConversation(options: {
       throw failure(error.code as (typeof conversationFailureCodes)[number]);
     throw failure();
   } finally {
+    steering = false;
+    clearInterval(channelTimer);
     clearTimeout(timer);
     options.signal?.removeEventListener("abort", abort);
     settled = true;

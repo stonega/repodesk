@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { runtimeProviderSchema } from "../../models/config.ts";
 import { codingPayload } from "../config.ts";
+import {
+  type TaskMessage,
+  taskConversation,
+  taskMessage,
+} from "../conversation.ts";
 import { developmentResult, developmentRun } from "../development.ts";
 import { resultIssues } from "../result-validation.ts";
 
@@ -16,6 +21,7 @@ export const localStart = z
       })
       .optional(),
     development: developmentRun.optional(),
+    messages: z.array(taskMessage).max(64).optional(),
     modelProvider: runtimeProviderSchema.optional(),
     providerApiKey: z.string().trim().min(1).max(8192).optional(),
     readToken: z.string().min(1).max(8192),
@@ -23,6 +29,7 @@ export const localStart = z
   .strict();
 export type LocalStart = z.infer<typeof localStart>;
 export const localStatus = z.object({
+  conversation: taskConversation.optional(),
   state: z.enum([
     "auth_required",
     "preparing",
@@ -80,6 +87,11 @@ export interface LocalDeviceAuth {
   deviceLogout(workspaceId: string): Promise<DeviceAuthStatus>;
 }
 export interface LocalRunner {
+  message?(
+    workspaceId: string,
+    taskId: string,
+    input: TaskMessage,
+  ): Promise<void>;
   erase?(workspaceId: string, taskId: string): Promise<void>;
   start(input: LocalStart): Promise<void>;
   resumeAuth?(workspaceId: string, taskId: string): Promise<void>;

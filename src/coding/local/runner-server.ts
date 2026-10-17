@@ -4,6 +4,7 @@ import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import { Fault, requireThat } from "../../domain.ts";
 import { equal } from "../../setup/credentials.ts";
+import { taskMessage } from "../conversation.ts";
 import { runtimeSave } from "../runtime-config.ts";
 import { localStart } from "./protocol.ts";
 import { runnerSettings } from "./settings.ts";
@@ -17,6 +18,22 @@ export function runnerApp(
   // Ten MiB of decoded media needs room for base64 and the original task text.
   app.use("*", bodyLimit({ maxSize: 20 * 1024 * 1024 }));
   app.get("/healthz", (c) => c.json({ status: "ok" }));
+  app.get("/conversation/inbox", async (c) => {
+    c.header("Cache-Control", "no-store");
+    return c.json(
+      await supervisor.channelInbox(
+        (c.req.header("authorization") ?? "").replace(/^Bearer /, ""),
+      ),
+    );
+  });
+  app.post("/conversation/events", async (c) => {
+    c.header("Cache-Control", "no-store");
+    await supervisor.channelEvent(
+      (c.req.header("authorization") ?? "").replace(/^Bearer /, ""),
+      await c.req.json(),
+    );
+    return c.json({ ok: true });
+  });
   app.get("/readyz", async (c) => {
     try {
       await supervisor.ready();
@@ -128,6 +145,14 @@ export function runnerApp(
       z.uuid().parse(c.req.param("workspace")),
       z.uuid().parse(c.req.param("task")),
       token,
+    );
+    return c.json({ ok: true });
+  });
+  app.post("/tasks/:workspace/:task/messages", async (c) => {
+    await supervisor.message(
+      z.uuid().parse(c.req.param("workspace")),
+      z.uuid().parse(c.req.param("task")),
+      taskMessage.parse(await c.req.json()),
     );
     return c.json({ ok: true });
   });

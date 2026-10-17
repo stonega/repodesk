@@ -435,6 +435,19 @@ export async function pruneDevelopment(sql: Sql, w: Workspace) {
       ).rows[0]?.data?.sources ?? [];
     const invalid =
       !!w.deletion ||
+      (
+        await sql.query(
+          "SELECT data FROM coding_task_events WHERE workspace_id=$1 AND task_id=$2 AND id LIKE 'conversation:message:%'",
+          [w.id, task.id],
+        )
+      ).rows.some((row) =>
+        (row.data.sourceIds ?? []).some(
+          (id: string) =>
+            !w.messages.some(
+              (s) => s.id === id && Date.parse(s.expiresAt) > Date.now(),
+            ),
+        ),
+      ) ||
       references.some(
         (reference: { id: string }) =>
           !w.messages.some(

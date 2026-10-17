@@ -9,6 +9,13 @@ import {
 } from "../github/user-access.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import { authorize, runAllowed } from "../workspaces/policy.ts";
+import { conversationPage } from "./conversation.ts";
+import {
+  askTask,
+  conversationAudience,
+  exchangeView,
+  taskExchanges,
+} from "./conversation-store.ts";
 import { cancelCoding, proposeCoding } from "./policy.ts";
 import { taskGet } from "./task-store.ts";
 import {
@@ -41,6 +48,8 @@ export function codingExtension(
       "cancel_coding_task",
       ...(directTargets.length ? ["start_development_task"] : []),
       "send_development_input",
+      "ask_development_task",
+      "development_task_conversation",
       "development_task_status",
       "cancel_development_task",
     ],
@@ -62,6 +71,9 @@ export function codingExtension(
       "coding_capacity_reached",
       "resolve_existing_proposal_first",
       "extension_configuration_changed",
+      "coding_message_conflict",
+      "coding_message_capacity",
+      "coding_task_stopped",
     ],
     factory: (input) => async (pi) => {
       const accessibleTargets = targets.filter((t) =>
@@ -166,6 +178,86 @@ export function codingExtension(
               taskId: task.id,
               revision: task.revision,
               state: task.state,
+              receipt: {
+                state: "received",
+                receivedRevision: task.revision,
+                dispatchedRevision: task.consumedRevision,
+                readRevision: task.readRevision ?? 0,
+                verifiedRevision: task.verifiedRevision,
+              },
+            };
+          }),
+      });
+      pi.registerTool({
+        name: "ask_development_task",
+        label: "Ask the Codex task",
+        description:
+          "Ask Codex a factual question about an existing task's current work, choices or blockers, including while it runs. You may formulate a technical follow-up yourself within the user's request. This is conversation only: it cannot add requirements, make product decisions, implement code or authorize publication. Use send_development_input with the original user source for changes. Resolve the task first; read development_task_conversation for replies. A queued or received message is not yet read or answered. The response is delivered asynchronously in this same conversation; do not invent it or repeatedly poll in one chat run.",
+        parameters: Type.Object({
+          taskId: Type.String(),
+          question: Type.String({ minLength: 1, maxLength: 4000 }),
+        }),
+        execute: async (callId, args) =>
+          operate(async (w, sql) => {
+            const task = await taskGet(sql, w.id, String(args.taskId));
+            const run = w.runs.find((r) => r.id === input.runId);
+            requireThat(run, "run_revoked", 409);
+            const message = await askTask(
+              sql,
+              w,
+              task,
+              run,
+              callId,
+              String(args.question),
+            );
+            run.codingTaskId = task.id;
+            return {
+              taskId: task.id,
+              message: exchangeView(message),
+              delivery: "asynchronous",
+            };
+          }),
+      });
+      pi.registerTool({
+        name: "development_task_conversation",
+        label: "Read the Codex task conversation",
+        description:
+          "Read saved questions, actual Codex answers and message receipts for the current audience's task. Received, read and answered are distinct. Requirement revisions report dispatch and verification separately; a conversation answer never proves a change was implemented. Task completion retains this history. Use bounded pages instead of repeated status polling.",
+        parameters: Type.Object({
+          taskId: Type.String(),
+          offset: Type.Optional(Type.Integer({ minimum: 0, maximum: 100 })),
+          limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
+        }),
+        execute: async (_id, args) =>
+          operate(async (w, sql) => {
+            const task = await taskGet(sql, w.id, String(args.taskId));
+            const run = w.runs.find((r) => r.id === input.runId);
+            requireThat(run, "run_revoked", 409);
+            conversationAudience(w, task, run);
+            const messages = await taskExchanges(sql, task);
+            const { offset, limit } = conversationPage.parse({
+              offset: args.offset,
+              limit: args.limit,
+            });
+            return {
+              taskId: task.id,
+              state: task.state,
+              requirements: {
+                receivedRevision: task.revision,
+                readRevision: task.readRevision ?? 0,
+                dispatchedRevision: task.consumedRevision,
+                verifiedRevision: task.verifiedRevision,
+              },
+              messages: messages
+                .slice(offset, offset + limit)
+                .map(exchangeView),
+              total: messages.length,
+              nextOffset:
+                offset + limit < messages.length ? offset + limit : undefined,
+              progress: task.progress,
+              result: task.result?.summary,
+              question: task.question?.text,
+              pr: task.pr?.url,
             };
           }),
       });
@@ -199,6 +291,9 @@ export function codingExtension(
                 taskId: task.id,
                 state: task.state,
                 revision: task.revision,
+                consumedRevision: task.consumedRevision,
+                readRevision: task.readRevision ?? 0,
+                verifiedRevision: task.verifiedRevision,
                 question: task.question?.text,
                 pr: task.pr?.url,
                 error: task.error,

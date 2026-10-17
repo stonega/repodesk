@@ -13,6 +13,7 @@ import { CodexAuthError, codexAuthFailure } from "./auth-failure.ts";
 import { checkoutFailureCode } from "./checkout-failure.ts";
 import { runConversation } from "./conversation.ts";
 import { CodexConversationError } from "./conversation-failure.ts";
+import { JobTaskChannel } from "./job-channel.ts";
 import { prepareOpenCodeReview } from "./open-code-review.ts";
 import { localStart } from "./protocol.ts";
 import { markPullRequestReady, publicationPushArgs } from "./publication.ts";
@@ -179,6 +180,22 @@ async function implement(job: Job) {
   await rm("/task/auth-failure.json", { force: true });
   await rm("/task/conversation-failure.json", { force: true });
   if (job.development) {
+    const channel =
+      process.env.CODEX_TASK_CHANNEL_URL && process.env.CODEX_TASK_CHANNEL_TOKEN
+        ? new JobTaskChannel(
+            process.env.CODEX_TASK_CHANNEL_URL,
+            process.env.CODEX_TASK_CHANNEL_TOKEN,
+          )
+        : undefined;
+    let channelThread = "";
+    if (channel)
+      try {
+        channelThread = (
+          await readFile("/task/repodesk-channel-thread", "utf8")
+        ).trim();
+      } catch {
+        /* Older work volumes reconstruct from durable task context. */
+      }
     let diagnostics: string | undefined;
     try {
       diagnostics = (await readFile("/task/check-diagnostics", "utf8")).slice(
@@ -189,6 +206,7 @@ async function implement(job: Job) {
     let turn: Awaited<ReturnType<typeof runConversation>>;
     try {
       turn = await runConversation({
+        channel,
         cwd: repo,
         env: {
           ...env,
@@ -207,7 +225,9 @@ async function implement(job: Job) {
         threadId:
           job.payload.authMode === "device_code"
             ? undefined
-            : job.development.threadId,
+            : !channel || channelThread === job.development.threadId
+              ? job.development.threadId
+              : undefined,
         readOnly: job.development.mode !== "work",
         protectCredentials:
           !!job.development.review && job.development.mode !== "work",
@@ -243,6 +263,10 @@ async function implement(job: Job) {
       throw error;
     }
     await writeFile("/task/conversation.json", JSON.stringify(turn));
+    if (channel)
+      await writeFile("/task/repodesk-channel-thread", turn.threadId, {
+        mode: 0o600,
+      });
     await writeFile("/task/thread-id", turn.threadId);
     await git(["add", "--all"]);
     await writeFile(

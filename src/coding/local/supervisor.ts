@@ -19,6 +19,13 @@ import {
   hash,
 } from "../../setup/credentials.ts";
 import {
+  channelEvent,
+  type TaskConversation,
+  type TaskMessage,
+  taskConversation,
+  taskMessage,
+} from "../conversation.ts";
+import {
   developmentResult,
   developmentResultByteLimit,
   developmentRun,
@@ -34,6 +41,7 @@ import { checkoutFailureCodes } from "./checkout-failure.ts";
 import type { ContainerEngine } from "./container.ts";
 import { conversationFailureCodes } from "./conversation-failure.ts";
 import { DeviceAuth } from "./device-auth.ts";
+import { applyChannelEvent, closeMailbox, enqueueMessage } from "./mailbox.ts";
 import {
   type LocalRunner,
   type LocalStart,
@@ -50,6 +58,8 @@ import {
 } from "./task-runtime.ts";
 
 interface Record extends LocalStatus {
+  channelToken?: string;
+  conversation?: TaskConversation;
   runtime?: RunnerSettings["CODEX_CONTAINER_ENGINE"];
   key: string;
   input: Omit<LocalStart, "readToken" | "providerApiKey">;
@@ -88,6 +98,7 @@ export const taskKey = (workspaceId: string, taskId: string) => {
 export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
   readonly device: DeviceAuth;
   private records = new Map<string, Record>();
+  private erased = new Set<string>();
   private tail: Promise<unknown> = Promise.resolve();
   private engine!: TaskRuntime;
   private selection: RuntimeSelection;
@@ -118,6 +129,10 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
       this.engine = this.factory(selected);
     await this.device.initialize();
     for (const name of await readdir(this.settings.CODEX_RUNNER_STATE)) {
+      if (/^deepx-codex-[a-f0-9]{32}\.erased$/.test(name)) {
+        this.erased.add(name.slice(0, -7));
+        continue;
+      }
       if (/^deepx-codex-[a-f0-9]{32}\.auth$/.test(name)) {
         await rm(join(this.settings.CODEX_RUNNER_STATE, name), { force: true });
         continue;
@@ -201,6 +216,10 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
     return join(this.settings.CODEX_RUNNER_STATE, `${r.key}.${suffix}`);
   }
   private async save(r: Record) {
+    if (r.phase !== "implement" || terminal(r.state) || r.state === "ready")
+      delete r.channelToken;
+    if (r.phase !== "implement" || terminal(r.state) || r.state === "ready")
+      closeMailbox(r.conversation, r.state === "cancelled");
     if (!["preparing", "running"].includes(r.state)) delete r.providerApiKey;
     if (terminal(r.state) && !r.finishedAt) r.finishedAt = Date.now();
     await writeFile(this.path(r, "json.tmp"), JSON.stringify(r), {
@@ -246,6 +265,9 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
   }
   private view(r: Record): LocalStatus {
     return {
+      conversation: r.conversation
+        ? structuredClone(r.conversation)
+        : undefined,
       state: r.state,
       threadId: r.threadId,
       prUrl: r.prUrl,
@@ -305,6 +327,16 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
     mode: TaskMode,
     env: { [key: string]: string } = {},
   ) {
+    if (mode === "implement" && r.input.development) {
+      closeMailbox(r.conversation);
+      r.channelToken = randomBytes(32).toString("hex");
+      await this.save(r);
+      env = {
+        ...env,
+        CODEX_TASK_CHANNEL_URL: this.settings.CODEX_RUNNER_PROXY_URL,
+        CODEX_TASK_CHANNEL_TOKEN: r.channelToken,
+      };
+    }
     const name = `${r.key}-${mode}`;
     const deviceRun =
       mode === "implement" && r.input.payload.authMode === "device_code";
@@ -390,6 +422,7 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
         "coding_job_invalid",
       );
       const key = taskKey(safe.workspaceId, safe.taskId);
+      requireThat(!this.erased.has(key), "coding_task_stopped", 409);
       const prior = this.records.get(key);
       if (prior) {
         requireThat(!prior.cleaned, "coding_task_stopped", 409);
@@ -414,6 +447,14 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
           409,
         );
       const r: Record = {
+        conversation: safe.development
+          ? {
+              messages: (safe.messages ?? []).map((message) => ({
+                ...message,
+                state: "queued",
+              })),
+            }
+          : undefined,
         runtime: this.settings.CODEX_CONTAINER_ENGINE,
         providerApiKey:
           safe.payload.authMode === "provider_key" && providerApiKey
@@ -468,6 +509,59 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
       const r = this.get(workspaceId, taskId);
       await this.advance(r);
       return this.view(r);
+    });
+  }
+  async message(workspaceId: string, taskId: string, value: TaskMessage) {
+    return this.serial(async () => {
+      const r = this.get(workspaceId, taskId);
+      requireThat(
+        r.input.development && !r.cleaned,
+        "coding_message_closed",
+        409,
+      );
+      const message = taskMessage.parse(value);
+      r.conversation ??= { messages: [] };
+      const mailbox = r.conversation;
+      const prior = mailbox.messages.some((m) => m.id === message.id);
+      requireThat(
+        prior ||
+          (["preparing", "running"].includes(r.state) &&
+            ["prepare", "setup", "implement"].includes(r.phase)),
+        "coding_message_closed",
+        409,
+      );
+      enqueueMessage(mailbox, message);
+      await this.save(r);
+    });
+  }
+  private channelRecord(token: string) {
+    const r = [...this.records.values()].find(
+      (r) =>
+        !r.cleaned &&
+        r.state === "running" &&
+        r.phase === "implement" &&
+        r.input.development &&
+        !!r.channelToken &&
+        equal(token, r.channelToken),
+    );
+    requireThat(r, "coding_channel_denied", 401);
+    return r;
+  }
+  async channelInbox(token: string) {
+    return this.serial(async () => {
+      const r = this.channelRecord(token);
+      return taskConversation
+        .parse(r.conversation ?? { messages: [] })
+        .messages.filter((m) => m.state === "queued")
+        .map(({ id, question }) => ({ id, question }));
+    });
+  }
+  async channelEvent(token: string, value: unknown) {
+    return this.serial(async () => {
+      const r = this.channelRecord(token);
+      r.conversation ??= { messages: [] };
+      applyChannelEvent(r.conversation, channelEvent.parse(value));
+      await this.save(r);
     });
   }
   private async copyResult(r: Record, filename: string) {
@@ -868,7 +962,15 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
   }
   async erase(workspaceId: string, taskId: string) {
     return this.serial(async () => {
-      const r = this.records.get(taskKey(workspaceId, taskId));
+      const key = taskKey(workspaceId, taskId);
+      // Fence delayed start requests even when erasure wins the race to reservation.
+      await writeFile(
+        join(this.settings.CODEX_RUNNER_STATE, `${key}.erased`),
+        "",
+        { mode: 0o600 },
+      );
+      this.erased.add(key);
+      const r = this.records.get(key);
       if (!r || r.cleaned) return;
       await this.stop(r);
       await this.engine.remove([
@@ -896,6 +998,8 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
       r.verificationCommands = undefined;
       r.threadId = undefined;
       r.input.development = undefined;
+      r.input.messages = undefined;
+      r.conversation = undefined;
       r.input.issue = undefined;
       r.input.payload.title = "[removed]";
       r.input.payload.body = "[removed]";
@@ -985,6 +1089,8 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
           r.input.payload.body = "[expired]";
           r.input.payload.title = "[expired]";
           delete r.result;
+          delete r.input.messages;
+          delete r.conversation;
           delete r.verificationCommands;
           if (r.input.development) {
             r.input.development.inputs = [];

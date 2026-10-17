@@ -85,11 +85,22 @@ changes continue the matching task through `send_development_input`, while a new
 development goal can start a separate task. Codex is also available when explicitly
 requested. The presence of a task never imports every later message into its inputs.
 
+For questions about the task's current work or technical choices, Pi reads
+`development_task_conversation` and can use `ask_development_task` for a fresh
+answer. Pi may formulate technical follow-ups within the user's request. Questions
+and confirmed replies remain in the same task/audience without granting changes
+or publication. Receipt, explicit reading and an actual answer are distinct;
+answers arrive asynchronously in the original chat/topic. Questions after completion
+or while a product choice is pending use a separate read-only execution, preserving
+the result, question and PR. New implementation waits for its cleanup. See the
+[conversation examples](../../examples/codex-task-conversation.md).
+
 Replying to the confirmed notice for a current Codex question routes that answer
 directly to its task, including photo-only answers. Unanchored answers receive Pi
 intent handling. Edits/duplicates of accepted inputs retain their task binding.
 Private conversations and unaddressed group messages are never imported across
-audiences. Accepted messages reach Codex at the next completed turn boundary. A necessary Codex question checkpoints
+audiences. New implementation requirements reach the next completed turn boundary;
+factual questions can use the active-turn channel. A necessary Codex question checkpoints
 partial work and releases the runner slot; answers preserve their original text.
 Tap inline **Cancel** on a task notice, or send **stop**, **停止**, or `/cancel` in
 the bound conversation to stop the task. Inline **Status** and `/status` in that

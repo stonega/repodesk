@@ -131,6 +131,41 @@ accepted requirements. Pending changes must be consumed and verified first. Once
 publication is reserved, later inputs queue for the next attempt; they cannot
 retroactively change an in-flight external operation.
 
+## Task conversation during execution
+
+Preference source: 2026-10-17 — the project owner confirmed two-way conversation
+between Chat Agent and Codex throughout a task, including questions, additional
+requirements, progress and continuation after the current work finishes. This
+extends the 2026-10-08 routing preference for factual questions about an existing
+task. Ordinary conversation and unrelated PR reviews retain their existing routing.
+
+Chat Agent can formulate technical questions with `ask_development_task` and read
+saved exchanges with `development_task_conversation`. Questions are reference
+data, not implementation requirements, product decisions or publication grants.
+Changes still relay the original authenticated source with
+`send_development_input`; consequential product choices still go to the user.
+
+Keep receipt, acceptance by the active turn, explicit reading and the actual answer
+distinct. Questions have durable IDs and ordered history under the task, tenant
+and chat/topic. They never advance its requirement revision. Progress contains
+deliberately reported facts or blockers, not hidden reasoning, private logs or
+credentials. Confirmed answers arrive asynchronously in the original audience;
+the chat agent reads saved history on follow-ups.
+
+During implementation, a private attempt-scoped channel can append a question to
+the current turn and receive explicit read/reply/progress tool calls. Claims
+persist before steering; unconfirmed native delivery is never replayed. An
+unclaimed question can move to a later safe execution boundary. Stop takes the
+existing priority cancellation path. New requirements retain their verified
+revision and publication checks.
+
+After completion, or while waiting on a product choice, factual questions can use
+a separate read-only execution. Preserve the original result, question, PR and
+authorization; serialize new implementation behind cleanup of this execution.
+Retain the dialogue after freeing compute. Reconstruct from durable evidence and
+current code when a compatible session is absent. Permission loss, source expiry
+and deletion cover conversations and their executions together.
+
 ## Execution, verification and results
 
 Codex investigates before deciding on an implementation plan. Creating a GitHub

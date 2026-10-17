@@ -1,4 +1,5 @@
 import { Fault } from "../../domain.ts";
+import type { TaskMessage } from "../conversation.ts";
 import {
   type LocalRuntimeControl,
   type RuntimeSave,
@@ -69,7 +70,9 @@ export class LocalRunnerClient
           error.error === "coding_device_auth_required" ||
           error.error === "coding_device_mode_required" ||
           error.error === "coding_checkpoint_expired" ||
-          error.error === "coding_token_limit"
+          error.error === "coding_token_limit" ||
+          error.error === "coding_message_conflict" ||
+          error.error === "coding_message_closed"
         )
           throw new Fault(error.error, 409);
       }
@@ -109,6 +112,9 @@ export class LocalRunnerClient
   }
   async start(input: LocalStart) {
     await this.request("/tasks", input);
+  }
+  async message(workspaceId: string, taskId: string, input: TaskMessage) {
+    await this.request(`${this.path(workspaceId, taskId)}/messages`, input);
   }
   async status(workspaceId: string, taskId: string) {
     return localStatus.parse(

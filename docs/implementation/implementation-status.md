@@ -1,5 +1,46 @@
 # Implementation evidence
 
+## Codex task conversation (2026-10-17)
+
+Direct continuous development tasks have a durable conversation separate from
+implementation requirements. Chat Agent can formulate factual questions with
+`ask_development_task`, read bounded history and receipts with
+`development_task_conversation`, and relay new requirements through the existing
+source-bound input tool. Questions never advance requirement revisions or grants.
+Requirement receipt, dispatch, completed-turn reading and verification are separate.
+
+Active implementation processes use an attempt-scoped mailbox and pinned app-server
+`turn/steer`. Only explicit read/reply/progress tools cross this channel; other
+server requests remain unsupported. Tokens stay out of the Codex child and other
+phases, survive supervisor restart and rotate between launches. Claims persist
+before steering. Idempotent mailbox acknowledgement retries cannot resend native
+input; unconfirmed native delivery stays unknown. Replies and meaningful progress
+arrive asynchronously in the original audience, with history available to Chat Agent.
+
+Completed/waiting tasks can answer through a separate read-only execution without
+changing their result, product question, PR or authorization. The existing unique
+live-attempt constraint and a conversation pointer serialize subsequent coding
+behind cleanup. Usage settles once. Frozen attempt identities handle unknown starts;
+durable erasure tombstones also fence starts delayed until after cleanup. Source
+expiry/deletion covers the dialogue and all recorded executions.
+
+Validation on an isolated v0.1.39 checkout plus this feature passed Biome, strict
+TypeScript, production build and **807 deterministic tests across 91 files** with
+disposable PostgreSQL. This avoids unrelated concurrent UI, memory and Cloudflare
+work in the shared checkout. The real pinned CLI **0.155.1** passed a local fake-provider
+proof for initial/live questions, reading, answers, progress, token accounting and
+restored tools on session resume. App, supervisor, Docker job and OpenSandbox job
+images built; the app passed its Node 24 contract and both Compose overlays validated.
+The full Docker lifecycle smoke passed, including duplicate questions and an
+active conversation surviving supervisor restart. Earlier smoke failures exposed
+a fake GitHub transport intercepting the private channel; the fixture now permits
+only those two scoped channel endpoints through its real local transport.
+
+No dependency or database migration was added. Matching app/worker/supervisor
+builds are required. Live model quality, Telegram delivery and a deployed OpenSandbox
+repeat remain separate rollout checks. Reviewed legacy task coverage is not implied
+by this Direct-task evidence. See [the conversation journey](../../examples/codex-task-conversation.md).
+
 ## v0.1.39 release preparation (2026-10-17)
 
 Release preflight caught Docker-specific credential ownership checks leaking into

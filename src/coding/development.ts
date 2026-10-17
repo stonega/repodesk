@@ -271,9 +271,12 @@ export interface DevelopmentTask {
   phase: "intake" | "work" | "analysis";
   revision: number;
   consumedRevision: number;
+  readRevision?: number;
   verifiedRevision: number;
   fence: number;
   attemptId?: string;
+  conversationAttemptId?: string;
+  conversationPending?: boolean;
   previousAttemptId?: string;
   cleanupAttemptId?: string;
   attempts: number;

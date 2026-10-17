@@ -15,6 +15,7 @@ import { decrypt, fingerprint } from "../setup/credentials.ts";
 import { loadSourceAttachments } from "../telegram/attachments.ts";
 import { type Telegram, TelegramClient } from "../telegram/client.ts";
 import { clearProgress, recordProgress } from "../telegram/feedback.ts";
+import { TaskConversationExecutor } from "./conversation-executor.ts";
 import {
   type DevelopmentRun,
   type DevelopmentTask,
@@ -59,6 +60,8 @@ export class DevelopmentExecutor {
     for (const task of await taskList(this.store.pool, workspaceId)) {
       if (
         developmentStopped(task.state) &&
+        !task.conversationPending &&
+        !task.conversationAttemptId &&
         !task.contentRemoved &&
         !task.cleanupAttemptId
       )
@@ -134,9 +137,20 @@ export class DevelopmentExecutor {
     return { token, app };
   }
   async advance(workspaceId: string, id: string) {
+    await new TaskConversationExecutor(
+      this.store,
+      this.apps,
+      this.runner,
+      this.key,
+    ).advance(workspaceId, id);
+    await this.advanceTask(workspaceId, id);
+  }
+  private async advanceTask(workspaceId: string, id: string) {
     const lease = randomUUID();
     const task = await this.store.change(workspaceId, async (w, sql) => {
       const t = await taskGet(sql, workspaceId, id);
+      if (t.conversationAttemptId && !t.cancelRequested && !t.contentRemoved)
+        return;
       if (
         (developmentStopped(t.state) &&
           !t.contentRemoved &&
@@ -195,7 +209,7 @@ export class DevelopmentExecutor {
       ) {
         t.state = "cancelled";
         clearProgress(w, "development", t.id);
-        notifyDevelopment(
+        await this.notice(
           w,
           t,
           t.error === "github_user_access_denied"
@@ -479,6 +493,32 @@ export class DevelopmentExecutor {
       }
       requireThat(task.attemptId, "coding_attempt_missing", 409);
       const status = await this.runner.status(workspaceId, task.attemptId);
+      const progress = status.conversation?.progress;
+      if (progress)
+        await this.update(
+          task,
+          lease,
+          async (w, sql, t) => {
+            await this.allowed(w, sql, t);
+            const saved = await sql.query(
+              "INSERT INTO coding_task_events(workspace_id,task_id,id,data) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id",
+              [
+                w.id,
+                t.id,
+                `conversation:progress:${task.attemptId}:${progress.id}`,
+                JSON.stringify(progress),
+              ],
+            );
+            if (saved.rowCount)
+              notifyDevelopment(
+                w,
+                t,
+                `Codex: ${progress.text}`,
+                `conversation:progress:${progress.id}`,
+              );
+          },
+          false,
+        );
       if (status.state === "auth_required") {
         requireThat(
           task.payload.authMode === "device_code" &&
@@ -615,6 +655,7 @@ export class DevelopmentExecutor {
           );
         } else if (status.state === "succeeded") {
           requireThat(status.result, "coding_result_invalid", 409);
+          t.readRevision = t.consumedRevision;
           t.result = status.result;
           if (t.revision > t.consumedRevision) {
             t.state = "queued";
@@ -924,6 +965,7 @@ export class DevelopmentExecutor {
         t.result = status.result;
         t.threadId = status.threadId;
         t.verifiedRevision = t.consumedRevision;
+        t.readRevision = t.consumedRevision;
         if (t.revision > t.verifiedRevision || !t.canPublish) {
           await this.settle(sql, t, status);
           t.state = t.revision > t.verifiedRevision ? "queued" : "review";

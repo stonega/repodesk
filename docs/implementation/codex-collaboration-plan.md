@@ -25,8 +25,11 @@ this automatic-verification revision; see the implementation log for its checks.
 The original delivery sequence below remains the acceptance contract. The selected
 transport is a private Codex app-server JSONL client in the existing container,
 using CLI 0.155.1. Questions are validated completed-turn envelopes, and inputs
-queue at confirmed turn boundaries. Native connection-local questions/live steering
-are not used for durable delivery. Waiting frees the task's runner slot. As of
+queue at confirmed turn boundaries. Product questions still use completed-turn
+envelopes. Updated 2026-10-17: factual questions additionally use a persistent
+attempt-scoped mailbox and native `turn/steer`, with narrowly registered experimental
+read/reply/progress tools. Claims persist before steering; lost native
+acknowledgements are not replayed. Waiting frees the task's runner slot. As of
 2026-10-07 the runner defaults to four active tasks, configurable through
 `CODEX_RUNNER_CONCURRENCY`; one task's attempts stay serialized. Tasks sharing a
 workspace device-login cache serialize their Codex phases while other phases can
@@ -93,6 +96,34 @@ inputs as legacy approvals, or restart unknown writes. Local validation includes
 migration reruns, application image runtime smoke and Compose validation.
 
 ## Outcome and first release
+
+The 2026-10-17 conversation extension reuses `coding_task_events` for questions,
+receipts, answers and reported progress, without a database migration or new
+dependency. `ask_development_task` permits factual follow-ups;
+`development_task_conversation` returns bounded history and separate requirement
+receipt/dispatch/read/verification revisions. Questions never enter inputs/grants.
+
+Only an implementation process receives its separate task-channel token, which
+persists across supervisor restarts and rotates between launches. The Codex child,
+other phases and other tasks do not receive it. The JSONL adapter handles only
+its three registered task tools on the bound thread/turn. Product clarification
+still checkpoints and releases the slot. Confirmed replies arrive asynchronously
+in the original chat/topic and remain available to Chat Agent on follow-ups.
+
+Questions after completion or while waiting use a separate read-only attempt.
+The existing unique live-attempt constraint and a conversation pointer fence new
+implementation until cleanup. Preserve results, product questions and publication
+grants; settle usage once. Unknown starts reconcile/retry only the same frozen
+attempt identity. Erasure stores a tombstone even before reservation, fencing
+delayed starts. Both Docker and OpenSandbox use this shared conversation layer.
+
+The pinned CLI 0.155.1 proof uses a local fake provider for initial/live input,
+receipts, replies, progress and restoration of tools on resume. `dynamicTools`
+belongs to `thread/start`, not `thread/resume`. Older work volumes without a
+channel-session marker reconstruct once; compatible surviving sessions can resume.
+See [the journey](../../examples/codex-task-conversation.md) and
+`scripts/codex-conversation-proof.ts`. Live model quality, end-to-end Telegram
+conversation and a deployed OpenSandbox repeat remain rollout checks.
 
 An authorized maintainer can ask in Telegram to implement a change and open a
 PR, without a redundant approval click when repository policy permits it.

@@ -40,6 +40,15 @@ These instructions guide tool choice and never grant access or approve an action
   `propose_coding_task`; Direct targets use `start_development_task`. Use
   `send_development_input` for changes to the same task/PR. Relay original
   authenticated requirements; Codex owns implementation and verification.
+- For factual questions about an existing Codex task, read
+  `development_task_conversation` and use `ask_development_task` when a fresh
+  answer from Codex is needed. You can ask technical follow-ups within the user's
+  request while work runs, or after its current implementation finishes. This
+  conversation cannot authorize changes or supply missing product decisions.
+  Queued/received messages are not read or answered; report the returned receipt
+  accurately. Answers arrive asynchronously in the original chat/topic. Do not
+  busy-poll or restart implementation to obtain an explanation. Changes still use
+  `send_development_input` with the original authenticated user message.
 
 Proposal success means awaiting human approval, never that GitHub changed. Report
 confirmed results only. Explain returned permission/state guidance concisely;
