@@ -135,7 +135,7 @@ const url = process.env.TEST_DATABASE_URL;
         enabled: true,
         backend: "podman",
         authMode: "provider_key",
-        development: developmentPolicy.parse({ executionMode: "direct" }),
+        development: developmentPolicy.parse({}),
       },
     };
     grantGitHubAccess(w, ["101", "202"]);
@@ -982,7 +982,7 @@ const url = process.env.TEST_DATABASE_URL;
   test("question survives restart, releases attempt and answers continue the same PR", async () => {
     const f = await fixture();
     await f.tick();
-    expect(f.starts[0]?.issue).toBeUndefined();
+    expect(f.starts[0]).not.toHaveProperty("issue");
     expect(f.starts[0]?.development?.inputs[0]?.text).toBe(original);
     await f.tick({
       state: "succeeded",
@@ -1247,7 +1247,6 @@ const url = process.env.TEST_DATABASE_URL;
     const first = await fixture();
     const second = await fixture();
     const policy = {
-      executionMode: "direct",
       publishByDefault: false,
       maxAttempts: 1,
       maxRepairAttempts: 0,
@@ -1298,7 +1297,6 @@ const url = process.env.TEST_DATABASE_URL;
     for (let pass = 0; pass < 2; pass++) {
       await store.pool.query(sql);
       expect((await first.read()).policy).toEqual({
-        executionMode: "direct",
         publishByDefault: false,
       });
       expect((await first.read()).tokens).toBe(17);
@@ -1308,7 +1306,6 @@ const url = process.env.TEST_DATABASE_URL;
       const w = await store.read(first.w.id);
       expect(w.coding?.revision).toBe(1);
       expect(w.coding?.settings.development).toEqual({
-        executionMode: "direct",
         publishByDefault: false,
       });
       expect(

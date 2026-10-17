@@ -25,8 +25,6 @@ const explain = (error: unknown) => {
       review_webhook_required: "Configure the GitHub webhook first.",
       review_repository_already_configured:
         "This repository already has Review Bot enabled in another workspace.",
-      coding_direct_execution_disabled:
-        "Enable Direct execution in Codex before accepting fixes.",
       version_conflict:
         "These settings changed. Reload the saved settings and try again.",
     }[code] ?? message
@@ -335,8 +333,8 @@ export function ReviewBot({
             ))}
             <p className="muted">
               These settings apply to this workspace’s connected GitHub
-              repositories. Fixes require GitHub write access and Codex Direct
-              execution.
+              repositories. Fixes require GitHub write access and the enabled
+              Codex plugin.
             </p>
             {error && (
               <p className="notice" role="alert">

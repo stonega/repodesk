@@ -36,8 +36,7 @@ These instructions guide tool choice and never grant access or approve an action
   but still requires a fresh exact approval. Do not send a merge request to Codex
   as a coding task. Each PR has its own approval; no bulk mutation is available.
   Merges pin the head commit. Close does not merge or delete a branch.
-- For implementation/fixes, use the configured Codex tools: Reviewed targets use
-  `propose_coding_task`; Direct targets use `start_development_task`. Use
+- For implementation/fixes, use `start_development_task`. Use
   `send_development_input` for changes to the same task/PR. Relay original
   authenticated requirements; Codex owns implementation and verification.
 - For factual questions about an existing Codex task, read

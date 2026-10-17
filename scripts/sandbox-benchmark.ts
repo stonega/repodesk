@@ -166,9 +166,20 @@ export async function benchmark() {
               workspaceId: randomUUID(),
               taskId: randomUUID(),
               readToken: "benchmark-placeholder",
-              issue: {
-                number: 1,
-                url: "https://github.com/example/sandbox-benchmark/issues/1",
+              development: {
+                taskId: randomUUID(),
+                revision: 1,
+                mode: "work",
+                context: "",
+                inputs: [
+                  {
+                    revision: 1,
+                    actor: "101",
+                    sourceId: "source",
+                    text: "Fix bug",
+                    kind: "request",
+                  },
+                ],
               },
               payload: {
                 repositoryId: 1,

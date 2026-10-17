@@ -28,7 +28,7 @@ afterEach(async () => {
 
 test("task media survives runner restart and is scrubbed with task erasure", async () => {
   const f = await fixture();
-  f.input.issue = undefined;
+
   const media = {
     images: [
       {
@@ -73,7 +73,7 @@ test("task media survives runner restart and is scrubbed with task erasure", asy
   expect(state).not.toContain(media.images[0]?.data ?? "");
   expect(JSON.parse(state).input.development).toBeUndefined();
   const g = await fixture();
-  g.input.issue = undefined;
+
   g.input.development = f.input.development;
   await g.supervisor.start(g.input);
   const path = join(
@@ -107,6 +107,23 @@ async function fixture(concurrency = 4) {
   let exitCode = 0;
   const engine: ContainerEngine = {
     async readText(_container, path) {
+      if (path.endsWith("conversation.json"))
+        return JSON.stringify({
+          threadId: "thread-123",
+          tokens: 10,
+          result: {
+            status: "completed",
+            intent: "implement",
+            evidenceRevision: 1,
+            evidence: "Fix bug",
+            publishRequested: true,
+            summary: "Fixed",
+            question: null,
+            title: "Fix",
+            body: "Checked",
+            verificationCommands: ["bun test"],
+          },
+        });
       return path.endsWith("base-sha")
         ? "a".repeat(40)
         : path.endsWith("verification.json")
@@ -156,7 +173,21 @@ async function fixture(concurrency = 4) {
       backend: "podman",
       authMode: "provider_key",
     },
-    issue: { number: 42, url: "https://github.com/example/repo/issues/42" },
+    development: {
+      taskId: randomUUID(),
+      revision: 1,
+      mode: "work",
+      context: "",
+      inputs: [
+        {
+          revision: 1,
+          actor: "101",
+          sourceId: "source",
+          text: "Fix bug",
+          kind: "request",
+        },
+      ],
+    },
     readToken: "read-only-github-token",
   };
   return {
@@ -174,7 +205,7 @@ async function fixture(concurrency = 4) {
 test("the authenticated task conversation survives restart, scopes its token and scrubs messages on erasure", async () => {
   const f = await fixture();
   holdImplementations(f);
-  f.input.issue = undefined;
+
   f.input.development = {
     taskId: randomUUID(),
     revision: 1,
@@ -278,6 +309,25 @@ test("the authenticated task conversation survives restart, scopes its token and
   await erased.initialize();
   await expect(erased.start(f.input)).rejects.toThrow("coding_task_stopped");
 });
+test("runner rejects issue-only starts before reserving any execution", async () => {
+  const f = await fixture();
+  const { development: _removed, ...input } = f.input;
+  const app = runnerApp(f.supervisor);
+  const response = await app.request("/tasks", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${f.settings.CODEX_RUNNER_TOKEN}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      ...input,
+      issue: { number: 42, url: "https://github.com/example/repo/issues/42" },
+    }),
+  });
+  expect(response.status).toBe(400);
+  expect(f.calls).toHaveLength(0);
+});
+
 test("erasure before reservation durably fences a delayed start without launching a container", async () => {
   const f = await fixture();
   await f.supervisor.erase(f.input.workspaceId, f.input.taskId);
@@ -496,6 +546,7 @@ test("parallel starts respect global capacity, remain idempotent at capacity and
     ...f.input,
     workspaceId: n === 2 ? randomUUID() : f.input.workspaceId,
     taskId: randomUUID(),
+    development: { ...f.input.development, taskId: randomUUID() },
     payload: {
       ...f.input.payload,
       repositoryId: n + 1,
@@ -547,7 +598,7 @@ test("a continuing task keeps one active attempt while independent tasks share t
   const f = await fixture();
   const input: LocalStart = {
     ...f.input,
-    issue: undefined,
+
     development: {
       taskId: randomUUID(),
       revision: 1,
@@ -584,13 +635,21 @@ test("shared account implementations serialize while preparation, checks and oth
     ...f.input,
     payload: { ...f.input.payload, authMode: "device_code" },
   };
-  const second = { ...first, taskId: randomUUID() };
+  const second = {
+    ...first,
+    taskId: randomUUID(),
+    development: { ...first.development, taskId: randomUUID() },
+  };
   const independent = {
     ...first,
     workspaceId: randomUUID(),
     taskId: randomUUID(),
   };
-  const provider = { ...f.input, taskId: randomUUID() };
+  const provider = {
+    ...f.input,
+    taskId: randomUUID(),
+    development: { ...f.input.development, taskId: randomUUID() },
+  };
   await f.supervisor.device.save(
     first.workspaceId,
     '{"tokens":{"access_token":"workspace-one"}}',
@@ -648,8 +707,21 @@ test("auth resume competes for its account stream even when global slots remain"
   const other: LocalStart = {
     ...f.input,
     taskId: randomUUID(),
-    issue: { number: 43, url: "https://github.com/example/repo/issues/43" },
-    development: undefined,
+    development: {
+      taskId: randomUUID(),
+      revision: 1,
+      mode: "work",
+      context: "",
+      inputs: [
+        {
+          revision: 1,
+          actor: "101",
+          sourceId: "source",
+          text: "Fix bug",
+          kind: "request",
+        },
+      ],
+    },
   };
   await f.supervisor.start(other);
   await f.supervisor.status(other.workspaceId, other.taskId);
@@ -682,7 +754,7 @@ test("device check repairs wait for the account stream without consuming repair 
   const f = await fixture();
   const { completed, authCopies } = holdImplementations(f);
   f.input.payload.authMode = "device_code";
-  f.input.issue = undefined;
+
   f.input.development = {
     taskId: randomUUID(),
     revision: 1,
@@ -730,8 +802,21 @@ test("device check repairs wait for the account stream without consuming repair 
   const other: LocalStart = {
     ...f.input,
     taskId: randomUUID(),
-    development: undefined,
-    issue: { number: 43, url: "https://github.com/example/repo/issues/43" },
+    development: {
+      taskId: randomUUID(),
+      revision: 1,
+      mode: "work",
+      context: "",
+      inputs: [
+        {
+          revision: 1,
+          actor: "101",
+          sourceId: "source",
+          text: "Fix bug",
+          kind: "request",
+        },
+      ],
+    },
   };
   await f.supervisor.start(f.input);
   await f.supervisor.start(other);
@@ -787,7 +872,13 @@ test("checks precede publication; publication uses a fresh volume and only its s
   const implement = f.calls.find(
     (c) => c.args[0] === "create" && c.args.at(-1) === "implement",
   );
-  expect(Object.keys(implement?.env ?? {})).toEqual(["CODEX_TASK_TOKEN"]);
+  expect(Object.keys(implement?.env ?? {}).sort()).toEqual(
+    [
+      "CODEX_TASK_TOKEN",
+      "CODEX_TASK_CHANNEL_URL",
+      "CODEX_TASK_CHANNEL_TOKEN",
+    ].sort(),
+  );
   await f.supervisor.publish(
     f.input.workspaceId,
     f.input.taskId,
@@ -835,14 +926,14 @@ test("an interrupted patch export retries without rerunning implementation", asy
   ).toBe("ready");
   expect(
     f.calls.filter((c) => c.args[0] === "create" && c.args.at(-1) === "export"),
-  ).toHaveLength(2);
+  ).toHaveLength(3);
   expect(
     f.calls.filter(
       (c) => c.args[0] === "create" && c.args.at(-1) === "implement",
     ),
   ).toHaveLength(1);
 });
-test("failed checks prevent publishing and cancellation cannot restart a task", async () => {
+test("failed checks repair without publication and cancellation cannot restart a task", async () => {
   const f = await fixture();
   await f.supervisor.start(f.input);
   await f.supervisor.status(f.input.workspaceId, f.input.taskId);
@@ -852,8 +943,9 @@ test("failed checks prevent publishing and cancellation cannot restart a task", 
   expect(
     await f.supervisor.status(f.input.workspaceId, f.input.taskId),
   ).toMatchObject({
-    state: "failed",
-    error: "coding_check_failed",
+    state: "running",
+    phase: "implement",
+    repairCount: 1,
     threadId: "thread-123",
   });
   await expect(
@@ -1053,7 +1145,9 @@ test("device-auth tasks use only their workspace credential and remove the task 
     (c) => c.args[0] === "create" && c.args.at(-1) === "implement",
   );
   expect(implement?.args).toContain(`${key}-auth:/auth`);
-  expect(implement?.env).toEqual({});
+  expect(implement?.env).not.toHaveProperty("CODEX_TASK_TOKEN");
+  expect(implement?.env).not.toHaveProperty("GITHUB_TOKEN");
+  expect(implement?.env?.CODEX_TASK_CHANNEL_TOKEN).toHaveLength(64);
   expect(f.jobInputs.at(-1)).not.toContain("old-secret");
   expect(f.jobInputs.at(-1)).not.toContain("refreshed-secret");
   expect(f.jobInputs.at(-1)).not.toContain('env_key = "CODEX_TASK_TOKEN"');
@@ -1083,7 +1177,7 @@ test("continuous questions checkpoint and release the runner; tenant-scoped answ
   const taskId = randomUUID();
   const input = {
     ...f.input,
-    issue: undefined,
+
     development: {
       taskId,
       pr: {
@@ -1185,7 +1279,7 @@ test("failed automatic checks continue repair beyond old quotas with sealed cred
   const input = {
     ...f.input,
     providerApiKey: "panel-repair-secret",
-    issue: undefined,
+
     development: {
       taskId: randomUUID(),
       revision: 1,
@@ -1271,7 +1365,7 @@ test("failed automatic checks continue repair beyond old quotas with sealed cred
 test("device continuous result is captured before deleting its credentialed container", async () => {
   const f = await fixture();
   f.input.payload.authMode = "device_code";
-  f.input.issue = undefined;
+
   f.input.development = {
     taskId: randomUUID(),
     revision: 1,
@@ -1337,7 +1431,7 @@ test("device continuous result is captured before deleting its credentialed cont
 test("completed work without a valid verification plan cannot become ready", async () => {
   for (const commands of [undefined, []]) {
     const f = await fixture();
-    f.input.issue = undefined;
+
     f.input.development = {
       taskId: randomUUID(),
       revision: 1,
@@ -1396,7 +1490,6 @@ async function authPausedFixture(continuous = true, concurrency = 4) {
   const f = await fixture(concurrency);
   f.input.payload.authMode = "device_code";
   if (continuous) {
-    f.input.issue = undefined;
     f.input.development = {
       taskId: randomUUID(),
       revision: 1,
@@ -1595,7 +1688,7 @@ test("cancellation stops Codex before capturing its last rotated credential", as
 
 test("safe implementation failures preserve reported usage before temporary account cleanup", async () => {
   const f = await fixture();
-  f.input.issue = undefined;
+
   f.input.payload.authMode = "device_code";
   f.input.development = {
     taskId: randomUUID(),
@@ -1667,7 +1760,7 @@ test("safe implementation failures preserve reported usage before temporary acco
 
 test("result-validation diagnostics survive runner restart and are erased with the task", async () => {
   const f = await fixture();
-  f.input.issue = undefined;
+
   f.input.development = {
     taskId: randomUUID(),
     revision: 1,

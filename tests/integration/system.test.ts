@@ -276,21 +276,16 @@ suite("PostgreSQL integration (isolated database)", () => {
       (await request("/api/admin/not-a-resource")).headers.get("content-type"),
     ).toContain("json");
   });
-  test("Overview coding count matches Reviewed and Direct tasks in this workspace", async () => {
+  test("Overview coding count matches the continuous tasks in this workspace", async () => {
     const w = teamWorkspace();
     w.operatorId = operatorId;
     w.members.push({ id: "404", role: "admin", active: true });
     const direct = developmentTask(w);
-    const reviewed = {
+    const completedTask = {
+      ...direct,
       id: randomUUID(),
-      actor: direct.actor,
-      runId: randomUUID(),
-      chatId: direct.chatId,
-      topicId: direct.topicId,
-      payload: direct.payload,
-      state: "succeeded" as const,
-      createdAt: direct.createdAt,
-      updatedAt: direct.updatedAt,
+      state: "review" as const,
+      payload: { ...direct.payload, title: "Completed task" },
     };
     w.github = undefined;
     await store.pool.query(
@@ -318,9 +313,7 @@ suite("PostgreSQL integration (isolated database)", () => {
         const overview = await response.json();
         const page = await (await request(`${base}/plugins/coding`)).json();
         expect(overview.counts.codingTasks).toBe(expected);
-        expect(overview.counts.codingTasks).toBe(
-          page.tasks.length + page.developmentTasks.length,
-        );
+        expect(overview.counts.codingTasks).toBe(page.tasks.length);
       };
       await count(0);
       await store.pool.query(
@@ -328,9 +321,10 @@ suite("PostgreSQL integration (isolated database)", () => {
         [w.id, direct.id, JSON.stringify(direct)],
       );
       await count(1);
-      await store.change(w.id, (saved) => {
-        saved.codingTasks = [reviewed];
-      });
+      await store.pool.query(
+        "INSERT INTO coding_tasks(workspace_id,id,data) VALUES($1,$2,$3)",
+        [w.id, completedTask.id, JSON.stringify(completedTask)],
+      );
       await count(2);
       // A task's execution attempts and final state do not change its count.
       direct.state = "cancelled";

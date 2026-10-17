@@ -1,6 +1,6 @@
 # Continuous development through Telegram
 
-Status: **implemented behind repository direct-execution policy; live pilot validation pending**, 2026-10-05.
+Status: **implemented as the only Codex task workflow; live pilot validation pending**, 2026-10-05.
 See the [implementation plan and evidence](../implementation/codex-collaboration-plan.md) for the delivered transport, limits and release gates.
 Source: the project owner's discussion on 2026-10-05: reduce repeated human
 confirmation, keep Pi responsible for requirements intake, and delegate complex
@@ -11,7 +11,7 @@ development workflow; other Pi conversation features keep their existing scope.
 ## Product contract
 
 PR readiness source: 2026-10-08 — the project owner requested that Codex plugin
-PRs be ready when the job finishes. Reviewed and Direct coding publication now
+PRs be ready when the job finishes. Coding publication
 creates non-draft PRs and marks existing drafts ready after verified follow-ups.
 
 An authorized maintainer states a development goal in Telegram. Codex investigates
@@ -44,7 +44,7 @@ A clear execution instruction from an authenticated, currently authorized mainta
 can serve as task authorization under an operator-configured repository policy.
 The application records the originating message, actor, selected repository, base
 branch and allowed operations before starting. No extra Approve
-click is needed when that scope is unambiguous and policy permits direct execution.
+click is needed when that scope is unambiguous.
 An acknowledgement reports what will run; it is not a timer-based consent mechanism.
 
 The repository policy defines whether an instruction to implement includes publishing
@@ -203,40 +203,16 @@ mark gaps and avoid claiming full session continuity. Never copy host credential
 or broaden access to restore a session. Existing deletion and retention controls
 continue to apply to task content and runner resources.
 
-## Current implementation and delivery slices
+## Current implementation
 
-The [implementation plan](../implementation/codex-collaboration-plan.md) maps this
-direction to code modules, protocol verification, persistence, milestones and
-acceptance tests. All milestones are planned, not completed.
+All Codex tasks use the durable continuous task/input/grant model and native
+app-server conversation adapter. `start_development_task` receives original user
+requirements, `send_development_input` continues the same task/PR, and factual
+questions use `ask_development_task` / `development_task_conversation`.
+Source-bound intent controls implementation/publication independently of questions.
+There is one configuration and task list. Reviewed proposals, the coding approval
+kind and the legacy issue/exec pipeline are removed without compatibility paths.
 
-Today the extension exposes `propose_coding_task`, `coding_task_status` and
-`cancel_coding_task`. Pi supplies the proposed issue title/body, Telegram approval
-binds one issue-to-draft-PR run, and the runner executes separate setup, Codex,
-check and publication phases. There is no conversational continuation tool, task
-input mailbox or durable Codex question/answer channel. See the
-[current setup and limits](../implementation/codex-coding.md) and
-[runner lifecycle](../implementation/codex-runner.md).
-
-Deliver the accepted direction in dependency order:
-
-1. Add the durable task/input/grant model and repository execution policy. Preserve
-   legacy approvals and their audit records; never reinterpret an old proposal as
-   a direct-execution grant.
-2. Hand original requirements to Codex, with an investigation path that does not
-   require creating an issue first. Keep technical planning out of Pi.
-3. Add ordered follow-up delivery and durable question/answer routing across
-   runner attempts, process restarts and user waits.
-4. Add bounded check-diagnostic repair and publication with current authority checks.
-5. Continue an existing task/PR using current repository state and retained task
-   context, with session reuse or explicit reconstruction as appropriate.
-
-Each slice requires deterministic tests before replacing the current path. Cover
-explicit execution versus analysis-only intent, ambiguous targets, unauthorized
-actors, revoked/configuration-changed grants, duplicate inputs, input ordering,
-multiple maintainers, question binding, private/group isolation, cancellation,
-budget exhaustion, session loss, restart fencing and uncertain external outcomes.
-Live provider/GitHub/Telegram validation remains a separate release gate.
-
-Exact tool names, runner transport and the new persisted schema are implementation
-decisions still to be specified. This design does not claim the pinned Codex CLI
-already supports the required interactive protocol.
+See [setup and limits](../implementation/codex-coding.md),
+[runner lifecycle](../implementation/codex-runner.md) and
+[implementation evidence](../implementation/implementation-status.md).

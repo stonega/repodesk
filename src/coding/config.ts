@@ -1,7 +1,5 @@
 import { z } from "zod";
-import type { RuntimeProvider } from "../models/config.ts";
 import { modelSelectionSchema } from "../models/config.ts";
-import type { Progress } from "../telegram/feedback.ts";
 import type { DevelopmentTask } from "./development.ts";
 import { developmentPolicy } from "./development-policy.ts";
 
@@ -99,45 +97,6 @@ export const codingPayload = z.preprocess(
   }),
 );
 export type CodingPayload = z.infer<typeof codingPayload>;
-export type CodingState =
-  | "auth_required"
-  | "queued"
-  | "creating_issue"
-  | "issue_created"
-  | "dispatching"
-  | "running"
-  | "starting_publication"
-  | "publishing"
-  | "succeeded"
-  | "failed"
-  | "unknown"
-  | "cancelled";
-export interface CodingTask {
-  runnerModel?: RuntimeProvider;
-  progress?: Progress;
-  id: string;
-  actor: string;
-  runId: string;
-  chatId: string;
-  topicId: number;
-  payload: CodingPayload;
-  state: CodingState;
-  createdAt: string;
-  updatedAt: string;
-  issue?: { number: number; url: string };
-  threadId?: string;
-  workflowRunId?: number;
-  workflowUrl?: string;
-  prUrl?: string;
-  error?: string;
-  nextPollAt?: string;
-  lease?: string;
-  cancelRequested?: boolean;
-  authResumeState?: "queued" | "issue_created" | "running";
-  authPausedAt?: string;
-  authWaitMs?: number;
-  authPauses?: number;
-}
 export interface CodingPage {
   repositoryRefreshError?: string;
   providerApiKeyConfigured: boolean;
@@ -156,8 +115,5 @@ export interface CodingPage {
   revision: number;
   settings: CodingSettings;
   repositories: { id: number; full_name: string; private?: boolean }[];
-  tasks: CodingTask[];
-  developmentTasks?: DevelopmentTask[];
+  tasks: DevelopmentTask[];
 }
-export const codingTerminal = (state: CodingState) =>
-  ["succeeded", "failed", "unknown", "cancelled"].includes(state);

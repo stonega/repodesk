@@ -151,11 +151,6 @@ export async function startDevelopment(
   requireThat(run, "not_found", 404);
   const sources = currentRequirement(w, actor, run, sourceIds);
   const policy = developmentPolicy.parse(w.coding?.settings.development ?? {});
-  requireThat(
-    policy.executionMode === "direct",
-    "coding_direct_execution_disabled",
-    409,
-  );
   const source = sources.find(
     (s) =>
       s.author === actor &&

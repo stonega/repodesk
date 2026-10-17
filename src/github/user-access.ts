@@ -1,4 +1,3 @@
-import { codingTerminal } from "../coding/config.ts";
 import { Fault, requireThat, type Workspace } from "../domain.ts";
 import type { GitHubRepository } from "./app.ts";
 
@@ -110,16 +109,13 @@ export function invalidateGitHubWork(w: Workspace, actor: string) {
   for (const a of w.approvals) {
     if (
       a.actor === actor &&
-      ["github_issue", "github_pull_request", "coding_task"].includes(a.kind) &&
+      ["github_issue", "github_pull_request"].includes(a.kind) &&
       !a.issue &&
       !a.pullRequest &&
       a.decision !== "rejected"
     )
       a.decision = "revoked";
   }
-  for (const task of w.codingTasks ?? [])
-    if (task.actor === actor && !codingTerminal(task.state))
-      task.cancelRequested = true;
   // A queued answer may contain source material retrieved under prior permissions.
   for (const run of w.runs)
     if (

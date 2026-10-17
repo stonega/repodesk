@@ -28,16 +28,11 @@ for (const width of [1280, 390]) {
     completed.payload.title = "Direct task ready for review";
     completed.state = "review";
     completed.question = undefined;
-    const reviewed = {
+    const completedTask = {
+      ...direct,
       id: randomUUID(),
-      actor: direct.actor,
-      runId: randomUUID(),
-      chatId: direct.chatId,
-      topicId: direct.topicId,
-      payload: { ...direct.payload, title: "Completed Reviewed task" },
-      state: "succeeded" as const,
-      createdAt: direct.createdAt,
-      updatedAt: direct.updatedAt,
+      state: "review" as const,
+      payload: { ...direct.payload, title: "Completed task" },
     };
     // Retained tasks remain visible without an active GitHub connection.
     w.github = undefined;
@@ -79,9 +74,10 @@ for (const width of [1280, 390]) {
       await expect(
         counts.getByRole("link", { name: "2 coding tasks. View details" }),
       ).toBeVisible();
-      await store.change(w.id, (saved) => {
-        saved.codingTasks = [reviewed];
-      });
+      await store.pool.query(
+        "INSERT INTO coding_tasks(workspace_id,id,data) VALUES($1,$2,$3)",
+        [w.id, completedTask.id, JSON.stringify(completedTask)],
+      );
       await page.reload();
       const card = counts.getByRole("link", {
         name: "3 coding tasks. View details",
@@ -101,7 +97,7 @@ for (const width of [1280, 390]) {
         new RegExp(`/admin/plugins/codex\\?workspace=${w.id}#coding-tasks$`),
       );
       const tasks = page.getByRole("region", { name: "Coding tasks" });
-      for (const task of [direct, completed, reviewed])
+      for (const task of [direct, completed, completedTask])
         await expect(
           tasks.getByRole("row").filter({ hasText: task.payload.title }),
         ).toBeVisible();

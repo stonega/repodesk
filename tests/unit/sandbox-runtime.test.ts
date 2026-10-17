@@ -65,7 +65,25 @@ async function fixture() {
       if (id.endsWith("-prepare"))
         await writeFile(join(volume, "base-sha"), "a".repeat(40));
       if (id.endsWith("-implement")) {
-        await writeFile(join(volume, "verification.json"), '["bun test"]');
+        await writeFile(
+          join(volume, "conversation.json"),
+          JSON.stringify({
+            threadId: "thread-123",
+            tokens: 10,
+            result: {
+              status: "completed",
+              intent: "implement",
+              evidenceRevision: 1,
+              evidence: "Fix bug",
+              publishRequested: true,
+              summary: "Fixed",
+              question: null,
+              title: "Fix",
+              body: "Checked",
+              verificationCommands: ["bun test"],
+            },
+          }),
+        );
         const auth = spec.mounts.find((m) => m.target === "/auth");
         if (auth)
           await writeFile(
@@ -98,7 +116,21 @@ async function fixture() {
     workspaceId: randomUUID(),
     taskId: randomUUID(),
     readToken: "private-read-token",
-    issue: { number: 1, url: "https://github.com/example/repo/issues/1" },
+    development: {
+      taskId: randomUUID(),
+      revision: 1,
+      mode: "work",
+      context: "",
+      inputs: [
+        {
+          revision: 1,
+          actor: "101",
+          sourceId: "source",
+          text: "Fix bug",
+          kind: "request",
+        },
+      ],
+    },
     payload: {
       repositoryId: 1,
       repository: "example/repo",
@@ -164,6 +196,7 @@ test("OpenSandbox executes isolated phases, survives restart and fences publicat
     "prepare",
     "setup",
     "implement",
+    "export",
     "check",
     "export",
   ]);

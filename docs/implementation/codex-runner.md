@@ -145,8 +145,7 @@ than the deployment's custom provider model.
 
 Both model authentication methods support connected public and private
 repositories. Repository access uses fresh GitHub App installation tokens scoped
-to the selected repository: read-only for preparation, issue-write for reviewed
-issue creation, and contents/pull-request write for authorized publication.
+to the selected repository: read-only for preparation and contents/pull-request write for authorized publication.
 ChatGPT account authentication does not grant GitHub access. Existing maintainer,
 connected-repository and execution-policy checks apply independently of visibility.
 Use this option only for trusted code:
@@ -293,7 +292,7 @@ Keep the supervisor running for cancellation, reconciliation and cleanup.
 A restart observes existing containers by their
 deterministic names, without launching duplicate work.
 
-For an **unknown** outcome, inspect the matching task branch, issue and PR before
+For an **unknown** outcome, inspect the matching task branch and PR before
 starting another request. A reserved container with an uncertain start is reconciled
 by its deterministic identity; it is not recreated blindly.
 Encrypted active-task credentials, temporary task tokens and reviewed
@@ -301,8 +300,7 @@ task content are private supervisor state. Replacing the
 supervisor state volume loses recovery information and must not be used to retry
 tasks automatically.
 
-Continuous tasks use a private stdin/stdout Codex app-server adapter alongside
-legacy reviewed `codex exec` tasks. CLI 0.155.1 is unchanged. Completed-turn
+All tasks use a private stdin/stdout Codex app-server adapter. CLI 0.155.1 is unchanged. Completed-turn
 `needs_input` results checkpoint questions; no connection-local question ID or live
 steering acknowledgement is treated as durable. The allowlist is initialize,
 initialized, thread/start, thread/resume and turn/start. Relevant notifications are

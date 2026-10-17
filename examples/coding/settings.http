@@ -9,10 +9,7 @@ GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding
 # Configure deploy/codex/compose.yaml separately. Use a fake key in checked-in examples.
 # Omit providerApiKey to preserve it; use null to remove it and restore any environment fallback.
 # Responses include providerApiKeyConfigured only, never the saved key.
-# Reviewed (also the default when development is omitted) uses propose_coding_task
-# and Telegram approval. Only explicit Direct targets support start_development_task.
-# coding_direct_execution_disabled is a policy rejection before GitHub checkout;
-# do not retry the direct start or treat it as a repository access failure.
+# Codex uses one continuous workflow. PR publication remains an independent setting.
 PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}
@@ -26,7 +23,6 @@ Content-Type: application/json
     "backend": "podman",
     "authMode": "provider_key",
     "development": {
-      "executionMode": "reviewed",
       "publishByDefault": false
     }
   }
@@ -47,7 +43,7 @@ Content-Type: application/json
 # resume automatically after current authority/GitHub access checks; no task-start POST is needed.
 # Public and private repositories use the connected GitHub App for repository access.
 # Stop or disconnect prevents this continuation. Checkpoint retention still applies.
-# Disconnect removes the workspace login and invalidates pending approvals.
+# Disconnect removes the workspace login and stops active tasks.
 POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding/device/logout
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}
@@ -55,9 +51,8 @@ Content-Type: application/json
 
 {}
 
-### Stop a reviewed or continuous task; publication cancellation is best-effort.
-# GET returns developmentTasks separately from legacy tasks.
-# Explicitly save executionMode "direct" after your dedicated live pilot checks.
+### Stop a Codex task; publication cancellation is best-effort.
+# GET returns one tasks list.
 POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding/REPLACE_TASK_UUID/cancel
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}

@@ -5,7 +5,7 @@ Use an authorized maintainer and an already configured repository. This example
 does not authorize connecting accounts, starting a paid task or publishing a PR.
 
 1. Start an explicitly authorized coding request using the repository's normal
-   Reviewed or Direct workflow. Record its task and runner attempt IDs.
+   Codex workflow. Record its task and runner attempt IDs.
 2. Simulate a temporary failure of the member's GitHub permission-sync API in a
    controlled staging fixture. The saved task shows **Waiting for GitHub access
    verification**, with automatic retry guidance. The attempt ID stays unchanged.

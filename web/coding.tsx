@@ -231,29 +231,12 @@ export function Coding({
       setBusy(false);
     }
   };
-  const tasks = data
-    ? [
-        ...(data.developmentTasks ?? []).map((t) => ({
-          ...t,
-          runId: "",
-          prUrl: t.pr?.url,
-          issue: undefined,
-          workflowUrl: undefined,
-          continuous: true,
-          questionText: t.question?.text,
-        })),
-        ...data.tasks.map((t) => ({
-          ...t,
-          continuous: false,
-          questionText: undefined,
-        })),
-      ]
-    : [];
+  const tasks = data?.tasks ?? [];
   const stopTask = tasks.find((task) => task.id === stopping?.id);
   const canStop =
     !!stopTask &&
     !stopTask.cancelRequested &&
-    !["succeeded", "failed", "unknown", "cancelled"].includes(stopTask.state);
+    !["failed", "unknown", "cancelled"].includes(stopTask.state);
   const stop = async () => {
     if (!stopping || !canStop || busy || loading) return;
     setBusy(true);
@@ -269,8 +252,7 @@ export function Coding({
     }
   };
   const activeTasks = tasks.filter(
-    (task) =>
-      !["succeeded", "failed", "unknown", "cancelled"].includes(task.state),
+    (task) => !["failed", "unknown", "cancelled"].includes(task.state),
   ).length;
   const pendingValue = error ? "—" : <Skeleton width="9rem" />;
   const credentialStatus =
@@ -373,10 +355,6 @@ export function Coding({
             </dd>
           </div>
           <div>
-            <dt>Execution</dt>
-            <dd>Deployment runtime</dd>
-          </div>
-          <div>
             <dt>Sign-in method</dt>
             <dd>
               {data
@@ -402,16 +380,6 @@ export function Coding({
           <div>
             <dt>Credential</dt>
             <dd>{data ? credentialStatus : pendingValue}</dd>
-          </div>
-          <div>
-            <dt>Execution policy</dt>
-            <dd>
-              {data
-                ? data.settings.development?.executionMode === "direct"
-                  ? "Direct"
-                  : "Reviewed"
-                : pendingValue}
-            </dd>
           </div>
           <div>
             <dt>Publish by default</dt>
@@ -452,15 +420,12 @@ export function Coding({
           <div>
             <h2>Coding tasks</h2>
             <p className="muted">
-              Stop cancels local execution. Published issues, branches and PRs
-              remain on GitHub.
+              Stop cancels local execution. Published branches and PRs remain on
+              GitHub.
             </p>
           </div>
           {tasks.some(
-            (task) =>
-              !["succeeded", "failed", "unknown", "cancelled"].includes(
-                task.state,
-              ),
+            (task) => !["failed", "unknown", "cancelled"].includes(task.state),
           ) && (
             <button
               type="button"
@@ -498,12 +463,6 @@ export function Coding({
                       {task.payload.title}
                       <br />
                       <small>
-                        {task.continuous
-                          ? "Continuous collaboration"
-                          : "Reviewed task"}
-                      </small>
-                      <br />
-                      <small>
                         {new Date(task.createdAt).toLocaleString()} ·{" "}
                         {task.actor}
                       </small>
@@ -517,65 +476,31 @@ export function Coding({
                     </td>
                     <td data-label="Status">
                       {codingStatusLabel(task)}
-                      {task.questionText && <p>{task.questionText}</p>}
+                      {task.question?.text && <p>{task.question?.text}</p>}
                       {task.error && (
                         <p>
                           {taskFailures[task.error] ??
                             codingFailureMessage(task.error, task.payload)}
                         </p>
                       )}
-                      {!task.continuous && task.threadId && (
-                        <p>
-                          Codex thread <code>{task.threadId}</code>
-                        </p>
-                      )}
-                      {!task.continuous &&
-                        task.state === "running" &&
-                        !task.threadId && (
-                          <p className="muted">
-                            Codex is running; its thread ID appears after the
-                            implementation finishes.
-                          </p>
-                        )}
                     </td>
                     <td data-label="Links">
-                      {task.issue && (
+                      {task.pr?.url && (
                         <p>
                           <a
-                            href={task.issue.url}
+                            href={task.pr?.url}
                             target="_blank"
                             rel="noreferrer"
                           >
-                            Issue
-                          </a>
-                        </p>
-                      )}
-                      {task.workflowUrl && (
-                        <p>
-                          <a
-                            href={task.workflowUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Workflow
-                          </a>
-                        </p>
-                      )}
-                      {task.prUrl && (
-                        <p>
-                          <a href={task.prUrl} target="_blank" rel="noreferrer">
                             PR
                           </a>
                         </p>
                       )}
                     </td>
                     <td data-label="Actions">
-                      {![
-                        "succeeded",
-                        "failed",
-                        "unknown",
-                        "cancelled",
-                      ].includes(task.state) && (
+                      {!["failed", "unknown", "cancelled"].includes(
+                        task.state,
+                      ) && (
                         <IconButton
                           icon="stop"
                           className="danger"
@@ -614,8 +539,8 @@ export function Coding({
             <span className="muted">{stopping.repository}</span>
           </p>
           <p>
-            Stopping cancels local execution. Published issues, branches and PRs
-            remain on GitHub.
+            Stopping cancels local execution. Published branches and PRs remain
+            on GitHub.
           </p>
           {!canStop && (
             <p role="status">This task is no longer available to stop.</p>
@@ -867,37 +792,6 @@ export function Coding({
                 )}
               </>
             )}
-            <label className="field" htmlFor="coding-execution-mode">
-              <span>Execution policy</span>
-              <Select
-                id="coding-execution-mode"
-                disabled={busy}
-                value={configDraft.development?.executionMode ?? "reviewed"}
-                onChange={(event) =>
-                  setConfigDraft({
-                    ...configDraft,
-                    development: {
-                      publishByDefault:
-                        configDraft.development?.publishByDefault ?? false,
-                      executionMode: event.target.value as
-                        | "reviewed"
-                        | "direct",
-                    },
-                  })
-                }
-              >
-                <option value="reviewed">
-                  Reviewed — approve each new implementation
-                </option>
-                <option value="direct">
-                  Direct — your clear instruction starts Codex
-                </option>
-              </Select>
-              <small>
-                Applies to connected repositories where you have GitHub write
-                access.
-              </small>
-            </label>
             <label className="form-check">
               <input
                 type="checkbox"
@@ -907,8 +801,6 @@ export function Coding({
                   setConfigDraft({
                     ...configDraft,
                     development: {
-                      executionMode:
-                        configDraft.development?.executionMode ?? "reviewed",
                       publishByDefault: event.target.checked,
                     },
                   })
@@ -918,8 +810,8 @@ export function Coding({
               default
             </label>
             <p className="muted">
-              Saving configuration invalidates pending approvals and requests
-              cancellation of active tasks using older settings.
+              Saving configuration requests cancellation of active tasks using
+              older settings.
             </p>
             <div ref={configActions}>
               {error && (

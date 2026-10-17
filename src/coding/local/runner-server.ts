@@ -125,7 +125,9 @@ export function runnerApp(
     ),
   );
   app.post("/tasks", async (c) => {
-    await supervisor.start(localStart.parse(await c.req.json()));
+    const input = localStart.safeParse(await c.req.json());
+    requireThat(input.success, "coding_job_invalid");
+    await supervisor.start(input.data);
     return c.json({ ok: true });
   });
   app.get("/tasks/:workspace/:task", async (c) =>

@@ -1,5 +1,11 @@
 # Continuous Codex collaboration — implementation plan
 
+Current workflow update, 2026-10-17: Codex now has one continuous task workflow.
+Reviewed execution, its proposals/approvals and the legacy issue/exec engine are
+removed without compatibility or migration. Configuration retains only publication
+preferences. The dated delivery notes and original milestones below are historical;
+use [current behavior](codex-coding.md) and [evidence](implementation-status.md).
+
 Date: 2026-10-05. Status: **M0–M5 implemented and locally verified; M6 operator controls implemented, live pilot gate pending**.
 Product authority: [accepted collaboration design](../design/codex-collaboration.md).
 Current baseline: [coding tasks](codex-coding.md) and [local runner](codex-runner.md).

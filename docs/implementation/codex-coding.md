@@ -1,18 +1,19 @@
-# Codex issue-to-PR tasks
+# Continuous Codex tasks
 
 Codex implementation runs approved repository tasks in isolated Docker or
 OpenSandbox environments. The bot uses Pi for Telegram conversation; the coding service owns
-authorization, task state, issue creation and publication. Setup and deterministic
+authorization, task state, conversation and publication. Setup and deterministic
 tests do not start a coding task, connect an account or send a message. A live
 provider-key GitHub/Codex VPS run and an isolated OpenSandbox repeat passed in the
 [landing acceptance environment](codex-landing-acceptance.md). Live account-auth
 refresh/continuation and a production OpenSandbox rollout remain separate gates.
 
-The [continuous collaboration design](../design/codex-collaboration.md) is now
-implemented behind workspace-wide **Direct** execution policy. Existing settings
-remain **Reviewed** when the new policy is omitted. The reviewed issue-to-PR
-workflow below is preserved; direct tasks use original received messages and do
-not require creating an issue.
+The [continuous collaboration design](../design/codex-collaboration.md) is the only
+Codex task workflow. Verified users hand original messages to Codex, continue the
+same task/PR, and ask factual questions during execution or after completion.
+Tasks require no Issue, execution-mode selector or separate coding approval.
+Reviewed proposals and the legacy issue/exec engine have been removed without a
+compatibility or automatic migration path.
 
 The runner defaults to four active tasks. Set `CODEX_RUNNER_CONCURRENCY` (1–32) in
 the deployment environment to change capacity. API-key tasks execute Codex in
@@ -42,18 +43,15 @@ misreported as missing configured base branches; uncertain publication keeps its
 existing unknown-outcome handling. Old failures saved only as a generic code
 cannot recover their original cause after an upgrade.
 
-Pi receives `start_development_task` when the plugin uses **Direct** policy and
-GitHub repositories are connected. Its target list includes only repositories where
-the verified user has current GitHub write access.
-**Reviewed** repositories, including older configurations without a development
-policy, use `propose_coding_task` and an actor-bound Telegram approval. A rejected
-direct start reports `coding_direct_execution_disabled`; it is a policy rejection
-before any GitHub checkout, not evidence of repository reachability failure.
+Pi receives `start_development_task` when the enabled Codex plugin has connected
+GitHub repositories. Its target list includes only repositories where the verified
+user has current GitHub write access. Questions, status and ordinary conversation
+cannot authorize implementation or publication.
 
 ## Continuous collaboration
 
-In the configuration editor, select **Direct** to allow a verified GitHub
-collaborator's clear instruction to authorize a task. Set whether verified implementations
+A verified GitHub collaborator's clear instruction can authorize a task.
+In the configuration editor, set whether verified implementations
 publish a PR by default. Codex has no application-imposed execution-cycle,
 repair-count, active-time or token quotas. It continues authorized work until
 completion, a necessary question, cancellation or failure. Provider/account
@@ -73,7 +71,7 @@ that evidence. Intake returns only `intent` or `needs_input`; the application
 still rejects unmatched evidence with `coding_intent_unverified` before granting
 implementation or publication. Analysis and work retain their result contracts.
 
-Direct tasks receive screenshots from original requirements and bound follow-ups
+Tasks receive screenshots from original requirements and bound follow-ups
 as Codex image inputs, including photo-only answers. Text/code files and selectable
 PDF text also reach the task through the guarded attachment decoder. See
 [attachment input](telegram-attachments.md) for limits, authorization and recovery.
@@ -181,8 +179,8 @@ rebuilds token totals from reported usage. It does not restart stopped tasks.
 3. Under **Plugins → Codex**, configure the shared provider/model or ChatGPT
    device-code sign-in. Enable the plugin after connecting credentials.
    Sign-in progress is bounded; Recheck connection preserves the editor's draft.
-4. Configure **Reviewed** or **Direct**, and PR publication by default, in the
-   Configuration dialog. These workflow choices apply to every connected repository.
+4. Configure PR publication by default in the Configuration dialog. This setting
+   applies to every connected repository.
    Codex reads the repository's default branch from GitHub; branch settings and
    collaborator access are managed in GitHub. There is no extra repository editor,
    maintainer list or plugin repository grant.
@@ -190,20 +188,12 @@ rebuilds token totals from reported usage. It does not restart stopped tasks.
    in their private bot chat. Current GitHub write access is required to start,
    continue or publish coding work. Read-only/unlinked users cannot start tasks.
 
-Migration `019_github_plugin_permissions.sql` removes legacy repository/maintainer
-settings and advances affected configuration revisions, invalidating older work.
-It preserves Direct only when all previous targets used Direct; mixed policies use
-Reviewed. Publish-by-default remains enabled only when all prior targets enabled it.
-Historical task/approval evidence remains intact. Older clients' repository arrays
-are discarded on save and cannot restore grants.
-
 No repository Actions workflow or Actions permission is required. Coding provider
 usage through a custom provider is billed separately from Pi chat usage.
 
 The operator API is `GET|PUT /api/admin/workspaces/:id/plugins/coding`.
 PUT accepts `{ revision, settings: { enabled, backend: "podman", authMode:
-"provider_key" | "device_code", development?: { executionMode:
-"reviewed" | "direct", publishByDefault: boolean }, model? },
+"provider_key" | "device_code", development?: { publishByDefault: boolean }, model? },
 providerApiKey? }`. Omit `providerApiKey` to retain it; send `null` to remove
 the saved key. Responses return only `providerApiKeyConfigured` and device
 connection status, never credentials. Device sign-in uses `POST
@@ -212,52 +202,42 @@ connection status, never credentials. Device sign-in uses `POST
 with `POST /api/admin/workspaces/:id/plugins/coding/:task/cancel` and `{}`.
 See the [HTTP example](../../examples/coding/settings.http).
 
-## Approval and execution
+## Authorization and execution
 
-An active workspace member with verified GitHub write access can ask the bot to
-implement a feature or fix in a connected repository. The `propose_coding_task` tool drafts the exact repository, base
-branch, issue title and body. A Telegram approval binds the initiating actor to
-creating the issue, running Codex locally, pushing a task branch and opening a
-PR. Approval expires after 15 minutes. Another actor cannot approve it.
+An active workspace member with verified GitHub write access can request a feature
+or fix. `start_development_task` binds the original request, actor, repository and
+chat/topic. Codex interprets the request in a read-only intake turn; the application
+checks its evidence against the original message before granting implementation
+or publication. Factual questions never create those grants.
 
 Model authentication does not grant repository access. The worker uses the
 connected GitHub App to mint a fresh installation token scoped to the selected
 repository and the current operation, for both public and private repositories.
-Current GitHub write access, workspace connection scope and approval/direct-policy
+Current GitHub write access, workspace connection scope and source-bound grant
 checks still apply.
-The worker creates the issue after a durable reservation. The supervisor uses
+The supervisor uses
 separate preparation, environment initialization, implementation, verification and publication containers. Only the
 preparation container gets a repository read token; Codex and checks run without a
 GitHub token. Publication gets a fresh scoped write token after the worker
 rechecks actor, repository, configuration and deployment authority. It rejects
 `.github/` changes and opens a PR. No merge is automatic.
 
-Each task has an issue link, status and, on success, a PR link. Ask for status or
+Each task has a status, retained conversation and, when published, a PR link. Ask for status or
 stop by task UUID. Operators can inspect and stop tasks in Plugins. The initiator
 may stop their own task after GitHub access is removed.
 
-## Recovery and prior configurations
+## Recovery
 
-Every external POST is reserved durably and an uncertain write is never replayed.
-An interrupted issue or publication request becomes **unknown**. Check GitHub for
-an issue, branch or PR before starting another task. Local cancellation is
-best-effort during publication, since a push or PR may already exist. Workspace
-deletion removes local records and the sealed device credential, and does not undo GitHub writes.
-
-Older GitHub Actions configurations cannot propose or dispatch new tasks. The panel
-shows a migration notice until the operator saves the local runner settings. Queued and issue-created Actions tasks become **cancelled**; tasks
-that may already have started remotely become **unknown**. Their recorded links
-remain visible, but the worker no longer polls or cancels Actions runs. Inspect
-and, if necessary, stop an already-running workflow in GitHub before starting
-another task.
+External publication is reserved durably and an uncertain write is never replayed.
+An interrupted publication request becomes **unknown**. Check GitHub for a branch
+or PR before starting another task. Cancellation during publication is best-effort.
+Workspace deletion removes local task records and sealed device credentials;
+it does not undo GitHub writes.
 
 No provider key, installation token, raw GitHub response or generated code is
 stored in routine task records or logs. The pilot retains up to 10 active and 200
 recorded coding tasks per workspace. See [runner isolation, limits and
 recovery](codex-runner.md).
 
-Migration `013_automatic_coding_checks.sql` removes old repository command settings
-and increments affected coding revisions, invalidating old grants. Older client
-command fields are discarded on save; they cannot override automatic verification.
-Historical approval evidence stays immutable. Drain/cancel active attempts before
-upgrading app, supervisor and job images together.
+Upgrade app, supervisor and job images together. The runner accepts only the
+continuous-task envelope and uses the app-server conversation protocol.

@@ -1,5 +1,4 @@
 import { stageMessage } from "../telegram/messages.ts";
-import type { CodingTask } from "./config.ts";
 import type { DevelopmentTask } from "./development.ts";
 import { codingFailureMessage } from "./failure-messages.ts";
 import type { LocalStatus } from "./local/protocol.ts";
@@ -20,7 +19,7 @@ export const taskUnknown =
   "I couldn’t confirm this task’s outcome. Ask the workspace administrator to inspect the recorded state before another attempt. It will not be repeated automatically.";
 
 export function markRunnerUnavailable(task: {
-  progress?: CodingTask["progress"];
+  progress?: DevelopmentTask["progress"];
 }) {
   task.progress ??= {
     key: "unavailable",
@@ -35,29 +34,21 @@ export function markRunnerUnavailable(task: {
 export function codingStatusLabel(task: {
   state: string;
   cancelRequested?: boolean;
-  progress?: CodingTask["progress"];
+  progress?: DevelopmentTask["progress"];
   phase?: string;
   pr?: unknown;
-  prUrl?: string;
   error?: string;
 }) {
   if (
-    [
-      "working",
-      "running",
-      "publishing",
-      "dispatching",
-      "queued",
-      "auth_required",
-    ].includes(task.state) &&
+    ["working", "running", "publishing", "queued", "auth_required"].includes(
+      task.state,
+    ) &&
     task.cancelRequested
   )
     return "Stopping";
   if (
     task.error === "github_user_access_unavailable" &&
-    !["review", "succeeded", "failed", "cancelled", "unknown"].includes(
-      task.state,
-    )
+    !["review", "failed", "cancelled", "unknown"].includes(task.state)
   )
     return "Waiting for GitHub access verification";
   if (["working", "running"].includes(task.state)) {
@@ -90,12 +81,7 @@ export function codingStatusLabel(task: {
         : task.pr
           ? "PR ready for review"
           : "Ready for review",
-    creating_issue: "Creating approved issue",
-    issue_created: "Waiting for runner",
-    dispatching: "Starting runner",
-    starting_publication: "Preparing publication",
     publishing: "Publishing PR",
-    succeeded: "PR ready for review",
     failed: "Could not complete",
     cancelled: "Stopped",
     unknown: "Outcome uncertain",
@@ -104,7 +90,7 @@ export function codingStatusLabel(task: {
 }
 
 function active(task: {
-  progress?: CodingTask["progress"];
+  progress?: DevelopmentTask["progress"];
   cancelRequested?: boolean;
 }) {
   if (task.cancelRequested) return "Stopping your task…";
@@ -144,32 +130,4 @@ export function developmentStatus(task: DevelopmentTask) {
       task.progress?.stage === "publish" ? publicationUnknown : taskUnknown,
   };
   return `${task.payload.repository}: ${labels[task.state]}${task.pr ? `\n${task.pr.url}` : ""}`;
-}
-export function reviewedStatus(task: CodingTask) {
-  if (task.error === "github_user_access_unavailable" && !task.cancelRequested)
-    return `${task.payload.repository}: ${codingFailureMessage(task.error, task.payload)}`;
-  const labels: Record<CodingTask["state"], string> = {
-    queued: "Your coding request is queued.",
-    creating_issue: "I’m creating the approved issue.",
-    issue_created:
-      "The approved issue is ready. Waiting for the coding runner.",
-    dispatching: "I’m starting the coding runner.",
-    running: active(task),
-    starting_publication:
-      "The recorded checks passed. Preparing PR publication.",
-    publishing:
-      task.progress?.unavailable || task.cancelRequested
-        ? active(task)
-        : stageMessage("publish"),
-    succeeded: "The recorded checks passed. Your PR is ready for review.",
-    failed: codingFailureMessage(task.error ?? "", task.payload),
-    cancelled:
-      task.error === "github_user_access_denied"
-        ? codingFailureMessage(task.error, task.payload)
-        : "Your task has stopped.",
-    unknown:
-      task.progress?.stage === "publish" ? publicationUnknown : taskUnknown,
-    auth_required: codingFailureMessage("coding_device_auth_required"),
-  };
-  return `${task.payload.repository}: ${task.cancelRequested && !["succeeded", "unknown", "failed", "cancelled"].includes(task.state) ? active(task) : labels[task.state]}${task.issue ? `\nIssue: ${task.issue.url}` : ""}${task.prUrl ? `\n${task.prUrl}` : ""}`;
 }

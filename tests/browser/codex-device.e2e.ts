@@ -1,5 +1,6 @@
 import { expect, type Page, type Route, test } from "@playwright/test";
-import type { CodingPage, CodingTask } from "../../src/coding/config.ts";
+import type { CodingPage } from "../../src/coding/config.ts";
+import type { DevelopmentTask } from "../../src/coding/development.ts";
 import { chooseOption } from "./dropdown-helpers.ts";
 
 const workspaceId = "d2ce2eab-3b09-4e8e-858e-75c20d832517";
@@ -78,13 +79,27 @@ test("coding feedback shows confirmed stages, stopping and safe failures on desk
   const f = await fixture(page, { state: "connected" });
   await f.dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   const now = Date.now();
-  const task: CodingTask = {
+  const task: DevelopmentTask = {
     id: "1e8f2aab-3b09-4e8e-858e-75c20d832517",
     actor: "101",
-    runId: "fixture-run",
+    workspaceId,
+    botId: "999",
+    sourceId: "fixture-source",
+    policy: { publishByDefault: false },
+    phase: "work",
+    revision: 1,
+    consumedRevision: 1,
+    verifiedRevision: 0,
+    fence: 1,
+    attempts: 1,
+    tokens: 0,
+    activeMs: 0,
+    canImplement: true,
+    canPublish: false,
+    cancelRequested: false,
     chatId: "101",
     topicId: 3,
-    state: "running" as const,
+    state: "working" as const,
     createdAt: new Date(now).toISOString(),
     updatedAt: new Date(now).toISOString(),
     payload: {

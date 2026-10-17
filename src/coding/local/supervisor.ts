@@ -62,7 +62,10 @@ interface Record extends LocalStatus {
   conversation?: TaskConversation;
   runtime?: RunnerSettings["CODEX_CONTAINER_ENGINE"];
   key: string;
-  input: Omit<LocalStart, "readToken" | "providerApiKey">;
+  // Erasure removes task content after all execution phases have stopped.
+  input: Omit<LocalStart, "readToken" | "providerApiKey" | "development"> & {
+    development?: LocalStart["development"];
+  };
   providerApiKey?: string; // Encrypted task credential; never copied into job input.
   phase: "prepare" | "setup" | "implement" | "check" | "publish";
   verificationCommands?: string[];
@@ -417,10 +420,7 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
   async start(input: LocalStart) {
     return this.serial(async () => {
       const { readToken, providerApiKey, ...safe } = localStart.parse(input);
-      requireThat(
-        safe.payload.backend === "podman" && (safe.issue || safe.development),
-        "coding_job_invalid",
-      );
+      requireThat(safe.payload.backend === "podman", "coding_job_invalid");
       const key = taskKey(safe.workspaceId, safe.taskId);
       requireThat(!this.erased.has(key), "coding_task_stopped", 409);
       const prior = this.records.get(key);
@@ -748,25 +748,6 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
               developmentResultByteLimit,
             )
           : undefined;
-        if (!r.input.development && !r.verificationCommands) {
-          try {
-            r.verificationCommands = verificationCommands.parse(
-              JSON.parse(
-                await this.engine.readText(
-                  `${r.key}-implement`,
-                  "/task/verification.json",
-                  20000,
-                ),
-              ),
-            );
-          } catch {
-            r.state = "failed";
-            r.error = "coding_verification_invalid";
-            await this.removeAuthVolume(r);
-            await this.save(r);
-            return;
-          }
-        }
         await this.removeAuthVolume(r);
         if (r.input.development) {
           let value: unknown;
@@ -1000,7 +981,6 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
       r.input.development = undefined;
       r.input.messages = undefined;
       r.conversation = undefined;
-      r.input.issue = undefined;
       r.input.payload.title = "[removed]";
       r.input.payload.body = "[removed]";
       r.input.payload.repository = "removed/removed";

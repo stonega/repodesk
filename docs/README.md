@@ -33,8 +33,8 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Telegram feedback beta plan](implementation/telegram-feedback-plan.md) | Readable progress, task status, cancellation and failures for friends and colleagues |
 | [GitHub App connections](implementation/github-app.md) | Default GitHub tools/skill, App registration, repository connections, permissions and approved PR actions |
 | [Review Bot](implementation/review-bot.md) | Selected-repository automatic PR reviews and tagged same-PR work |
-| [Codex coding tasks](implementation/codex-coding.md) | Maintainer-only issue-to-PR tasks, repository settings and local runner setup |
-| [Continuous Codex collaboration](design/codex-collaboration.md) | Policy-gated continuous tasks: Pi requirements intake, Codex decisions, Telegram questions, repair and same-PR follow-ups; live pilot pending |
+| [Codex coding tasks](implementation/codex-coding.md) | Continuous coding tasks, publication settings and local runner setup |
+| [Continuous Codex collaboration](design/codex-collaboration.md) | Continuous tasks: Pi requirements intake, Codex decisions, Telegram questions, repair and same-PR follow-ups; live pilot pending |
 | [Codex collaboration implementation plan](implementation/codex-collaboration-plan.md) | Protocol proof, durable tasks, original-requirement handoff, Telegram input, repair, same-PR continuation and release gates |
 | [Codex account authentication lifecycle](implementation/codex-auth-plan.md) | Credential generations, automatic refresh persistence, sign-in pauses and authorized continuation |
 | [Landing-page Codex acceptance](implementation/codex-landing-acceptance.md) | GitHub/Cloudflare test repository, verified VPS environment and live approval/deployment gates |

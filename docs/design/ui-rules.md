@@ -337,7 +337,7 @@ when implementing or reviewing a change.
   task and repository, explaining cancellation and retained GitHub artifacts,
   with visible Stop followed by Cancel. Send cancellation only after confirmation;
   lock dismissal while pending and keep failures in the modal.
-- **Scope:** Reviewed and continuous coding tasks in the Codex plugin, on desktop
+- **Scope:** Codex coding tasks in the plugin, on desktop
   and mobile.
 - **Source:** 2026-10-06 — user requested a Stop label button and a confirmation
   modal for the coding task action shown in the screenshot.
@@ -445,11 +445,15 @@ when implementing or reviewing a change.
 - **Preference:** Show a compact configuration summary with an Edit action opening
   a dialog, followed by coding tasks. Remove the repository list and its management
   actions; GitHub owns repository access.
-- **Scope:** Codex plugin detail page on desktop and mobile. Workflow settings apply
+- **Scope:** Codex plugin detail page on desktop and mobile. Publication settings apply
   once to the workspace's connected repositories.
 - **Source:** 2026-09-29 — user requested separate configuration, repository and task
   cards. 2026-10-12 — user removed the extra repository permission layer in Codex
   and Review Bot in favor of GitHub's native permissions.
+- **Source update:** 2026-10-17 — the user approved removing Reviewed and using
+  one continuous Codex task workflow, explicitly without legacy compatibility.
+  Remove the execution-mode selector and mode badges from both saved summaries
+  and editors. Keep PR publication as an independent setting.
 - **Exceptions:** Task repository references remain in task summaries.
 
 ### GitHub owns Codex and Review Bot repository permissions
@@ -532,7 +536,7 @@ when implementing or reviewing a change.
 
 - **Preference:** Successful Codex publication leaves the PR ready for review and
   uses matching language in settings, task status and Telegram results.
-- **Scope:** Reviewed and Direct tasks in the Codex plugin; verified follow-ups
+- **Scope:** Codex tasks in the plugin; verified follow-ups
   mark an existing draft PR ready before reporting successful publication.
 - **Source:** 2026-10-08 — user requested that the PR status be ready when a Codex
   plugin job finishes.
@@ -1391,7 +1395,7 @@ Use this format for each preference:
 - **Preference:** Once a coding task has a confirmed PR, replace inline Status
   and Cancel with Review and Merge. Keep the PR actions on the progress message,
   final result, questions, blockers and requested status, including follow-up work.
-- **Scope:** Telegram Reviewed and Direct coding task messages with a confirmed
+- **Scope:** Telegram Codex task messages with a confirmed
   PR. Review opens the PR's changed files; Merge opens its GitHub page.
 - **Source:** 2026-10-08 — user showed a waiting-for-input task message containing
   a PR link and requested Review or Merge for its inline buttons.
@@ -1424,7 +1428,7 @@ Use this format for each preference:
   status/input receipts and final outcomes. Routine progress must not flood the
   conversation or repeat command instructions. Close the progress message when
   waiting or finished so it does not imply ongoing work.
-- **Scope:** Telegram assistant requests and Reviewed/Direct coding tasks for the
+- **Scope:** Telegram assistant requests and Codex tasks for the
   invite-only friend and colleague beta; apply the same wording principles to
   corresponding admin task status.
 - **Source:** 2026-10-06 — user endorsed clear progress, cancellation and failure

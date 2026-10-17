@@ -1,5 +1,5 @@
 import { expect, type Page, type Route, test } from "@playwright/test";
-import type { CodingPage, CodingTask } from "../../src/coding/config.ts";
+import type { CodingPage } from "../../src/coding/config.ts";
 import type { DevelopmentTask } from "../../src/coding/development.ts";
 
 const workspaceId = "d2ce2eab-3b09-4e8e-858e-75c20d832517";
@@ -7,13 +7,27 @@ const endpoint = `/api/admin/workspaces/${workspaceId}/plugins/coding`;
 
 async function fixture(page: Page, failed = false) {
   const now = new Date().toISOString();
-  const reviewed: CodingTask = {
+  const initial: DevelopmentTask = {
     id: "1e8f2aab-3b09-4e8e-858e-75c20d832517",
     actor: "101",
-    runId: "fixture-run",
     chatId: "101",
     topicId: 3,
-    state: "running",
+    workspaceId,
+    botId: "999",
+    sourceId: "fixture-source-1",
+    policy: { publishByDefault: false },
+    phase: "work",
+    revision: 1,
+    consumedRevision: 1,
+    verifiedRevision: 0,
+    fence: 1,
+    attempts: 1,
+    tokens: 0,
+    activeMs: 0,
+    canImplement: true,
+    canPublish: false,
+    cancelRequested: false,
+    state: "working",
     createdAt: now,
     updatedAt: now,
     payload: {
@@ -25,18 +39,18 @@ async function fixture(page: Page, failed = false) {
       baseBranch: "main",
       backend: "podman",
       authMode: "device_code",
-      title: "Reviewed fixture task",
+      title: "Implementation fixture task",
       body: "Fixture",
     },
   };
   const continuous: DevelopmentTask = {
-    ...reviewed,
+    ...initial,
     id: "2e8f2aab-3b09-4e8e-858e-75c20d832517",
-    payload: { ...reviewed.payload, title: "Continuous fixture task" },
+    payload: { ...initial.payload, title: "Continuous fixture task" },
     workspaceId,
     botId: "999",
     sourceId: "fixture-source",
-    policy: { executionMode: "direct", publishByDefault: false },
+    policy: { publishByDefault: false },
     state: "working",
     phase: "work",
     revision: 1,
@@ -51,7 +65,7 @@ async function fixture(page: Page, failed = false) {
     cancelRequested: false,
   };
   if (failed)
-    for (const task of [reviewed, continuous]) {
+    for (const task of [initial, continuous]) {
       task.state = "failed";
       task.error = "coding_base_branch_missing";
       task.payload.baseBranch = "develop";
@@ -65,8 +79,7 @@ async function fixture(page: Page, failed = false) {
     },
     repositories: [],
 
-    tasks: [reviewed],
-    developmentTasks: [continuous],
+    tasks: [initial, continuous],
     legacyActionsConfiguration: false,
     providerApiKeyConfigured: false,
     deviceAuth: { state: "connected" },
@@ -77,7 +90,7 @@ async function fixture(page: Page, failed = false) {
     if (path.startsWith(`${endpoint}/`) && path.endsWith("/cancel")) {
       expect(route.request().method()).toBe("POST");
       expect(route.request().postDataJSON()).toEqual({});
-      const task = [reviewed, continuous].find(
+      const task = [initial, continuous].find(
         (task) => path === `${endpoint}/${task.id}/cancel`,
       );
       if (!task) throw new Error("Unexpected cancellation target");
@@ -106,7 +119,7 @@ async function fixture(page: Page, failed = false) {
   await expect(
     page.getByRole("region", { name: "Coding tasks" }),
   ).toContainText(continuous.payload.title);
-  return { reviewed, continuous, cancellations };
+  return { initial, continuous, cancellations };
 }
 
 for (const width of [1280, 390]) {
@@ -116,8 +129,8 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     const f = await fixture(page);
     f.continuous.error = "github_user_access_unavailable";
-    f.reviewed.state = "cancelled";
-    f.reviewed.error = "github_user_access_denied";
+    f.initial.state = "cancelled";
+    f.initial.error = "github_user_access_denied";
     await page.reload();
     const tasks = page.getByRole("region", { name: "Coding tasks" });
     const recovering = tasks
@@ -134,7 +147,7 @@ for (const width of [1280, 390]) {
     ).toBeEnabled();
     const stopped = tasks
       .getByRole("row")
-      .filter({ hasText: "Reviewed fixture task" });
+      .filter({ hasText: "Implementation fixture task" });
     await expect(stopped).toContainText("Stopped");
     await expect(stopped).toContainText("/github sync");
     await expect(stopped).not.toContainText("couldn’t finish this task");
@@ -152,7 +165,7 @@ for (const width of [1280, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 900 });
     const f = await fixture(page, true);
-    for (const task of [f.reviewed, f.continuous]) {
+    for (const task of [f.initial, f.continuous]) {
       const row = page.getByRole("row").filter({ hasText: task.payload.title });
       await expect(row).toContainText(
         "The configured base branch “develop” does not exist in example/repo",
@@ -187,7 +200,7 @@ for (const width of [1280, 390]) {
       .screenshot({ path: test.info().outputPath("checkout-failures.png") });
     expect(f.cancellations).toEqual([]);
   });
-  for (const mode of ["reviewed", "continuous"] as const) {
+  for (const mode of ["initial", "continuous"] as const) {
     test(`${mode} Stop requires confirmation at ${width}px`, async ({
       page,
     }) => {
@@ -226,7 +239,7 @@ for (const width of [1280, 390]) {
       await expect(dialog).toHaveCount(0);
       await expect(stop).toBeDisabled();
       expect(f.cancellations).toEqual([task.id]);
-      const other = f[mode === "reviewed" ? "continuous" : "reviewed"];
+      const other = f[mode === "initial" ? "continuous" : "initial"];
       await expect(
         page.getByRole("button", {
           name: `Stop coding task ${other.payload.title}`,
@@ -240,7 +253,7 @@ test("pending Stop locks the modal and rejected cancellation can be retried", as
   page,
 }) => {
   const f = await fixture(page);
-  const cancelPath = `**${endpoint}/${f.reviewed.id}/cancel`;
+  const cancelPath = `**${endpoint}/${f.initial.id}/cancel`;
   let held: Route | undefined;
   let attempts = 0;
   await page.route(cancelPath, async (route) => {
@@ -249,7 +262,7 @@ test("pending Stop locks the modal and rejected cancellation can be retried", as
   });
   await page
     .getByRole("button", {
-      name: `Stop coding task ${f.reviewed.payload.title}`,
+      name: `Stop coding task ${f.initial.payload.title}`,
     })
     .click();
   const dialog = page.getByRole("dialog", { name: "Stop coding task?" });
@@ -276,7 +289,7 @@ test("pending Stop locks the modal and rejected cancellation can be retried", as
   await page.unroute(cancelPath);
   await dialog.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(dialog).toHaveCount(0);
-  expect(f.cancellations).toEqual([f.reviewed.id]);
+  expect(f.cancellations).toEqual([f.initial.id]);
 });
 
 test("task completion while confirming disables Stop without cancelling", async ({

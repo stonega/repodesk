@@ -47,9 +47,29 @@ if (mode === "prepare") {
     throw Error("Wrong fixture");
 } else if (mode === "implement") {
   await writeFile("/task/repo/result.txt", "verified fixture\n".repeat(65536));
+  git(["add", "--all"]);
   await writeFile(
-    "/task/verification.json",
-    JSON.stringify(["test -s result.txt"]),
+    "/task/result.patch",
+    git(["diff", "--cached", "--binary", "HEAD"]),
+  );
+  await writeFile(
+    "/task/conversation.json",
+    JSON.stringify({
+      threadId: "benchmark-thread",
+      tokens: 0,
+      result: {
+        status: "completed",
+        intent: "implement",
+        evidenceRevision: 1,
+        evidence: "Fix bug",
+        publishRequested: true,
+        summary: "Fixture completed",
+        question: null,
+        title: "Benchmark",
+        body: "Fixture",
+        verificationCommands: ["test -s result.txt"],
+      },
+    }),
   );
 } else if (mode === "check") {
   if (

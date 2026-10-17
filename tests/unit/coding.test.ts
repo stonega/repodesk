@@ -1,14 +1,8 @@
 import { expect, test } from "bun:test";
 import { branchName } from "../../src/coding/config.ts";
-import {
-  cancelCoding,
-  codingDestination,
-  proposeCoding,
-} from "../../src/coding/policy.ts";
+import { codingDestination } from "../../src/coding/policy.ts";
 import { codingView, saveCoding } from "../../src/coding/service.ts";
-import { sweep } from "../../src/privacy/service.ts";
 import { decrypt } from "../../src/setup/credentials.ts";
-import { decide } from "../../src/workflows/service.ts";
 import { createRun } from "../../src/workspaces/service.ts";
 import { grantGitHubAccess, workspace } from "../fixtures.ts";
 
@@ -148,51 +142,6 @@ test("device auth uses connected repositories regardless of visibility", () => {
   });
   expect(page.settings.authMode).toBe("device_code");
 });
-test("full reviewed payload and one local task per approved tool call", () => {
-  const { w, run } = codingFixture();
-  const a = proposeCoding(w, "101", run.id, "call", input);
-  expect(proposeCoding(w, "101", run.id, "call", input).id).toBe(a.id);
-  expect(w.deliveries).toHaveLength(1);
-  expect(w.deliveries[0]?.text).toContain(input.body);
-  expect(w.deliveries[0]?.text).toContain("develop");
-  expect(w.deliveries[0]?.text).toContain("deployment runtime");
-  expect(w.deliveries[0]?.text).not.toContain("Podman");
-  expect(w.codingTasks).toBeUndefined();
-  expect(() => decide(w, "303", a.id, true)).toThrow("approval_denied");
-  decide(w, "101", a.id, true);
-  expect(w.codingTasks).toHaveLength(1);
-  expect(w.codingTasks?.[0]?.state).toBe("queued");
-  expect(() => decide(w, "101", a.id, true)).toThrow("approval_consumed");
-});
-test("changed destination, GitHub revocation, expiry, cancellation and payload tampering invalidate approval", () => {
-  for (const mutate of [
-    (f: ReturnType<typeof codingFixture>) => {
-      present(present(f.w.github).repositories[0]).default_branch = "main";
-    },
-    (f: ReturnType<typeof codingFixture>) => {
-      present(f.w.members.find((m) => m.id === "101")?.github).repositories =
-        [];
-    },
-    (f: ReturnType<typeof codingFixture>) => {
-      present(f.w.github).revision++;
-    },
-    (f: ReturnType<typeof codingFixture>) => {
-      f.run.cancelled = true;
-    },
-    (f: ReturnType<typeof codingFixture>) => {
-      present(f.w.approvals[0]).expiresAt = new Date(0).toISOString();
-    },
-    (f: ReturnType<typeof codingFixture>) => {
-      (present(f.w.approvals[0]).payload as { body: string }).body = "tampered";
-    },
-  ]) {
-    const f = codingFixture();
-    const a = proposeCoding(f.w, "101", f.run.id, "call", input);
-    mutate(f);
-    expect(() => decide(f.w, "101", a.id, true)).toThrow();
-    expect(f.w.codingTasks?.length ?? 0).toBe(0);
-  }
-});
 test("configuration is operator and tenant scoped with optimistic revision", () => {
   const { w } = codingFixture();
   const owner = w.members.find((member) => member.id === "101");
@@ -237,21 +186,6 @@ test("branch validation rejects ref tricks, options and path traversal", () => {
   ])
     expect(branchName.safeParse(value).success).toBe(true);
 });
-test("initiator can stop after GitHub revocation; deletion purges coding data", () => {
-  const { w, run } = codingFixture();
-  const a = proposeCoding(w, "101", run.id, "call", input);
-  decide(w, "101", a.id, true);
-  present(w.members.find((m) => m.id === "101")?.github).repositories = [];
-  expect(cancelCoding(w, "101", a.id).cancelRequested).toBe(true);
-  expect(() => cancelCoding(w, "202", a.id)).toThrow(
-    "github_user_connection_required",
-  );
-  w.deletion = { requestedAt: new Date().toISOString(), providerState: "none" };
-  sweep(w);
-  expect(w.coding).toBeUndefined();
-  expect(w.codingTasks).toBeUndefined();
-});
-
 test("disconnected repositories do not prevent disabling the extension", () => {
   const { w } = codingFixture();
   const settings = present(w.coding).settings;
@@ -265,11 +199,10 @@ test("disconnected repositories do not prevent disabling the extension", () => {
 });
 
 test("workspace provider credentials are encrypted, redacted, revisioned and explicitly removable", () => {
-  const { w, run } = codingFixture();
+  const { w } = codingFixture();
   const admin = { id: w.operatorId, operator: true, username: "operator" };
   const key = "ab".repeat(32);
   const settings = present(w.coding).settings;
-  const approval = proposeCoding(w, "101", run.id, "before-key", input);
   const save = (revision: number, providerApiKey?: string | null) =>
     saveCoding(w, admin, { revision, settings, providerApiKey }, key);
   const page = save(1, "workspace-provider-secret");
@@ -284,7 +217,6 @@ test("workspace provider credentials are encrypted, redacted, revisioned and exp
   expect(page.providerApiKeyConfigured).toBe(true);
   expect(JSON.stringify(page)).not.toContain(ciphertext);
   expect(JSON.stringify(w)).not.toContain("workspace-provider-secret");
-  expect(() => decide(w, "101", approval.id, true)).toThrow();
   save(2);
   expect(w.coding?.providerApiKey).toBe(ciphertext);
   expect(() => save(2, "stale-secret")).toThrow("version_conflict");

@@ -39,7 +39,7 @@ custom runner images must include this JSON-capable OCR version.
    explicitly requested fixes and the review model once for the plugin, then enable
    Review Bot. Saved values appear in a read-only summary. Cancel discards drafts;
    failed saves retain them. There is no repository list or automatic review owner.
-5. To accept fixes, choose **Direct** in Codex Configuration and enable requested
+5. To accept fixes, enable requested
    fixes in Review Bot Configuration. Members verify their GitHub account through
    `/github connect`; an admin-selected profile alone cannot authorize requests.
 
@@ -54,7 +54,7 @@ GitHub. Write tokens never enter model execution or checks.
 
 Migration `019_github_plugin_permissions.sql` removes legacy repository/reviewer
 settings and advances revisions. Each workflow option remains enabled only if all
-prior targets enabled it; fixes also require the resulting Codex Direct policy.
+prior targets enabled it; fixes require the enabled Codex plugin.
 Where plugin-wide routing overlaps, the lowest workspace ID remains enabled and
 conflicting workspaces are disabled for operator review. The migration is idempotent
 and does not restart old tasks or rewrite historical approvals/grants.

@@ -94,12 +94,6 @@ export function checkReview(w: Workspace, task: ReviewTask, stopping = false) {
     "coding_configuration_changed",
     409,
   );
-  requireThat(
-    task.mode !== "fix" ||
-      coding.settings.development?.executionMode === "direct",
-    "coding_direct_execution_disabled",
-    403,
-  );
   if (!task.automatic)
     authorizeVerifiedRepository(
       w,

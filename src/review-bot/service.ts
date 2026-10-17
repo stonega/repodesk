@@ -164,12 +164,6 @@ export class ReviewService {
           "review_webhook_required",
           409,
         );
-        requireThat(
-          !input.settings.allowFixes ||
-            w.coding.settings.development?.executionMode === "direct",
-          "coding_direct_execution_disabled",
-          409,
-        );
         const others = await sql.query(
           "SELECT data FROM workspaces WHERE id<>$1 AND data->>'operatorId'=$2 AND data#>>'{reviewBot,settings,enabled}'='true'",
           [w.id, w.operatorId],

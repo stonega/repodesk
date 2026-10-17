@@ -1,6 +1,6 @@
 import type { Delivery } from "../domain.ts";
 
-export type TaskOwner = "run" | "coding" | "development";
+export type TaskOwner = "run" | "development";
 
 /** GitHub handles review and merge permissions and confirmation on the PR itself. */
 export function pullRequestButtons(url?: string): Delivery["buttons"] {
@@ -19,7 +19,7 @@ export function taskButtons(
   id: string,
   cancel = true,
 ): Delivery["buttons"] {
-  const kind = { run: "r", coding: "c", development: "d" }[owner];
+  const kind = { run: "r", development: "d" }[owner];
   return [
     [
       { text: "Status", callback_data: `t${kind}s:${id}` },

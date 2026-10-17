@@ -14,13 +14,7 @@ export const localStart = z
     workspaceId: z.uuid(),
     taskId: z.uuid(),
     payload: codingPayload,
-    issue: z
-      .object({
-        number: z.number().int().positive(),
-        url: z.string().url(),
-      })
-      .optional(),
-    development: developmentRun.optional(),
+    development: developmentRun,
     messages: z.array(taskMessage).max(64).optional(),
     modelProvider: runtimeProviderSchema.optional(),
     providerApiKey: z.string().trim().min(1).max(8192).optional(),

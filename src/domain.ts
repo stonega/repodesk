@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ModelOptions } from "./agent/model-settings.ts";
 import type { PluginSettings } from "./agent/plugin-config.ts";
-import type { CodingConfig, CodingTask } from "./coding/config.ts";
+import type { CodingConfig } from "./coding/config.ts";
 import type { GitHubConnection } from "./github/config.ts";
 import type { GitHubUserAccess } from "./github/user-access.ts";
 import type { MemoryContext, MemoryState } from "./memory/types.ts";
@@ -281,7 +281,6 @@ export interface Approval {
     | "deletion"
     | "github_issue"
     | "github_pull_request"
-    | "coding_task"
     | "skill";
   target: string;
   version: number;
@@ -418,13 +417,13 @@ export interface Delivery {
     consumed?: boolean;
   };
   /** Routine task updates share one Telegram message; each edit is a durable intent. */
-  progressMessage?: { owner: "coding" | "development"; id: string };
+  progressMessage?: { owner: "development"; id: string };
   editOf?: string;
   editUnavailable?: boolean;
   botId?: string;
   cancellationRunId?: string;
   feedback?: {
-    owner: "run" | "coding" | "development";
+    owner: "run" | "development";
     id: string;
     key: string;
   };
@@ -477,7 +476,6 @@ export interface Workspace {
   reviewTasks?: ReviewTask[];
   reviewCleanup?: string[];
   coding?: CodingConfig;
-  codingTasks?: CodingTask[];
   github?: GitHubConnection;
   plugins?: PluginSettings;
   id: string;

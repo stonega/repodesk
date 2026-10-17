@@ -17,7 +17,6 @@ export const developmentPolicy = z.preprocess(
   withoutDevelopmentLimits,
   z
     .object({
-      executionMode: z.enum(["reviewed", "direct"]).default("reviewed"),
       publishByDefault: z.boolean().default(false),
     })
     .strict(),

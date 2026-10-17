@@ -48,8 +48,7 @@ const messages: Record<string, string> = {
     "This repository is not connected to the workspace. Ask the workspace operator to check its GitHub connection.",
   coding_maintainer_required:
     "You do not have coding access to this repository. Check your repository permissions in GitHub, then run /github sync in your private bot chat.",
-  coding_direct_execution_disabled:
-    "This repository requires reviewed approval. Request a coding proposal and approve it before execution.",
+
   coding_configuration_changed:
     "Coding settings changed during this task. Ask the workspace administrator to review them before a new request.",
   coding_pr_closed:

@@ -1,10 +1,8 @@
-import { type CodingTask, codingTerminal } from "../coding/config.ts";
 import {
   type DevelopmentTask,
   developmentStopped,
 } from "../coding/development.ts";
-import { developmentStatus, reviewedStatus } from "../coding/feedback.ts";
-import { cancelCoding, checkCodingPayload } from "../coding/policy.ts";
+import { developmentStatus } from "../coding/feedback.ts";
 import { taskGet, taskList } from "../coding/task-store.ts";
 import {
   cancelDevelopment,
@@ -18,17 +16,13 @@ import {
   requireThat,
   type Workspace,
 } from "../domain.ts";
-import { authorizeVerifiedRepository } from "../github/user-access.ts";
-import { audience, authorize } from "../workspaces/policy.ts";
+import { authorize } from "../workspaces/policy.ts";
 import { deliver, visibleRuns } from "../workspaces/service.ts";
 import { runStatus } from "./feedback.ts";
 import type { Message, Update } from "./router.ts";
 import { pullRequestButtons, taskButtons } from "./task-buttons.ts";
 
-type Target =
-  | { kind: "r"; value: Run }
-  | { kind: "c"; value: CodingTask }
-  | { kind: "d"; value: DevelopmentTask };
+type Target = { kind: "r"; value: Run } | { kind: "d"; value: DevelopmentTask };
 
 async function controlTarget(
   sql: Sql,
@@ -37,10 +31,6 @@ async function controlTarget(
   id: string,
 ): Promise<Target | undefined> {
   if (kind === "d") return { kind: "d", value: await taskGet(sql, w.id, id) };
-  if (kind === "c") {
-    const value = w.codingTasks?.find((t) => t.id === id);
-    return value && { kind: "c", value };
-  }
   if (kind === "r") {
     const value = w.runs.find((r) => r.id === id);
     return value && { kind: "r", value };
@@ -49,11 +39,7 @@ async function controlTarget(
 
 function statusButtons(target: Target, reference = false) {
   const prButtons = pullRequestButtons(
-    target.kind === "d"
-      ? target.value.pr?.url
-      : target.kind === "c"
-        ? target.value.prUrl
-        : undefined,
+    target.kind === "d" ? target.value.pr?.url : undefined,
   );
   if (prButtons || reference) return prButtons;
   const cancel =
@@ -61,15 +47,9 @@ function statusButtons(target: Target, reference = false) {
       ? !target.value.cancelled &&
         ["queued", "running", "awaiting_approval"].includes(target.value.status)
       : !target.value.cancelRequested &&
-        (target.kind === "d"
-          ? !developmentStopped(target.value.state)
-          : !codingTerminal(target.value.state));
+        !developmentStopped(target.value.state);
   return taskButtons(
-    target.kind === "d"
-      ? "development"
-      : target.kind === "c"
-        ? "coding"
-        : "run",
+    target.kind === "d" ? "development" : "run",
     target.value.id,
     cancel,
   );
@@ -78,21 +58,7 @@ function allowed(w: Workspace, actor: string, target: Target, stop: boolean) {
   authorize(w, actor);
   if (target.kind === "d")
     checkDevelopment(w, target.value, actor, stop, !stop);
-  else if (target.kind === "c") {
-    const t = target.value;
-    audience(w, actor, t.chatId);
-    if (stop) {
-      if (t.actor !== actor)
-        authorizeVerifiedRepository(w, actor, t.payload.repositoryId, true);
-    } else {
-      requireThat(
-        t.actor === actor || t.chatId !== t.actor,
-        "access_denied",
-        403,
-      );
-      checkCodingPayload(w, actor, t.payload);
-    }
-  } else {
+  else {
     const r = target.value;
     requireThat(
       visibleRuns(w, actor).some((v) => v.id === r.id),
@@ -134,16 +100,6 @@ async function perform(
           id: `development:${target.value.id}:status:${updateId}`,
           buttons: statusButtons(target, true),
         });
-    } else if (target.kind === "c") {
-      const terminal =
-        codingTerminal(target.value.state) && !target.value.cancelRequested;
-      cancelCoding(w, actor, target.value.id);
-      if (terminal)
-        deliver(w, actor, chatId, reviewedStatus(target.value), {
-          topicId,
-          id: `coding:${target.value.id}:status:${updateId}`,
-          buttons: statusButtons(target, true),
-        });
     } else {
       const run = await cancelRequest(sql, w, actor, target.value.id);
       if (!run.cancelled)
@@ -162,10 +118,10 @@ async function perform(
       chatId,
       target.kind === "r"
         ? runStatus(target.value)
-        : `${target.kind === "d" ? developmentStatus(target.value) : reviewedStatus(target.value)}${reference ? `\nReference: ${target.value.id}` : ""}`,
+        : `${developmentStatus(target.value)}${reference ? `\nReference: ${target.value.id}` : ""}`,
       {
         topicId,
-        id: `${target.kind === "d" ? "development" : target.kind === "c" ? "coding" : "run"}:${target.value.id}:status:${updateId}`,
+        id: `${target.kind === "d" ? "development" : "run"}:${target.value.id}:status:${updateId}`,
         buttons: statusButtons(target, reference),
       },
     );
@@ -195,7 +151,6 @@ export async function taskControl(
     ...(await taskList(sql, w.id)).map(
       (value): Target => ({ kind: "d", value }),
     ),
-    ...(w.codingTasks ?? []).map((value): Target => ({ kind: "c", value })),
     ...visibleRuns(w, actor).map((value): Target => ({ kind: "r", value })),
   ];
   const replyId = msg.reply_to_message?.message_id;
@@ -219,7 +174,7 @@ export async function taskControl(
             d.topicId === topicId &&
             (d.runId === t.id ||
               d.id.startsWith(
-                `${target.kind === "d" ? "development" : target.kind === "c" ? "coding" : "run"}:${t.id}:`,
+                `${target.kind === "d" ? "development" : "run"}:${t.id}:`,
               )),
         ) ||
         (target.kind === "r" && target.value.replyTo === replyId) ||
@@ -231,17 +186,13 @@ export async function taskControl(
       );
     return target.kind === "r"
       ? ["queued", "running", "awaiting_approval"].includes(target.value.status)
-      : target.kind === "c"
-        ? !codingTerminal(target.value.state)
-        : !developmentStopped(target.value.state);
+      : !developmentStopped(target.value.state);
   });
   const parentRuns = new Set(
     candidates.flatMap((t) =>
-      t.kind === "c"
-        ? [t.value.runId]
-        : t.kind === "d"
-          ? [w.messages.find((s) => s.id === t.value.sourceId)?.runId]
-          : [],
+      t.kind === "d"
+        ? [w.messages.find((s) => s.id === t.value.sourceId)?.runId]
+        : [],
     ),
   );
   candidates = candidates.filter(
@@ -306,9 +257,9 @@ export async function selectTaskControl(
   botId: string,
 ) {
   const c = u.callback_query;
-  if (/^t[rcd][cs]:/.test(c?.data ?? ""))
+  if (/^t[rd][cs]:/.test(c?.data ?? ""))
     return inlineTaskControl(sql, w, u, botId);
-  if (!c?.data || !/^f[rcd][cs]:/.test(c.data)) return false;
+  if (!c?.data || !/^f[rd][cs]:/.test(c.data)) return false;
   requireThat(
     !c.from.is_bot && c.message && !c.message.sender_chat,
     "access_denied",
@@ -366,7 +317,7 @@ async function inlineTaskControl(
   botId: string,
 ) {
   const c = u.callback_query;
-  const match = /^t([rcd])([cs]):([0-9a-f-]{36})$/.exec(c?.data ?? "");
+  const match = /^t([rd])([cs]):([0-9a-f-]{36})$/.exec(c?.data ?? "");
   if (!match) return false;
   requireThat(
     c && !c.from.is_bot && c.message && !c.message.sender_chat,
@@ -419,7 +370,7 @@ async function inlineTaskControl(
 export async function selectionAllowed(sql: Sql, w: Workspace, d: Delivery) {
   if (!/^control:[0-9]+:[0-9]+$/.test(d.id) || !d.buttons) return true;
   for (const b of d.buttons.flat()) {
-    const match = /^f([rcd])([cs]):([0-9a-f-]{36}):[0-9]+$/.exec(
+    const match = /^f([rd])([cs]):([0-9a-f-]{36}):[0-9]+$/.exec(
       b.callback_data ?? "",
     );
     if (!match?.[3]) return false;

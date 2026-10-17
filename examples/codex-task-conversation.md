@@ -4,9 +4,9 @@ Implemented locally, 2026-10-17. Deploy matching app/worker and supervisor build
 before using the new tools. Both Docker and OpenSandbox share this channel;
 OpenSandbox still needs its prepared server, image, storage and proxy profile.
 
-1. Use the Direct continuous-task policy and ask the bot to implement an authorized
-   change, such as “Improve the landing page's mobile layout.” The legacy Reviewed
-   issue-to-PR task uses a separate workflow; these examples describe Direct tasks.
+1. Ask the bot to implement an authorized change, such as “Improve the landing
+   page's mobile layout.” All Codex tasks use the continuous workflow; no mode
+   selection, task approval or prerequisite Issue is needed.
 2. While Codex works, ask “Why did you change the navigation?” Chat Agent resolves
    the task, reads `development_task_conversation` and, if needed, sends a factual
    question with `ask_development_task`. It may formulate technical follow-ups

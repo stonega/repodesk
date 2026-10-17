@@ -1,5 +1,43 @@
 # Implementation evidence
 
+## One Codex task workflow (2026-10-17)
+
+Codex now uses one continuous task workflow. Removed Reviewed proposals, the
+`coding_task` approval kind, legacy workspace task model/executor, and the old
+Issue/`codex exec` runner path. There is no migration or compatibility bridge.
+The strict settings contract rejects the removed `executionMode` field; publication
+by default remains independent. Requests without that optional publication setting
+can start source-bound intake normally. Existing GitHub issue/PR action approvals
+remain separate application features.
+
+The runner requires a continuous task envelope and rejects issue-only starts before
+reserving execution. Questions and ordinary chat cannot grant implementation or
+publication. Verified actor/repository access, original request evidence, audience,
+cancellation, retention and durable publication checks remain enforced. Review Bot
+fixes retain their own enabled setting and GitHub write checks without a Codex mode
+dependency. A regression checks revocation before execution.
+
+The admin configuration summary/editor has no mode selector or task-mode badges.
+GET/PUT/logout return the same `tasks` collection, also used by Overview counts and
+Stop. Saved summaries, editing, loading/empty, pending and failed-save recovery were
+checked at 1280px/390px, including dark theme. The shared modal and Stop confirmation
+contracts remain in use. Documentation, bundled tool guidance and examples agree.
+
+Validation: Biome, strict TypeScript, build and **829 deterministic tests across
+95 files** passed in the isolated feature checkout with disposable PostgreSQL.
+The merged shared checkout also passed Biome, types, build and **863 tests across
+98 files**, including the independent Cloudflare changes present there.
+The relevant **40 browser scenarios** passed; the final configuration copy/assertions
+and Stop flow were rechecked independently. App, supervisor, Docker job and
+OpenSandbox job images built; the final app passed the Node 24 runtime contract.
+Both Compose overlays validate. The full Docker lifecycle smoke passed with
+continuous provider/device tasks, live questions across restart, checkpoint recovery,
+repair, publication fencing, auth continuation, usage, erasure and cancellation.
+A fresh one-iteration Docker benchmark fixture also completed with no failures.
+
+No dependency or database migration was added. Upgrade app/worker/supervisor/job
+builds together. No live model, GitHub/Telegram write or deployment was performed.
+
 ## Conversation-thread history and Telegram identity (2026-10-17)
 
 The admin history list now shows continuous conversation threads at

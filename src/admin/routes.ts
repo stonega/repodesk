@@ -569,7 +569,7 @@ export function adminRoutes(
     );
     const page = codingView(workspace, c.get("session").admin);
     page.repositoryRefreshError = refreshError;
-    page.developmentTasks = await taskList(store.pool, id);
+    page.tasks = await taskList(store.pool, id);
     if (deviceAuth)
       try {
         page.deviceAuth = await deviceAuth.deviceStatus(id);
@@ -588,7 +588,7 @@ export function adminRoutes(
         await setup.models.selected(w, page.settings.model);
       return page;
     });
-    page.developmentTasks = await taskList(store.pool, id);
+    page.tasks = await taskList(store.pool, id);
     if (deviceAuth)
       try {
         page.deviceAuth = await deviceAuth.deviceStatus(id);
@@ -636,6 +636,7 @@ export function adminRoutes(
         return codingView(w, c.get("session").admin);
       });
       page.deviceAuth = status;
+      page.tasks = await taskList(store.pool, id);
       return c.json(page);
     },
   );
@@ -643,29 +644,25 @@ export function adminRoutes(
     c.json(
       await store.change(validId(c.req.param("id")), async (w, sql) => {
         codingView(w, c.get("session").admin);
-        const task = w.codingTasks?.find(
-          (t) => t.id === validId(c.req.param("task")),
-        );
-        if (!task) {
-          const continuous = await taskGet(
-            sql,
-            w.id,
-            validId(c.req.param("task")),
-          );
-          continuous.cancelRequested = true;
-          if (["queued", "waiting", "review"].includes(continuous.state))
-            continuous.state = "cancelled";
-          await taskSave(sql, continuous);
+        const task = await taskGet(sql, w.id, validId(c.req.param("task")));
+        if (
+          !task.cancelRequested &&
+          !["failed", "cancelled", "unknown"].includes(task.state)
+        ) {
+          task.cancelRequested = true;
+          if (
+            ["queued", "waiting", "review"].includes(task.state) ||
+            (task.state === "auth_required" && !task.attemptId)
+          )
+            task.state = "cancelled";
+          await taskSave(sql, task);
           audit(
             w,
             c.get("session").admin.id,
             "coding.cancel_requested",
-            continuous.id,
+            task.id,
           );
-          return { ok: true };
         }
-        task.cancelRequested = true;
-        audit(w, c.get("session").admin.id, "coding.cancel_requested", task.id);
         return { ok: true };
       }),
     ),
@@ -863,9 +860,7 @@ export function adminRoutes(
               : visibleWorkflows(w, actor).length,
             ...(operatorView
               ? {
-                  codingTasks:
-                    (w.codingTasks?.length ?? 0) +
-                    (await taskList(store.pool, w.id)).length,
+                  codingTasks: (await taskList(store.pool, w.id)).length,
                 }
               : {}),
           },

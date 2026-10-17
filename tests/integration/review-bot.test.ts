@@ -156,7 +156,7 @@ class Runner implements LocalRunner {
         enabled: true,
         backend: "podman",
         authMode: "provider_key",
-        development: { executionMode: "direct", publishByDefault: false },
+        development: { publishByDefault: false },
       },
     };
     w.reviewBot = {
@@ -487,6 +487,21 @@ class Runner implements LocalRunner {
     });
     await f.mention("@deepx-fixture[bot] fix this", 91);
     expect((await store.read(f.w.id)).reviewTasks).toHaveLength(0);
+  });
+  test("removing coding modes keeps Review Bot fix permission enforced", async () => {
+    const f = await fixture();
+    await f.mention();
+    const task = await f.task();
+    await store.change(f.w.id, (w) => {
+      if (!w.reviewBot) throw Error("Missing review settings");
+      w.reviewBot.settings.allowFixes = false;
+    });
+    await f.executor.advance(f.w.id, task.id);
+    expect(f.runner.starts).toHaveLength(0);
+    expect(f.runner.pushes).toHaveLength(0);
+    expect((await f.task()).error).toBe("review_fixes_disabled");
+    await f.mention("@deepx-fixture[bot] fix this", 101);
+    expect((await store.read(f.w.id)).reviewTasks).toHaveLength(1);
   });
   test("explicit fixes run checks and update the existing PR without creating an issue or PR", async () => {
     const f = await fixture();
@@ -870,7 +885,7 @@ class Runner implements LocalRunner {
       topicId: 0,
       sourceId: "fixture",
       payload: review.payload,
-      policy: { executionMode: "direct", publishByDefault: false },
+      policy: { publishByDefault: false },
       state: "queued",
       phase: "intake",
       revision: 1,

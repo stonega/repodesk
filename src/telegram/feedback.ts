@@ -35,7 +35,7 @@ interface ProgressTask {
 export function deliverTaskProgress(
   w: Workspace,
   task: ProgressTask,
-  owner: "coding" | "development",
+  owner: "development",
   text: string,
   options: { id: string; buttons?: Delivery["buttons"]; editOnly?: boolean },
 ) {
@@ -88,7 +88,7 @@ export function clearProgress(w: Workspace, owner: string, id: string) {
 export function recordProgress(
   w: Workspace,
   task: ProgressTask,
-  owner: "coding" | "development",
+  owner: "development",
   stage: string,
   cycle: string,
   now = Date.now(),

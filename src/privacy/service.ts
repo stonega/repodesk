@@ -43,7 +43,6 @@ export function sweep(w: Workspace, now = new Date()) {
     delete w.repositorySelections;
     delete w.coding;
     delete w.chatModel;
-    delete w.codingTasks;
     delete w.memory;
     w.messages = [];
     w.threads = [];
@@ -96,9 +95,6 @@ export function sweep(w: Workspace, now = new Date()) {
   w.accessRequests = w.accessRequests?.filter(
     (r) =>
       Date.parse(r.decidedAt ?? r.requestedAt) > now.getTime() - 30 * 86400000,
-  );
-  w.codingTasks = w.codingTasks?.filter(
-    (t) => Date.parse(t.createdAt) > cutoff,
   );
   w.messages = w.messages.filter((m) => retainedSource(w, m, now.getTime()));
   pruneMemories(w, now.getTime());

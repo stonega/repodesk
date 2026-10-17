@@ -163,7 +163,17 @@ if(process.argv[2]==='app-server') {
    }
    if(text.includes('Followup fixture'))fs.writeFileSync('/task/repo/extra.txt','updated\\n');
    const result={status:intake?'intent':question?'needs_input':'completed',intent:'implement',evidenceRevision:1,evidence:'Fixture',publishRequested:true,summary:'Fixture checked.',question:question?'Keep page one for empty results?':null,title:'Smoke fix',body:'Local smoke checks passed.',verificationCommands:intake||question?[]:text.includes('Verification checks failed.')?['true']:text.includes('Exhaust fixture')?['false']:['test -z "$CODEX_TASK_TOKEN" && test -z "$GITHUB_TOKEN" && test "$(cat README.md)" = fixed']};
+   if(JSON.parse(fs.readFileSync('/input/job.json','utf8')).payload.body==='Malformed result fixture')result.summary='';
    send({id:r.id,result:{turn:{id:'smoke-turn'}}});send({method:'turn/started',params:{threadId:'smoke-thread',turn:{id:'smoke-turn'}}});
+if(JSON.parse(fs.readFileSync('/input/job.json','utf8')).payload.body==='Parallel fixture') {
+ const deadline=Date.now()+60000;
+ while(!fs.existsSync('/task/release-model')) {
+  if(Date.now()>deadline)process.exit(10);
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100);
+ }
+}
+
+
    send({method:'thread/tokenUsage/updated',params:{threadId:'smoke-thread',turnId:'smoke-turn',tokenUsage:{total:{totalTokens:20},last:{totalTokens:20}}}});
    if(text.includes('Conversation channel fixture')){conversationResult=result;fs.writeFileSync('/task/conversation-ready','ready');if(text.includes('Task conversation questions: ')){conversationMessage=JSON.parse(text.split('Task conversation questions: ')[1])[0];send({id:501,method:'item/tool/call',params:{threadId:'smoke-thread',turnId:'smoke-turn',callId:'conversation-read',tool:'repodesk_task_read',arguments:{messageId:conversationMessage.id}}});}return;}
    send({method:'item/completed',params:{threadId:'smoke-thread',turnId:'smoke-turn',item:{type:'agentMessage',phase:'final_answer',text:JSON.stringify(result)}}});
@@ -172,16 +182,7 @@ if(process.argv[2]==='app-server') {
   send({id:r.id,error:{code:-32601,message:'unsupported'}});
  });return;
 }
-if(JSON.parse(fs.readFileSync('/input/job.json','utf8')).payload.body==='Parallel fixture') {
- const deadline=Date.now()+60000;
- while(!fs.existsSync('/task/release-model')) {
-  if(Date.now()>deadline)process.exit(10);
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100);
- }
-}
-fs.writeFileSync('/task/repo/README.md','fixed\\n');
-fs.writeFileSync('/task/verification.json',JSON.stringify([JSON.parse(fs.readFileSync('/input/job.json','utf8')).payload.body==='Fail verification fixture'?'false':'test -z "$CODEX_TASK_TOKEN" && test -z "$GITHUB_TOKEN" && test "$(cat README.md)" = fixed']));
-console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
+process.exit(16);
 `,
   );
   await engine(["build", "-t", image, dir]);
@@ -237,6 +238,17 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   const port = await engine(["port", name, "3020"]);
   let base = `http://${port}`;
   const request = async (path: string, body?: unknown) => {
+    if (path === "/tasks") {
+      const task = body as {
+        taskId: string;
+        development: { context: string; taskId: string };
+      };
+      if (task.development.context === "Smoke lifecycle fixture")
+        body = {
+          ...task,
+          development: { ...task.development, taskId: task.taskId },
+        };
+    }
     const response = await fetch(`${base}${path}`, {
       method: body === undefined ? "GET" : "POST",
       headers: {
@@ -289,7 +301,21 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
       body: "Change old to fixed",
       backend: "podman",
     },
-    issue: { number: 1, url: "https://github.com/example/smoke/issues/1" },
+    development: {
+      taskId: randomUUID(),
+      revision: 1,
+      mode: "work",
+      context: "Smoke lifecycle fixture",
+      inputs: [
+        {
+          revision: 1,
+          actor: "101",
+          sourceId: "source",
+          text: "Fix bug",
+          kind: "request",
+        },
+      ],
+    },
     readToken: "fake-read-token",
     providerApiKey: "fake-panel-provider-key",
   };
@@ -434,7 +460,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   await request("/tasks", {
     ...input,
     taskId: failedTaskId,
-    payload: { ...input.payload, body: "Fail verification fixture" },
+    payload: { ...input.payload, body: "Malformed result fixture" },
   });
   for (let attempt = 0; ; attempt++) {
     const status = (await request(`/tasks/${workspaceId}/${failedTaskId}`)) as {
@@ -444,7 +470,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     };
     if (status.state === "failed") {
       if (
-        status.error !== "coding_check_failed" ||
+        status.error !== "coding_result_invalid" ||
         status.threadId !== "smoke-thread"
       )
         throw new Error(
@@ -570,7 +596,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   await request("/tasks", {
     ...input,
     taskId: conversationTaskId,
-    issue: undefined,
+
     development: {
       ...development,
       taskId: randomUUID(),
@@ -637,7 +663,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   await request("/tasks", {
     ...input,
     taskId: developmentIds[0],
-    issue: undefined,
+
     development,
   });
   const waiting = await waitFor(developmentIds[0], "succeeded");
@@ -646,7 +672,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   await request("/tasks", {
     ...input,
     taskId: developmentIds[1],
-    issue: undefined,
+
     development: {
       ...development,
       revision: 2,
@@ -701,7 +727,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   await request("/tasks", {
     ...input,
     taskId: developmentIds[2],
-    issue: undefined,
+
     development: {
       ...development,
       taskId: randomUUID(),
@@ -715,7 +741,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   await request("/tasks", {
     ...input,
     taskId: developmentIds[3],
-    issue: undefined,
+
     development: {
       ...development,
       taskId: randomUUID(),
@@ -746,7 +772,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   await request("/tasks", {
     ...input,
     taskId: developmentIds[4],
-    issue: undefined,
+
     development: {
       ...development,
       pr,
@@ -767,7 +793,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   await request("/tasks", {
     ...input,
     taskId: developmentIds[5],
-    issue: undefined,
+
     payload: { ...input.payload, body: "Remote race fixture" },
     development: {
       ...development,
@@ -804,7 +830,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   const deviceLogicalTaskId = randomUUID();
   const deviceInput = {
     ...input,
-    issue: undefined,
+
     providerApiKey: undefined,
     payload: { ...input.payload, authMode: "device_code" },
   };

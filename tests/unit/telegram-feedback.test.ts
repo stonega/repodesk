@@ -51,9 +51,9 @@ test("progress persists deduplication and coalesces rapid phases without a false
 test("a confirmed long phase replaces pending progress and real repairs get fresh edit identities", () => {
   const w = workspace(),
     t = task();
-  recordProgress(w, t, "coding", "check", "1", 10000);
-  recordProgress(w, t, "coding", "check", "1", 130000);
-  recordProgress(w, t, "coding", "check", "1", 300000);
+  recordProgress(w, t, "development", "check", "1", 10000);
+  recordProgress(w, t, "development", "check", "1", 130000);
+  recordProgress(w, t, "development", "check", "1", 300000);
   expect(w.deliveries.filter((d) => d.id.endsWith(":delay"))).toHaveLength(1);
   const delayed = w.deliveries.find((d) => d.id.endsWith(":delay"));
   expect(delayed?.text).toBe(
@@ -74,8 +74,8 @@ test("a confirmed long phase replaces pending progress and real repairs get fres
           Buffer.byteLength(b.callback_data) <= 64,
       ),
   ).toBe(true);
-  recordProgress(w, t, "coding", "repair", "2", 310000);
-  recordProgress(w, t, "coding", "check", "2", 320000);
+  recordProgress(w, t, "development", "repair", "2", 310000);
+  recordProgress(w, t, "development", "check", "2", 320000);
   expect(new Set(w.deliveries.map((d) => d.id)).size).toBe(w.deliveries.length);
   expect(w.deliveries.at(-1)?.text).toContain("running the checks");
   expect(w.deliveries.filter((d) => d.state === "pending")).toHaveLength(1);
@@ -84,7 +84,7 @@ test("a confirmed long phase replaces pending progress and real repairs get fres
 test("repair cycles reuse confirmed progress after a restart without new Telegram messages", () => {
   const w = workspace(),
     t = task();
-  recordProgress(w, t, "coding", "check", "1", 10000);
+  recordProgress(w, t, "development", "check", "1", 10000);
   const original = w.deliveries[0];
   if (!original) throw Error("Missing progress");
   original.state = "sent";
@@ -95,7 +95,7 @@ test("repair cycles reuse confirmed progress after a restart without new Telegra
     recordProgress(
       w,
       restored,
-      "coding",
+      "development",
       "repair",
       String(cycle),
       cycle * 20000,
@@ -108,7 +108,7 @@ test("repair cycles reuse confirmed progress after a restart without new Telegra
     recordProgress(
       w,
       restored,
-      "coding",
+      "development",
       "check",
       String(cycle),
       cycle * 20000 + 10000,

@@ -1,4 +1,3 @@
-import { checkCodingPayload } from "../coding/policy.ts";
 import { taskGet } from "../coding/task-store.ts";
 import { checkDevelopment } from "../coding/tasks.ts";
 import type { Sql } from "../db/pool.ts";
@@ -68,31 +67,6 @@ export class DeliveryWorker {
       } catch {
         return false;
       }
-    }
-    const id = /^coding:([0-9a-f-]{36}):/.exec(d.id)?.[1];
-    if (id) {
-      const t = w.codingTasks?.find((t) => t.id === id);
-      if (t) {
-        if (!d.id.includes(":cancel:")) {
-          try {
-            checkCodingPayload(w, t.actor, t.payload);
-            if (d.actor !== t.actor) checkCodingPayload(w, d.actor, t.payload);
-          } catch {
-            return false;
-          }
-        }
-        if (d.feedback)
-          return (
-            !t.cancelRequested &&
-            (d.feedback.key === "queued"
-              ? t.state === "queued"
-              : ["running", "publishing", "starting_publication"].includes(
-                  t.state,
-                ) &&
-                t.progress?.key === d.feedback.key &&
-                !t.progress.unavailable)
-          );
-      } else if (d.feedback) return false;
     }
     return true;
   }

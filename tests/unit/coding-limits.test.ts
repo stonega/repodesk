@@ -15,12 +15,10 @@ test("retired Codex quotas are discarded without default or hidden overrides", (
   expect(
     developmentPolicy.parse({
       ...legacy,
-      executionMode: "direct",
       publishByDefault: true,
     }),
-  ).toEqual({ executionMode: "direct", publishByDefault: true });
+  ).toEqual({ publishByDefault: true });
   expect(developmentPolicy.parse({})).toEqual({
-    executionMode: "reviewed",
     publishByDefault: false,
   });
   const run = developmentRun.parse({
@@ -52,13 +50,27 @@ test("older settings clients cannot preserve retired execution overrides", () =>
       backend: "podman",
       development: {
         ...legacy,
-        executionMode: "direct",
         publishByDefault: true,
       },
     },
   });
   expect(save.settings.development).toEqual({
-    executionMode: "direct",
     publishByDefault: true,
   });
+});
+
+test("Codex has one workflow and rejects the removed execution policy", () => {
+  for (const executionMode of ["reviewed", "direct"]) {
+    expect(() => developmentPolicy.parse({ executionMode })).toThrow();
+    expect(() =>
+      codingSaveSchema.parse({
+        revision: 1,
+        settings: {
+          enabled: true,
+          backend: "podman",
+          development: { executionMode },
+        },
+      }),
+    ).toThrow();
+  }
 });

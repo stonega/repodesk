@@ -4,7 +4,6 @@ import type {
   DevelopmentInput,
   DevelopmentTask,
 } from "../coding/development.ts";
-import { checkCodingPayload, checkCodingTask } from "../coding/policy.ts";
 import { checkDevelopment } from "../coding/tasks.ts";
 import type { Sql } from "../db/pool.ts";
 import {
@@ -172,45 +171,6 @@ function developmentEntries(
   return entries;
 }
 
-function reviewedCodingEntries(w: Workspace, r: Run, cutoff: number): Entry[] {
-  const entries: Entry[] = [];
-  for (const task of w.codingTasks ?? []) {
-    if (
-      Date.parse(task.createdAt) <= cutoff ||
-      !readable(w, r, task.actor, task.chatId, task.topicId) ||
-      !allowed(() => {
-        checkCodingTask(w, task);
-        checkCodingPayload(w, r.actor, task.payload);
-      })
-    )
-      continue;
-    const origin = w.runs.find((run) => run.id === task.runId);
-    const sources = origin
-      ? sourcesFor(
-          w,
-          r,
-          origin.sources.map((s) => s.id),
-        )
-      : undefined;
-    if (!sources) continue;
-    entries.push({
-      id: `coding:${task.id}`,
-      kind: "coding",
-      goal: task.payload.title,
-      status: task.state,
-      nextAction: nextAction(task.state, !!task.prUrl),
-      updatedAt: task.updatedAt,
-      prUrl: task.prUrl,
-      topicId: task.topicId,
-      chatId: task.chatId,
-      repositoryId: task.payload.repositoryId,
-      repository: task.payload.repository,
-      sources,
-    });
-  }
-  return entries;
-}
-
 function assistantEntries(w: Workspace, r: Run, cutoff: number): Entry[] {
   const entries: Entry[] = [];
   for (const run of w.runs) {
@@ -297,7 +257,6 @@ export function workHandoff(
   const cutoff = Date.now() - w.settings.retentionDays * 86400000;
   const entries: Entry[] = [
     ...developmentEntries(w, r, cutoff, tasks),
-    ...reviewedCodingEntries(w, r, cutoff),
     ...assistantEntries(w, r, cutoff),
     ...discussionEntries(w, r),
   ];

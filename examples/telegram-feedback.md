@@ -6,8 +6,7 @@ these steps are not part of automated setup or tests.
 
 1. Send a short private question. Observe the native thinking preview and one final
    answer, without an extra immediate queued message.
-2. Ask for a coding change in a configured Reviewed repository and approve the
-   proposal. Repeat with a Direct repository. Observe factual preparation, work
+2. Ask for a coding change in a connected repository. Observe factual preparation, work
    and verification stages by editing the original acknowledgement, with inline
    **Status** and **Cancel** buttons. Tap **Status** on that message; it should report the current task and confirmed
    links, clear the native spinner and remain usable after ten minutes. Also test
