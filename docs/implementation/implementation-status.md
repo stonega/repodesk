@@ -1,5 +1,24 @@
 # Implementation evidence
 
+## v0.1.40 release preparation (2026-10-18)
+
+Version advances to **0.1.40**, covering continuous Codex conversations and the
+single coding workflow, scoped long-term memory, conversation-thread history and
+statistics, and the Cloudflare plugin with browser authorization.
+
+Release preflight found remaining admin/loading browser assertions for the removed
+execution summary and Reviewed/Direct selector. They now check the publication
+summary, absence of the selector and persistence of the independently saved PR
+publication setting. Application behavior is unchanged by this correction.
+Local Biome, strict TypeScript, build, Node runtime contract, **863 deterministic
+tests** and **35 admin/loading browser scenarios** passed. Stable publication
+requires the full Verify workflow to pass for the release commit.
+
+The Reviewed removal is intentionally breaking: `executionMode`, issue-only runner
+starts and the separate `developmentTasks` response collection are removed without
+compatibility or migration. App/worker/supervisor/job builds must be upgraded together.
+See [the current Codex workflow](codex-coding.md) and the release notes before upgrading.
+
 ## One Codex task workflow (2026-10-17)
 
 Codex now uses one continuous task workflow. Removed Reviewed proposals, the

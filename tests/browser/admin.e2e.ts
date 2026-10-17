@@ -1691,7 +1691,7 @@ test.describe
           .getByText("Disabled", { exact: true }),
       ).toBeVisible();
       await expect(
-        configuration.getByText("Deployment runtime", { exact: true }),
+        configuration.getByText("Publish by default", { exact: true }),
       ).toBeVisible();
       await expect(page.locator(".plugin-back-link svg")).toBeVisible();
       await configuration
@@ -1706,7 +1706,7 @@ test.describe
       await expect(
         codingDialog.getByText("Maintainers", { exact: true }),
       ).toHaveCount(0);
-      await chooseOption(codingDialog.getByLabel("Execution policy"), "direct");
+      await expect(codingDialog.getByLabel("Execution policy")).toHaveCount(0);
       await codingDialog
         .getByLabel(
           "Publish verified implementations as PRs ready for review by default",
@@ -1736,8 +1736,14 @@ test.describe
           .getByText("Enabled", { exact: true }),
       ).toBeVisible();
       await expect(
-        configuration.getByText("Direct", { exact: true }),
+        configuration
+          .getByText("Publish by default", { exact: true })
+          .locator("..")
+          .getByText("Enabled", { exact: true }),
       ).toBeVisible();
+      await expect(
+        configuration.getByText("Execution policy", { exact: true }),
+      ).toHaveCount(0);
       await coding.screenshot({
         path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/coding-desktop.png`,
       });

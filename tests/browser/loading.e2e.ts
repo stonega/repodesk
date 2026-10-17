@@ -262,8 +262,11 @@ for (const width of [1280, 390]) {
       await expect(card.locator(".skeleton").first()).toBeVisible();
     }
     await expect(
-      config.getByText("Deployment runtime", { exact: true }),
+      config.getByText("Publish by default", { exact: true }),
     ).toBeVisible();
+    await expect(
+      config.getByText("Execution policy", { exact: true }),
+    ).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: "Edit Codex configuration" }),
     ).toBeDisabled();
