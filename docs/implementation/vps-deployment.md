@@ -14,7 +14,7 @@ Use a dedicated Linux x86_64 Docker stack with Docker Engine, Compose v2
 enough disk for local builds, three images, release archives and database backups.
 The updater service requires noninteractive Docker and deployment-directory access.
 It handles app, worker, migrations, PostgreSQL and the Docker Codex runner. The
-optional Code Truth service and local Podman overlay remain separate.
+optional Code Truth service and local build overlay remain separate.
 
 Keep the running deployment directory and Compose project stable. The default
 root is `/opt/repodesk`, and the default project is `repodesk`:

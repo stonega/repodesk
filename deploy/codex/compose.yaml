@@ -30,8 +30,10 @@ services:
       - no-new-privileges:true
       - label=disable
     cap_drop: [ALL]
+    cap_add: [CHOWN]
     environment:
-      CONTAINER_HOST: unix:///run/podman/podman.sock
+      CODEX_CONTAINER_ENGINE: ${CODEX_CONTAINER_ENGINE:-docker}
+      CONTAINER_HOST: unix:///var/run/docker.sock
       CODEX_RUNNER_TOKEN: ${CODEX_RUNNER_TOKEN:?Set CODEX_RUNNER_TOKEN}
       # Optional fallback; workspace keys can be saved in the web panel.
       CODEX_PROVIDER_API_KEY: ${CODEX_PROVIDER_API_KEY:-}
@@ -41,13 +43,22 @@ services:
       CODEX_REASONING_EFFORT: ${CODEX_REASONING_EFFORT:-high}
       CODEX_RUNNER_IMAGE: ${CODEX_RUNNER_IMAGE:-localhost/deepx-codex-job:local}
       CODEX_RUNNER_NETWORK: ${CODEX_RUNNER_NETWORK:-deepx_codex_tasks}
-      CODEX_RUNNER_PROXY_URL: http://codex-runner:3020
+      CODEX_RUNNER_PROXY_URL: ${CODEX_RUNNER_PROXY_URL:-http://codex-runner:3020}
       CODEX_RUNNER_CONCURRENCY: ${CODEX_RUNNER_CONCURRENCY:-4}
+      CODEX_DOCKER_IMAGE: ${CODEX_DOCKER_IMAGE:-}
+      CODEX_OPENSANDBOX_IMAGE: ${CODEX_OPENSANDBOX_IMAGE:-}
+      CODEX_DOCKER_HOST: ${CODEX_DOCKER_HOST:-}
+      CODEX_SANDBOX_ROOT: ${CODEX_SANDBOX_ROOT:-}
+      CODEX_SANDBOX_HOST_ROOT: ${CODEX_SANDBOX_HOST_ROOT:-}
+      OPENSANDBOX_URL: ${OPENSANDBOX_URL:-}
+      OPENSANDBOX_API_KEY: ${OPENSANDBOX_API_KEY:-}
+      OPENSANDBOX_SECURE_ACCESS: ${OPENSANDBOX_SECURE_ACCESS:-false}
+      OPENSANDBOX_ALLOWED_DOMAINS: ${OPENSANDBOX_ALLOWED_DOMAINS:-github.com,api.github.com,*.githubusercontent.com,registry.npmjs.org,*.npmjs.org,deb.debian.org,security.debian.org,auth.openai.com,api.openai.com,chatgpt.com,*.openai.com,*.chatgpt.com}
       CODEX_RUNNER_CPUS: ${CODEX_RUNNER_CPUS:-2}
       CODEX_RUNNER_MEMORY_MB: ${CODEX_RUNNER_MEMORY_MB:-4096}
       CODEX_RUNNER_RETENTION_HOURS: ${CODEX_RUNNER_RETENTION_HOURS:-24}
     volumes:
-      - ${PODMAN_SOCKET:?Set PODMAN_SOCKET}:/run/podman/podman.sock
+      - /var/run/docker.sock:/var/run/docker.sock
       - codex_runner_state:/var/lib/deepx-codex
     networks:
       - default

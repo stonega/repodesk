@@ -13,6 +13,7 @@ import { type Sql, transaction } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import {
   type Admin,
+  Fault,
   requireThat,
   type Session,
   settingsSchema,
@@ -82,6 +83,10 @@ const workspaceActor = (w: Workspace, admin: Admin) => {
   return authorize(w, admin.telegramId, true);
 };
 
+import {
+  type LocalRuntimeControl,
+  runtimeSave,
+} from "../coding/runtime-config.ts";
 import type { GitHubService } from "../github/service.ts";
 import type { ReleaseUpdates } from "../updates/releases.ts";
 
@@ -92,7 +97,7 @@ export function adminRoutes(
   plugins: PluginService,
   github: GitHubService,
   encryptionKey?: string,
-  deviceAuth?: LocalDeviceAuth,
+  deviceAuth?: LocalDeviceAuth & Partial<LocalRuntimeControl>,
   review?: ReviewService,
   updates?: ReleaseUpdates,
 ) {
@@ -163,6 +168,35 @@ export function adminRoutes(
     return c.json({ csrf: result.csrf });
   });
   app.get("/api/admin/auth/session", (c) => c.json(c.get("session")));
+  app.get("/api/admin/operator/coding-runtime", async (c) => {
+    operator(c.get("session").admin);
+    requireThat(
+      deviceAuth?.runtimeStatus,
+      "coding_runtime_control_unavailable",
+      503,
+    );
+    return c.json(await deviceAuth.runtimeStatus());
+  });
+  app.put("/api/admin/operator/coding-runtime", async (c) => {
+    const admin = c.get("session").admin;
+    operator(admin);
+    requireThat(
+      deviceAuth?.runtimeSave,
+      "coding_runtime_control_unavailable",
+      503,
+    );
+    const value = runtimeSave.parse(await c.req.json());
+    const result = await deviceAuth.runtimeSave(value);
+    try {
+      await store.pool.query(
+        "INSERT INTO operator_audit(actor,action,target) VALUES($1,'coding.runtime_selected',$2)",
+        [admin.id, value.selection ?? "environment"],
+      );
+    } catch {
+      throw new Fault("coding_outcome_unknown", 503);
+    }
+    return c.json(result);
+  });
   app.get("/api/admin/operator/site", async (c) =>
     c.json(await site.view(c.get("session").admin, setup.telegramTransport)),
   );

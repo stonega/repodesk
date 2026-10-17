@@ -30,7 +30,7 @@ it discoverable; installation starts only after a deployment administrator click
 
 This currently supports the dedicated Linux x86_64 Docker VPS stack, including
 its Docker Codex runner. It does not replace a custom Compose topology, the
-optional Code Truth service or a local Podman overlay. See the VPS guide first.
+optional Code Truth service or a local build overlay. See the VPS guide first.
 
 On the provisioned host, copy the checked-in daemon and service template:
 

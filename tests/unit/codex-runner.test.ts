@@ -7,7 +7,7 @@ import {
   archiveText,
   type ContainerEngine,
   containerArgs,
-} from "../../src/coding/local/podman.ts";
+} from "../../src/coding/local/container.ts";
 import type { LocalStart } from "../../src/coding/local/protocol.ts";
 import { runnerApp } from "../../src/coding/local/runner-server.ts";
 import {
@@ -936,7 +936,7 @@ test("device-auth tasks use only their workspace credential and remove the task 
   const implement = f.calls.find(
     (c) => c.args[0] === "create" && c.args.at(-1) === "implement",
   );
-  expect(implement?.args).toContain(`${key}-auth:/auth:U`);
+  expect(implement?.args).toContain(`${key}-auth:/auth`);
   expect(implement?.env).toEqual({});
   expect(f.jobInputs.at(-1)).not.toContain("old-secret");
   expect(f.jobInputs.at(-1)).not.toContain("refreshed-secret");

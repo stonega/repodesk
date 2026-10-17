@@ -24,13 +24,22 @@ services:
     cap_add: [CHOWN]
     security_opt: [no-new-privileges:true, label=disable]
     environment:
-      CODEX_CONTAINER_ENGINE: docker
+      CODEX_CONTAINER_ENGINE: ${CODEX_CONTAINER_ENGINE:-docker}
       CONTAINER_HOST: unix:///var/run/docker.sock
       CODEX_RUNNER_TOKEN: ${CODEX_RUNNER_TOKEN:?Set CODEX_RUNNER_TOKEN}
       CODEX_RUNNER_IMAGE: ${CODEX_RUNNER_IMAGE:?Set CODEX_RUNNER_IMAGE}
       CODEX_RUNNER_NETWORK: ${CODEX_RUNNER_NETWORK:-repodesk_codex_tasks}
-      CODEX_RUNNER_PROXY_URL: http://codex-runner:3020
+      CODEX_RUNNER_PROXY_URL: ${CODEX_RUNNER_PROXY_URL:-http://codex-runner:3020}
       CODEX_RUNNER_CONCURRENCY: ${CODEX_RUNNER_CONCURRENCY:-4}
+      CODEX_DOCKER_IMAGE: ${CODEX_DOCKER_IMAGE:-}
+      CODEX_OPENSANDBOX_IMAGE: ${CODEX_OPENSANDBOX_IMAGE:-}
+      CODEX_DOCKER_HOST: ${CODEX_DOCKER_HOST:-}
+      CODEX_SANDBOX_ROOT: ${CODEX_SANDBOX_ROOT:-}
+      CODEX_SANDBOX_HOST_ROOT: ${CODEX_SANDBOX_HOST_ROOT:-}
+      OPENSANDBOX_URL: ${OPENSANDBOX_URL:-}
+      OPENSANDBOX_API_KEY: ${OPENSANDBOX_API_KEY:-}
+      OPENSANDBOX_SECURE_ACCESS: ${OPENSANDBOX_SECURE_ACCESS:-false}
+      OPENSANDBOX_ALLOWED_DOMAINS: ${OPENSANDBOX_ALLOWED_DOMAINS:-github.com,api.github.com,*.githubusercontent.com,registry.npmjs.org,*.npmjs.org,deb.debian.org,security.debian.org,auth.openai.com,api.openai.com,chatgpt.com,*.openai.com,*.chatgpt.com}
       CODEX_PROVIDER_API_KEY: ${CODEX_PROVIDER_API_KEY:-}
       CODEX_PROVIDER_NAME: ${CODEX_PROVIDER_NAME:-AIAPI}
       CODEX_PROVIDER_BASE_URL: ${CODEX_PROVIDER_BASE_URL:-https://aiapi.abmatrix.cn/v1}

@@ -155,7 +155,8 @@ test("full reviewed payload and one local task per approved tool call", () => {
   expect(w.deliveries).toHaveLength(1);
   expect(w.deliveries[0]?.text).toContain(input.body);
   expect(w.deliveries[0]?.text).toContain("develop");
-  expect(w.deliveries[0]?.text).toContain("local Podman");
+  expect(w.deliveries[0]?.text).toContain("deployment runtime");
+  expect(w.deliveries[0]?.text).not.toContain("Podman");
   expect(w.codingTasks).toBeUndefined();
   expect(() => decide(w, "303", a.id, true)).toThrow("approval_denied");
   decide(w, "101", a.id, true);

@@ -6,6 +6,7 @@ import { ZodError } from "zod";
 import { adminRoutes } from "./admin/routes.ts";
 import { PluginService } from "./agent/plugin-service.ts";
 import type { LocalDeviceAuth } from "./coding/local/protocol.ts";
+import type { LocalRuntimeControl } from "./coding/runtime-config.ts";
 import type { Store } from "./db/repositories.ts";
 import { Fault, requireThat } from "./domain.ts";
 import { GitHubService } from "./github/service.ts";
@@ -22,7 +23,7 @@ export function createApp(
   plugins = new PluginService(store),
   github = new GitHubService(store, "", origin),
   encryptionKey?: string,
-  deviceAuth?: LocalDeviceAuth,
+  deviceAuth?: LocalDeviceAuth & Partial<LocalRuntimeControl>,
   review?: ReviewService,
   updates = new ReleaseUpdates(store),
 ) {

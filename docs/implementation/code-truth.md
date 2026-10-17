@@ -5,7 +5,7 @@ Pi extension. It includes eight read-only MCP tools and the companion query skil
 Repository URLs and networks/branches are editable independently per workspace;
 no extension file registration is required.
 
-## Start the local service with Docker or Podman
+## Start the local service with Docker
 
 From this repository root, install application and service dependencies for checks:
 
@@ -33,23 +33,10 @@ docker compose -f compose.yaml -f examples/code-truth.compose.yaml config --quie
 docker compose -f compose.yaml -f examples/code-truth.compose.yaml up --build -d
 ```
 
-For the existing rootless Podman deployment, use the same Compose files:
-
-```sh
-podman compose -f compose.yaml -f examples/code-truth.compose.yaml config --quiet
-podman compose -f compose.yaml -f examples/code-truth.compose.yaml build app code-truth
-podman compose -f compose.yaml -f examples/code-truth.compose.yaml up -d --no-build
-```
-
-To retain this service in subsequent plain `podman compose` commands, set
+To retain this service in subsequent plain `docker compose` commands, set
 `COMPOSE_FILE=compose.yaml:examples/code-truth.compose.yaml` in the local `.env`.
-Set `APP_IMAGE=localhost/deepx-agent:local` and
-`CODE_TRUTH_IMAGE=localhost/deepx-code-truth:local` for Podman so previously tagged
-`docker.io/library/...` images cannot win short-name lookup after a local build.
 Preserve the existing database password, encryption key, transport and origin.
-On rootless SELinux hosts, the new token file must have the same readable container
-UID ACL and shared `container_file_t` label as the working encryption-key file.
-Keep its parent directory private; do not make the token world-readable.
+Keep token files readable by the service user and their parent directory private.
 
 This runs Code Truth privately on the Compose network, with no published host port.
 Its `/data` volume holds immutable snapshots. Both API and worker receive its private

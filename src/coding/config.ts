@@ -47,6 +47,8 @@ export function withoutRepositoryGrants(value: unknown) {
   delete clean.repositories;
   return clean;
 }
+// "podman" is the historical local-runner wire identifier. Keep it stable for
+// persisted approvals/fingerprints; the deployment runtime supports Docker/OpenSandbox.
 export const codingSettingsSchema = z.preprocess(
   withoutRepositoryGrants,
   z

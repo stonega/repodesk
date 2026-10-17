@@ -1,9 +1,40 @@
+import { isAbsolute } from "node:path";
 import { z } from "zod";
 import { DEFAULT_MODEL_BASE_URL } from "../../agent/model-settings.ts";
 import type { RuntimeProvider } from "../../models/config.ts";
+import { runtimeEngine } from "../runtime-config.ts";
+
+const optionalSetting = <T extends z.ZodType>(schema: T) =>
+  z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    schema.optional(),
+  );
 
 export const runnerSettings = z.object({
-  CODEX_CONTAINER_ENGINE: z.enum(["podman", "docker"]).default("podman"),
+  CODEX_CONTAINER_ENGINE: runtimeEngine.default("docker"),
+  CODEX_DOCKER_IMAGE: optionalSetting(z.string().min(1)),
+  CODEX_OPENSANDBOX_IMAGE: optionalSetting(z.string().min(1)),
+  CODEX_DOCKER_HOST: optionalSetting(z.string().startsWith("unix://")),
+  // These paths must refer to the same storage on the supervisor and sandbox host.
+  CODEX_SANDBOX_ROOT: optionalSetting(
+    z.string().refine(isAbsolute, "Use an absolute sandbox storage path"),
+  ),
+  CODEX_SANDBOX_HOST_ROOT: optionalSetting(
+    z.string().refine(isAbsolute, "Use an absolute sandbox host path"),
+  ),
+  OPENSANDBOX_URL: optionalSetting(z.string().url()),
+  OPENSANDBOX_API_KEY: optionalSetting(z.string().min(1)),
+  OPENSANDBOX_SECURE_ACCESS: z
+    .union([
+      z.boolean(),
+      z.enum(["true", "false"]).transform((v) => v === "true"),
+    ])
+    .default(false),
+  OPENSANDBOX_ALLOWED_DOMAINS: z
+    .string()
+    .default(
+      "github.com,api.github.com,*.githubusercontent.com,registry.npmjs.org,*.npmjs.org,deb.debian.org,security.debian.org,auth.openai.com,api.openai.com,chatgpt.com,*.openai.com,*.chatgpt.com",
+    ),
   CODEX_RUNNER_TOKEN: z.string().min(32),
   CODEX_PROVIDER_API_KEY: z.string().optional(),
   CODEX_PROVIDER_NAME: z.string().min(1).max(100).default("AIAPI"),
@@ -55,7 +86,7 @@ export const runnerSettings = z.object({
   CONTAINER_HOST: z
     .string()
     .startsWith("unix://")
-    .default("unix:///run/podman/podman.sock"),
+    .default("unix:///var/run/docker.sock"),
 });
 export type RunnerSettings = z.infer<typeof runnerSettings>;
 

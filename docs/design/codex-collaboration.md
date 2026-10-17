@@ -180,7 +180,7 @@ binds one issue-to-draft-PR run, and the runner executes separate setup, Codex,
 check and publication phases. There is no conversational continuation tool, task
 input mailbox or durable Codex question/answer channel. See the
 [current setup and limits](../implementation/codex-coding.md) and
-[runner lifecycle](../implementation/codex-podman.md).
+[runner lifecycle](../implementation/codex-runner.md).
 
 Deliver the accepted direction in dependency order:
 

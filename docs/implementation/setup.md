@@ -25,11 +25,10 @@ docker compose config --quiet
 docker compose up --build -d
 ```
 
-For subsequent local Podman starts, run `bun run local:start`. It uses the Compose
-files selected in `.env` and starts the rootless Podman socket when the Codex
-overlay is present. Pass `--build` to rebuild Compose images after source changes
+For subsequent local Docker starts, run `bun run local:start`. It validates the
+Compose files selected in `.env` before starting them. Pass `--build` to rebuild Compose images after source changes
 (`bun run local:start --build`). The separate Codex job image is built as described
-in [the Podman runner guide](codex-podman.md). The default reuses local images for a
+in [the local runner guide](codex-runner.md). The default reuses local images for a
 quick restart.
 
 Open `http://localhost:3000/setup`. Create the first administrator with a username
@@ -94,13 +93,12 @@ PUBLIC_ORIGIN=http://localhost:3000
 ```
 
 ```sh
-podman compose config --quiet
-podman compose up --build -d
+docker compose config --quiet
+docker compose up --build -d
 ```
 
-Docker Compose supports the same configuration. On SELinux/rootless Podman hosts,
-ensure the container's Node user can read the encryption key and its label permits
-container access; keep the containing `secrets/` directory private.
+Ensure the container's Node user can read the encryption key and, on SELinux
+hosts, its label permits container access. Keep `secrets/` private.
 
 Save a workspace and bot token in Setup. Selecting polling explicitly opts the worker
 into outbound Telegram requests using the saved bot credential, including before
@@ -438,7 +436,7 @@ once per minute. Writes are buffered and best-effort; storage failures never fai
 bot request. Container output remains available for startup/database failures:
 
 ```sh
-podman compose logs --tail=100 -f app worker
+docker compose logs --tail=100 -f app worker
 # Docker equivalent:
 docker compose logs --tail=100 -f app worker
 ```
@@ -527,7 +525,7 @@ Configure credentials and the workspace-wide workflow under **Plugins → Codex*
 Codex uses GitHub’s default branch and verified collaborator permissions; there are
 no plugin repository or maintainer grants. Codex prepares the environment and selects
 verification automatically. Members connect GitHub with `/github connect`. Follow [the complete setup](codex-coding.md)
-and [the Podman runner guide](codex-podman.md) with
+and [the local runner guide](codex-runner.md) with
 `deploy/codex/compose.yaml`. Configure the custom Responses provider endpoint/model
 in deployment settings, then save the workspace API key in **Plugins → Codex
 implementation**. Keys are encrypted and never displayed again.

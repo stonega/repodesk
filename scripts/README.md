@@ -8,7 +8,7 @@
 - `open-code-review-smoke.ts`: offline OCR preparation in a prebuilt `codex-job` image; exact refs, exclusions, rules and preparation failure, with disposable Docker volumes and no credentials. Run `bun scripts/open-code-review-smoke.ts IMAGE_TAG`.
 - `backup.sh`: protected PostgreSQL custom dump through Compose.
 - `restore-rehearsal.sh`: restore into a disposable sibling DB, verify, remove it.
-- `start-local.sh`: start the configured local Podman stack; pass `--build` to rebuild images.
+- `start-local.sh`: start the configured local Docker stack; pass `--build` to rebuild images.
 - `deploy-vps.sh`: release-bundle host cutover with locking, backup, migrations and readiness checks; see [VPS deployment](../docs/implementation/vps-deployment.md).
 - `cleanup-host.mjs`: dry-run-first release image retention and shared storage fencing for the optional daily timer; see [automatic storage cleanup](../docs/implementation/storage-cleanup.md).
 - `update-host.mjs`: dependency-free Node host daemon for approved panel updates; verifies GitHub release/CI identity, builds pinned Docker images and invokes the protected cutover. See [installation](../docs/implementation/updates.md).

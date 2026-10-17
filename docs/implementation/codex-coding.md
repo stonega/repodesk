@@ -1,10 +1,12 @@
 # Codex issue-to-PR tasks
 
-Codex implementation runs approved repository tasks in isolated local Podman
-containers. The bot uses Pi for Telegram conversation; the coding service owns
+Codex implementation runs approved repository tasks in isolated Docker or
+OpenSandbox environments. The bot uses Pi for Telegram conversation; the coding service owns
 authorization, task state, issue creation and publication. Setup and deterministic
 tests do not start a coding task, connect an account or send a message. A live
-end-to-end GitHub/Codex staging run remains a release gate.
+provider-key GitHub/Codex VPS run and an isolated OpenSandbox repeat passed in the
+[landing acceptance environment](codex-landing-acceptance.md). Live account-auth
+refresh/continuation and a production OpenSandbox rollout remain separate gates.
 
 The [continuous collaboration design](../design/codex-collaboration.md) is now
 implemented behind workspace-wide **Direct** execution policy. Existing settings
@@ -16,7 +18,7 @@ The runner defaults to four active tasks. Set `CODEX_RUNNER_CONCURRENCY` (1–32
 the deployment environment to change capacity. API-key tasks execute Codex in
 parallel; tasks sharing one workspace's ChatGPT login serialize Codex phases while
 preparation, checks and publication can overlap. See the
-[runner guide](codex-podman.md#lifecycle-and-recovery) for resource limits and recovery.
+[runner guide](codex-runner.md#lifecycle-and-recovery) for resource limits and recovery.
 
 Temporary GitHub permission-sync failures hold task progression for automatic
 retry, retaining the same attempt and checkout. Already-running local work can
@@ -157,7 +159,7 @@ rebuilds token totals from reported usage. It does not restart stopped tasks.
 
 ## Set up
 
-1. Configure the [local Podman runner](codex-podman.md) and build its task image.
+1. Configure the [local local runner](codex-runner.md) and build its task image.
 2. Connect the workspace GitHub App and select each target repository. For local
    publication, grant **Contents: read and write**, **Issues: read and write** and
    **Pull requests: read and write** to the App installation.
@@ -241,7 +243,7 @@ another task.
 No provider key, installation token, raw GitHub response or generated code is
 stored in routine task records or logs. The pilot retains up to 10 active and 200
 recorded coding tasks per workspace. See [runner isolation, limits and
-recovery](codex-podman.md).
+recovery](codex-runner.md).
 
 Migration `013_automatic_coding_checks.sql` removes old repository command settings
 and increments affected coding revisions, invalidating old grants. Older client

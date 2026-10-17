@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { Fault } from "../../domain.ts";
-import { archiveText, type ContainerEngine } from "./podman.ts";
+import { archiveText, type ContainerEngine } from "./container.ts";
 import type { RunnerSettings } from "./settings.ts";
 
 const exec = promisify(execFile);

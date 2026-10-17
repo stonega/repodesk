@@ -2,7 +2,7 @@
 
 Date: 2026-10-05. Status: **M0–M5 implemented and locally verified; M6 operator controls implemented, live pilot gate pending**.
 Product authority: [accepted collaboration design](../design/codex-collaboration.md).
-Current baseline: [coding tasks](codex-coding.md) and [Podman runner](codex-podman.md).
+Current baseline: [coding tasks](codex-coding.md) and [local runner](codex-runner.md).
 
 ## Delivered implementation and validation
 
@@ -30,7 +30,7 @@ are not used for durable delivery. Waiting frees the task's runner slot. As of
 2026-10-07 the runner defaults to four active tasks, configurable through
 `CODEX_RUNNER_CONCURRENCY`; one task's attempts stay serialized. Tasks sharing a
 workspace device-login cache serialize their Codex phases while other phases can
-overlap. See [runner concurrency and resource limits](codex-podman.md#lifecycle-and-recovery).
+overlap. See [runner concurrency and resource limits](codex-runner.md#lifecycle-and-recovery).
 
 Migration `011_coding_collaboration.sql` adds tenant-scoped task/input/grant/
 attempt/event records. Direct mode is opt-in per repository; omitted policy retains
@@ -65,16 +65,16 @@ Reproducible local evidence:
   follow-up, closed PR, unknown-publication reconciliation and private-state erasure.
 - `tests/unit/codex-runner.test.ts`: legacy compatibility plus checkpoint/slot release,
   repair beyond the retired quotas with sealed credentials and cumulative usage.
-- `bun scripts/codex-smoke.ts`: real rootless Podman with fake Codex/GitHub, local Git,
+- `bun scripts/codex-smoke.ts`: real Docker with fake Codex/GitHub, local Git,
   provider/device credentials, checkpoint recovery, repeated check repair, fresh
   and same-PR publication, remote-head fencing, device continuation and erasure.
-  Set `CODEX_SMOKE_PODMAN_SOCKET` when using a temporary rootless service socket.
+  Set `CODEX_SMOKE_DOCKER_SOCKET` when using a nondefault Docker service socket.
 - The existing admin browser journey verifies reviewed defaults, explicit direct
   policy, publication default persistence and desktop/mobile form layout.
 
 Biome, TypeScript, Bun build, all 351 Bun tests, all 19 browser journeys,
 application Node runtime contract, all three image builds and Compose configuration
-passed. The protocol and Podman fixtures use synthetic messages and fake external
+passed. The protocol and Docker fixtures use synthetic messages and fake external
 services; their evidence does not establish live-model interpretation quality.
 
 The dedicated live pilot remains pending: authenticated maintainer → question →
@@ -169,10 +169,10 @@ in the pinned build. M0 must settle the required subset using that build's schem
 and a local fake-provider fixture before selecting the production transport.
 
 Keep the app-server connection private to the trusted adapter. Prefer attached
-stdin/stdout through the Podman control layer, with bounded framing and backpressure,
+stdin/stdout through the container control layer, with bounded framing and backpressure,
 over adding a public listener. Persist normalized events before acknowledging their
 application handling. Do not expose general app-server configuration, process or
-filesystem APIs as Telegram tools. No Podman socket, GitHub credential or runner
+filesystem APIs as Telegram tools. No Docker socket, GitHub credential or runner
 management credential enters the coding container.
 
 Native user-input requests are usable only if the pinned protocol supports the
@@ -230,7 +230,7 @@ new execution behind the repository policy/feature gate until M0–M5 pass toget
   boundary delivery if live steering cannot meet the durability contract.
 
 Files: new `src/coding/local/conversation.ts` adapter and fake protocol fixtures;
-extend `src/coding/local/podman.ts`, `tests/unit/codex-runner.test.ts` and
+extend `src/coding/local/container.ts`, `tests/unit/codex-runner.test.ts` and
 `scripts/codex-smoke.ts` only as needed for the proof. No dependency or CLI upgrade
 is assumed. Any required upgrade must have explicit compatibility evidence and
 remain pinned.
@@ -383,7 +383,7 @@ a fake Codex executable; it is distinct from protocol tests and live model quali
 After each implementation slice, run `bun run check`, `bun run typecheck`,
 `bun test` and `bun run build`. When changing images, containers or deployment,
 also build/smoke-test the Docker image, validate Compose configuration, and run
-the Podman coding smoke test. Run relevant browser checks for the settings changes.
+the Docker coding smoke test. Run relevant browser checks for the settings changes.
 Update runnable examples together with changed interfaces.
 
 Dependencies: M0 and M1 establish the protocol and durability; M2 depends on both;

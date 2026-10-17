@@ -39,21 +39,29 @@ async function fixture(page: Page, state: CodingPage["deviceAuth"]) {
             ? [{ id: workspaceId, name: "Device sign-in fixture" }]
             : path === endpoint
               ? data
-              : path === "/api/admin/operator/model-providers"
+              : path === "/api/admin/operator/coding-runtime"
                 ? {
-                    version: 1,
-                    providers: [
-                      {
-                        id: "00000000-0000-4000-8000-000000000002",
-                        name: "Team provider",
-                        baseUrl: "https://models.example.test/v1",
-                        apiKeyConfigured: true,
-                        version: 1,
-                        models: ["team/coding-model"],
-                      },
-                    ],
+                    revision: 0,
+                    selection: null,
+                    engine: "docker",
+                    environmentDefault: "docker",
+                    retainedTasks: 0,
                   }
-                : {};
+                : path === "/api/admin/operator/model-providers"
+                  ? {
+                      version: 1,
+                      providers: [
+                        {
+                          id: "00000000-0000-4000-8000-000000000002",
+                          name: "Team provider",
+                          baseUrl: "https://models.example.test/v1",
+                          apiKeyConfigured: true,
+                          version: 1,
+                          models: ["team/coding-model"],
+                        },
+                      ],
+                    }
+                  : {};
     await route.fulfill({ json });
   });
   await page.goto(`/admin/plugins/codex?workspace=${workspaceId}`);
@@ -149,7 +157,7 @@ test("unavailable runner can be rechecked without losing the configuration draft
   );
   await expect(
     dialog.getByRole("link", { name: "Codex runner setup instructions" }),
-  ).toHaveAttribute("href", /codex-podman\.md#configure-the-deployment$/);
+  ).toHaveAttribute("href", /codex-runner\.md#configure-the-deployment$/);
   await dialog.screenshot({
     path: "test-results/codex-configuration-desktop.png",
   });

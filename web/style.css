@@ -2306,6 +2306,10 @@ input.plugin-toggle-input:disabled {
   gap: 12px;
   margin-bottom: 18px;
 }
+.coding-card-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
 .plugin-card-heading h2 {
   margin: 0;
 }

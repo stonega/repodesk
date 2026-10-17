@@ -31,7 +31,7 @@ FROM docker:29-cli@sha256:b1805116a6a86cc591b5d5f60a910a0715cdcc9d18d866ad68b145
 # Install supervisor tools before application files so code changes reuse this layer.
 FROM runtime-base AS codex-supervisor-dependencies
 COPY --from=docker-client /usr/local/bin/docker /usr/local/bin/docker
-RUN apt-get update && apt-get install -y --no-install-recommends podman ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && test -s /etc/ssl/certs/ca-certificates.crt \
     && npm install -g @openai/codex@0.155.1 \
     && npm cache clean --force \
@@ -59,6 +59,10 @@ RUN mkdir /task /input /auth && chown node:node /task /auth
 ENV HOME=/task/home
 USER node
 ENTRYPOINT ["node", "/opt/deepx/job.js"]
+
+# The trusted execd starts as root; the adapter launches every repository job as UID 1000.
+FROM codex-job AS codex-opensandbox-job
+USER root
 
 # Preserve the ordinary app as the default build target.
 FROM runtime AS app

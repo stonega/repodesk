@@ -1,0 +1,42 @@
+# Copy to private storage, replace the key, and chmod 600 before starting.
+# Pinned companion: uvx --from opensandbox-server==1.1.1 opensandbox-server --config PATH
+[server]
+host = "127.0.0.1"
+port = 3021
+api_key = "replace-with-a-random-private-management-key"
+max_sandbox_timeout_seconds = 86400
+
+[runtime]
+type = "docker"
+execd_image = "opensandbox/execd:release-1.1.1"
+
+[storage]
+allowed_host_paths = ["/var/lib/repodesk-sandboxes"]
+
+[store]
+type = "sqlite"
+path = "/var/lib/repodesk-opensandbox/server.db"
+
+[docker]
+network_mode = "bridge"
+publish_host = "127.0.0.1"
+port_range_min = 40000
+port_range_max = 50000
+no_new_privileges = true
+pids_limit = 256
+drop_capabilities = ["AUDIT_WRITE", "MKNOD", "NET_ADMIN", "NET_RAW", "SYS_ADMIN", "SYS_MODULE", "SYS_PTRACE", "SYS_TIME", "SYS_TTY_CONFIG"]
+
+[proxy]
+resolve_internal = true
+
+[ingress]
+mode = "direct"
+
+[egress]
+image = "opensandbox/egress:release-1.1.1"
+# Required: DNS-only mode does not enforce the policy against direct IP access.
+mode = "dns+nft"
+readiness_timeout_seconds = 30.0
+
+[renew_intent]
+enabled = false

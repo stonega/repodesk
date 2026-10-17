@@ -1,0 +1,27 @@
+# Authenticate as a deployment operator in the panel first. Use that session's
+# Cookie and CSRF token; do not commit real credentials in this example.
+@origin = http://localhost:3000
+@session = replace-with-your-session
+@csrf = replace-with-your-csrf-token
+
+### Read the effective runtime, environment default and current revision
+GET {{origin}}/api/admin/operator/coding-runtime
+Cookie: repodesk_session={{session}}
+
+### Select a prepared backend; copy the latest revision from GET before saving
+PUT {{origin}}/api/admin/operator/coding-runtime
+Origin: {{origin}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"revision":0,"selection":"opensandbox"}
+
+### Return to the environment default, using the latest revision
+PUT {{origin}}/api/admin/operator/coding-runtime
+Origin: {{origin}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"revision":1,"selection":null}

@@ -280,7 +280,7 @@ apply once to the workspace and the base branch comes from GitHub.
 These use separate tenant `codingTasks` records and a worker polling loop, so the
 chat lease/deadline does not span remote implementation. The application reserves
 issue creation and local publication before sending; uncertain writes never replay.
-The [Podman runner](../implementation/codex-podman.md) uses a trusted
+The [local runner](../implementation/codex-runner.md) uses a trusted
 supervisor and separate preparation, implementation and publication containers.
 Workspace provider keys are encrypted in the database and sent to the supervisor
 behind a task-scoped proxy; an optional environment key provides a fallback;

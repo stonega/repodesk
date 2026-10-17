@@ -106,7 +106,7 @@ its pending registration flows but retains the operator's shared App credentials
 5. Generate a client secret and a private key. Save them under `secrets/` with private
    file permissions. Never commit them or paste them into the panel.
 
-## Configure Docker or Podman
+## Configure Docker
 
 Add the non-secret App identifiers and secret file paths to the local `.env`:
 
@@ -129,8 +129,8 @@ restart app/worker/Code Truth with all three Compose files. For an already-updat
 installation that only needs the App credentials enabled:
 
 ```sh
-podman compose config --quiet
-podman compose up -d --no-build
+docker compose config --quiet
+docker compose up -d --no-build
 ```
 
 Host processes accept `GITHUB_APP_PRIVATE_KEY` and `GITHUB_APP_CLIENT_SECRET`, or

@@ -4,8 +4,7 @@ import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import { Fault, requireThat } from "../../domain.ts";
 import { equal } from "../../setup/credentials.ts";
-import { Docker } from "./docker.ts";
-import { Podman } from "./podman.ts";
+import { runtimeSave } from "../runtime-config.ts";
 import { localStart } from "./protocol.ts";
 import { runnerSettings } from "./settings.ts";
 import { RunnerSupervisor } from "./supervisor.ts";
@@ -77,6 +76,22 @@ export function runnerApp(
     );
     await next();
   });
+  app.use("/runtime", async (c, next) => {
+    requireThat(
+      equal(
+        c.req.header("authorization") ?? "",
+        `Bearer ${supervisor.settings.CODEX_RUNNER_TOKEN}`,
+      ),
+      "coding_runner_denied",
+      401,
+    );
+    c.header("Cache-Control", "no-store");
+    await next();
+  });
+  app.get("/runtime", async (c) => c.json(await supervisor.runtimeStatus()));
+  app.post("/runtime", async (c) =>
+    c.json(await supervisor.runtimeSave(runtimeSave.parse(await c.req.json()))),
+  );
   app.get("/device-auth/:workspace", async (c) =>
     c.json(
       await supervisor.device.status(z.uuid().parse(c.req.param("workspace"))),
@@ -148,12 +163,7 @@ export function runnerApp(
 
 if (import.meta.main) {
   const settings = runnerSettings.parse(process.env);
-  const supervisor = new RunnerSupervisor(
-    settings,
-    settings.CODEX_CONTAINER_ENGINE === "docker"
-      ? new Docker(settings)
-      : new Podman(settings),
-  );
+  const supervisor = new RunnerSupervisor(settings);
   await supervisor.initialize();
   const app = runnerApp(supervisor);
   const server = serve({ fetch: app.fetch, hostname: "0.0.0.0", port: 3020 });

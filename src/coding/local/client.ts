@@ -1,5 +1,10 @@
 import { Fault } from "../../domain.ts";
 import {
+  type LocalRuntimeControl,
+  type RuntimeSave,
+  runtimeView,
+} from "../runtime-config.ts";
+import {
   deviceAuthStatus,
   type LocalDeviceAuth,
   type LocalRunner,
@@ -7,7 +12,9 @@ import {
   localStatus,
 } from "./protocol.ts";
 
-export class LocalRunnerClient implements LocalRunner, LocalDeviceAuth {
+export class LocalRunnerClient
+  implements LocalRunner, LocalDeviceAuth, LocalRuntimeControl
+{
   constructor(
     private url: string,
     private token: string,
@@ -27,6 +34,27 @@ export class LocalRunnerClient implements LocalRunner, LocalDeviceAuth {
       });
       if (response.status === 404 && path.startsWith("/tasks/"))
         throw new Fault("coding_task_not_found", 404);
+      if (path === "/runtime" && !response.ok) {
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        if (
+          response.status === 409 &&
+          [
+            "coding_runtime_in_use",
+            "coding_runtime_not_configured",
+            "coding_runtime_version_conflict",
+          ].includes(data.error ?? "")
+        )
+          throw new Fault(data.error as string, 409);
+        if (
+          response.status === 503 &&
+          data.error === "coding_runtime_unavailable"
+        )
+          throw new Fault(data.error, 503);
+        if (response.status === 404)
+          throw new Fault("coding_runtime_control_unavailable", 503);
+      }
       if (response.status === 429)
         throw new Fault(
           path.includes("/device-auth/")
@@ -116,5 +144,11 @@ export class LocalRunnerClient implements LocalRunner, LocalDeviceAuth {
     return deviceAuthStatus.parse(
       await this.request(`${this.devicePath(workspaceId)}/logout`, {}),
     );
+  }
+  async runtimeStatus() {
+    return runtimeView.parse(await this.request("/runtime"));
+  }
+  async runtimeSave(input: RuntimeSave) {
+    return runtimeView.parse(await this.request("/runtime", input));
   }
 }

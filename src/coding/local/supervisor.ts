@@ -26,19 +26,32 @@ import {
   verificationCommands,
 } from "../development.ts";
 import { resultIssues, safeResultIssues } from "../result-validation.ts";
+import {
+  type LocalRuntimeControl,
+  type RuntimeSave,
+  runtimeSave,
+} from "../runtime-config.ts";
 import { checkoutFailureCodes } from "./checkout-failure.ts";
+import type { ContainerEngine } from "./container.ts";
 import { conversationFailureCodes } from "./conversation-failure.ts";
 import { DeviceAuth } from "./device-auth.ts";
-import { type ContainerEngine, containerArgs } from "./podman.ts";
 import {
   type LocalRunner,
   type LocalStart,
   type LocalStatus,
   localStart,
 } from "./protocol.ts";
+import { RuntimeSelection } from "./runtime-control.ts";
+import { taskRuntime } from "./runtime-factory.ts";
 import { codexConfig, type RunnerSettings } from "./settings.ts";
+import {
+  OciTaskRuntime,
+  type TaskMode,
+  type TaskRuntime,
+} from "./task-runtime.ts";
 
 interface Record extends LocalStatus {
+  runtime?: RunnerSettings["CODEX_CONTAINER_ENGINE"];
   key: string;
   input: Omit<LocalStart, "readToken" | "providerApiKey">;
   providerApiKey?: string; // Encrypted task credential; never copied into job input.
@@ -73,14 +86,21 @@ export const taskKey = (workspaceId: string, taskId: string) => {
   return `deepx-codex-${createHash("sha256").update(`${workspaceId}:${taskId}`).digest("hex").slice(0, 32)}`;
 };
 
-export class RunnerSupervisor implements LocalRunner {
+export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
   readonly device: DeviceAuth;
   private records = new Map<string, Record>();
   private tail: Promise<unknown> = Promise.resolve();
+  private engine!: TaskRuntime;
+  private selection: RuntimeSelection;
   constructor(
     readonly settings: RunnerSettings,
-    private engine: ContainerEngine,
+    engine?: ContainerEngine | TaskRuntime,
+    private factory = taskRuntime,
   ) {
+    if (engine)
+      this.engine =
+        "create" in engine ? engine : new OciTaskRuntime(settings, engine);
+    this.selection = new RuntimeSelection(settings);
     this.device = new DeviceAuth(settings);
   }
   async initialize() {
@@ -89,6 +109,14 @@ export class RunnerSupervisor implements LocalRunner {
       mode: 0o700,
     });
     await chmod(this.settings.CODEX_RUNNER_STATE, 0o700);
+    await this.selection.initialize();
+    const selected = this.selection.settings(this.selection.current.selection);
+    Object.assign(this.settings, selected);
+    if (
+      !this.engine ||
+      selected.CODEX_CONTAINER_ENGINE !== this.selection.defaultEngine
+    )
+      this.engine = this.factory(selected);
     await this.device.initialize();
     for (const name of await readdir(this.settings.CODEX_RUNNER_STATE)) {
       if (/^deepx-codex-[a-f0-9]{32}\.auth$/.test(name)) {
@@ -99,6 +127,14 @@ export class RunnerSupervisor implements LocalRunner {
       const r = JSON.parse(
         await readFile(join(this.settings.CODEX_RUNNER_STATE, name), "utf8"),
       ) as Record;
+      requireThat(
+        r.cleaned ||
+          (r.runtime
+            ? r.runtime === this.settings.CODEX_CONTAINER_ENGINE
+            : this.settings.CODEX_CONTAINER_ENGINE === "docker"),
+        "coding_runtime_mismatch",
+        409,
+      );
       if (r.input.development && !r.cleaned)
         r.input.development = developmentRun.parse(r.input.development);
       requireThat(
@@ -109,18 +145,53 @@ export class RunnerSupervisor implements LocalRunner {
     }
   }
   async ready() {
-    await this.engine.command([
-      "image",
-      "inspect",
-      "--format",
-      "{{.Id}}",
-      this.settings.CODEX_RUNNER_IMAGE,
-    ]);
-    await this.engine.command([
-      "network",
-      "inspect",
-      this.settings.CODEX_RUNNER_NETWORK,
-    ]);
+    await this.engine.ready();
+  }
+  async runtimeStatus() {
+    return this.serial(async () => this.runtimeView());
+  }
+  private runtimeView() {
+    return {
+      ...this.selection.current,
+      engine: this.settings.CODEX_CONTAINER_ENGINE,
+      environmentDefault: this.selection.defaultEngine,
+      retainedTasks: [...this.records.values()].filter((r) => !r.cleaned)
+        .length,
+    };
+  }
+  async runtimeSave(input: RuntimeSave) {
+    return this.serial(async () => {
+      const value = runtimeSave.parse(input);
+      requireThat(
+        value.revision === this.selection.current.revision,
+        "coding_runtime_version_conflict",
+        409,
+      );
+      if (value.selection === this.selection.current.selection)
+        return this.runtimeView();
+      const settings = this.selection.settings(value.selection);
+      const changed =
+        settings.CODEX_CONTAINER_ENGINE !==
+        this.settings.CODEX_CONTAINER_ENGINE;
+      let engine = this.engine;
+      if (changed) {
+        requireThat(
+          !this.runtimeView().retainedTasks,
+          "coding_runtime_in_use",
+          409,
+        );
+        try {
+          engine = this.factory(settings);
+          await engine.ready();
+        } catch {
+          throw new Fault("coding_runtime_unavailable", 503);
+        }
+      }
+      await this.selection.save(value.selection);
+      Object.assign(this.settings, settings);
+      this.engine = engine;
+      return this.runtimeView();
+    });
   }
   private serial<T>(action: () => Promise<T>): Promise<T> {
     const result = this.tail.then(action);
@@ -214,51 +285,37 @@ export class RunnerSupervisor implements LocalRunner {
   }
   private async removeAuthVolume(r: Record) {
     if (r.input.payload.authMode !== "device_code") return;
-    await this.engine.command([
-      "rm",
-      "--force",
-      "--ignore",
-      `${r.key}-implement`,
-    ]);
+    await this.engine.remove([`${r.key}-implement`]);
     const name = this.authVolume(r);
-    const volumes = await this.engine.command([
-      "volume",
-      "ls",
-      "--format",
-      "{{.Name}}",
-      "--filter",
-      `name=${name}`,
-    ]);
-    if (volumes.split("\n").includes(name))
-      await this.engine.command(["volume", "rm", "--force", name]);
+    if ((await this.engine.listVolumes(name)).includes(name))
+      await this.engine.removeVolumes([name]);
   }
   private async copyInput(file: string, target: string) {
     // Docker copies into a root-owned input volume; the job UID may only read it.
     if (this.settings.CODEX_CONTAINER_ENGINE === "docker")
       await chmod(file, 0o644);
-    await this.engine.command(["cp", file, target]);
+    const split = target.indexOf(":");
+    await this.engine.copyFile(
+      file,
+      target.slice(0, split),
+      target.slice(split + 1),
+    );
   }
   private async launch(
     r: Record,
-    mode: string,
+    mode: TaskMode,
     env: { [key: string]: string } = {},
   ) {
     const name = `${r.key}-${mode}`;
     const deviceRun =
       mode === "implement" && r.input.payload.authMode === "device_code";
-    if (deviceRun)
-      await this.engine.command(["volume", "create", this.authVolume(r)]);
-    await this.engine.command(
-      containerArgs(
-        this.settings,
-        name,
-        this.volume(r, mode),
-        mode,
-        env,
-        deviceRun ? this.authVolume(r) : undefined,
-      ),
+    await this.engine.create({
+      name,
+      volume: this.volume(r, mode),
+      mode,
       env,
-    );
+      authVolume: deviceRun ? this.authVolume(r) : undefined,
+    });
     if (deviceRun) {
       const credential = this.path(r, "auth");
       try {
@@ -273,15 +330,20 @@ export class RunnerSupervisor implements LocalRunner {
           { mode: 0o600 },
         );
         if (this.settings.CODEX_CONTAINER_ENGINE === "docker") {
-          // The root supervisor reads via its group; the job UID owns the private copy.
-          await chmod(credential, 0o640);
-          await chown(credential, 1000, 0);
+          if (process.getuid?.() === 0) {
+            // The root supervisor reads via its group; the job UID owns the copy.
+            await chmod(credential, 0o640);
+            await chown(credential, 1000, 0);
+          } else {
+            requireThat(
+              process.getuid?.() === 1000,
+              "coding_docker_supervisor_uid_invalid",
+              503,
+            );
+            await chmod(credential, 0o600);
+          }
         }
-        await this.engine.command([
-          "cp",
-          credential,
-          `${name}:/auth/auth.json`,
-        ]);
+        await this.engine.copyFile(credential, name, "/auth/auth.json");
       } finally {
         await rm(credential, { force: true });
       }
@@ -333,9 +395,7 @@ export class RunnerSupervisor implements LocalRunner {
       if (mode === "publish")
         await this.copyInput(this.path(r, "patch"), `${name}:/input/patch`);
     }
-    return this.engine.command(
-      mode === "export" ? ["start", "--attach", name] : ["start", name],
-    );
+    return this.engine.start(name, mode === "export");
   }
   async start(input: LocalStart) {
     return this.serial(async () => {
@@ -369,6 +429,7 @@ export class RunnerSupervisor implements LocalRunner {
           409,
         );
       const r: Record = {
+        runtime: this.settings.CODEX_CONTAINER_ENGINE,
         providerApiKey:
           safe.payload.authMode === "provider_key" && providerApiKey
             ? encrypt(
@@ -434,19 +495,7 @@ export class RunnerSupervisor implements LocalRunner {
     }
     if (terminal(r.state) || r.state === "ready") return;
     try {
-      const raw = await this.engine.command([
-        "inspect",
-        "--format",
-        "{{json .State}}",
-        `${r.key}-${r.phase}`,
-      ]);
-      const state = z
-        .object({
-          Running: z.boolean(),
-          Status: z.string(),
-          ExitCode: z.number(),
-        })
-        .parse(JSON.parse(raw));
+      const state = await this.engine.inspect(`${r.key}-${r.phase}`);
       if (state.Running) return;
       if (state.Status !== "exited" && state.Status !== "stopped")
         throw new Error("Incomplete container start");
@@ -504,13 +553,7 @@ export class RunnerSupervisor implements LocalRunner {
       if (state.ExitCode !== 0 && r.phase === "check" && r.input.development) {
         if (!this.canImplement(r)) return;
         r.repairs = (r.repairs ?? 0) + 1; // Reserve before the repair launch.
-        await this.engine.command([
-          "rm",
-          "--force",
-          "--ignore",
-          `${r.key}-implement`,
-          `${r.key}-check`,
-        ]);
+        await this.engine.remove([`${r.key}-implement`, `${r.key}-check`]);
         r.phase = "implement";
         await this.save(r);
         await this.launch(
@@ -739,7 +782,7 @@ export class RunnerSupervisor implements LocalRunner {
     }
   }
   private async exportArtifact(r: Record) {
-    await this.engine.command(["rm", "--force", "--ignore", `${r.key}-export`]);
+    await this.engine.remove([`${r.key}-export`]);
     const artifact = z
       .object({
         patch: z.string().max(5 * 1024 * 1024),
@@ -822,13 +865,7 @@ export class RunnerSupervisor implements LocalRunner {
       r.input.payload.authMode === "device_code"
     ) {
       // Stop token rotation before reading the final cache; keep the container for cp.
-      await this.engine.command([
-        "stop",
-        "--ignore",
-        "--time",
-        "0",
-        `${r.key}-implement`,
-      ]);
+      await this.engine.stop(`${r.key}-implement`);
       try {
         await this.captureAuth(r);
       } catch {
@@ -836,12 +873,7 @@ export class RunnerSupervisor implements LocalRunner {
       }
     }
     // `rm --force --ignore` also handles a reservation that never created a container.
-    await this.engine.command([
-      "rm",
-      "--force",
-      "--ignore",
-      `${r.key}-${r.phase}`,
-    ]);
+    await this.engine.remove([`${r.key}-${r.phase}`]);
     if (r.phase === "implement") await this.removeAuthVolume(r);
     r.state = r.phase === "publish" ? "unknown" : "cancelled";
     await this.save(r);
@@ -854,10 +886,7 @@ export class RunnerSupervisor implements LocalRunner {
       const r = this.records.get(taskKey(workspaceId, taskId));
       if (!r || r.cleaned) return;
       await this.stop(r);
-      await this.engine.command([
-        "rm",
-        "--force",
-        "--ignore",
+      await this.engine.remove([
         ...[
           "prepare",
           "setup",
@@ -869,21 +898,9 @@ export class RunnerSupervisor implements LocalRunner {
         ].map((p) => `${r.key}-${p}`),
       ]);
       for (const volume of ["work", "publish", "auth", "input"]) {
-        const names = await this.engine.command([
-          "volume",
-          "ls",
-          "--format",
-          "{{.Name}}",
-          "--filter",
-          `name=${r.key}-${volume}`,
-        ]);
-        if (names.split("\n").includes(`${r.key}-${volume}`))
-          await this.engine.command([
-            "volume",
-            "rm",
-            "--force",
-            `${r.key}-${volume}`,
-          ]);
+        const names = await this.engine.listVolumes(`${r.key}-${volume}`);
+        if (names.includes(`${r.key}-${volume}`))
+          await this.engine.removeVolumes([`${r.key}-${volume}`]);
       }
       for (const suffix of ["patch", "result", "input", "conversation", "auth"])
         await rm(this.path(r, suffix), { force: true });
@@ -952,10 +969,7 @@ export class RunnerSupervisor implements LocalRunner {
           Date.now() >
             r.finishedAt + this.settings.CODEX_RUNNER_RETENTION_HOURS * 3600000
         ) {
-          await this.engine.command([
-            "rm",
-            "--force",
-            "--ignore",
+          await this.engine.remove([
             ...[
               "prepare",
               "setup",
@@ -966,26 +980,14 @@ export class RunnerSupervisor implements LocalRunner {
               "input",
             ].map((p) => `${r.key}-${p}`),
           ]);
-          const volumes = (
-            await this.engine.command([
-              "volume",
-              "ls",
-              "--format",
-              "{{.Name}}",
-              "--filter",
-              `name=${r.key}`,
-            ])
-          )
-            .split("\n")
-            .filter(
-              (name) =>
-                name === `${r.key}-work` ||
-                name === `${r.key}-publish` ||
-                name === `${r.key}-auth` ||
-                name === `${r.key}-input`,
-            );
-          if (volumes.length)
-            await this.engine.command(["volume", "rm", "--force", ...volumes]);
+          const volumes = (await this.engine.listVolumes(r.key)).filter(
+            (name) =>
+              name === `${r.key}-work` ||
+              name === `${r.key}-publish` ||
+              name === `${r.key}-auth` ||
+              name === `${r.key}-input`,
+          );
+          await this.engine.removeVolumes(volumes);
           for (const suffix of ["patch", "result", "input", "conversation"])
             await rm(this.path(r, suffix), { force: true });
           // Keep a small tombstone so delayed duplicate requests cannot replay the task.

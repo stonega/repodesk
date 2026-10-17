@@ -36,7 +36,10 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Continuous Codex collaboration](design/codex-collaboration.md) | Policy-gated continuous tasks: Pi requirements intake, Codex decisions, Telegram questions, repair and same-PR follow-ups; live pilot pending |
 | [Codex collaboration implementation plan](implementation/codex-collaboration-plan.md) | Protocol proof, durable tasks, original-requirement handoff, Telegram input, repair, same-PR continuation and release gates |
 | [Codex account authentication lifecycle](implementation/codex-auth-plan.md) | Credential generations, automatic refresh persistence, sign-in pauses and authorized continuation |
-| [Local Codex runner](implementation/codex-podman.md) | Automatic Docker VPS runner, Podman isolation, account auth and local publication |
+| [Landing-page Codex acceptance](implementation/codex-landing-acceptance.md) | GitHub/Cloudflare test repository, verified VPS environment and live approval/deployment gates |
+| [Local Codex runner](implementation/codex-runner.md) | Automatic Docker VPS runner, Docker isolation, account auth and local publication |
+| [Alternative Codex sandboxes](implementation/codex-sandboxes.md) | Docker/OpenSandbox configuration, isolation and repeatable benchmarks |
+| [VPS sandbox measurements](research/sandbox-vps-2026-10-17.md) | Same-host Docker/OpenSandbox fixture, live landing tasks and microsandbox exclusion |
 | [Local Code Truth](implementation/code-truth.md) | Predefined source-query extension, local MCP service and repository configuration |
 | [Setup](implementation/setup.md) | Local commands, validation, and configuration |
 | [Implementation evidence](implementation/implementation-status.md) | Verified behavior and remaining live release gates |

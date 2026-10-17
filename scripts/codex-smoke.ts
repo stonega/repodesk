@@ -9,13 +9,15 @@ import type { LocalStatus } from "../src/coding/local/protocol.ts";
 import { taskKey } from "../src/coding/local/supervisor.ts";
 
 const exec = promisify(execFile);
-const engineName =
-  process.env.CODEX_SMOKE_ENGINE === "docker" ? "docker" : "podman";
+const engineName = "docker";
+if (
+  process.env.CODEX_SMOKE_ENGINE &&
+  process.env.CODEX_SMOKE_ENGINE !== "docker"
+)
+  throw Error("Codex smoke supports Docker only.");
 const engine = async (args: string[]) => {
-  if (engineName === "docker") {
-    args = args.filter((arg) => !["--format=docker", "--ignore"].includes(arg));
-    if (args[0] === "volume" && args[1] === "exists") args[1] = "inspect";
-  }
+  args = args.filter((arg) => arg !== "--ignore");
+  if (args[0] === "volume" && args[1] === "exists") args[1] = "inspect";
   const result = await exec(engineName, args, {
     timeout: 120000,
     maxBuffer: 1024 * 1024,
@@ -173,10 +175,9 @@ fs.writeFileSync('/task/verification.json',JSON.stringify([JSON.parse(fs.readFil
 console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
 `,
   );
-  await engine(["build", "--format=docker", "-t", image, dir]);
+  await engine(["build", "-t", image, dir]);
   await engine([
     "build",
-    "--format=docker",
     "-f",
     join(dir, "Dockerfile.supervisor"),
     "-t",
@@ -185,10 +186,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
   ]);
   await engine(["network", "create", name]);
   const socket =
-    engineName === "docker"
-      ? (process.env.CODEX_SMOKE_DOCKER_SOCKET ?? "/var/run/docker.sock")
-      : (process.env.CODEX_SMOKE_PODMAN_SOCKET ??
-        (await engine(["info", "--format", "{{.Host.RemoteSocket.Path}}"])));
+    process.env.CODEX_SMOKE_DOCKER_SOCKET ?? "/var/run/docker.sock";
   await engine([
     "run",
     "-d",
@@ -197,7 +195,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     "--pull=never",
     "--read-only",
     "--cap-drop=ALL",
-    ...(engineName === "docker" ? ["--cap-add=CHOWN"] : []),
+    "--cap-add=CHOWN",
     "--security-opt=no-new-privileges",
     "--security-opt=label=disable",
     "--tmpfs=/tmp",
@@ -208,7 +206,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     "-p",
     "127.0.0.1::3020",
     "-v",
-    `${socket}:/run/podman/podman.sock`,
+    `${socket}:/var/run/docker.sock`,
     "-v",
     `${name}-state:/var/lib/deepx-codex`,
     "-e",
@@ -216,7 +214,7 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'smoke-thread'}));
     "-e",
     `CODEX_CONTAINER_ENGINE=${engineName}`,
     "-e",
-    "CONTAINER_HOST=unix:///run/podman/podman.sock",
+    "CONTAINER_HOST=unix:///var/run/docker.sock",
     "-e",
     "CODEX_PROVIDER_BASE_URL=https://example.invalid/v1",
     "-e",

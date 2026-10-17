@@ -124,6 +124,18 @@ for (const width of [1280, 390]) {
     expect(latestBounds?.width).toBeGreaterThanOrEqual(44);
     expect(latestBounds?.height).toBeGreaterThanOrEqual(44);
     await expect(pager).toContainText("1–50");
+    const terminal = page.getByText("View container logs in the terminal", {
+      exact: true,
+    });
+    await terminal.click();
+    await expect(page.locator("details pre")).toHaveText(
+      "docker compose logs --tail=100 -f app worker",
+    );
+    await page.screenshot({
+      path: test.info().outputPath("docker-terminal.png"),
+      fullPage: true,
+    });
+    await terminal.click();
     await expect(previous).toBeDisabled();
     await expect(page.locator(".log-table")).toHaveCSS("font-size", "12px");
     await expect(pager).toHaveCSS("font-size", "14px");

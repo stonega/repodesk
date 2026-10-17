@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CodingPage, CodingSettings } from "../src/coding/config.ts";
 import { codingFailureMessage } from "../src/coding/failure-messages.ts";
 import { codingStatusLabel } from "../src/coding/feedback.ts";
+import { CodingRuntime } from "./coding-runtime.tsx";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { ModelPicker } from "./model-providers.tsx";
@@ -82,7 +83,7 @@ function RunnerSetupNotice() {
       this plugin, then connect your account. If the runner is unavailable,
       check the deployment status and recheck the connection.{" "}
       <a
-        href="https://github.com/stonega/repodesk/blob/main/docs/implementation/codex-podman.md#configure-the-deployment"
+        href="https://github.com/stonega/repodesk/blob/main/docs/implementation/codex-runner.md#configure-the-deployment"
         target="_blank"
         rel="noopener noreferrer"
       >
@@ -323,12 +324,13 @@ export function Coding({
           list. Check the GitHub App connection if this continues.
         </p>
       )}
+      <CodingRuntime request={request} />
       <section
         className="card"
         aria-label="Codex configuration"
         aria-busy={!data && !error}
       >
-        <div className="plugin-card-heading">
+        <div className="plugin-card-heading coding-card-heading">
           <div>
             <h2>Configuration</h2>
             <p className="muted">
@@ -372,7 +374,7 @@ export function Coding({
           </div>
           <div>
             <dt>Execution</dt>
-            <dd>Local containers</dd>
+            <dd>Deployment runtime</dd>
           </div>
           <div>
             <dt>Sign-in method</dt>
@@ -446,7 +448,7 @@ export function Coding({
         aria-label="Coding tasks"
         aria-busy={!data && !error}
       >
-        <div className="plugin-card-heading">
+        <div className="plugin-card-heading coding-card-heading">
           <div>
             <h2>Coding tasks</h2>
             <p className="muted">

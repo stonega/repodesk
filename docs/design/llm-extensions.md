@@ -185,9 +185,9 @@ The optional Codex extension exposes `propose_coding_task`, `coding_task_status`
 and `cancel_coding_task`. Repository-specific Telegram maintainer grants and a
 complete approval bind issue creation and local Codex execution.
 Application services own issue/publication writes and durable task state. Codex runs
-in an isolated local Podman container, followed by
+in an isolated local Docker container, followed by
 project checks and separate PR publication. Local execution and its
-custom-provider configuration and workspace API keys are described in [the Podman guide](../implementation/codex-podman.md).
+custom-provider configuration and workspace API keys are described in [the runner guide](../implementation/codex-runner.md).
 See [configuration, permissions and recovery](../implementation/codex-coding.md).
 
 The [continuous collaboration workflow](codex-collaboration.md) also provides

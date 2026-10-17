@@ -287,7 +287,7 @@ export function RuntimeLogs({
       </p>
       <details>
         <summary>View container logs in the terminal</summary>
-        <pre>podman compose logs --tail=100 -f app worker</pre>
+        <pre>docker compose logs --tail=100 -f app worker</pre>
         <p className="muted">
           Container logs also include startup failures that occur before
           database logging is available.

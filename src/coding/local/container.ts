@@ -1,59 +1,10 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { Fault } from "../../domain.ts";
 import type { RunnerSettings } from "./settings.ts";
 
-const exec = promisify(execFile);
 export interface ContainerEngine {
   command(args: string[], env?: Record<string, string>): Promise<string>;
   readText(container: string, path: string, maxBytes?: number): Promise<string>;
 }
-export class Podman implements ContainerEngine {
-  constructor(private settings: RunnerSettings) {}
-  async readText(container: string, path: string, maxBytes = 4096) {
-    try {
-      const { stdout } = await exec(
-        "podman",
-        [
-          "--remote",
-          "--url",
-          this.settings.CONTAINER_HOST,
-          "cp",
-          `${container}:${path}`,
-          "-",
-        ],
-        {
-          env: { PATH: process.env.PATH, HOME: "/tmp" },
-          encoding: "buffer",
-          timeout: 60000,
-          maxBuffer: Math.max(65536, maxBytes + 8192),
-        },
-      );
-      return archiveText(stdout, maxBytes);
-    } catch {
-      throw new Fault("coding_container_failed", 503);
-    }
-  }
-  async command(args: string[], env: Record<string, string> = {}) {
-    try {
-      const result = await exec(
-        "podman",
-        ["--remote", "--url", this.settings.CONTAINER_HOST, ...args],
-        {
-          env: { PATH: process.env.PATH, HOME: "/tmp", ...env },
-          timeout: 60000,
-          maxBuffer: 8 * 1024 * 1024,
-        },
-      );
-      return result.stdout.trim();
-    } catch {
-      // Child errors include command arguments and output. Never propagate those.
-      throw new Fault("coding_container_failed", 503);
-    }
-  }
-}
-
-// Read one tiny metadata file from `podman cp ... -` without extracting paths,
+// Read one tiny metadata file from `docker cp ... -` without extracting paths,
 // changing ownership, or requiring chroot capabilities in the supervisor.
 export function archiveText(archive: Buffer, maxBytes = 4096) {
   let result: string | undefined;
@@ -93,13 +44,11 @@ export function containerArgs(
   env: Record<string, string> = {},
   authVolume?: string,
 ) {
-  const docker = settings.CODEX_CONTAINER_ENGINE === "docker";
   return [
     "create",
     "--name",
     name,
     "--pull=never",
-    ...(docker ? [] : ["--http-proxy=false"]),
     "--restart=no",
     "--init",
     "--user=1000:1000",
@@ -115,10 +64,8 @@ export function containerArgs(
     `--network=${mode === "export" ? "none" : settings.CODEX_RUNNER_NETWORK}`,
     "--volume",
     `${volume}:/task${mode === "export" ? ":ro" : ""}`,
-    ...(authVolume
-      ? ["--volume", `${authVolume}:/auth${docker ? "" : ":U"}`]
-      : []),
-    ...(docker && mode !== "export"
+    ...(authVolume ? ["--volume", `${authVolume}:/auth`] : []),
+    ...(mode !== "export"
       ? [
           "--volume",
           `${name.replace(/-(prepare|setup|implement|check|publish)$/, "")}-input:/input:ro`,

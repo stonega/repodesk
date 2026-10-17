@@ -29,6 +29,111 @@ Live GitHub/model comparison quality and rollout to the existing app/worker rema
 release gates. See [setup and limits](github-app.md#read-pr-code-changes-and-reviews-from-telegram)
 and [the runnable comparison journey](../../examples/github-pr-comparison.md).
 
+## Admin-panel Codex runtime selection (2026-10-17)
+
+**Plugins → Codex → Runtime → Edit** selects Docker or
+OpenSandbox for the whole deployment, or follows `CODEX_CONTAINER_ENGINE`.
+The saved panel override survives supervisor restarts. Optional per-engine images,
+OCI sockets and shared sandbox paths prepare alternate host profiles; the panel
+never returns or edits their management credentials.
+
+Operator/session/Origin/CSRF checks protect changes, followed by the supervisor's
+authenticated management API. Revision checks reject stale writes; task starts and
+switches are serialized. A different engine must pass readiness before saving and
+cannot replace an engine with retained tasks/checkpoints, including completed work.
+Corrupt, oversized or symlinked saved selection files fail closed. Unconfirmed
+saves, including a failed audit acknowledgement after the runner commits, instruct
+the operator to read the current selection before retrying.
+
+Validation: Biome, strict TypeScript, production build and **789 deterministic
+tests across 90 files** passed with disposable PostgreSQL. **36 relevant browser
+scenarios** passed across runtime selection, account authentication, Codex Stop,
+overview and logs. Runtime saved/editor, pending, loading, error and unavailable
+states were inspected at 1280px and 390px, including dark mode. The mobile Edit
+action stays at the top right. Final app/supervisor images built; Node runtime and
+authenticated runtime API/persistence/restart image checks passed. Docker
+Compose validation and the full Docker smoke passed, including checkpoint repair,
+publication fencing, device continuation, erasure and cancellation. No application
+deployment or production backend switch is implied. microsandbox and Podman were
+removed at the user's request, including adapters, profiles and panel options;
+removed environment/saved selections fail closed and browser coverage asserts
+that the choice is absent. See [configuration and limits](codex-sandboxes.md).
+
+The default and local startup script use Docker. Shared container helpers moved
+to `container.ts`; no Podman executable is installed in the supervisor image.
+Its uncompressed size dropped from 951,122,785 to 849,540,010 bytes (about 97 MiB).
+Native UID 1000 supervisors retain private task credentials without a root-only
+ownership change; the root container path preserves the job UID before copying.
+The runner guide is now `codex-runner.md`. Existing approval/protocol wire values
+remain stable, with no Podman execution path or automatic data migration.
+
+## Landing-page live-test environment (2026-10-17)
+
+The dedicated [landing repository](https://github.com/stonega/repodesk-landing)
+has a committed `baseline-v1`, a published Cloudflare page and a manually triggered
+branch preview. Local/CI checks and desktop/mobile browser acceptance passed. The
+existing VPS Codex job image also passed a credential-free fresh-clone/install,
+check, typecheck, unit-test and build preflight in disposable isolated storage.
+The existing GitHub App can access the new repository; a host-operator action
+selected it for the workspace and synchronized the existing verified user account.
+
+The requester approved the concrete proposal through the existing Reviewed flow.
+The real Docker task produced [PR #2](https://github.com/stonega/repodesk-landing/pull/2)
+with passing Verify jobs and a native Cloudflare `github:push` preview. The earlier
+automatic-preview gate is resolved by that observed deployment. Additional VPS
+OpenSandbox acceptance produced [PR #3](https://github.com/stonega/repodesk-landing/pull/3),
+also with passing Verify/Cloudflare checks and desktop/mobile deployed-preview
+acceptance. The five-trial fixture comparison, failed first OpenSandbox attempt,
+prepared-browser retry and microsandbox exclusion are recorded separately in the
+[VPS comparison](../research/sandbox-vps-2026-10-17.md). See the
+[acceptance receipt](codex-landing-acceptance.md).
+
+## Alternative Codex sandboxes and benchmark harness (2026-10-17)
+
+The local supervisor supports deployment-selected OpenSandbox
+alongside Docker through a typed phase-runtime interface. Existing workspace
+policy, authentication ordering, task fencing, repair and publication remain in
+the supervisor. The OpenSandbox SDK dependency is pinned to 1.1.1 and loaded only
+when selected. OpenSandbox uses private authenticated management and shared host
+storage.
+
+Fresh phase environments retain task-scoped work storage, read-only inputs,
+implementation-only account credentials/model tokens and separate publication
+storage. Durable sandbox/job identities survive restart; uncertain launches do
+not replay. Cleanup retries after failures, and retained records reject backend
+switches. OpenSandbox has a dedicated execd-compatible image target, pinned
+companion images, deny-default egress and documented SELinux storage labeling.
+
+`bun run benchmark:sandboxes` runs a credential-free Git/file/check/patch and
+simulated-publication fixture across selected engines. It records phase and
+operation timings, P50/P95, host/SDK metadata and explicit failures, and cleans
+only its own task identities. Real Docker and self-hosted OpenSandbox have each
+completed the entire fixture on this host. The earlier microsandbox experiment
+was removed at the user's request after the VPS lacked KVM; its SDK, adapter and
+configuration are absent. This does not measure live model execution, dependency
+downloads or remote GitHub publication.
+Prewarmed pools, memory snapshots and cross-task dependency caches are not enabled.
+See [setup, commands and verification boundaries](codex-sandboxes.md).
+
+Validation: Biome, strict TypeScript, production build and all **767 deterministic
+tests across 87 files** passed with disposable PostgreSQL. The 48 focused runner
+tests include new phase/credential isolation, restart/deduplication, uncertain
+launches, cleanup retry, artifact bounds/symlinks, backend mismatch and SDK command
+identity/ownership checks. Initial full runs encountered two unchanged flaky
+fixtures; their focused reruns and the final full suite passed. That initial local
+implementation pass performed no migration, production backend switch, live
+model/account call or GitHub/Telegram write. Subsequent authorized VPS acceptance
+is documented separately above.
+
+Final app, supervisor, ordinary job and OpenSandbox job images built. The app's
+isolated Node runtime contract, Docker Compose validation and the real
+Docker smoke passed, including fake provider/device auth, parallel capacity,
+restart, question reconstruction, repairs, publication fencing, erasure and
+cancellation. The initial local sandbox comparison also passed without failures;
+its small-sample timings and limits are recorded in the sandbox guide. Temporary
+test database, task containers, comparison network and OpenSandbox server were
+removed/stopped.
+
 ## Invite links use a circular countdown (2026-10-15)
 
 The invite card replaces its visible countdown text row with a small animated
@@ -1104,7 +1209,7 @@ Tasks sharing one workspace's managed ChatGPT cache serialize implementation,
 repair and auth resume to preserve refreshed credentials. Preparation, setup,
 checks and publication can overlap; separate workspace caches run independently.
 Queued repairs do not consume an attempt before they can launch. See the
-[runner guide](codex-podman.md#lifecycle-and-recovery) for configuration and per-task
+[runner guide](codex-runner.md#lifecycle-and-recovery) for configuration and per-task
 resource limits.
 
 Validation: Biome, strict TypeScript, build and **517 deterministic tests across
@@ -2076,7 +2181,7 @@ Telegram test message or paid model evaluation was sent.
 - Existing Telegram issue-to-PR semantics remain. Codex session files/thread IDs
   are retained, but continuing a completed task from Telegram is not exposed yet.
   Live custom-provider execution and GitHub publication remain staging gates.
-  See [local runner setup and boundaries](codex-podman.md).
+  See [local runner setup and boundaries](codex-runner.md).
 
 ## Codex panel credentials deployment (2026-09-22)
 

@@ -20,7 +20,7 @@ is the [GitHub journey](../design/github-workflows.md).
 | Code Truth | Configured repository source queries through a private local service | Live repository indexing and answer-quality evaluation |
 | Issues | Requester-approved issue draft and durable GitHub submission | Live issue creation and unknown-outcome drill |
 | Reports/skills/handoffs | Read-only GitHub metadata and approved repository schedules; conversation skill drafts; scoped work briefs (2026-10-07) | Live report accuracy, teammate reuse and handoff usefulness; [plan](team-workflows-plan.md) |
-| Coding | Maintainer-approved issue-to-draft-PR tasks with local Podman runner | Runner setup and live end-to-end task |
+| Coding | Maintainer-approved issue-to-draft-PR tasks with local local runner | Runner setup and live end-to-end task |
 
 The repository uses workspace JSONB aggregates under row locks for the pilot, with
 relational inbox/outbox/binding/session constraints. Read the architecture's capacity

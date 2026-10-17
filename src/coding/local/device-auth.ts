@@ -28,7 +28,7 @@ interface PendingLogin {
 }
 
 // Only the supervisor sees the reusable ChatGPT credential. A task gets an
-// isolated copy in a short-lived Podman volume during its Codex phase.
+// isolated copy in a short-lived credential mount during its Codex phase.
 export class DeviceAuth {
   private pending = new Map<string, PendingLogin>();
   private failed = new Set<string>();

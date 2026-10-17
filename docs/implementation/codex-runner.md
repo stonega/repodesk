@@ -1,4 +1,13 @@
-# Local Codex execution with Docker or Podman
+# Local Codex execution with Docker
+
+The optional OpenSandbox backend uses the same supervisor protocol.
+See [alternative sandboxes and benchmarks](codex-sandboxes.md) for setup and
+verification boundaries. Docker is the default runtime; OpenSandbox is the only
+optional runtime. Podman support was removed on 2026-10-17 at the user's request.
+Older Podman deployments must drain tasks and explicitly migrate their data/images
+before using Docker. Never point Docker at retained Podman task state or assume
+the two engines share volumes. No automatic migration or running-service cutover
+is performed by this source change.
 
 The **Local containers** runner runs policy-authorized coding tasks on the deployment
 host. Pi still
@@ -19,7 +28,7 @@ Stable GitHub releases build and transfer the application, trusted Codex supervi
 and task images. The deploy script applies `deploy/codex/docker-compose.yaml`,
 starts the supervisor, and waits for its engine, task-image and network readiness
 before stopping application writers. Existing Docker databases and the Compose
-project remain in place; no Podman installation or database migration is needed.
+project remain in place; no database migration is needed.
 The supervisor restarts automatically after a host restart.
 
 The first release generates a private management/encryption token at
@@ -48,31 +57,15 @@ required in the panel. Manual deployments can merge the Docker overlay with the
 base Compose file, specifying the two prebuilt images and a stable private token.
 See [VPS deployment](vps-deployment.md) for release and recovery details.
 
-### A new or existing Podman application stack
+### Local Docker application stack
 
-Install Podman and a Compose provider on the host first. Run the following as
-the account that owns the application stack, images and task containers:
-
-```sh
-systemctl --user enable --now podman.socket
-export PODMAN_SOCKET="${XDG_RUNTIME_DIR}/podman/podman.sock"
-test -S "$PODMAN_SOCKET"
-```
-
-For operation after logout and reboot, the host administrator enables lingering
-for this service account with `loginctl enable-linger ACCOUNT_NAME`. This keeps
-the socket available; it does not create a permanent Codex task container. See
-[Podman's system service documentation](https://docs.podman.io/en/latest/markdown/podman-system-service.1.html).
-
-Use a rootless Podman service with its Unix socket available to the supervisor.
-The socket grants control of that Podman account; the supervisor is trusted
-infrastructure. Task containers never receive the socket. A dedicated rootless
-account is appropriate for a shared deployment.
-
-Build the reusable task image from the repository root:
+Install Docker Engine and Docker Compose. Run the supervisor as root in the
+shipped container, or UID 1000 for a native process using a prepared Docker socket.
+The socket grants daemon control; only trusted supervisor infrastructure gets it.
+Repository jobs never receive it. Build the task image before starting the stack:
 
 ```sh
-podman build --format=docker --target codex-job -t localhost/deepx-codex-job:local .
+docker build --target codex-job -t localhost/deepx-codex-job:local .
 ```
 
 The image pins Codex CLI 0.155.1 and Open Code Review CLI 1.12.12 and includes
@@ -86,7 +79,7 @@ images supplied by a model or task. Build before starting tasks.
 Set these variables in the deployment's private `.env` or Compose environment:
 
 ```dotenv
-PODMAN_SOCKET=/run/user/1000/podman/podman.sock
+CODEX_CONTAINER_ENGINE=docker
 CODEX_RUNNER_TOKEN=replace-with-a-random-token-of-at-least-32-characters
 CODEX_PROVIDER_NAME=AIAPI
 CODEX_PROVIDER_BASE_URL=https://aiapi.abmatrix.cn/v1
@@ -197,12 +190,12 @@ or permanent task container is required. See the [plan and recovery boundaries](
 
 
 After the shared runner token and existing application settings are configured,
-validate and start from the repository root on that same Podman engine:
+validate and start from the repository root on the Docker engine:
 
 ```sh
-podman compose -f compose.yaml -f deploy/codex/compose.yaml config --quiet
-podman compose -f compose.yaml -f deploy/codex/compose.yaml up --build -d
-podman compose -f compose.yaml -f deploy/codex/compose.yaml ps codex-runner
+docker compose -f compose.yaml -f deploy/codex/compose.yaml config --quiet
+docker compose -f compose.yaml -f deploy/codex/compose.yaml up --build -d
+docker compose -f compose.yaml -f deploy/codex/compose.yaml ps codex-runner
 ```
 
 Keep `CODEX_RUNNER_TOKEN` private and stable: it authenticates the app/worker
@@ -216,12 +209,11 @@ The supervisor joins the app network and a separate task network. Task container
 join only the task network, have no published ports, run as UID 1000 with a
 read-only root filesystem, dropped capabilities and process/CPU/memory limits.
 Outbound access is needed for GitHub, packages and the
-configured provider. The Podman overlay requires a **Podman** engine even when
-using `docker compose` for configuration validation. The ordinary app still
-also supports the Docker coding overlay used by VPS releases.
+configured provider. Both Compose overlays now use Docker; the local overlay
+builds the supervisor while VPS releases use imported immutable images.
 
 Only the app and worker get `CODEX_RUNNER_URL` and `CODEX_RUNNER_TOKEN`. Only the supervisor
-gets the optional provider environment fallback and Podman socket. No bot, database
+gets the optional provider environment fallback and Docker socket. No bot, database
 or GitHub App private key is mounted into coding containers. The supervisor HTTP port is not published.
 
 ## Configure repositories
@@ -296,7 +288,7 @@ local work is cancelled and cleaned by the supervisor. The worker also disconnec
 and removes that workspace's sealed device credential after deletion; if the
 supervisor is temporarily unavailable, it retries on the next maintenance pass.
 Codex tasks have no execution-cycle, repair-count, active-time or token quotas.
-Docker and Podman jobs have no application deadline or container watchdog.
+Docker jobs have no application deadline or container watchdog.
 Keep the supervisor running for cancellation, reconciliation and cleanup.
 A restart observes existing containers by their
 deterministic names, without launching duplicate work.
@@ -325,7 +317,7 @@ structured questions, continuation, missing-session
 reconstruction, per-turn token accounting and cancellation. It creates a clean
 Codex home and uses no host auth or paid model calls. The fixture passed both on
 the host and bundled inside the read-only job image with no external network.
-The real Docker/Podman smoke also covers question checkpoints, automatic repair/repair
+The real Docker smoke also covers question checkpoints, automatic repair/repair
 exhaustion, fresh and same-PR publication with fake GitHub, remote-head fencing,
 device continuation and explicit private-state erasure. Waiting for user input or
 sign-in releases the task's runner slot. Retained work checkpoints can seed a new isolated cycle; expired
@@ -339,14 +331,13 @@ For a repeatable smoke test without model calls or GitHub writes, build the
 executable while exercising the real supervisor, engine socket, resource limits,
 volumes, patch export and cancellation, and removes its test resources afterward.
 `CODEX_SMOKE_JOB_IMAGE` and `CODEX_SMOKE_SUPERVISOR_IMAGE` can select other tags.
-Set `CODEX_SMOKE_ENGINE=docker` for Docker (the default remains Podman).
-`CODEX_SMOKE_DOCKER_SOCKET` or `CODEX_SMOKE_PODMAN_SOCKET` selects the engine socket.
+The smoke always uses Docker. `CODEX_SMOKE_DOCKER_SOCKET` selects its socket.
 CI and release builds run the full Docker fixture.
 When a host HTTP proxy is configured, exempt localhost with `NO_PROXY`/`no_proxy`
-for tests; a loopback-only build proxy may need `podman build --network=host`.
+for tests; a loopback-only build proxy may need `docker build --network=host`.
 
 Official references: [Codex device login](https://learn.chatgpt.com/docs/auth#login-on-headless-devices),
 [automation auth guidance](https://learn.chatgpt.com/docs/non-interactive-mode#authenticate-in-automation),
 [Codex custom providers](https://learn.chatgpt.com/docs/config-file/config-advanced#custom-model-providers),
 [non-interactive execution](https://learn.chatgpt.com/docs/non-interactive-mode),
-[Podman run](https://docs.podman.io/en/latest/markdown/podman-run.1.html).
+[Docker run](https://docs.docker.com/reference/cli/docker/container/run/).
