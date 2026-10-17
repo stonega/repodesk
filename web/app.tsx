@@ -23,7 +23,11 @@ import {
   useSearchParams,
 } from "react-router";
 import { Check, ChevronLeft, Refresh, Search } from "reicon-react";
-import type { RunHistoryPage, RunSummary } from "../src/admin/run-history.ts";
+import { runMessageEntries } from "../src/admin/run-statistics.ts";
+import type {
+  ThreadDetail,
+  ThreadHistoryPage,
+} from "../src/admin/thread-history.ts";
 import type {
   WorkflowCollection,
   WorkflowDetail,
@@ -73,10 +77,12 @@ import { Pagination } from "./pagination.tsx";
 import { Plugins } from "./plugins.tsx";
 import { prefixFields, RecordForm } from "./record-form.tsx";
 import { RunAttempts } from "./run-attempts.tsx";
+import { RunStatistics } from "./run-statistics.tsx";
 import { Select } from "./select.tsx";
 import { workspaceFields } from "./settings-fields.ts";
 import { Sidebar } from "./sidebar.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
+import { TelegramUserInfo, ThreadIdentity } from "./telegram-identity.tsx";
 import { ThemeSwitch } from "./theme-switch.tsx";
 import { ErrorToast, ToastProvider, useToast } from "./toast.tsx";
 import { Usage } from "./usage.tsx";
@@ -1031,7 +1037,7 @@ function WorkspacePage({
   if (resource === "skills") return <SkillsPage id={id} />;
   if (resource === "workflows") return <WorkflowsPage id={id} />;
   if (resource === "instructions") return <InstructionsPage id={id} />;
-  if (resource === "runs") return <RunsPage key={id} id={id} />;
+  if (resource === "threads") return <ThreadsPage key={id} id={id} />;
   if (resource === "members") return <MembersPage id={id} />;
   if (resource === "chats") return <ChatsPage id={id} />;
   if (resource === "deletion") return <PrivacyPage id={id} />;
@@ -1059,6 +1065,7 @@ function ReadPage({
     counts?: {
       members: number;
       runs: number;
+      threads: number;
       workflows: number;
       codingTasks?: number;
     };
@@ -1076,11 +1083,15 @@ function ReadPage({
   const notify = useToast();
   const [managingBot, setManagingBot] = useState(false);
   const [managingGitHub, setManagingGitHub] = useState(false);
-  const counts = data?.counts ?? {
-    members: undefined,
-    runs: undefined,
-    workflows: undefined,
-    ...(admin.operator && !admin.telegramId ? { codingTasks: undefined } : {}),
+  const counts = {
+    members: data?.counts?.members,
+    threads: data?.counts?.threads,
+    workflows: data?.counts?.workflows,
+    ...(data?.counts?.codingTasks !== undefined
+      ? { codingTasks: data.counts.codingTasks }
+      : admin.operator && !admin.telegramId
+        ? { codingTasks: undefined }
+        : {}),
   };
   useEffect(() => {
     if (resource === "overview" && data?.settings && data.version)
@@ -2905,77 +2916,13 @@ function InstructionsPage({ id }: { id: string }) {
 }
 type AdminRun = Run & { deliveries: Delivery[] };
 
-function RunCard({
-  title,
-  run,
-  detail,
-  to,
-}: {
-  title: string;
-  run: RunSummary;
-  detail: string;
-  to: string;
-}) {
-  return (
-    <Link className="run-card" to={to}>
-      <span className="run-card-heading">
-        <span className="run-card-title">{title}</span>
-        <span className="pill">{run.status}</span>
-      </span>
-      <span className="run-card-line">
-        {new Date(run.at).toLocaleString()} · Actor {run.actor} · {run.model}
-      </span>
-      <span className="run-card-line">{detail}</span>
-    </Link>
-  );
-}
-
 function RunMessages({ run }: { run: AdminRun }) {
-  const checkpoints = run.transcript.map((value) => {
-    const message =
-      value && typeof value === "object"
-        ? (value as Record<string, unknown>)
-        : {};
-    const content = Array.isArray(message.content) ? message.content : [];
-    const text = content
-      .filter(
-        (part): part is { type: "text"; text: string } =>
-          part?.type === "text" && typeof part.text === "string",
-      )
-      .map((part) => part.text)
-      .join("\n");
-    const calls = content
-      .filter(
-        (part): part is { type: "toolCall"; name: string } =>
-          part?.type === "toolCall" && typeof part.name === "string",
-      )
-      .map((part) => part.name);
-    const role = message.role;
-    return {
-      label:
-        role === "assistant"
-          ? "Assistant"
-          : role === "toolResult"
-            ? `Tool · ${typeof message.toolName === "string" ? message.toolName : "Result"}`
-            : role === "user"
-              ? "User"
-              : "Checkpoint",
-      text,
-      calls,
-    };
-  });
-  const lastAssistant = checkpoints.findLast(
-    (entry) => entry.label === "Assistant" && entry.text,
-  );
+  const entries = runMessageEntries(run);
   return (
     <section className="run-message-section" aria-label="Messages">
       <h2>Messages</h2>
       <ol className="run-messages">
-        <li>
-          <strong>Request</strong>
-          <p className="prose">{run.task}</p>
-        </li>
-        {checkpoints.map((entry, index) => (
+        {entries.map((entry, index) => (
           // Checkpoints are an ordered, immutable snapshot and need not have IDs.
           // biome-ignore lint/suspicious/noArrayIndexKey: Ordered run transcript.
           <li key={index}>
@@ -2989,61 +2936,49 @@ function RunMessages({ run }: { run: AdminRun }) {
             )}
           </li>
         ))}
-        {run.result && run.result.trim() !== lastAssistant?.text.trim() && (
-          <li>
-            <strong>Final answer</strong>
-            <p className="prose">{run.result}</p>
-          </li>
-        )}
       </ol>
     </section>
   );
 }
 
-function RunsPage({ id }: { id: string }) {
+function ThreadsPage({ id }: { id: string }) {
   const [params] = useSearchParams();
   const rawOffset = Number(params.get("offset"));
   const offset =
     Number.isSafeInteger(rawOffset) && rawOffset > 0 ? rawOffset : 0;
-  return <RunListPage key={`${id}:${offset}`} id={id} offset={offset} />;
+  return <ThreadListPage key={`${id}:${offset}`} id={id} offset={offset} />;
 }
-function RunListPage({ id, offset }: { id: string; offset: number }) {
-  const [params] = useSearchParams();
-  const detailParams = new URLSearchParams(params);
-  detailParams.set("workspace", id);
-  const { data, error, reload, loading } = useData<RunHistoryPage>(
-    `/api/admin/workspaces/${id}/runs?offset=${offset}&limit=25`,
+function ThreadListPage({ id, offset }: { id: string; offset: number }) {
+  const { data, error, reload, loading } = useData<ThreadHistoryPage>(
+    `/api/admin/workspaces/${id}/threads?offset=${offset}&limit=25`,
   );
-  const memberData = data?.mode === "member" ? data : undefined;
   return (
     <Page
-      title="Runs & delivery"
-      description="Generation and delivery have separate states. An unknown send is never automatically repeated."
+      title="Threads"
+      description="Continuous conversations with your Telegram assistant. Open a thread to follow its requests and replies."
       actions={
         <>
-          {memberData && (
-            <CreateModal label="Request a run">
+          {data?.mode === "member" && (
+            <CreateModal label="New request">
               {(close) => (
-                <>
-                  <RecordForm
-                    fields={runFields}
-                    value={{
-                      task: "Create a source-grounded team recap.",
-                      chatId: "",
-                      topicId: 0,
-                    }}
-                    label="Queue request"
-                    save={async (value) => {
-                      await api(
-                        `/api/admin/workspaces/${id}/runs`,
-                        "POST",
-                        value,
-                      );
-                      close();
-                      reload();
-                    }}
-                  />
-                </>
+                <RecordForm
+                  fields={runFields}
+                  value={{
+                    task: "Create a source-grounded team recap.",
+                    chatId: "",
+                    topicId: 0,
+                  }}
+                  label="Queue request"
+                  save={async (value) => {
+                    await api(
+                      `/api/admin/workspaces/${id}/runs`,
+                      "POST",
+                      value,
+                    );
+                    close();
+                    reload();
+                  }}
+                />
               )}
             </CreateModal>
           )}
@@ -3057,29 +2992,204 @@ function RunListPage({ id, offset }: { id: string; offset: number }) {
     >
       {error && <Notice error>{error}</Notice>}
       {!data && loading && (
-        <section aria-label="Runs" aria-busy="true">
-          <SkeletonRows label="Run summaries" rows={3} />
+        <section aria-label="Threads" aria-busy="true">
+          <SkeletonRows label="Thread summaries" rows={3} />
         </section>
       )}
       {data?.total === 0 && (
-        <section className="card">No assistant runs yet.</section>
+        <section className="card">No conversations yet.</section>
       )}
       {data && data.total > 0 && data.items.length === 0 && (
         <section className="card">
-          No runs on this page. Use Previous page to return to earlier results.
+          No threads on this page. Use Previous page to return to earlier
+          conversations.
         </section>
       )}
-      {data?.items.map((r) => (
-        <RunCard
-          key={r.id}
-          title={memberData ? r.taskPreview : `Run ${r.id.slice(0, 8)}`}
-          run={r}
-          detail={`${r.attemptCount} model ${r.attemptCount === 1 ? "attempt" : "attempts"} · Delivery: ${r.deliveryStates.join(", ") || "none"}`}
-          to={`/admin/runs/${r.id}?${detailParams.toString()}`}
-        />
+      {data?.items.map((thread) => (
+        <Link
+          className="run-card thread-card"
+          key={thread.id}
+          to={`/admin/threads/${encodeURIComponent(thread.id)}?${new URLSearchParams({ workspace: id, listOffset: String(offset) })}`}
+        >
+          <span className="run-card-heading">
+            <span className="run-card-title">{thread.title}</span>
+            <span className="pill">{thread.status.replaceAll("_", " ")}</span>
+          </span>
+          <ThreadIdentity thread={thread} />
+          {thread.preview && (
+            <span className="thread-preview">{thread.preview}</span>
+          )}
+          <span className="run-card-line">
+            {thread.requestCount}{" "}
+            {thread.requestCount === 1 ? "request" : "requests"} · Updated{" "}
+            {new Date(thread.updatedAt).toLocaleString()}
+          </span>
+        </Link>
       ))}
       <Pager data={data} pageSize={25} loading={loading} alwaysShow />
     </Page>
+  );
+}
+function ThreadDetailRoute({ id }: { id: string }) {
+  const { threadId = "" } = useParams();
+  const [params] = useSearchParams();
+  const rawOffset = Number(params.get("offset"));
+  const offset =
+    Number.isSafeInteger(rawOffset) && rawOffset > 0 ? rawOffset : 0;
+  return (
+    <ThreadDetailPage
+      key={`${id}:${threadId}:${offset}`}
+      id={id}
+      threadId={threadId}
+      offset={offset}
+    />
+  );
+}
+function ThreadDetailPage({
+  id,
+  threadId,
+  offset,
+}: {
+  id: string;
+  threadId: string;
+  offset: number;
+}) {
+  const [params] = useSearchParams();
+  const rawListOffset = Number(params.get("listOffset"));
+  const listOffset =
+    Number.isSafeInteger(rawListOffset) && rawListOffset > 0
+      ? rawListOffset
+      : 0;
+  const { data, error, reload, loading } = useData<ThreadDetail>(
+    `/api/admin/workspaces/${id}/threads/${encodeURIComponent(threadId)}?offset=${offset}&limit=25`,
+  );
+  return (
+    <>
+      <p>
+        <Link
+          className="page-back-link"
+          to={`/admin/threads?${new URLSearchParams({ workspace: id, offset: String(listOffset) })}`}
+        >
+          <ChevronLeft
+            size={18}
+            weight="Outline"
+            color="currentColor"
+            aria-hidden="true"
+          />
+          Back to Threads
+        </Link>
+      </p>
+      <Page
+        title={data?.thread.title ?? "Thread"}
+        titleBadge={data?.thread.status.replaceAll("_", " ")}
+        actions={
+          error && (
+            <Action loading={loading} onClick={async () => reload()}>
+              Try again
+            </Action>
+          )
+        }
+      >
+        <section
+          className="card"
+          aria-label="Telegram conversation"
+          aria-busy={loading}
+        >
+          <h2>Telegram conversation</h2>
+          {data ? (
+            <>
+              <ThreadIdentity thread={data.thread} linked />
+              <p className="muted">
+                {data.total} {data.total === 1 ? "request" : "requests"} ·
+                Updated {new Date(data.thread.updatedAt).toLocaleString()}
+              </p>
+            </>
+          ) : loading ? (
+            <SkeletonRows label="Telegram identity" rows={2} />
+          ) : (
+            <p className="muted">Conversation information unavailable.</p>
+          )}
+        </section>
+        <RunStatistics
+          statistics={data?.statistics}
+          conversation
+          loading={loading}
+        />
+        {error && (
+          <Notice error>
+            {error === "not_found"
+              ? "This thread is unavailable in this workspace. It may have expired or been removed."
+              : error}
+          </Notice>
+        )}
+        {!data && loading && (
+          <section className="card" aria-label="Conversation" aria-busy="true">
+            <h2>Conversation</h2>
+            <SkeletonRows label="Conversation messages" rows={3} />
+          </section>
+        )}
+        {data && (
+          <section
+            className="card"
+            aria-label="Conversation"
+            aria-busy={loading}
+          >
+            <h2>Conversation</h2>
+            {data.items.length === 0 && (
+              <p className="muted">
+                No requests on this page. Use Previous page to return to earlier
+                messages.
+              </p>
+            )}
+            <ol className="thread-conversation" start={offset + 1}>
+              {data.items.map((turn) => (
+                <li className="thread-conversation-turn" key={turn.id}>
+                  <article
+                    className="thread-turn"
+                    aria-label={`Request from ${turn.user.name || turn.user.username || turn.user.id}`}
+                  >
+                    <div className="thread-turn-heading">
+                      <TelegramUserInfo user={turn.user} linked />
+                      <time className="muted" dateTime={turn.at}>
+                        {new Date(turn.at).toLocaleString()}
+                      </time>
+                    </div>
+                    <p className="prose">{turn.task}</p>
+                    <div className="thread-reply">
+                      <strong>RepoDesk</strong>
+                      {turn.result ? (
+                        <p className="prose">{turn.result}</p>
+                      ) : (
+                        <p className="muted">
+                          {turn.status === "queued"
+                            ? "Queued for a reply."
+                            : turn.status === "running"
+                              ? "Working on a reply…"
+                              : turn.status === "awaiting_approval"
+                                ? "Waiting for approval."
+                                : "No assistant reply recorded."}
+                        </p>
+                      )}
+                    </div>
+                    <div className="thread-turn-footer">
+                      <span className="pill">
+                        {turn.status.replaceAll("_", " ")}
+                      </span>
+                      <Link
+                        to={`/admin/runs/${turn.id}?${new URLSearchParams({ workspace: id, thread: threadId, threadOffset: String(offset), listOffset: String(listOffset) })}`}
+                      >
+                        Run details
+                      </Link>
+                    </div>
+                  </article>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+        <Pager data={data} pageSize={25} loading={loading} alwaysShow />
+      </Page>
+    </>
   );
 }
 function RunDetailRoute({ id }: { id: string }) {
@@ -3092,15 +3202,26 @@ function RunDetailPage({ id, runId }: { id: string; runId: string }) {
   backParams.set("workspace", id);
   const { data, error, reload, loading } = useData<{
     mode: "member" | "operator";
+    threadId?: string;
     run: AdminRun;
   }>(`/api/admin/workspaces/${id}/runs/${encodeURIComponent(runId)}`);
   const run = data?.run;
+  const threadId = data?.threadId ?? params.get("thread");
+  const threadParams = new URLSearchParams({
+    workspace: id,
+    offset: params.get("threadOffset") ?? "0",
+    listOffset: params.get("listOffset") ?? params.get("offset") ?? "0",
+  });
   return (
     <>
       <p>
         <Link
           className="page-back-link"
-          to={`/admin/runs?${backParams.toString()}`}
+          to={
+            threadId
+              ? `/admin/threads/${encodeURIComponent(threadId)}?${threadParams.toString()}`
+              : `/admin/threads?${backParams.toString()}`
+          }
         >
           <ChevronLeft
             size={18}
@@ -3108,7 +3229,7 @@ function RunDetailPage({ id, runId }: { id: string; runId: string }) {
             color="currentColor"
             aria-hidden="true"
           />
-          Back to Runs
+          {threadId ? "Back to thread" : "Back to Threads"}
         </Link>
       </p>
       <Page
@@ -3122,6 +3243,7 @@ function RunDetailPage({ id, runId }: { id: string; runId: string }) {
           )
         }
       >
+        <RunStatistics run={run} loading={loading} />
         {error && (
           <Notice error>
             {error === "not_found"
@@ -4005,7 +4127,7 @@ function Shell() {
     ["workflows", "Workflows"],
     ["skills", "Skills"],
     ["instructions", "Instructions"],
-    ["runs", "Runs"],
+    ["threads", "Threads"],
     ["usage", "Usage"],
     ["audit", "Audit"],
     ["deletion", "Privacy"],
@@ -4019,7 +4141,7 @@ function Shell() {
           "members",
           "workflows",
           "skills",
-          "runs",
+          "threads",
           "settings",
         ].includes(path),
       )
@@ -4089,11 +4211,23 @@ function Shell() {
               {chosen &&
                 visibleNavigation
                   .filter(([path]) => path !== "settings")
-                  .map(([path, label]) => (
-                    <NavLink key={path} to={`/admin/${path}`}>
-                      {label}
-                    </NavLink>
-                  ))}
+                  .map(([path, label]) =>
+                    path === "threads" &&
+                    location.pathname.startsWith("/admin/runs/") ? (
+                      <Link
+                        key={path}
+                        to="/admin/threads"
+                        className="active"
+                        aria-current="page"
+                      >
+                        {label}
+                      </Link>
+                    ) : (
+                      <NavLink key={path} to={`/admin/${path}`}>
+                        {label}
+                      </NavLink>
+                    ),
+                  )}
               {chosen && current.admin.operator && (
                 <NavLink to="/admin/plugins">Plugins</NavLink>
               )}
@@ -4323,6 +4457,19 @@ function Shell() {
             <Route
               path="/admin/workflows/:workflowId"
               element={chosen ? <WorkflowDetailRoute id={chosen} /> : <Setup />}
+            />
+            <Route
+              path="/admin/runs"
+              element={
+                <Navigate
+                  to={`/admin/threads?${locationParams.toString()}`}
+                  replace
+                />
+              }
+            />
+            <Route
+              path="/admin/threads/:threadId"
+              element={chosen ? <ThreadDetailRoute id={chosen} /> : <Setup />}
             />
             <Route
               path="/admin/runs/:runId"

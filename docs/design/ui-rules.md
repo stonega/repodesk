@@ -727,27 +727,33 @@ when implementing or reviewing a change.
 ### Overview counts lead to the matching records
 
 - **Preference:** Make Overview count cards open their detail pages, and count the
-  same records those pages list. Show assistant runs, scheduled workflows and
+  same records those pages list. Show conversation threads, scheduled workflows and
   coding tasks as distinct totals so active Codex work is easy to find.
 - **Scope:** Workspace Overview for deployment administrators and linked members.
 - **Source:** 2026-09-28 — user showed zero Runs and Workflows cards despite live
   bot work and asked for pages with details.
+  2026-10-17 — the requested thread-list refactor changes the primary history
+  count to conversations; individual request counts remain within each thread.
 - **Exceptions:** Deployment administrators can read all workspace run messages
   without linking Telegram. Unlinked administrators still see only workflow metadata;
   workflow content and mutations retain their existing identity requirements.
 
-### Run summaries open a dedicated detail page
+### Thread summaries open a continuous conversation
 
-- **Preference:** Keep each run item to a compact two or three line summary.
-  Open a dedicated detail page from the whole item, with the run's messages
-  presented as a readable ordered list and technical metadata below them. Give
-  each run a workspace-scoped URL that supports direct visits and refreshes, and
-  a Back to Runs link that preserves the list's pagination.
-  Fetch a bounded page of summaries for the list, with previous/next controls;
-  fetch messages and technical detail only when opening an individual run.
-  Place pagination below the run list, after its loading or empty state when
+- **Preference:** List continuous conversation threads, grouping their requests by
+  saved thread identity. Keep cards compact, with the subject, latest preview,
+  request count, last activity and status. Show saved Telegram names, usernames
+  and user IDs; group conversations also show the group title/ID, topic ID and
+  participants. Use explicit ID fallbacks when profiles are unavailable.
+  Open a dedicated thread page from the whole item, with requests and assistant
+  replies in chronological order and conversation statistics at the top. Keep
+  execution transcripts, tool data and controls behind each request's Run details
+  link. Preserve independent list and request pagination through detail/back
+  navigation, refreshes and browser history. Fetch bounded summary and message
+  pages. Place pagination below the list, after its loading or empty state when
   there are no cards to display.
-- **Scope:** Runs & delivery in the workspace admin panel, on desktop and mobile.
+- **Scope:** Threads in the workspace admin panel, on desktop and mobile. Overview
+  counts conversation threads and links to the same list.
 - **Source:** 2026-09-28 — user showed a tall run card and asked for compact
   items that open a detailed message list when clicked.
   2026-10-06 — user requested removing the Telegram identity/conversation access
@@ -758,10 +764,38 @@ when implementing or reviewing a change.
   for full records, and a paginated UI list.
   2026-10-10 — user requested moving Runs & delivery pagination to the bottom
   of the list.
+  2026-10-17 — user clarified that runs are individual requests, requested a thread
+  list for continuous chats and asked to show Telegram user and group information.
+  This supersedes request-level cards as the primary history list.
 - **Exceptions:** Deployment administrators and eligible workspace owners/admins
   can read every retained run message in their workspace, including private runs.
   Telegram linking is unnecessary for deployment administrators to view messages;
   execution and mutation controls retain their existing authorization requirements.
+  Older requests without a valid retained thread and scheduled requests remain
+  separate, clearly labeled entries. Never infer continuity from a shared user,
+  group, topic or timestamp. Only saved profile data supplies display names; no
+  Telegram history/profile lookup is implied. Existing run-detail URLs remain valid.
+
+### Run details lead with statistics
+
+- **Preference:** Show a compact statistics summary at the top of each run detail
+  page, before messages and technical metadata. Include messages, tool calls,
+  model attempts, token usage, cache hit rate and recorded spend with readable
+  labels and units. Keep the labels visible during loading, and distinguish
+  missing or partial usage from a measured zero.
+- **Scope:** Individual request/run detail pages, on desktop and mobile. A run
+  represents one request; a thread is a continuous conversation spanning runs.
+  Thread details reuse the summary layout for all retained requests, counting
+  conversation requests/replies separately from execution tool checkpoints.
+- **Source:** 2026-10-17 — user requested basic run statistics at the top, including
+  messages, tool calls, tokens and cache ratio, and clarified that the current
+  run list represents requests rather than continuous chat threads.
+  The subsequent thread-list refactor retains individual run diagnostics and
+  shows aggregate statistics on continuous conversation pages.
+- **Exceptions:** Aggregate only retained run data. Cache hit rate uses cached
+  reads divided by all input tokens, including cache reads and writes. Usage and
+  spend include follow-up and compaction attempts when recorded; unavailable
+  provider usage or charges must not appear as zero.
 
 ### Logs reuse run pagination with compact text
 

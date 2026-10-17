@@ -1560,6 +1560,41 @@ li {
   padding: 10px 0;
   overflow-wrap: anywhere;
 }
+.run-statistics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  margin: 0;
+}
+.run-statistics-grid > div {
+  min-width: 0;
+}
+.run-statistics-grid dt {
+  color: var(--ui-muted);
+  font-size: 13px;
+}
+.run-statistics-grid dd {
+  margin: 4px 0 0;
+}
+.run-statistics-grid strong {
+  display: block;
+  font-size: 26px;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.run-statistics-grid small {
+  display: block;
+  margin-top: 4px;
+  color: var(--ui-muted);
+  font-size: 12px;
+}
+@media (max-width: 700px) {
+  .run-statistics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 16px;
+  }
+}
 .run-message-section h2 {
   margin: 22px 0 10px;
 }
@@ -1583,6 +1618,75 @@ li {
 .run-messages p {
   margin: 4px 0 0;
 }
+.thread-identity,
+.thread-participants {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.thread-chat,
+.telegram-user-info,
+.thread-turn-heading,
+.thread-turn-footer {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.thread-preview {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.thread-conversation {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.thread-conversation > .thread-conversation-turn {
+  padding: 24px 0;
+}
+.thread-conversation-turn + .thread-conversation-turn {
+  border-top: 1px solid var(--ui-border);
+}
+.thread-turn {
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.thread-turn-heading {
+  justify-content: space-between;
+  font-size: 13px;
+}
+.thread-turn-heading > .telegram-user-info {
+  font-weight: 600;
+}
+.thread-reply {
+  margin: 16px 0;
+  padding: 16px;
+  border-radius: var(--ui-radius);
+  background: var(--ui-surface-muted);
+}
+.thread-reply .prose {
+  margin-bottom: 0;
+}
+.thread-turn-footer {
+  justify-content: space-between;
+  font-size: 13px;
+}
+.thread-turn-footer a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
 aside .field > span {
   color: var(--ui-muted);
   font-size: 12px;

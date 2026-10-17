@@ -60,6 +60,14 @@ import { claim, login, operator, session, throttle } from "./auth.ts";
 import { runSummaries } from "./run-history.ts";
 import { deploymentOrigin, SiteService } from "./site.ts";
 import {
+  historyPage,
+  runThreadKey,
+  threadDetail,
+  threadGroups,
+  threadKey,
+  threadSummaries,
+} from "./thread-history.ts";
+import {
   visibleWorkflows,
   workflowMetadata,
   workflowRepositories,
@@ -817,7 +825,7 @@ export function adminRoutes(
           resource,
         ) ||
           (c.req.method === "GET" &&
-            (/^runs(?:\/[^/]+)?$/.test(resource) ||
+            (/^(runs|threads)(?:\/[^/]+)?$/.test(resource) ||
               (!admin.telegramId && /^workflows(?:\/[^/]+)?$/.test(resource)))),
         "access_denied",
         403,
@@ -849,6 +857,7 @@ export function adminRoutes(
           counts: {
             members: w.members.filter((m) => m.active).length,
             runs: w.runs.length,
+            threads: threadGroups(w).size,
             workflows: operatorView
               ? w.workflows.filter((f) => f.status !== "deleted").length
               : visibleWorkflows(w, actor).length,
@@ -957,6 +966,13 @@ export function adminRoutes(
             ),
           ),
         );
+      case "threads": {
+        const page = historyPage.parse(c.req.query());
+        return c.json({
+          mode: actor === w.operatorId ? "operator" : "member",
+          ...threadSummaries(w, page.offset, page.limit),
+        });
+      }
       case "runs": {
         const page = z
           .object({
@@ -1424,6 +1440,16 @@ export function adminRoutes(
       ),
     );
   });
+  app.get("/api/admin/workspaces/:id/threads/:thread", async (c) => {
+    const w = await store.read(validId(c.req.param("id")));
+    const actor = workspaceActor(w, c.get("session").admin);
+    const id = threadKey.parse(c.req.param("thread"));
+    const page = historyPage.parse(c.req.query());
+    return c.json({
+      mode: actor === w.operatorId ? "operator" : "member",
+      ...threadDetail(w, id, page.offset, page.limit),
+    });
+  });
   app.get("/api/admin/workspaces/:id/runs/:run", async (c) => {
     const w = await store.read(validId(c.req.param("id")));
     const actor = workspaceActor(w, c.get("session").admin);
@@ -1432,6 +1458,7 @@ export function adminRoutes(
     requireThat(run, "not_found", 404);
     return c.json({
       mode: actor === w.operatorId ? "operator" : "member",
+      threadId: runThreadKey(w, run),
       run: {
         ...run,
         deliveries: w.deliveries.filter(

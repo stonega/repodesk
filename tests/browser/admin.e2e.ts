@@ -172,18 +172,18 @@ test.describe
       await page.unroute(registrationRoute);
       await page.goto("/admin");
       await expect(
-        page.getByRole("link", { name: "Runs", exact: true }),
+        page.getByRole("link", { name: "Threads", exact: true }),
       ).toBeVisible();
       await expect(
         page.getByRole("link", { name: "Workflows", exact: true }),
       ).toBeVisible();
-      await page.getByRole("link", { name: "0 runs. View details" }).click();
+      await page.getByRole("link", { name: "0 threads. View details" }).click();
       await expect(
-        page.getByRole("heading", { name: "Runs & delivery" }),
+        page.getByRole("heading", { name: "Threads" }),
       ).toBeVisible();
-      await expect(page.getByText("No assistant runs yet.")).toBeVisible();
+      await expect(page.getByText("No conversations yet.")).toBeVisible();
       await expect(
-        page.getByRole("button", { name: "Request a run" }),
+        page.getByRole("button", { name: "New request" }),
       ).toHaveCount(0);
       await page.getByRole("link", { name: "Workflows", exact: true }).click();
       await expect(
@@ -2019,7 +2019,7 @@ test.describe
         ["skills", "Add skill", "Create skill"],
         ["skills", "Import skill", "Import SKILL.md"],
         ["instructions", "Add instruction", "Propose an instruction"],
-        ["runs", "Request a run", "Request a run"],
+        ["threads", "New request", "New request"],
         ["operations", "Create panel account", "Create panel account"],
         ["plugins", "Add plugin", "Register a Pi extension"],
         ["plugins/code-truth", "Add repository", "Add repository"],
@@ -2612,7 +2612,7 @@ test.describe
         ["settings", "Workspace settings"],
         ["members", "Members & access"],
         ["workflows", "Scheduled workflows"],
-        ["runs", "Runs & delivery"],
+        ["threads", "Threads"],
         ["usage", "Usage & budget"],
         ["audit", "Audit history"],
         ["plugins", "Plugins"],

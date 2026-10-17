@@ -775,6 +775,168 @@ suite("PostgreSQL integration (isolated database)", () => {
         .status,
     ).toBe(404);
   });
+  test("thread history groups requests with Telegram identities, paginates turns, and enforces workspace access", async () => {
+    const w = await seed();
+    const threadId = randomUUID();
+    const runIds = await store.change(w.id, (saved) => {
+      saved.threads = [
+        {
+          id: threadId,
+          actor: "101",
+          chatId: "-100100",
+          kind: "group",
+          topicId: 7,
+          participants: ["101", "202"],
+          at: "2026-10-17T00:00:00Z",
+        },
+      ];
+      const user = saved.members.find((member) => member.id === "101");
+      if (user)
+        Object.assign(user, {
+          name: "Alice",
+          username: "alice",
+          profileUpdatedAt: "2026-10-17T00:00:00Z",
+        });
+      const chat = saved.chats.find((item) => item.id === "-100100");
+      if (chat) chat.title = "Engineering group";
+      return Array.from({ length: 27 }, (_, index) => {
+        const run = createRun(
+          saved,
+          index % 2 ? "202" : "101",
+          `Request ${index + 1}`,
+          "-100100",
+          7,
+          "fixture",
+        );
+        Object.assign(run, {
+          threadId,
+          status: "succeeded",
+          result: `Answer ${index + 1}`,
+        });
+        return run.id;
+      });
+    });
+    const base = `/api/admin/workspaces/${w.id}`;
+    const list = await (await request(`${base}/threads`)).json();
+    expect(list).toMatchObject({
+      mode: "member",
+      total: 1,
+      offset: 0,
+      limit: 25,
+    });
+    expect(list.items).toHaveLength(1);
+    expect(list.items[0]).toMatchObject({
+      id: threadId,
+      requestCount: 27,
+      user: { id: "101", name: "Alice", username: "alice" },
+      group: { id: "-100100", title: "Engineering group" },
+      topicId: 7,
+      participantCount: 2,
+    });
+    expect(list.items[0]).not.toHaveProperty("items");
+    expect(list.items[0]).not.toHaveProperty("transcript");
+    const detailPath = `${base}/threads/${threadId}`;
+    const detail = await (await request(detailPath)).json();
+    expect(detail).toMatchObject({
+      total: 27,
+      offset: 0,
+      limit: 25,
+      statistics: { messages: 54 },
+    });
+    expect(detail.items.map((turn: { id: string }) => turn.id)).toEqual(
+      runIds.slice(0, 25),
+    );
+    expect(detail.items[0]).toMatchObject({
+      task: "Request 1",
+      result: "Answer 1",
+      user: { name: "Alice" },
+    });
+    const next = await (await request(`${detailPath}?offset=25`)).json();
+    expect(next.items.map((turn: { id: string }) => turn.id)).toEqual(
+      runIds.slice(25),
+    );
+    expect(
+      await (await request(`${detailPath}?offset=100`)).json(),
+    ).toMatchObject({ total: 27, items: [] });
+    const overview = await (await request(`${base}/overview`)).json();
+    expect(overview.counts).toMatchObject({ runs: 27, threads: 1 });
+    expect(
+      await (await request(`${base}/runs/${runIds[0]}`)).json(),
+    ).toHaveProperty("threadId", threadId);
+    for (const query of [
+      "offset=-1",
+      "offset=1.5",
+      "offset=nope",
+      "limit=0",
+      "limit=101",
+    ])
+      for (const path of [`${base}/threads`, detailPath])
+        expect((await request(`${path}?${query}`)).status).toBe(400);
+    expect((await request(`${base}/threads/${randomUUID()}`)).status).toBe(404);
+    expect((await request(`${base}/threads/not-a-key`)).status).toBe(400);
+    expect(
+      (await request(`${base}/threads`, "GET", undefined, { cookie: "" }))
+        .status,
+    ).toBe(401);
+    const other = await seed();
+    expect(
+      (await request(`/api/admin/workspaces/${other.id}/threads/${threadId}`))
+        .status,
+    ).toBe(404);
+    const foreign = await foreignWorkspace();
+    for (const suffix of ["threads", `threads/${threadId}`])
+      expect(
+        (await request(`/api/admin/workspaces/${foreign.id}/${suffix}`)).status,
+      ).toBe(403);
+    const memberId = randomUUID();
+    const username = `threads-${memberId}`;
+    const password = "thread history fixture password";
+    await store.pool.query(
+      "INSERT INTO admins(id,username,password_hash,telegram_id,operator) VALUES($1,$2,$3,'202',false)",
+      [memberId, username, await passwordHash(password)],
+    );
+    const memberSession = await login(store.pool, username, password);
+    const memberHeaders = { cookie: `repodesk_session=${memberSession.raw}` };
+    for (const path of [`${base}/threads`, detailPath])
+      expect(
+        (await request(path, "GET", undefined, memberHeaders)).status,
+      ).toBe(403);
+    await store.change(w.id, (saved) => {
+      const member = saved.members.find((member) => member.id === "202");
+      if (member) member.role = "admin";
+    });
+    expect(
+      (await request(detailPath, "GET", undefined, memberHeaders)).status,
+    ).toBe(200);
+    await store.change(w.id, (saved) => {
+      const member = saved.members.find((member) => member.id === "202");
+      if (member) member.active = false;
+    });
+    for (const path of [`${base}/threads`, detailPath])
+      expect(
+        (await request(path, "GET", undefined, memberHeaders)).status,
+      ).toBe(403);
+    await store.pool.query("DELETE FROM admins WHERE id=$1", [memberId]);
+    await store.pool.query("UPDATE admins SET telegram_id=NULL WHERE id=$1", [
+      operatorId,
+    ]);
+    try {
+      expect(await (await request(`${base}/threads`)).json()).toHaveProperty(
+        "mode",
+        "operator",
+      );
+      expect((await request(`${base}/threads`, "POST", {})).status).toBe(403);
+      expect(await (await request(detailPath)).json()).toMatchObject({
+        mode: "operator",
+        items: [{ task: "Request 1" }, ...detail.items.slice(1)],
+      });
+    } finally {
+      await store.pool.query(
+        "UPDATE admins SET telegram_id='101' WHERE id=$1",
+        [operatorId],
+      );
+    }
+  });
   test("run summaries bound large content while details retain the full record", async () => {
     const w = await seed();
     const task = `Long request ${"details ".repeat(400)}`;

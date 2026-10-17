@@ -23,7 +23,7 @@ Public static assets can load before login, but contain no workspace data or sec
 | --- | --- | --- |
 | First-run setup | Claim deployment, create local admin, configure workspace and bot, set up a GitHub App, enter the panel | Resumable; one initial admin; no public reinitialization. Successful model setup activates the bot automatically once Telegram reception and an enabled published skill are ready. |
 | Sign-in/workspace selector | Local admin sign-in; optional linked Telegram sign-in, authorized workspaces, operator-only New workspace entry in the selector, logout | Login does not grant a workspace role; revoked sessions stop working. New workspace opens a fresh setup wizard and is selected when entering the panel. |
-| Overview | Linked count cards for members, assistant runs, scheduled workflows and operator-visible coding tasks (Reviewed and Direct together, opening the Codex task list); deployment-administrator cards for the configured Telegram bot and workspace GitHub App, with token editing in a Manage bot dialog and GitHub controls in a management dialog; team card showing saved configuration with one edit dialog and versioned form; broader bot/worker, group and budget status remain planned | Loading, empty, stale and failure states are visible; tenant-scoped metrics matching their detail lists. |
+| Overview | Linked count cards for members, conversation threads, scheduled workflows and operator-visible coding tasks (Reviewed and Direct together, opening the Codex task list); deployment-administrator cards for the configured Telegram bot and workspace GitHub App, with token editing in a Manage bot dialog and GitHub controls in a management dialog; team card showing saved configuration with one edit dialog and versioned form; broader bot/worker, group and budget status remain planned | Loading, empty, stale and failure states are visible; tenant-scoped metrics matching their detail lists. |
 | Workspace settings | Workspace activity status and Pause/Resume action; Settings follows Plugins in the sidebar | Confirmation dialog explains the consequences; Cancel makes no change; versioned saves preserve other configuration and show conflicts. Pause is absent from the Overview team editor. |
 | Bot settings | Display label, timezone, base instructions, response style, directed-response mode, pause switch | Validated form, versioned save, audit entry, saved/effective version shown. |
 | Model settings | Operator-configured providers and bot chat model, thinking level, optional capacity and token prices; saved summaries and modal editors | Successful model setup activates automatically when prerequisites are ready, without a separate activation card. Invalid settings rejected locally; provider capabilities require evaluation. Runs pin endpoint/thinking/prices at first execution; endpoint changes stop old runs. |
@@ -33,7 +33,7 @@ Public static assets can load before login, but contain no workspace data or sec
 | GitHub | Manage GitHub modal for guided App creation, workspace OAuth, installation/repository selection and connected repository links, opened on Overview without navigation; GitHub callbacks return to Plugins; disconnect API | Manifest state bound to operator/session/workspace; encrypted operator App credentials; one-use PKCE OAuth; verify user installation/repository access; installation tokens limited to selected repositories and Contents read. |
 | Agent skills | Create/import/edit, test, publish, enable/disable, scope, settings and version rollback | Permission-bounded skills; pinned workflow versions; disabling blocks dependent execution. |
 | Shared instructions | List, edit, scope, provenance, versions, forget | Never lists other users' personal memories by virtue of admin role. |
-| Runs | Compact run summaries link to a dedicated detail page with all workspace run messages, evidence, cost and existing cancel/retry controls; deployment administrators can read messages without linking Telegram | Direct visits and refreshes load the selected run independently of list pagination; Back to Runs retains the workspace and list offset. Workspace owners/admins can inspect every retained run, including private requests, results, transcripts and delivery text. Access stays tenant-scoped; execution and mutations retain Telegram authorization. Retry creates a traceable attempt; uncertain delivery cannot be blindly resent. |
+| Threads | Compact conversation summaries with Telegram user/group identity, latest activity and request counts; dedicated chronological conversations with aggregate statistics and links to individual run diagnostics | Paginate threads after grouping by saved identity; preserve workspace, list and request offsets. Names/usernames are display metadata; IDs and existing workspace authorization govern access. Unlinked deployment administrators can inspect retained messages. Existing cancel/retry/recovery controls remain on individual runs. |
 | Usage and limits | Recorded/estimated usage, daily/monthly caps, reservations and blocked jobs | Changes apply atomically; concurrent workers cannot overspend the displayed cap. |
 | Members & access | Search Telegram names/usernames/IDs and GitHub logins; manage active membership, roles and requests; fetch GitHub account choices in member forms; GitHub column contains only View, opening account/profile, status and repository access details | All active members can use the bot; roles determine available actions. GitHub associations require explicit selection and separate member verification. Preserve last-admin protection, tenant boundaries and revocation checks. |
 | Privacy and audit | Retention settings, deletion request/status, configuration/action audit | Destructive changes show scope; logs omit credentials and raw private chat text. |
@@ -147,6 +147,8 @@ and encryption key stay operator-level deployment settings.
 | `/api/admin/workspaces/:id/skills/*` | Catalog, versions, tests, publication and assignments |
 | `/api/admin/workspaces/:id/instructions/*` | Scoped memory/instruction management |
 | `/api/admin/workspaces/:id/runs/*` | Authorized history, details, cancel and retry |
+| `/api/admin/workspaces/:id/threads` | Paginated conversation summaries with saved Telegram user/group identity |
+| `/api/admin/workspaces/:id/threads/:thread` | Chronological request/reply pages and whole-conversation statistics |
 | `/api/admin/workspaces/:id/members/*` | Membership and roles |
 | `/api/admin/workspaces/:id/usage` and `/audit` | Paginated accounting and audit metadata |
 | `/api/admin/workspaces/:id/deletion` | Request/status of authorized purge |
@@ -184,25 +186,63 @@ lists and tool checkboxes. Bound IDs and concurrency versions remain in request
 payloads without becoming editable fields. Failed saves preserve drafts and show
 field errors; pending saves block modal dismissal and duplicate submission.
 
-The runs list requests 25 summaries at a time, with previous/next controls below
-the list and a URL offset preserved through detail navigation, reload and browser
-history. Pagination follows loading and empty states too.
-`GET /api/admin/workspaces/:id/runs?offset=0&limit=25` returns
-`{ mode, items, total, offset, limit }`. Offset defaults to 0 and must be a
+The Threads list at `/admin/threads?workspace=:workspaceId` requests 25 compact
+conversation summaries. `/admin/runs` redirects there while preserving query
+parameters. Sidebar and Overview use Threads; Overview's `counts.threads` matches
+the list total. The existing `counts.runs` remains the individual request count
+for API compatibility.
+
+`GET /api/admin/workspaces/:id/threads?offset=0&limit=25` returns
+`{ mode, items, total, offset, limit }`. Group all retained requests by valid saved
+thread identity before pagination; sort threads by latest request/completion time,
+with deterministic insertion order for ties. Private actors, bots, groups and
+native topics retain their persisted boundaries. Ignored/pending automatic-followup
+classifiers are not conversation turns. Requests without a valid retained thread
+record and scheduled requests remain separate entries with `run-:runId` keys;
+continuity is never inferred from user/chat IDs or timing.
+
+Each summary has `id`, `kind`, a bounded `title` (first retained request, 120
+characters), `preview` (latest answer or request, 200 characters), `at`, `updatedAt`,
+`status`, `requestCount`, `user`, optional `group`, `topicId`, up to three
+`participants`, and `participantCount`. User metadata contains only `id`, optional
+`name` and `username`; approved-request metadata is a fallback for older profiles.
+Groups use saved titles and IDs. No live Telegram profile/history lookup occurs.
+Lists omit execution transcripts, tool data, attempts and message/delivery bodies.
+
+`GET /api/admin/workspaces/:id/threads/:thread?offset=0&limit=25` returns
+`{ mode, thread, statistics, items, total, offset, limit }`. Thread pages at
+`/admin/threads/:thread?workspace=:workspaceId` show a chronological page of request
+and answer pairs. Each item has run `id`, `user`, `task`, optional `result`, `status`,
+`at`, optional `finishedAt` and `model`. Statistics cover the whole retained
+conversation, independent of the current message page; the message count includes
+requests and recorded assistant replies. Run details retain execution transcripts
+and existing mutation/recovery controls. List and message pagination are independent:
+`listOffset` preserves the parent list; run links retain `thread`, `threadOffset`
+and `listOffset` for return navigation.
+
+Both thread endpoints use the existing workspace-admin/deployment-operator read
+authorization, including access to private retained conversations. Cross-workspace
+thread IDs return 404 after workspace authorization; missing/malformed keys and
+invalid pagination are explicit errors. Offset defaults to 0 and must be a
 non-negative safe integer; limit defaults to 25 and must be an integer from 1 to
-100. Invalid pagination returns HTTP 400. Results remain newest-created first;
-out-of-range offsets return an empty page with the retained total.
-Each item contains only `id`, `actor`, `status`, `at`, `model`, `taskPreview`
-(whitespace-normalized, at most 200 characters including an ellipsis),
-`attemptCount`, and distinct `deliveryStates`, including cancellation receipts.
-Messages, full requests, settings, instructions, sources, attempts, tool data and
-delivery records are available only in the detail response. Both endpoints retain
-the same workspace authorization. The list shows skeletons while paging and retry
-on failure, without retaining rows from a different page.
+100. Loading, retry, empty and out-of-range pages retain headings/navigation and
+never show data from a previous thread/page.
+
+The existing `/api/admin/workspaces/:id/runs?offset=0&limit=25` API still returns
+individual request summaries with its original fields, pagination and authorization.
 
 Run detail pages at `/admin/runs/:runId?workspace=:workspaceId` load the selected
 record from `GET /api/admin/workspaces/:id/runs/:run`. Missing or expired runs show
-an explicit error and a Back to Runs link; failed loads offer Try again.
+an explicit error and a Back to Threads link; failed loads offer Try again. Known
+parent threads use Back to thread, preserving message and list pagination.
+A summary above the messages shows the displayed message count, distinct tool
+calls (including pending/blocked calls), model attempts, reported total tokens,
+cache hit rate and recorded actual USD spend. Tokens include uncached input,
+cache reads/writes and output across all attempts, including follow-up and
+compaction. Cache hit rate is cache-read tokens divided by all input tokens.
+Missing usage/charges stay unavailable and partial totals identify how many
+attempts have reported. An empty run has zero attempts/tokens/spend and no cache
+rate. The primary history list groups these requests into conversation threads.
 Run detail pages show model attempts as a numbered horizontal timeline, with
 time, status and reserved/actual USD amounts. Additional attempt metadata expands
 inside each card; overflow scrolls within the timeline on narrow screens.

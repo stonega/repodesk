@@ -16,6 +16,7 @@ async function fixture(page: Page, operator = true, holdSettings = false) {
     counts: {
       members: 8,
       runs: 12,
+      threads: 4,
       workflows: 2,
       ...(operator ? { codingTasks: 4 } : {}),
     },

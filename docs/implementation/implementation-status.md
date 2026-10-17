@@ -1,5 +1,36 @@
 # Implementation evidence
 
+## Conversation-thread history and Telegram identity (2026-10-17)
+
+The admin history list now shows continuous conversation threads at
+`/admin/threads`, grouped by valid saved routing identity before pagination and
+ordered by latest activity. Equal timestamps follow retained request order.
+Cards show the initial subject, latest preview, request count, status, Telegram
+names/usernames/IDs, group titles/IDs, topic IDs and participants. Missing profiles
+use IDs. Legacy requests without a valid thread and scheduled requests stay separate;
+ignored or unaccepted automatic follow-up classifiers are excluded.
+
+Thread detail pages show chronological request/reply pairs, whole-conversation
+statistics and per-request links to existing run diagnostics/actions. Thread and
+request pages retain independent pagination through navigation and refreshes.
+Sidebar/Overview use Threads and the matching count; old run-list URLs redirect
+with their query parameters. Existing run-detail URLs and the request-summary API
+remain available. Both new read endpoints preserve workspace admin/operator access,
+including private histories; non-admin members, revoked members and foreign
+workspaces remain denied. Telegram metadata is saved display data, not authority.
+No dependency, database migration or live Telegram profile lookup was added.
+
+Validation: `bun run check`, `bun run typecheck`, `bun run build`, all **869
+deterministic tests across 97 files** with disposable PostgreSQL, and all **45
+browser scenarios** across Threads, run details, Overview loading and admin passed.
+Desktop/mobile screenshots at 1280px/390px were reviewed in light/dark themes,
+including conversation identity, ordered requests/replies, pending/partial usage,
+loading, empty and error/retry states. Checks cover pagination before/after grouping,
+equal timestamps, legacy isolation, shared participants, profiles/ID fallbacks,
+unlinked operator reads, member/revocation denial, cross-workspace IDs and retained
+run navigation. No deployment, live model call or Telegram message was performed.
+
+
 ## Codex task conversation (2026-10-17)
 
 Direct continuous development tasks have a durable conversation separate from
@@ -74,6 +105,25 @@ concurrent claims, usage replay and checkpoint recovery. No live model call,
 Telegram send or deployment was performed. Recall fidelity and live Telegram
 acceptance remain release gates. See [design and limits](../design/long-term-memory.md)
 and [examples](../../examples/long-term-memory.md).
+
+## Run detail statistics (2026-10-17)
+
+Individual run detail pages now lead with message/tool-call counts, model attempts,
+reported total tokens, cache hit rate and recorded actual USD spend. Message counts
+share the displayed transcript's entries; tool calls merge retained call IDs with
+durable records without counting tool results again. Tokens and charges aggregate
+all recorded attempts, including follow-up and compaction. Cached reads and writes
+count toward input; only cached reads count toward the hit rate. Missing and
+partially reported usage/charges remain explicit. No API, dependency or migration
+was added. Runs remain individual requests; continuous chat threads are distinct.
+
+Validation: strict TypeScript, production build, scoped Biome checks, all **794
+deterministic tests** with disposable PostgreSQL, and all **15 Runs browser
+scenarios** passed. Desktop/mobile screenshots were reviewed for populated,
+loading, error, pending, partial and empty usage states, including light/dark
+themes. Repository-wide Biome reported formatting/import issues in concurrently
+edited Codex conversation files outside this change. No deployment or live
+provider/Telegram call was performed.
 
 ## v0.1.39 release preparation (2026-10-17)
 
