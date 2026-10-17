@@ -1,6 +1,6 @@
 ---
 name: repodesk-github
-description: Core GitHub work in Telegram: resolve connected repositories, read issues and PRs, propose issues, merge or close PRs, and hand coding work to Codex.
+description: Core GitHub work in Telegram: resolve connected repositories, read issues, PR code changes and reviews, propose issues, merge or close PRs, and hand coding work to Codex.
 ---
 
 # RepoDesk GitHub
@@ -15,8 +15,19 @@ These instructions guide tool choice and never grant access or approve an action
   to resolve the PR/task. Ask only if the target remains materially ambiguous.
 - Use `query_github_metadata` for current PR/issue status, titles and descriptions.
   Follow paging for lists; disclose incomplete coverage. PR descriptions do not
-  prove tests passed or reviews approved. Use Code Truth for source questions only
-  when its tools are registered.
+  prove tests passed or reviews approved.
+- Use `query_github_pull_request` for PR implementation comparisons, changed
+  files and diff patches (`resource: files`), submitted reviews (`reviews`) and
+  inline review comments (`comments`). Read each requested PR; titles/bodies alone
+  cannot establish implementation differences. Follow `nextPage`, passing the
+  returned `headSha` and `baseSha`; reuse those pins across resources. Restart
+  if the PR changes. Disclose missing patches, truncation and page/API limits.
+  Review records may apply to older commits; distinguish them from current
+  approval requirements and CI results. Do not infer missing App permissions
+  from the summary tool's narrower output: attempt the registered detail tool
+  and explain its returned permission guidance if access actually fails.
+  Use Code Truth for additional source context only when its tools are registered;
+  its indexed branch is not evidence of an unindexed PR head.
 - For a requested new issue, use `propose_github_issue`. The requester reviews
   the complete title/body and approves in Telegram before publication.
 - For a requested merge or close, use `propose_github_pull_request_action` when

@@ -1,5 +1,34 @@
 # Implementation evidence
 
+## Telegram PR code and review evidence (2026-10-17)
+
+The default GitHub extension now registers `query_github_pull_request` alongside
+the existing metadata tool. Members can read each connected-repository PR's
+changed files/patches, review records and inline comments for implementation
+comparisons. The bundled GitHub skill directs comparisons to actual code evidence
+and distinguishes a summary-tool capability gap from a failed GitHub permission
+check. Missing installation grants return specific recovery guidance.
+
+Reads request only a fresh, single-repository Pull-requests-read installation
+token. Existing tenant, member, upstream repository, private-chat and approved
+workflow-source boundaries apply throughout network reads. Each page checks PR
+identity and head/base commits before and after fetching; later pages require the
+returned commit pins. Changes reject mixed-commit evidence. Response budgets,
+missing patches, pagination and the 3,000-file/150-page limits remain explicit;
+review records are live and retain their own commit provenance.
+
+Validation: Biome, strict TypeScript, production build and the Node runtime
+contract passed. All **789 deterministic tests across 90 files** passed with
+disposable PostgreSQL, including ten new PR-detail scenarios and default-agent
+tool registration. Coverage includes differing PR patches, read-only token scope,
+pagination and missing evidence, commit changes, permission revocation at each
+network stage, tenant/member/private-group boundaries and missing-grant guidance.
+
+No dependency, migration, write grant or new deployment configuration was added.
+Live GitHub/model comparison quality and rollout to the existing app/worker remain
+release gates. See [setup and limits](github-app.md#read-pr-code-changes-and-reviews-from-telegram)
+and [the runnable comparison journey](../../examples/github-pr-comparison.md).
+
 ## Invite links use a circular countdown (2026-10-15)
 
 The invite card replaces its visible countdown text row with a small animated

@@ -5,6 +5,10 @@ import { repositoryReportWindow } from "../workflows/schedule.ts";
 import { runAllowed } from "../workspaces/policy.ts";
 import type { GitHubApp } from "./app.ts";
 import { recordRepositoryRead } from "./metadata-policy.ts";
+import {
+  pullRequestQuery,
+  readPullRequestDetails,
+} from "./pull-request-details.ts";
 import { GitHubApps } from "./registry.ts";
 
 export const metadataQuery = z
@@ -46,14 +50,15 @@ export class GitHubMetadata {
     private store: Store,
     private apps: GitHubApps | GitHubApp,
   ) {}
-  async read(
+  private async reader(
     workspaceId: string,
     runId: string,
-    value: unknown,
+    repositoryId: number,
+    permission: "pulls_read" | "issues_read",
     signal: AbortSignal,
     guard: () => Promise<void>,
   ) {
-    const q = metadataQuery.parse(value);
+    let revision: number | undefined;
     const check = async () => {
       signal.throwIfAborted();
       await guard();
@@ -69,9 +74,10 @@ export class GitHubMetadata {
           "github_repository_not_connected",
           409,
         );
-        recordRepositoryRead(w, r, q.repositoryId, w.github.revision);
+        revision ??= w.github.revision;
+        recordRepositoryRead(w, r, repositoryId, revision);
         const repo = w.github.repositories.find(
-          (repo) => repo.id === q.repositoryId,
+          (repo) => repo.id === repositoryId,
         );
         requireThat(repo, "github_repository_not_connected", 409);
         const workflow = w.workflows.find((f) => f.id === r.workflowId);
@@ -93,10 +99,46 @@ export class GitHubMetadata {
     requireThat(app, "github_app_not_configured", 409);
     const token = await app.installationToken(
       scope.installationId,
-      [q.repositoryId],
-      q.kind === "pulls" ? "pulls_read" : "issues_read",
+      [repositoryId],
+      permission,
     );
     await check();
+    return { scope, app, token: token.token, check };
+  }
+  async pullRequest(
+    workspaceId: string,
+    runId: string,
+    value: unknown,
+    signal: AbortSignal,
+    guard: () => Promise<void>,
+  ) {
+    const q = pullRequestQuery.parse(value);
+    const reader = await this.reader(
+      workspaceId,
+      runId,
+      q.repositoryId,
+      "pulls_read",
+      signal,
+      guard,
+    );
+    return readPullRequestDetails(reader, q, signal);
+  }
+  async read(
+    workspaceId: string,
+    runId: string,
+    value: unknown,
+    signal: AbortSignal,
+    guard: () => Promise<void>,
+  ) {
+    const q = metadataQuery.parse(value);
+    const { scope, app, token, check } = await this.reader(
+      workspaceId,
+      runId,
+      q.repositoryId,
+      q.kind === "pulls" ? "pulls_read" : "issues_read",
+      signal,
+      guard,
+    );
     const since =
       q.since ?? (q.state === "merged" ? scope.window?.since : undefined);
     const until =
@@ -110,7 +152,7 @@ export class GitHubMetadata {
     });
     if (q.kind === "issues" && since) params.set("since", since);
     const raw = await app.repositoryMetadata(
-      token.token,
+      token,
       scope.repository,
       q.kind,
       params,

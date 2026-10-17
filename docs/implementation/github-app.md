@@ -311,6 +311,50 @@ existing approval retention and workspace-deletion policy.
 See [the example and deterministic verification](../../examples/github-issue.md).
 API reference: [Create an issue](https://docs.github.com/en/rest/issues/issues#create-an-issue).
 
+## Read PR code changes and reviews from Telegram
+
+Implemented locally, 2026-10-17. `query_github_metadata` remains the summary/status
+tool. `query_github_pull_request` reads one PR's changed files and diff patches
+(`resource: files`, the default), review records (`reviews`) or inline review
+comments (`comments`). For example, ask “Compare the implementations in
+example/workspace PR #2 and PR #3, and explain their review findings.” The built-in
+GitHub tools load for connected repositories without Code Truth, Codex enablement
+or a custom plugin. Deploy the updated app and worker before expecting this tool
+in an existing bot; App permission changes alone do not add tools.
+
+These endpoints require only **Pull requests: Read-only**, already included in
+the configured Read-and-write grant. No Contents or new write permission is
+requested. A summary-only response is a tool capability gap, not evidence that
+GitHub denied access. An actual `github_app_permissions_missing` response explains
+how to update the App and accept the installation permissions. Access-denied
+responses also require checking installation repository selection and requester
+access; they do not identify which grant is missing. Reconnecting alone does not
+expand the App's permissions.
+
+Reads use a fresh token restricted to the selected repository and PR read access.
+The service checks active membership, current upstream grants, run cancellation,
+connection revision, private-chat boundaries and approved workflow sources before
+and after network operations. Each page contains at most 20 records. Read PR
+head/base before and after each page; changed commits reject the result. Subsequent
+pages require the returned `headSha` and `baseSha`; reuse them across resources.
+Review/comment records remain live and may refer to earlier commits. They do not
+prove current merge approval, passing CI or user impact.
+
+Patch excerpts are limited to 12,000 characters per file, review/comment bodies
+and comment hunks to 4,000 each, and excerpt text to 40,000 per response.
+Missing patches, truncation and additional pages are explicit. Follow `nextPage`
+when present; report incomplete coverage when it is absent but `hasMore` remains
+true. GitHub returns at most 3,000 changed files; RepoDesk caps each resource at
+150 pages. `complete` means the end of that resource was reached without missing
+or locally truncated text on this page; it does not certify earlier pages or
+upstream patch completeness. No arbitrary URL, checkout, CI read or mutation is
+exposed. Repository text and review bodies remain untrusted evidence.
+
+See [the runnable comparison journey](../../examples/github-pr-comparison.md),
+GitHub's [changed files endpoint](https://docs.github.com/en/rest/pulls/pulls#list-pull-requests-files),
+[review records](https://docs.github.com/en/rest/pulls/reviews#list-reviews-for-a-pull-request)
+and [inline comments](https://docs.github.com/en/rest/pulls/comments#list-review-comments-on-a-pull-request).
+
 ## Merge or close a PR from Telegram
 
 The GitHub tools and bundled [`repodesk-github` skill](../../skills/repodesk-github/SKILL.md)

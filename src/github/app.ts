@@ -526,6 +526,36 @@ export class GitHubApp {
       signal,
     );
   }
+  /** Fixed, read-only PR detail endpoints; no model-supplied URLs or paths. */
+  async pullRequestDetails(
+    token: string,
+    repository: string,
+    number: number,
+    resource: "files" | "reviews" | "comments",
+    page: number,
+    signal: AbortSignal,
+  ) {
+    requireThat(
+      /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository),
+      "github_repository_not_connected",
+      409,
+    );
+    requireThat(
+      Number.isSafeInteger(number) &&
+        number > 0 &&
+        ["files", "reviews", "comments"].includes(resource) &&
+        Number.isSafeInteger(page) &&
+        page >= 1 &&
+        page <= 150,
+      "invalid_github_item",
+    );
+    return this.request(
+      `https://api.github.com/repos/${repository}/pulls/${number}/${resource}?per_page=20&page=${page}`,
+      token,
+      undefined,
+      signal,
+    );
+  }
   async codingPublishedPull(
     token: string,
     repository: string,
