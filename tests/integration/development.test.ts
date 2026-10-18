@@ -46,6 +46,7 @@ import { GitHubApp } from "../../src/github/app.ts";
 import { GitHubApps } from "../../src/github/registry.ts";
 import { DeliveryWorker } from "../../src/jobs/delivery.ts";
 import { Executor } from "../../src/jobs/execute.ts";
+import { taskReference } from "../../src/miniapp/auth.ts";
 import type { SetupService } from "../../src/setup/service.ts";
 import { TelegramError } from "../../src/telegram/client.ts";
 import { recordProgress } from "../../src/telegram/feedback.ts";
@@ -2148,15 +2149,6 @@ const url = process.env.TEST_DATABASE_URL;
       },
     };
   }
-  // A fixture URL proves cleanup preserves unrelated delivered links.
-  function withTaskDetails(w: Workspace, id: string) {
-    const d = present(w.deliveries.find((d) => d.id === id));
-    d.buttons = [
-      ...(d.buttons ?? []),
-      [{ text: "Task details", url: "https://example.com/task" }],
-    ];
-    return id;
-  }
   async function keyboardFixture() {
     const f = await fixture();
     type Keyboard = NonNullable<Delivery["buttons"]>;
@@ -2212,7 +2204,6 @@ const url = process.env.TEST_DATABASE_URL;
     const acknowledgement = present(
       (await store.read(f.w.id)).deliveries.at(-1),
     );
-    await store.change(f.w.id, (w) => withTaskDetails(w, acknowledgement.id));
     await worker().send(f.w.id, acknowledgement.id);
     await store.change(f.w.id, async (_w, sql) => {
       const task = await taskGet(sql, f.w.id, f.task.id);
@@ -2221,15 +2212,12 @@ const url = process.env.TEST_DATABASE_URL;
     });
     const note = async (text: string) =>
       store.change(f.w.id, async (w, sql) =>
-        withTaskDetails(
-          w,
-          present(
-            notifyDevelopment(
-              w,
-              await taskGet(sql, w.id, f.task.id),
-              text,
-              `conversation:progress:${randomUUID()}`,
-            ),
+        present(
+          notifyDevelopment(
+            w,
+            await taskGet(sql, w.id, f.task.id),
+            text,
+            `conversation:progress:${randomUUID()}`,
           ),
         ),
       );
@@ -2300,7 +2288,7 @@ const url = process.env.TEST_DATABASE_URL;
           .get(801)
           ?.buttons.flat()
           .map((b) => b.text),
-      ).toEqual(["Task details"]);
+      ).toEqual(["View conversation"]);
       expect(
         f.calls.filter((call) => call.method === "sendMessage"),
       ).toHaveLength(3);
@@ -2429,7 +2417,7 @@ const url = process.env.TEST_DATABASE_URL;
         .get(801)
         ?.buttons.flat()
         .map((b) => b.text),
-    ).toEqual([]);
+    ).toEqual(["View conversation"]);
     expect(f.calls.filter((c) => c.method === "sendMessage")).toHaveLength(2);
     expect(f.calls.at(-1)?.method).toBe("editMessageText");
   });
@@ -2470,11 +2458,8 @@ const url = process.env.TEST_DATABASE_URL;
       task.cancelRequested = true;
       task.state = "cancelled";
       await taskSave(sql, task);
-      return withTaskDetails(
-        w,
-        present(
-          notifyDevelopment(w, task, "Your task has stopped.", "cancel:latest"),
-        ),
+      return present(
+        notifyDevelopment(w, task, "Your task has stopped.", "cancel:latest"),
       );
     });
     await f.worker().send(f.w.id, stopped);
@@ -2486,7 +2471,7 @@ const url = process.env.TEST_DATABASE_URL;
         .get(803)
         ?.buttons.flat()
         .map((b) => b.text),
-    ).toEqual(["Task details"]);
+    ).toEqual(["View conversation"]);
     expect(f.calls.filter((c) => c.method === "sendMessage")).toHaveLength(3);
   });
   test("permanently uneditable old keyboards never create replacement messages or remain authorized", async () => {
@@ -2595,7 +2580,7 @@ const url = process.env.TEST_DATABASE_URL;
           .get(id)
           ?.buttons.flat()
           .map((b) => b.text),
-      ).toEqual(["Review", "Merge", "Task details"]);
+      ).toEqual(["Review", "Merge", "View conversation"]);
   });
   test("keyboard cleanup rechecks actor, topic, bot, target message and current permissions before editing", async () => {
     for (const boundary of [
@@ -2653,7 +2638,15 @@ const url = process.env.TEST_DATABASE_URL;
       expect(call.params.message_id).toBe(901);
       expect(call.params.message_thread_id).toBeUndefined();
       expect(call.params.reply_markup).toMatchObject({
-        inline_keyboard: [[{ text: "Status" }, { text: "Cancel" }]],
+        inline_keyboard: [
+          [{ text: "Status" }, { text: "Cancel" }],
+          [
+            {
+              text: "View conversation",
+              url: `https://t.me/fixture?startapp=${taskReference(f.w.id, f.task.id)}`,
+            },
+          ],
+        ],
       });
     }
     await f.tick();
@@ -2673,7 +2666,16 @@ const url = process.env.TEST_DATABASE_URL;
       (c) => c.params.text === "I need your input before we can continue.",
     );
     expect(closed?.method).toBe("editMessageText");
-    expect(closed?.params.reply_markup).toEqual({ inline_keyboard: [] });
+    expect(closed?.params.reply_markup).toEqual({
+      inline_keyboard: [
+        [
+          {
+            text: "View conversation",
+            url: `https://t.me/fixture?startapp=${taskReference(f.w.id, f.task.id)}`,
+          },
+        ],
+      ],
+    });
   });
   test("a confirmed PR replaces task controls in outcomes, questions, follow-up progress and status", async () => {
     const f = await telegramProgressFixture();
@@ -2682,6 +2684,15 @@ const url = process.env.TEST_DATABASE_URL;
       [
         { text: "Review", url: `${url}/files` },
         { text: "Merge", url },
+      ],
+    ];
+    const sentButtons = [
+      ...buttons,
+      [
+        {
+          text: "View conversation",
+          url: `https://t.me/fixture?startapp=${taskReference(f.w.id, f.task.id)}`,
+        },
       ],
     ];
     for (const state of [
@@ -2724,16 +2735,16 @@ const url = process.env.TEST_DATABASE_URL;
       expect(outcome?.method).toBe("sendMessage");
       expect(outcome?.params.message_thread_id).toBe(3);
       expect(progress?.params.reply_markup).toEqual({
-        inline_keyboard: buttons,
+        inline_keyboard: sentButtons,
       });
       expect(outcome?.params.reply_markup).toEqual({
-        inline_keyboard: buttons,
+        inline_keyboard: sentButtons,
       });
     }
     const followup = await f.progress("check", "after-pr");
     await f.worker.send(f.w.id, followup.id);
     expect(f.calls.at(-1)?.params.reply_markup).toEqual({
-      inline_keyboard: buttons,
+      inline_keyboard: sentButtons,
     });
     await store.change(f.w.id, (w, sql) =>
       cancelDevelopment(sql, w, "101", f.task.id),
@@ -2742,7 +2753,7 @@ const url = process.env.TEST_DATABASE_URL;
     expect(cancellation.buttons).toEqual(buttons);
     await f.worker.send(f.w.id, cancellation.id);
     expect(f.calls.at(-1)?.params.reply_markup).toEqual({
-      inline_keyboard: buttons,
+      inline_keyboard: sentButtons,
     });
     await expect(
       store.change(f.w.id, (w, sql) =>
@@ -3207,7 +3218,15 @@ const url = process.env.TEST_DATABASE_URL;
     await new DeliveryWorker(store, setup).send(f.w.id, started.id);
     expect(calls[0]?.method).toBe("sendMessage");
     expect(calls[0]?.params.reply_markup).toEqual({
-      inline_keyboard: started.buttons,
+      inline_keyboard: [
+        ...(started.buttons ?? []),
+        [
+          {
+            text: "View conversation",
+            url: `https://t.me/fixture?startapp=${taskReference(f.w.id, f.task.id)}`,
+          },
+        ],
+      ],
     });
     expect(
       (await store.read(f.w.id)).deliveries.find((d) => d.id === started.id)

@@ -8,6 +8,7 @@ import {
 } from "../conversation.ts";
 import { developmentResult, developmentRun } from "../development.ts";
 import { resultIssues } from "../result-validation.ts";
+import { transcriptPage } from "../transcript.ts";
 
 export const localStart = z
   .object({
@@ -23,6 +24,7 @@ export const localStart = z
   .strict();
 export type LocalStart = z.infer<typeof localStart>;
 export const localStatus = z.object({
+  transcript: transcriptPage.optional(),
   conversation: taskConversation.optional(),
   state: z.enum([
     "auth_required",
@@ -89,7 +91,11 @@ export interface LocalRunner {
   erase?(workspaceId: string, taskId: string): Promise<void>;
   start(input: LocalStart): Promise<void>;
   resumeAuth?(workspaceId: string, taskId: string): Promise<void>;
-  status(workspaceId: string, taskId: string): Promise<LocalStatus>;
+  status(
+    workspaceId: string,
+    taskId: string,
+    transcriptOffset?: number,
+  ): Promise<LocalStatus>;
   publish(workspaceId: string, taskId: string, token: string): Promise<void>;
   cancel(workspaceId: string, taskId: string): Promise<void>;
 }

@@ -135,6 +135,12 @@ export function runnerApp(
       await supervisor.status(
         z.uuid().parse(c.req.param("workspace")),
         z.uuid().parse(c.req.param("task")),
+        z.coerce
+          .number()
+          .int()
+          .nonnegative()
+          .safe()
+          .parse(c.req.query("transcriptOffset") ?? 0),
       ),
     ),
   );

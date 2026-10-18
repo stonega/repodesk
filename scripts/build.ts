@@ -22,7 +22,7 @@ if (!backend.success)
   throw new AggregateError(backend.logs, "Backend build failed");
 await cp("src/agent/SOUL.md", "dist/SOUL.md");
 const frontend = await Bun.build({
-  entrypoints: ["web/app.tsx", "web/theme-init.ts"],
+  entrypoints: ["web/app.tsx", "web/theme-init.ts", "web/mini.tsx"],
   outdir: "dist/web/assets",
   target: "browser",
   minify: true,
@@ -47,3 +47,13 @@ for (const asset of ["app.js", "theme-init.js", "style.css"]) {
   html = html.replace(`/assets/${asset}`, `/assets/${asset}?v=${version}`);
 }
 await writeFile("dist/web/index.html", html);
+await cp("web/mini.css", "dist/web/assets/mini.css");
+let mini = await readFile("web/mini.html", "utf8");
+for (const asset of ["mini.js", "mini.css"]) {
+  const version = createHash("sha256")
+    .update(await readFile(`dist/web/assets/${asset}`))
+    .digest("hex")
+    .slice(0, 16);
+  mini = mini.replace(`/assets/${asset}`, `/assets/${asset}?v=${version}`);
+}
+await writeFile("dist/web/mini.html", mini);

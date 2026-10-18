@@ -50,7 +50,7 @@ export async function taskEvent(
   data: unknown,
 ) {
   await sql.query(
-    "INSERT INTO coding_task_events(workspace_id,task_id,id,data) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING",
+    "INSERT INTO coding_task_events(workspace_id,task_id,id,data,created_at) VALUES($1,$2,$3,$4,clock_timestamp()) ON CONFLICT DO NOTHING",
     [task.workspaceId, task.id, id, JSON.stringify(data)],
   );
 }

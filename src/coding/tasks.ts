@@ -233,7 +233,7 @@ export async function startDevelopment(
     hasAttachments: source.attachments?.length ? true : undefined,
   };
   await sql.query(
-    "INSERT INTO coding_task_inputs(workspace_id,task_id,revision,source_key,data) VALUES($1,$2,1,$3,$4)",
+    "INSERT INTO coding_task_inputs(workspace_id,task_id,revision,source_key,data,created_at) VALUES($1,$2,1,$3,$4,clock_timestamp())",
     [w.id, task.id, `${source.id}:initial`, JSON.stringify(input)],
   );
   await sql.query(
@@ -326,7 +326,7 @@ export async function appendDevelopment(
     hasAttachments: source.attachments?.length ? true : undefined,
   };
   await sql.query(
-    "INSERT INTO coding_task_inputs(workspace_id,task_id,revision,source_key,data) VALUES($1,$2,$3,$4,$5)",
+    "INSERT INTO coding_task_inputs(workspace_id,task_id,revision,source_key,data,created_at) VALUES($1,$2,$3,$4,$5,clock_timestamp())",
     [w.id, task.id, task.revision, sourceKey, JSON.stringify(input)],
   );
   await sql.query(

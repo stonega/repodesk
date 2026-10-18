@@ -4,6 +4,13 @@ Implemented locally, 2026-10-17. Deploy matching app/worker and supervisor build
 before using the new tools. Both Docker and OpenSandbox share this channel;
 OpenSandbox still needs its prepared server, image, storage and proxy profile.
 
+With the bot's [Main Mini App configured](../docs/implementation/telegram-mini-app.md),
+select **View conversation** on a task message to read original inputs, actual
+completed Codex messages, factual exchanges and expandable tool activity. The page
+follows Telegram's theme and preserves reading position as new messages arrive.
+Reply through Telegram; closing the read-only viewer leaves the task running.
+Old tasks show only retained messages that were actually recorded.
+
 1. Ask the bot to implement an authorized change, such as “Improve the landing
    page's mobile layout.” All Codex tasks use the continuous workflow; no mode
    selection, task approval or prerequisite Issue is needed.

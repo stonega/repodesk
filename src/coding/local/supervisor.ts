@@ -37,6 +37,7 @@ import {
   type RuntimeSave,
   runtimeSave,
 } from "../runtime-config.ts";
+import { transcriptEntry, transcriptText } from "../transcript.ts";
 import { checkoutFailureCodes } from "./checkout-failure.ts";
 import type { ContainerEngine } from "./container.ts";
 import { conversationFailureCodes } from "./conversation-failure.ts";
@@ -56,8 +57,10 @@ import {
   type TaskMode,
   type TaskRuntime,
 } from "./task-runtime.ts";
+import { appendTranscript, readTranscript } from "./transcript-log.ts";
 
 interface Record extends LocalStatus {
+  transcriptEnabled?: boolean;
   channelToken?: string;
   conversation?: TaskConversation;
   runtime?: RunnerSettings["CODEX_CONTAINER_ENGINE"];
@@ -330,6 +333,7 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
     mode: TaskMode,
     env: { [key: string]: string } = {},
   ) {
+    if (mode === "implement") r.transcriptEnabled = true;
     if (mode === "implement" && r.input.development) {
       closeMailbox(r.conversation);
       r.channelToken = randomBytes(32).toString("hex");
@@ -447,6 +451,7 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
           409,
         );
       const r: Record = {
+        transcriptEnabled: true,
         conversation: safe.development
           ? {
               messages: (safe.messages ?? []).map((message) => ({
@@ -504,11 +509,20 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
       }
     });
   }
-  async status(workspaceId: string, taskId: string) {
+  async status(workspaceId: string, taskId: string, transcriptOffset = 0) {
     return this.serial(async () => {
       const r = this.get(workspaceId, taskId);
       await this.advance(r);
-      return this.view(r);
+      return {
+        ...this.view(r),
+        transcript:
+          r.cleaned || !r.transcriptEnabled
+            ? undefined
+            : await readTranscript(
+                this.path(r, "transcript"),
+                transcriptOffset,
+              ),
+      };
     });
   }
   async message(workspaceId: string, taskId: string, value: TaskMessage) {
@@ -559,6 +573,15 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
   async channelEvent(token: string, value: unknown) {
     return this.serial(async () => {
       const r = this.channelRecord(token);
+      const captured = z
+        .object({ action: z.literal("transcript"), entry: transcriptEntry })
+        .safeParse(value);
+      if (captured.success) {
+        const entry = captured.data.entry;
+        entry.text = transcriptText(entry.text, [token, r.proxyToken]);
+        await appendTranscript(this.path(r, "transcript"), entry);
+        return;
+      }
       r.conversation ??= { messages: [] };
       applyChannelEvent(r.conversation, channelEvent.parse(value));
       await this.save(r);
@@ -566,6 +589,46 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
   }
   private async copyResult(r: Record, filename: string) {
     return this.engine.readText(`${r.key}-${r.phase}`, `/task/${filename}`);
+  }
+  private async recoverTranscript(r: Record) {
+    if (!r.transcriptEnabled || r.phase !== "implement") return;
+    let raw: string;
+    try {
+      raw = await this.engine.readText(
+        `${r.key}-implement`,
+        "/task/native-transcript.jsonl",
+        16 * 1024 * 1024,
+      );
+    } catch {
+      return;
+    }
+    const known = new Set<string>();
+    let offset = 0;
+    for (;;) {
+      const page = await readTranscript(this.path(r, "transcript"), offset);
+      for (const entry of page.entries) known.add(entry.id);
+      if (!page.hasMore || page.offset <= offset) break;
+      offset = page.offset;
+    }
+    for (const line of raw.split("\n")) {
+      const entry = transcriptEntry.safeParse(
+        (() => {
+          try {
+            return JSON.parse(line);
+          } catch {
+            return undefined;
+          }
+        })(),
+      );
+      if (entry.success && !known.has(entry.data.id)) {
+        entry.data.text = transcriptText(entry.data.text, [
+          r.channelToken ?? "",
+          r.proxyToken,
+        ]);
+        await appendTranscript(this.path(r, "transcript"), entry.data);
+        known.add(entry.data.id);
+      }
+    }
   }
   private async advance(r: Record) {
     if (r.state === "auth_required" && !r.cleaned) {
@@ -578,6 +641,7 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
       if (state.Running) return;
       if (state.Status !== "exited" && state.Status !== "stopped")
         throw new Error("Incomplete container start");
+      await this.recoverTranscript(r);
       if (
         r.phase === "implement" &&
         r.input.payload.authMode === "device_code"
@@ -933,6 +997,10 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
       }
     }
     // `rm --force --ignore` also handles a reservation that never created a container.
+    if (r.phase === "implement") {
+      await this.engine.stop(`${r.key}-implement`);
+      await this.recoverTranscript(r);
+    }
     await this.engine.remove([`${r.key}-${r.phase}`]);
     if (r.phase === "implement") await this.removeAuthVolume(r);
     r.state = r.phase === "publish" ? "unknown" : "cancelled";
@@ -970,7 +1038,14 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
         if (names.includes(`${r.key}-${volume}`))
           await this.engine.removeVolumes([`${r.key}-${volume}`]);
       }
-      for (const suffix of ["patch", "result", "input", "conversation", "auth"])
+      for (const suffix of [
+        "patch",
+        "result",
+        "input",
+        "conversation",
+        "auth",
+        "transcript",
+      ])
         await rm(this.path(r, suffix), { force: true });
       r.cleaned = true;
       r.proxyToken = "";
@@ -1057,7 +1132,13 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
               name === `${r.key}-input`,
           );
           await this.engine.removeVolumes(volumes);
-          for (const suffix of ["patch", "result", "input", "conversation"])
+          for (const suffix of [
+            "patch",
+            "result",
+            "input",
+            "conversation",
+            "transcript",
+          ])
             await rm(this.path(r, suffix), { force: true });
           // Keep a small tombstone so delayed duplicate requests cannot replay the task.
           if (r.state === "auth_required") {

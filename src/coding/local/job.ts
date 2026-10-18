@@ -179,11 +179,14 @@ async function implement(job: Job) {
   await rm("/task/failure-code", { force: true });
   await rm("/task/auth-failure.json", { force: true });
   await rm("/task/conversation-failure.json", { force: true });
+  await rm("/task/native-transcript.jsonl", { force: true });
   const channel =
     process.env.CODEX_TASK_CHANNEL_URL && process.env.CODEX_TASK_CHANNEL_TOKEN
       ? new JobTaskChannel(
           process.env.CODEX_TASK_CHANNEL_URL,
           process.env.CODEX_TASK_CHANNEL_TOKEN,
+          fetch,
+          "/task/native-transcript.jsonl",
         )
       : undefined;
   let channelThread = "";

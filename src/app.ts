@@ -10,6 +10,7 @@ import type { LocalRuntimeControl } from "./coding/runtime-config.ts";
 import type { Store } from "./db/repositories.ts";
 import { Fault, requireThat } from "./domain.ts";
 import { GitHubService } from "./github/service.ts";
+import { miniAppRoutes } from "./miniapp/history.ts";
 import type { ReviewService } from "./review-bot/service.ts";
 import { equal } from "./setup/credentials.ts";
 import type { SetupService } from "./setup/service.ts";
@@ -29,20 +30,31 @@ export function createApp(
 ) {
   const app = new Hono();
   const ingress = new Ingress(store, setup, github.users);
-  app.use(
-    "*",
+  app.use("*", (c, next) =>
     secureHeaders({
+      xFrameOptions: c.req.path === "/mini" ? false : "SAMEORIGIN",
       contentSecurityPolicy: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
-        styleSrc: ["'self'"],
+        scriptSrc:
+          c.req.path === "/mini"
+            ? ["'self'", "https://telegram.org"]
+            : ["'self'"],
+        styleSrc:
+          c.req.path === "/mini" ? ["'self'", "'unsafe-inline'"] : ["'self'"],
         connectSrc: ["'self'"],
         imgSrc: ["'self'", "data:"],
         objectSrc: ["'none'"],
-        frameAncestors: ["'none'"],
+        frameAncestors:
+          c.req.path === "/mini"
+            ? [
+                "https://web.telegram.org",
+                "https://*.telegram.org",
+                "https://telegram.org",
+              ]
+            : ["'none'"],
         formAction: ["'self'", "https://github.com"],
       },
-    }),
+    })(c, next),
   );
   app.use("*", (c, next) =>
     bodyLimit({
@@ -108,6 +120,9 @@ export function createApp(
       "Return to Telegram and confirm your GitHub account there. This window can be closed.",
     );
   });
+  if (encryptionKey)
+    app.route("/mini-api", miniAppRoutes(store, setup, encryptionKey));
+  app.get("/mini", serveStatic({ path: "./dist/web/mini.html" }));
   app.route(
     "/",
     adminRoutes(

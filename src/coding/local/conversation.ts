@@ -12,6 +12,7 @@ import {
   parseDevelopmentResult,
   type ResultIssues,
 } from "../result-validation.ts";
+import { codexTranscript } from "../transcript.ts";
 import { CodexAuthError, codexAuthFailure } from "./auth-failure.ts";
 import {
   CodexConversationError,
@@ -225,6 +226,17 @@ export async function runConversation(options: {
         const p = message.params;
         if (p?.threadId && threadId && p.threadId !== threadId) continue;
         if (p?.turnId && turnId && p.turnId !== turnId) continue;
+        if (message.method === "item/completed" && p?.item && options.channel) {
+          const entry = codexTranscript(
+            threadId,
+            p.turnId ?? turnId,
+            p.item,
+            Object.entries(options.env)
+              .filter(([key]) => /TOKEN|KEY|SECRET|PASSWORD/.test(key))
+              .map(([, value]) => value ?? ""),
+          );
+          if (entry) options.channel.record(entry);
+        }
         if (
           (message.method === "item/started" ||
             message.method === "item/completed") &&
@@ -496,5 +508,6 @@ export async function runConversation(options: {
     pending.clear();
     child.stdin.end();
     child.kill("SIGKILL");
+    await options.channel?.flushTranscript();
   }
 }

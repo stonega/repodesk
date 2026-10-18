@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { appendFile } from "node:fs/promises";
 import { z } from "zod";
 import {
   type ChannelEvent,
   type TaskMessage,
   taskMessage,
 } from "../conversation.ts";
+import { type TranscriptEntry, transcriptText } from "../transcript.ts";
 
 class ChannelRequestError extends Error {
   constructor(readonly status: number) {
@@ -59,6 +61,43 @@ export function conversationPrompt(messages: TaskMessage[]) {
 
 /** The implementation process receives only this attempt's short-lived channel token. */
 export class JobTaskChannel {
+  private transcriptTail: Promise<void> = Promise.resolve();
+  private transcriptFiles: Promise<void> = Promise.resolve();
+  private transcriptOffline = false;
+  record(entry: TranscriptEntry) {
+    const safe = { ...entry, text: transcriptText(entry.text, [this.token]) };
+    const saved = this.transcriptFiles.then(async () => {
+      if (this.transcriptPath)
+        await appendFile(this.transcriptPath, `${JSON.stringify(safe)}\n`, {
+          mode: 0o600,
+        });
+    });
+    this.transcriptFiles = saved;
+    void saved.catch(() => {});
+    this.transcriptTail = this.transcriptTail.then(async () => {
+      await saved;
+      if (this.transcriptOffline) return;
+      for (let retry = 0; retry < 3; retry++) {
+        try {
+          await this.request("events", {
+            action: "transcript",
+            entry: safe,
+          });
+          return;
+        } catch {
+          // The private task file is recovered by the supervisor on exit.
+          if (retry === 2) {
+            this.transcriptOffline = true;
+            return;
+          }
+        }
+      }
+    });
+    void this.transcriptTail.catch(() => {});
+  }
+  async flushTranscript() {
+    await this.transcriptTail;
+  }
   readonly sessionId = randomUUID();
   private owned = new Set<string>();
   private calls = new Map<
@@ -69,6 +108,7 @@ export class JobTaskChannel {
     private url: string,
     private token: string,
     private transport: typeof fetch = fetch,
+    private transcriptPath?: string,
   ) {}
   private async request(path: string, body?: unknown) {
     const response = await this.transport(

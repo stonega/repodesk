@@ -80,7 +80,7 @@ BotFather action; local implementation does not change bot settings or create to
 | Channel monitoring | Explicit access plus product-level monitoring consent | Broader Telegram visibility is not automatically consent to analyze everything. |
 | Private channel summarization elsewhere | Source and destination authorization | Being allowed to read does not automatically permit posting to a wider group. |
 | CI bot pings | Direct integration or explicitly enabled bot communication | P0 ignores bot senders; no promise to summarize events it cannot receive. |
-| Dashboard | P0 admin web panel plus private command shortcuts; Mini App later | Same domain services and permissions across both surfaces. |
+| Dashboard | Admin web panel plus private command shortcuts; [read-only Codex history Mini App](../implementation/telegram-mini-app.md) implemented locally | Same domain services and permissions; the viewer adds no task-write controls. |
 | Long artifact | Brief message plus protected attachment/link | Avoid uncontrolled message splitting and token-heavy repetition. |
 
 ## Transport implementation contract

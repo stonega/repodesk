@@ -58,6 +58,7 @@ export interface TaskExchange extends TaskMessage {
   sourceKey: string;
   state: "queued" | "received" | "read" | "answered" | "unknown" | "cancelled";
   answer?: string;
+  answeredAt?: string;
   error?: string;
   attemptId?: string;
   route?: "active" | "readonly";

@@ -14,6 +14,7 @@ import { type DevelopmentTask, developmentStopped } from "./development.ts";
 import type { LocalRunner, LocalStart, LocalStatus } from "./local/protocol.ts";
 import { taskGet, taskInputs, taskSave } from "./task-store.ts";
 import { checkDevelopment, notifyDevelopment } from "./tasks.ts";
+import { captureRunnerStatus } from "./transcript-store.ts";
 
 const finished = (message: TaskExchange) =>
   ["answered", "unknown", "cancelled"].includes(message.state);
@@ -155,6 +156,7 @@ export class TaskConversationExecutor {
           await this.allowed(w, t, m);
         m.state = state;
         m.answer = answer;
+        if (answer) m.answeredAt ??= new Date().toISOString();
         m.error = error;
         m.cleanup = m.route === "readonly";
         if (answer && !t.cancelRequested)
@@ -212,8 +214,10 @@ export class TaskConversationExecutor {
       }
       let status: LocalStatus;
       try {
-        status = await this.runner.status(
-          workspaceId,
+        status = await captureRunnerStatus(
+          this.store,
+          this.runner,
+          task,
           message.attemptId as string,
         );
       } catch (error) {

@@ -1,5 +1,10 @@
 # Local Codex execution with Docker
 
+Completed native assistant messages and bounded activity now feed the read-only
+[Telegram task history Mini App](telegram-mini-app.md). Its private transcript
+files survive supervisor restart, are drained into task-scoped application events,
+and follow task erasure. Raw reasoning and protocol streams remain excluded.
+
 The optional OpenSandbox backend uses the same supervisor protocol.
 See [alternative sandboxes and benchmarks](codex-sandboxes.md) for setup and
 verification boundaries. Docker is the default runtime; OpenSandbox is the only

@@ -137,7 +137,7 @@ if(process.argv[2]==='app-server') {
  const rl=require('node:readline').createInterface({input:process.stdin});
  const send=x=>process.stdout.write(JSON.stringify(x)+'\\n');
  let conversationResult,conversationMessage;
- const finishConversation=()=>{send({method:'item/completed',params:{threadId:'smoke-thread',turnId:'smoke-turn',item:{type:'agentMessage',phase:'final_answer',text:JSON.stringify(conversationResult)}}});send({method:'turn/completed',params:{threadId:'smoke-thread',turn:{id:'smoke-turn',status:'completed'}}});};
+ const finishConversation=()=>{send({method:'item/completed',params:{threadId:'smoke-thread',turnId:'smoke-turn',item:{id:'smoke-final',type:'agentMessage',phase:'final_answer',text:JSON.stringify(conversationResult)}}});send({method:'turn/completed',params:{threadId:'smoke-thread',turn:{id:'smoke-turn',status:'completed'}}});};
  rl.on('line',line=>{
   const r=JSON.parse(line); if(r.id===undefined)return;
   if(!r.method&&r.id===501){if(!r.result?.success)process.exit(12);send({id:502,method:'item/tool/call',params:{threadId:'smoke-thread',turnId:'smoke-turn',callId:'conversation-answer',tool:'repodesk_task_reply',arguments:{messageId:conversationMessage.id,text:'The current checkout preserves pagination ordering.'}}});return;}
@@ -174,6 +174,7 @@ if(JSON.parse(fs.readFileSync('/input/job.json','utf8')).payload.body==='Paralle
 }
 
 
+   send({method:'item/completed',params:{threadId:'smoke-thread',turnId:'smoke-turn',item:{id:'smoke-commentary',type:'agentMessage',phase:'commentary',text:'I am checking the repository.'}}});
    send({method:'thread/tokenUsage/updated',params:{threadId:'smoke-thread',turnId:'smoke-turn',tokenUsage:{total:{totalTokens:20},last:{totalTokens:20}}}});
    if(text.includes('Conversation channel fixture')){conversationResult=result;fs.writeFileSync('/task/conversation-ready','ready');if(text.includes('Task conversation questions: ')){conversationMessage=JSON.parse(text.split('Task conversation questions: ')[1])[0];send({id:501,method:'item/tool/call',params:{threadId:'smoke-thread',turnId:'smoke-turn',callId:'conversation-read',tool:'repodesk_task_read',arguments:{messageId:conversationMessage.id}}});}return;}
    send({method:'item/completed',params:{threadId:'smoke-thread',turnId:'smoke-turn',item:{type:'agentMessage',phase:'final_answer',text:JSON.stringify(result)}}});
@@ -648,6 +649,17 @@ process.exit(16);
   await restartSupervisor();
   const conversation = await waitFor(conversationTaskId, "ready");
   if (
+    !conversation.transcript?.entries.some(
+      (entry) => entry.text === "I am checking the repository.",
+    ) ||
+    !conversation.transcript.entries.some(
+      (entry) => entry.text === "Fixture checked.",
+    )
+  )
+    throw Error(
+      "Native Codex messages were not retained across supervisor restart",
+    );
+  if (
     !conversation.checkPassed ||
     conversation.tokens !== 20 ||
     conversation.conversation?.messages.length !== 1 ||
@@ -660,6 +672,14 @@ process.exit(16);
     );
   await request(`/tasks/${workspaceId}/${conversationTaskId}/cancel`, {});
   await request(`/tasks/${workspaceId}/${conversationTaskId}/erase`, {});
+  if (
+    (
+      (await request(
+        `/tasks/${workspaceId}/${conversationTaskId}`,
+      )) as LocalStatus
+    ).transcript
+  )
+    throw Error("Task erasure retained transcript content");
   await request("/tasks", {
     ...input,
     taskId: developmentIds[0],

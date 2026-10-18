@@ -4,6 +4,7 @@ import type { Sql } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import { type Delivery, requireThat, type Workspace } from "../domain.ts";
 import { repositoryDeliveryAllowed } from "../github/repository-context.ts";
+import { taskReference } from "../miniapp/auth.ts";
 import type { SetupService } from "../setup/service.ts";
 import { TelegramError } from "../telegram/client.ts";
 import { telegramMarkdown, telegramRichMessage } from "../telegram/format.ts";
@@ -259,6 +260,20 @@ export class DeliveryWorker {
         const latest = latestTaskMessage(current, intent);
         if (latest && latest.remoteId !== intent.remoteId)
           buttons = withoutTaskControls(buttons, taskId);
+      }
+      const developmentId = /^development:([0-9a-f-]{36}):/.exec(
+        intent.id,
+      )?.[1];
+      if (developmentId && deployment.bot?.username) {
+        buttons = [
+          ...(buttons ?? []),
+          [
+            {
+              text: "View conversation",
+              url: `https://t.me/${deployment.bot.username}?startapp=${taskReference(workspaceId, developmentId)}`,
+            },
+          ],
+        ];
       }
       intent.buttons = buttons;
       const sent = await (await this.setup.client()).call<{

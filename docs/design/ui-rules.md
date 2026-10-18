@@ -23,6 +23,7 @@ when implementing or reviewing a change.
 | Dialog actions | [Cancel order](#modal-cancel-follows-the-primary-action), [close controls](#modal-close-controls-use-a-plain-x), [secondary actions](#dialog-support-actions-use-secondary-buttons) |
 | Feedback and loading | [Toasts and error placement](#routine-action-confirmations-and-request-errors-use-toasts), [visible loading layout](#loading-keeps-the-layout-visible) |
 | Log pagination and density | [Shared pagination and compact log text](#logs-reuse-run-pagination-with-compact-text), [refresh menu](#logs-use-an-auto-refresh-menu) |
+| Telegram Mini App experience | [Official Telegram guidance](#telegram-mini-apps-follow-official-guidance) |
 
 ## Maintenance
 
@@ -36,6 +37,34 @@ when implementing or reviewing a change.
 - Keep illustrative examples separate from established preferences.
 
 ## Recorded preferences
+
+### Telegram Mini Apps follow official guidance
+
+- **Preference:** Follow Telegram's official Mini App design and platform guidance
+  wherever applicable. Use mobile-first layouts, Telegram theme colors that update
+  with the client, accessible controls and lightweight interactions. Respect the
+  changing viewport, safe areas and content safe areas. Use Telegram's native
+  navigation and action controls where they fit the flow; avoid duplicating the
+  client's back/close controls or adding an action button to a read-only page
+  without a purpose. Reuse backend services and suitable web components while
+  adapting the Mini App presentation to Telegram.
+- **Scope:** All RepoDesk Telegram Mini App pages, starting with the Codex
+  task conversation/history viewer. Native Topics remain the primary conversation
+  interface; the task viewer supplements them. This does not restyle the admin SPA.
+- **Source:** 2026-10-18 — the user requested that our Mini App follow Telegram's
+  official guidance as closely as practical. Platform details were checked against
+  the [official Mini App documentation](https://core.telegram.org/bots/webapps),
+  including its [design guidelines](https://core.telegram.org/bots/webapps#design-guidelines).
+- **Acceptance:** Verify light/dark and live theme changes, compact/expanded
+  viewports, safe-area spacing, long-history scrolling, back/close behavior and
+  loading/empty/error states on mobile and desktop Telegram clients. Use only
+  capabilities supported by the client, with appropriate fallbacks. Authenticate
+  using server-validated Telegram initialization data and enforce task/audience
+  permissions independently of the launch link. These are implementation checks,
+  not a claim that a Mini App has been delivered or visually verified.
+- **Exceptions:** Custom transcript and tool-activity rendering is appropriate
+  where Telegram supplies no native equivalent. Record any deliberate departure
+  with its reason and affected scope; preserve a usable fallback on older clients.
 
 ### Content layout owns card spacing
 

@@ -1,5 +1,12 @@
 # Continuous Codex tasks
 
+Task messages offer **View conversation**, opening a read-only Telegram Mini App
+with retained original inputs, Codex messages and expandable activity. It follows
+Telegram theme and viewport settings and rechecks the viewer's task/audience
+access. Enable the bot's Main Mini App at the existing site's `/mini` URL before
+rollout. See [task history and setup](telegram-mini-app.md) for capture boundaries,
+recovery, retention and live client acceptance.
+
 Codex implementation runs approved repository tasks in isolated Docker or
 OpenSandbox environments. The bot uses Pi for Telegram conversation; the coding service owns
 authorization, task state, conversation and publication. Setup and deterministic

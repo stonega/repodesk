@@ -116,9 +116,11 @@ export class LocalRunnerClient
   async message(workspaceId: string, taskId: string, input: TaskMessage) {
     await this.request(`${this.path(workspaceId, taskId)}/messages`, input);
   }
-  async status(workspaceId: string, taskId: string) {
+  async status(workspaceId: string, taskId: string, transcriptOffset = 0) {
     return localStatus.parse(
-      await this.request(this.path(workspaceId, taskId)),
+      await this.request(
+        `${this.path(workspaceId, taskId)}${transcriptOffset ? `?transcriptOffset=${transcriptOffset}` : ""}`,
+      ),
     );
   }
   async publish(workspaceId: string, taskId: string, token: string) {

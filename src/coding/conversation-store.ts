@@ -25,7 +25,14 @@ export async function saveExchange(
   exchange: TaskExchange,
 ) {
   await sql.query(
-    "INSERT INTO coding_task_events(workspace_id,task_id,id,data) VALUES($1,$2,$3,$4) ON CONFLICT(workspace_id,task_id,id) DO UPDATE SET data=excluded.data",
+    `INSERT INTO coding_task_events(workspace_id,task_id,id,data,created_at)
+     VALUES($1,$2,$3,$4::jsonb || CASE WHEN $4::jsonb->>'answer' IS NOT NULL
+       THEN jsonb_build_object('answerRecordedAt',to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))
+       ELSE '{}'::jsonb END,clock_timestamp())
+     ON CONFLICT(workspace_id,task_id,id) DO UPDATE SET data=excluded.data ||
+       CASE WHEN coding_task_events.data->>'answerRecordedAt' IS NOT NULL
+       THEN jsonb_build_object('answerRecordedAt',coding_task_events.data->>'answerRecordedAt')
+       ELSE '{}'::jsonb END`,
     [
       task.workspaceId,
       task.id,

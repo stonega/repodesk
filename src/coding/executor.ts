@@ -44,6 +44,7 @@ import {
   taskSave,
 } from "./task-store.ts";
 import { checkDevelopment, notifyDevelopment } from "./tasks.ts";
+import { captureRunnerStatus } from "./transcript-store.ts";
 
 const reason = (e: unknown) =>
   e instanceof Fault ? e.code : "coding_execution_failed";
@@ -492,7 +493,12 @@ export class DevelopmentExecutor {
         return;
       }
       requireThat(task.attemptId, "coding_attempt_missing", 409);
-      const status = await this.runner.status(workspaceId, task.attemptId);
+      const status = await captureRunnerStatus(
+        this.store,
+        this.runner,
+        task,
+        task.attemptId,
+      );
       const progress = status.conversation?.progress;
       if (progress)
         await this.update(

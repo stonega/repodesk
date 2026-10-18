@@ -1,5 +1,50 @@
 # Implementation evidence
 
+## Telegram Mini App for Codex task history (2026-10-18)
+
+The read-only `/mini` page opens a task from **View conversation** on Telegram
+task messages. It combines retained original inputs, Chat Agent questions, Codex
+answers/progress and completed native assistant messages, with expandable bounded
+command/file/tool activity. It follows live Telegram themes, stable viewport and
+safe-area settings. Older-page loading preserves the reading anchor; reconnect
+and foreground activation catch up without duplicating messages or forcing a
+reader away from earlier content. Arrival cursors remain separate from displayed
+message time so delayed runner records and answers to older questions are visible.
+
+The existing private attempt channel captures an explicit native-item allowlist.
+A separate private file queue preserves messages while channel requests stall;
+the supervisor recovers those files before container cleanup. Private logs and
+application events survive restarts, deduplicate native identities and follow task
+erasure. Reasoning, internal prompts and raw protocol streams are excluded;
+structured task results expose their supplied summary/question. Older tasks and
+interrupted partial output have explicit coverage limits. No dependency or SQL
+migration was added.
+
+Every read validates signed Telegram initialization data and current task,
+workspace, bot, repository and retained-source permissions. Private tasks remain
+with their original actor. Group reads additionally verify current membership of
+the original group and Topic-bound sources. Deleted factual-question sources also
+hide their answers before asynchronous cleanup. Access/session failures clear
+displayed history. Admin login/cookies remain separate, and only the Mini App page
+permits Telegram Web embedding and the official SDK.
+
+Validation of the isolated Mini App snapshot passed Biome, strict TypeScript,
+production build and **908 deterministic tests across 103 files** with disposable
+PostgreSQL (`bun test --timeout 15000`). An earlier shared-workspace run hit the
+existing auth-pause recovery test's five-second timeout; its focused replay and
+full rerun passed.
+Focused capture/authorization tests and **5 browser tests** cover native events,
+cursor recovery/deduplication, expiry/revocation, clipboard copying, scroll
+anchoring, loading/empty/error states, theme changes and mobile/desktop rendering.
+The app, supervisor and job images built; the app passed the Node 24 runtime
+contract, Docker lifecycle smoke retained native messages across supervisor
+restart and erased them with the task, and the Docker Compose overlay validated.
+
+BotFather Main Mini App configuration at the deployment's `/mini` URL, live
+iOS/Android/Desktop acceptance and live group membership checks remain rollout
+steps. No deployment, bot registration, account connection or live Telegram/model
+call was performed. See [setup and boundaries](telegram-mini-app.md).
+
 ## Latest-message Codex task controls (2026-10-18)
 
 Native Telegram Status/Cancel controls now remain only on the latest confirmed
