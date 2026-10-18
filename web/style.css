@@ -2433,6 +2433,15 @@ input.plugin-toggle-input:disabled {
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+.cloudflare-summary-card {
+  display: grid;
+  gap: 18px;
+}
+.cloudflare-summary-card > h2,
+.cloudflare-summary-card > p,
+.cloudflare-summary-card > .plugin-card-heading {
+  margin: 0;
+}
 .repository-card-details .plugin-summary {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }

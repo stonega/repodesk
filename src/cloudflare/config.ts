@@ -91,7 +91,7 @@ export const emptyCloudflare: CloudflareSettings = {
   enabled: false,
   accountId: "",
   zoneIds: [],
-  authMethod: "oauth",
+  authMethod: "api_token",
 };
 export const cloudflareSave = z
   .object({
@@ -103,6 +103,7 @@ export const cloudflareSave = z
       .regex(/^[A-Za-z0-9_-]{20,256}$/)
       .optional(),
     removeToken: z.boolean().optional(),
+    verifyResources: z.boolean().optional(),
     oauthClient: z
       .object({
         clientId: z

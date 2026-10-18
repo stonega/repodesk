@@ -100,26 +100,27 @@ when implementing or reviewing a change.
 - **Exceptions:** Internal MCP target/snapshot identifiers remain part of the
   service protocol and code provenance, outside the repository editor.
 
-### Cloudflare supports browser authorization
+### Cloudflare uses API tokens directly
 
-- **Preference:** Connect Cloudflare through its browser consent screen, with
-  connection/reconnect status and Disconnect in the plugin detail page. Keep
-  saved OAuth client details in a summary and its credentials in the shared Edit
-  modal; tokens and client secrets stay write-only.
-- **Scope:** The Cloudflare plugin on desktop and mobile. Account and zone
-  restrictions and action approvals apply after authorization.
-- **Source:** 2026-10-17 — user requested using Cloudflare's authentication flow
-  for the integration. Authorization Code with PKCE, server-managed refresh and
-  an operator-configured OAuth client are the implementation choices.
-- **Exceptions:** Existing/manual API token connections remain available as an
-  explicit authentication choice. Client registration in Cloudflare is a one-time
-  operator prerequisite; configuring RepoDesk does not register or publish it.
+- **Preference:** Connect Cloudflare by saving a scoped API token. Keep the saved
+  token status and resource names as summaries, with token and resource editors
+  in shared modals. Offer a direct link to Cloudflare token creation and clear
+  permission guidance; secrets stay write-only.
+- **Scope:** Cloudflare setup and management on desktop and mobile. Account/domain
+  restrictions and exact-action approvals still apply.
+- **Source:** 2026-10-18 — after checking that Cloudflare client registration needs
+  a separate bootstrap token, the user requested using the token directly.
+  This supersedes the 2026-10-17 browser-authorization preference.
+- **Exceptions:** Existing OAuth connections retain backend compatibility until
+  replaced. The panel guides them to an API token and does not offer new OAuth
+  client setup. Replacement clears local OAuth credentials; operators revoke old
+  authorizations in Cloudflare.
 
 ### Connections discover resource identifiers
 
 - **Preference:** Minimize setup input by discovering identifiers and displaying
-  provider account/resource names after authorization. Connect first; automatically
-  select an account when it is the only authorized choice. Ask for a selection
+  provider account/resource names after saving credentials. Connect first;
+  automatically select an account when it is the only authorized choice. Ask for a selection
   when several accounts are available. Offer searchable domain choices instead of
   requiring account and zone IDs to be copied from another dashboard.
 - **Scope:** Cloudflare connection and configuration on desktop and mobile, and
@@ -127,10 +128,12 @@ when implementing or reviewing a change.
   Saved resources remain summaries; selections are edited in a modal.
 - **Source:** 2026-10-18 — user requested improving the Cloudflare flow and reducing
   input as much as possible after reviewing Cloudflare's account-selection consent.
-- **Exceptions:** Provider consent and one-time operator OAuth client registration
-  remain necessary. Manual API-token configuration remains an explicit fallback.
-  Discovery does not grant access to every returned resource: allowed domains
-  require an explicit selection, and no domains means Pages-only access.
+- **Source update:** 2026-10-18 — direct API tokens replace the OAuth prerequisite.
+  Discover account/domain names with the saved token where permissions allow.
+- **Exceptions:** Restricted tokens without account-list permission may use explicit
+  account and zone IDs through a manual editor. Discovery does not grant access
+  to every returned resource: allowed domains require an explicit selection, and
+  no domains means Pages-only access.
 
 ### Model providers are reused across services
 

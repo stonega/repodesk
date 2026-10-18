@@ -24,7 +24,9 @@ import {
   row,
 } from "./client.ts";
 import {
+  type CloudflareResources,
   cloudflareAction,
+  cloudflareDiscovery,
   cloudflareHasCredentials,
   cloudflareQuery,
   cloudflareSave,
@@ -32,6 +34,10 @@ import {
   emptyCloudflare,
 } from "./config.ts";
 import { CloudflareOAuth, cloudflareClientSecretAAD } from "./oauth.ts";
+import {
+  listCloudflareResources,
+  selectedCloudflareResources,
+} from "./resources.ts";
 
 const payloadSchema = z
   .object({
@@ -122,11 +128,76 @@ export class CloudflareService {
       oauth: await this.oauth.view(w),
     };
   }
+  private async tokenResources(
+    admin: Admin,
+    id: string,
+    revision: number,
+    sessionHash?: string,
+  ) {
+    const guard = async () => {
+      const w = await this.store.read(id);
+      authority(admin, w);
+      requireThat(
+        (w.plugins?.revision ?? 0) === revision,
+        "version_conflict",
+        409,
+      );
+      const current = await this.store.pool.query(
+        sessionHash
+          ? "SELECT 1 FROM admins a JOIN sessions s ON a.id=s.admin_id WHERE a.id=$1 AND a.operator=true AND s.token_hash=$2 AND s.expires_at>now()"
+          : "SELECT 1 FROM admins WHERE id=$1 AND operator=true",
+        sessionHash ? [admin.id, sessionHash] : [admin.id],
+      );
+      requireThat(current.rowCount, "access_denied", 403);
+      requireThat(
+        w.plugins?.cloudflare?.settings.authMethod !== "oauth" &&
+          w.plugins?.cloudflare?.credential,
+        "cloudflare_token_required",
+        409,
+      );
+      return w;
+    };
+    const w = await guard();
+    return {
+      token: decrypt(
+        this.key,
+        this.aad(id),
+        w.plugins?.cloudflare?.credential as string,
+      ),
+      guard: async () => {
+        await guard();
+      },
+    };
+  }
+  async resources(
+    admin: Admin,
+    id: string,
+    sessionHash: string,
+    value: unknown,
+  ) {
+    operator(admin);
+    const input = cloudflareDiscovery.parse(value);
+    const access = await this.tokenResources(
+      admin,
+      id,
+      input.revision,
+      sessionHash,
+    );
+    return listCloudflareResources(
+      this.client,
+      access.token,
+      input.resource,
+      input.page,
+      access.guard,
+      input.resource === "zones" ? input.accountId : undefined,
+    );
+  }
   async save(
     admin: Admin,
     id: string,
     value: unknown,
     fallback: PluginRecord[] = [],
+    sessionHash?: string,
   ) {
     operator(admin);
     const input = cloudflareSave.parse(value);
@@ -148,29 +219,52 @@ export class CloudflareService {
         input.settings.zoneIds.some(
           (id) => !prior.resources?.zones.some((zone) => zone.id === id),
         ));
-    const resources = selecting
-      ? await this.oauth.selectResources(
-          admin,
-          id,
-          input.revision,
-          input.settings.accountId,
-          input.settings.zoneIds,
-        )
-      : prior?.resources?.account?.id === input.settings.accountId
-        ? {
-            account: prior.resources.account,
-            zones: prior.resources.zones.filter((zone) =>
-              input.settings.zoneIds.includes(zone.id),
-            ),
-          }
+    const access =
+      input.verifyResources && input.settings.authMethod !== "oauth"
+        ? await this.tokenResources(admin, id, input.revision, sessionHash)
         : undefined;
-    await this.store.change(id, (w) => {
+    if (access)
+      requireThat(
+        !input.apiToken && !input.removeToken && input.settings.accountId,
+        "cloudflare_token_required",
+        409,
+      );
+    let resources: CloudflareResources | undefined;
+    if (
+      !input.apiToken &&
+      !input.removeToken &&
+      prior?.resources?.account?.id === input.settings.accountId
+    )
+      resources = {
+        account: prior.resources.account,
+        zones: prior.resources.zones.filter((zone) =>
+          input.settings.zoneIds.includes(zone.id),
+        ),
+      };
+    if (access)
+      resources = await selectedCloudflareResources(
+        this.client,
+        access.token,
+        input.settings.accountId,
+        input.settings.zoneIds,
+        access.guard,
+      );
+    else if (selecting)
+      resources = await this.oauth.selectResources(
+        admin,
+        id,
+        input.revision,
+        input.settings.accountId,
+        input.settings.zoneIds,
+      );
+    await this.store.change(id, async (w) => {
       authority(admin, w);
       requireThat(
         (w.plugins?.revision ?? 0) === input.revision,
         "version_conflict",
         409,
       );
+      if (access) await access.guard();
       requireThat(this.key, "cloudflare_credentials_unavailable", 503);
       const credential = input.removeToken
         ? undefined
@@ -178,6 +272,12 @@ export class CloudflareService {
           ? encrypt(this.key, this.aad(id), input.apiToken)
           : w.plugins?.cloudflare?.credential;
       let oauth = structuredClone(w.plugins?.cloudflare?.oauth);
+      // Switching explicitly to a token clears local OAuth tokens and pending consent.
+      if (
+        input.settings.authMethod !== "oauth" &&
+        (input.apiToken || input.removeToken)
+      )
+        oauth = undefined;
       requireThat(
         !oauth?.connection || input.settings.authMethod === "oauth",
         "cloudflare_disconnect_before_client_change",

@@ -189,7 +189,12 @@ export class PluginService {
     requireThat(this.cloudflare, "cloudflare_credentials_unavailable", 503);
     return this.cloudflare.view(admin, workspaceId);
   }
-  async saveCloudflare(admin: Admin, workspaceId: string, value: unknown) {
+  async saveCloudflare(
+    admin: Admin,
+    workspaceId: string,
+    value: unknown,
+    sessionHash?: string,
+  ) {
     requireThat(this.cloudflare, "cloudflare_credentials_unavailable", 503);
     await this.cloudflare.view(admin, workspaceId);
     const workspace = await this.store.read(workspaceId);
@@ -198,6 +203,7 @@ export class PluginService {
       workspaceId,
       value,
       await this.entries(workspace),
+      sessionHash,
     );
   }
   async saveCodeTruth(admin: Admin, workspaceId: string, value: unknown) {

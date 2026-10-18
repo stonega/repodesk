@@ -1,40 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "react-router";
 import type {
   CloudflarePage,
   CloudflareSettings,
 } from "../src/cloudflare/config.ts";
-import { CloudflareOAuth } from "./cloudflare-oauth.tsx";
+import { cloudflareError } from "./cloudflare-errors.ts";
 import { CloudflareResourceEditor } from "./cloudflare-resources.tsx";
+import { CloudflareTokenEditor } from "./cloudflare-token.tsx";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
-import { Select } from "./select.tsx";
 import { Skeleton } from "./skeleton.tsx";
 import { ErrorToast, useToast } from "./toast.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
-function explain(cause: unknown) {
-  const code = (cause as Error).message;
-  if (code.includes("version_conflict"))
-    return "Cloudflare settings changed in another session. Close the editor and reload saved settings before trying again.";
-  const messages: Record<string, string> = {
-    cloudflare_disconnect_before_client_change:
-      "Disconnect Cloudflare before changing its client, scopes or authentication method.",
-    cloudflare_token_and_account_required:
-      "Enter an account ID and API token before enabling Cloudflare.",
-    cloudflare_credentials_unavailable:
-      "Cloudflare credential storage is unavailable. Check the API and worker configuration.",
-    extension_tool_collision:
-      "A file plugin already uses a Cloudflare tool name. Update its grants first.",
-    invalid_request:
-      "Check the 32-character account and zone IDs, unique zones, and API token.",
-    access_denied:
-      "Only this workspace’s deployment operator can configure Cloudflare.",
-  };
-  return messages[code] ?? code;
-}
-
 export function Cloudflare({
   request,
   workspaceId,
@@ -49,17 +27,15 @@ export function Cloudflare({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [editor, setEditor] = useState<CloudflareSettings>();
-  const [chooseAccount, setChooseAccount] = useState(false);
+  const [editor, setEditor] = useState<"token" | "resources">();
   const notify = useToast();
-  const [params, setParams] = useSearchParams();
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
       setData(await request<CloudflarePage>(endpoint));
     } catch (cause) {
-      setError(explain(cause));
+      setError(cloudflareError(cause));
     } finally {
       setLoading(false);
     }
@@ -67,29 +43,11 @@ export function Cloudflare({
   useEffect(() => {
     void load();
   }, [load]);
-  useEffect(() => {
-    const result = params.get("cloudflare");
-    if (!result) return;
-    if (result === "connected") {
-      notify("Cloudflare connected.");
-      setChooseAccount(true);
-    } else
-      setError(
-        "Cloudflare authorization was cancelled, expired or failed. Check the saved client, account and permissions, then reconnect.",
-      );
-    const next = new URLSearchParams(params);
-    next.delete("cloudflare");
-    setParams(next, { replace: true });
-  }, [params, setParams, notify]);
-  useEffect(() => {
-    if (!chooseAccount || !data) return;
-    if (!data.settings.accountId) setEditor(data.settings);
-    setChooseAccount(false);
-  }, [chooseAccount, data]);
   async function save(
     settings: CloudflareSettings,
     token?: string,
     removeToken?: boolean,
+    verifyResources?: boolean,
   ) {
     if (!data || busy) return;
     setBusy(true);
@@ -99,18 +57,18 @@ export function Cloudflare({
         settings,
         ...(token ? { apiToken: token } : {}),
         ...(removeToken ? { removeToken } : {}),
+        ...(verifyResources ? { verifyResources } : {}),
       });
       setData(result);
-      setEditor(undefined);
+      setEditor(token && !removeToken ? "resources" : undefined);
       setError("");
       notify("Cloudflare settings saved.");
-    } catch (cause) {
-      setError(explain(cause));
-      throw cause;
     } finally {
       setBusy(false);
     }
   }
+  const tokenReady =
+    data?.tokenConfigured && data.settings.authMethod !== "oauth";
   const pending = error ? "—" : <Skeleton width="10rem" />;
   return (
     <section className="plugin-detail" aria-label="Cloudflare plugin">
@@ -122,34 +80,16 @@ export function Cloudflare({
           disabled={busy || loading || !data}
           onChange={(enabled) => {
             if (!data) return;
-            if (
-              enabled &&
-              data.settings.authMethod === "oauth" &&
-              !["connected", "refreshing"].includes(data.oauth?.status ?? "")
-            ) {
-              setError(
-                "Complete OAuth setup and select Connect Cloudflare to enable this plugin.",
-              );
+            if (enabled && !tokenReady) {
+              setEditor("token");
               return;
             }
-            if (
-              enabled &&
-              data.settings.authMethod === "oauth" &&
-              !data.settings.accountId
-            ) {
-              setEditor(data.settings);
-              return;
-            }
-            if (
-              enabled &&
-              data.settings.authMethod !== "oauth" &&
-              (!data.tokenConfigured || !data.settings.accountId)
-            ) {
-              setEditor({ ...data.settings, enabled });
+            if (enabled && !data.settings.accountId) {
+              setEditor("resources");
               return;
             }
             void save({ ...data.settings, enabled }).catch((cause) =>
-              setError(explain(cause)),
+              setError(cloudflareError(cause)),
             );
           }}
         />
@@ -166,19 +106,47 @@ export function Cloudflare({
           </button>
         </ErrorToast>
       )}
-      {(!data || data.settings.authMethod === "oauth") && (
-        <CloudflareOAuth
-          request={request}
-          endpoint={endpoint}
-          data={data}
-          busy={busy}
-          setBusy={setBusy}
-          saved={setData}
-          reload={() => void load()}
-        />
-      )}
       <section
-        className="card"
+        className="card cloudflare-summary-card"
+        aria-label="Cloudflare authorization"
+        aria-busy={loading || busy}
+      >
+        <div className="plugin-card-heading coding-card-heading">
+          <div>
+            <h2>API token</h2>
+            <p className="muted">Scoped access to your Cloudflare resources</p>
+          </div>
+          <IconButton
+            icon="edit"
+            label="Edit Cloudflare API token"
+            showLabel
+            disabled={!data || busy || loading}
+            onClick={() => setEditor("token")}
+          />
+        </div>
+        <dl className="plugin-summary">
+          <div>
+            <dt>API token</dt>
+            <dd>
+              {data ? (tokenReady ? "Configured" : "Not configured") : pending}
+            </dd>
+          </div>
+        </dl>
+        {data && !tokenReady && (
+          <p className="muted">
+            Add a scoped API token in Edit to get started. No OAuth client
+            registration is required.
+          </p>
+        )}
+        {data?.settings.authMethod === "oauth" && (
+          <p className="notice">
+            This workspace has a legacy OAuth connection. Add an API token to
+            switch.
+          </p>
+        )}
+      </section>
+      <section
+        className="card cloudflare-summary-card"
         aria-label="Cloudflare configuration"
         aria-busy={loading || busy}
       >
@@ -191,57 +159,25 @@ export function Cloudflare({
             icon="edit"
             label="Edit Cloudflare configuration"
             showLabel
-            disabled={!data || busy || loading}
-            onClick={() => {
-              if (data) setEditor(data.settings);
-            }}
+            disabled={!data || busy || loading || !tokenReady}
+            onClick={() => setEditor("resources")}
           />
         </div>
         <dl className="plugin-summary">
           <div>
-            <dt>
-              {data?.settings.authMethod === "oauth" ? "Account" : "Account ID"}
-            </dt>
+            <dt>Account</dt>
             <dd>
               {data
                 ? data.resources?.account?.name ||
                   data.settings.accountId ||
-                  (["connected", "refreshing"].includes(
-                    data.oauth?.status ?? "",
-                  )
+                  (tokenReady
                     ? "Choose an account in Edit"
-                    : "Connect Cloudflare to discover accounts")
+                    : "Add an API token first")
                 : pending}
             </dd>
           </div>
           <div>
-            <dt>Authentication</dt>
-            <dd>
-              {data
-                ? data.settings.authMethod === "oauth"
-                  ? "Cloudflare authorization"
-                  : "API token"
-                : pending}
-            </dd>
-          </div>
-          {data?.settings.authMethod !== "oauth" && (
-            <div>
-              <dt>API token</dt>
-              <dd>
-                {data
-                  ? data.tokenConfigured
-                    ? "Configured"
-                    : "Not configured"
-                  : pending}
-              </dd>
-            </div>
-          )}
-          <div>
-            <dt>
-              {data?.settings.authMethod === "oauth"
-                ? "Allowed domains"
-                : "Allowed zone IDs"}
-            </dt>
+            <dt>Allowed domains</dt>
             <dd>
               {data
                 ? data.settings.zoneIds.length
@@ -251,26 +187,21 @@ export function Cloudflare({
                           ?.name || id}
                       </div>
                     ))
-                  : data.settings.authMethod === "oauth"
+                  : data.settings.accountId
                     ? "Pages only"
-                    : "No zones selected"
+                    : "No domains selected"
                 : pending}
             </dd>
           </div>
         </dl>
-        {data &&
-          !data.tokenConfigured &&
-          data.settings.authMethod !== "oauth" && (
-            <p className="muted">
-              Add a scoped API token in Edit to get started. Saving does not
-              verify the token’s permissions.
-            </p>
-          )}
       </section>
-      <section className="card" aria-label="Cloudflare capabilities">
+      <section
+        className="card cloudflare-summary-card"
+        aria-label="Cloudflare capabilities"
+      >
         <h2>Queries and actions</h2>
         <p>
-          Ask in a private Telegram conversation to inspect selected zones and
+          Ask in a private Telegram conversation to inspect selected domains and
           DNS records, or Pages projects and deployments in the configured
           account.
         </p>
@@ -280,22 +211,28 @@ export function Cloudflare({
           before execution.
         </p>
         <p className="muted">
-          Grant Zone Read, DNS Read, and Account Pages Read permissions as
-          needed. DNS changes require DNS Edit; cache purges require Cache
-          Purge. Token resource restrictions should match this account and the
-          selected zones.
+          Grant Zone Read, DNS Read and Cloudflare Pages Read as needed. DNS
+          changes require DNS Edit; cache purges require Cache Purge. Token
+          resource restrictions should match this account and the selected
+          domains.
         </p>
         <p className="muted">
           Workers, deployment creation and secret management are not included.
         </p>
       </section>
-      {editor && data && (
-        <CloudflareEditor
-          initial={editor}
+      {editor === "token" && data && (
+        <CloudflareTokenEditor
+          data={data}
+          busy={busy}
+          close={() => setEditor(undefined)}
+          save={save}
+        />
+      )}
+      {editor === "resources" && data && (
+        <ResourceEditor
           data={data}
           request={request}
           endpoint={endpoint}
-          tokenConfigured={data.tokenConfigured}
           busy={busy}
           close={() => setEditor(undefined)}
           save={save}
@@ -304,186 +241,139 @@ export function Cloudflare({
     </section>
   );
 }
-
-function CloudflareEditor({
-  initial,
+function ResourceEditor({
   data,
   request,
   endpoint,
-  tokenConfigured,
   busy,
   close,
   save,
 }: {
-  initial: CloudflareSettings;
   data: CloudflarePage;
   request: Request;
   endpoint: string;
-  tokenConfigured: boolean;
   busy: boolean;
   close: () => void;
   save: (
     settings: CloudflareSettings,
     token?: string,
     removeToken?: boolean,
+    verifyResources?: boolean,
   ) => Promise<void>;
 }) {
-  const [draft, setDraft] = useState(initial);
-  const [zones, setZones] = useState(initial.zoneIds.join("\n"));
-  const [token, setToken] = useState("");
-  const [removeToken, setRemoveToken] = useState(false);
-  const [error, setError] = useState("");
-  if (
-    initial.authMethod === "oauth" &&
-    ["connected", "refreshing"].includes(data.oauth?.status ?? "")
-  )
-    return (
-      <Modal title="Edit Cloudflare configuration" onClose={close} busy={busy}>
+  const [manual, setManual] = useState(false);
+  return (
+    <Modal title="Edit Cloudflare configuration" onClose={close} busy={busy}>
+      <p className="muted">
+        {manual
+          ? "Use IDs from the Cloudflare dashboard when your token cannot discover accounts. Permissions are checked when a tool uses the token."
+          : "Choose the resources this workspace can use. Account discovery needs User Memberships Read and account verification needs Account Settings Read."}
+      </p>
+      <button
+        className="secondary"
+        type="button"
+        disabled={busy}
+        onClick={() => setManual(!manual)}
+      >
+        {manual ? "Choose by name" : "Enter IDs manually"}
+      </button>
+      {manual ? (
+        <ManualResourceEditor
+          data={data}
+          busy={busy}
+          save={(settings) => save(settings)}
+        />
+      ) : (
         <CloudflareResourceEditor
           data={data}
           request={request}
           endpoint={endpoint}
           busy={busy}
-          save={save}
+          save={(settings) => save(settings, undefined, false, true)}
         />
-      </Modal>
-    );
+      )}
+    </Modal>
+  );
+}
+function ManualResourceEditor({
+  data,
+  busy,
+  save,
+}: {
+  data: CloudflarePage;
+  busy: boolean;
+  save: (settings: CloudflareSettings) => Promise<void>;
+}) {
+  const [account, setAccount] = useState(data.settings.accountId);
+  const [zones, setZones] = useState(data.settings.zoneIds.join("\n"));
+  const [error, setError] = useState("");
   return (
-    <Modal title="Edit Cloudflare configuration" onClose={close} busy={busy}>
+    <form
+      onSubmit={async (event) => {
+        event.preventDefault();
+        if (busy) return;
+        const zoneIds = zones
+          .split(/[\s,]+/)
+          .filter(Boolean)
+          .map((id) => id.toLowerCase());
+        if (
+          zoneIds.length > 20 ||
+          zoneIds.some((id) => !/^[a-f0-9]{32}$/.test(id)) ||
+          new Set(zoneIds).size !== zoneIds.length
+        ) {
+          setError(
+            "Enter up to 20 unique zone IDs, each with 32 hexadecimal characters.",
+          );
+          return;
+        }
+        setError("");
+        try {
+          await save({
+            ...data.settings,
+            authMethod: "api_token",
+            accountId: account.toLowerCase(),
+            zoneIds,
+            enabled: data.settings.enabled || !data.settings.accountId,
+          });
+        } catch (cause) {
+          setError(cloudflareError(cause));
+        }
+      }}
+    >
       {error && (
         <p className="notice" role="alert">
           {error}
         </p>
       )}
-      <form
-        onSubmit={async (event) => {
-          event.preventDefault();
-          const settings = {
-            ...draft,
-            accountId: draft.accountId.trim().toLowerCase(),
-            zoneIds: zones
-              .split(/[\s,]+/)
-              .filter(Boolean)
-              .map((s) => s.toLowerCase()),
-          };
-          if (
-            settings.zoneIds.length > 20 ||
-            settings.zoneIds.some((s) => !/^[a-f0-9]{32}$/.test(s)) ||
-            new Set(settings.zoneIds).size !== settings.zoneIds.length
-          ) {
-            setError(
-              "Enter up to 20 unique zone IDs, each with 32 hexadecimal characters.",
-            );
-            return;
-          }
-          setError("");
-          try {
-            await save(settings, token.trim() || undefined, removeToken);
-          } catch (cause) {
-            setError(explain(cause));
-          }
-        }}
-      >
-        <label className="field" htmlFor="cloudflare-auth-method">
-          <span>Authentication</span>
-          <Select
-            id="cloudflare-auth-method"
-            aria-label="Authentication"
-            value={draft.authMethod ?? "api_token"}
-            onChange={(e) =>
-              setDraft({
-                ...draft,
-                authMethod: e.target.value as "oauth" | "api_token",
-                enabled: false,
-              })
-            }
-          >
-            <option value="oauth">Cloudflare authorization</option>
-            <option value="api_token">API token</option>
-          </Select>
-        </label>
-        {draft.authMethod === "oauth" && (
-          <p className="muted">
-            Connect Cloudflare to discover your account and domains
-            automatically. Choose your account on Cloudflare’s consent screen.
-            No IDs to copy.
-          </p>
-        )}
-        {draft.authMethod !== "oauth" && (
-          <>
-            <label className="field">
-              <span>Account ID</span>
-              <input
-                value={draft.accountId}
-                required={draft.enabled}
-                pattern="[a-fA-F0-9]{32}"
-                maxLength={32}
-                onChange={(e) =>
-                  setDraft({ ...draft, accountId: e.target.value })
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Allowed zone IDs</span>
-              <textarea
-                aria-label="Allowed zone IDs"
-                aria-describedby="cloudflare-zones-help"
-                rows={4}
-                value={zones}
-                onChange={(e) => setZones(e.target.value)}
-              />
-              <small className="muted" id="cloudflare-zones-help">
-                One zone ID per line, up to 20. Leave empty to use Pages queries
-                only. Find IDs in your Cloudflare dashboard.
-              </small>
-            </label>
-          </>
-        )}
-        {draft.authMethod !== "oauth" && (
-          <>
-            <label className="field">
-              <span>{tokenConfigured ? "Replace API token" : "API token"}</span>
-              <input
-                type="password"
-                aria-label={tokenConfigured ? "Replace API token" : "API token"}
-                aria-describedby="cloudflare-token-help"
-                autoComplete="new-password"
-                value={token}
-                disabled={removeToken}
-                required={draft.enabled && !tokenConfigured}
-                pattern="[A-Za-z0-9_-]{20,256}"
-                maxLength={256}
-                onChange={(e) => setToken(e.target.value)}
-              />
-              <small className="muted" id="cloudflare-token-help">
-                {tokenConfigured ? "Leave blank to keep the saved token. " : ""}
-                The token is encrypted and is never displayed after saving.
-              </small>
-            </label>
-            {tokenConfigured && (
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={removeToken}
-                  onChange={(e) => {
-                    setRemoveToken(e.target.checked);
-                    if (e.target.checked) {
-                      setDraft({ ...draft, enabled: false });
-                      setToken("");
-                    }
-                  }}
-                />
-                Remove saved token and disable Cloudflare
-              </label>
-            )}
-          </>
-        )}
-        <ModalActions>
-          <button type="submit" disabled={busy}>
-            {busy ? "Saving…" : "Save"}
-          </button>
-        </ModalActions>
-      </form>
-    </Modal>
+      <label className="field">
+        <span>Account ID</span>
+        <input
+          required
+          pattern="[a-fA-F0-9]{32}"
+          maxLength={32}
+          value={account}
+          disabled={busy}
+          onChange={(event) => setAccount(event.target.value)}
+        />
+      </label>
+      <label className="field">
+        <span>Allowed zone IDs</span>
+        <textarea
+          aria-label="Allowed zone IDs"
+          rows={4}
+          value={zones}
+          disabled={busy}
+          onChange={(event) => setZones(event.target.value)}
+        />
+        <small className="muted">
+          One zone ID per line, up to 20. Leave empty for Pages only.
+        </small>
+      </label>
+      <ModalActions>
+        <button type="submit" disabled={busy}>
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </ModalActions>
+    </form>
   );
 }

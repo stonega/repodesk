@@ -1,5 +1,36 @@
 # Implementation evidence
 
+## Cloudflare direct API token setup (2026-10-18)
+
+New Cloudflare settings default to API tokens. The panel replaces OAuth client
+setup with a write-only token modal and a separate resource-selection modal.
+Saving a token opens account/domain selection; a sole account is selected in the
+draft, domains remain explicit and Pages-only access needs no domain selection.
+Existing summaries remain readable values. Token replacement clears cached names
+and pauses the plugin; removal disables it. Restricted tokens can enter IDs
+manually without claiming verified provider permissions.
+
+The token-backed inventory endpoint enforces the current operator, workspace,
+session, Origin, CSRF and plugin revision before and after provider reads. Named
+selection saves verify the account and each domain's account association before
+persisting names. Discovery grants no tool scope. Local OAuth credentials and
+pending consent are cleared only when explicitly replaced with a token; legacy
+backend OAuth behavior remains compatible, and late callbacks cannot restore a
+replaced connection. Old remote authorizations must be revoked in Cloudflare.
+
+UI preferences, the implementation/user guides and runnable token requests are
+updated. The isolated Cloudflare snapshot passed Biome (one existing unused-import
+warning in development tests), strict TypeScript, production build, the Node runtime
+contract and **919 deterministic tests across 104 files** with disposable PostgreSQL.
+An earlier shared-tree run passed **930 tests across 105 files**. All **18 browser
+scenarios** passed at 1280px/390px in the isolated snapshot, including saved
+display, both editors, loading/empty, pending, error/recovery, manual IDs and legacy
+replacement. Light/dark screenshots were inspected, and card edge spacing has
+browser assertions. No package, migration or environment variable was added.
+Live token permissions remain an acceptance step; no Cloudflare account was
+connected, provider mutation sent, Telegram/model call made or deployment run.
+See [setup and compatibility](cloudflare.md).
+
 ## Free-form scheduled tasks with optional skills (2026-10-18)
 
 Telegram and admin workflow proposals now accept free-form tasks without a
@@ -349,7 +380,8 @@ Cloudflare/model/Telegram calls or deployment were performed. See
 
 ### Cloudflare browser authorization (2026-10-17)
 
-New Cloudflare connections default to browser OAuth; existing API token connections
+Historical behavior, superseded by the direct-token panel above. New Cloudflare
+connections originally defaulted to browser OAuth; existing API token connections
 retain their authentication method. Operators register a Cloudflare client once,
 then save its write-only secret, client ID and API scopes in the shared Authorization
 editor. Connect uses Authorization Code, S256 PKCE and session/workspace/revision-bound
@@ -372,7 +404,7 @@ reconnect and disconnect states were visually inspected, including dark theme.
 Biome, strict TypeScript, production build and Node runtime contract passed. No
 package, migration or environment variable was added. No live account connection,
 Cloudflare API mutation, Telegram send or deployment was performed. See the
-[registration and connection guide](cloudflare.md#browser-authorization).
+[existing-connection compatibility notes](cloudflare.md#existing-oauth-connections).
 
 ## Codex task conversation (2026-10-17)
 

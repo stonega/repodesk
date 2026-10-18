@@ -705,6 +705,24 @@ export function adminRoutes(
     ),
   );
   app.post(
+    "/api/admin/workspaces/:id/plugins/cloudflare/resources",
+    async (c) => {
+      requireThat(
+        plugins.cloudflare,
+        "cloudflare_credentials_unavailable",
+        503,
+      );
+      return c.json(
+        await plugins.cloudflare.resources(
+          c.get("session").admin,
+          validId(c.req.param("id")),
+          hash(sessionCookieValue(c) ?? ""),
+          await c.req.json(),
+        ),
+      );
+    },
+  );
+  app.post(
     "/api/admin/workspaces/:id/plugins/cloudflare/oauth/resources",
     async (c) => {
       requireThat(
@@ -809,6 +827,7 @@ export function adminRoutes(
         c.get("session").admin,
         validId(c.req.param("id")),
         await c.req.json(),
+        hash(sessionCookieValue(c) ?? ""),
       ),
     ),
   );

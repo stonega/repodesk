@@ -5,7 +5,7 @@ import type {
   CloudflareResourcePage,
   CloudflareSettings,
 } from "../src/cloudflare/config.ts";
-import { cloudflareOAuthError } from "./cloudflare-oauth.tsx";
+import { cloudflareError } from "./cloudflare-errors.ts";
 import { ModalActions } from "./modal.tsx";
 import { Select } from "./select.tsx";
 import { Skeleton } from "./skeleton.tsx";
@@ -46,15 +46,11 @@ export function CloudflareResourceEditor({
     let cancelled = false;
     setAccountsLoading(true);
     setAccountError("");
-    void request<CloudflareResourcePage>(
-      `${endpoint}/oauth/resources`,
-      "POST",
-      {
-        revision: data.revision,
-        resource: "accounts",
-        page: accountQuery.page,
-      },
-    )
+    void request<CloudflareResourcePage>(`${endpoint}/resources`, "POST", {
+      revision: data.revision,
+      resource: "accounts",
+      page: accountQuery.page,
+    })
       .then((result) => {
         if (cancelled) return;
         setAccounts((old) =>
@@ -70,7 +66,7 @@ export function CloudflareResourceEditor({
           setAccountId((current) => current || result.items[0]?.id || "");
       })
       .catch((cause) => {
-        if (!cancelled) setAccountError(cloudflareOAuthError(cause));
+        if (!cancelled) setAccountError(cloudflareError(cause));
       })
       .finally(() => {
         if (!cancelled) setAccountsLoading(false);
@@ -84,23 +80,19 @@ export function CloudflareResourceEditor({
     let cancelled = false;
     setZonesLoading(true);
     setZoneError("");
-    void request<CloudflareResourcePage>(
-      `${endpoint}/oauth/resources`,
-      "POST",
-      {
-        revision: data.revision,
-        resource: "zones",
-        accountId,
-        page: zoneQuery.page,
-      },
-    )
+    void request<CloudflareResourcePage>(`${endpoint}/resources`, "POST", {
+      revision: data.revision,
+      resource: "zones",
+      accountId,
+      page: zoneQuery.page,
+    })
       .then((result) => {
         if (cancelled) return;
         setZones((old) => merge(zoneQuery.page === 1 ? [] : old, result.items));
         setMoreZones(result.hasMore);
       })
       .catch((cause) => {
-        if (!cancelled) setZoneError(cloudflareOAuthError(cause));
+        if (!cancelled) setZoneError(cloudflareError(cause));
       })
       .finally(() => {
         if (!cancelled) setZonesLoading(false);
@@ -130,12 +122,13 @@ export function CloudflareResourceEditor({
         try {
           await save({
             ...data.settings,
+            authMethod: "api_token",
             accountId,
             zoneIds: selected,
             enabled: data.settings.enabled || !data.settings.accountId,
           });
         } catch (cause) {
-          setError(cloudflareOAuthError(cause));
+          setError(cloudflareError(cause));
         }
       }}
     >
@@ -187,7 +180,8 @@ export function CloudflareResourceEditor({
         )}
         {!accountsLoading && !accountError && !accounts.length && (
           <p className="muted">
-            No authorized accounts. Reconnect Cloudflare and grant Account Read.
+            No accounts are available. Check the token’s account restrictions
+            and User Memberships Read permission, or enter IDs manually.
           </p>
         )}
         {moreAccounts && (
