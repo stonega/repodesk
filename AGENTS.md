@@ -69,6 +69,10 @@ style.
   at desktop and mobile widths. Inspect affected display/editor, loading/empty,
   pending and error states where applicable. Passing lint, types, builds or save
   tests does not establish UI-rule compliance.
+- When moving, removing or conditionally hiding content, recheck the entire
+  affected container for leftover margins, gaps and empty wrappers. Verify its
+  first and last visible content against the intended padding; see
+  [card spacing](docs/design/ui-rules.md#content-layout-owns-card-spacing).
 - Add focused browser regression coverage for changed interaction contracts and
   reported failures. Assert the required user behavior, including separation of
   display and editing when relevant, rather than merely validating the existing

@@ -759,10 +759,12 @@ p {
   padding: 16px 18px;
 }
 .access-link-details {
+  display: grid;
+  gap: 8px;
   min-width: 0;
 }
-.access-link-heading {
-  margin-bottom: 4px;
+.access-link-details > * {
+  margin: 0;
 }
 .access-link-heading h3 {
   display: inline;
@@ -796,7 +798,6 @@ p {
   }
 }
 .access-link-url {
-  margin: 0;
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   overflow-wrap: anywhere;
 }

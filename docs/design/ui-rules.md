@@ -17,6 +17,7 @@ when implementing or reviewing a change.
 | Plugin detail layout | [Shared plugin layout](#plugin-details-share-card-layouts-and-a-title-switch), [Codex sections](#codex-details-show-configuration-and-tasks-separately) |
 | Integration setup input | [Discover resource identifiers](#connections-discover-resource-identifiers) |
 | Code Truth setup | [URL and description](#code-truth-repositories-use-a-url-and-description) |
+| Card spacing after content changes | [Content layout owns card spacing](#content-layout-owns-card-spacing) |
 | Repository display | [Shared repository cards](#repository-cards-share-one-style), [member GitHub details](#member-github-columns-show-only-a-view-button), [connected repositories](#connected-github-repositories-stay-compact-and-directly-accessible) |
 | Action labels and controls | [Card action placement](#card-actions-stay-at-the-top-right), [Edit/New labels](#edit-and-add-buttons-use-short-labels), [shared icons](#common-action-buttons-use-reicon), [dropdown styling](#dropdown-inputs-share-the-workspace-selector-style) |
 | Dialog actions | [Cancel order](#modal-cancel-follows-the-primary-action), [close controls](#modal-close-controls-use-a-plain-x), [secondary actions](#dialog-support-actions-use-secondary-buttons) |
@@ -35,6 +36,22 @@ when implementing or reviewing a change.
 - Keep illustrative examples separate from established preferences.
 
 ## Recorded preferences
+
+### Content layout owns card spacing
+
+- **Preference:** When moving, removing or hiding a row, recheck the complete
+  card's spacing, including its first and last visible content. Use a container
+  gap for spacing between grouped summary rows and reset those rows' default
+  margins so their position or presence does not add space at the card edges.
+  Remove obsolete spacing rules and empty wrappers during the same change.
+- **Scope:** Admin cards and grouped summaries changed by UI layout work, at
+  desktop and mobile widths, including loading, empty, pending and error states.
+  Check rendered spacing and add focused browser coverage for reported regressions.
+- **Source:** 2026-10-18 — after the invite countdown moved into the title, the
+  user identified leftover bottom space and requested prevention of this class
+  of layout regression. Container gaps are the implementation choice.
+- **Exceptions:** Deliberately different section spacing and prose margins may
+  remain when explicitly scoped. Do not reset margins across every card globally.
 
 ### Code Truth repositories use a URL and description
 
@@ -1150,6 +1167,8 @@ when implementing or reviewing a change.
   respect reduced-motion preferences. Explain that opening it
   grants regular membership immediately and that each token works for one Telegram
   account. Keep the current link visible during refresh and offer Retry on failure.
+  Keep the card's vertical padding balanced, with no extra bottom margin after
+  its final guidance paragraph.
 - **Scope:** The shareable invite link in Members & access → Access requests.
 - **Source:** 2026-09-27 — user requested a common card and copy icon button for
   the link shown in the access-request section. 2026-09-28 — user requested a
@@ -1159,6 +1178,8 @@ when implementing or reviewing a change.
   per token, and a link that updates every 10 seconds with a countdown.
   2026-10-15 — user requested replacing “New link in 7s” with an animated circle
   after the invite card title. This placement applies to this card.
+  2026-10-18 — user requested removing the extra space below the invite card's
+  guidance text.
 - **Exceptions:** Ordinary access requests without an invite still need approval.
   The countdown controls the displayed link; copied links remain valid for 24 hours.
 

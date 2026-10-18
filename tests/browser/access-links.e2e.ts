@@ -3,6 +3,40 @@ import { AccessLinks } from "../../src/workspaces/access-links.ts";
 import { workspace } from "../fixtures.ts";
 
 const startTime = new Date("2026-10-14T12:00:00Z");
+async function expectInviteSpacing(page: Page) {
+  const spacing = await page.locator(".access-link-card").evaluate((card) => {
+    const rows = Array.from(
+      card.querySelector(".access-link-details")?.children ?? [],
+      (row) => row.getBoundingClientRect(),
+    );
+    const first = rows[0];
+    const last = rows.at(-1);
+    if (!first || !last) throw Error("Missing invite content");
+    const bounds = card.getBoundingClientRect();
+    const style = getComputedStyle(card);
+    return {
+      top: first.top - bounds.top,
+      expectedTop:
+        parseFloat(style.paddingTop) + parseFloat(style.borderTopWidth),
+      bottom: bounds.bottom - last.bottom,
+      expectedBottom:
+        parseFloat(style.paddingBottom) + parseFloat(style.borderBottomWidth),
+      gaps: rows.flatMap((row, index) => {
+        const next = rows[index + 1];
+        return next ? [next.top - row.bottom] : [];
+      }),
+    };
+  });
+  expect(spacing.top).toBeCloseTo(spacing.expectedTop, 0);
+  expect(spacing.bottom).toBeCloseTo(spacing.expectedBottom, 0);
+  const firstGap = spacing.gaps[0];
+  if (firstGap === undefined) throw Error("Missing invite rows");
+  expect(firstGap).toBeGreaterThan(0);
+  for (const gap of spacing.gaps) {
+    expect(gap).toBeCloseTo(firstGap, 0);
+  }
+}
+
 async function fixture(page: Page) {
   const w = workspace();
   const links = new AccessLinks("ab".repeat(32));
@@ -121,6 +155,7 @@ for (const width of [1280, 390]) {
     });
     const progress = timer.locator(".access-link-timer-progress");
     const link = requests.locator(".access-link-url");
+    await expectInviteSpacing(page);
     await expect(timer).toHaveText("New link in 10s");
     await expect(timer.locator("svg")).toBeVisible();
     await expect(progress).toHaveAttribute("stroke-dashoffset", "0");
@@ -184,6 +219,7 @@ for (const width of [1280, 390]) {
         "icon-spin",
       );
       await expect(link).toHaveText(first ?? "");
+      await expectInviteSpacing(page);
       await expect(
         requests.getByRole("button", { name: "Copy access link" }),
       ).toBeEnabled();
@@ -258,6 +294,7 @@ for (const width of [1280, 390]) {
     await page.clock.runFor(10_000);
     await expect(page.locator(".toast").getByRole("alert")).toBeVisible();
     await expect(timer).toHaveText("Link refresh paused.");
+    await expectInviteSpacing(page);
     await expect(timer.locator("svg")).toHaveCSS("animation-name", "none");
     await expect(link).toHaveText(first ?? "");
     await page.clock.runFor(30_000);
@@ -334,6 +371,7 @@ for (const width of [1280, 390]) {
     const link = page.locator(".access-link-url");
     await expect(timer).toHaveText("New link in 10s");
     await expect(progress).toHaveCSS("transition-duration", "0s");
+    await expectInviteSpacing(page);
     const first = await link.textContent();
     await page.clock.runFor(3000);
     await expect(timer).toHaveText("New link in 7s");
