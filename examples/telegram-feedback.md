@@ -29,7 +29,7 @@ these steps are not part of automated setup or tests.
    answer, without an extra immediate queued message.
 2. Ask for a coding change in a connected repository. Observe factual preparation, work
    and verification stages by editing the original acknowledgement, with inline
-   **Status** and **Cancel** buttons. Tap **Status** on that message; it should report the current task and confirmed
+   **Status** and **Cancel** buttons. Tap **Status** on the latest task message; it should report the current task and confirmed
    links, clear the native spinner and remain usable after ten minutes. Also test
    `/status` in the same Topic or by replying to a task message.
 3. Supply a change that needs a consequential product choice. Answer the question
@@ -82,9 +82,18 @@ these steps are not part of automated setup or tests.
     Review opens that PR's changed files; Merge opens that PR's GitHub page, where
     merge permissions and confirmation still apply. Continue the task until it
     asks a necessary question: the question and progress edit must retain the
-    same PR actions. Repeat with a blocker and a `/status` reply; an older Status
-    button must return the current PR actions. Use `/cancel` for post-publication
+   same PR actions. Repeat with a blocker and a `/status` reply. Use `/cancel` for post-publication
     cancellation and verify its receipt keeps the existing PR links.
+11. Before publication, generate two distinct Codex progress notes. After each
+    confirmed delivery, only the latest task message should show **Status/Cancel**;
+    older message text and other URL links stay intact. Editing the original
+    progress acknowledgement must not restore its controls. Repeat with two tasks
+    in one Topic; each task keeps its own latest controls. Inspect desktop/mobile.
+    In deterministic delivery fixtures, reject or delay the next send: the existing
+    controls must remain. Restart during keyboard cleanup and replay the job: only
+    the known old keyboard changes, without another message. A stale callback is
+    denied even if Telegram could not remove its keyboard. A terminal update may
+    leave no Status/Cancel buttons; PR Review/Merge links remain usable.
 
 Record the deployed image, repository, verification performed and sanitized
 task/run references. Do not put credentials, private requests, device codes or raw

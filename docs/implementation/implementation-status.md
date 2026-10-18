@@ -1,5 +1,34 @@
 # Implementation evidence
 
+## Latest-message Codex task controls (2026-10-18)
+
+Native Telegram Status/Cancel controls now remain only on the latest confirmed
+task message, independently per task, requester, bot and chat/topic. Confirming a
+new message revokes old callbacks and queues durable keyboard-only edits. An older
+routine progress edit keeps its original message order and cannot restore controls.
+Pending, failed or unknown new sends preserve the previous controls; confirmed
+terminal outcomes can remove them all. PR Review/Merge and other URL links
+retain their existing behavior.
+
+Cleanup edits target known sent message IDs and retry safely after rate limits,
+ambiguous edits or worker restart. Further updates reuse a pending cleanup and its
+retry time. A permanently uneditable old message is never replaced; its visible
+buttons may remain, but its stale callbacks are denied. Retained legacy deliveries
+are included after the next confirmed update. No dependency or SQL migration was
+added. The scoped UI preference, implementation contract and manual acceptance
+example are updated.
+
+The isolated button-fix commit passed Biome, strict TypeScript, production build,
+the host Node runtime contract and **896 deterministic tests across 101 files**
+using disposable PostgreSQL. Coverage includes legacy deliveries,
+consecutive/duplicate updates, failed/unknown sends, retry/restart recovery,
+backoff reuse, concurrent sends, older progress edits, final outcomes, preserved
+URL links, stale callbacks and audience/permission boundaries. Earlier shared-tree
+validation passed 919 tests across 104 files with concurrent routing/transcript
+and Mini App work present; those independent changes are excluded from this commit.
+Native Telegram desktop/mobile rendering and deployment remain unverified;
+no live Telegram messages were sent.
+
 ## Telegram work-buddy personality (2026-10-18)
 
 The assistant now loads [SOUL.md](../../src/agent/SOUL.md) into its private,

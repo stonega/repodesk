@@ -142,7 +142,10 @@ export class TelegramClient implements Telegram {
     }
     if (!body.ok) {
       // Classify only known edit failures; never persist Telegram's raw description.
-      if (method === "editMessageText" && body.error_code === 400) {
+      if (
+        (method === "editMessageText" || method === "editMessageReplyMarkup") &&
+        body.error_code === 400
+      ) {
         if (/message is not modified/i.test(body.description ?? ""))
           throw new TelegramError("telegram_message_not_modified", "permanent");
         if (

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { TelegramClient } from "../../src/telegram/client.ts";
 
-test("Telegram edit errors expose only safe classifications, scoped to editMessageText", async () => {
+test("Telegram text and keyboard edits expose safe error classifications without changing send errors", async () => {
   for (const [description, code] of [
     ["Bad Request: message is not modified", "telegram_message_not_modified"],
     ["Bad Request: message to edit not found", "telegram_message_uneditable"],
@@ -17,13 +17,16 @@ test("Telegram edit errors expose only safe classifications, scoped to editMessa
         error_code: 400,
         description,
       })) as unknown as typeof fetch);
-    await expect(
-      client.call("editMessageText", {
-        chat_id: "101",
-        message_id: 1,
-        text: "Working",
-      }),
-    ).rejects.toMatchObject({ code, disposition: "permanent" });
+    for (const method of ["editMessageText", "editMessageReplyMarkup"])
+      await expect(
+        client.call(method, {
+          chat_id: "101",
+          message_id: 1,
+          ...(method === "editMessageText"
+            ? { text: "Working" }
+            : { reply_markup: { inline_keyboard: [] } }),
+        }),
+      ).rejects.toMatchObject({ code, disposition: "permanent" });
     await expect(
       client.call("sendMessage", { chat_id: "101", text: "Working" }),
     ).rejects.toMatchObject({

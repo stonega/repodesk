@@ -427,6 +427,10 @@ export interface Delivery {
   progressMessage?: { owner: "development"; id: string };
   editOf?: string;
   editUnavailable?: boolean;
+  /** Stable order of a confirmed task message; text edits keep its place. */
+  taskMessageSequence?: number;
+  sentButtons?: Delivery["buttons"];
+  taskControlsCleanup?: { taskId: string; messageId: number };
   botId?: string;
   cancellationRunId?: string;
   feedback?: {

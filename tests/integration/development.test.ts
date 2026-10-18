@@ -36,7 +36,12 @@ import {
 import { migrate } from "../../src/db/migrate.ts";
 import { database, transaction } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
-import { Fault, type Source } from "../../src/domain.ts";
+import {
+  type Delivery,
+  Fault,
+  type Source,
+  type Workspace,
+} from "../../src/domain.ts";
 import { GitHubApp } from "../../src/github/app.ts";
 import { GitHubApps } from "../../src/github/registry.ts";
 import { DeliveryWorker } from "../../src/jobs/delivery.ts";
@@ -2143,6 +2148,490 @@ const url = process.env.TEST_DATABASE_URL;
       },
     };
   }
+  // A fixture URL proves cleanup preserves unrelated delivered links.
+  function withTaskDetails(w: Workspace, id: string) {
+    const d = present(w.deliveries.find((d) => d.id === id));
+    d.buttons = [
+      ...(d.buttons ?? []),
+      [{ text: "Task details", url: "https://example.com/task" }],
+    ];
+    return id;
+  }
+  async function keyboardFixture() {
+    const f = await fixture();
+    type Keyboard = NonNullable<Delivery["buttons"]>;
+    const messages = new Map<number, { text: string; buttons: Keyboard }>();
+    const calls: { method: string; params: Record<string, unknown> }[] = [];
+    let nextMessage = 800;
+    let failure:
+      | { method: string; error: TelegramError; applied?: boolean }
+      | undefined;
+    let onCall: ((method: string) => Promise<void>) | undefined;
+    const setup = {
+      client: async () => ({
+        call: async (method: string, params: Record<string, unknown>) => {
+          calls.push({ method, params: structuredClone(params) });
+          await onCall?.(method);
+          const fault = failure?.method === method ? failure : undefined;
+          if (fault) failure = undefined;
+          if (fault && !fault.applied) throw fault.error;
+          const buttons = structuredClone(
+            (params.reply_markup as { inline_keyboard?: Keyboard } | undefined)
+              ?.inline_keyboard ?? [],
+          );
+          let messageId: number;
+          if (method === "sendMessage") {
+            messageId = ++nextMessage;
+            messages.set(messageId, { text: String(params.text), buttons });
+          } else {
+            messageId = Number(params.message_id);
+            const message = messages.get(messageId);
+            if (!message)
+              throw new TelegramError(
+                "telegram_message_uneditable",
+                "permanent",
+              );
+            if (
+              method === "editMessageReplyMarkup" &&
+              JSON.stringify(message.buttons) === JSON.stringify(buttons)
+            )
+              throw new TelegramError(
+                "telegram_message_not_modified",
+                "permanent",
+              );
+            if (method === "editMessageText")
+              message.text = String(params.text);
+            message.buttons = buttons;
+          }
+          if (fault) throw fault.error;
+          return { message_id: messageId };
+        },
+      }),
+    } as unknown as SetupService;
+    const worker = () => new DeliveryWorker(store, setup);
+    const acknowledgement = present(
+      (await store.read(f.w.id)).deliveries.at(-1),
+    );
+    await store.change(f.w.id, (w) => withTaskDetails(w, acknowledgement.id));
+    await worker().send(f.w.id, acknowledgement.id);
+    await store.change(f.w.id, async (_w, sql) => {
+      const task = await taskGet(sql, f.w.id, f.task.id);
+      task.state = "working";
+      await taskSave(sql, task);
+    });
+    const note = async (text: string) =>
+      store.change(f.w.id, async (w, sql) =>
+        withTaskDetails(
+          w,
+          present(
+            notifyDevelopment(
+              w,
+              await taskGet(sql, w.id, f.task.id),
+              text,
+              `conversation:progress:${randomUUID()}`,
+            ),
+          ),
+        ),
+      );
+    const cleanups = async () =>
+      (await store.read(f.w.id)).deliveries.filter(
+        (d) => d.taskControlsCleanup && d.state === "pending",
+      );
+    const drain = async () => {
+      for (const cleanup of await cleanups())
+        await worker().send(f.w.id, cleanup.id);
+    };
+    const controls = (taskId = f.task.id) =>
+      [...messages].filter(([, message]) =>
+        message.buttons
+          .flat()
+          .some(
+            (button) =>
+              button.callback_data === `tds:${taskId}` ||
+              button.callback_data === `tdc:${taskId}`,
+          ),
+      );
+    return {
+      ...f,
+      setup,
+      worker,
+      messages,
+      calls,
+      acknowledgement,
+      note,
+      cleanups,
+      drain,
+      controls,
+      fail: (method: string, error: TelegramError, applied = false) => {
+        failure = { method, error, applied };
+      },
+      onCall: (callback?: (method: string) => Promise<void>) => {
+        onCall = callback;
+      },
+    };
+  }
+  test("only the latest confirmed task message keeps Status/Cancel; queued updates and duplicate sends do not move controls", async () => {
+    for (const legacy of [false, true]) {
+      const f = await keyboardFixture();
+      if (legacy)
+        await store.change(f.w.id, (w) => {
+          const d = present(
+            w.deliveries.find((d) => d.id === f.acknowledgement.id),
+          );
+          delete d.taskMessageSequence;
+          delete d.sentButtons;
+        });
+      const originalText = present(f.messages.get(801)).text;
+      const first = await f.note("Implementation is ready for checks.");
+      const second = await f.note("Browser checks are running.");
+      expect(f.controls().map(([id]) => id)).toEqual([801]);
+      for (const [id, remote] of [
+        [first, 802],
+        [second, 803],
+      ] as const) {
+        await f.worker().send(f.w.id, id);
+        await f.worker().send(f.w.id, id);
+        await f.drain();
+        expect(f.controls().map(([id]) => id)).toEqual([remote]);
+      }
+      expect(f.messages.get(801)?.text).toBe(originalText);
+      expect(
+        f.messages
+          .get(801)
+          ?.buttons.flat()
+          .map((b) => b.text),
+      ).toEqual(["Task details"]);
+      expect(
+        f.calls.filter((call) => call.method === "sendMessage"),
+      ).toHaveLength(3);
+      for (const call of f.calls.filter(
+        (call) => call.method === "editMessageReplyMarkup",
+      )) {
+        expect(call.params.text).toBeUndefined();
+        expect(call.params).toEqual({
+          chat_id: "101",
+          message_id: expect.any(Number),
+          reply_markup: expect.any(Object),
+        });
+      }
+      await expect(
+        store.change(f.w.id, (w, sql) =>
+          selectTaskControl(
+            sql,
+            w,
+            {
+              update_id: 9800,
+              callback_query: {
+                id: "old-controls",
+                from: { id: 101, is_bot: false },
+                data: `tdc:${f.task.id}`,
+                message: {
+                  message_id: 801,
+                  date: 1,
+                  chat: { id: 101, type: "private" },
+                  message_thread_id: 3,
+                },
+              },
+            },
+            "999",
+          ),
+        ),
+      ).rejects.toThrow("access_denied");
+      expect((await f.read()).cancelRequested).toBe(false);
+    }
+  });
+  test("failed and unknown new sends preserve the previous confirmed controls and are not blindly resent", async () => {
+    for (const unknown of [false, true]) {
+      const f = await keyboardFixture();
+      const id = await f.note("Checking the implementation.");
+      f.fail(
+        "sendMessage",
+        new TelegramError(
+          unknown
+            ? "telegram_outcome_unknown"
+            : "telegram_destination_rejected",
+          unknown ? "unknown" : "permanent",
+        ),
+        unknown,
+      );
+      await f.worker().send(f.w.id, id);
+      await f.worker().send(f.w.id, id);
+      expect(
+        f.messages
+          .get(801)
+          ?.buttons.flat()
+          .some((b) => b.text === "Cancel"),
+      ).toBe(true);
+      expect(await f.cleanups()).toHaveLength(0);
+      expect(f.calls.filter((c) => c.method === "sendMessage")).toHaveLength(2);
+    }
+  });
+  test("keyboard removal retries the known message after rate limits, ambiguous edits and a worker restart without duplicate replies", async () => {
+    const f = await keyboardFixture();
+    await f.worker().send(f.w.id, await f.note("Running the final checks."));
+    const cleanup = present((await f.cleanups())[0]);
+    f.fail(
+      "editMessageReplyMarkup",
+      new TelegramError("telegram_rate_limited", "retry", 30),
+    );
+    await f.worker().send(f.w.id, cleanup.id);
+    expect(f.controls()).toHaveLength(2);
+    expect((await f.cleanups())[0]?.nextAt).toBeDefined();
+    await store.change(f.w.id, (w) => {
+      present(w.deliveries.find((d) => d.id === cleanup.id)).nextAt = undefined;
+    });
+    f.fail(
+      "editMessageReplyMarkup",
+      new TelegramError("telegram_outcome_unknown", "unknown"),
+      true,
+    );
+    await f.worker().send(f.w.id, cleanup.id);
+    expect(f.controls().map(([id]) => id)).toEqual([802]);
+    await store.change(f.w.id, (w) => {
+      const d = present(w.deliveries.find((d) => d.id === cleanup.id));
+      d.state = "sending";
+      d.startedAt = "2000-01-01T00:00:00Z";
+      d.nextAt = undefined;
+    });
+    await f.worker().send(f.w.id, cleanup.id);
+    await f.worker().send(f.w.id, cleanup.id);
+    expect(
+      (await store.read(f.w.id)).deliveries.find((d) => d.id === cleanup.id)
+        ?.state,
+    ).toBe("sent");
+    expect(f.calls.filter((c) => c.method === "sendMessage")).toHaveLength(2);
+    expect(
+      f.calls.filter((c) => c.method === "editMessageReplyMarkup"),
+    ).toHaveLength(3);
+  });
+  test("editing an earlier progress message cannot restore controls after a newer Codex update", async () => {
+    const f = await keyboardFixture();
+    await f
+      .worker()
+      .send(
+        f.w.id,
+        await f.note(
+          "All documents were checked; browser verification is next.",
+        ),
+      );
+    await f.drain();
+    const progress = await store.change(f.w.id, async (w, sql) => {
+      const task = await taskGet(sql, w.id, f.task.id);
+      recordProgress(w, task, "development", "check", "1", Date.now() + 10000);
+      await taskSave(sql, task);
+      return present(w.deliveries.at(-1)).id;
+    });
+    await f.worker().send(f.w.id, progress);
+    await f.drain();
+    expect(f.controls().map(([id]) => id)).toEqual([802]);
+    expect(
+      f.messages
+        .get(801)
+        ?.buttons.flat()
+        .map((b) => b.text),
+    ).toEqual([]);
+    expect(f.calls.filter((c) => c.method === "sendMessage")).toHaveLength(2);
+    expect(f.calls.at(-1)?.method).toBe("editMessageText");
+  });
+  test("later updates reuse a throttled keyboard cleanup without bypassing its retry time", async () => {
+    const f = await keyboardFixture();
+    await f.worker().send(f.w.id, await f.note("Implementation is ready."));
+    const cleanup = present((await f.cleanups())[0]);
+    f.fail(
+      "editMessageReplyMarkup",
+      new TelegramError("telegram_rate_limited", "retry", 30),
+    );
+    await f.worker().send(f.w.id, cleanup.id);
+    const nextAt = present((await f.cleanups())[0]?.nextAt);
+    await f.worker().send(f.w.id, await f.note("The checks passed."));
+    const oldCleanups = (await f.cleanups()).filter((d) => d.remoteId === 801);
+    expect(oldCleanups).toHaveLength(1);
+    expect(oldCleanups[0]?.id).toBe(cleanup.id);
+    expect(oldCleanups[0]?.nextAt).toBe(nextAt);
+    await f.drain();
+    expect(
+      f.calls.filter(
+        (c) =>
+          c.method === "editMessageReplyMarkup" && c.params.message_id === 801,
+      ),
+    ).toHaveLength(1);
+    await store.change(f.w.id, (w) => {
+      present(w.deliveries.find((d) => d.id === cleanup.id)).nextAt = undefined;
+    });
+    await f.drain();
+    expect(f.controls().map(([id]) => id)).toEqual([803]);
+  });
+  test("a confirmed stopped outcome clears controls from every earlier task message", async () => {
+    const f = await keyboardFixture();
+    await f.worker().send(f.w.id, await f.note("The checks are running."));
+    await f.drain();
+    const stopped = await store.change(f.w.id, async (w, sql) => {
+      const task = await taskGet(sql, w.id, f.task.id);
+      task.cancelRequested = true;
+      task.state = "cancelled";
+      await taskSave(sql, task);
+      return withTaskDetails(
+        w,
+        present(
+          notifyDevelopment(w, task, "Your task has stopped.", "cancel:latest"),
+        ),
+      );
+    });
+    await f.worker().send(f.w.id, stopped);
+    await f.drain();
+    expect(f.controls()).toHaveLength(0);
+    expect(f.messages.get(803)?.text).toBe("Your task has stopped.");
+    expect(
+      f.messages
+        .get(803)
+        ?.buttons.flat()
+        .map((b) => b.text),
+    ).toEqual(["Task details"]);
+    expect(f.calls.filter((c) => c.method === "sendMessage")).toHaveLength(3);
+  });
+  test("permanently uneditable old keyboards never create replacement messages or remain authorized", async () => {
+    const f = await keyboardFixture();
+    await f.worker().send(f.w.id, await f.note("The implementation is ready."));
+    const cleanup = present((await f.cleanups())[0]);
+    f.fail(
+      "editMessageReplyMarkup",
+      new TelegramError("telegram_message_uneditable", "permanent"),
+    );
+    await f.worker().send(f.w.id, cleanup.id);
+    await f.worker().send(f.w.id, cleanup.id);
+    expect(
+      (await store.read(f.w.id)).deliveries.find((d) => d.id === cleanup.id)
+        ?.state,
+    ).toBe("failed");
+    expect(
+      (await store.read(f.w.id)).deliveries
+        .find((d) => d.id === f.acknowledgement.id)
+        ?.buttons?.flat()
+        .some((b) => b.callback_data?.startsWith("td")),
+    ).toBe(false);
+    await f.worker().send(f.w.id, await f.note("Checks passed."));
+    expect((await f.cleanups()).some((d) => d.remoteId === 801)).toBe(false);
+    expect(f.calls.filter((c) => c.method === "sendMessage")).toHaveLength(3);
+  });
+  test("simultaneous task updates serialize and retain controls only on the latest delivered message", async () => {
+    const f = await keyboardFixture();
+    const a = await f.note("Implementation progress.");
+    const b = await f.note("Verification progress.");
+    let release = () => {};
+    let started = () => {};
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const paused = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    f.onCall(async (method) => {
+      if (method === "sendMessage") {
+        started();
+        await paused;
+      }
+    });
+    const first = f.worker().send(f.w.id, a);
+    await entered;
+    try {
+      await f.worker().send(f.w.id, b);
+      expect(
+        (await store.read(f.w.id)).deliveries.find((d) => d.id === b)?.state,
+      ).toBe("pending");
+      expect(f.controls().map(([id]) => id)).toEqual([801]);
+    } finally {
+      release();
+    }
+    await first;
+    f.onCall();
+    await f.worker().send(f.w.id, b);
+    await f.drain();
+    expect(f.controls().map(([id]) => id)).toEqual([803]);
+    expect(f.calls.filter((c) => c.method === "sendMessage")).toHaveLength(3);
+  });
+  test("different tasks retain their own controls and PR links remain on every PR message", async () => {
+    const f = await keyboardFixture();
+    const second = await store.change(f.w.id, async (w, sql) => {
+      const run = createRun(
+        w,
+        "101",
+        "Fix another page",
+        "101",
+        3,
+        "gpt-4.1-mini",
+        { replyTo: 50, botId: "999" },
+      );
+      run.status = "running";
+      const source = present(
+        w.messages.find((s) => s.runId === run.id && s.role === "user"),
+      );
+      return startDevelopment(sql, w, run.id, "101", 7001, [source.id], "999");
+    });
+    await f.worker().send(f.w.id, `development:${second.id}:started`);
+    await f.worker().send(f.w.id, await f.note("First task progress."));
+    await f.drain();
+    expect(f.controls().map(([id]) => id)).toEqual([803]);
+    expect(f.controls(second.id).map(([id]) => id)).toEqual([802]);
+    const prUrl = "https://github.com/example/workspace/pull/43";
+    await store.change(f.w.id, async (_w, sql) => {
+      const task = await taskGet(sql, f.w.id, f.task.id);
+      task.pr = {
+        number: 43,
+        url: prUrl,
+        branch: "fix",
+        headSha: "a".repeat(40),
+      };
+      await taskSave(sql, task);
+    });
+    for (const text of ["PR is ready.", "A PR follow-up is ready."]) {
+      await f.worker().send(f.w.id, await f.note(text));
+      await f.drain();
+    }
+    expect(f.controls()).toHaveLength(0);
+    expect(f.controls(second.id)).toHaveLength(1);
+    for (const id of [804, 805])
+      expect(
+        f.messages
+          .get(id)
+          ?.buttons.flat()
+          .map((b) => b.text),
+      ).toEqual(["Review", "Merge", "Task details"]);
+  });
+  test("keyboard cleanup rechecks actor, topic, bot, target message and current permissions before editing", async () => {
+    for (const boundary of [
+      "actor",
+      "topic",
+      "bot",
+      "message",
+      "revoked",
+      "repository",
+    ] as const) {
+      const f = await keyboardFixture();
+      await f.worker().send(f.w.id, await f.note("A new confirmed update."));
+      const cleanup = present((await f.cleanups())[0]);
+      await store.change(f.w.id, (w) => {
+        const d = present(w.deliveries.find((d) => d.id === cleanup.id));
+        if (boundary === "actor") d.actor = "202";
+        if (boundary === "topic") d.topicId = 4;
+        if (boundary === "bot") d.botId = "998";
+        if (boundary === "message")
+          d.taskControlsCleanup = { taskId: f.task.id, messageId: 802 };
+        if (boundary === "revoked")
+          present(w.members.find((m) => m.id === "101")).active = false;
+        if (boundary === "repository")
+          present(w.members.find((m) => m.id === "101")?.github).repositories =
+            [];
+      });
+      const before = f.calls.length;
+      await f.worker().send(f.w.id, cleanup.id);
+      expect(f.calls).toHaveLength(before);
+      expect(
+        (await store.read(f.w.id)).deliveries.find((d) => d.id === cleanup.id)
+          ?.state,
+      ).toBe("cancelled");
+    }
+  });
+
   test("accepted task, checks and repairs edit one message; a necessary question is new", async () => {
     const f = await telegramProgressFixture();
     for (const [stage, cycle] of [
@@ -2255,33 +2744,29 @@ const url = process.env.TEST_DATABASE_URL;
     expect(f.calls.at(-1)?.params.reply_markup).toEqual({
       inline_keyboard: buttons,
     });
-    await store.change(f.w.id, (w, sql) =>
-      selectTaskControl(
-        sql,
-        w,
-        {
-          update_id: 9500,
-          callback_query: {
-            id: "old-status-after-pr",
-            from: { id: 101, is_bot: false },
-            data: present(f.acknowledgement.buttons?.[0]?.[0]?.callback_data),
-            message: {
-              message_id: 901,
-              date: Math.floor(Date.now() / 1000),
-              chat: { id: 101, type: "private" },
-              message_thread_id: 3,
+    await expect(
+      store.change(f.w.id, (w, sql) =>
+        selectTaskControl(
+          sql,
+          w,
+          {
+            update_id: 9500,
+            callback_query: {
+              id: "old-status-after-pr",
+              from: { id: 101, is_bot: false },
+              data: present(f.acknowledgement.buttons?.[0]?.[0]?.callback_data),
+              message: {
+                message_id: 901,
+                date: Math.floor(Date.now() / 1000),
+                chat: { id: 101, type: "private" },
+                message_thread_id: 3,
+              },
             },
           },
-        },
-        "999",
+          "999",
+        ),
       ),
-    );
-    const status = present((await store.read(f.w.id)).deliveries.at(-1));
-    expect(status.buttons).toEqual(buttons);
-    await f.worker.send(f.w.id, status.id);
-    expect(f.calls.at(-1)?.params.reply_markup).toEqual({
-      inline_keyboard: buttons,
-    });
+    ).rejects.toThrow("access_denied");
     const msg: Message = {
       message_id: 9501,
       date: Math.floor(Date.now() / 1000),

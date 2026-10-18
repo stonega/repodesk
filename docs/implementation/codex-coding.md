@@ -103,9 +103,12 @@ Private conversations and unaddressed group messages are never imported across
 audiences. New implementation requirements reach the next completed turn boundary;
 factual questions can use the active-turn channel. A necessary Codex question checkpoints
 partial work and releases the runner slot; answers preserve their original text.
-Tap inline **Cancel** on a task notice, or send **stop**, **停止**, or `/cancel` in
-the bound conversation to stop the task. Inline **Status** and `/status` in that
-conversation report its state and confirmed PR. The admin task
+Tap inline **Cancel** on the latest task notice, or send **stop**, **停止**, or
+`/cancel` in the bound conversation to stop the task. **Status/Cancel** appear only
+on the latest confirmed task message; older messages lose these controls after
+the new one is delivered. Failed or uncertain sends keep the previous controls.
+Inline **Status** and `/status` in that conversation report its state and confirmed
+PR. Confirmed PR messages retain their Review/Merge links. The admin task
 list supports cancellation in both modes. Its solid **Stop** icon button has a
 task-specific accessible label and hover title, and opens a confirmation dialog
 showing the task and repository before sending cancellation.

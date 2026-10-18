@@ -88,8 +88,9 @@ private queue notices. The buttons target their recorded task without a selector
 or command reminder. Taps validate the sent bot/message, requester, workspace,
 chat/topic and exact stored button before applying current permissions. The task
 initiator retains cancellation after a maintainer grant is removed. Status replies
-offer Cancel only while cancellation is applicable; old task buttons return the
-current outcome. Button acknowledgements clear the native spinner silently.
+offer Cancel only while cancellation is applicable. Buttons on the latest task
+message return the current outcome; superseded buttons are revoked as described
+below. Button acknowledgements clear the native spinner silently.
 Explicit commands and native streaming Stop remain available.
 
 The later 2026-10-07 correction reuses one Telegram message for routine task
@@ -103,6 +104,23 @@ original send never triggers a replacement. Telegram's confirmed missing/unedita
 message rejection permits one replacement; an already-applied edit succeeds.
 Existing two-minute and ten-second thresholds remain notification policies.
 Local fixtures cover these paths; live Telegram acceptance remains pending.
+
+The 2026-10-18 correction keeps **Status/Cancel only on the latest confirmed
+task message**, independently per task, requester, bot and chat/topic. After a new
+message is confirmed, the same workspace transaction revokes older callbacks and
+queues durable `editMessageReplyMarkup` cleanup. Cleanup removes only those task
+controls, preserving message text, Review/Merge and other URL links.
+Editing an older routine progress message does not move controls back to it.
+Pending, rejected or unknown new sends leave the previous controls available.
+Confirmed final messages may leave no active controls.
+
+Keyboard edits retry the same known Telegram message after rate limits, uncertain
+edits or a worker restart. They never create a replacement message. A permanently
+uneditable old message may still show its stale keyboard in Telegram, but its
+callbacks remain revoked. Separate tasks retain their own controls. Legacy sent
+messages are included when the next confirmed task update is delivered; no live
+backfill or deployment is implied. Deterministic delivery fixtures cover these
+contracts; native desktop/mobile acceptance remains pending.
 
 Local verification for the message-edit correction: Biome, strict TypeScript and
 Bun build passed. All **538 deterministic tests** passed against disposable
