@@ -110,9 +110,9 @@ export function notifyDevelopment(
       buttons: prButtons ?? taskButtons("development", task.id),
     });
   const outcome: Partial<Record<DevelopmentTask["state"], string>> = {
-    waiting: "I’m waiting for your answer.",
+    waiting: "I need your input before we can continue.",
     auth_required: "Your task is paused until Codex is reconnected.",
-    review: "Your task is ready for review.",
+    review: "Ready for you to take a look.",
     failed: "I couldn’t finish this task.",
     cancelled: "Your task has stopped.",
     unknown: "The task outcome needs an administrator’s check.",
@@ -266,7 +266,7 @@ export async function startDevelopment(
   notifyDevelopment(
     w,
     task,
-    `Your request for ${payload.repository} is queued. I’ll keep you posted.`,
+    `Got it — your request for ${payload.repository} is queued. I’ll keep you posted.`,
     "started",
   );
   const acknowledgement = w.deliveries.find(

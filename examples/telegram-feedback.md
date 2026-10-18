@@ -1,5 +1,26 @@
 # Telegram feedback acceptance
 
+## Personality acceptance
+
+The maintained [SOUL.md](../src/agent/SOUL.md) is included in model prompts;
+fixed notices use conversational English. Use a dedicated pilot bot for the
+following live checks, only after the operator authorizes live messages/model use:
+
+| Situation | Check |
+| --- | --- |
+| Chinese and English conversation | Replies follow the person's language and sound like a warm colleague. “小伙伴” or “buddy” is optional, not repeated on every reply. |
+| Short factual answer | Warmth stays in the answer itself; no obligatory greeting, praise, emoji or closing question. |
+| Queued coding request | Acknowledge receipt and say it is queued; do not claim investigation or implementation has started. |
+| Repair or failure | State the actual problem and next step calmly. Never celebrate failure or promise an unconfirmed repair/retry. |
+| Approval or formal report | Preserve the exact approval facts or requested output format, using restrained wording. |
+| Desktop and mobile | Check the complete progress, waiting, failure and final messages in native Telegram. Buttons, source links and Stop retain their existing behavior. |
+
+Local coverage is in `tests/unit/soul.test.ts` and the feedback/integration suites.
+The Node runtime contract verifies the bundled Markdown loads. These checks do
+not establish live model tone or native Telegram visual acceptance.
+
+## Progress and recovery acceptance
+
 Use a dedicated staging bot, authorized test members and a test repository. Live
 messages, model spend and GitHub writes need an explicitly scoped operator session;
 these steps are not part of automated setup or tests.

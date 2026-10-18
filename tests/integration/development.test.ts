@@ -2181,7 +2181,7 @@ const url = process.env.TEST_DATABASE_URL;
     expect(f.calls.at(-1)?.method).toBe("sendMessage");
     expect(f.calls.at(-1)?.params.text).toContain("Which page");
     const closed = f.calls.find(
-      (c) => c.params.text === "I’m waiting for your answer.",
+      (c) => c.params.text === "I need your input before we can continue.",
     );
     expect(closed?.method).toBe("editMessageText");
     expect(closed?.params.reply_markup).toEqual({ inline_keyboard: [] });
@@ -2764,7 +2764,7 @@ const url = process.env.TEST_DATABASE_URL;
       (d) => d.id === `development:${f.task.id}:status:9200`,
     );
     expect(statuses).toHaveLength(1);
-    expect(statuses[0]?.text).toContain("investigating");
+    expect(statuses[0]?.text).toContain("taking a closer look at your request");
     expect(statuses[0]?.text).not.toContain("Reference:");
     expect(
       calls.filter((c) => c.method === "answerCallbackQuery"),

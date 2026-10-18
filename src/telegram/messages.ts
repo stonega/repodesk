@@ -1,22 +1,22 @@
 import type { Run } from "../domain.ts";
 
 const stages: Record<string, string> = {
-  queued: "Your task is queued.",
-  prepare: "I’m preparing the repository.",
-  setup: "I’m preparing the repository environment.",
-  intake: "I’m investigating your request.",
-  analysis: "I’m investigating your question.",
-  implement: "I’m implementing the change.",
+  queued: "Got it — your task is queued. I’ll keep you posted.",
+  prepare: "I’m getting the repository ready.",
+  setup: "I’m getting the repository environment ready.",
+  intake: "I’m taking a closer look at your request.",
+  analysis: "I’m looking into your question.",
+  implement: "I’m working on the changes.",
   check: "I’m running the checks now.",
-  repair: "A check failed, so I’m fixing it before trying again.",
+  repair: "A check caught a problem. I’m working on the fix.",
   publish: "The checks passed. I’m opening or updating your PR.",
 };
 export const stageMessage = (stage: string) =>
-  stages[stage] ?? "Your task is running.";
+  stages[stage] ?? "I’m working on your task.";
 
 const ongoingStages: Record<string, string> = {
   prepare: "I’m still getting the repository ready.",
-  setup: "The environment setup is still running.",
+  setup: "I’m still getting the environment ready.",
   intake: "I’m still looking into your request.",
   analysis: "I’m still looking into your question.",
   implement: "I’m still working on the changes.",
@@ -26,13 +26,13 @@ const ongoingStages: Record<string, string> = {
   publish: "I’m waiting for confirmation from GitHub about your PR.",
 };
 export const ongoingStageMessage = (stage: string) =>
-  ongoingStages[stage] ?? "Your task is still running. I’ll keep you posted.";
+  ongoingStages[stage] ?? "I’m still on it. I’ll keep you posted.";
 
 const failures: Record<string, string> = {
   repository_menu_expired:
     "This repository menu has expired or access changed. Send /repos to open the current choices.",
   empty_response:
-    "The model returned no answer. Try a clearer request; ask the administrator to check the model if this happens again.",
+    "I didn’t get an answer back from the model. Your administrator can check the model connection if this keeps happening.",
   incomplete_response:
     "The model did not finish its answer. Try narrowing the request; ask the administrator to inspect it if this happens again.",
   worker_shutdown:
@@ -58,7 +58,7 @@ const failures: Record<string, string> = {
   provider_outcome_unknown:
     "I couldn’t confirm the model request’s outcome. Ask the administrator to inspect the request and provider usage before retrying.",
   queue_retries_exhausted:
-    "Your request could not start after repeated queue failures. Ask the administrator to check the worker before trying again.",
+    "I couldn’t get your request started after several attempts. Your administrator can check the worker before you try again.",
   extension_configuration_invalid:
     "A required plugin could not load. Ask the administrator to check the plugin configuration.",
   extension_configuration_changed:
@@ -74,7 +74,7 @@ const failures: Record<string, string> = {
 };
 export const requestFailureMessage = (code: string) =>
   failures[code] ??
-  "I couldn’t finish this request. Ask the workspace administrator to inspect it in the panel.";
+  "I hit a snag and couldn’t finish this request. Your workspace administrator can check the details in the panel.";
 
 const runLabels: Record<Run["status"], string> = {
   queued: "Queued",

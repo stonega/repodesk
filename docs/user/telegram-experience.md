@@ -9,6 +9,23 @@ GitHub actions from Telegram. The AI helps interpret the request; repository acc
 tool grants and write approvals come from the application. See the
 [GitHub journey and capability status](../design/github-workflows.md).
 
+## Personality
+
+RepoDesk aims to feel like a warm, dependable work buddy: conversational, direct,
+and a little playful when appropriate. Model replies follow your language and
+tone; “小伙伴” or “buddy” can fit naturally without appearing in every reply.
+Failures and approvals stay clear and calm, and progress describes confirmed
+state. Task and request notices use the same conversational style in English.
+
+The maintained [SOUL.md](../../src/agent/SOUL.md) is loaded into the assistant's
+system prompt. It defines voice, examples and situational tone; application
+permissions and evidence requirements remain authoritative. Changes take effect
+when source processes restart, or after rebuilding and restarting bundled
+processes. The build includes the Markdown beside the Node entrypoints; no
+workspace setting is needed. Local tests check prompt integration and packaging;
+live model tone and native Telegram desktop/mobile rendering still need pilot
+acceptance.
+
 ## Repository picker (implemented locally)
 
 Send `/repos` to choose a repository from native inline buttons. The picker shows

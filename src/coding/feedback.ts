@@ -107,9 +107,9 @@ export function developmentStatus(task: DevelopmentTask) {
   if (task.error === "github_user_access_unavailable" && !task.cancelRequested)
     return `${task.payload.repository}: ${codingFailureMessage(task.error, task.payload)}${task.pr ? `\n${task.pr.url}` : ""}`;
   const labels: Record<DevelopmentTask["state"], string> = {
-    queued: "Your task is queued.",
+    queued: stageMessage("queued"),
     working: active(task),
-    waiting: `Waiting for your answer.\n${task.question?.text ?? "Reply with the outcome you want."}`,
+    waiting: `I need your input before we can continue.\n${task.question?.text ?? "What outcome would you like?"}`,
     auth_required: codingFailureMessage("coding_device_auth_required"),
     publishing:
       task.progress?.unavailable || task.cancelRequested
@@ -117,7 +117,7 @@ export function developmentStatus(task: DevelopmentTask) {
         : stageMessage("publish"),
     review:
       task.phase === "analysis" || task.result?.status === "analysis"
-        ? "The investigation is complete."
+        ? "I’ve finished looking into it."
         : task.pr
           ? "Your PR is ready for review."
           : "The recorded checks passed. Publication has not been requested.",

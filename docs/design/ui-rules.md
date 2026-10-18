@@ -1474,6 +1474,29 @@ Use this format for each preference:
   incomplete responses still need a short, readable explanation. Source citations
   remain supported.
 
+### Telegram feels like a warm work buddy
+
+- **Preference:** RepoDesk speaks as a dependable, approachable work partner,
+  with a little energy and personality. Match the person's language and formality;
+  “小伙伴”, “buddy” or a supplied name may fit naturally, without becoming a
+  mandatory greeting. Use occasional light humor or emoji when the mood fits.
+  Keep useful answers direct, and make fixed progress and failure notices sound
+  conversational too. Maintain the model's personality in
+  [SOUL.md](../../src/agent/SOUL.md), loaded into the assistant system prompt.
+- **Scope:** Telegram model replies in private chats, groups and scheduled
+  reports, plus application-generated task and request notices. This preference
+  changes wording, not message layout, controls, delivery timing or authorization.
+- **Source:** 2026-10-18 — user requested a livelier, friendlier personality as a
+  work partner, suggested “小伙伴” / “buddy”, then authorized implementation of
+  a dedicated soul document and its prompt integration.
+- **Exceptions:** Respect personal tone preferences and formal output formats.
+  Keep scheduled reports restrained. Failures, risks and approvals stay calm,
+  precise and actionable, without jokes or celebratory emoji. Warmth does not
+  permit unsupported progress claims or bypass permission and privacy rules.
+  Fixed notices keep their existing English language; model replies follow the
+  conversation's language. Native desktop/mobile Telegram rendering and live
+  model tone still require pilot acceptance.
+
 ### Telegram PR messages offer Review and Merge
 
 - **Preference:** Once a coding task has a confirmed PR, replace inline Status

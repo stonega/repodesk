@@ -2104,7 +2104,9 @@ suite("PostgreSQL integration (isolated database)", () => {
           error: "empty_response",
         });
         expect(saved.deliveries).toHaveLength(1);
-        expect(saved.deliveries[0]?.text).toContain("model returned no answer");
+        expect(saved.deliveries[0]?.text).toContain(
+          "didn’t get an answer back from the model",
+        );
       }
     }
   });

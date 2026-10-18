@@ -168,7 +168,7 @@ export function queuedRunFeedback(w: Workspace, now = Date.now()) {
       w,
       run.actor,
       run.chatId,
-      "Your request is still queued. I’ll let you know when it starts.",
+      "I’ve got your request. It’s still queued — I’ll let you know when it starts.",
       {
         topicId: run.topicId,
         replyTo: run.replyTo,

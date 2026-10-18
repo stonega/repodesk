@@ -52,6 +52,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Automatic storage cleanup](implementation/storage-cleanup.md) | Daily host release retention, CI post-job cleanup and safe activation |
 | [Debugging](implementation/debugging.md) | Operator-provided VPS access and missing-reply diagnosis |
 | [Telegram experience](user/telegram-experience.md) | Proposed commands, onboarding, and example conversations |
+| [Assistant personality](../src/agent/SOUL.md) | Loaded work-buddy voice, forms of address, situational tone and examples |
 
 ## Evidence vocabulary
 

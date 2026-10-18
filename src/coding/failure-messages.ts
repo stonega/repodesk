@@ -73,7 +73,7 @@ export function codingFailureMessage(
     return `Could not check out ${payload.repository}, so Codex did not start. Ask the workspace administrator to check the GitHub connection and repository branch settings, then start a new request.`;
   const text = messages[code] ?? attachmentErrors[code];
   if (!text)
-    return "I couldn’t finish this task. Ask the workspace administrator to inspect it in the panel.";
+    return "I hit a snag and couldn’t finish this task. Your workspace administrator can check the details in the panel.";
   return code === "github_user_access_unavailable" ||
     /Ask|Wait|Start|State|Request/.test(text)
     ? text

@@ -11,12 +11,16 @@ import {
   PiRunner,
   selectedModel,
 } from "../src/agent/runtime.ts";
+import { assistantSoul } from "../src/agent/soul.ts";
 import { database } from "../src/db/pool.ts";
 import { Store } from "../src/db/repositories.ts";
 import { GitHubApp } from "../src/github/app.ts";
 import { githubExtension } from "../src/github/extension.ts";
 import { GitHubMetadata } from "../src/github/metadata.ts";
 import { GitHubPullRequests } from "../src/github/pull-requests.ts";
+
+assert.ok(assistantSoul.includes("小伙伴"));
+assert.ok(assistantSoul.includes("Friendliness never grants access"));
 
 const model = selectedModel("gpt-4.1-mini");
 let calls = 0;

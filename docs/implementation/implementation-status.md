@@ -1,5 +1,32 @@
 # Implementation evidence
 
+## Telegram work-buddy personality (2026-10-18)
+
+The assistant now loads [SOUL.md](../../src/agent/SOUL.md) into its private,
+group and scheduled reply prompts. It defines a warm, dependable work partner,
+natural language matching, optional “小伙伴” / “buddy” forms of address and
+sparse humor/emoji. Failures, risks, approvals and formal reports use a calmer
+tone. The base policy permits friendly phrasing while retaining concise answers,
+evidence requirements, approvals and private/group boundaries.
+
+Fixed queue, investigation, implementation, repair, waiting and generic failure
+notices use conversational wording. Confirmed-state routing, controls,
+deduplication and delivery timing retain their existing contracts. The Markdown
+is copied beside bundled Node entrypoints and loaded using the module URL;
+source processes load it directly. Restart source processes, or rebuild and
+restart bundles, after editing it. No dependency, setting or migration was added.
+
+The UI preference, user guide and runnable pilot acceptance examples are updated.
+Validation passed Biome, strict TypeScript, production build, **887 deterministic
+tests across 101 files** in the shared working tree, the host Node runtime
+contract and the Node 24 runtime
+contract in the built application image with networking disabled. Compose config
+also validates. Coverage includes prompt integration, factual notices, safe
+failure guidance and the existing delivery/permission/cancellation contracts.
+Live model tone and native Telegram desktop/mobile display, including waiting,
+failure and final states, remain unverified. No live model call, Telegram send,
+account connection or deployment was performed.
+
 ## Code Truth repository descriptions and automatic IDs (2026-10-18)
 
 Code Truth repository modals now ask only for the GitHub URL and an optional
