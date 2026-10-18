@@ -10,10 +10,11 @@ staging deployment remain release gates; no account is connected by installation
 
 ## Start here
 
+- [User documentation](docs/user/README.md) · [Get started](docs/user/get-started.md)
 - [Main GitHub journey and capability status](docs/design/github-workflows.md)
 - [Setup and Docker](docs/implementation/setup.md)
 - [Implementation evidence and limits](docs/implementation/implementation-status.md)
-- [Telegram commands and admin guide](docs/user/telegram-experience.md)
+- [Telegram usage guide](docs/user/telegram-experience.md) · [Command reference](docs/user/commands.md)
 - [Architecture](docs/design/architecture.md)
 - [LLM plugins / Pi extensions](docs/design/llm-extensions.md)
 - [Release and recovery runbook](docs/implementation/release-runbook.md)

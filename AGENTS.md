@@ -17,7 +17,9 @@ from design proposals.
 - `docs/research/`: dated, source-linked research and unresolved claims.
 - `docs/reference/`: platform constraints and source references.
 - `docs/implementation/`: setup and delivery plan.
-- `docs/user/`: proposed user journeys, labeled until implemented.
+- `docs/user/`: standalone user-facing guides for deployment, administration and usage.
+  Keep internal links within this directory for publication as a documentation site.
+  Document current behavior, not design proposals or implementation evidence.
 - `scripts/`: repeatable local automation.
 - `examples/`: runnable requests and sample workflows.
 - `postmortem/`: incident analysis when incidents occur.

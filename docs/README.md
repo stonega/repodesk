@@ -1,5 +1,15 @@
 # Product documentation
 
+## User documentation
+
+Start with the [user documentation](user/README.md) for deployment and everyday use,
+or follow [Get started](user/get-started.md) for a first Docker installation.
+The self-contained `user/` directory contains the user-facing documentation for
+publication as a separate documentation site. Its guides cover current behavior;
+design proposals, research and implementation evidence remain in the sections below.
+
+## Product and engineering documentation
+
 Research baseline: **2026-09-18**; Every Agent public launch follow-up: **2026-10-07**.
 Product name: **RepoDesk**.
 
@@ -52,7 +62,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Self-hosted Actions runner](implementation/self-hosted-runner.md) | VPS runner installation, separate CI Docker daemon, registration and operations |
 | [Automatic storage cleanup](implementation/storage-cleanup.md) | Daily host release retention, CI post-job cleanup and safe activation |
 | [Debugging](implementation/debugging.md) | Operator-provided VPS access and missing-reply diagnosis |
-| [Telegram experience](user/telegram-experience.md) | Proposed commands, onboarding, and example conversations |
+| [User documentation](user/README.md) | Deployment, configuration, Telegram, GitHub integrations, administration and troubleshooting |
 | [Assistant personality](../src/agent/SOUL.md) | Loaded work-buddy voice, forms of address, situational tone and examples |
 
 ## Evidence vocabulary

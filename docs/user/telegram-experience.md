@@ -1,378 +1,77 @@
-# Telegram experience
+# Telegram 使用指南
 
-Implemented local pilot interface. A working deployment requires the operator to
-finish the web setup for a dedicated Telegram bot. Activation happens automatically
-after successful model setup once its receiver and enabled published skill are ready. No public bot is shipped.
+在私聊中直接描述问题；在群里使用命令、@提及或回复机器人。管理员负责部署和连接服务，普通成员可以从加入工作区开始。
 
-RepoDesk's main use is asking about selected GitHub repositories and reviewing
-GitHub actions from Telegram. The AI helps interpret the request; repository access,
-tool grants and write approvals come from the application. See the
-[GitHub journey and capability status](../design/github-workflows.md).
+## 第一次使用
 
-## Personality
+1. 获取管理员的邀请链接，打开后发送 Start；或点击 **Request access** 等待审批。
+2. 发送 `/help` 查看帮助。
+3. 加入多个工作区时，用 `/workspace <工作区 UUID>` 选择本次使用的工作区。
+4. 发送问题，例如“帮我整理一下这段需求”，或在已连接 GitHub 后查询仓库。
 
-RepoDesk aims to feel like a warm, dependable work buddy: conversational, direct,
-and a little playful when appropriate. Model replies follow your language and
-tone; “小伙伴” or “buddy” can fit naturally without appearing in every reply.
-Failures and approvals stay clear and calm, and progress describes confirmed
-state. Task and request notices use the same conversational style in English.
+如果收到设置未完成的提示，联系管理员检查激活状态；成员加入不会自动启用机器人。
 
-The maintained [SOUL.md](../../src/agent/SOUL.md) is loaded into the assistant's
-system prompt. It defines voice, examples and situational tone; application
-permissions and evidence requirements remain authoritative. Changes take effect
-when source processes restart, or after rebuilding and restarting bundled
-processes. The build includes the Markdown beside the Node entrypoints; no
-workspace setting is needed. Local tests check prompt integration and packaging;
-live model tone and native Telegram desktop/mobile rendering still need pilot
-acceptance.
+## 私聊与 Topic
 
-## Repository picker (implemented locally)
+使用 Telegram 原生 Topic 整理不同讨论。同一 Topic 内直接发消息即可继续，无需每次 Reply；不同 Topic 有独立的默认上下文，回复和预览保留在原 Topic。
 
-Send `/repos` to choose a repository from native inline buttons. The picker shows
-up to ten active, workspace-selected repositories you can access. Your recently
-mentioned repositories and recent selections come first, followed by the latest
-saved GitHub push time (or update time when push time is unavailable). Archived
-and disabled repositories are excluded. GitHub activity metadata refreshes through
-the existing admin repository refresh; the command does not make a live GitHub call.
+Topic 之外，单独发消息开始新对话；使用 Telegram **Reply** 回复保留的用户消息或机器人回答来继续。回复旧消息会继续该对话的最新状态，不会回滚到当时。来源已过期或不可用时，会开始新对话并说明。
 
-Use `/repos <name>` to search by owner/repository name beyond the first ten. A
-checkmark and **Selected** label show the current repository; **Clear selection**
-removes it. Each menu is valid for fifteen minutes and one selection. Open `/repos`
-again if a menu expires or repository access changes.
+你可以问“我们之前讨论的登录方案是什么？”来查询自己在当前工作区保留的私聊历史。群组请求无法读取这些私聊。长对话会整理和压缩上下文；需要准确原文时，可明确要求查找原始讨论。
 
-Selection belongs to your current workspace, bot, chat and topic. Subsequent
-assistant requests use it as the default repository when you do not name one;
-explicit repository references take precedence. Other people and topics keep
-their own selections. Selection expires with workspace retention and does not
-approve GitHub writes, bypass maintainer policy or retarget an existing coding task.
-In linked groups, only public repositories appear; use private chat for private
-repositories. Native desktop/mobile rendering still requires a live Telegram check.
-See [the runnable picker journey](../../examples/telegram-repositories.md).
+## 选择仓库
 
-## Repository reports, team skills and handoffs
+发送 `/repos`，点击仓库按钮；超过前十项时用 `/repos 仓库名` 搜索。选中项有标记，**Clear selection** 清除默认仓库。
 
-Locally implemented on 2026-10-07. In private chat, ask for current PR/issue status
-with links, or request a daily repository report with a time and timezone. Review
-its repository sources and audience before approving. Private repository group
-reports require a workspace admin; ad-hoc private reads stay in private chat.
+选择仅作用于你在当前工作区、机器人、聊天和 Topic 中的请求。消息中明确命名的仓库优先，其他成员和 Topic 不受影响。选择不会改动已有任务的目标，也不代表批准写入。
 
-After a successful assistant conversation, ask to save the procedure as a team
-skill. Review the sanitized instructions, then approve a disabled admin-visible
-draft. An admin publishes and enables it through Skills. Published procedures have
-their own lifecycle; unpublished drafts depend on retained source conversations.
+群组选择器只显示公共仓库，私有仓库的交互查询使用私聊。仓库不在列表时，核对 [GitHub 连接和权限](github.md)。
 
-Ask “昨天做到哪里了，哪些任务等我回答或审核？” for a personal work brief.
-In groups, briefs stay in the current topic. Results use recorded tasks, questions,
-verification and discussion notes, with PR links when available; they do not merge
-PRs or change tasks. See [examples and pilot checks](../../examples/team-workflows.md).
+## 可直接尝试的请求
 
-## Get started
-
-The operator first creates the local admin and workspace, saves the chat model,
-and configures the bot. Webhook deployments explicitly register the receiver in
-Site domain; polling deployments connect through the worker. Processing activates
-automatically once the receiver and an enabled published skill are ready. Approve
-users in Members & access before they can use the bot. Personal Telegram owner
-linking is optional and available through Operations. Setup can resume before
-those credentials exist.
-
-Send `/start` privately. Use `/timezone Asia/Taipei` (substitute your zone) to confirm
-workspace time. `/workspace <workspace UUID>` selects an enrolled workspace. People
-without workspace eligibility receive access-help only; ask an admin to enroll your
-numeric Telegram ID as an active member.
-
-For a group, get `/linktoken` privately, then copy the complete `/link TOKEN` command
-shown as inline code in the reply and send it in the intended group
-within ten minutes. Both workspace-admin and Telegram-admin authority are required.
-One group may be linked per workspace. Anonymous admin identities cannot link it.
-
-The default source scope is directed messages. For whole-group recaps, an admin must
-verify bot visibility and explicitly enable `/capture on`. This includes received
-messages from group participants who are not workspace members. All group participants can
-see group replies. Telegram old history is unavailable.
-
-## Private conversations
-
-Use Telegram's native Topics to organize private conversations. Just send messages
-inside a topic to continue it; no Reply is needed, including while the bot is still
-thinking. Different topics have separate default context. Replying inside a topic
-keeps that topic's conversation, even when quoting another topic. Every answer and
-streamed preview stays in the topic where you asked.
-
-Outside Topics, a standalone message starts a new conversation. Use Telegram Reply
-on a retained answer or your own message to continue it. Replying to an older answer
-continues the latest conversation; it does not rewind it. Unavailable reply anchors
-start a new conversation with an explanation.
-
-Ask about an earlier conversation when you want the assistant to search your retained
-private history. It can search only your threads in the selected workspace; private
-history is unavailable in group requests. `/workspace` changes the workspace used
-for both topic context and searches. Switching back resumes that workspace's retained
-topic conversation. `/help` and other control commands do not start LLM conversations.
-Inside a Topic you can naturally change subjects and return to earlier discussions.
-Short follow-ups refer to the recent discussion. Replies lead with the answer,
-without unsolicited context explanations, extra suggestions or closing questions.
-The assistant uses reasonable low-risk assumptions and asks only when essential
-information is missing; required action approvals still apply. It can organize discussion summaries, decisions and todos in the
-background and retrieve retained originals when needed. Long conversations are
-compressed in batches; you stay in the same Topic. Summarization uses the same run
-budget and may take extra time on the turn that triggers it. Memory remains subject
-to retention and model accuracy.
-
-See [examples](../../examples/private-threads.md).
-
-## Commands
-
-| Command | Implemented behavior |
+| 目标 | 示例 |
 | --- | --- |
-| `/start`, `/help` | Workspace onboarding, limitations and commands |
-| `/timezone <IANA zone>` | Admin timezone confirmation |
-| `/workspace <UUID>` | Select an enrolled workspace privately |
-| `/repos [name]` | Choose a repository from up to ten inline choices, or search connected names |
-| `/github`, `/github connect` | Connect your GitHub account in private chat; `/github sync` refreshes grants and `/github disconnect` removes the link |
-| `/linktoken`, `/link TOKEN` | Expiring one-use group linking |
-| `/capture on` / `/capture off` | Admin consent to received group-message collection |
-| `/ask <request>` | Bounded Pi request; `/ask@botname` works in groups |
-| `@botname <request>` | Ask via a mention in a linked group, when Telegram delivers it |
-| `/recap` | Recap permitted messages with coverage and source references |
-| Reply to the bot | Stay in the current Topic; outside Topics, continue the replied-to private thread; in groups, join that retained public discussion in the same chat/topic |
-| `/correct once <text>` | Reply to a delivered run to correct one new output |
-| `/correct save <text>` | Reply to a workflow output to propose a persistent correction |
-| `/status [reference]` | Readable status for the replied-to or active request/task in this chat/topic; choose a target when several are available |
-| `/cancel [reference]` | Stop the replied-to or active request/task; choose a target when several are available |
-| `/automations` | List visible workflows; use `run`, `pause`, `resume` or `delete` plus UUID |
-| `/remember <text>` | Propose personal memory privately or workspace memory in a group |
-| `/memory`, `/memory edit <UUID> <text>`, `/memory forget <UUID>` | List, propose replacement, forget instructions |
-| `/usage` | Recorded charges/reservations and workspace cap |
-| `/settings` | Current timezone, retention, membership access and version |
-| `/privacy` | Collection, retention and removal explanation |
-| `/privacy delete` | Private admin request for confirmed workspace removal |
+| 查看仓库进展 | “列出 example/app 当前未合并的 PR，附上负责人和链接。” |
+| 对比 PR | “比较 example/app 的 PR #12 和 #15 的实现及审查意见。” |
+| 查代码 | “example/app 在哪里校验登录状态？给出文件位置。”（需要 Code Truth） |
+| 创建 Issue | “在 example/app 创建登录超时问题的 Issue，复现步骤是……” |
+| 实现修改 | “在 example/app 修复登录错误提示，并补上检查。”（需要 Codex 和 GitHub 写权限） |
+| 查看交接 | “昨天做到哪里了，哪些任务等我回答或审核？” |
+| 定期报告 | “每天 09:00 Asia/Taipei 发一份 example/app 的 PR 报告。” |
 
-Photos, supported image documents, UTF-8 text/code files and selectable-text PDFs
-are accepted. Unsupported file input receives readable feedback when addressed to
-the bot; see [attachment input](../implementation/telegram-attachments.md).
-Commands addressed to other bots, bot-authored requests and unrelated group messages are ignored.
-Message edits update context and do not launch another request.
+明确仓库、期望结果和限制条件，有助于减少必要澄清。查询或解释请求不会授权修改；需要确认的操作会展示具体目标和内容。
 
-For example, send `@agent_bub_bot hi` using your bot's actual username. Mentions
-follow the same workspace access checks as `/ask`. Telegram privacy mode can prevent
-plain mentions from reaching the bot; use `/ask@agent_bub_bot hi` or reply to a bot
-message in that case. Receiving broader group traffic requires the bot to be an
-administrator or have privacy mode disabled; retaining unrelated messages still
-requires explicit `/capture on` consent.
+## 图片与附件
 
-After an explicitly addressed group request receives its answer, clear short
-follow-ups such as “再详细点” or “换成英文” can continue without @ or Reply for up to
-five minutes, provided Telegram delivers ordinary messages. Each member continues
-their own discussion; another member speaking does not take it over. Replying to a
-bot answer can join that shared discussion. A reply or mention directed at someone
-else closes automatic attention; an explicit ask can resume it later. Unclear
-addressees and unrelated messages receive no automatic reply. Plain follow-ups while
-an answer is pending or after `/recap` require an explicit ask/reply instead.
+可发送图片、UTF-8 文本/代码文件和带可选取文字的 PDF。图片可以没有说明；发起开发任务时仍应在文字中说明希望完成的修改。
 
-Group conversations support internal summaries, decisions, todos and long-history
-compression. They never bring in private chat history. Temporary follow-up candidates
-are cleared when ignored or rejected; unrelated traffic is retained only with the
-existing collection consent. See [group examples](../../examples/group-conversations.md).
+| 输入 | 限制 |
+| --- | --- |
+| JPEG、PNG、GIF、WebP 图片 | 单张最多 5 MiB；聊天模型需支持图片 |
+| UTF-8 文本和代码文件 | 单个最多 256 KiB，提取文字最多 32,000 字符 |
+| 未加密、可选取文字的 PDF | 最多 5 MiB、40 页、32,000 个提取字符 |
+| 一次请求涉及的附件 | 最多四个，下载总量最多 10 MiB，当前输入优先 |
 
-Model replies render Markdown bold, italic, strikethrough, headings, links and code
-using Telegram message entities. Lists remain readable text; unsupported markup and
-raw HTML remain literal. System notices stay plain text. Formatting applies to new
-replies; messages already delivered are not edited or resent.
+扫描 PDF 可将相关页面作为图片发送。语音、音频、视频、压缩包和 Office 文档不支持解析。超限文件不会静默截断，按提示缩小范围后重发。相册图片作为独立消息处理，不会自动合并成一个请求。
 
-## A recurring recap
+群内附件需要在说明文字中使用命令或 @提及，或直接回复机器人。无需把 API Key、Bot Token 等凭据发给机器人。
 
-Ask: “Propose a weekly recap every Friday at 17:00 Asia/Taipei, covering the previous
-seven days in this group. Put blockers first.” The model can propose only supported
-daily/weekly recurrence. Ambiguous times need clarification.
+## 查看进度和停止
 
-Review the proposal's owner, source/destination, topic, format, timezone, budget and
-next three instants. The owner-bound Approve/Reject buttons expire after 15 minutes.
-Another user cannot approve it, and repeat clicks do not activate it twice. You can
-also create, inspect, edit and approve a versioned proposal in the web panel.
+普通私聊执行时显示原生 **Thinking…** 预览，生成过程中逐步更新，最终回复可能与预览不同。短回复可能直接完成；群组和定时输出只显示最终答案。
 
-Reply to a scheduled output with `/correct save Use bullet lists and put blockers
-first`. Review and approve the persistent instruction. Future runs use that correction;
-already-running work retains its starting snapshot. `/correct once` creates only a
-single corrected output.
+- `/status`：查看当前聊天或 Topic 的请求，多个候选时选择。回复具体任务消息发送此命令，可帮助定位。
+- 原生 **Stop**：停止对应私聊生成；已经转交给 Codex 时也会停止关联任务。
+- `/cancel`：停止当前或所选请求/任务；也可用任务消息上的 **Cancel**。
 
-Pause under Workflows or with `/automations pause <UUID>`. Owner revocation and skill
-disablement suspend dependent work. Reapproval is required after suspension. Late
-occurrences over five minutes skip without a burst of catch-up messages.
+“Stopping…” 表示已记录停止请求，等待确认结束。已发消息、PR 和正在进行的外部写入可能无法撤回。结果不确定时先检查目标服务。
 
-## Rich and streaming replies
+Codex 的补充需求、持续对话和 **View conversation** 详见 [Codex 开发任务](codex.md)。任务按钮使用最新消息，旧按钮可能已失效。
 
-Model answers use native rich messages: headings, lists and checkboxes, compact
-tables, quotes, code blocks, bold/italic text and safe links. Group and scheduled
-answers use the same formatting. If Telegram rejects rich delivery, the bot falls
-back to a text reply. Media uploads and math rendering are not enabled.
+## 确认操作
 
-Requests do not produce a separate “Queued” reply. In a private conversation,
-Telegram's native “Thinking…” placeholder appears when execution starts, then the
-reply appears progressively while the model writes. This also applies to one-off
-corrections. Use `/status` to inspect requests still waiting for execution.
-The preview is provisional: it may change between tool calls, and Telegram expires
-it after 30 seconds without updates. The completed answer contains no automatic coverage or run-ID footer. Context handling stays silent unless asked about; a specific unknown is stated
-briefly only when needed for an accurate answer. Diagnostic details stay in the panel. Short answers may finish before multiple preview updates are visible.
-Groups and scheduled outputs receive only the final reply.
+Issue、PR 合并/关闭、定时任务和持久指令等会显示 **Approve / Reject**。核对目标、完整内容、接收位置和时区后确认。通常只有请求本人可以确认，提案在 15 分钟后过期。
 
-Press Telegram's native **Stop** button on the preview to cancel generation and
-pending publication. `/cancel <run UUID>` remains available. Stop affects the run
-that created that preview, even after you switch workspaces. Partial responses are
-not automatically saved. Already sent messages or external requests in flight cannot
-be retracted by Stop; uncertain provider charges remain reserved for reconciliation.
+清晰的 Codex 修改请求采用任务授权流程，通过检查后自动发布 PR，不要求额外点击一次开发批准。合并、部署和其他超出该任务的操作仍需各自授权。
 
-## Progress and recovery
-
-Longer coding tasks keep one progress message: the queued acknowledgement is edited
-when the runner confirms preparation, investigation, implementation, checks or repair.
-Fast transitions are combined; routine edits are limited to one every ten seconds.
-A confirmed active stage lasting two minutes can receive one short update in that
-same message. Inline **Status** and **Cancel** controls remain available while
-applicable. Necessary questions, actionable blockers, requested status/input receipts
-and final results arrive as new replies. The progress message changes to waiting or
-finished and removes its active controls when appropriate.
-Once the task has a confirmed PR, inline **Review** and **Merge** replace the task
-controls on progress, outcomes, questions and status replies. Review opens the PR's
-changed files; Merge opens the PR on GitHub, where you can complete the merge with
-your GitHub permissions and confirmation. Follow-up work keeps these PR links.
-Ordinary private requests keep the native thinking preview; a private queue wait
-over thirty seconds can
-receive one queued notice with the same buttons. Ordinary group replies keep their
-final-only behavior.
-
-Tap **Status**, send `/status` or reply to a task message with it. Status identifies
-required input, the last confirmed stage and confirmed issue/PR links. If the runner cannot be
-reached, it says that current status is unavailable. A necessary product question
-ends with “Reply here to continue.” A Codex sign-in pause directs the workspace
-operator to the configuration page. Task notices stay in their original chat/topic.
-
-Tap **Cancel** on a task notice, use native Stop for private assistant generation,
-or send `/cancel` in the task's conversation. Multiple candidates produce a target
-selector. Existing explicit
-references continue to work. When a private preview handed the request to Codex,
-its native Stop also cancels that linked task. Cancelling the original request from
-Telegram or the authorized admin control uses the task's existing cancellation
-permissions. “Stopping…” means cancellation was recorded while work
-was active; “has stopped” follows confirmed termination. A lost runner record or an
-in-flight publication may produce an uncertain outcome. Cancellation cannot retract
-existing artifacts or an external operation already in flight. Task-control callbacks stay bound
-to their sent task message, user, bot and chat/topic and recheck current access.
-An older Status button reports the current task outcome and offers Review/Merge
-when the task has a confirmed PR. Otherwise, status replies omit Cancel once
-the task has stopped or a stop is already requested.
-
-Failures explain the next step without exposing internal codes or provider output.
-If an administrator must repair a connection, permission or configuration, the
-reply identifies that responsibility. If Telegram itself cannot receive the reply,
-the panel retains the separate delivery failure/unknown state. Unknown sends and
-GitHub writes are not automatically replayed.
-
-## Web panel
-
-Use the verified local login to manage Settings, Members & access, Group access,
-Workflows, Skills, Instructions, Runs, Usage, Audit and Privacy. Workflows and
-skills use labeled forms, selection lists and tool checkboxes. Stale saves fail with a
-reload/review instruction instead of overwriting another administrator's change.
-
-A skill is instruction Markdown, a requested subset of existing tools and validated
-settings. Publish an immutable version before enabling it. Runs/workflows pin versions;
-editing or rollback does not rewrite historical executions. Disable takes effect at
-subsequent policy boundaries. “Test draft policy” is a deterministic validation and
-prompt preview; it makes no paid model request.
-
-Run status and delivery status are separate. `delivery_unknown` means Telegram may
-have accepted the send; inspect the destination before resolving it. Unknown provider
-charges remain reserved until an authorized admin reconciles billing. A cancellation
-cannot undo a message already sent.
-
-Files, arbitrary browsing/shell, general app connectors and proactive monitoring
-are not supported. The GitHub issue and coding paths below are the bounded external
-writes. Source IDs establish an authorized citation set;
-the operator must still evaluate the chosen model's factual accuracy before a pilot.
-
-## Request access (implemented)
-
-If you are not yet authorized, send the bot a message and tap **Request access**.
-Your workspace admin can approve it from **Members & access → Access requests** in the admin
-panel. Until approval, the bot does not run your requests. Once approved, you receive
-a confirmation and can send `/help` or a new question. Approval grants regular member
-access. Repeated taps do not create duplicate pending requests.
-
-If the bot serves several workspaces and cannot identify yours, ask your admin for
-the request-access link shown in their Members page. Open it, then tap **Request
-access**. In a linked group, a command directed at the bot offers the same action.
-A rejected request can be submitted again after 24 hours.
-The link can be used during setup before bot activation; regular requests start
-only after activation.
-
-## Repository source questions (implemented; setup required)
-
-The operator must configure and enable Code Truth for the selected repository and
-branch. Ask a source question such as “Where does example/workspace handle Telegram
-updates?” The answer should carry source references;
-check its indexed commit/branch coverage before treating it as current. Code Truth
-does not read live issue or PR metadata. See [Code Truth setup](../implementation/code-truth.md).
-
-## GitHub issue submission (implemented)
-
-With a GitHub App connected under Plugins, ask: “File an issue in example/workspace
-about the recap missing the last message.” The assistant drafts the issue and shows
-its repository, title and full body. Click **Approve** to publish, or **Reject** to
-cancel. Only the requester can approve; the draft expires after 15 minutes. The bot
-returns the issue link in the same chat/topic. The App installation needs Issues:
-read and write; existing installations must approve that permission update on GitHub.
-
-If the outcome is unknown, check GitHub before requesting another draft. The bot
-will not automatically retry an uncertain submission.
-
-## Model API costs (implemented)
-
-In private chat, ask “How much have I spent on model API calls this month?” or
-“Break down today's model costs by model.” Workspace owners/admins may also ask
-for workspace totals and remaining monthly budget. Regular members see their own
-usage only. Today/month boundaries use UTC; retained-history queries cover only
-the accounting still held by the application, up to 90 days.
-
-The response distinguishes settled USD costs from reserved and unknown amounts.
-It is an application accounting snapshot, not a provider invoice, and excludes
-the subsequent cost of generating the answer. An enabled published skill must
-grant `query_model_cost`; new starter skills include it. See the
-[examples and existing-workspace setup](../../examples/model-cost.md).
-
-## Codex feature and bug tasks (implemented; repository setup required)
-
-Configured repository maintainers can ask Codex to implement or investigate a
-change. In **Reviewed** mode the bot proposes the issue/branch for one approval.
-In operator-enabled **Direct** mode, a clear implementation instruction starts a
-bounded continuous task without that extra click. Pi relays the original request;
-Codex makes technical decisions, runs checks and continues repairs until completion,
-a necessary question, cancellation or failure. Provider/account limits still apply.
-Analysis requests do not authorize implementation or publication.
-
-Reply to a Codex question or task message, or continue its Telegram Topic, to add
-requirements and answer necessary product questions. Multiple tasks in a Topic
-require a task selection. Follow-ups continue the same PR. Waiting releases
-the runner slot; pending requirements are retained in order. Send **stop**, **停止**,
-or `/cancel` in the task conversation to cancel; `/status` reports its state and
-confirmed PR. Cancellation during publication is best-effort. Ordinary membership
-or administrator status does not grant coding access. See
-[Codex setup](../implementation/codex-coding.md). Direct mode still requires live
-pilot validation before production enablement.
-
-## Connect your GitHub account (implemented locally)
-
-After your workspace administrator approves your Telegram identity, send
-`/github` (or `/github connect`) in a private chat with the bot. The native command
-menu includes `/repos` and `/github`, plus Ask, Status, Cancel and Help shortcuts.
-The active worker publishes these menus on startup and after bot-token rotation;
-the group menu omits the private GitHub connection command. Follow the GitHub authorization
-link, return to Telegram, check the GitHub login and press **Connect account**.
-Your administrator can see the linked account and repository permissions under
-Members & access. With multiple workspaces, use `/workspace <id>` first.
-
-Permissions cover only repositories selected for that workspace. GitHub admin
-rights do not make you a RepoDesk administrator. Send `/github sync` to refresh
-permissions or `/github disconnect` to remove the link and repository grants.
-The worker also refreshes permissions about every five minutes. If authorization
-expires or syncing fails, use `/github connect` again.
+继续阅读 [命令参考](commands.md)、[群组与话题](groups.md)、[记忆与隐私](memory-and-privacy.md)。
