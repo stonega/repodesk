@@ -1689,10 +1689,13 @@ Use this format for each preference:
 ### Admin site domains are configured in the panel
 
 - **Preference:** Provide custom-domain setup in the admin panel, with an editable
-  hostname and the routing instructions needed to connect the site.
+  hostname and the routing instructions needed to connect the site. Include the
+  current Mini App URL with a copy control under Telegram in **Update connected
+  services**, alongside the provider setup guidance.
 - **Scope:** Deployment-wide admin site address; restricted to deployment operators.
 - **Source:** 2026-10-05 — user requested custom-domain setup for the admin panel
   site inside the admin panel.
+  2026-10-18 — user requested adding the Mini App URL to Update connected services.
 - **Exceptions:** DNS, certificates and host proxy routing require infrastructure
   configuration outside the panel; availability must not be implied by saving.
 

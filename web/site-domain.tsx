@@ -37,7 +37,7 @@ function ServiceUrl({
           ) : loading ? (
             <Skeleton width="20rem" />
           ) : (
-            "—"
+            <span>—</span>
           )}
           <IconButton
             icon={copyStatus === "copied" ? "done" : "copy"}
@@ -262,6 +262,17 @@ export function SiteDomain({ request }: { request: Request }) {
           aria-labelledby="telegram-service-title"
         >
           <h3 id="telegram-service-title">Telegram</h3>
+          <p className="muted">
+            In BotFather, set your bot’s Main Mini App URL to this address.
+          </p>
+          <dl className="service-urls">
+            <ServiceUrl
+              key={site?.origin}
+              label="Mini App URL"
+              value={site ? `${site.origin}/mini` : undefined}
+              loading={!site && !error}
+            />
+          </dl>
           {!site ? (
             <p className="muted">
               {error ? (

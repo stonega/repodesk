@@ -135,7 +135,12 @@ for (const width of [1280, 390]) {
       name: "Update connected services",
     });
     await expect(card).toHaveAttribute("aria-busy", "true");
-    for (const label of ["Homepage URL", "Callback URL", "Setup URL"]) {
+    for (const label of [
+      "Homepage URL",
+      "Callback URL",
+      "Setup URL",
+      "Mini App URL",
+    ]) {
       await expect(card.getByText(label, { exact: true })).toBeVisible();
       await expect(
         card.getByRole("button", { name: `Copy ${label}` }),
@@ -144,6 +149,9 @@ for (const width of [1280, 390]) {
     await expect(
       card.getByText("No webhook update", { exact: false }),
     ).toHaveCount(0);
+    await card.screenshot({
+      path: testInfo.outputPath(`connected-services-loading-${width}.png`),
+    });
     await held[0]?.fulfill({ json: site });
     await expect(card).toHaveAttribute("aria-busy", "false");
     await expect(
@@ -155,11 +163,18 @@ for (const width of [1280, 390]) {
     await expect(
       card.getByText("Changing domains cancels pending GitHub connections."),
     ).toBeVisible();
+    await expect(
+      card.getByText(
+        "In BotFather, set your bot’s Main Mini App URL to this address.",
+      ),
+    ).toBeVisible();
+    await expect(card.locator("form, input")).toHaveCount(0);
 
     for (const [label, value] of [
       ["Homepage URL", site.origin],
       ["Callback URL", site.githubCallbackUrl],
       ["Setup URL", site.githubSetupUrl],
+      ["Mini App URL", `${site.origin}/mini`],
     ]) {
       const copy = card.getByRole("button", {
         name: `Copy ${label}`,
@@ -201,21 +216,26 @@ for (const width of [1280, 390]) {
         },
       });
     });
-    await card.getByRole("button", { name: "Copy Homepage URL" }).click();
+    await card.getByRole("button", { name: "Copy Mini App URL" }).click();
     await expect(card.getByRole("alert")).toContainText(
       "Select the URL to copy it manually.",
     );
-    await expect(card.getByText(site.origin, { exact: true })).toBeVisible();
     await expect(
-      card.getByRole("button", { name: "Copy Homepage URL" }),
+      card.getByText(`${site.origin}/mini`, { exact: true }),
+    ).toBeVisible();
+    await expect(
+      card.getByRole("button", { name: "Copy Mini App URL" }),
     ).toBeEnabled();
+    await card.screenshot({
+      path: testInfo.outputPath(`connected-services-copy-error-${width}.png`),
+    });
   });
 }
 
 test("failed service details can retry and webhook registration remains explicit", async ({
   page,
   context,
-}) => {
+}, testInfo) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const held = await openSite(page);
   const card = page.getByRole("region", { name: "Update connected services" });
@@ -226,12 +246,22 @@ test("failed service details can retry and webhook registration remains explicit
   await expect(
     card.getByRole("button", { name: "Copy Homepage URL" }),
   ).toBeDisabled();
+  await expect(
+    card.getByRole("button", { name: "Copy Mini App URL" }),
+  ).toBeDisabled();
+  await card.screenshot({
+    path: testInfo.outputPath("services-unavailable.png"),
+  });
   await page
     .getByRole("button", { name: "Retry loading site settings" })
     .click();
   await expect.poll(() => held.length).toBe(2);
   await held[1]?.fulfill({ json: { ...site, telegramTransport: "webhook" } });
   await expect(card.getByText("Status: Registration required")).toBeVisible();
+  await card.getByRole("button", { name: "Copy Mini App URL" }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    `${site.origin}/mini`,
+  );
   await expect(
     card.getByText("After the HTTPS address is reachable", { exact: false }),
   ).toBeVisible();
@@ -251,6 +281,7 @@ test("failed service details can retry and webhook registration remains explicit
   await expect.poll(() => registrations).toBe(1);
   expect(registration?.request().method()).toBe("POST");
   await expect(card.getByRole("button", { name: "Working…" })).toBeDisabled();
+  await card.screenshot({ path: testInfo.outputPath("webhook-pending.png") });
   await registration?.fulfill({ json: {} });
   await expect.poll(() => held.length).toBe(3);
   await held[2]?.fulfill({

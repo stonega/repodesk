@@ -35,6 +35,13 @@ test("custom domain setup preserves failed edits and fits desktop/mobile", async
     await expect(
       page.getByRole("heading", { name: "Site domain", exact: true }),
     ).toBeVisible();
+    const services = page.getByRole("region", {
+      name: "Update connected services",
+    });
+    const defaultMiniAppUrl = `${testInfo.project.use.baseURL}/mini`;
+    await expect(
+      services.getByText(defaultMiniAppUrl, { exact: true }),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Add custom domain" }).click();
     const dialog = page.getByRole("dialog");
     await expect(
@@ -72,11 +79,17 @@ test("custom domain setup preserves failed edits and fits desktop/mobile", async
       }),
     ).toBeVisible();
     await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
+    await expect(
+      services.getByText("https://admin.example.com/mini", { exact: true }),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Edit domain" }).click();
     await dialog.getByRole("button", { name: "Use default address" }).click();
     await expect(dialog).toHaveCount(0);
     await expect(
       page.getByText("Using the deployment’s default address."),
+    ).toBeVisible();
+    await expect(
+      services.getByText(defaultMiniAppUrl, { exact: true }),
     ).toBeVisible();
   } finally {
     await pool.end();

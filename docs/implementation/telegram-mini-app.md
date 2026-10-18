@@ -19,8 +19,10 @@ not use the admin login or expose admin endpoints to Telegram users.
 To enable the entry point on a deployed bot:
 
 1. Serve the existing RepoDesk site over HTTPS.
-2. In BotFather, configure the bot's **Main Mini App** URL as
-   `https://YOUR_REPODESK_DOMAIN/mini` and enable it.
+2. In **Site domain → Update connected services → Telegram**, copy the **Mini
+   App URL** (`https://YOUR_REPODESK_DOMAIN/mini`). In BotFather, configure the
+   bot's **Main Mini App** URL with that address and enable it. Update BotFather
+   again after changing the site domain.
 3. Open **View conversation** from a task message in private Telegram and in a
    linked group. Verify the task, permissions and native client presentation.
 

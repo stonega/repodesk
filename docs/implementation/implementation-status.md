@@ -45,6 +45,15 @@ iOS/Android/Desktop acceptance and live group membership checks remain rollout
 steps. No deployment, bot registration, account connection or live Telegram/model
 call was performed. See [setup and boundaries](telegram-mini-app.md).
 
+**Site domain → Update connected services → Telegram** now includes a copyable
+**Mini App URL** using the effective site address plus `/mini`, with BotFather
+guidance. It follows domain changes and restoring the default address, remains
+visible while loading, and is available in both polling and webhook modes.
+The URL follow-up passed lint, strict TypeScript, the production build, all
+919 deterministic tests and six focused browser scenarios. Desktop/mobile
+light/dark, loading, clipboard failure and unavailable-settings layouts were
+visually reviewed.
+
 ## Latest-message Codex task controls (2026-10-18)
 
 Native Telegram Status/Cancel controls now remain only on the latest confirmed
