@@ -148,7 +148,7 @@ for upstream behavior. The table above defines this application's supported subs
 
 ## Predefined Code Truth
 
-The Plugins page includes a built-in Code Truth extension backed by a private local MCP service. Operators configure GitHub repositories, network/branch mappings and repositories for the selected workspace. Its named Pi factory registers eight read-only MCP tools and loads the companion skill. The shared registry revision, run digest, guards and durable tool ledger apply. See [local service setup and boundaries](../implementation/code-truth.md) and [source provenance](../../services/code-truth/UPSTREAM.md).
+The Plugins page includes a built-in Code Truth extension backed by a private local MCP service. Operators configure GitHub repository URLs and optional descriptions for the selected workspace. Internal IDs are generated automatically, and indexing follows each repository’s default GitHub branch. Its named Pi factory registers eight read-only MCP tools and loads the companion skill. The shared registry revision, run digest, guards and durable tool ledger apply. See [local service setup and boundaries](../implementation/code-truth.md) and [source provenance](../../services/code-truth/UPSTREAM.md).
 
 ## Workspace API and migration
 

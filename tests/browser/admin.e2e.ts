@@ -1078,7 +1078,7 @@ test.describe
         page.getByRole("link", { name: "Open word-count" }),
       ).toHaveCount(0);
     });
-    test("predefined Code Truth configures workspace repositories and branches", async ({
+    test("predefined Code Truth configures workspace repositories and descriptions", async ({
       page,
     }) => {
       await page.goto("/admin/plugins");
@@ -1098,29 +1098,19 @@ test.describe
         .click();
       await page
         .getByRole("dialog", { name: "Add repository", exact: true })
-        .getByLabel("Repository ID", { exact: true })
-        .fill("deepx-web");
-      await page
-        .getByRole("dialog", { name: "Add repository", exact: true })
         .getByLabel("GitHub repository URL")
         .fill("https://github.com/deepxfinance/web.git");
-      await page
-        .getByRole("dialog", { name: "Add repository", exact: true })
-        .getByLabel("Branch 1", { exact: true })
-        .fill("devnet-develop");
-      await page
-        .getByRole("dialog", { name: "Add repository", exact: true })
-        .getByRole("button", { name: "Add network", exact: true })
-        .click();
-      const networkDialog = page.getByRole("dialog", {
-        name: "Add network",
+      const repositoryDialog = page.getByRole("dialog", {
+        name: "Add repository",
         exact: true,
       });
-      await networkDialog.getByLabel("Network name").fill("testnet");
-      await networkDialog.getByLabel("Branch name").fill("testnet-develop");
-      await networkDialog
-        .getByRole("button", { name: "Add network", exact: true })
-        .click();
+      await expect(repositoryDialog.getByLabel("Repository ID")).toHaveCount(0);
+      await expect(
+        repositoryDialog.getByRole("group", { name: "Networks and branches" }),
+      ).toHaveCount(0);
+      await repositoryDialog
+        .getByLabel("Description")
+        .fill("Web application source and shared components.");
       await page
         .getByRole("dialog", { name: "Add repository", exact: true })
         .getByRole("button", { name: "Apply repository" })
@@ -1138,7 +1128,7 @@ test.describe
         (await savedBeforeRepositories.json()).settings.repositories,
       ).toHaveLength(0);
       await expect(
-        card.getByRole("heading", { name: "deepx-web", exact: true }),
+        card.getByRole("heading", { name: "deepxfinance/web", exact: true }),
       ).toBeVisible();
       await card
         .getByRole("button", { name: "Save Code Truth", exact: true })
@@ -1148,10 +1138,12 @@ test.describe
       );
       await page.reload();
       await expect(
-        card.getByRole("heading", { name: "deepx-web", exact: true }),
+        card.getByRole("heading", { name: "deepxfinance/web", exact: true }),
       ).toBeVisible();
       await expect(
-        card.getByText("testnet → testnet-develop", { exact: true }),
+        card.getByText("Web application source and shared components.", {
+          exact: true,
+        }),
       ).toBeVisible();
       await expect(
         card.getByRole("switch", { name: "Enable Code Truth", exact: true }),
@@ -1174,8 +1166,8 @@ test.describe
                   target: "deepx-web",
                   networks: [
                     {
-                      network: "devnet",
-                      branch: "devnet-develop",
+                      network: "default",
+                      branch: "main",
                       status: "ready",
                       commit: "a".repeat(40),
                       indexedAt: "2026-09-20T00:00:00.000Z",
@@ -1194,9 +1186,7 @@ test.describe
         "Index status refreshed.",
       );
       await expect(card.getByText("Index status refreshed.")).toHaveCount(0);
-      await expect(
-        card.getByText(/devnet → devnet-develop · ready/),
-      ).toBeVisible();
+      await expect(card.getByText(/main · ready/)).toBeVisible();
       await page.setViewportSize({ width: 1280, height: 1000 });
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.screenshot({
@@ -1339,16 +1329,8 @@ test.describe
         .click();
       await page
         .getByRole("dialog", { name: "Add repository", exact: true })
-        .getByLabel("Repository ID", { exact: true })
-        .fill("isolated-repo");
-      await page
-        .getByRole("dialog", { name: "Add repository", exact: true })
         .getByLabel("GitHub repository URL")
         .fill("https://github.com/example/isolated");
-      await page
-        .getByRole("dialog", { name: "Add repository", exact: true })
-        .getByLabel("Branch 1", { exact: true })
-        .fill("main");
       await page.getByRole("button", { name: "Apply repository" }).click();
       await truth
         .getByRole("button", { name: "Save Code Truth", exact: true })
@@ -1398,7 +1380,7 @@ test.describe
       ).toBeVisible();
       await page.goto(`/admin/plugins/code-truth?workspace=${workspaceId}`);
       await expect(
-        truth.getByRole("heading", { name: "isolated-repo", exact: true }),
+        truth.getByRole("heading", { name: "example/isolated", exact: true }),
       ).toBeVisible();
       await chooseWorkspace(page, secondId);
       await expect(
@@ -2086,7 +2068,7 @@ test.describe
       ).toHaveValue("909090");
       await page.getByRole("button", { name: "Cancel", exact: true }).click();
       await page.unroute("**/api/admin/workspaces/*/members");
-      // Nested network cancellation preserves the repository draft and its focus.
+      // Repository creation uses only a URL and description; Cancel discards the draft.
       await page.goto("/admin/plugins/code-truth");
       await page
         .getByRole("button", { name: "Add repository", exact: true })
@@ -2095,32 +2077,15 @@ test.describe
         name: "Add repository",
         exact: true,
       });
-      await repo.getByLabel("Repository ID").fill("modal-draft");
+      await expect(repo.getByLabel("GitHub repository URL")).toBeFocused();
+      await expect(repo.getByLabel("Repository ID")).toHaveCount(0);
+      await expect(
+        repo.getByRole("button", { name: "Add network", exact: true }),
+      ).toHaveCount(0);
       await repo
         .getByLabel("GitHub repository URL")
         .fill("https://github.com/example/draft");
-      await repo.getByLabel("Branch 1", { exact: true }).fill("main");
-      await repo
-        .getByRole("button", { name: "Add network", exact: true })
-        .click();
-      const network = page.getByRole("dialog", {
-        name: "Add network",
-        exact: true,
-      });
-      await network.getByLabel("Network name").fill("devnet");
-      await network.getByLabel("Branch name").fill("duplicate");
-      await network
-        .getByRole("button", { name: "Add network", exact: true })
-        .click();
-      await expect(network.getByRole("alert")).toHaveText(
-        "This network already exists.",
-      );
-      await page.keyboard.press("Escape");
-      await expect(network).toHaveCount(0);
-      await expect(repo.getByLabel("Repository ID")).toHaveValue("modal-draft");
-      await expect(
-        repo.getByRole("button", { name: "Add network", exact: true }),
-      ).toBeFocused();
+      await repo.getByLabel("Description").fill("Repository draft.");
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
       await expect(repo).toBeVisible();
@@ -2135,7 +2100,7 @@ test.describe
       });
       await repo.getByRole("button", { name: "Cancel", exact: true }).click();
       await expect(
-        page.getByRole("heading", { name: "modal-draft", exact: true }),
+        page.getByRole("heading", { name: "example/draft", exact: true }),
       ).toHaveCount(0);
     });
     test("access requests approve members, reject requests and fit mobile", async ({

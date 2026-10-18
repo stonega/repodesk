@@ -6,6 +6,7 @@ import type { CloudflareService } from "../cloudflare/service.ts";
 import type { CodeTruthClient } from "../code-truth/client.ts";
 import {
   type CodeTruthPage,
+  codeRepositorySchema,
   codeTruthSaveSchema,
   codeTruthTools,
   emptyCodeTruth,
@@ -169,9 +170,17 @@ export class PluginService {
     operator(admin);
     const workspace = await this.store.read(workspaceId);
     authorizePlugins(admin, workspace);
+    const settings = workspace.plugins?.codeTruth ?? emptyCodeTruth;
     return {
       revision: workspace.plugins?.revision ?? 0,
-      settings: structuredClone(workspace.plugins?.codeTruth ?? emptyCodeTruth),
+      // Old configurations can contain the same URL under different target IDs.
+      // Keep those records editable while normalizing their retired network fields.
+      settings: {
+        ...settings,
+        repositories: settings.repositories.map((repo) =>
+          codeRepositorySchema.parse(repo),
+        ),
+      },
       serviceConfigured: Boolean(this.codeTruth),
       workspaces: [{ id: workspace.id, name: workspace.settings.name }],
     };

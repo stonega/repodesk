@@ -15,6 +15,7 @@ when implementing or reviewing a change.
 | --- | --- |
 | Saved display versus editing | [Modal editors](#add-and-create-flows-use-modals), [workspace values](#workspace-settings-show-saved-values-before-editing), [team summary](#team-configuration-uses-one-overview-editor), [model summary](#model-configuration-uses-a-summary-card-and-one-editor) |
 | Plugin detail layout | [Shared plugin layout](#plugin-details-share-card-layouts-and-a-title-switch), [Codex sections](#codex-details-show-configuration-and-tasks-separately) |
+| Code Truth setup | [URL and description](#code-truth-repositories-use-a-url-and-description) |
 | Repository display | [Shared repository cards](#repository-cards-share-one-style), [member GitHub details](#member-github-columns-show-only-a-view-button), [connected repositories](#connected-github-repositories-stay-compact-and-directly-accessible) |
 | Action labels and controls | [Card action placement](#card-actions-stay-at-the-top-right), [Edit/New labels](#edit-and-add-buttons-use-short-labels), [shared icons](#common-action-buttons-use-reicon), [dropdown styling](#dropdown-inputs-share-the-workspace-selector-style) |
 | Dialog actions | [Cancel order](#modal-cancel-follows-the-primary-action), [close controls](#modal-close-controls-use-a-plain-x), [secondary actions](#dialog-support-actions-use-secondary-buttons) |
@@ -33,6 +34,24 @@ when implementing or reviewing a change.
 - Keep illustrative examples separate from established preferences.
 
 ## Recorded preferences
+
+### Code Truth repositories use a URL and description
+
+- **Preference:** Ask only for the GitHub repository URL and an optional free-text
+  description in the repository modal. Generate internal repository IDs
+  automatically and show the GitHub repository name in saved cards. Replace the
+  network/branch mapping editor with the description; follow the repository's
+  default GitHub branch automatically. Saved descriptions remain readable text,
+  with New/Edit opening the shared modal.
+- **Scope:** Code Truth repository configuration and summaries, on desktop and
+  mobile. Descriptions explain repository purpose and usage; they do not grant
+  access or authorize actions.
+- **Source:** 2026-10-18 — user requested replacing Networks and branches with a
+  universal text description and removing the Repository ID input because users
+  should not enter internal IDs. Default-branch indexing is the implementation
+  choice supporting removal of branch settings.
+- **Exceptions:** Internal MCP target/snapshot identifiers remain part of the
+  service protocol and code provenance, outside the repository editor.
 
 ### Cloudflare supports browser authorization
 
@@ -1252,7 +1271,7 @@ when implementing or reviewing a change.
   dismissal and duplicate submission.
 - **Scope:** Add/create management flows across the admin app: members,
   workflows, skills/imports, instructions, runs, panel accounts,
-  plugins, repositories/networks and GitHub Apps. Related repository, plugin,
+  plugins, repositories and GitHub Apps. Related repository, plugin,
   member, workflow, skill and instruction editors also use these dialogs.
   Operations shows service/deployment status and action results as readable
   summaries; panel account creation, identity verification, access recovery and
@@ -1268,7 +1287,7 @@ when implementing or reviewing a change.
 - **Exceptions:** Sign-in/bootstrap, policy forms,
   workspace creation in the setup wizard, approval decisions and
   recovery controls outside Operations stay on their pages. Field editing
-  within a modal may remain inline. Applying repository/network changes edits
+  within a modal may remain inline. Applying repository changes edits
   a draft; the existing Save Code Truth step persists it. GitHub confirmation
   still takes place on GitHub. The policy-form exception does not cover saved
   repository policy records on plugin detail pages, including Review Bot.

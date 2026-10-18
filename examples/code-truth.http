@@ -19,9 +19,8 @@ Content-Type: application/json
   "settings": {
     "enabled": true,
     "repositories": [{
-      "id": "my-repository",
       "repositoryUrl": "https://github.com/your-org/my-repository.git",
-      "networks": { "devnet": "devnet-develop", "testnet": "testnet-develop" },
+      "description": "Web application source and shared components.",
       "workspaces": ["{{workspace}}"]
     }]
   }

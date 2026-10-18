@@ -117,7 +117,6 @@ const url = process.env.TEST_DATABASE_URL;
             {
               id: "source",
               repositoryUrl: "https://github.com/example/workspace.git",
-              networks: { devnet: "develop" },
               workspaces: [id],
             },
           ],
@@ -148,7 +147,6 @@ const url = process.env.TEST_DATABASE_URL;
     expect(page.workspace.github?.revision).toBe(2);
     expect(page.workspace.plugins?.codeTruth?.repositories[0]).toMatchObject({
       repositoryUrl: "https://github.com/example/renamed.git",
-      networks: { devnet: "develop" },
       workspaces: [id],
     });
     expect(page.workspace.plugins?.revision).toBe(5);

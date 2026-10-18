@@ -50,7 +50,7 @@ async function fixture(page: Page, theme: "light" | "dark") {
         {
           id: "source",
           repositoryUrl: `https://github.com/${name}.git`,
-          networks: { main: "main", testnet: "testnet-develop" },
+          description: "Application source and shared packages.",
           workspaces: [workspaceId],
         },
       ],
@@ -209,9 +209,9 @@ for (const width of [1280, 390]) {
         [
           "code-truth",
           "Repository 1",
-          "testnet → testnet-develop",
+          "Application source and shared packages.",
           "Edit repository 1",
-          "Edit repository source",
+          `Edit repository ${name}`,
         ],
       ] as const) {
         await page.goto(`/admin/plugins/${route}?workspace=${workspaceId}`);

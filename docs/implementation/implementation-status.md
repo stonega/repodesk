@@ -1,5 +1,31 @@
 # Implementation evidence
 
+## Code Truth repository descriptions and automatic IDs (2026-10-18)
+
+Code Truth repository modals now ask only for the GitHub URL and an optional
+description of up to 2,000 characters. Internal IDs are generated automatically;
+existing IDs survive edits. Saved cards show the GitHub repository name and
+description as text. Network/branch controls and their nested modal were removed.
+Descriptions and repository URLs reach the assistant through `list_code_targets`
+so it can select generated target IDs without asking users for them.
+
+Indexing resolves the repository's current default GitHub branch on each refresh
+and retains its actual branch name and immutable commit as provenance. The
+upstream MCP adapter retains one internal snapshot selector. Legacy saved network
+mappings remain readable, are omitted from settings responses and are removed on
+save; they no longer select branches. Legacy duplicate-URL records remain editable.
+Matching app/worker and Code Truth service builds are required for this behavior.
+The runtime skill, API example, setup docs and scoped UI preference were updated.
+
+Validation passed Biome, strict TypeScript for both packages, production build,
+Node runtime contract, **882 deterministic tests across 100 files**, and **25 admin
+and repository browser scenarios**. The four focused Code Truth browser scenarios
+passed again after final spacing cleanup. Desktop/mobile saved displays, editors,
+loading/empty, pending, validation and recoverable error states were visually
+inspected. The real CodeGraph/MCP smoke passed with automatic branch discovery.
+No dependency or SQL migration was added; live GitHub calls and deployment were
+not performed.
+
 ## Automatic Codex PR publication (2026-10-18)
 
 Removed the publication checkbox from the Codex configuration dialog and its

@@ -34,6 +34,64 @@ afterEach(async () => {
 });
 
 describe("RepositoryManager", () => {
+  test("follows default-branch changes, preserves provenance on failure and deduplicates sync", async () => {
+    const directory = await temporaryDirectory("repodesk-default-branch-");
+    const archivePath = await createRepositoryArchive(directory, {
+      "README.md": "source",
+    });
+    const source = recordingRepositorySource("e".repeat(40), archivePath);
+    let branch = "trunk";
+    let fail = false;
+    let discoveries = 0;
+    source.defaultBranch = async () => {
+      discoveries++;
+      if (fail) throw new Error("Metadata unavailable");
+      return branch;
+    };
+    const repositories = new RepositoryManager({
+      dataDir: directory,
+      targets: [
+        {
+          id: "application",
+          repositoryUrl: "https://github.com/example/application",
+          description: "Application source",
+          networks: { default: "HEAD" },
+        },
+      ],
+      snapshotRetention: 2,
+      repositorySource: source,
+      codegraph: {
+        async initialize(path: string) {
+          await mkdir(join(path, ".codegraph"));
+        },
+        async closeProject() {},
+      } as unknown as CodeGraphRunner,
+    });
+    const first = repositories.syncAll();
+    expect(repositories.syncAll()).toBe(first);
+    expect((await first).errors).toEqual([]);
+    expect(discoveries).toBe(1);
+    expect(repositories.statuses()[0]).toMatchObject({
+      description: "Application source",
+      networks: [{ branch: "trunk", status: "ready" }],
+    });
+    branch = "develop";
+    await repositories.syncAll();
+    expect(source.resolveCalls.map((call) => call.branch)).toEqual([
+      "trunk",
+      "develop",
+    ]);
+    expect(repositories.statuses()[0]?.networks[0]?.branch).toBe("develop");
+    fail = true;
+    expect((await repositories.syncAll()).errors).toHaveLength(1);
+    expect(repositories.statuses()[0]?.networks[0]).toMatchObject({
+      branch: "develop",
+      commit: "e".repeat(40),
+      status: "ready",
+    });
+    expect(source.downloadCalls).toHaveLength(1);
+  });
+
   test("publishes and reuses one immutable archive snapshot across networks", async () => {
     const directory = await temporaryDirectory("deepx-repositories-");
     const archivePath = await createRepositoryArchive(directory, {
@@ -106,6 +164,9 @@ describe("RepositoryManager", () => {
   test("reports a denied branch without publishing it", async () => {
     const directory = await temporaryDirectory("deepx-repositories-denied-");
     const repositorySource: GitHubRepositorySource = {
+      async defaultBranch() {
+        return "main";
+      },
       async resolveBranch() {
         throw new Error("GitHub API request failed with status 404");
       },
@@ -229,6 +290,9 @@ function recordingRepositorySource(
   return {
     resolveCalls,
     downloadCalls,
+    async defaultBranch() {
+      return "main";
+    },
     async resolveBranch(repository, branch) {
       resolveCalls.push({ repository, branch });
       return commit;

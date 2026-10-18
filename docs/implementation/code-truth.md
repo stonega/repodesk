@@ -2,8 +2,9 @@
 
 Status: implemented locally. **Workspace → Plugins → Code Truth** is a predefined
 Pi extension. It includes eight read-only MCP tools and the companion query skill.
-Repository URLs and networks/branches are editable independently per workspace;
-no extension file registration is required.
+Repository URLs and optional descriptions are editable independently per workspace;
+internal IDs are generated automatically and indexing follows the default GitHub
+branch. No extension file registration is required.
 
 ## Start the local service with Docker
 
@@ -60,17 +61,19 @@ changes apply without a process restart.
 ## Configure repositories
 
 1. Open **Workspace → Plugins → Code Truth**, then **Add repository**.
-2. Enter a unique target ID and canonical HTTPS GitHub repository URL, for example
-   `my-repository` and `https://github.com/your-org/my-repository.git`.
-3. Map a logical network name to a branch, for example `main` → `main`.
-   The assistant uses the sole configured network when none is specified; when
-   several are available, it uses explicit context or asks which one to query.
+2. Enter a canonical HTTPS GitHub repository URL, for example
+   `https://github.com/your-org/my-repository.git`. RepoDesk generates the internal
+   ID and shows the GitHub repository name; no ID input is needed.
+3. Optionally describe the repository's purpose and when to use it (up to 2,000
+   characters). The description is available to the assistant as repository
+   context, never as instructions or authorization. Indexing automatically follows
+   GitHub's current default branch, including after a default-branch change.
 4. Confirm the selected workspace in the sidebar. All eligible actors in this
    workspace receive access; other workspaces have independent repositories.
 5. Enable Code Truth and save. Settings can be saved before the local service is
    running. Saving configuration does not contact GitHub or execute repository code.
 6. Expand **Repository indexing status** and choose **Sync &
-   check indexes**. Check again after indexing finishes. Each ready network shows
+   check indexes**. Check again after indexing finishes. Each ready repository shows
    its branch, immutable commit SHA and indexing timestamp.
 
 The service also initializes a workspace's index on its first enabled assistant run.
@@ -81,8 +84,15 @@ service re-resolves configured branches and reuses matching snapshots on disk.
 
 Supported repositories match the upstream service: HTTPS `github.com` only, no SSH,
 GitLab, arbitrary local directories, credentials in URLs, or runtime package installs.
-Up to 12 repositories, with up to 8 networks each, can be configured per workspace.
+Up to 12 distinct repositories can be configured per workspace.
 Code is parsed and queried; repository build scripts are not executed.
+
+Legacy saved IDs remain stable. Legacy network mappings are accepted when reading
+or saving old settings, but are omitted from the settings response and no longer
+select branches. Saving the settings removes those legacy mappings. The internal
+MCP adapter uses one `default` snapshot selector with `HEAD`; the service resolves
+the actual default branch before indexing and retains its name and commit as
+provenance. Deploy matching app/worker and Code Truth service builds for this path.
 
 ## Authorization, durability and operations
 

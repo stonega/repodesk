@@ -444,7 +444,6 @@ const url = process.env.TEST_DATABASE_URL;
       const repo = {
         id: "frontend",
         repositoryUrl: "https://github.com/example/frontend.git",
-        networks: { devnet: "main" },
         workspaces: [workspaceId],
       };
       const input = {
@@ -524,6 +523,66 @@ const url = process.env.TEST_DATABASE_URL;
       ).toBeUndefined();
     });
 
+    test("Code Truth generates IDs and persists descriptions without network settings", async () => {
+      const fresh = workspace();
+      fresh.operatorId = admin.id;
+      await store.pool.query(
+        "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",
+        [fresh.id, admin.id, JSON.stringify(fresh)],
+      );
+      const first = await service.saveCodeTruth(admin, fresh.id, {
+        revision: 0,
+        settings: {
+          enabled: false,
+          repositories: [
+            {
+              repositoryUrl: "https://github.com/example/application",
+              description: "Application and worker source.",
+              workspaces: [fresh.id],
+            },
+          ],
+        },
+      });
+      const saved = first.settings.repositories[0];
+      expect(saved?.id).toMatch(/^repo-[0-9a-f-]{36}$/);
+      expect(saved?.description).toBe("Application and worker source.");
+      expect(saved).not.toHaveProperty("networks");
+      expect((await service.codeTruthView(admin, fresh.id)).settings).toEqual(
+        first.settings,
+      );
+      await store.change(fresh.id, (w) => {
+        const repositories = w.plugins?.codeTruth?.repositories;
+        const repository = repositories?.[0];
+        if (!repositories || !repository)
+          throw Error("Missing saved repository");
+        Object.assign(repository, { networks: { devnet: "old-branch" } });
+        repositories.push({ ...repository, id: "legacy-copy" });
+      });
+      const legacy = await service.codeTruthView(admin, fresh.id);
+      expect(legacy.settings.repositories).toHaveLength(2);
+      expect(legacy.settings.repositories[0]).not.toHaveProperty("networks");
+      const edited = await service.saveCodeTruth(admin, fresh.id, {
+        revision: first.revision,
+        settings: {
+          ...first.settings,
+          repositories: [
+            {
+              ...saved,
+              description: "Updated repository context.",
+              networks: { devnet: "old-branch" },
+            },
+          ],
+        },
+      });
+      expect(edited.settings.repositories[0]?.id).toBe(saved?.id);
+      expect(edited.settings.repositories[0]?.description).toBe(
+        "Updated repository context.",
+      );
+      expect(
+        (await store.read(fresh.id)).plugins?.codeTruth?.repositories[0],
+      ).not.toHaveProperty("networks");
+    });
+
     test("same-owner workspaces have independent settings, revisions, audits and Code Truth", async () => {
       const before = await service.view(admin, workspaceId);
       const siblingBefore = await service.view(admin, siblingWorkspaceId);
@@ -579,8 +638,8 @@ const url = process.env.TEST_DATABASE_URL;
       );
       expect(
         (await service.codeTruthView(admin, siblingWorkspaceId)).settings
-          .repositories[0]?.networks.devnet,
-      ).toBe("other-branch");
+          .repositories[0]?.repositoryUrl,
+      ).toBe("https://github.com/example/independent");
       expect((await store.deployment()) as object).not.toHaveProperty(
         "plugins",
       );
@@ -678,7 +737,6 @@ const url = process.env.TEST_DATABASE_URL;
             {
               id: "legacy",
               repositoryUrl: "https://github.com/example/legacy",
-              networks: { devnet: "main" },
               workspaces: [second.id],
             },
           ],

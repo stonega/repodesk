@@ -60,7 +60,6 @@ const url = process.env.TEST_DATABASE_URL;
             {
               id: "frontend",
               repositoryUrl: "https://github.com/example/workspace",
-              networks: { devnet: "main" },
               workspaces: [w.id],
             },
           ],

@@ -15,6 +15,7 @@ const silentLogger = {
 export type ArchiveStream = AsyncIterable<Uint8Array>;
 
 export interface GitHubRepositorySource {
+  defaultBranch(repository: GitHubRepository): Promise<string>;
   resolveBranch(repository: GitHubRepository, branch: string): Promise<string>;
   downloadArchive(
     repository: GitHubRepository,
@@ -40,6 +41,17 @@ export class OctokitGitHubRepositorySource implements GitHubRepositorySource {
       log: silentLogger,
       ...(options.fetch ? { request: { fetch: options.fetch } } : {}),
     });
+  }
+
+  async defaultBranch(repository: GitHubRepository): Promise<string> {
+    const response = await this.#octokit.rest.repos.get({
+      ...repository,
+      request: { signal: AbortSignal.timeout(BRANCH_REQUEST_TIMEOUT_MS) },
+    });
+    const branch = response.data.default_branch;
+    if (typeof branch !== "string" || !branch || branch.length > 255)
+      throw new Error("GitHub returned an invalid default branch");
+    return branch;
   }
 
   async resolveBranch(

@@ -6,6 +6,7 @@ import type {
   CodeTruthSettings,
   CodeTruthStatus,
 } from "../src/code-truth/config.ts";
+import { codeRepositorySchema } from "../src/code-truth/config.ts";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
@@ -14,6 +15,9 @@ import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 import { ErrorToast, useToast } from "./toast.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
+const repositoryName = (url: string) =>
+  new URL(url).pathname.slice(1).replace(/\.git$/, "");
+
 const explain = (error: unknown) => {
   const message = (error as Error).message;
   if (message.includes("version_conflict"))
@@ -34,7 +38,7 @@ const explain = (error: unknown) => {
         code_truth_no_repositories:
           "Grant a saved repository to this workspace first.",
         invalid_request:
-          "Check repository IDs, HTTPS GitHub URLs, branch names and unique network names.",
+          "Check HTTPS GitHub URLs and descriptions (up to 2,000 characters).",
         extension_tool_collision:
           "A registered plugin already uses a Code Truth tool name in this workspace.",
         access_denied: "You can grant access only to your own workspaces.",
@@ -118,6 +122,10 @@ export function CodeTruth({
     } finally {
       setBusy(false);
     }
+  };
+  const nameForTarget = (id: string) => {
+    const repo = data?.settings.repositories.find((r) => r.id === id);
+    return repo ? repositoryName(repo.repositoryUrl) : "Repository";
   };
   const pendingValue = error ? "—" : <Skeleton width="8rem" />;
   return (
@@ -223,7 +231,7 @@ export function CodeTruth({
               <div>
                 <h2>Repositories</h2>
                 <p className="muted">
-                  Map each repository's networks to branches.
+                  Index each repository's default GitHub branch automatically.
                 </p>
               </div>
               <IconButton
@@ -235,8 +243,8 @@ export function CodeTruth({
               />
             </div>
             <p className="muted">
-              Add HTTPS GitHub repositories for this workspace and map each
-              network to a branch. Use Manage GitHub on{" "}
+              Add HTTPS GitHub repositories for this workspace. Use Manage
+              GitHub on{" "}
               <NavLink to={`/admin/overview?workspace=${workspaceId}`}>
                 Overview
               </NavLink>{" "}
@@ -248,47 +256,51 @@ export function CodeTruth({
             {data && settings.repositories.length === 0 && (
               <p>No repositories configured.</p>
             )}
-            <div className="repository-list repository-list-stacked">
-              {settings.repositories.map((repo, index) => (
-                <RepositoryCard
-                  key={repo.id}
-                  label={`Repository ${index + 1}`}
-                  name={repo.id}
-                  url={repo.repositoryUrl}
-                  actions={
-                    <>
-                      <IconButton
-                        icon="edit"
-                        label={`Edit repository ${index + 1}`}
-                        onClick={() => setEditingRepository(index)}
-                      />
-                      <IconButton
-                        icon="delete"
-                        label={`Remove repository ${index + 1}`}
-                        className="danger"
-                        onClick={() =>
-                          change({
-                            ...settings,
-                            repositories: settings.repositories.filter(
-                              (_, i) => i !== index,
-                            ),
-                          })
-                        }
-                      />
-                    </>
-                  }
-                >
-                  <p className="repository-card-note">{repo.repositoryUrl}</p>
-                  <ul>
-                    {Object.entries(repo.networks).map(([network, branch]) => (
-                      <li key={network}>
-                        {network} → {branch}
-                      </li>
-                    ))}
-                  </ul>
-                </RepositoryCard>
-              ))}
-            </div>
+            {settings.repositories.length > 0 && (
+              <div className="repository-list repository-list-stacked">
+                {settings.repositories.map((repo, index) => (
+                  <RepositoryCard
+                    key={repo.id}
+                    label={`Repository ${index + 1}`}
+                    name={repositoryName(repo.repositoryUrl)}
+                    url={repo.repositoryUrl}
+                    actions={
+                      <>
+                        <IconButton
+                          icon="edit"
+                          label={`Edit repository ${index + 1}`}
+                          onClick={() => setEditingRepository(index)}
+                        />
+                        <IconButton
+                          icon="delete"
+                          label={`Remove repository ${index + 1}`}
+                          className="danger"
+                          onClick={() =>
+                            change({
+                              ...settings,
+                              repositories: settings.repositories.filter(
+                                (_, i) => i !== index,
+                              ),
+                            })
+                          }
+                        />
+                      </>
+                    }
+                  >
+                    <div className="code-truth-repository-details">
+                      {repo.description && (
+                        <p className="repository-card-note">
+                          {repo.description}
+                        </p>
+                      )}
+                      <p className="repository-card-note muted">
+                        Default GitHub branch
+                      </p>
+                    </div>
+                  </RepositoryCard>
+                ))}
+              </div>
+            )}
             <div className="row">
               <button type="submit" disabled={!dirty}>
                 Save Code Truth
@@ -305,9 +317,9 @@ export function CodeTruth({
               : settings.repositories[editingRepository]
           }
           workspaceId={workspaceId}
-          existingIds={settings.repositories
+          existingUrls={settings.repositories
             .filter((_, i) => i !== editingRepository)
-            .map((r) => r.id)}
+            .map((r) => r.repositoryUrl)}
           close={() => setEditingRepository(undefined)}
           apply={(repo) => {
             if (editingRepository === "new")
@@ -364,10 +376,11 @@ export function CodeTruth({
             )}
             {status.targets.map((t) => (
               <div key={t.target}>
-                <h3>{t.target}</h3>
+                <h3>{nameForTarget(t.target)}</h3>
                 {t.networks.map((n) => (
                   <p className="plugin-path" key={n.network}>
-                    {n.network} → {n.branch} · {n.status}
+                    {n.branch === "HEAD" ? "Default GitHub branch" : n.branch} ·{" "}
+                    {n.status}
                     {n.commit && (
                       <>
                         {" "}
@@ -391,30 +404,34 @@ export function CodeTruth({
 function RepositoryEditor({
   initial,
   workspaceId,
-  existingIds,
+  existingUrls,
   close,
   apply,
 }: {
   initial?: CodeRepository;
   workspaceId: string;
-  existingIds: string[];
+  existingUrls: string[];
   close: () => void;
   apply: (repository: CodeRepository) => void;
 }) {
   const [draft, setDraft] = useState<CodeRepository>(() =>
     initial
-      ? { ...initial, networks: { ...initial.networks } }
+      ? { ...initial }
       : {
-          id: "",
+          id: `repo-${crypto.randomUUID()}`,
           repositoryUrl: "",
-          networks: { devnet: "" },
+          description: "",
           workspaces: [workspaceId],
         },
   );
   const [error, setError] = useState("");
   return (
     <Modal
-      title={initial ? `Edit repository ${initial.id}` : "Add repository"}
+      title={
+        initial
+          ? `Edit repository ${repositoryName(initial.repositoryUrl)}`
+          : "Add repository"
+      }
       onClose={close}
     >
       <p className="muted">
@@ -429,23 +446,26 @@ function RepositoryEditor({
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          if (existingIds.includes(draft.id)) {
-            setError("A repository with this ID already exists.");
+          const parsed = codeRepositorySchema.safeParse(draft);
+          if (!parsed.success) {
+            setError(
+              "Enter an HTTPS GitHub repository URL and a description of up to 2,000 characters.",
+            );
             return;
           }
-          apply(draft);
+          if (
+            existingUrls.some(
+              (url) =>
+                repositoryName(url).toLowerCase() ===
+                repositoryName(draft.repositoryUrl).toLowerCase(),
+            )
+          ) {
+            setError("This repository is already configured.");
+            return;
+          }
+          apply(parsed.data);
         }}
       >
-        <label className="field">
-          <span>Repository ID</span>
-          <input
-            required
-            pattern="[a-z0-9][a-z0-9_-]{0,63}"
-            value={draft.id}
-            placeholder="my-repository"
-            onChange={(e) => setDraft({ ...draft, id: e.target.value })}
-          />
-        </label>
         <label className="field">
           <span>GitHub repository URL</span>
           <input
@@ -458,150 +478,21 @@ function RepositoryEditor({
             }
           />
         </label>
-        <NetworkFields
-          value={draft.networks}
-          change={(networks) => setDraft({ ...draft, networks })}
-        />
-        <ModalActions>
-          <button type="submit">Apply repository</button>
-        </ModalActions>
-      </form>
-    </Modal>
-  );
-}
-
-function NetworkFields({
-  value,
-  change,
-}: {
-  value: Record<string, string>;
-  change: (value: Record<string, string>) => void;
-}) {
-  const entries = Object.entries(value);
-  const [adding, setAdding] = useState(false);
-  return (
-    <fieldset className="plugin-workspaces">
-      <legend>Networks and branches</legend>
-      {entries.map(([network, branch], index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: Controlled fields; network names are editable.
-        <div className="row" key={index}>
-          <label className="field">
-            <span>Network {index + 1}</span>
-            <input
-              required
-              pattern="[a-z0-9][a-z0-9_-]{0,63}"
-              value={network}
-              onChange={(e) => {
-                // Keep duplicate names invalid while editing rather than overwriting a branch.
-                if (
-                  !entries.some(
-                    ([name], i) => i !== index && name === e.target.value,
-                  )
-                )
-                  change(
-                    Object.fromEntries(
-                      entries.map(([key, v], i) => [
-                        i === index ? e.target.value : key,
-                        v,
-                      ]),
-                    ),
-                  );
-              }}
-            />
-          </label>
-          <label className="field">
-            <span>Branch {index + 1}</span>
-            <input
-              required
-              value={branch}
-              placeholder="devnet-develop"
-              onChange={(e) => change({ ...value, [network]: e.target.value })}
-            />
-          </label>
-          <IconButton
-            icon="delete"
-            label={`Remove network ${index + 1}`}
-            className="danger"
-            type="button"
-            disabled={entries.length === 1}
-            onClick={() =>
-              change(Object.fromEntries(entries.filter((_, i) => i !== index)))
+        <label className="field">
+          <span>Description</span>
+          <textarea
+            rows={4}
+            maxLength={2000}
+            value={draft.description ?? ""}
+            placeholder="Describe what this repository contains and when to use it."
+            onChange={(e) =>
+              setDraft({ ...draft, description: e.target.value })
             }
           />
-        </div>
-      ))}
-      <IconButton
-        icon="add"
-        label="Add network"
-        disabled={entries.length >= 8}
-        onClick={() => setAdding(true)}
-      />
-      {adding && (
-        <NetworkEditor
-          existingNames={Object.keys(value)}
-          close={() => setAdding(false)}
-          apply={(network, branch) => {
-            change({ ...value, [network]: branch });
-            setAdding(false);
-          }}
-        />
-      )}
-    </fieldset>
-  );
-}
-
-function NetworkEditor({
-  existingNames,
-  close,
-  apply,
-}: {
-  existingNames: string[];
-  close: () => void;
-  apply: (network: string, branch: string) => void;
-}) {
-  const [network, setNetwork] = useState("");
-  const [branch, setBranch] = useState("");
-  const [error, setError] = useState("");
-  return (
-    <Modal title="Add network" onClose={close}>
-      {error && (
-        <p className="notice" role="alert">
-          {error}
-        </p>
-      )}
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (existingNames.includes(network)) {
-            setError("This network already exists.");
-            return;
-          }
-          apply(network, branch);
-        }}
-      >
-        <label className="field">
-          <span>Network name</span>
-          <input
-            required
-            pattern="[a-z0-9][a-z0-9_-]{0,63}"
-            value={network}
-            placeholder="testnet"
-            onChange={(e) => setNetwork(e.target.value)}
-          />
-        </label>
-        <label className="field">
-          <span>Branch name</span>
-          <input
-            required
-            value={branch}
-            placeholder="testnet-develop"
-            onChange={(e) => setBranch(e.target.value)}
-          />
+          <small className="muted">Optional · up to 2,000 characters.</small>
         </label>
         <ModalActions>
-          <button type="submit" aria-label="Add network">
-            New
-          </button>
+          <button type="submit">Apply repository</button>
         </ModalActions>
       </form>
     </Modal>

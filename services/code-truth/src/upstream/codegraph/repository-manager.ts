@@ -38,6 +38,8 @@ export type PublicSnapshot = Omit<Snapshot, "path">;
 
 export type TargetStatus = {
   target: string;
+  repositoryUrl: string;
+  description?: string;
   networks: Array<
     | (PublicSnapshot & { status: "ready" })
     | {
@@ -99,6 +101,8 @@ export class RepositoryManager {
   statuses(): TargetStatus[] {
     return [...this.#targets.values()].map((target) => ({
       target: target.id,
+      repositoryUrl: target.repositoryUrl,
+      ...(target.description ? { description: target.description } : {}),
       networks: Object.entries(target.networks).map(([network, branch]) => {
         const key = snapshotKey(target.id, network);
         const snapshot = this.#active.get(key);
@@ -174,9 +178,13 @@ export class RepositoryManager {
     const repository = parseGitHubRepositoryUrl(target.repositoryUrl);
     if (!repository) throw new Error("Configured repository URL is invalid");
 
-    for (const [network, branch] of Object.entries(target.networks)) {
+    for (const [network, configuredBranch] of Object.entries(target.networks)) {
       const key = snapshotKey(target.id, network);
       try {
+        const branch =
+          configuredBranch === "HEAD"
+            ? await this.#repositorySource.defaultBranch(repository)
+            : configuredBranch;
         const commit = await this.#repositorySource.resolveBranch(
           repository,
           branch,

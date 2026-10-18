@@ -30,6 +30,7 @@ const targets: [import("../../../src/code-truth/config.ts").CodeTarget] = [
   {
     id: "frontend",
     repositoryUrl: "https://github.com/example/frontend.git",
+    description: "Frontend application and shared components.",
     networks: { devnet: "devnet-develop" },
   },
 ];
@@ -60,6 +61,9 @@ beforeAll(async () => {
     token,
     clock: () => clock,
     repositorySourceFor: (getToken) => ({
+      async defaultBranch() {
+        return "main";
+      },
       async resolveBranch() {
         const token = getToken();
         credentialReads.push(token);
@@ -74,6 +78,9 @@ beforeAll(async () => {
     dataDir: join(root, "data"),
     codegraph: graph,
     repositorySource: {
+      async defaultBranch() {
+        return "main";
+      },
       async resolveBranch() {
         syncs++;
         return "a".repeat(40);
@@ -153,6 +160,15 @@ test("local MCP exposes only configured targets, preserves commit evidence and d
       arguments: {},
     });
     expect(JSON.stringify(listed)).toContain("frontend");
+    expect(listed.structuredContent).toMatchObject({
+      targets: [
+        {
+          target: "frontend",
+          repositoryUrl: "https://github.com/example/frontend.git",
+          description: "Frontend application and shared components.",
+        },
+      ],
+    });
     expect(JSON.stringify(listed)).not.toContain("backend");
     const result = await mcp.callTool({
       name: "get_code_context",

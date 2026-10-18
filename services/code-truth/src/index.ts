@@ -28,6 +28,10 @@ const service = createLocalService({
   dataDir: env.DATA_DIR,
   codegraph: new CodeGraphRunner(binary, new BunProcessRunner()),
   repositorySourceFor: (getToken) => ({
+    defaultBranch: (repository) =>
+      new OctokitGitHubRepositorySource({ token: getToken() }).defaultBranch(
+        repository,
+      ),
     resolveBranch: (repository, branch) =>
       new OctokitGitHubRepositorySource({ token: getToken() }).resolveBranch(
         repository,

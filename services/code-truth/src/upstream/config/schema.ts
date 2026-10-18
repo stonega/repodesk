@@ -28,6 +28,7 @@ const branchSchema = z
 
 export const codeTargetSchema = z.object({
   id: identifierSchema,
+  description: z.string().trim().max(2000).optional(),
   repositoryUrl: z
     .string()
     .min(1)

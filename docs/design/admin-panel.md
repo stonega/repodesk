@@ -342,7 +342,7 @@ Release demonstration: configure the bot from the panel, see the new version tak
 effect in Telegram, create/approve a schedule, inspect its run, then pause it from
 the panel and confirm no next run is dispatched.
 
-The **Plugins** page also offers predefined **Code Truth**: enable/disable, add/remove GitHub repositories, edit network-to-branch mappings, configure repositories for the selected workspace, and sync/check index readiness with commit provenance. `/api/admin/workspaces/:id/plugins/code-truth` supports GET/PUT; `/status` supports POST with `{}`; the URL identifies the workspace. These share workspace plugin revision checks and operator authorization.
+The **Plugins** page also offers predefined **Code Truth**: enable/disable, add/remove GitHub repositories with optional descriptions and automatically generated IDs, index their default GitHub branches for the selected workspace, and sync/check index readiness with commit provenance. `/api/admin/workspaces/:id/plugins/code-truth` supports GET/PUT; `/status` supports POST with `{}`; the URL identifies the workspace. These share workspace plugin revision checks and operator authorization.
 
 [GitHub App setup and API](../implementation/github-app.md) documents the implemented workspace connection flow.
 

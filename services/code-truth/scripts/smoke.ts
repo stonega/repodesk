@@ -28,6 +28,9 @@ const service = createLocalService({
   dataDir: join(root, "data"),
   codegraph: new CodeGraphRunner(binary, new BunProcessRunner()),
   repositorySource: {
+    async defaultBranch() {
+      return "main";
+    },
     async resolveBranch() {
       return "b".repeat(40);
     },
@@ -51,7 +54,7 @@ const config = {
     {
       id: "fixture",
       repositoryUrl: "https://github.com/example/fixture.git",
-      networks: { devnet: "main" },
+      networks: { default: "HEAD" },
     },
   ],
 };
@@ -88,7 +91,7 @@ try {
     name: "search_code",
     arguments: {
       target: "fixture",
-      network: "devnet",
+      network: "default",
       query: "localCodeTruthSmoke",
     },
   });

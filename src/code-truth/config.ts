@@ -17,19 +17,23 @@ const branch = z
   );
 export const codeRepositorySchema = z
   .object({
-    id: identifier,
+    id: identifier.default(() => `repo-${crypto.randomUUID()}`),
     repositoryUrl: z
       .string()
       .max(2048)
       .regex(
         /^https:\/\/github\.com\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}(?:\.git)?$/,
       ),
+    description: z.string().trim().max(2000).optional(),
     networks: z
       .record(identifier, branch)
-      .refine((v) => Object.keys(v).length > 0 && Object.keys(v).length <= 8),
+      .refine((v) => Object.keys(v).length > 0 && Object.keys(v).length <= 8)
+      .optional(),
     workspaces: z.array(z.uuid()).max(500),
   })
-  .strict();
+  .strict()
+  // Accept saved legacy mappings, but repository settings now follow GitHub's default branch.
+  .transform(({ networks: _, ...repository }) => repository);
 export const codeTruthSchema = z
   .object({
     enabled: z.boolean(),
@@ -38,7 +42,12 @@ export const codeTruthSchema = z
   .strict()
   .refine(
     (v) =>
-      new Set(v.repositories.map((r) => r.id)).size === v.repositories.length,
+      new Set(v.repositories.map((r) => r.id)).size === v.repositories.length &&
+      new Set(
+        v.repositories.map((r) =>
+          r.repositoryUrl.toLowerCase().replace(/\.git$/, ""),
+        ),
+      ).size === v.repositories.length,
   );
 export const codeTruthSaveSchema = z
   .object({
@@ -48,7 +57,9 @@ export const codeTruthSaveSchema = z
   .strict();
 export type CodeTruthSettings = z.infer<typeof codeTruthSchema>;
 export type CodeRepository = z.infer<typeof codeRepositorySchema>;
-export type CodeTarget = Omit<CodeRepository, "workspaces">;
+export type CodeTarget = Omit<CodeRepository, "workspaces"> & {
+  networks: Record<string, string>;
+};
 export const codeTruthTools = [
   "list_code_targets",
   "search_code",
@@ -73,6 +84,8 @@ export interface CodeTruthStatus {
   syncing: boolean;
   targets: {
     target: string;
+    repositoryUrl?: string;
+    description?: string;
     networks: {
       network: string;
       branch: string;
@@ -89,5 +102,11 @@ export function targetsFor(
 ): CodeTarget[] {
   return settings.repositories
     .filter((r) => r.workspaces.includes(workspaceId))
-    .map(({ workspaces: _, ...target }) => target);
+    .map(({ id, repositoryUrl, description }) => ({
+      id,
+      repositoryUrl,
+      ...(description ? { description } : {}),
+      // The upstream MCP protocol still uses a named snapshot selector.
+      networks: { default: "HEAD" },
+    }));
 }

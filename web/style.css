@@ -2515,18 +2515,6 @@ input.plugin-toggle-input:disabled {
   margin: 0;
   min-width: 0;
 }
-.plugin-workspaces {
-  min-width: 0;
-  border: 1px solid var(--ui-border);
-  border-radius: 7px;
-  margin: 0 0 18px;
-  padding: 12px 16px;
-}
-.plugin-workspaces legend {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ui-muted);
-}
 .plugin-check {
   display: flex;
   gap: 10px;
@@ -2542,16 +2530,25 @@ input.plugin-toggle-input:disabled {
 }
 
 .code-truth-fields {
+  display: grid;
+  gap: 16px;
   border: 0;
   padding: 0;
   margin: 0;
   min-width: 0;
 }
-.code-truth-fields .repository-list {
-  margin-bottom: 16px;
+.code-truth-fields > p,
+.code-truth-fields .plugin-card-heading {
+  margin: 0;
 }
-.code-truth-status {
-  margin-top: 1.5rem;
+.code-truth-fields .plugin-card-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.code-truth-repository-details {
+  display: grid;
+  gap: 6px;
+  white-space: pre-wrap;
 }
 
 .field input[aria-invalid="true"],
