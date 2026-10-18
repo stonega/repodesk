@@ -51,8 +51,11 @@ cannot authorize implementation or publication.
 ## Continuous collaboration
 
 A verified GitHub collaborator's clear instruction can authorize a task.
-In the configuration editor, set whether verified implementations
-publish a PR by default. Codex has no application-imposed execution-cycle,
+Verified implementations automatically publish PRs ready for review; no
+publication checkbox or separate PR request is required. Saved publication
+opt-outs are normalized to enabled. Existing tasks with a different authority
+snapshot stop on the configuration check rather than silently gaining authority.
+Codex has no application-imposed execution-cycle,
 repair-count, active-time or token quotas. It continues authorized work until
 completion, a necessary question, cancellation or failure. Provider/account
 limits, container isolation, retention and current permissions still apply.
@@ -156,8 +159,9 @@ patches. Permission/configuration changes, bot changes and removed source contex
 stop execution. Source expiry and soft deletion scrub relational private content
 immediately and retry idempotent container/volume erasure until confirmed.
 
-GET additionally returns `developmentTasks`; plugin settings accept optional
-`development: { executionMode, publishByDefault }`.
+GET returns a single `tasks` collection. The task authority snapshot records the
+fixed `publishByDefault: true` policy; execution mode and publication are not
+operator choices.
 The existing cancellation route handles continuous
 task IDs. The migration creates tenant-scoped task/input/grant/attempt/event tables;
 it enables no new execution policy by itself. See [delivery evidence and rollout](codex-collaboration-plan.md).
@@ -179,8 +183,7 @@ rebuilds token totals from reported usage. It does not restart stopped tasks.
 3. Under **Plugins → Codex**, configure the shared provider/model or ChatGPT
    device-code sign-in. Enable the plugin after connecting credentials.
    Sign-in progress is bounded; Recheck connection preserves the editor's draft.
-4. Configure PR publication by default in the Configuration dialog. This setting
-   applies to every connected repository.
+4. Verified implementations publish PRs ready for review automatically.
    Codex reads the repository's default branch from GitHub; branch settings and
    collaborator access are managed in GitHub. There is no extra repository editor,
    maintainer list or plugin repository grant.
@@ -193,9 +196,11 @@ usage through a custom provider is billed separately from Pi chat usage.
 
 The operator API is `GET|PUT /api/admin/workspaces/:id/plugins/coding`.
 PUT accepts `{ revision, settings: { enabled, backend: "podman", authMode:
-"provider_key" | "device_code", development?: { publishByDefault: boolean }, model? },
+"provider_key" | "device_code", model? },
 providerApiKey? }`. Omit `providerApiKey` to retain it; send `null` to remove
-the saved key. Responses return only `providerApiKeyConfigured` and device
+the saved key. If `development.publishByDefault` is supplied, the server normalizes
+it to `true`; it cannot disable publication. Responses return only
+`providerApiKeyConfigured` and device
 connection status, never credentials. Device sign-in uses `POST
 /api/admin/workspaces/:id/plugins/coding/device/start`; disconnect uses `POST
 /api/admin/workspaces/:id/plugins/coding/device/logout`. Stop a task

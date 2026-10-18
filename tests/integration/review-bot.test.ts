@@ -156,7 +156,7 @@ class Runner implements LocalRunner {
         enabled: true,
         backend: "podman",
         authMode: "provider_key",
-        development: { publishByDefault: false },
+        development: { publishByDefault: true },
       },
     };
     w.reviewBot = {
@@ -885,7 +885,7 @@ class Runner implements LocalRunner {
       topicId: 0,
       sourceId: "fixture",
       payload: review.payload,
-      policy: { publishByDefault: false },
+      policy: { publishByDefault: true },
       state: "queued",
       phase: "intake",
       revision: 1,

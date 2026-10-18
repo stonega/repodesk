@@ -1692,7 +1692,7 @@ test.describe
       ).toBeVisible();
       await expect(
         configuration.getByText("Publish by default", { exact: true }),
-      ).toBeVisible();
+      ).toHaveCount(0);
       await expect(page.locator(".plugin-back-link svg")).toBeVisible();
       await configuration
         .getByRole("button", { name: "Edit Codex configuration" })
@@ -1707,11 +1707,9 @@ test.describe
         codingDialog.getByText("Maintainers", { exact: true }),
       ).toHaveCount(0);
       await expect(codingDialog.getByLabel("Execution policy")).toHaveCount(0);
-      await codingDialog
-        .getByLabel(
-          "Publish verified implementations as PRs ready for review by default",
-        )
-        .check();
+      await expect(
+        codingDialog.getByLabel(/Publish verified implementations/),
+      ).toHaveCount(0);
       await codingDialog
         .getByRole("button", { name: "Save configuration", exact: true })
         .click();
@@ -1736,11 +1734,8 @@ test.describe
           .getByText("Enabled", { exact: true }),
       ).toBeVisible();
       await expect(
-        configuration
-          .getByText("Publish by default", { exact: true })
-          .locator("..")
-          .getByText("Enabled", { exact: true }),
-      ).toBeVisible();
+        configuration.getByText("Publish by default", { exact: true }),
+      ).toHaveCount(0);
       await expect(
         configuration.getByText("Execution policy", { exact: true }),
       ).toHaveCount(0);

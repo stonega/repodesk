@@ -463,16 +463,21 @@ when implementing or reviewing a change.
 - **Preference:** Show a compact configuration summary with an Edit action opening
   a dialog, followed by coding tasks. Remove the repository list and its management
   actions; GitHub owns repository access.
-- **Scope:** Codex plugin detail page on desktop and mobile. Publication settings apply
-  once to the workspace's connected repositories.
+- **Scope:** Codex plugin detail page on desktop and mobile.
 - **Source:** 2026-09-29 — user requested separate configuration, repository and task
   cards. 2026-10-12 — user removed the extra repository permission layer in Codex
   and Review Bot in favor of GitHub's native permissions.
 - **Source update:** 2026-10-17 — the user approved removing Reviewed and using
   one continuous Codex task workflow, explicitly without legacy compatibility.
   Remove the execution-mode selector and mode badges from both saved summaries
-  and editors. Keep PR publication as an independent setting.
+  and editors.
+- **Source update:** 2026-10-18 — the user requested removing the publication
+  checkbox and enabling publication by default. Omit the publication control and
+  its saved Enabled/Disabled row. Verified implementations publish PRs ready for
+  review automatically; saved opt-outs must not remain hidden overrides.
 - **Exceptions:** Task repository references remain in task summaries.
+  Analysis/questions remain read-only. Passing checks and current GitHub authority
+  are still required for publication.
 
 ### GitHub owns Codex and Review Bot repository permissions
 

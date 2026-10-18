@@ -898,6 +898,54 @@ const url = process.env.TEST_DATABASE_URL;
       };
     });
   }
+  test("a retained opt-out task stops instead of silently receiving publication authority", async () => {
+    const f = await fixture();
+    await store.change(f.w.id, async (_w, sql) => {
+      const task = await taskGet(sql, f.w.id, f.task.id);
+      task.policy.publishByDefault = false;
+      await taskSave(sql, task);
+    });
+    const stopped = await f.tick();
+    expect(stopped.state).toBe("cancelled");
+    expect(stopped.error).toBe("coding_configuration_changed");
+    expect(stopped.canPublish).toBe(false);
+    expect(f.starts).toHaveLength(0);
+    expect(f.publications).toHaveLength(0);
+  });
+  test("a verified implementation publishes once without an explicit PR request", async () => {
+    const f = await fixture("Fix pagination");
+    expect(f.task.policy.publishByDefault).toBe(true);
+    expect(f.task.canPublish).toBe(false);
+    await f.tick();
+    const intent = result({
+      evidence: "Fix pagination",
+      publishRequested: false,
+    });
+    const queued = await f.tick({ state: "succeeded", result: intent });
+    expect(queued.canImplement).toBe(true);
+    expect(queued.canPublish).toBe(true);
+    const running = await f.tick();
+    expect(f.publications).toHaveLength(0);
+    expect(
+      (
+        await f.tick({
+          state: "ready",
+          checkPassed: true,
+          result: { ...intent, status: "completed" },
+        })
+      ).state,
+    ).toBe("publishing");
+    expect(f.publications).toEqual([present(running.attemptId)]);
+    const done = await f.tick({
+      state: "succeeded",
+      prUrl: "https://github.com/example/workspace/pull/43",
+      publishedSha: "b".repeat(40),
+    });
+    expect(done.state).toBe("review");
+    expect(done.pr?.url).toBe("https://github.com/example/workspace/pull/43");
+    await f.tick();
+    expect(f.publications).toHaveLength(1);
+  });
   test("temporary GitHub access loss retains the attempt, blocks publication and recovers once", async () => {
     const f = await fixture();
     await f.tick();
@@ -1112,7 +1160,7 @@ const url = process.env.TEST_DATABASE_URL;
       ),
     ).toBe(false);
   });
-  test("a checkpoint awaiting review releases its runner slot after an executor restart", async () => {
+  test("a superseded checkpoint releases its runner slot after an executor restart without publication", async () => {
     const f = await fixture();
     await f.tick();
     await f.tick({
@@ -1122,6 +1170,7 @@ const url = process.env.TEST_DATABASE_URL;
     });
     await f.tick();
     const attemptId = present((await f.read()).attemptId);
+    await f.append("Also fix the empty state before publishing");
     f.runner.cancel = async () => {
       throw new Fault("coding_runner_unavailable", 503);
     };
@@ -1131,7 +1180,7 @@ const url = process.env.TEST_DATABASE_URL;
       checkPassed: true,
       result: result({ status: "completed", publishRequested: false }),
     });
-    expect(review.state).toBe("review");
+    expect(review.state).toBe("queued");
     expect(review.cleanupAttemptId).toBe(attemptId);
     f.runner.cancel = async (_workspace, id) => {
       f.cancels.push(id);
@@ -1142,7 +1191,7 @@ const url = process.env.TEST_DATABASE_URL;
       await taskSave(sql, task);
     });
     await f.executor().tick(f.w.id);
-    expect((await f.read()).state).toBe("review");
+    expect((await f.read()).state).toBe("queued");
     expect((await f.read()).cleanupAttemptId).toBeUndefined();
     expect(f.cancels).toEqual([attemptId]);
     expect(f.starts).toHaveLength(2);
@@ -1306,7 +1355,7 @@ const url = process.env.TEST_DATABASE_URL;
       const w = await store.read(first.w.id);
       expect(w.coding?.revision).toBe(1);
       expect(w.coding?.settings.development).toEqual({
-        publishByDefault: false,
+        publishByDefault: true,
       });
       expect(
         (
@@ -1408,7 +1457,7 @@ const url = process.env.TEST_DATABASE_URL;
     expect(queued.state).toBe("queued");
     expect(queued.phase).toBe("work");
     expect(queued.canImplement).toBe(true);
-    expect(queued.canPublish).toBe(false);
+    expect(queued.canPublish).toBe(true);
     await accepted.tick();
     expect(accepted.starts.at(-1)?.development?.mode).toBe("work");
     expect(accepted.publications).toHaveLength(0);

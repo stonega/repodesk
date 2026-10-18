@@ -46,6 +46,21 @@ const input = {
   title: "Fix recap",
   body: "Include the last message. Add regression tests.",
 };
+test("reading and saving Codex settings cannot retain a publication opt-out", () => {
+  const { w } = codingFixture();
+  const admin = { id: w.operatorId, operator: true, username: "operator" };
+  const settings = {
+    ...present(w.coding).settings,
+    development: { publishByDefault: false },
+  };
+  present(w.coding).settings = settings;
+  expect(codingView(w, admin).settings.development?.publishByDefault).toBe(
+    true,
+  );
+  const saved = saveCoding(w, admin, { revision: 1, settings });
+  expect(saved.settings.development?.publishByDefault).toBe(true);
+  expect(w.coding?.settings.development?.publishByDefault).toBe(true);
+});
 test("legacy Actions settings cannot authorize a new coding task", () => {
   const { w } = codingFixture();
   (present(w.coding).settings as { backend: string }).backend =

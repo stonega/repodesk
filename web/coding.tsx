@@ -382,16 +382,6 @@ export function Coding({
             <dd>{data ? credentialStatus : pendingValue}</dd>
           </div>
           <div>
-            <dt>Publish by default</dt>
-            <dd>
-              {data
-                ? data.settings.development?.publishByDefault
-                  ? "Enabled"
-                  : "Disabled"
-                : pendingValue}
-            </dd>
-          </div>
-          <div>
             <dt>Tasks</dt>
             <dd>
               {data ? (
@@ -792,23 +782,6 @@ export function Coding({
                 )}
               </>
             )}
-            <label className="form-check">
-              <input
-                type="checkbox"
-                disabled={busy}
-                checked={configDraft.development?.publishByDefault ?? false}
-                onChange={(event) =>
-                  setConfigDraft({
-                    ...configDraft,
-                    development: {
-                      publishByDefault: event.target.checked,
-                    },
-                  })
-                }
-              />
-              Publish verified implementations as PRs ready for review by
-              default
-            </label>
             <p className="muted">
               Saving configuration requests cancellation of active tasks using
               older settings.

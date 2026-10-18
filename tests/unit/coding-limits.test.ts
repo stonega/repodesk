@@ -19,7 +19,7 @@ test("retired Codex quotas are discarded without default or hidden overrides", (
     }),
   ).toEqual({ publishByDefault: true });
   expect(developmentPolicy.parse({})).toEqual({
-    publishByDefault: false,
+    publishByDefault: true,
   });
   const run = developmentRun.parse({
     ...legacy,
@@ -40,6 +40,20 @@ test("retired Codex quotas are discarded without default or hidden overrides", (
   expect(() => developmentPolicy.parse({ executionMode: "bypass" })).toThrow();
   expect(() => developmentPolicy.parse({ allowSecrets: true })).toThrow();
   expect(() => developmentRun.parse({ ...run, bypassChecks: true })).toThrow();
+});
+
+test("verified implementation publication cannot be disabled by saved settings", () => {
+  for (const development of [
+    {},
+    { publishByDefault: false },
+    { publishByDefault: true },
+  ]) {
+    const saved = codingSaveSchema.parse({
+      revision: 1,
+      settings: { enabled: true, backend: "podman", development },
+    });
+    expect(saved.settings.development).toEqual({ publishByDefault: true });
+  }
 });
 
 test("older settings clients cannot preserve retired execution overrides", () => {

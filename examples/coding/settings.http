@@ -9,7 +9,7 @@ GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding
 # Configure deploy/codex/compose.yaml separately. Use a fake key in checked-in examples.
 # Omit providerApiKey to preserve it; use null to remove it and restore any environment fallback.
 # Responses include providerApiKeyConfigured only, never the saved key.
-# Codex uses one continuous workflow. PR publication remains an independent setting.
+# Verified Codex implementations automatically publish PRs ready for review.
 PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/coding
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}
@@ -21,10 +21,7 @@ Content-Type: application/json
   "settings": {
     "enabled": true,
     "backend": "podman",
-    "authMode": "provider_key",
-    "development": {
-      "publishByDefault": false
-    }
+    "authMode": "provider_key"
   }
 }
 

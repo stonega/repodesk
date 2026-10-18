@@ -17,7 +17,12 @@ export const developmentPolicy = z.preprocess(
   withoutDevelopmentLimits,
   z
     .object({
-      publishByDefault: z.boolean().default(false),
+      // Publication is part of every verified implementation. Keep the fixed
+      // value in task authority snapshots; saved opt-outs cannot disable it.
+      publishByDefault: z
+        .boolean()
+        .default(true)
+        .transform(() => true),
     })
     .strict(),
 );

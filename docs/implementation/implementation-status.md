@@ -1,5 +1,23 @@
 # Implementation evidence
 
+## Automatic Codex PR publication (2026-10-18)
+
+Removed the publication checkbox from the Codex configuration dialog and its
+Enabled/Disabled summary row. Verified implementations automatically publish PRs
+ready for review. Policy parsing fixes `publishByDefault` to true, including saved
+false values, so removing the control leaves no hidden opt-out. Task authority
+snapshots retain the fixed value; existing tasks with a different snapshot stop
+at the configuration fence instead of acquiring new publication authority.
+Analysis, questions, evidence checks, current GitHub permissions and verification
+requirements retain their existing boundaries.
+
+Validation passed Biome, strict TypeScript, build, **867 deterministic tests**,
+**35 admin/loading browser scenarios** and **20 plugin permission/modal scenarios**.
+Desktop/mobile screenshots cover saved summaries, light/dark editors,
+loading/empty states, pending saves and recoverable errors. Regression tests cover
+automatic publication without an explicit PR request, duplicate polling, read-only
+analysis and cancellation of retained tasks with the old opt-out authority snapshot.
+
 ## GitHub App setup without icon uploads or a welcome modal (2026-10-18)
 
 GitHub App creation no longer offers an icon download, upload instructions or an

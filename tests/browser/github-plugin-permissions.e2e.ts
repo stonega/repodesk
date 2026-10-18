@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import type { CodingPage } from "../../src/coding/config.ts";
 import { emptyCoding } from "../../src/coding/config.ts";
 import { emptyReview, type ReviewPage } from "../../src/review-bot/config.ts";
+import { chooseOption } from "./dropdown-helpers.ts";
 
 const workspaceId = "d2ce2eab-3b09-4e8e-858e-75c20d832517";
 type Plugin = "codex" | "review-bot";
@@ -140,13 +141,18 @@ for (const plugin of ["codex", "review-bot"] as const) {
           dialog.getByText("Maintainers", { exact: true }),
         ).toHaveCount(0);
         await expect(dialog.getByText(/Codex Direct execution/)).toHaveCount(0);
-        if (plugin === "codex")
-          await dialog
-            .getByLabel(
-              "Publish verified implementations as PRs ready for review by default",
-            )
-            .check();
-        else
+        if (plugin === "codex") {
+          await expect(
+            summary.getByText("Publish by default", { exact: true }),
+          ).toHaveCount(0);
+          await expect(
+            dialog.getByLabel(/Publish verified implementations/),
+          ).toHaveCount(0);
+          await chooseOption(
+            dialog.getByLabel("Sign-in method"),
+            "device_code",
+          );
+        } else
           await dialog
             .getByLabel("Allow explicitly requested fixes to the same PR")
             .check();
@@ -159,15 +165,16 @@ for (const plugin of ["codex", "review-bot"] as const) {
           await expect(dialog.getByLabel("Execution policy")).toHaveCount(0);
           await expect(dialog.getByText(/Reviewed|Direct/)).toHaveCount(0);
           await expect(
-            dialog.getByLabel(
-              "Publish verified implementations as PRs ready for review by default",
-            ),
-          ).not.toBeChecked();
-          await dialog
-            .getByLabel(
-              "Publish verified implementations as PRs ready for review by default",
-            )
-            .check();
+            dialog.getByLabel(/Publish verified implementations/),
+          ).toHaveCount(0);
+          await expect(dialog.getByLabel("Sign-in method")).toHaveAttribute(
+            "value",
+            "provider_key",
+          );
+          await chooseOption(
+            dialog.getByLabel("Sign-in method"),
+            "device_code",
+          );
         } else {
           await expect(
             dialog.getByLabel(
@@ -203,10 +210,14 @@ for (const plugin of ["codex", "review-bot"] as const) {
         expect(f.writes[0]?.settings).not.toHaveProperty("repositories");
         expect(f.writes[0]?.settings).not.toHaveProperty("maintainers");
         if (plugin === "codex") {
-          expect(f.coding.settings.development?.publishByDefault).toBe(true);
-          expect(f.coding.settings.development).not.toHaveProperty(
-            "executionMode",
-          );
+          expect(f.coding.settings.authMode).toBe("device_code");
+          expect(f.writes[0]?.settings).not.toHaveProperty("development");
+          await expect(
+            summary.getByText("Publish by default", { exact: true }),
+          ).toHaveCount(0);
+          await expect(
+            summary.getByText("ChatGPT device code", { exact: true }),
+          ).toBeVisible();
         } else expect(f.review.settings.allowFixes).toBe(true);
         await expect(summary.locator("form,input,select")).toHaveCount(0);
         expect(
@@ -261,11 +272,7 @@ for (const plugin of ["codex", "review-bot"] as const) {
       const f = await fixture(page, plugin);
       const dialog = await openEditor(page, plugin);
       if (plugin === "codex")
-        await dialog
-          .getByLabel(
-            "Publish verified implementations as PRs ready for review by default",
-          )
-          .check();
+        await chooseOption(dialog.getByLabel("Sign-in method"), "device_code");
       else await dialog.getByLabel("Accept tagged requests").uncheck();
       let releaseSave = () => {};
       f.controls.pending = new Promise<void>((resolve) => {
@@ -299,11 +306,10 @@ for (const plugin of ["codex", "review-bot"] as const) {
         dialog.getByRole("button", { name: "Cancel", exact: true }),
       ).toBeInViewport();
       if (plugin === "codex")
-        await expect(
-          dialog.getByLabel(
-            "Publish verified implementations as PRs ready for review by default",
-          ),
-        ).toBeChecked();
+        await expect(dialog.getByLabel("Sign-in method")).toHaveAttribute(
+          "value",
+          "device_code",
+        );
       else
         await expect(
           dialog.getByLabel("Accept tagged requests"),

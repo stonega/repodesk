@@ -178,7 +178,7 @@ const url = process.env.TEST_DATABASE_URL;
         canImplement: false,
         canPublish: false,
         revision: 1,
-        policy: { publishByDefault: false },
+        policy: { publishByDefault: true },
       });
       expect(records.rows[0].data.policy).not.toHaveProperty("executionMode");
       expect((await store.read(id)).approvals).toHaveLength(0);
