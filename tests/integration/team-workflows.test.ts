@@ -344,6 +344,86 @@ const url = process.env.TEST_DATABASE_URL;
       ).toBe("00:00");
       expect(result.complete).toBe(true);
     });
+    test("free-form schedule proposals and runs survive persistence without a skill or extra tool grants", async () => {
+      const w = teamWorkspace(),
+        r = requestRun(w);
+      for (const skill of w.skills)
+        for (const version of skill.published)
+          version.tools = ["read_chat_context"];
+      await seed(w, r);
+      const tool = fixtureValue(
+        applicationTools(store, w.id, r.id, 1).find(
+          (t) => t.name === "propose_workflow",
+        ),
+      );
+      const args = {
+        name: "Daily reminder",
+        task: "Remind me to take a break",
+        frequency: "daily",
+        hour: 9,
+        minute: 0,
+        timezone: "Asia/Taipei",
+        format: "One sentence",
+        windowDays: 1,
+      };
+      await tool.execute("schedule", args);
+      await tool.execute("schedule", args);
+      const restart = new Store(store.pool);
+      const proposed = await restart.read(w.id);
+      expect(proposed.workflows).toHaveLength(1);
+      expect(proposed.approvals).toHaveLength(1);
+      expect(proposed.deliveries).toHaveLength(1);
+      expect(proposed.workflows[0]?.spec.skillId).toBeUndefined();
+      await restart.change(w.id, (current) => {
+        decide(current, "101", fixtureValue(proposed.approvals[0]).id, true);
+        current.skills = [];
+        fixtureValue(current.runs.find((run) => run.id === r.id)).status =
+          "succeeded";
+      });
+      const nextAt = fixtureValue(
+        (await restart.read(w.id)).workflows[0]?.nextAt,
+      );
+      await restart.change(w.id, (current) => {
+        tick(current, "gpt-4.1-mini", new Date(nextAt));
+        tick(current, "gpt-4.1-mini", new Date(nextAt));
+      });
+      const saved = await restart.read(w.id);
+      expect(saved.occurrences).toHaveLength(1);
+      const scheduled = fixtureValue(
+        saved.runs.find((run) => run.workflowId === proposed.workflows[0]?.id),
+      );
+      expect(scheduled.skillPins).toEqual([]);
+      expect(runAllowed(saved, scheduled)).toBe(true);
+      await restart.change(w.id, (current) => {
+        const run = fixtureValue(
+          current.runs.find((run) => run.id === scheduled.id),
+        );
+        run.status = "running";
+        run.fence = 1;
+      });
+      const tools = applicationTools(restart, w.id, scheduled.id, 1);
+      const context = fixtureValue(
+        tools.find((t) => t.name === "read_chat_context"),
+      );
+      await expect(context.execute("context", {})).resolves.toBeDefined();
+      const instruction = fixtureValue(
+        tools.find((t) => t.name === "propose_instruction"),
+      );
+      await expect(
+        instruction.execute("instruction", {
+          body: "New rule",
+          scope: "workspace",
+        }),
+      ).rejects.toThrow("tool_not_granted");
+      await restart.change(w.id, (current) => {
+        fixtureValue(
+          current.members.find((member) => member.id === "101"),
+        ).active = false;
+      });
+      await expect(
+        context.execute("context-after-revocation", {}),
+      ).rejects.toThrow("tool_policy_denied");
+    });
     test("application tools review a skill exactly once, survive JSONB key order and reject stale fences", async () => {
       const w = teamWorkspace(),
         source = successfulRun(w, "202"),

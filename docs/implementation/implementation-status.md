@@ -1,5 +1,32 @@
 # Implementation evidence
 
+## Free-form scheduled tasks with optional skills (2026-10-18)
+
+Telegram and admin workflow proposals now accept free-form tasks without a
+`skillId`. Approval, pause/resume, dispatch and run creation support an empty
+skill catalog. Runs without a selected skill have no skill pins or dependency on
+unrelated catalog changes; existing selected skills retain their published version
+pins and revocation behavior. Schedule proposals are application-owned tools,
+independent of a skill's requested tool list. Unpinned scheduled runs can read
+their authorized chat context and scoped model costs; connector grants and
+external-action policies remain separate. No migration or dependency was added.
+
+The shared modal editor defaults to **No skill**, allows clearing an existing
+selection, and saved details show a readable value without a fictitious version.
+Assistant guidance distinguishes scheduling from tool availability: a missing
+weather skill cannot itself block a proposal, while live weather still requires
+an authorized live-data tool. Daily/weekly recurrence, explicit local time/zone,
+approval, destination checks, budgets and capacity limits remain in force.
+
+Validation of the isolated scheduler snapshot passed Biome, strict TypeScript,
+production build and **914 deterministic tests across 103 files** with disposable
+PostgreSQL. All **6 focused browser scenarios** passed, with desktop/mobile
+inspection of saved details, modal
+editors, the empty skill catalog, pending saves and retained drafts after failure.
+Coverage includes approval/replay, restart persistence, duplicate and missed
+occurrences, dispatch capacity, owner revocation and unchanged tool boundaries.
+No deployment, live Telegram/model call or live weather retrieval was performed.
+
 ## Telegram Mini App for Codex task history (2026-10-18)
 
 The read-only `/mini` page opens a task from **View conversation** on Telegram

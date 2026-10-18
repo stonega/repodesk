@@ -18,6 +18,7 @@ import {
   audit,
   authorize,
   revokeWork,
+  workflowSkillAvailable,
 } from "../workspaces/policy.ts";
 import { createRun } from "../workspaces/service.ts";
 import { nextOccurrences } from "./schedule.ts";
@@ -47,7 +48,7 @@ export function proposeWorkflow(
     (s) =>
       s.id === spec.skillId && s.enabled && !s.archived && s.published.length,
   );
-  requireThat(skill, "skill_unavailable");
+  requireThat(!spec.skillId || skill, "skill_unavailable");
   let workflow = id ? w.workflows.find((f) => f.id === id) : undefined;
   if (id) {
     requireThat(workflow, "not_found", 404);
@@ -55,7 +56,7 @@ export function proposeWorkflow(
     requireThat(workflow.owner === actor, "owner_required", 403);
     workflow.version++;
     workflow.spec = spec;
-    workflow.skillVersion = skill.published.length;
+    workflow.skillVersion = skill?.published.length;
     workflow.status = "draft";
   } else {
     workflow = {
@@ -64,7 +65,7 @@ export function proposeWorkflow(
       owner: actor,
       status: "draft",
       spec,
-      skillVersion: skill.published.length,
+      skillVersion: skill?.published.length,
       versions: [],
     };
     w.workflows.push(workflow);
@@ -213,12 +214,7 @@ export function decide(
       "github_workflow_scope_denied",
       403,
     );
-    requireThat(
-      w.skills.some(
-        (s) => s.id === workflow.spec.skillId && s.enabled && !s.archived,
-      ),
-      "skill_unavailable",
-    );
+    requireThat(workflowSkillAvailable(w, workflow), "skill_unavailable");
     workflow.status = "active";
     workflow.nextAt = nextOccurrences(workflow.spec.recurrence, now, 1)[0];
     workflow.reason = undefined;
@@ -286,10 +282,7 @@ export function workflowAction(
       "github_workflow_scope_denied",
       403,
     );
-    requireThat(
-      w.skills.some((s) => s.id === f.spec.skillId && s.enabled && !s.archived),
-      "skill_unavailable",
-    );
+    requireThat(workflowSkillAvailable(w, f), "skill_unavailable");
     f.status = "active";
     f.nextAt = nextOccurrences(f.spec.recurrence, new Date(), 1)[0];
   } else f.status = action === "pause" ? "paused" : "deleted";

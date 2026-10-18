@@ -1,0 +1,15 @@
+{
+  "name": "Daily priorities reminder",
+  "task": "Remind me to review today's priorities.",
+  "chatId": "101",
+  "topicId": 0,
+  "recurrence": {
+    "frequency": "daily",
+    "hour": 9,
+    "minute": 0,
+    "timezone": "Asia/Taipei"
+  },
+  "format": "One concise sentence.",
+  "budgetUsd": 0.1,
+  "windowDays": 1
+}

@@ -99,7 +99,8 @@ export function workflowFields(
       path: "skillId",
       label: "Skill",
       kind: "select",
-      required: true,
+      placeholder: "No skill",
+      help: "Optional reusable instructions. The task can run without a skill.",
       options: skills.map((s) => ({ value: s.id, label: s.draft.name })),
     },
     {

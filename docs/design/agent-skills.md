@@ -135,6 +135,10 @@ that snapshot on the run. Include relevant names/descriptions in context; a boun
 `load_skill` tool retrieves only authorized pinned content when needed. An explicitly
 chosen workflow skill loads deterministically. Skill selection cannot change tenant,
 actor, destination, approval requirements or the underlying tool registry.
+Workflows may omit a skill entirely and run their free-form task without any skill
+pin or skill availability dependency. Approved run context and scoped model-cost
+reads remain available, as do application/extension tools with independent grants;
+omitting a skill grants no additional connector or write authority.
 
 Effective tool access is the intersection of deployment-approved tools, workspace
 policy, actor permissions, connection grants, workflow policy and skill assignment.

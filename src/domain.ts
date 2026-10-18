@@ -95,7 +95,7 @@ export const workflowSchema = z
       .max(2000)
       .default("Decisions, blockers, next steps. Cite source IDs."),
     budgetUsd: z.number().min(0.001).max(5),
-    skillId: z.string().min(1),
+    skillId: z.string().min(1).optional(),
     windowDays: z.number().int().min(1).max(30).default(7),
     github: repositorySourcesSchema.optional(),
   })
@@ -266,8 +266,8 @@ export interface Workflow {
   owner: string;
   status: "draft" | "active" | "paused" | "suspended" | "deleted";
   spec: WorkflowSpec;
-  skillVersion: number;
-  versions: { version: number; spec: WorkflowSpec; skillVersion: number }[];
+  skillVersion?: number;
+  versions: { version: number; spec: WorkflowSpec; skillVersion?: number }[];
   nextAt?: string;
   reason?: string;
 }

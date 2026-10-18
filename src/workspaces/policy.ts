@@ -4,6 +4,7 @@ import {
   type Audit,
   type Run,
   requireThat,
+  type Workflow,
   type Workspace,
 } from "../domain.ts";
 import {
@@ -54,6 +55,18 @@ export function audit(
 }
 export function runAllowed(w: Workspace, run: Run): boolean {
   return allowedRun(w, run, new Set(), new Map());
+}
+export function workflowSkillAvailable(w: Workspace, workflow: Workflow) {
+  return (
+    !workflow.spec.skillId ||
+    w.skills.some(
+      (s) =>
+        s.id === workflow.spec.skillId &&
+        s.enabled &&
+        !s.archived &&
+        !!s.published[(workflow.skillVersion ?? 0) - 1],
+    )
+  );
 }
 function allowedRun(
   w: Workspace,
@@ -148,9 +161,7 @@ export function revokeWork(w: Workspace, now = new Date()) {
     if (
       workflow.status === "active" &&
       (!eligible(w, workflow.owner) ||
-        !w.skills.some(
-          (s) => s.id === workflow.spec.skillId && s.enabled && !s.archived,
-        ) ||
+        !workflowSkillAvailable(w, workflow) ||
         (workflow.spec.github &&
           !workflowRepositoriesAllowed(
             w,

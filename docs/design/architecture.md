@@ -246,7 +246,12 @@ and are not replayed automatically. Completed transcript boundaries can resume.
 Daily/weekly recurrence uses Temporal in IANA zones. Nonexistent local times skip;
 repeated local times use the earlier instant. Scheduler previews and execution share
 the same function. Occurrences more than five minutes late skip and notify the owner.
-Pause, owner removal, skill disable and deletion block dependent execution.
+Workflows accept free-form tasks without a skill. Explicitly selected skills keep
+their published version pins; only these workflows depend on skill availability.
+Runs without a skill can read their approved chat context and scoped model costs,
+alongside independently authorized application/extension tools. Scheduling grants
+no new connector access or external writes. Pause, owner removal, selected-skill
+disable and deletion block dependent execution.
 
 Delivery is independent of generation. An intent is marked `sending` before calling
 Telegram; a lost reply becomes `delivery_unknown`, never an automatic resend. 429

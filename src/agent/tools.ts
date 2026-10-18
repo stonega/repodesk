@@ -86,9 +86,15 @@ export function applicationTools(
               ?.tools ?? [],
         );
         requireThat(
-          ["query_work_handoff", "read_skill_source", "propose_skill"].includes(
-            name,
-          ) ||
+          [
+            "query_work_handoff",
+            "read_skill_source",
+            "propose_skill",
+            "propose_workflow",
+          ].includes(name) ||
+            (!!r.workflowId &&
+              !r.skillPins.length &&
+              ["read_chat_context", "query_model_cost"].includes(name)) ||
             (["query_memories", "manage_memory"].includes(name) &&
               !!r.threadId &&
               !r.workflowId) ||
@@ -328,7 +334,7 @@ export function applicationTools(
     ),
     bind(
       "propose_workflow",
-      "Draft an owner-bound schedule for human approval. Never activates it. Source and destination must be this chat/topic.",
+      "Draft any free-form task as an owner-bound schedule for human approval; a skill is optional. Never activates it or adds tools. Source and destination must be this chat/topic.",
       Type.Object({
         name: Type.String(),
         task: Type.String(),
@@ -338,7 +344,7 @@ export function applicationTools(
         weekday: Type.Optional(Type.Integer({ minimum: 1, maximum: 7 })),
         timezone: Type.String(),
         format: Type.String(),
-        skillId: Type.String(),
+        skillId: Type.Optional(Type.String({ minLength: 1 })),
         windowDays: Type.Integer({ minimum: 1, maximum: 30 }),
         repositoryIds: Type.Optional(
           Type.Array(Type.Integer({ minimum: 1 }), {

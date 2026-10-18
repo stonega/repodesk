@@ -20,6 +20,7 @@ export interface FormField {
   maxLength?: number;
   minLength?: number;
   help?: string;
+  placeholder?: string;
   options?: { value: string; label: string }[];
   numeric?: boolean;
   when?: { path: string; value: unknown };
@@ -238,7 +239,8 @@ export function RecordForm({
                         }
                       >
                         <option value="">
-                          Select {field.label.toLowerCase()}
+                          {field.placeholder ??
+                            `Select ${field.label.toLowerCase()}`}
                         </option>
                         {field.options?.map((option) => (
                           <option key={option.value} value={option.value}>

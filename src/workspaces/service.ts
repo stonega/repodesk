@@ -113,12 +113,14 @@ export function createRun(
   if (options.workflowId)
     requireThat(workflow?.status === "active", "workflow_inactive", 409);
   const pins = workflow
-    ? [{ id: workflow.spec.skillId, version: workflow.skillVersion }]
+    ? workflow.spec.skillId
+      ? [{ id: workflow.spec.skillId, version: workflow.skillVersion ?? 0 }]
+      : []
     : w.skills
         .filter((s) => s.enabled && !s.archived && s.published.length)
         .map((s) => ({ id: s.id, version: s.published.length }));
   requireThat(
-    pins.length &&
+    (pins.length || (workflow && !workflow.spec.skillId)) &&
       pins.every((p) =>
         w.skills.some(
           (s) =>

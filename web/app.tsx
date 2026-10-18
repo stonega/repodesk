@@ -2083,7 +2083,6 @@ function WorkflowsPage({
     },
     format: "Decisions, blockers, next steps",
     budgetUsd: 0.1,
-    skillId: skills.data?.items[0]?.id ?? "",
     windowDays: 7,
   };
   return (
@@ -2202,10 +2201,16 @@ function WorkflowsPage({
                 <div>
                   <dt>Skill</dt>
                   <dd>
-                    {skills.data?.items.find(
-                      (skill) => skill.id === f.spec.skillId,
-                    )?.draft.name ?? f.spec.skillId}
-                    <small>Pinned version {f.skillVersion}</small>
+                    {f.spec.skillId ? (
+                      <>
+                        {skills.data?.items.find(
+                          (skill) => skill.id === f.spec.skillId,
+                        )?.draft.name ?? f.spec.skillId}
+                        <small>Pinned version {f.skillVersion}</small>
+                      </>
+                    ) : (
+                      "No skill"
+                    )}
                   </dd>
                 </div>
               </dl>

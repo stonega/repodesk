@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import type { Skill } from "../../src/domain.ts";
+import type { Skill, Workflow } from "../../src/domain.ts";
 import { memoryReferences } from "../../src/workspaces/conversation-memory.ts";
 import { spec } from "../fixtures.ts";
 import {
@@ -8,7 +8,7 @@ import {
   teamWorkspace,
 } from "../team-workflows-fixture.ts";
 
-async function fixture(page: Page) {
+async function fixture(page: Page, noSkill = false) {
   const w = teamWorkspace(),
     source = successfulRun(w);
   const draft: Skill = {
@@ -31,7 +31,8 @@ async function fixture(page: Page) {
     },
   };
   w.skills.push(draft);
-  const workflow = {
+  if (noSkill) w.skills = [];
+  const workflow: Workflow & { next: string[] } = {
     id: "repository-report",
     version: 1,
     owner: "101",
@@ -41,7 +42,7 @@ async function fixture(page: Page) {
       name: "Repository report",
       github: { revision: 1, repositoryIds: [7001] },
     },
-    skillVersion: 1,
+    skillVersion: noSkill ? undefined : 1,
     versions: [],
     next: [
       "2026-10-09T09:00:00Z",
@@ -52,12 +53,23 @@ async function fixture(page: Page) {
   let saved:
     | {
         version: number;
-        spec: { github?: { revision: number; repositoryIds: number[] } };
+        spec: {
+          skillId?: string;
+          github?: { revision: number; repositoryIds: number[] };
+        };
       }
     | undefined;
   await page.route("**/api/**", async (route) => {
     const req = route.request(),
       path = new URL(req.url()).pathname;
+    if (req.method() === "POST" && path.endsWith("/workflows")) {
+      workflow.spec = req.postDataJSON();
+      workflow.skillVersion = undefined;
+      workflow.status = "draft";
+      saved = { version: 1, spec: workflow.spec };
+      await route.fulfill({ json: { workflow, approval: {} } });
+      return;
+    }
     if (
       req.method() === "POST" &&
       path.endsWith("/workflows/repository-report/action")
@@ -155,6 +167,10 @@ test("repository schedule editing preserves selections and submits numeric sourc
     dialog.getByRole("checkbox", { name: "example/private" }),
   ).toBeChecked();
   await dialog.getByRole("checkbox", { name: "example/public" }).check();
+  const skill = dialog.getByRole("combobox", { name: "Skill", exact: true });
+  await expect(skill).toHaveText(f.w.skills[0]?.draft.name as string);
+  await skill.click();
+  await page.getByRole("option", { name: "No skill", exact: true }).click();
   await dialog
     .getByRole("button", { name: "Preview approval proposal" })
     .click();
@@ -163,7 +179,99 @@ test("repository schedule editing preserves selections and submits numeric sourc
     revision: 2,
     repositoryIds: [7001, 7002],
   });
+  expect(f.saved()?.spec.skillId).toBeUndefined();
 });
+
+for (const width of [1280, 390]) {
+  test(`free-form schedules use a modal without a skill and retain drafts on failure at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const f = await fixture(page, true);
+    await page.goto(`/admin/workflows/repository-report?workspace=${f.w.id}`);
+    await expect(page.getByText("No skill", { exact: true })).toBeVisible();
+    await expect(page.getByText(/Pinned version/)).toHaveCount(0);
+    await expect(page.locator(".workflow-card form")).toHaveCount(0);
+    await page.screenshot({
+      path: `test-results/workflow-no-skill-detail-${width}.png`,
+      fullPage: true,
+    });
+    await page.getByRole("button", { name: "Edit proposal" }).click();
+    const edit = page.getByRole("dialog", { name: "Edit Repository report" });
+    await expect(
+      edit.getByRole("combobox", { name: "Skill", exact: true }),
+    ).toHaveText("No skill");
+    await edit.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByRole("link", { name: "Back to Workflows" }).click();
+    await page.getByRole("button", { name: "Add workflow" }).click();
+    const dialog = page.getByRole("dialog", { name: "Propose a schedule" });
+    await expect(
+      dialog.getByRole("combobox", { name: "Skill", exact: true }),
+    ).toHaveText("No skill");
+    await dialog.getByLabel("Workflow name").fill("Daily reminder");
+    await dialog
+      .getByLabel("Task", { exact: true })
+      .fill("Remind me to take a break");
+    await dialog.getByLabel("Destination chat ID").fill("101");
+    let finish: (() => void) | undefined;
+    let fail = true;
+    await page.route("**/api/admin/workspaces/*/workflows", async (route) => {
+      if (route.request().method() !== "POST" || !fail) return route.fallback();
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      await route.fulfill({ status: 409, json: { error: "version_conflict" } });
+    });
+    await dialog
+      .getByRole("combobox", { name: "Skill", exact: true })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: `test-results/workflow-no-skill-editor-${width}.png`,
+      fullPage: true,
+    });
+    await dialog
+      .getByRole("button", { name: "Preview approval proposal" })
+      .click();
+    await expect(
+      dialog.getByRole("button", { name: "Saving…" }),
+    ).toBeDisabled();
+    await expect(
+      dialog.getByRole("button", { name: "Cancel", exact: true }),
+    ).toBeDisabled();
+    await page.screenshot({
+      path: `test-results/workflow-no-skill-pending-${width}.png`,
+      fullPage: true,
+    });
+    await expect.poll(() => !!finish).toBe(true);
+    finish?.();
+    await expect(dialog.getByRole("alert")).toBeVisible();
+    await expect(dialog.getByLabel("Task", { exact: true })).toHaveValue(
+      "Remind me to take a break",
+    );
+    await page.screenshot({
+      path: `test-results/workflow-no-skill-error-${width}.png`,
+      fullPage: true,
+    });
+    fail = false;
+    await dialog
+      .getByRole("button", { name: "Preview approval proposal" })
+      .click();
+    await expect(dialog).toHaveCount(0);
+    expect(f.saved()?.spec.skillId).toBeUndefined();
+    await page
+      .getByRole("link", { name: "Daily reminder", exact: true })
+      .click();
+    await expect(
+      page.getByText("Remind me to take a break", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("No skill", { exact: true })).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+  });
+}
 
 test("conversation skill provenance and explicit publication remain usable on desktop and mobile", async ({
   page,

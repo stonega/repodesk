@@ -119,6 +119,11 @@ GitHub issue and coding paths are separately scoped and approved.
 
 ## F04 — Recurring workflows and scheduling (P0)
 
+Scheduled tasks accept free-form instructions. A published, enabled skill is an
+optional reusable procedure, not a prerequisite or a list of allowed task subjects.
+Selecting a skill pins its version; omitting one creates no skill dependency.
+Scheduling does not add tools, data sources or external-action permissions.
+
 Inspired by E-08–11, E-15. Convert a natural-language instruction into a structured
 draft containing name, task, input sources, time window, timezone, recurrence,
 destination, owner, instructions, allowed tools, budget and approval policy.

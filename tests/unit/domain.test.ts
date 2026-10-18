@@ -22,6 +22,7 @@ import {
 import {
   authorize,
   eligible,
+  revokeWork,
   runAllowed,
   updateMembership,
 } from "../../src/workspaces/policy.ts";
@@ -142,6 +143,153 @@ describe("tenant and access boundaries", () => {
   });
 });
 describe("approvals and scheduling", () => {
+  test("free-form schedules need no skills through approval, resume and duplicate dispatch", () => {
+    const w = workspace();
+    const input = {
+      ...spec(w),
+      skillId: undefined,
+      task: "Send a daily reminder",
+    };
+    w.skills = [];
+    const now = new Date("2026-09-18T08:59:00Z");
+    const p = proposeWorkflow(w, "101", input, now);
+    expect(p.workflow.skillVersion).toBeUndefined();
+    tick(w, "gpt-4.1-mini", new Date("2026-09-18T09:00:00Z"));
+    expect(w.runs).toHaveLength(0);
+    decide(w, "101", p.approval.id, true, now);
+    workflowAction(w, "101", p.workflow.id, "pause", 1, "gpt-4.1-mini");
+    workflowAction(w, "101", p.workflow.id, "resume", 1, "gpt-4.1-mini");
+    const due = new Date(p.workflow.nextAt as string);
+    tick(w, "gpt-4.1-mini", due);
+    tick(w, "gpt-4.1-mini", due);
+    expect(w.runs).toHaveLength(1);
+    expect(w.occurrences).toHaveLength(1);
+    const run = w.runs[0];
+    if (!run) throw Error();
+    expect(run.skillPins).toEqual([]);
+    expect(run.task).toContain("Send a daily reminder");
+    expect(runAllowed(w, run)).toBe(true);
+    workflowAction(w, "101", p.workflow.id, "pause", 1, "gpt-4.1-mini");
+    expect(run.status).toBe("cancelled");
+  });
+  test("unrelated skill removal leaves free-form schedules active; owner revocation still blocks them", () => {
+    const w = workspace();
+    const p = proposeWorkflow(w, "101", { ...spec(w), skillId: undefined });
+    decide(w, "101", p.approval.id, true);
+    const run = createRun(
+      w,
+      "101",
+      p.workflow.spec.task,
+      "-100100",
+      0,
+      "gpt-4.1-mini",
+      {
+        workflowId: p.workflow.id,
+      },
+    );
+    w.skills = [];
+    revokeWork(w);
+    expect(p.workflow.status).toBe("active");
+    expect(runAllowed(w, run)).toBe(true);
+    const owner = w.members.find((m) => m.id === "101");
+    if (!owner) throw Error();
+    owner.active = false;
+    revokeWork(w);
+    expect(p.workflow.status).toBe("suspended");
+    expect(run.status).toBe("cancelled");
+    expect(runAllowed(w, run)).toBe(false);
+  });
+  test("selected skills retain their version pin and disabling them still suspends dependent schedules", () => {
+    const w = workspace();
+    const p = proposeWorkflow(w, "101", spec(w));
+    decide(w, "101", p.approval.id, true);
+    const skill = w.skills[0];
+    if (!skill) throw Error();
+    skill.published.push(structuredClone(skill.draft));
+    const run = createRun(
+      w,
+      "101",
+      p.workflow.spec.task,
+      "-100100",
+      0,
+      "gpt-4.1-mini",
+      {
+        workflowId: p.workflow.id,
+      },
+    );
+    expect(run.skillPins).toEqual([{ id: skill.id, version: 1 }]);
+    changeSkill(w, "101", skill.id, skill.version, "disable");
+    expect(p.workflow.status).toBe("suspended");
+    expect(run.status).toBe("cancelled");
+  });
+  test("removing a schedule's skill creates a new approval and clears its version pin", () => {
+    const w = workspace();
+    const p = proposeWorkflow(w, "101", spec(w));
+    decide(w, "101", p.approval.id, true);
+    const edit = proposeWorkflow(
+      w,
+      "101",
+      { ...spec(w), skillId: undefined },
+      new Date(),
+      p.workflow.id,
+      1,
+    );
+    expect(edit.workflow.status).toBe("draft");
+    expect(edit.workflow.skillVersion).toBeUndefined();
+    expect(edit.workflow.versions[0]?.skillVersion).toBe(1);
+    expect(() =>
+      workflowAction(w, "101", p.workflow.id, "run", 2, "gpt-4.1-mini"),
+    ).toThrow("workflow_inactive");
+    decide(w, "101", edit.approval.id, true);
+    const run = workflowAction(
+      w,
+      "101",
+      p.workflow.id,
+      "run",
+      2,
+      "gpt-4.1-mini",
+    );
+    expect("skillPins" in run && run.skillPins).toEqual([]);
+    expect(() =>
+      proposeWorkflow(w, "101", { ...spec(w), skillId: "missing" }),
+    ).toThrow("skill_unavailable");
+  });
+  test("free-form schedules retain budget, audience, missed-run and dispatch capacity checks", () => {
+    const w = workspace();
+    const input = { ...spec(w), skillId: undefined };
+    w.skills = [];
+    expect(() =>
+      proposeWorkflow(w, "101", { ...input, chatId: "202" }),
+    ).toThrow("destination_denied");
+    w.settings.runBudgetUsd = 0.01;
+    expect(() => proposeWorkflow(w, "101", input)).toThrow(
+      "budget_exceeds_workspace_limit",
+    );
+    w.settings.runBudgetUsd = null;
+    const now = new Date("2026-09-18T08:59:00Z");
+    const p = proposeWorkflow(w, "101", input, now);
+    decide(w, "101", p.approval.id, true, now);
+    tick(w, "gpt-4.1-mini", new Date("2026-09-18T10:00:00Z"));
+    expect(w.occurrences[0]?.status).toBe("skipped");
+    expect(w.runs).toHaveLength(0);
+    const due = new Date(p.workflow.nextAt as string);
+    for (let i = 0; i < 20; i++)
+      createRun(
+        w,
+        "101",
+        input.task,
+        input.chatId,
+        input.topicId,
+        "gpt-4.1-mini",
+        {
+          workflowId: p.workflow.id,
+        },
+      );
+    tick(w, "gpt-4.1-mini", due);
+    expect(p.workflow.status).toBe("suspended");
+    expect(p.workflow.reason).toBe("dispatch_policy_or_capacity");
+    expect(w.occurrences).toHaveLength(1);
+  });
   test("exact actor, version, payload, expiry and replay enforced", () => {
     const w = workspace();
     const p = proposeWorkflow(w, "101", spec(w));

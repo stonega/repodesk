@@ -5,6 +5,18 @@ acceptance. Automated checks use fake providers and never send these requests.
 
 ## Repository status and daily report
 
+Schedules also accept free-form tasks without a saved skill. For example:
+
+```text
+每天 09:00 Asia/Taipei 提醒我检查当天的优先事项，发到这里，用一句话。
+```
+
+Review and approve the proposal. In the panel, leave **Skill** as **No skill**.
+For the API, omit `skillId`; see [the free-form proposal](freeform-workflow-proposal.json).
+Selecting a skill remains optional and pins its published version. Scheduling
+does not add tools or data sources: live weather requires an authorized live-data
+tool, and access checks, budgets and approval still apply.
+
 After connecting/selecting a repository, ask in private Telegram chat:
 
 ```text
