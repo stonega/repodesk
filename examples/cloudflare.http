@@ -22,8 +22,8 @@ Content-Type: application/json
   "settings": {
     "enabled": false,
     "authMethod": "oauth",
-    "accountId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "zoneIds": ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
+    "accountId": "",
+    "zoneIds": []
   },
   "oauthClient": {
     "clientId": "replace-with-client-id",
@@ -43,9 +43,32 @@ Content-Type: application/json
 
 { "revision": 1 }
 
-# The provider callback returns to Plugins → Cloudflare, verifies the account
-# and enables the plugin. Access/refresh tokens stay encrypted on the server.
+# The provider callback discovers accounts. A sole account is selected/enabled
+# for Pages only; multiple accounts require a named selection in the panel.
+# Existing account/domain restrictions are retained on reconnect.
+# Access/refresh tokens stay encrypted on the server.
 # Read GET below for the current revision/status before any further save.
+
+### Discover authorized accounts (no manually copied account ID)
+POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/cloudflare/oauth/resources
+Cookie: deepx_session={{session}}
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{ "revision": 2, "resource": "accounts", "page": 1 }
+
+### Discover domains using an account ID returned above; follow hasMore/page
+POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/cloudflare/oauth/resources
+Cookie: deepx_session={{session}}
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{ "revision": 2, "resource": "zones", "accountId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "page": 1 }
+
+# Save named selections in Configuration → Edit. The panel supplies the discovered
+# IDs in the normal PUT settings payload; each changed selection is verified.
 
 ### Disconnect OAuth and disable the plugin (use the current revision)
 POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/cloudflare/oauth/disconnect

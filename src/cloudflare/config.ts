@@ -14,8 +14,40 @@ export const cloudflareSettings = z
   .strict()
   .refine((s) => new Set(s.zoneIds).size === s.zoneIds.length);
 export type CloudflareSettings = z.infer<typeof cloudflareSettings>;
+export const cloudflareResource = z.object({
+  id: cloudflareId,
+  name: z.string().min(1).max(253),
+});
+export type CloudflareResource = z.infer<typeof cloudflareResource>;
+export interface CloudflareResources {
+  account?: CloudflareResource;
+  zones: CloudflareResource[];
+}
+export interface CloudflareResourcePage {
+  items: CloudflareResource[];
+  page: number;
+  hasMore: boolean;
+}
+export const cloudflareDiscovery = z.discriminatedUnion("resource", [
+  z
+    .object({
+      revision: z.number().int().nonnegative(),
+      resource: z.literal("accounts"),
+      page: z.number().int().min(1).max(1000).default(1),
+    })
+    .strict(),
+  z
+    .object({
+      revision: z.number().int().nonnegative(),
+      resource: z.literal("zones"),
+      accountId: cloudflareId,
+      page: z.number().int().min(1).max(1000).default(1),
+    })
+    .strict(),
+]);
 export interface CloudflareConfig {
   settings: CloudflareSettings;
+  resources?: CloudflareResources;
   credential?: string;
   oauth?: {
     clientId: string;
@@ -45,6 +77,7 @@ export interface CloudflarePage {
   revision: number;
   settings: CloudflareSettings;
   tokenConfigured: boolean;
+  resources?: CloudflareResources;
   oauth?: {
     clientId: string;
     scopes: string[];

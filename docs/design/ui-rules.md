@@ -15,6 +15,7 @@ when implementing or reviewing a change.
 | --- | --- |
 | Saved display versus editing | [Modal editors](#add-and-create-flows-use-modals), [workspace values](#workspace-settings-show-saved-values-before-editing), [team summary](#team-configuration-uses-one-overview-editor), [model summary](#model-configuration-uses-a-summary-card-and-one-editor) |
 | Plugin detail layout | [Shared plugin layout](#plugin-details-share-card-layouts-and-a-title-switch), [Codex sections](#codex-details-show-configuration-and-tasks-separately) |
+| Integration setup input | [Discover resource identifiers](#connections-discover-resource-identifiers) |
 | Code Truth setup | [URL and description](#code-truth-repositories-use-a-url-and-description) |
 | Repository display | [Shared repository cards](#repository-cards-share-one-style), [member GitHub details](#member-github-columns-show-only-a-view-button), [connected repositories](#connected-github-repositories-stay-compact-and-directly-accessible) |
 | Action labels and controls | [Card action placement](#card-actions-stay-at-the-top-right), [Edit/New labels](#edit-and-add-buttons-use-short-labels), [shared icons](#common-action-buttons-use-reicon), [dropdown styling](#dropdown-inputs-share-the-workspace-selector-style) |
@@ -67,6 +68,23 @@ when implementing or reviewing a change.
 - **Exceptions:** Existing/manual API token connections remain available as an
   explicit authentication choice. Client registration in Cloudflare is a one-time
   operator prerequisite; configuring RepoDesk does not register or publish it.
+
+### Connections discover resource identifiers
+
+- **Preference:** Minimize setup input by discovering identifiers and displaying
+  provider account/resource names after authorization. Connect first; automatically
+  select an account when it is the only authorized choice. Ask for a selection
+  when several accounts are available. Offer searchable domain choices instead of
+  requiring account and zone IDs to be copied from another dashboard.
+- **Scope:** Cloudflare connection and configuration on desktop and mobile, and
+  comparable future integration setup where the provider supports discovery.
+  Saved resources remain summaries; selections are edited in a modal.
+- **Source:** 2026-10-18 — user requested improving the Cloudflare flow and reducing
+  input as much as possible after reviewing Cloudflare's account-selection consent.
+- **Exceptions:** Provider consent and one-time operator OAuth client registration
+  remain necessary. Manual API-token configuration remains an explicit fallback.
+  Discovery does not grant access to every returned resource: allowed domains
+  require an explicit selection, and no domains means Pages-only access.
 
 ### Model providers are reused across services
 

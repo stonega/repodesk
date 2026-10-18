@@ -14,7 +14,20 @@ export function cloudflareOAuthError(cause: unknown) {
     (
       {
         cloudflare_oauth_client_required:
-          "Save the OAuth client ID, client secret, API scopes and account ID first.",
+          "Save the OAuth client ID, client secret and API scopes first.",
+        cloudflare_oauth_accounts_empty:
+          "No accounts were authorized. Reconnect Cloudflare and select an account with Account Read permission.",
+        cloudflare_oauth_account_required: "Choose an account before saving.",
+        cloudflare_zone_denied:
+          "A selected domain is unavailable or belongs to another account. Check your selection and permissions.",
+        cloudflare_oauth_account_denied:
+          "Cloudflare did not authorize the selected account. Reconnect and grant access to that account.",
+        cloudflare_access_denied:
+          "Cloudflare denied access. Check the account and required Account Read or Zone Read permissions.",
+        cloudflare_unavailable:
+          "Couldn’t load Cloudflare resources. Try again shortly.",
+        cloudflare_reconnect_required:
+          "Cloudflare authorization expired. Reconnect to continue.",
         cloudflare_disconnect_before_client_change:
           "Disconnect Cloudflare before changing its client, scopes or authentication method.",
         cloudflare_https_required:
@@ -54,8 +67,7 @@ export function CloudflareOAuth({
   const canConnect =
     !!oauth?.clientId &&
     oauth.clientSecretConfigured &&
-    oauth.scopes.length > 0 &&
-    !!data?.settings.accountId;
+    oauth.scopes.length > 0;
   const connected = oauth?.status !== "not_connected" && !!oauth?.status;
   const labels = {
     not_connected: "Not connected",
@@ -148,8 +160,8 @@ export function CloudflareOAuth({
       ) : (
         <p className="muted">
           Register a Cloudflare OAuth client once, then save its credentials and
-          API scope IDs in Edit. Account Read is required to verify your chosen
-          account.
+          API scope IDs in Edit. Account Read discovers authorized accounts;
+          Zone Read discovers domains. No account or zone IDs are needed.
         </p>
       )}
       {oauth?.status === "reconnect_required" && (
@@ -200,9 +212,10 @@ export function CloudflareOAuth({
         )}
       </div>
       <p className="muted">
-        Connecting authorizes and enables this workspace’s plugin. Cloudflare
-        asks which accounts and permissions to grant; the saved account and zone
-        restrictions still apply.
+        Choose accounts and permissions on Cloudflare. A single account is
+        selected automatically; if you authorize several, choose one here
+        afterward. Use Configuration → Edit to select optional domains for DNS
+        and cache access.
       </p>
       {editor && data && (
         <OAuthEditor

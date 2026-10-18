@@ -58,7 +58,7 @@ const url = process.env.TEST_DATABASE_URL;
       await root.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
       await root.end();
     });
-    async function fixture() {
+    async function fixture(discover = false) {
       const w = workspace();
       w.operatorId = admin.id;
       const run = createRun(
@@ -80,6 +80,14 @@ const url = process.env.TEST_DATABASE_URL;
         failRefresh: false,
         failRevoke: false,
         account: accountId,
+        accounts: [{ id: accountId, name: "Fixture" }],
+        zones: [
+          { id: zoneId, name: "example.com", account: { id: accountId } },
+        ],
+        holdResources: Promise.resolve(),
+        onResources: () => {},
+        holdSelection: Promise.resolve(),
+        onSelection: () => {},
         refresh: true,
         onRefresh: async () => {},
       };
@@ -120,19 +128,60 @@ const url = process.env.TEST_DATABASE_URL;
         expect(new Headers(init.headers).get("authorization")).toBe(
           `Bearer ${active}`,
         );
+        const parsed = new URL(url);
+        if (
+          parsed.pathname.endsWith("/accounts") ||
+          parsed.pathname.endsWith("/zones")
+        ) {
+          controls.onResources();
+          await controls.holdResources;
+          const items = parsed.pathname.endsWith("/accounts")
+            ? controls.accounts
+            : controls.zones.filter(
+                (zone) =>
+                  zone.account.id === parsed.searchParams.get("account.id"),
+              );
+          const page = Number(parsed.searchParams.get("page"));
+          const result = items
+            .slice((page - 1) * 50, page * 50)
+            .map((item) => ({
+              ...item,
+              settings: { private: "not-for-panel" },
+            }));
+          return Response.json({
+            success: true,
+            result,
+            result_info: { total_count: items.length },
+          });
+        }
+        if (parsed.pathname.includes("/accounts/")) {
+          controls.onSelection();
+          await controls.holdSelection;
+        }
+        const selectedAccount = controls.accounts.find((item) =>
+          parsed.pathname.endsWith(`/accounts/${item.id}`),
+        );
         return Response.json({
           success: true,
           result: url.endsWith(`/accounts/${accountId}`)
             ? { id: controls.account, name: "Fixture" }
-            : url.endsWith(`/zones/${zoneId}`)
-              ? { id: zoneId, name: "example.com", account: { id: accountId } }
-              : [],
+            : selectedAccount
+              ? selectedAccount
+              : url.endsWith(`/zones/${zoneId}`)
+                ? {
+                    id: zoneId,
+                    name: "example.com",
+                    account: { id: accountId },
+                  }
+                : [],
           result_info: { page: 1 },
         });
       });
       await service.save(admin, w.id, {
         revision: 0,
-        settings,
+        settings: discover
+          ? { ...settings, accountId: "", zoneIds: [] }
+          : settings,
         oauthClient: { clientId, clientSecret, scopes: ["account.read"] },
       });
       const plugins = new PluginService(
@@ -228,6 +277,291 @@ const url = process.env.TEST_DATABASE_URL;
       expect(started.searchParams.get("code_challenge")).toBe(
         Buffer.from(hash(verifier), "hex").toString("base64url"),
       );
+    });
+    test("OAuth connects without identifiers and selects a sole account without granting domains", async () => {
+      const f = await fixture(true);
+      const started = await begin(f);
+      await f.service.oauth.callback(
+        admin,
+        hash(auth.raw),
+        started.searchParams.get("state") ?? "",
+        "code",
+      );
+      const page = await f.service.view(admin, f.w.id);
+      expect(page.settings).toMatchObject({
+        enabled: true,
+        accountId,
+        zoneIds: [],
+      });
+      expect(page.resources).toEqual({
+        account: { id: accountId, name: "Fixture" },
+        zones: [],
+      });
+      expect(page.oauth?.status).toBe("connected");
+      await expect(
+        f.service.query(f.w.id, f.run.id, 2, {
+          resource: "dns_records",
+          zoneId,
+        }),
+      ).rejects.toThrow("cloudflare_zone_denied");
+    });
+    test("multiple authorized accounts keep tools disabled until a verified named selection is saved", async () => {
+      const f = await fixture(true);
+      const second = { id: "c".repeat(32), name: "Another account" };
+      f.controls.accounts.push(second);
+      const started = await begin(f);
+      await f.service.oauth.callback(
+        admin,
+        hash(auth.raw),
+        started.searchParams.get("state") ?? "",
+        "code",
+      );
+      expect((await f.service.view(admin, f.w.id)).settings).toMatchObject({
+        enabled: false,
+        accountId: "",
+        zoneIds: [],
+      });
+      const accounts = await f.service.oauth.resources(admin, f.w.id, {
+        revision: 2,
+        resource: "accounts",
+      });
+      expect(accounts.items).toEqual(f.controls.accounts);
+      expect(accounts.hasMore).toBe(false);
+      await expect(
+        f.service.query(f.w.id, f.run.id, 2, { resource: "pages_projects" }),
+      ).rejects.toThrow("cloudflare_not_configured");
+      const page = await f.service.save(admin, f.w.id, {
+        revision: 2,
+        settings: {
+          ...settings,
+          enabled: true,
+          accountId: second.id,
+          zoneIds: [],
+        },
+      });
+      expect(page.resources?.account).toEqual(second);
+      expect(page.settings.enabled).toBe(true);
+    });
+    test("domain inventory is paginated and selecting a domain verifies its account and stores names", async () => {
+      const f = await connected();
+      f.controls.zones = Array.from({ length: 51 }, (_, i) => ({
+        id: (i + 1).toString(16).padStart(32, "0"),
+        name: `zone-${i}.example`,
+        account: { id: accountId },
+      }));
+      const first = await f.service.oauth.resources(admin, f.w.id, {
+        revision: 2,
+        resource: "zones",
+        accountId,
+      });
+      const next = await f.service.oauth.resources(admin, f.w.id, {
+        revision: 2,
+        resource: "zones",
+        accountId,
+        page: 2,
+      });
+      expect(first.items).toHaveLength(50);
+      expect(first.hasMore).toBe(true);
+      expect(next.items).toHaveLength(1);
+      expect(next.hasMore).toBe(false);
+      const page = await f.service.save(admin, f.w.id, {
+        revision: 2,
+        settings: { ...settings, enabled: true },
+      });
+      expect(page.settings.zoneIds).toEqual([zoneId]);
+      const changed = await f.service.save(admin, f.w.id, {
+        revision: 3,
+        settings: { ...settings, enabled: true, zoneIds: [] },
+      });
+      expect(changed.resources?.zones).toEqual([]);
+      const saved = await f.service.save(admin, f.w.id, {
+        revision: 4,
+        settings: { ...settings, enabled: true },
+      });
+      expect(saved.resources?.zones).toEqual([
+        { id: zoneId, name: "example.com" },
+      ]);
+      f.controls.accounts.push({ id: "c".repeat(32), name: "Other" });
+      await expect(
+        f.service.save(admin, f.w.id, {
+          revision: 5,
+          settings: { ...settings, enabled: true, accountId: "c".repeat(32) },
+        }),
+      ).rejects.toThrow("cloudflare_zone_denied");
+      expect((await f.service.view(admin, f.w.id)).revision).toBe(5);
+    });
+    test("inventory rejects unauthorized operators, foreign workspaces, stale revisions and invalid queries", async () => {
+      const f = await connected();
+      const query = { revision: 2, resource: "accounts" };
+      const calls = f.calls.length;
+      for (const actor of [
+        { ...admin, operator: false },
+        { ...admin, id: randomUUID() },
+      ])
+        await expect(
+          f.service.oauth.resources(actor, f.w.id, query),
+        ).rejects.toThrow(
+          actor.operator ? "access_denied" : "operator_required",
+        );
+      const foreign = await fixture();
+      await store.change(foreign.w.id, (w) => {
+        w.operatorId = randomUUID();
+      });
+      await expect(
+        f.service.oauth.resources(admin, foreign.w.id, query),
+      ).rejects.toThrow("access_denied");
+      await expect(
+        f.service.oauth.resources(admin, f.w.id, { ...query, revision: 1 }),
+      ).rejects.toThrow("version_conflict");
+      await expect(
+        f.service.oauth.resources(admin, f.w.id, { ...query, page: 0 }),
+      ).rejects.toThrow();
+      await expect(
+        f.service.oauth.resources(admin, f.w.id, {
+          ...query,
+          resource: "zones",
+        }),
+      ).rejects.toThrow();
+      expect(f.calls).toHaveLength(calls);
+    });
+    test("disconnect, role, refresh and revision changes fence in-flight inventory", async () => {
+      for (const mode of ["revision", "disconnect", "role", "refresh"]) {
+        const f = await connected();
+        let release = () => {};
+        let started = () => {};
+        const pending = new Promise<void>((resolve) => {
+          started = resolve;
+        });
+        f.controls.holdResources = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        f.controls.onResources = started;
+        const request = f.service.oauth.resources(admin, f.w.id, {
+          revision: 2,
+          resource: "accounts",
+        });
+        const rejected = request.catch((cause: unknown) => cause);
+        await pending;
+        if (mode === "disconnect")
+          await f.service.oauth.disconnect(admin, f.w.id, 2);
+        else if (mode === "role")
+          await store.pool.query(
+            "UPDATE admins SET operator=false WHERE id=$1",
+            [admin.id],
+          );
+        else if (mode === "refresh")
+          await store.change(f.w.id, (w) => {
+            requireThat(
+              w.plugins?.cloudflare?.oauth?.connection,
+              "missing connection",
+            );
+            w.plugins.cloudflare.oauth.connection.reconnectRequired = true;
+          });
+        else
+          await f.service.save(admin, f.w.id, {
+            revision: 2,
+            settings: { ...settings, enabled: true },
+          });
+        release();
+        expect(await rejected).toBeInstanceOf(Error);
+        if (mode === "role")
+          await store.pool.query(
+            "UPDATE admins SET operator=true WHERE id=$1",
+            [admin.id],
+          );
+      }
+    });
+    test("a configuration change during selection verification cannot persist a stale grant", async () => {
+      const f = await connected();
+      let release = () => {};
+      let started = () => {};
+      const pending = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      f.controls.holdSelection = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      f.controls.onSelection = started;
+      const saving = f.service.save(admin, f.w.id, {
+        revision: 2,
+        settings: { ...settings, enabled: true, zoneIds: [] },
+      });
+      const rejected = saving.catch((cause: unknown) => cause);
+      await pending;
+      await f.service.oauth.disconnect(admin, f.w.id, 2);
+      release();
+      expect(await rejected).toBeInstanceOf(Error);
+      const page = await f.service.view(admin, f.w.id);
+      expect(page.settings.enabled).toBe(false);
+      expect(page.settings.zoneIds).toEqual([zoneId]);
+      expect(page.oauth?.status).toBe("not_connected");
+    });
+    test("inventory HTTP requests require Origin and CSRF and project only names and IDs", async () => {
+      const f = await connected();
+      const path = `/api/admin/workspaces/${f.w.id}/plugins/cloudflare/oauth/resources`;
+      const headers = {
+        cookie: `deepx_session=${auth.raw}`,
+        origin: "http://localhost:3000",
+        "x-csrf-token": auth.csrf,
+        "content-type": "application/json",
+      };
+      const body = JSON.stringify({ revision: 2, resource: "accounts" });
+      for (const override of [
+        { origin: "https://other.example" },
+        { "x-csrf-token": "bad" },
+      ])
+        expect(
+          (
+            await f.app.request(path, {
+              method: "POST",
+              headers: { ...headers, ...override },
+              body,
+            })
+          ).status,
+        ).toBe(403);
+      const result = await f.app.request(path, {
+        method: "POST",
+        headers,
+        body,
+      });
+      expect(result.status).toBe(200);
+      expect(await result.json()).toEqual({
+        items: [{ id: accountId, name: "Fixture" }],
+        page: 1,
+        hasMore: false,
+      });
+      expect(
+        (
+          await f.app.request(path, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              revision: 2,
+              resource: "accounts",
+              path: "/secrets",
+            }),
+          })
+        ).status,
+      ).toBe(400);
+    });
+    test("empty account consent fails without saving tokens", async () => {
+      const f = await fixture(true);
+      f.controls.accounts = [];
+      const started = await begin(f);
+      await expect(
+        f.service.oauth.callback(
+          admin,
+          hash(auth.raw),
+          started.searchParams.get("state") ?? "",
+          "code",
+        ),
+      ).rejects.toThrow("cloudflare_oauth_accounts_empty");
+      expect((await f.service.view(admin, f.w.id)).oauth?.status).toBe(
+        "not_connected",
+      );
+      expect(
+        f.calls.filter((call) => call.url.endsWith("/revoke")),
+      ).toHaveLength(2);
     });
     test("callback exchanges once, verifies the account, encrypts tokens and enables existing queries/actions", async () => {
       const f = await fixture();

@@ -118,6 +118,7 @@ export class CloudflareService {
         w.plugins?.cloudflare?.settings ?? emptyCloudflare,
       ),
       tokenConfigured: !!w.plugins?.cloudflare?.credential,
+      resources: structuredClone(w.plugins?.cloudflare?.resources),
       oauth: await this.oauth.view(w),
     };
   }
@@ -129,6 +130,40 @@ export class CloudflareService {
   ) {
     operator(admin);
     const input = cloudflareSave.parse(value);
+    const snapshot = await this.store.read(id);
+    authority(admin, snapshot);
+    requireThat(
+      (snapshot.plugins?.revision ?? 0) === input.revision,
+      "version_conflict",
+      409,
+    );
+    const prior = snapshot.plugins?.cloudflare;
+    const selecting =
+      input.settings.authMethod === "oauth" &&
+      prior?.oauth?.connection &&
+      (input.settings.accountId !== prior.settings.accountId ||
+        fingerprint(input.settings.zoneIds) !==
+          fingerprint(prior.settings.zoneIds) ||
+        !prior.resources?.account ||
+        input.settings.zoneIds.some(
+          (id) => !prior.resources?.zones.some((zone) => zone.id === id),
+        ));
+    const resources = selecting
+      ? await this.oauth.selectResources(
+          admin,
+          id,
+          input.revision,
+          input.settings.accountId,
+          input.settings.zoneIds,
+        )
+      : prior?.resources?.account?.id === input.settings.accountId
+        ? {
+            account: prior.resources.account,
+            zones: prior.resources.zones.filter((zone) =>
+              input.settings.zoneIds.includes(zone.id),
+            ),
+          }
+        : undefined;
     await this.store.change(id, (w) => {
       authority(admin, w);
       requireThat(
@@ -205,7 +240,7 @@ export class CloudflareService {
         entries: fallback,
         ...w.plugins,
         revision: input.revision + 1,
-        cloudflare: { settings: input.settings, credential, oauth },
+        cloudflare: { settings: input.settings, credential, oauth, resources },
       };
       audit(w, admin.id, "plugins.updated", "cloudflare", w.plugins.revision);
     });

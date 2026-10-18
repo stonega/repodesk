@@ -6,9 +6,19 @@ import type { Store } from "../db/repositories.ts";
 import { type Admin, Fault, requireThat, type Workspace } from "../domain.ts";
 import { decrypt, encrypt, hash, token } from "../setup/credentials.ts";
 import { audit } from "../workspaces/policy.ts";
-import { CloudflareClient, type CloudflareTransport, row } from "./client.ts";
-import { type CloudflareConfig, cloudflareTools } from "./config.ts";
+import { CloudflareClient, type CloudflareTransport } from "./client.ts";
+import {
+  type CloudflareConfig,
+  type CloudflareResource,
+  cloudflareDiscovery,
+  cloudflareHasCredentials,
+  cloudflareTools,
+} from "./config.ts";
 import { CloudflareOAuthClient, type OAuthTokens } from "./oauth-client.ts";
+import {
+  listCloudflareResources,
+  selectedCloudflareResources,
+} from "./resources.ts";
 
 type OAuth = NonNullable<CloudflareConfig["oauth"]>;
 const aad = (id: string, kind: string) => `cloudflare:${id}:oauth:${kind}`;
@@ -102,7 +112,6 @@ export class CloudflareOAuth {
         oauth = config?.oauth;
       requireThat(
         config?.settings.authMethod === "oauth" &&
-          config.settings.accountId &&
           oauth?.clientSecret &&
           oauth.scopes.length,
         "cloudflare_oauth_client_required",
@@ -252,16 +261,33 @@ export class CloudflareOAuth {
         decrypt(this.key, aad(id, hash(state)), flow.verifier),
         flow.redirectUri,
       );
-      const account = await this.api.request(
-        tokens.access_token,
-        `/accounts/${snapshot.accountId}`,
-        { guard },
-      );
-      requireThat(
-        row(account.result).id === snapshot.accountId,
-        "cloudflare_oauth_account_denied",
-        403,
-      );
+      let account: CloudflareResource | undefined;
+      if (snapshot.accountId) {
+        account = (
+          await selectedCloudflareResources(
+            this.api,
+            tokens.access_token,
+            snapshot.accountId,
+            [],
+            guard,
+          )
+        ).account;
+      } else {
+        const accounts = await listCloudflareResources(
+          this.api,
+          tokens.access_token,
+          "accounts",
+          1,
+          guard,
+        );
+        requireThat(
+          accounts.items.length,
+          "cloudflare_oauth_accounts_empty",
+          403,
+        );
+        if (accounts.items.length === 1 && !accounts.hasMore)
+          account = accounts.items[0];
+      }
       await guard();
       await this.store.change(id, async (w, sql) => {
         const current = this.flow(w, admin, sessionHash, state);
@@ -284,7 +310,15 @@ export class CloudflareOAuth {
         );
         current.oauth.connection = this.connection(id, tokens);
         delete current.oauth.flow;
-        w.plugins.cloudflare.settings.enabled = true;
+        w.plugins.cloudflare.settings.accountId = account?.id ?? "";
+        if (!snapshot.accountId) w.plugins.cloudflare.settings.zoneIds = [];
+        w.plugins.cloudflare.resources = {
+          account,
+          zones: snapshot.accountId
+            ? (w.plugins.cloudflare.resources?.zones ?? [])
+            : [],
+        };
+        w.plugins.cloudflare.settings.enabled = !!account;
         w.plugins.revision++;
         audit(w, admin.id, "cloudflare.connected", id, w.plugins.revision);
       });
@@ -324,15 +358,72 @@ export class CloudflareOAuth {
       (await this.revokeTokens(id, previous).catch(() => false))
     );
   }
-  async accessToken(id: string, revision: number): Promise<string> {
+  private async resourceAccess(admin: Admin, id: string, revision: number) {
+    const guard = async () => {
+      const w = await this.store.read(id);
+      authority(admin, w);
+      requireThat(w.plugins?.revision === revision, "version_conflict", 409);
+      requireThat(
+        w.plugins.cloudflare?.settings.authMethod === "oauth" &&
+          cloudflareHasCredentials(w.plugins.cloudflare),
+        "cloudflare_not_configured",
+        409,
+      );
+      const current = await this.store.pool.query(
+        "SELECT 1 FROM admins WHERE id=$1 AND operator=true",
+        [admin.id],
+      );
+      requireThat(current.rowCount, "operator_required", 403);
+    };
+    await guard();
+    const token = await this.accessToken(id, revision, admin);
+    return { token, guard };
+  }
+  async resources(admin: Admin, id: string, value: unknown) {
+    operator(admin);
+    const input = cloudflareDiscovery.parse(value);
+    const access = await this.resourceAccess(admin, id, input.revision);
+    return listCloudflareResources(
+      this.api,
+      access.token,
+      input.resource,
+      input.page,
+      access.guard,
+      input.resource === "zones" ? input.accountId : undefined,
+    );
+  }
+  async selectResources(
+    admin: Admin,
+    id: string,
+    revision: number,
+    accountId: string,
+    zoneIds: string[],
+  ) {
+    const access = await this.resourceAccess(admin, id, revision);
+    requireThat(accountId, "cloudflare_oauth_account_required", 409);
+    return selectedCloudflareResources(
+      this.api,
+      access.token,
+      accountId,
+      zoneIds,
+      access.guard,
+    );
+  }
+  async accessToken(
+    id: string,
+    revision: number,
+    admin?: Admin,
+  ): Promise<string> {
     const deadline = Date.now() + 17000;
     for (;;) {
       const result = await this.store.change(id, (w) => {
+        if (admin) authority(admin, w);
         requireThat(
           !w.deletion &&
-            !w.settings.paused &&
+            (!!admin || !w.settings.paused) &&
             w.plugins?.revision === revision &&
-            w.plugins.cloudflare?.settings.enabled &&
+            w.plugins.cloudflare &&
+            (!!admin || w.plugins.cloudflare?.settings.enabled) &&
             w.plugins.cloudflare.settings.authMethod === "oauth",
           "extension_configuration_changed",
           409,

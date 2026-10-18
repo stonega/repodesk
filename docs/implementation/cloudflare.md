@@ -3,13 +3,16 @@
 Implemented locally, 2026-10-17. Live Cloudflare/Telegram acceptance and deployment
 remain release gates. No extra package, migration or environment variable is needed;
 the API and worker use the existing deployment encryption key.
+Account/domain discovery and the simplified connection flow were added 2026-10-18.
 
-Open **Plugins → Cloudflare → Edit**. New configurations default to Cloudflare
-browser authorization; choose API token for a manual connection. Save the account
-ID and up to 20 explicit zone IDs. Existing token configurations keep their
+Open **Plugins → Cloudflare → Connect Cloudflare** after the operator configures
+the OAuth application once in **Authorization → Edit**. New configurations default
+to browser authorization. Cloudflare handles account selection and consent; no
+account or zone IDs need to be entered. Existing token configurations keep their
 authentication method. Credentials are write-only and encrypted with
 workspace-specific authenticated data. Saving configuration does not validate
-provider credentials; OAuth verifies the configured account when connecting.
+manual provider credentials; OAuth verifies account/resource access when connecting
+and changing the workspace selection.
 
 ## Browser authorization
 
@@ -19,20 +22,39 @@ the published Cloudflare authorization/token/revocation endpoints.
 See [client registration](https://developers.cloudflare.com/fundamentals/oauth/create-an-oauth-client/)
 and [endpoint documentation](https://developers.cloudflare.com/fundamentals/oauth/integrate-with-cloudflare/).
 
-1. Save the account/zone settings with **Cloudflare authorization** selected.
-2. In Cloudflare, create an OAuth client with Code response type,
+1. In Cloudflare, create an OAuth client with Code response type,
    `authorization_code` and `refresh_token` grants, and `client_secret_basic`
    authentication. Register the callback URL displayed by RepoDesk's Authorization
    editor: `<site origin>/api/admin/cloudflare/callback`.
-3. Select Account Read for account verification, plus the read/write permissions
+2. Select Account Read for account discovery/verification, Zone Read for domain
+   discovery, plus the read/write permissions
    needed for the supported operations. Save the client ID, client secret and
    selected dot-delimited API scope IDs in **Authorization → Edit**. The
    [OAuth scopes API](https://developers.cloudflare.com/api/resources/iam/subresources/oauth_scopes/methods/list/)
    lists available IDs; `account.read` is the Account Read scope. RepoDesk adds
    `offline_access` to authorization requests for renewable access.
-4. Select **Connect Cloudflare**, sign in to Cloudflare and review its account and
-   permission consent. Returning successfully verifies access to the saved account,
-   stores encrypted tokens and enables this workspace's plugin.
+3. Select **Connect Cloudflare**, sign in and choose authorized accounts and
+   permissions on Cloudflare's consent screen. Returning successfully stores
+   encrypted tokens. A sole authorized account is selected automatically and the
+   plugin is enabled for Pages-only access. If several accounts were authorized,
+   a modal asks which named account this workspace should use; tools remain
+   disabled until that choice is saved. Existing configured accounts are verified
+   on reconnect and retain their domain restrictions.
+4. Optionally open **Configuration → Edit**, search and select up to 20 domains
+   by name for DNS/cache access, then save. Accounts and domains are fetched in
+   pages of 50; More accounts/domains exposes additional choices. No domains are
+   selected automatically. Leave them unchecked for Pages-only access, including
+   when Zone Read was not granted. A changed account clears the domain draft.
+
+Saving a changed OAuth account/domain selection verifies the account and each
+domain's account association with Cloudflare before applying it. Inventory reads
+are operator-only, workspace/revision-bound, and recheck authorization after the
+provider returns. They remain available for configuration while the plugin is
+disabled; they do not grant model/tool access to discovered resources. Failed
+discovery and saves preserve the saved settings and modal draft. Saved summaries
+show verified account/domain names; older selections without cached names retain
+their IDs until verified by connection/selection. Tokens and provider configuration
+are excluded from inventory responses. Manual API tokens still use explicit IDs.
 
 The client is registered once and can be reused across workspaces with the same
 callback URI. Each workspace has independent credentials, consent state and
@@ -151,6 +173,15 @@ redirects to the plugin with a fixed success/failure marker. POST the correspond
 `revocationConfirmed`. Configuration views expose only client IDs, scope IDs,
 callback URL, connection status and expiry; client secrets, access/refresh tokens,
 PKCE verifiers and pending state never appear in responses.
+
+POST `/api/admin/workspaces/:id/plugins/cloudflare/oauth/resources` accepts
+`{ revision, resource: "accounts", page?: 1 }` or
+`{ revision, resource: "zones", accountId, page?: 1 }` and returns
+`{ items: [{ id, name }], page, hasMore }`. Discovery requires an existing OAuth
+connection, the authenticated operator session, Origin and CSRF. The settings
+response additionally includes optional `resources: { account?: { id, name },
+zones: [{ id, name }] }` for saved display names. IDs stay in API payloads and
+authorization checks; the OAuth UI does not ask users to type them.
 
 See [runnable requests and Telegram journey](../../examples/cloudflare.http).
 Cloudflare's [DNS API](https://developers.cloudflare.com/api/resources/dns/subresources/records/methods/list/),

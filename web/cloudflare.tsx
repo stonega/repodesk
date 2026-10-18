@@ -5,6 +5,7 @@ import type {
   CloudflareSettings,
 } from "../src/cloudflare/config.ts";
 import { CloudflareOAuth } from "./cloudflare-oauth.tsx";
+import { CloudflareResourceEditor } from "./cloudflare-resources.tsx";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
@@ -49,6 +50,7 @@ export function Cloudflare({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [editor, setEditor] = useState<CloudflareSettings>();
+  const [chooseAccount, setChooseAccount] = useState(false);
   const notify = useToast();
   const [params, setParams] = useSearchParams();
   const load = useCallback(async () => {
@@ -68,8 +70,10 @@ export function Cloudflare({
   useEffect(() => {
     const result = params.get("cloudflare");
     if (!result) return;
-    if (result === "connected") notify("Cloudflare connected.");
-    else
+    if (result === "connected") {
+      notify("Cloudflare connected.");
+      setChooseAccount(true);
+    } else
       setError(
         "Cloudflare authorization was cancelled, expired or failed. Check the saved client, account and permissions, then reconnect.",
       );
@@ -77,6 +81,11 @@ export function Cloudflare({
     next.delete("cloudflare");
     setParams(next, { replace: true });
   }, [params, setParams, notify]);
+  useEffect(() => {
+    if (!chooseAccount || !data) return;
+    if (!data.settings.accountId) setEditor(data.settings);
+    setChooseAccount(false);
+  }, [chooseAccount, data]);
   async function save(
     settings: CloudflareSettings,
     token?: string,
@@ -125,6 +134,15 @@ export function Cloudflare({
             }
             if (
               enabled &&
+              data.settings.authMethod === "oauth" &&
+              !data.settings.accountId
+            ) {
+              setEditor(data.settings);
+              return;
+            }
+            if (
+              enabled &&
+              data.settings.authMethod !== "oauth" &&
               (!data.tokenConfigured || !data.settings.accountId)
             ) {
               setEditor({ ...data.settings, enabled });
@@ -148,6 +166,17 @@ export function Cloudflare({
           </button>
         </ErrorToast>
       )}
+      {(!data || data.settings.authMethod === "oauth") && (
+        <CloudflareOAuth
+          request={request}
+          endpoint={endpoint}
+          data={data}
+          busy={busy}
+          setBusy={setBusy}
+          saved={setData}
+          reload={() => void load()}
+        />
+      )}
       <section
         className="card"
         aria-label="Cloudflare configuration"
@@ -170,9 +199,19 @@ export function Cloudflare({
         </div>
         <dl className="plugin-summary">
           <div>
-            <dt>Account ID</dt>
-            <dd className="mono">
-              {data ? data.settings.accountId || "Not configured" : pending}
+            <dt>
+              {data?.settings.authMethod === "oauth" ? "Account" : "Account ID"}
+            </dt>
+            <dd>
+              {data
+                ? data.resources?.account?.name ||
+                  data.settings.accountId ||
+                  (["connected", "refreshing"].includes(
+                    data.oauth?.status ?? "",
+                  )
+                    ? "Choose an account in Edit"
+                    : "Connect Cloudflare to discover accounts")
+                : pending}
             </dd>
           </div>
           <div>
@@ -198,16 +237,23 @@ export function Cloudflare({
             </div>
           )}
           <div>
-            <dt>Allowed zone IDs</dt>
+            <dt>
+              {data?.settings.authMethod === "oauth"
+                ? "Allowed domains"
+                : "Allowed zone IDs"}
+            </dt>
             <dd>
               {data
                 ? data.settings.zoneIds.length
                   ? data.settings.zoneIds.map((id) => (
-                      <div className="mono" key={id}>
-                        {id}
+                      <div key={id}>
+                        {data.resources?.zones.find((zone) => zone.id === id)
+                          ?.name || id}
                       </div>
                     ))
-                  : "No zones selected"
+                  : data.settings.authMethod === "oauth"
+                    ? "Pages only"
+                    : "No zones selected"
                 : pending}
             </dd>
           </div>
@@ -221,17 +267,6 @@ export function Cloudflare({
             </p>
           )}
       </section>
-      {(!data || data.settings.authMethod === "oauth") && (
-        <CloudflareOAuth
-          request={request}
-          endpoint={endpoint}
-          data={data}
-          busy={busy}
-          setBusy={setBusy}
-          saved={setData}
-          reload={() => void load()}
-        />
-      )}
       <section className="card" aria-label="Cloudflare capabilities">
         <h2>Queries and actions</h2>
         <p>
@@ -257,6 +292,9 @@ export function Cloudflare({
       {editor && data && (
         <CloudflareEditor
           initial={editor}
+          data={data}
+          request={request}
+          endpoint={endpoint}
           tokenConfigured={data.tokenConfigured}
           busy={busy}
           close={() => setEditor(undefined)}
@@ -269,12 +307,18 @@ export function Cloudflare({
 
 function CloudflareEditor({
   initial,
+  data,
+  request,
+  endpoint,
   tokenConfigured,
   busy,
   close,
   save,
 }: {
   initial: CloudflareSettings;
+  data: CloudflarePage;
+  request: Request;
+  endpoint: string;
   tokenConfigured: boolean;
   busy: boolean;
   close: () => void;
@@ -289,6 +333,21 @@ function CloudflareEditor({
   const [token, setToken] = useState("");
   const [removeToken, setRemoveToken] = useState(false);
   const [error, setError] = useState("");
+  if (
+    initial.authMethod === "oauth" &&
+    ["connected", "refreshing"].includes(data.oauth?.status ?? "")
+  )
+    return (
+      <Modal title="Edit Cloudflare configuration" onClose={close} busy={busy}>
+        <CloudflareResourceEditor
+          data={data}
+          request={request}
+          endpoint={endpoint}
+          busy={busy}
+          save={save}
+        />
+      </Modal>
+    );
   return (
     <Modal title="Edit Cloudflare configuration" onClose={close} busy={busy}>
       {error && (
@@ -345,34 +404,41 @@ function CloudflareEditor({
         </label>
         {draft.authMethod === "oauth" && (
           <p className="muted">
-            Save the account and zone settings, then use Connect Cloudflare in
-            Authorization to enable access.
+            Connect Cloudflare to discover your account and domains
+            automatically. Choose your account on Cloudflare’s consent screen.
+            No IDs to copy.
           </p>
         )}
-        <label className="field">
-          <span>Account ID</span>
-          <input
-            value={draft.accountId}
-            required={draft.enabled}
-            pattern="[a-fA-F0-9]{32}"
-            maxLength={32}
-            onChange={(e) => setDraft({ ...draft, accountId: e.target.value })}
-          />
-        </label>
-        <label className="field">
-          <span>Allowed zone IDs</span>
-          <textarea
-            aria-label="Allowed zone IDs"
-            aria-describedby="cloudflare-zones-help"
-            rows={4}
-            value={zones}
-            onChange={(e) => setZones(e.target.value)}
-          />
-          <small className="muted" id="cloudflare-zones-help">
-            One zone ID per line, up to 20. Leave empty to use Pages queries
-            only. Find IDs in your Cloudflare dashboard.
-          </small>
-        </label>
+        {draft.authMethod !== "oauth" && (
+          <>
+            <label className="field">
+              <span>Account ID</span>
+              <input
+                value={draft.accountId}
+                required={draft.enabled}
+                pattern="[a-fA-F0-9]{32}"
+                maxLength={32}
+                onChange={(e) =>
+                  setDraft({ ...draft, accountId: e.target.value })
+                }
+              />
+            </label>
+            <label className="field">
+              <span>Allowed zone IDs</span>
+              <textarea
+                aria-label="Allowed zone IDs"
+                aria-describedby="cloudflare-zones-help"
+                rows={4}
+                value={zones}
+                onChange={(e) => setZones(e.target.value)}
+              />
+              <small className="muted" id="cloudflare-zones-help">
+                One zone ID per line, up to 20. Leave empty to use Pages queries
+                only. Find IDs in your Cloudflare dashboard.
+              </small>
+            </label>
+          </>
+        )}
         {draft.authMethod !== "oauth" && (
           <>
             <label className="field">

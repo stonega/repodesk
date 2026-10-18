@@ -705,6 +705,23 @@ export function adminRoutes(
     ),
   );
   app.post(
+    "/api/admin/workspaces/:id/plugins/cloudflare/oauth/resources",
+    async (c) => {
+      requireThat(
+        plugins.cloudflare,
+        "cloudflare_credentials_unavailable",
+        503,
+      );
+      return c.json(
+        await plugins.cloudflare.oauth.resources(
+          c.get("session").admin,
+          validId(c.req.param("id")),
+          await c.req.json(),
+        ),
+      );
+    },
+  );
+  app.post(
     "/api/admin/workspaces/:id/plugins/cloudflare/oauth/connect",
     async (c) => {
       requireThat(

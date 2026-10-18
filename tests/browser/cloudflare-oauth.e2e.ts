@@ -1,5 +1,9 @@
 import { expect, type Page, test } from "@playwright/test";
-import type { CloudflarePage } from "../../src/cloudflare/config.ts";
+import type {
+  CloudflarePage,
+  CloudflareResource,
+} from "../../src/cloudflare/config.ts";
+import { chooseOption } from "./dropdown-helpers.ts";
 
 const workspace = "d2ce2eab-3b09-4e8e-858e-75c20d832517";
 const endpoint = `/api/admin/workspaces/${workspace}/plugins/cloudflare`;
@@ -8,10 +12,16 @@ async function fixture(page: Page, connected = false) {
     revision: 1,
     settings: {
       enabled: connected,
-      accountId: "a".repeat(32),
-      zoneIds: ["b".repeat(32)],
+      accountId: connected ? "a".repeat(32) : "",
+      zoneIds: connected ? ["b".repeat(32)] : [],
       authMethod: "oauth",
     },
+    resources: connected
+      ? {
+          account: { id: "a".repeat(32), name: "Fixture account" },
+          zones: [{ id: "b".repeat(32), name: "example.com" }],
+        }
+      : undefined,
     tokenConfigured: false,
     oauth: {
       clientId: connected ? "fixture-client" : "",
@@ -28,12 +38,23 @@ async function fixture(page: Page, connected = false) {
     pending: Promise.resolve(),
     failure: "",
     revocationConfirmed: true,
+    accounts: [
+      { id: "a".repeat(32), name: "Fixture account" },
+    ] as CloudflareResource[],
+    zones: [
+      { id: "b".repeat(32), name: "example.com" },
+      { id: "c".repeat(32), name: "another.example" },
+    ] as CloudflareResource[],
+    inventoryPending: Promise.resolve(),
+    inventoryFailure: "",
   };
   await page.route(
     "https://dash.cloudflare.com/oauth2/auth**",
     async (route) => {
       data.revision++;
       data.settings.enabled = true;
+      data.settings.accountId = "a".repeat(32);
+      data.resources = { account: controls.accounts[0], zones: [] };
       if (data.oauth) {
         data.oauth.status = "connected";
         data.oauth.expiresAt = "2026-12-01T12:00:00Z";
@@ -46,6 +67,27 @@ async function fixture(page: Page, connected = false) {
   );
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === `${endpoint}/oauth/resources`) {
+      const body = route.request().postDataJSON();
+      await controls.inventoryPending;
+      if (controls.inventoryFailure) {
+        await route.fulfill({
+          status: 403,
+          json: { error: controls.inventoryFailure },
+        });
+        return;
+      }
+      const items =
+        body.resource === "accounts" ? controls.accounts : controls.zones;
+      await route.fulfill({
+        json: {
+          items: items.slice((body.page - 1) * 50, body.page * 50),
+          page: body.page,
+          hasMore: body.page * 50 < items.length,
+        },
+      });
+      return;
+    }
     if (path.startsWith(endpoint)) {
       if (route.request().method() !== "GET") {
         const body = route.request().postDataJSON();
@@ -73,6 +115,15 @@ async function fixture(page: Page, connected = false) {
           data.revision++;
         } else {
           data.settings = body.settings;
+          if (data.oauth?.status === "connected")
+            data.resources = {
+              account: controls.accounts.find(
+                (item) => item.id === data.settings.accountId,
+              ),
+              zones: controls.zones.filter((item) =>
+                data.settings.zoneIds.includes(item.id),
+              ),
+            };
           data.revision++;
           if (body.oauthClient && data.oauth) {
             data.oauth.clientId = body.oauthClient.clientId;
@@ -221,6 +272,262 @@ for (const width of [1280, 390]) {
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
+  });
+  test(`OAuth named account/domain choices preserve saved display and drafts at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 950 });
+    const f = await fixture(page, true);
+    await f.open();
+    const config = page.getByRole("region", {
+      name: "Cloudflare configuration",
+      exact: true,
+    });
+    await expect(config).toContainText("Fixture account");
+    await expect(config).toContainText("example.com");
+    await expect(config.getByRole("textbox")).toHaveCount(0);
+    await expect(config.getByRole("checkbox")).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Edit Cloudflare configuration" })
+      .click();
+    const editor = page.getByRole("dialog", {
+      name: "Edit Cloudflare configuration",
+    });
+    await expect(editor.getByLabel("Account ID", { exact: true })).toHaveCount(
+      0,
+    );
+    await expect(
+      editor.getByLabel("Allowed zone IDs", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      editor.getByRole("combobox", { name: "Account", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      editor.getByRole("checkbox", { name: "example.com", exact: true }),
+    ).toBeChecked();
+    await editor
+      .getByRole("checkbox", { name: "another.example", exact: true })
+      .check();
+    await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+    expect(f.writes).toHaveLength(0);
+    await expect(config).not.toContainText("another.example");
+    await page
+      .getByRole("button", { name: "Edit Cloudflare configuration" })
+      .click();
+    await expect(
+      editor.getByRole("checkbox", { name: "another.example", exact: true }),
+    ).not.toBeChecked();
+    await editor.getByLabel("Search domains").fill("another");
+    await editor
+      .getByRole("checkbox", { name: "another.example", exact: true })
+      .check();
+    await editor.getByLabel("Search domains").fill("");
+    await editor.screenshot({
+      path: test.info().outputPath("oauth-named-domains.png"),
+    });
+    let release = () => {};
+    f.controls.pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    f.controls.failure = "version_conflict";
+    await editor.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(
+      editor.getByRole("button", { name: "Cancel", exact: true }),
+    ).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(editor).toBeVisible();
+    await editor.screenshot({
+      path: test.info().outputPath("oauth-domains-pending.png"),
+    });
+    release();
+    await expect(editor.getByRole("alert")).toContainText("another session");
+    await expect(
+      editor.getByRole("checkbox", { name: "another.example", exact: true }),
+    ).toBeChecked();
+    await editor.screenshot({
+      path: test.info().outputPath("oauth-domains-save-error.png"),
+    });
+    f.controls.failure = "";
+    await editor.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    await expect(config).toContainText("another.example");
+    await page.getByRole("switch", { name: "Enable Cloudflare" }).click();
+    await expect(
+      page.getByRole("switch", { name: "Enable Cloudflare" }),
+    ).not.toBeChecked();
+    await page.getByRole("switch", { name: "Enable Cloudflare" }).click();
+    await expect(editor).toHaveCount(0);
+    await expect(
+      page.getByRole("switch", { name: "Enable Cloudflare" }),
+    ).toBeChecked();
+    await page.screenshot({
+      path: test.info().outputPath("oauth-named-summary.png"),
+      fullPage: true,
+    });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  });
+  test(`OAuth multi-account callback asks only for account choice and supports Pages only at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 950 });
+    const f = await fixture(page, true);
+    f.controls.accounts.push({ id: "d".repeat(32), name: "Second account" });
+    f.data.settings = {
+      ...f.data.settings,
+      enabled: false,
+      accountId: "",
+      zoneIds: [],
+    };
+    f.data.resources = { zones: [] };
+    await f.open("&cloudflare=connected");
+    const editor = page.getByRole("dialog", {
+      name: "Edit Cloudflare configuration",
+    });
+    await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(
+      page.getByRole("region", {
+        name: "Cloudflare configuration",
+        exact: true,
+      }),
+    ).toContainText("Choose an account in Edit");
+    await page.getByRole("switch", { name: "Enable Cloudflare" }).click();
+    await expect(editor).toBeVisible();
+    expect(f.writes).toHaveLength(0);
+    await expect(
+      editor.getByRole("button", { name: "Save", exact: true }),
+    ).toBeDisabled();
+    await chooseOption(
+      editor.getByRole("combobox", { name: "Account", exact: true }),
+      "d".repeat(32),
+    );
+    await expect(
+      editor.getByRole("checkbox", { name: "example.com", exact: true }),
+    ).not.toBeChecked();
+    await editor.screenshot({
+      path: test.info().outputPath("oauth-account-choice.png"),
+    });
+    await editor.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    await expect(
+      page.getByRole("region", {
+        name: "Cloudflare configuration",
+        exact: true,
+      }),
+    ).toContainText("Second account");
+    await expect(
+      page.getByRole("region", {
+        name: "Cloudflare configuration",
+        exact: true,
+      }),
+    ).toContainText("Pages only");
+    await expect(
+      page.getByRole("switch", { name: "Enable Cloudflare" }),
+    ).toBeChecked();
+    expect(f.writes.at(-1)?.body.settings).toMatchObject({
+      accountId: "d".repeat(32),
+      zoneIds: [],
+      enabled: true,
+    });
+  });
+  test(`OAuth discovery paginates named choices and clears domains on account change at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 950 });
+    const f = await fixture(page, true);
+    f.controls.accounts.push({ id: "d".repeat(32), name: "Second account" });
+    f.controls.zones.push(
+      ...Array.from({ length: 49 }, (_, i) => ({
+        id: (i + 1).toString(16).padStart(32, "0"),
+        name: `domain-${i}.example`,
+      })),
+    );
+    await f.open();
+    await page
+      .getByRole("button", { name: "Edit Cloudflare configuration" })
+      .click();
+    const editor = page.getByRole("dialog", {
+      name: "Edit Cloudflare configuration",
+    });
+    await editor
+      .getByRole("button", { name: "More domains", exact: true })
+      .click();
+    await editor.getByLabel("Search domains").fill("domain-48");
+    await editor
+      .getByRole("checkbox", { name: "domain-48.example", exact: true })
+      .check();
+    await expect(editor).toContainText("2 of 20 domains selected");
+    await chooseOption(
+      editor.getByRole("combobox", { name: "Account", exact: true }),
+      "d".repeat(32),
+    );
+    await expect(editor).toContainText("0 of 20 domains selected");
+    await expect(editor.getByLabel("Search domains")).toHaveValue("");
+    await expect(
+      editor.getByRole("checkbox", { name: "example.com", exact: true }),
+    ).not.toBeChecked();
+    await editor.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    expect(f.writes.at(-1)?.body.settings).toMatchObject({
+      accountId: "d".repeat(32),
+      zoneIds: [],
+    });
+  });
+  test(`OAuth inventory loading, failure recovery and empty domains at ${width}px`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.setViewportSize({ width, height: 950 });
+    const f = await fixture(page, true);
+    let release = () => {};
+    f.controls.inventoryPending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await f.open();
+    await page
+      .getByRole("button", { name: "Edit Cloudflare configuration" })
+      .click();
+    const editor = page.getByRole("dialog", {
+      name: "Edit Cloudflare configuration",
+    });
+    await expect(
+      editor.getByRole("button", { name: "Save", exact: true }),
+    ).toBeDisabled();
+    await expect(editor).toContainText("Allowed domains");
+    await editor.screenshot({
+      path: test.info().outputPath("oauth-inventory-loading-dark.png"),
+    });
+    f.controls.inventoryFailure = "cloudflare_access_denied";
+    release();
+    await expect(editor.getByRole("alert").first()).toContainText(
+      "denied access",
+    );
+    await editor.screenshot({
+      path: test.info().outputPath("oauth-inventory-error-dark.png"),
+    });
+    f.controls.inventoryFailure = "";
+    f.controls.zones = [];
+    await editor.getByRole("button", { name: "Retry", exact: true }).click();
+    await editor
+      .getByRole("button", { name: "Retry domains", exact: true })
+      .click();
+    await expect(editor.getByRole("alert")).toHaveCount(0);
+    await expect(
+      editor.getByRole("checkbox", { name: "example.com", exact: true }),
+    ).toBeChecked();
+    await editor
+      .getByRole("checkbox", { name: "example.com", exact: true })
+      .click();
+    await expect(editor.getByRole("checkbox")).toHaveCount(0);
+    await expect(editor).toContainText("No domains available");
+    await editor.screenshot({
+      path: test.info().outputPath("oauth-inventory-empty-dark.png"),
+    });
+    await editor.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(editor).toHaveCount(0);
   });
   test(`OAuth loading, pending saves and recoverable errors preserve the correct state at ${width}px`, async ({
     page,

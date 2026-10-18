@@ -26,6 +26,32 @@ inspected. The real CodeGraph/MCP smoke passed with automatic branch discovery.
 No dependency or SQL migration was added; live GitHub calls and deployment were
 not performed.
 
+## Cloudflare connection discovery (2026-10-18)
+
+Cloudflare OAuth now starts without account/zone IDs. The callback discovers
+authorized accounts, automatically selects a sole account for Pages-only access,
+and asks for a named workspace account when several are available. Configuration
+uses named account choices and searchable, paginated domain checkboxes in the
+shared modal. Saved summaries show verified names; manual API-token setup remains
+an explicit fallback. No domains are granted automatically. Operators still
+register/configure their OAuth client once.
+
+Inventory endpoints project only names/IDs and require the authenticated workspace
+operator, Origin, CSRF and current revision. Provider responses are fenced against
+disconnect, role/credential revocation and settings changes. Saving a new account
+or domain selection verifies provider access and each domain's account before
+the local grant changes. Discovery works while configuring a disabled plugin and
+does not expose inventory to model tools. Missing Zone Read still allows an
+explicit Pages-only selection. UI rules and runnable API examples are updated.
+
+Validation passed Biome, strict TypeScript, production build, Node runtime contract,
+all **875 deterministic tests across 98 files**, and **22 Cloudflare browser scenarios**
+at 1280px/390px. Desktop/mobile saved displays, editors, account choice,
+loading/empty, pending, failure/recovery and dark theme were visually inspected.
+No dependency, migration,
+live Cloudflare connection, provider mutation, Telegram send or deployment was
+introduced; live Cloudflare consent remains an acceptance gate.
+
 ## Automatic Codex PR publication (2026-10-18)
 
 Removed the publication checkbox from the Codex configuration dialog and its
