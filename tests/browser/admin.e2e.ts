@@ -1868,7 +1868,7 @@ test.describe
         fullPage: true,
       });
     });
-    test("setup welcomes the user before entering the connected workspace", async ({
+    test("setup opens the connected workspace directly without a welcome modal", async ({
       page,
     }) => {
       await page.goto("/admin");
@@ -1905,26 +1905,13 @@ test.describe
           .getByRole("button"),
       ).toHaveCount(4);
       await page.getByRole("button", { name: "Connect GitHub" }).click();
-      const celebration = page.locator(".setup-celebration");
-      await expect(
-        celebration.getByRole("heading", { name: "Welcome to RepoDesk" }),
-      ).toBeVisible();
-      const getStarted = celebration.getByRole("button", {
-        name: "Get started",
-      });
-      await expect(getStarted).toBeFocused();
-      expect(Math.round((await celebration.boundingBox())?.width ?? 0)).toBe(
-        page.viewportSize()?.width,
-      );
-      await expect(page.locator(".setup-confetti span")).toHaveCount(32);
-      await page.waitForTimeout(300);
-      await page.screenshot({
-        path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/setup-confetti.png`,
-      });
-      await page.waitForTimeout(1900);
-      await expect(page).toHaveURL(/\/setup\?/);
-      await getStarted.click();
       await expect(page).toHaveURL(new RegExp(`/admin\\?workspace=${other}$`));
+      await expect(
+        page.getByRole("dialog", { name: "Welcome to RepoDesk" }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "Get started" }),
+      ).toHaveCount(0);
       const githubCard = page.getByRole("region", { name: "GitHub" });
       await expect(githubCard).toContainText("Connected");
       await expect(githubCard).toContainText("13 repositories");
@@ -2004,7 +1991,9 @@ test.describe
         page.getByRole("button", { name: "Connect GitHub" }),
       ).toBeEnabled();
       await page.waitForTimeout(1900);
-      await expect(page.locator(".setup-celebration")).toHaveCount(0);
+      await expect(
+        page.getByRole("dialog", { name: "Welcome to RepoDesk" }),
+      ).toHaveCount(0);
       await expect(page).toHaveURL(/\/setup\?/);
     });
     test("creation dialogs isolate drafts, trap focus and keep failed saves open", async ({

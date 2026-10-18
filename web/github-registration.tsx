@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { GitHubAppBadge } from "./github-app-badge.tsx";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { Select } from "./select.tsx";
@@ -107,7 +106,6 @@ export function GitHubRegistration({
               deployments with a public HTTPS domain. It will be available to
               your workspaces; each workspace chooses its own repositories.
             </p>
-            <GitHubAppBadge />
             <fieldset disabled={busy} className="plugin-fields">
               <label className="field">
                 <span>App name</span>

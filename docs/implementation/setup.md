@@ -47,14 +47,11 @@ are shared across your workspaces; each workspace and service saves its own choi
 The timezone selector starts with your browser's IANA timezone and also offers UTC
 and other available IANA zones.
 Adjust budgets and retention later in the Overview team editor. You can revisit steps.
-The GitHub step has one **Connect GitHub** button. After creating a new App, download
-the provided RepoDesk icon, upload it in the linked GitHub App settings, and
-acknowledge the upload before authorization continues. GitHub manifests cannot
-set the icon automatically. It creates a personal App when
-needed, then asks GitHub for user authorization and installation. Choose the
+The GitHub step has one **Connect GitHub** button. It creates a personal App when
+needed, then continues directly to GitHub user authorization and installation
+without an icon download or upload step. Choose the
 repositories in GitHub. Setup verifies one accessible installation, connects its
-granted repositories and shows a RepoDesk welcome dialog with confetti. Click
-**Get started** to enter the workspace. If more
+granted repositories and opens the workspace directly without a welcome modal. If more
 than one installation is accessible, use Plugins to choose the right account.
 Selecting **All repositories** in GitHub connects all repositories currently
 accessible to the authorizing user through that installation. Successful model

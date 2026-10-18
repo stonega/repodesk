@@ -99,17 +99,20 @@ when implementing or reviewing a change.
   automatically. Webhook registration stays explicit in Site domain; deployment
   pause, membership and external-action approvals retain their existing controls.
 
-### Newly created GitHub Apps use RepoDesk branding
+### GitHub App creation skips manual icon setup
 
-- **Preference:** Use RepoDesk's existing app icon as the GitHub App icon when
-  guiding users through App creation.
-- **Scope:** GitHub App creation in setup and Manage GitHub, with a ready-to-upload
-  PNG and an owner-appropriate GitHub settings link after registration.
+- **Preference:** Continue from GitHub App creation to authorization without an
+  icon download, upload instructions or an upload acknowledgement. Keep cosmetic
+  branding out of the connection prerequisites.
+- **Scope:** GitHub App creation in setup and Manage GitHub, including creation
+  dialogs and the return from GitHub registration, on desktop and mobile.
 - **Source:** 2026-10-08 — user requested adding our app icon when creating a
   GitHub App for a user.
-- **Exceptions:** GitHub's documented manifest has no logo field; the owner uploads
-  the icon in GitHub. Setup waits for the owner's upload acknowledgement before
-  continuing authorization. An acknowledgement is not API verification of the icon.
+- **Source update:** 2026-10-18 — after confirming GitHub's manifest cannot set the
+  icon automatically, the user requested removing the unnecessary download and
+  manual upload step. This supersedes the earlier guided branding requirement.
+- **Exceptions:** Owners can customize their App directly in GitHub settings;
+  RepoDesk does not prompt for or require that customization.
 
 ### Telegram repository menus favor recent work
 
@@ -661,13 +664,16 @@ when implementing or reviewing a change.
   Telegram fields before moving forward; errors keep the draft on that step.
   Do not pair a separate Save button with Continue. The GitHub step shows one
   Connect GitHub action. GitHub handles authorization and installation repository
-  choice; after verified repository connection, show a welcome dialog for
-  RepoDesk with confetti and a Get started button that opens the workspace.
+  choice; after verified repository connection, open the workspace directly
+  without a welcome modal or another confirmation action.
   Keep detailed GitHub controls in Plugins and show that page to the deployment
   administrator even before Telegram account linking. Keep optional workspace
   policies in Workspace settings, and detailed model management in
   the admin panel.
 - **Scope:** Authenticated setup at `/setup`, including desktop and mobile.
+- **Source update:** 2026-10-18 — user requested removing the Welcome to RepoDesk
+  modal. Successful GitHub repository connection now opens the workspace directly,
+  superseding the earlier confetti and Get started requirement.
 - **Source update:** 2026-10-08 — user requested a model-provider step during first
   workspace setup, superseding the earlier three-step sequence.
 - **Source:** 2026-09-27 — user asked to split the long setup page into several

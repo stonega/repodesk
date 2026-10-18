@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -504,9 +503,6 @@ function Setup() {
   const navigate = useNavigate();
   const creatingWorkspace = params.get("new") === "1";
   const selected = params.get("workspace");
-  const [completedWorkspace, setCompletedWorkspace] = useState<string | null>(
-    null,
-  );
   const [workspaceSaving, setWorkspaceSaving] = useState(false);
   const [workspaceError, setWorkspaceError] = useState("");
   const [credentialSaving, setCredentialSaving] = useState(false);
@@ -610,7 +606,6 @@ function Setup() {
             disabled={
               workspaceSaving ||
               credentialSaving ||
-              !!completedWorkspace ||
               (creatingWorkspace && step.id !== "workspace")
             }
             onClick={() => goToStep(step.id)}
@@ -798,7 +793,9 @@ function Setup() {
             <GitHubSetup
               request={api}
               workspaceId={workspace.id}
-              onConnected={() => setCompletedWorkspace(workspace.id)}
+              onConnected={() =>
+                navigate(`/admin?workspace=${workspace.id}`, { replace: true })
+              }
             />
           ) : (
             <Notice>Save a workspace before setting up GitHub.</Notice>
@@ -820,9 +817,7 @@ function Setup() {
           <button
             type="button"
             className="secondary"
-            disabled={
-              workspaceSaving || credentialSaving || !!completedWorkspace
-            }
+            disabled={workspaceSaving || credentialSaving}
             onClick={() => goToStep(previousStep.id)}
           >
             Back
@@ -865,69 +860,7 @@ function Setup() {
           </button>
         ) : null}
       </div>
-      {completedWorkspace && (
-        <SetupCelebration
-          onStart={() =>
-            navigate(`/admin?workspace=${completedWorkspace}`, {
-              replace: true,
-            })
-          }
-        />
-      )}
     </Page>
-  );
-}
-const confettiPieces = Array.from({ length: 32 }, (_, index) => ({
-  id: `confetti-${index + 1}`,
-  left: `${(index * 37) % 100}%`,
-  color: ["#1d594c", "#84ae96", "#d8b762", "#e8a073", "#b6d1b2"][index % 5],
-  delay: `${(index * 73) % 650}ms`,
-  duration: `${1400 + (index % 5) * 170}ms`,
-}));
-function SetupCelebration({ onStart }: { onStart: () => void }) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const element = dialog.current;
-    element?.showModal();
-    element?.querySelector("button")?.focus();
-    return () => element?.close();
-  }, []);
-  return createPortal(
-    <dialog
-      ref={dialog}
-      className="setup-celebration"
-      aria-labelledby="setup-welcome-title"
-      aria-describedby="setup-welcome-description"
-      onCancel={(event) => event.preventDefault()}
-    >
-      <div className="setup-confetti" aria-hidden="true">
-        {confettiPieces.map((piece) => (
-          <span
-            key={piece.id}
-            style={{
-              left: piece.left,
-              backgroundColor: piece.color,
-              animationDelay: piece.delay,
-              animationDuration: piece.duration,
-            }}
-          />
-        ))}
-      </div>
-      <div className="setup-celebration-card">
-        <span className="setup-celebration-mark" aria-hidden="true">
-          <Check size={28} weight="Outline" color="currentColor" />
-        </span>
-        <h2 id="setup-welcome-title">Welcome to RepoDesk</h2>
-        <p id="setup-welcome-description">
-          Your workspace is ready. Configure your model and activate the bot in
-          the admin panel.
-        </p>
-        <button type="button" onClick={onStart}>
-          Get started
-        </button>
-      </div>
-    </dialog>,
-    document.body,
   );
 }
 function ModelSettings({ workspaceId }: { workspaceId: string }) {

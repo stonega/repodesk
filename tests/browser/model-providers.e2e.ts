@@ -920,7 +920,79 @@ for (const width of [1280, 390]) {
       model: "gpt-4.1",
     });
   });
-  test(`GitHub App creation offers the actual downloadable icon and waits for the upload handoff at ${width}px`, async ({
+  test(`GitHub App creation continues directly to authorization without icon setup at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { w } = await fixture(page);
+    let connections = 0;
+    let releaseAuthorization = () => {};
+    const authorization = new Promise<void>((resolve) => {
+      releaseAuthorization = resolve;
+    });
+    let releaseStatus = () => {};
+    const status = new Promise<void>((resolve) => {
+      releaseStatus = resolve;
+    });
+    await page.route(
+      `**/api/admin/workspaces/${w.id}/github`,
+      async (route) => {
+        await status;
+        await route.fulfill({
+          json: {
+            configured: true,
+            appSlug: "fixture-app",
+            appSettingsUrl:
+              "https://github.com/organizations/example/settings/apps/fixture-app",
+            revision: 0,
+            pending: false,
+            installations: [],
+          },
+        });
+      },
+    );
+    await page.route(
+      `**/api/admin/workspaces/${w.id}/github/connect`,
+      async (route) => {
+        connections++;
+        expect(route.request().postDataJSON()).toEqual({ source: "setup" });
+        await authorization;
+        await route.fulfill({
+          json: { url: "https://github.com/fixture-oauth" },
+        });
+      },
+    );
+    await page.route("https://github.com/fixture-oauth", (route) =>
+      route.fulfill({ body: "Offline authorization fixture" }),
+    );
+    await page.goto(`/setup?workspace=${w.id}&step=github&github=app-created`);
+    await expect(page.getByLabel("GitHub connection")).toBeVisible();
+    await page.screenshot({
+      path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/github-app-loading-${width}.png`,
+      fullPage: true,
+    });
+    expect(connections).toBe(0);
+    releaseStatus();
+    await expect.poll(() => connections).toBe(1);
+    await expect(page.getByRole("link", { name: "Download icon" })).toHaveCount(
+      0,
+    );
+    await expect(
+      page.getByLabel("I uploaded the RepoDesk icon in GitHub"),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Connecting GitHub…", exact: true }),
+    ).toBeDisabled();
+    await expect(page.locator("body")).toHaveJSProperty("scrollWidth", width);
+    await page.screenshot({
+      path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/github-app-authorizing-${width}.png`,
+      fullPage: true,
+    });
+    releaseAuthorization();
+    await expect(page).toHaveURL("https://github.com/fixture-oauth");
+    expect(connections).toBe(1);
+  });
+  test(`GitHub App authorization failures remain retryable without icon setup at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -930,9 +1002,6 @@ for (const width of [1280, 390]) {
       route.fulfill({
         json: {
           configured: true,
-          appSlug: "fixture-app",
-          appSettingsUrl:
-            "https://github.com/organizations/example/settings/apps/fixture-app",
           revision: 0,
           pending: false,
           installations: [],
@@ -943,39 +1012,202 @@ for (const width of [1280, 390]) {
       `**/api/admin/workspaces/${w.id}/github/connect`,
       async (route) => {
         connections++;
-        await route.fulfill({
-          json: { url: "https://github.com/fixture-oauth" },
-        });
+        if (connections === 1) {
+          await route.fulfill({
+            status: 502,
+            json: { error: "github_unavailable" },
+          });
+        } else {
+          await route.fulfill({
+            json: { url: "https://github.com/fixture-oauth" },
+          });
+        }
       },
     );
     await page.route("https://github.com/fixture-oauth", (route) =>
       route.fulfill({ body: "Offline authorization fixture" }),
     );
     await page.goto(`/setup?workspace=${w.id}&step=github&github=app-created`);
-    await expect(
-      page.getByRole("img", { name: "RepoDesk GitHub App icon" }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: "Open GitHub App settings" }),
-    ).toHaveAttribute(
-      "href",
-      "https://github.com/organizations/example/settings/apps/fixture-app",
+    await expect(page.getByRole("alert")).toHaveText(
+      "GitHub is unavailable. Try again shortly.",
+    );
+    const connect = page.getByRole("button", {
+      name: "Connect GitHub",
+      exact: true,
+    });
+    await expect(connect).toBeEnabled();
+    await expect(page.getByRole("checkbox")).toHaveCount(0);
+    expect(connections).toBe(1);
+    await page.screenshot({
+      path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/github-app-authorization-error-${width}.png`,
+      fullPage: true,
+    });
+    await connect.click();
+    await expect(page).toHaveURL("https://github.com/fixture-oauth");
+    expect(connections).toBe(2);
+  });
+  test(`GitHub App setup waits for installation without repeating authorization at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { w } = await fixture(page);
+    let connections = 0;
+    await page.route(`**/api/admin/workspaces/${w.id}/github`, (route) =>
+      route.fulfill({
+        json: {
+          configured: true,
+          revision: 0,
+          pending: true,
+          installations: [],
+          installUrl: "https://github.com/fixture-installation",
+        },
+      }),
+    );
+    await page.route(
+      `**/api/admin/workspaces/${w.id}/github/connect`,
+      (route) => {
+        connections++;
+        return route.fulfill({ status: 500 });
+      },
+    );
+    await page.goto(`/setup?workspace=${w.id}&step=github&github=app-created`);
+    await expect(page.getByRole("status")).toHaveText(
+      "GitHub account authorized. Install the App to grant repository access.",
     );
     await expect(
       page.getByRole("button", { name: "Connect GitHub", exact: true }),
-    ).toBeDisabled();
-    expect(connections).toBe(0);
-    const download = page.waitForEvent("download");
-    await page.getByRole("link", { name: "Download icon" }).click();
-    expect((await download).suggestedFilename()).toBe(
-      "repodesk-github-app.png",
-    );
+    ).toBeEnabled();
+    await expect(page.getByRole("checkbox")).toHaveCount(0);
     await page.screenshot({
-      path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/github-app-icon-${width}.png`,
+      path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/github-app-installation-${width}.png`,
       fullPage: true,
     });
-    await page.getByLabel("I uploaded the RepoDesk icon in GitHub").click();
-    await expect(page).toHaveURL("https://github.com/fixture-oauth");
-    expect(connections).toBe(1);
+    expect(connections).toBe(0);
+  });
+  test(`GitHub setup opens the workspace directly after repository connection at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { w } = await fixture(page);
+    let saves = 0;
+    let releaseConnection = () => {};
+    const connected = new Promise<void>((resolve) => {
+      releaseConnection = resolve;
+    });
+    await page.route(
+      `**/api/admin/workspaces/${w.id}/github`,
+      async (route) => {
+        if (route.request().method() === "PUT") {
+          saves++;
+          expect(route.request().postDataJSON()).toEqual({
+            revision: 0,
+            installationId: 123,
+            allRepositories: true,
+          });
+          await connected;
+          await route.fulfill({ json: {} });
+        } else {
+          await route.fulfill({
+            json: {
+              configured: true,
+              revision: 0,
+              pending: true,
+              installations: [{ id: 123, account: "example" }],
+            },
+          });
+        }
+      },
+    );
+    await page.goto(`/setup?workspace=${w.id}&step=github&github=authorized`);
+    await expect.poll(() => saves).toBe(1);
+    await expect(
+      page.getByRole("button", { name: "Connecting GitHub…", exact: true }),
+    ).toBeDisabled();
+    await expect(page).toHaveURL(/\/setup\?/);
+    await page.screenshot({
+      path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/github-repositories-connecting-${width}.png`,
+      fullPage: true,
+    });
+    releaseConnection();
+    await expect(page).toHaveURL(new RegExp(`/admin\\?workspace=${w.id}$`));
+    await expect(
+      page.getByRole("heading", { name: "Your team, in view", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("dialog", { name: "Welcome to RepoDesk" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Get started", exact: true }),
+    ).toHaveCount(0);
+    await expect(page.locator("body")).toHaveJSProperty("scrollWidth", width);
+    await page.screenshot({
+      path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/github-workspace-ready-${width}.png`,
+      fullPage: true,
+    });
+    expect(saves).toBe(1);
+  });
+  test(`GitHub App creation and saved management omit manual icon instructions at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { w } = await fixture(page);
+    let configured = false;
+    await page.route(`**/api/admin/workspaces/${w.id}/github`, (route) =>
+      route.fulfill({
+        json: {
+          configured,
+          canRegister: !configured,
+          appSlug: configured ? "fixture-app" : undefined,
+          installUrl: configured
+            ? "https://github.com/fixture-installation"
+            : undefined,
+          revision: 0,
+          pending: false,
+          installations: [],
+        },
+      }),
+    );
+    await page.goto(`/admin/plugins?workspace=${w.id}&github=new`);
+    const manage = page.getByRole("dialog", { name: "Manage GitHub" });
+    await manage
+      .getByRole("button", { name: "Create GitHub App", exact: true })
+      .click();
+    const editor = page.getByRole("dialog", {
+      name: "Create GitHub App",
+      exact: true,
+    });
+    await expect(editor.getByLabel("App name", { exact: true })).toHaveValue(
+      "repodesk",
+    );
+    await expect(
+      editor.getByRole("button", { name: "Continue to GitHub", exact: true }),
+    ).toBeEnabled();
+    await expect(editor).not.toContainText(
+      /Download icon|Upload a logo|Set new avatar/,
+    );
+    await expect(
+      editor.getByRole("img", { name: "RepoDesk GitHub App icon" }),
+    ).toHaveCount(0);
+    await page.screenshot({
+      path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/github-app-create-${width}.png`,
+      fullPage: true,
+    });
+    configured = true;
+    await page.goto(`/admin/plugins?workspace=${w.id}&github=app-created`);
+    await expect(manage.getByRole("status")).toContainText(
+      "GitHub App created.",
+    );
+    await expect(
+      manage.getByRole("button", { name: "Connect GitHub", exact: true }),
+    ).toBeEnabled();
+    await expect(manage).not.toContainText(/Download icon|Set new avatar/);
+    await expect(
+      manage.getByRole("link", { name: "Open GitHub App settings" }),
+    ).toHaveCount(0);
+    await expect(manage.locator("input, select")).toHaveCount(0);
+    await page.screenshot({
+      path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/github-app-created-${width}.png`,
+      fullPage: true,
+    });
   });
 }

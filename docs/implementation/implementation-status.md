@@ -1,5 +1,28 @@
 # Implementation evidence
 
+## GitHub App setup without icon uploads or a welcome modal (2026-10-18)
+
+GitHub App creation no longer offers an icon download, upload instructions or an
+upload acknowledgement in setup or Manage GitHub. Setup proceeds directly from
+manifest registration to account authorization. Failed authorization remains
+retryable, and an already authorized or connected workspace does not restart
+authorization. Owners may customize the default badge independently in GitHub.
+Once repository connection succeeds, setup opens the workspace directly; the
+Welcome to RepoDesk modal, Get started action and confetti were removed.
+The unused icon component, asset, styles and build copy were removed. The current
+[UI preference](../design/ui-rules.md#github-app-creation-skips-manual-icon-setup)
+supersedes the earlier guided branding step.
+
+Validation: Biome, strict TypeScript and production build passed. All **27** admin
+and focused onboarding browser scenarios passed with fake GitHub transports.
+Desktop (1280px) and mobile (390px) creation/saved displays, loading, authorization
+pending/error, installation waiting and direct workspace entry were visually
+inspected. The final full Bun run passed **863 of 864** tests in the concurrently
+edited workspace; the unrelated Review Bot test "Telegram follow-ups wait for a
+Review Bot fix on the same PR" reproducibly received `cancelled` instead of
+`queued`. Earlier access-link and Cloudflare OAuth failures passed in isolation
+and on the final full run. No live GitHub account was connected for validation.
+
 ## v0.1.40 release preparation (2026-10-18)
 
 Version advances to **0.1.40**, covering continuous Codex conversations and the
@@ -1253,10 +1276,10 @@ independent selections, and task-proxy routing after restart. Workspace deletion
 removes its model selection; shared operator provider records remain configuration.
 No dependency or database migration was added.
 
-GitHub creation now offers the existing RepoDesk icon as a 200×200 PNG under 1 MiB
-and an owner-appropriate App settings link. The documented manifest cannot set an
-icon, so setup waits for the owner's upload acknowledgement before authorization.
-That acknowledgement does not independently verify the badge on GitHub.
+The original GitHub creation flow offered the RepoDesk icon as a 200×200 PNG under
+1 MiB and an owner-appropriate App settings link, then waited for an upload
+acknowledgement before authorization. That manual icon step was removed on
+2026-10-18; see the current entry above.
 
 Validation: Biome, strict TypeScript, production build and all **619** deterministic
 tests passed with disposable PostgreSQL. All **41** affected browser scenarios

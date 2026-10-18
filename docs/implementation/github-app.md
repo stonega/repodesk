@@ -43,7 +43,7 @@ repository-scoped issue submission and approved PR merge/close actions. No perso
 5. In setup, authorize the account, then use the same **Connect GitHub** button
    to open GitHub installation. Choose repositories on GitHub and return to the
    setup tab. It detects the installation, connects the granted repositories and
-   shows a RepoDesk welcome dialog. Click **Get started** to enter the workspace.
+   opens the workspace directly, without a welcome modal.
    In Plugins, installation and repository selection remain
    separate controls.
 
@@ -529,14 +529,10 @@ Local tests use fake GitHub responses and disposable PostgreSQL; real account li
 and permission changes remain live acceptance checks. Local implementation does not
 connect accounts, send live Telegram messages or deploy this change.
 
-## RepoDesk App icon
+## App icon customization
 
 GitHub's [manifest fields](https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest)
-do not include a logo. GitHub [requires the App owner to upload a badge](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/creating-a-custom-badge-for-your-github-app)
-after registration. RepoDesk provides its existing icon as a 200×200 PNG under
-1 MiB, with a Download icon action in creation and an owner-appropriate settings
-link afterward. Setup asks the owner to upload it under Display information and
-choose Set new avatar before acknowledging the step and continuing authorization.
-The acknowledgment is not independent verification of the GitHub image. Existing
-App credentials without stored organization metadata retain the personal settings
-link; organization owners can navigate to their organization's App settings.
+do not include a logo. GitHub assigns a default badge, which the owner can
+[customize in GitHub settings](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/creating-a-custom-badge-for-your-github-app)
+after registration. This customization is optional. RepoDesk continues directly to
+authorization without an icon download, upload instructions or acknowledgement.

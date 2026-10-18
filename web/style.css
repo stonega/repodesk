@@ -1283,74 +1283,6 @@ button.github-repository-more:hover:not(:disabled) {
   margin: 0;
   overflow: visible;
 }
-.setup-celebration {
-  position: fixed;
-  z-index: 100;
-  inset: 0;
-  width: 100vw;
-  height: 100dvh;
-  max-width: none;
-  max-height: none;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--ui-canvas) 93%, transparent);
-}
-.setup-celebration-card {
-  position: relative;
-  z-index: 1;
-  width: min(360px, calc(100vw - 32px));
-  padding: 30px;
-  border: 1px solid var(--ui-border);
-  border-radius: 16px;
-  background: var(--ui-surface);
-  text-align: center;
-}
-.setup-celebration-card h2 {
-  margin: 12px 0 6px;
-}
-.setup-celebration-card p {
-  margin: 0 0 20px;
-  color: var(--ui-muted);
-}
-.setup-celebration-mark {
-  display: inline-grid;
-  width: 48px;
-  height: 48px;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--ui-accent-soft);
-  color: var(--ui-accent);
-}
-.setup-confetti {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-.setup-confetti span {
-  position: absolute;
-  top: -16px;
-  width: 8px;
-  height: 15px;
-  border-radius: 2px;
-  animation: setup-confetti-fall 1.8s ease-in both;
-}
-@keyframes setup-confetti-fall {
-  from {
-    transform: translateY(0) rotate(0);
-  }
-  to {
-    transform: translateY(110vh) rotate(640deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .setup-confetti {
-    display: none;
-  }
-}
 .setup-navigation {
   display: flex;
   justify-content: flex-end;
@@ -3113,19 +3045,6 @@ input.plugin-toggle-input:disabled {
   }
 }
 
-.github-app-badge {
-  display: flex;
-  gap: 1rem;
-  align-items: flex-start;
-  margin-block: 1rem;
-}
-.github-app-badge img {
-  flex: 0 0 64px;
-}
-.github-app-badge h3 {
-  margin-top: 0;
-}
-
 .model-provider-item {
   display: flex;
   align-items: flex-start;
@@ -3143,21 +3062,6 @@ input.plugin-toggle-input:disabled {
 .model-provider-item > .row {
   flex: 0 0 auto;
 }
-.github-icon-confirmation {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.625rem;
-  margin-block: 0.75rem;
-}
-.github-icon-checkbox {
-  flex: 0 0 auto;
-  margin-top: 0.25rem;
-}
-.github-icon-copy {
-  flex: 1;
-  min-width: 0;
-}
-
 .update-release-heading {
   margin: 14px 0;
 }

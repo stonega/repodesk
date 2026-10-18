@@ -41,19 +41,17 @@ This is our application design, not built-in behavior supplied by Pi or Docker.
 | 1. Workspace | Enter a workspace name, select an IANA timezone, then continue | Continue saves the draft before advancing. Budget and retention policies can be adjusted later in Workspace settings. |
 | 2. Model | Add an OpenAI-compatible provider in its dialog, saving a base API URL and key to fetch the model list; select a bot chat model | Continue saves a workspace-specific selection and activates the bot automatically when its token, receiver and enabled published skill are ready. Providers are reused across the same operator’s workspaces and by Codex/Review Bot. Capacity and prices are optional overrides in Advanced settings. |
 | 3. Connect Telegram | Enter a BotFather token in a write-only field, then Continue | Validate bot identity and show its username without returning the token. |
-| 4. GitHub App | Click Connect GitHub; confirm authorization and choose repositories during GitHub installation | The setup page verifies one accessible installation and connects its granted repositories, then shows a RepoDesk welcome dialog with confetti. Get started opens the workspace. Detailed controls remain in Plugins. Bot activation finishes automatically once the saved model, Telegram receiver and skill prerequisites are ready. |
+| 4. GitHub App | Click Connect GitHub; confirm authorization and choose repositories during GitHub installation | The setup page verifies one accessible installation and connects its granted repositories, then opens the workspace directly. Detailed controls remain in Plugins. Bot activation finishes automatically once the saved model, Telegram receiver and skill prerequisites are ready. |
 
-After manifest registration, setup offers the RepoDesk PNG and an App-owner settings
-link. GitHub requires the owner to upload the icon under Display information; the
-manifest cannot set it. The owner acknowledges the upload before authorization
-continues. This acknowledgement does not independently verify the GitHub badge.
+After manifest registration, setup continues directly to GitHub authorization.
+App icon customization is optional in GitHub settings and is not part of setup.
 
 The authenticated wizard uses the administrator entry's two-panel visual layout.
 Only one step is shown at a time; step navigation allows returning to saved work.
 Setup resumes from saved server state. GitHub registration and authorization return
 to the GitHub step when started there. Authorization alone does not grant repository
 access; the App must also appear under Installed GitHub Apps. Setup waits for an
-installation and verifies its repositories before showing the welcome dialog.
+installation and verifies its repositories before opening the workspace.
 The operator's New workspace action in the admin selector reuses this wizard with
 a blank workspace form. After saving, the new workspace ID stays in the URL so
 reloads and GitHub callbacks continue setup for that workspace. The Telegram bot
