@@ -1,6 +1,6 @@
 {
   "name": "repodesk",
-  "version": "0.1.40",
+  "version": "0.1.41",
   "type": "module",
   "private": true,
   "devDependencies": {
