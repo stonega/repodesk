@@ -188,7 +188,7 @@ export function Cloudflare({
                       </div>
                     ))
                   : data.settings.accountId
-                    ? "Pages only"
+                    ? "Account resources only"
                     : "No domains selected"
                 : pending}
             </dd>
@@ -201,23 +201,32 @@ export function Cloudflare({
       >
         <h2>Queries and actions</h2>
         <p>
-          Ask in a private Telegram conversation to inspect selected domains and
-          DNS records, or Pages projects and deployments in the configured
-          account.
+          Ask in a private Telegram conversation about traffic, bandwidth, cache
+          performance, countries and status codes, or inspect DNS, Pages,
+          Workers, KV, R2, D1, Queues, Vectorize, Hyperdrive and Turnstile
+          resources.
         </p>
         <p>
-          Workspace owners and admins can propose DNS changes and cache purges.
-          Each change shows its exact request with Approve and Reject controls
-          before execution.
+          Inspect TLS certificates, security rulesets, firewall rules, load
+          balancers, health checks, custom hostnames, email routing and waiting
+          rooms. Access follows the saved account, selected domains and token
+          permissions.
+        </p>
+        <p>
+          Workspace owners and admins can propose DNS changes, cache purges,
+          zone setting changes and Worker route changes. Every change shows its
+          exact request with Approve and Reject controls before execution.
         </p>
         <p className="muted">
-          Grant Zone Read, DNS Read and Cloudflare Pages Read as needed. DNS
-          changes require DNS Edit; cache purges require Cache Purge. Token
-          resource restrictions should match this account and the selected
-          domains.
+          Traffic needs Analytics Read for each selected domain. Add product
+          Read permissions only for the features you use. Changes need DNS Edit,
+          Cache Purge, Zone Settings Edit or Workers Routes Edit as appropriate.
+          Configure these permissions in the Cloudflare token dashboard.
         </p>
         <p className="muted">
-          Workers, deployment creation and secret management are not included.
+          Stored data, source code, deployment creation and secret management
+          are excluded. Analytics availability and retention depend on your
+          Cloudflare plan.
         </p>
       </section>
       {editor === "token" && data && (
@@ -366,7 +375,8 @@ function ManualResourceEditor({
           onChange={(event) => setZones(event.target.value)}
         />
         <small className="muted">
-          One zone ID per line, up to 20. Leave empty for Pages only.
+          One zone ID per line, up to 20. Leave empty for Account resources
+          only.
         </small>
       </label>
       <ModalActions>

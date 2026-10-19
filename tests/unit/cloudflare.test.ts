@@ -171,3 +171,95 @@ test("Cloudflare evidence revocation follows retained answers and prevents group
   expect(cloudflareReadAllowed(w, derived)).toBe(false);
   expect(retainedSource(w, source)).toBe(false);
 });
+
+test("expanded Cloudflare schema binds each resource to its identifiers and rejects unrelated arguments", () => {
+  const zoneId = "b".repeat(32);
+  for (const input of [
+    {
+      resource: "zone_analytics",
+      zoneId,
+      since: "2026-09-01",
+      until: "2026-09-07",
+      dimension: "country",
+    },
+    { resource: "worker_schedules", scriptName: "my-worker" },
+    { resource: "r2_buckets", cursor: "next-token" },
+    { resource: "ruleset", zoneId, resourceId: "a".repeat(32) },
+    {
+      resource: "d1_database",
+      resourceId: "12345678-abcd-abcd-abcd-123456789abc",
+    },
+  ])
+    expect(cloudflareQuery.safeParse(input).success).toBe(true);
+  for (const input of [
+    { resource: "zone_analytics" },
+    { resource: "zone_settings", zoneId, projectName: "site" },
+    { resource: "workers", zoneId },
+    { resource: "worker_schedules", scriptName: "../secrets" },
+    { resource: "r2_bucket", bucketName: "a/b" },
+    { resource: "r2_buckets", page: 2 },
+    { resource: "account", page: 2 },
+    { resource: "workers", since: "2026-09-01" },
+    { resource: "zone_analytics", zoneId, since: "2026-02-30" },
+    { resource: "zone_analytics", zoneId, query: "mutation {}" },
+  ])
+    expect(cloudflareQuery.safeParse(input).success).toBe(false);
+});
+
+test("reviewed zone settings and Worker routes have closed action inputs", () => {
+  const zoneId = "b".repeat(32);
+  expect(
+    cloudflareAction.safeParse({
+      action: "update_zone_setting",
+      zoneId,
+      settingId: "ssl",
+      value: "strict",
+    }).success,
+  ).toBe(true);
+  expect(
+    cloudflareAction.safeParse({
+      action: "update_zone_setting",
+      zoneId,
+      settingId: "ssl",
+      value: "arbitrary",
+    }).success,
+  ).toBe(false);
+  expect(
+    cloudflareAction.safeParse({
+      action: "update_zone_setting",
+      zoneId,
+      settingId: "unknown",
+      value: "on",
+    }).success,
+  ).toBe(false);
+  expect(
+    cloudflareAction.safeParse({
+      action: "update_zone_setting",
+      zoneId,
+      settingId: "browser_cache_ttl",
+      value: "on",
+    }).success,
+  ).toBe(false);
+  for (const pattern of ["https://*.example.com/*", "example.com/api/*"])
+    expect(
+      cloudflareAction.safeParse({
+        action: "create_worker_route",
+        zoneId,
+        pattern,
+        scriptName: "my-worker",
+      }).success,
+    ).toBe(true);
+  for (const pattern of [
+    "https://user@example.com/*",
+    "https://example.com:443/*",
+    "https://example.com/?a=b",
+  ])
+    expect(
+      cloudflareAction.safeParse({
+        action: "create_worker_route",
+        zoneId,
+        pattern,
+        scriptName: "my-worker",
+      }).success,
+    ).toBe(false);
+});

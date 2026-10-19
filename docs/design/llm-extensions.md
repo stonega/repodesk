@@ -214,11 +214,23 @@ not broaden the executable file-extension API or expose an arbitrary GitHub writ
 ## Predefined Cloudflare
 
 The [Cloudflare plugin](../implementation/cloudflare.md) provides private interactive
-zone/DNS/Pages queries and exact reviewed DNS changes/cache purges. The operator
-configures browser OAuth or an encrypted write-only API token, account and explicit
-zone grants under Plugins → Cloudflare. OAuth uses session-bound PKCE, encrypted
-renewable tokens and explicit reconnect/disconnect. Active members may query;
+traffic analytics and broad account/zone metadata queries with exact reviewed
+DNS, cache, zone-setting and Worker-route changes. The operator
+configures an encrypted write-only API token, account and explicit zone grants
+under Plugins → Cloudflare. Existing OAuth connections retain backend compatibility. Active members may query;
 owners/admins may propose changes.
 Application services validate actor, scope, destination and approval, reserve writes
 durably and never replay ambiguous outcomes. Pages secrets and arbitrary API access
 are excluded. No extra package or migration is required.
+
+
+### Cloudflare expansion contract (2026-10-19)
+
+The expanded plugin uses a closed resource catalog for account and selected-zone
+metadata, fixed GraphQL traffic queries, and reviewed DNS/cache/zone-setting/Worker
+route changes. Account metadata is scoped to the saved account; zone resources
+always require an explicit allowed zone and verified account association. No saved
+domains means account resources only. Product-specific token permissions and plan
+entitlements still apply. Metadata projections exclude credentials, source code,
+object contents, database rows and arbitrary API/GraphQL/SQL execution. New writes
+reuse exact actor approvals, current-state checks and durable ambiguity handling.

@@ -1,7 +1,7 @@
 # Cloudflare plugin
 
 Implemented locally, 2026-10-17. Live Cloudflare/Telegram acceptance and deployment
-remain release gates. No extra package, migration or environment variable is needed;
+remain release gates for newly added operations. No extra package, migration or environment variable is needed;
 the API and worker use the existing deployment encryption key.
 Account/domain discovery and the simplified connection flow were added 2026-10-18.
 Account API token guidance and the account token dashboard link were updated
@@ -20,8 +20,11 @@ write-only and encrypted with workspace-specific authenticated data.
    workspace should use. For account verification grant **Account Settings Read**;
    user API tokens also need **User Memberships Read** for named account discovery.
    Add **Zone Read**, **DNS Read** and **Cloudflare Pages Read**
-   for the queries needed, plus **DNS Edit** for DNS changes and **Cache Purge**
-   for purges. [Token creation](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)
+   for the queries needed. Traffic analytics requires zone **Analytics Read**.
+   Add product Read permissions for Workers, KV, R2, D1, Queues, Vectorize,
+   Hyperdrive, Turnstile, security, load balancing or other catalog features only
+   when used. Writes need **DNS Edit**, **Cache Purge**, **Zone Settings Edit** or
+   **Workers Routes Edit** for the corresponding operation. [Token creation](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)
    and [permission names](https://developers.cloudflare.com/fundamentals/api/reference/permissions/)
    describe the Cloudflare controls.
    Cloudflare's [account API token guide](https://developers.cloudflare.com/fundamentals/api/get-started/account-owned-tokens/)
@@ -29,8 +32,9 @@ write-only and encrypted with workspace-specific authenticated data.
 2. Paste and save the token. Saving a new/replacement token disables the plugin
    and opens **Configuration**. Saving alone does not verify provider permissions.
 3. Choose the named account, or accept the sole account selected in the draft.
-   Optionally search and select up to 20 domains for DNS/cache access. No domains
-   are selected automatically; none means Pages-only access. Accounts/domains are
+   Optionally search and select up to 20 domains for traffic, DNS and other domain
+   features. No domains are selected automatically; none means account resources
+   only. Accounts/domains are
    fetched in pages of 50, with More controls for subsequent pages.
 4. Save the selection. Named selections verify the account and every domain's
    account association before saving their names. First account selection enables
@@ -47,7 +51,7 @@ For tokens that cannot list accounts, including account tokens without discovery
 access, select **Enter IDs manually** in Configuration.
 Supply the account and up to 20 zone IDs from Cloudflare. Manual saves do not verify
 remote permissions; DNS access still checks the zone's account before using it.
-Pages-only tokens can leave domains empty, including when Zone Read is unavailable.
+Account-only tokens can leave domains empty, including when Zone Read is unavailable.
 
 Use **API token → Edit** to replace or remove credentials. A blank replacement keeps
 the current token. Replacement clears cached resource names and pauses the plugin;
@@ -71,8 +75,38 @@ The built-in Pi factory exposes two tools and a companion instruction skill:
 
 | Tool | Supported operations | Access |
 | --- | --- | --- |
-| `query_cloudflare` | `zones`, `dns_records`, `pages_projects`, `pages_deployments` | Active workspace member, private interactive conversation |
-| `propose_cloudflare_action` | `create_dns_record`, `update_dns_record`, `delete_dns_record`, `purge_cache` | Workspace owner/admin, private interactive conversation, followed by exact actor approval |
+| `query_cloudflare` | `capabilities`, selected zones, fixed traffic analytics and the resource catalog below | Active workspace member, private interactive conversation |
+| `propose_cloudflare_action` | DNS create/update/delete, cache purge, zone-setting update and Worker-route create/update/delete | Workspace owner/admin, private interactive conversation, followed by exact actor approval |
+
+### Resource catalog
+
+Call `capabilities` for exact resource names, scope, required identifiers and
+pagination. Resource IDs/names select children of the saved account or an allowed
+zone; there is no model-supplied account, method, path or query language.
+
+| Area | Resource names |
+| --- | --- |
+| Traffic | `zone_analytics`: daily requests, bytes, cached requests/bytes, threats, page views, encrypted traffic and daily uniques; optional country, status, content or browser breakdown |
+| DNS and TLS | `zones`, `dns_records`, `dnssec`, `zone_settings`, `ssl_certificates`, `ssl_verification` |
+| Security and routing | `rulesets`, `ruleset`, `firewall_rules`, `access_rules`, `page_rules`, `worker_routes`, `custom_hostnames`, `waiting_rooms` |
+| Availability and email | `load_balancers`, `healthchecks`, `email_routing`, `email_routing_rules` |
+| Pages | `pages_projects`, `pages_deployments`, `pages_domains` |
+| Workers | `workers`, `worker_domains`, `worker_schedules`, `worker_deployments`, `worker_versions`, `worker_subdomain` |
+| Storage and compute metadata | `kv_namespaces`, `r2_buckets`, `r2_bucket`, `d1_databases`, `d1_database`, `queues`, `queue_consumers`, `vectorize_indexes`, `hyperdrive_configs` |
+| Account services | `account`, `turnstile_widgets`, `load_balancer_pools`, `load_balancer_monitors`, `account_rulesets`, `account_ruleset`, `web_analytics_sites` |
+
+Traffic uses a fixed read-only GraphQL POST. `since` and `until` are inclusive UTC
+YYYY-MM-DD dates, at most 31 days, defaulting to the last seven complete UTC days.
+`dimension` is overview/country/status/content/browser. Daily uniques are not
+period-unique visitors, and zone requests are not Web Analytics sessions. Plan
+retention, dataset access and sampling apply. Partial GraphQL errors and missing
+zone results fail explicitly; empty data does not establish zero traffic.
+
+The closed catalog uses product-specific output field allowlists, including nested
+objects/arrays. Hyperdrive credentials, Turnstile secrets, rule action secrets,
+Worker bindings/source and stored data are excluded. Endpoints and response shapes
+were checked against the [official TypeScript API source](https://github.com/cloudflare/cloudflare-typescript/tree/main/src/resources)
+and [GraphQL zone analytics guide](https://developers.cloudflare.com/analytics/graphql-api/migration-guides/zone-analytics/).
 
 DNS create/update supports A, AAAA, CNAME, TXT and MX records, fully qualified
 names within the selected zone, content, TTL, optional proxy flag and MX priority.
@@ -84,13 +118,27 @@ remaining concurrency limitation. Purges take up to 20 explicit HTTP(S) URLs wit
 the zone or an explicit whole-zone purge. Oversized previews are rejected rather
 than truncated.
 
-Queries return only configured zones, or one page of up to 20 DNS records, Pages
-projects or deployments. Page metadata and partial-inventory guidance accompany
-lists. Pages responses allowlist display fields and exclude environment variables,
-build configuration and source credentials. Queries and actions do not expose
-arbitrary methods, URLs or API paths. Workers, creating deployments, uploads,
-secrets and other Cloudflare products are outside this implementation.
-Scheduled workflows and group requests cannot use these tools.
+Queries return one page at a time. Pages projects/deployments request ten results
+per page (the live provider rejected twenty with error 8000024); other numeric
+pages request twenty. R2 bucket lists use cursors. Provider single-page inventories
+are paginated locally in groups of twenty, with explicit counts. Missing upstream
+pagination metadata is not treated as proof of completeness. Bodies remain bounded
+to 1 MiB and projected output to 24 KiB; narrow the query if a limit is exceeded.
+
+Zone-setting changes support 14 named settings: ssl, always_use_https,
+automatic_https_rewrites, min_tls_version, tls_1_3, security_level, browser_check,
+cache_level, development_mode, http3, ipv6, websockets, early_hints and
+browser_cache_ttl. Values are validated; the provider still enforces plan-specific
+editability and TTLs. Worker-route changes support explicit in-zone URL patterns,
+script names or an explicit null bypass. Updates/deletes pin current IDs and
+contents, and settings must be provider-editable. As with DNS, there is no remote
+atomic compare-and-swap guarantee after the final preflight.
+
+Creating deployments, uploads, KV values, R2 object contents, D1 rows/SQL, Worker
+source code and secret management remain outside the implementation. Scheduled
+workflows and group requests cannot use these tools. Token permission failures do
+not authorize automatically increasing access. API-token setup has no Reconnect
+control; check the failed operation and product permission before replacing a token.
 
 ## Permissions, durability and recovery
 

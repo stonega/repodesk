@@ -205,8 +205,8 @@ export function CloudflareResourceEditor({
       >
         <legend>Allowed domains</legend>
         <p className="muted">
-          Optional. Select up to 20 domains for DNS and cache access. Leave all
-          unchecked for Pages only.
+          Optional. Select up to 20 domains for traffic, DNS and other domain
+          features. Leave all unchecked for account resources only.
         </p>
         <label className="field">
           <span>Search domains</span>
@@ -220,7 +220,7 @@ export function CloudflareResourceEditor({
         {zoneError && (
           <p className="notice" role="alert">
             Couldn’t load domains. Check Zone Read permission, or continue with
-            Pages only.{" "}
+            account resources only.{" "}
             <button
               type="button"
               className="secondary"
@@ -232,7 +232,8 @@ export function CloudflareResourceEditor({
         )}
         {!zonesLoading && !zoneError && accountId && !zoneChoices.length && (
           <p className="muted">
-            No domains available in this account. You can use Pages only.
+            No domains available in this account. You can use account resources
+            only.
           </p>
         )}
         <div className="cloudflare-domain-list">

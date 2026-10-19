@@ -43,10 +43,11 @@ export function CloudflareTokenEditor({
         </a>
       </p>
       <p className="muted">
-        Include Account Settings Read for account verification. Add Zone Read,
-        DNS Read and Cloudflare Pages Read as needed; DNS changes need DNS Edit
-        and cache purges need Cache Purge. Restrict the token to the accounts
-        and domains you want to use.
+        Include Account Settings Read for account verification and Zone Read for
+        selected domains. Traffic needs Analytics Read; DNS and Pages need their
+        Read permissions. Add other product Read permissions as needed. Changes
+        require DNS Edit, Cache Purge, Zone Settings Edit or Workers Routes
+        Edit. Restrict the token to the accounts and domains you use.
       </p>
       <p className="muted">
         User API tokens need User Memberships Read to discover accounts. If your

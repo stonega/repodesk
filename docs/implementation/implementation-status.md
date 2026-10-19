@@ -129,6 +129,38 @@ remain staging acceptance steps. See [runner behavior](codex-runner.md#lifecycle
 [the repeatable fixture](../../examples/codex-interruption.md) and
 [incident evidence](../../postmortem/2026-10-18-codex-task-interrupted-by-vps-reboot.md).
 
+## Expanded Cloudflare operations (2026-10-19)
+
+The built-in plugin now exposes 45 query choices (including capability discovery),
+covering fixed zone traffic analytics and 42 metadata resources across DNS/TLS,
+security, Pages, Workers, KV, R2, D1, Queues, Vectorize, Hyperdrive, Turnstile,
+load balancing, health checks, email routing, waiting rooms and Web Analytics site
+metadata. Saved account and explicit domain grants apply to all requests, with
+current private/member authorization and revision checks around provider reads.
+Account-only configurations now say **Account resources only**. Field allowlists
+exclude credential/configuration secrets and stored content; no arbitrary API,
+GraphQL, SQL, source-code or object-data access is exposed.
+
+Exact reviewed writes now also support 14 named zone settings and Worker-route
+create/update/delete. Updates/deletes pin the current target; noneditable settings
+are rejected. Existing actor approvals, tenant scope, durable sending reservations,
+concurrent-send deduplication and no replay after ambiguous outcomes are retained.
+Pages uses ten results per page after a read-only live check isolated the prior
+failure to the twenty-result request. See the [incident analysis](../../postmortem/2026-10-19-cloudflare-pages-pagination.md).
+
+Validation: Biome, strict TypeScript, production build and the Node runtime contract
+passed. All 980 tests in the full deterministic suite passed; the final focused
+Cloudflare pass included 59 tests. All 18 focused browser scenarios passed with
+disposable PostgreSQL; desktop/mobile saved display, token/resource editors,
+loading/empty, pending/error and light/dark renders were inspected. Focused coverage
+includes every catalog entry, foreign scope/parameter denial, GraphQL read guards,
+partial-error rejection, daily date bounds, pagination, nested secret exclusion,
+revocation, changed targets and concurrent approved sends. A direct read-only
+GraphQL overview smoke check succeeded with the existing saved token and selected
+zone. No provider settings changed or Telegram messages were sent. Expanded
+provider/product acceptance and deployment remain outstanding. No dependency,
+migration or deployment configuration was added.
+
 ## Cloudflare direct API token setup (2026-10-18)
 
 New Cloudflare settings default to API tokens. The panel replaces OAuth client

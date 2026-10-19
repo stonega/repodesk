@@ -70,15 +70,21 @@ export class CloudflareClient {
     token: string,
     path: string,
     options: {
-      method?: "GET" | "POST" | "PATCH" | "DELETE";
+      method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
       body?: unknown;
+      graphql?: boolean;
       signal?: AbortSignal;
       guard: () => Promise<void>;
     },
   ) {
     await options.guard();
     options.signal?.throwIfAborted();
-    const writing = options.method && options.method !== "GET";
+    requireThat(
+      !options.graphql || (path === "/graphql" && options.method === "POST"),
+      "cloudflare_invalid_request",
+    );
+    const writing =
+      options.method && options.method !== "GET" && !options.graphql;
     let response: Response;
     let data: Row;
     try {
@@ -128,7 +134,14 @@ export class CloudflareClient {
         502,
       );
     }
-    if (!response.ok || data.success !== true) {
+    const graphqlErrors =
+      options.graphql &&
+      data.errors != null &&
+      (!Array.isArray(data.errors) || data.errors.length > 0);
+    if (
+      !response.ok ||
+      (options.graphql ? graphqlErrors || !data.data : data.success !== true)
+    ) {
       if (writing && (response.status >= 500 || response.ok))
         throw new Fault("cloudflare_outcome_unknown", 502);
       throw new Fault(
@@ -136,7 +149,9 @@ export class CloudflareClient {
           ? "cloudflare_access_denied"
           : response.status === 429
             ? "cloudflare_rate_limited"
-            : "cloudflare_request_failed",
+            : options.graphql
+              ? "cloudflare_analytics_unavailable"
+              : "cloudflare_request_failed",
         409,
       );
     }
@@ -145,14 +160,23 @@ export class CloudflareClient {
       options.signal?.throwIfAborted();
     }
     return {
-      result: data.result,
-      result_info: pick(data.result_info, [
-        "page",
-        "per_page",
-        "count",
-        "total_count",
-        "total_pages",
-      ]),
+      result: options.graphql ? data.data : data.result,
+      result_info: Object.fromEntries(
+        Object.entries(
+          pick(data.result_info, [
+            "page",
+            "per_page",
+            "count",
+            "total_count",
+            "total_pages",
+            "cursor",
+          ]),
+        ).filter(([key, value]) =>
+          key === "cursor"
+            ? typeof value === "string" && value.length <= 2048
+            : typeof value === "number" && Number.isFinite(value),
+        ),
+      ),
     };
   }
 }

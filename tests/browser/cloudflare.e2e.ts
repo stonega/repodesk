@@ -74,9 +74,22 @@ for (const width of [1280, 390]) {
       settings: { enabled: true, accountId: "a".repeat(32), zoneIds: [] },
     });
     await expect(auth).toContainText("Configured");
+    const capabilities = page.getByRole("region", {
+      name: "Cloudflare capabilities",
+    });
+    await expect(capabilities).toContainText("traffic");
+    await expect(capabilities).toContainText("Workers");
+    await expect(capabilities).toContainText("Analytics Read");
+    await expect(capabilities).toContainText("Worker route changes");
+    await expect(capabilities).toContainText("Approve and Reject");
+    await expect(
+      page
+        .getByRole("region", { name: "Cloudflare configuration" })
+        .locator("input, select, textarea"),
+    ).toHaveCount(0);
     await expect(
       page.getByRole("region", { name: "Cloudflare configuration" }),
-    ).toContainText("Pages only");
+    ).toContainText("Account resources only");
     await expect(page.locator("body")).not.toContainText(
       "cfat_fixture-direct-token-123456",
     );
@@ -128,6 +141,8 @@ for (const width of [1280, 390]) {
     });
     await open();
     await expect(editor.getByLabel("Replace API token")).toHaveValue("");
+    await expect(editor).toContainText("Analytics Read");
+    await expect(editor).toContainText("Workers Routes Edit");
     await editor
       .getByLabel("Replace API token")
       .fill("discarded-fixture-token-123");

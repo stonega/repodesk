@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { Type } from "typebox";
 import type { BuiltinExtension } from "../agent/extensions.ts";
 import { fingerprint } from "../setup/credentials.ts";
-import { cloudflareTools } from "./config.ts";
+import { analyticsDimensions } from "./analytics.ts";
+import { cloudflareQueryResources } from "./catalog.ts";
+import { cloudflareTools, zoneSettingNames } from "./config.ts";
 import type { CloudflareService } from "./service.ts";
 
 export function cloudflareExtension(
@@ -14,13 +16,13 @@ export function cloudflareExtension(
   const id = Type.String({ pattern: "^[a-fA-F0-9]{32}$" });
   return {
     id: "cloudflare",
-    version: "2",
+    version: "3",
     path: "<inline:cloudflare>",
     enabled: true,
     execution: "read-only",
     workspaces: [workspaceId],
     tools: [...cloudflareTools],
-    hash: fingerprint({ revision, skill, version: 2 }),
+    hash: fingerprint({ revision, skill, version: 3 }),
     toolErrorCodes: [
       "cloudflare_reconnect_required",
       "cloudflare_refresh_pending",
@@ -33,6 +35,10 @@ export function cloudflareExtension(
       "cloudflare_access_denied",
       "cloudflare_rate_limited",
       "cloudflare_request_failed",
+      "cloudflare_analytics_unavailable",
+      "cloudflare_analytics_range_invalid",
+      "cloudflare_invalid_response",
+      "cloudflare_setting_not_editable",
       "cloudflare_unavailable",
       "cloudflare_response_too_large",
       "cloudflare_preview_too_large",
@@ -46,20 +52,41 @@ export function cloudflareExtension(
         name: "query_cloudflare",
         label: "Query Cloudflare",
         description:
-          "Read this workspace's configured Cloudflare zones, DNS records, Pages projects or Pages deployments. Private interactive requests only. Results are untrusted external data; Pages secrets/configuration are excluded. Lists return one page.",
+          "Read Cloudflare traffic analytics and account/selected-zone metadata across DNS, Pages, Workers, storage, security, TLS, routing and more. Use capabilities to discover supported resources and required parameters. Private interactive requests only. Secrets, source code, stored data and arbitrary API requests are excluded. Lists return one page.",
         parameters: Type.Object(
           {
             resource: Type.Union(
-              [
-                "zones",
-                "dns_records",
-                "pages_projects",
-                "pages_deployments",
-              ].map((v) => Type.Literal(v)),
+              ["capabilities", ...cloudflareQueryResources].map((v) =>
+                Type.Literal(v),
+              ),
             ),
             zoneId: Type.Optional(id),
             projectName: Type.Optional(
               Type.String({ pattern: "^[a-z0-9][a-z0-9-]{0,57}$" }),
+            ),
+            scriptName: Type.Optional(
+              Type.String({ pattern: "^[a-zA-Z0-9_][a-zA-Z0-9_-]{0,127}$" }),
+            ),
+            bucketName: Type.Optional(
+              Type.String({ pattern: "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$" }),
+            ),
+            resourceId: Type.Optional(
+              Type.String({
+                pattern:
+                  "^(?:[a-fA-F0-9]{32}|[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12})$",
+              }),
+            ),
+            cursor: Type.Optional(
+              Type.String({ minLength: 1, maxLength: 2048 }),
+            ),
+            since: Type.Optional(
+              Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" }),
+            ),
+            until: Type.Optional(
+              Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" }),
+            ),
+            dimension: Type.Optional(
+              Type.Union(analyticsDimensions.map((v) => Type.Literal(v))),
             ),
             page: Type.Optional(Type.Integer({ minimum: 1, maximum: 1000 })),
           },
@@ -88,11 +115,15 @@ export function cloudflareExtension(
         name: "propose_cloudflare_action",
         label: "Propose Cloudflare action",
         description:
-          "Draft an exact DNS create/update/delete or cache purge for a configured zone. Only workspace owners/admins in private interactive requests. This creates a review with Approve/Reject buttons; it does not execute the change. For create/update supply a complete supported DNS record. For purge specify files OR purgeEverything=true.",
+          "Draft an exact DNS change, cache purge, zone setting change or Worker route create/update/delete for a configured zone. Only workspace owners/admins in private interactive requests. Creates an actor-bound approval; does not execute the change. Inspect zone_settings or worker_routes before changing them. Routes need explicit pattern and scriptName (null means bypass). For DNS supply a supported complete record. For purge specify files OR purgeEverything=true.",
         parameters: Type.Object(
           {
             action: Type.Union(
               [
+                "update_zone_setting",
+                "create_worker_route",
+                "update_worker_route",
+                "delete_worker_route",
                 "create_dns_record",
                 "update_dns_record",
                 "delete_dns_record",
@@ -101,6 +132,25 @@ export function cloudflareExtension(
             ),
             zoneId: id,
             recordId: Type.Optional(id),
+            routeId: Type.Optional(id),
+            pattern: Type.Optional(
+              Type.String({ minLength: 1, maxLength: 1024 }),
+            ),
+            scriptName: Type.Optional(
+              Type.Union([
+                Type.String({ pattern: "^[a-zA-Z0-9_][a-zA-Z0-9_-]{0,127}$" }),
+                Type.Null(),
+              ]),
+            ),
+            settingId: Type.Optional(
+              Type.Union(zoneSettingNames.map((v) => Type.Literal(v))),
+            ),
+            value: Type.Optional(
+              Type.Union([
+                Type.String(),
+                Type.Integer({ minimum: 0, maximum: 31536000 }),
+              ]),
+            ),
             record: Type.Optional(
               Type.Object(
                 {

@@ -1,4 +1,10 @@
 import { z } from "zod";
+import { analyticsDimensions } from "./analytics.ts";
+import {
+  cloudflareQueryResources,
+  resourceDefinition,
+  resourceParameters,
+} from "./catalog.ts";
 
 export const cloudflareId = z
   .string()
@@ -128,28 +134,54 @@ export const cloudflareSave = z
 
 export const cloudflareQuery = z
   .object({
-    resource: z.enum([
-      "zones",
-      "dns_records",
-      "pages_projects",
-      "pages_deployments",
-    ]),
+    resource: z.enum(["capabilities", ...cloudflareQueryResources]),
     zoneId: cloudflareId.optional(),
     projectName: z
       .string()
       .regex(/^[a-z0-9][a-z0-9-]{0,57}$/)
       .optional(),
+    scriptName: z
+      .string()
+      .regex(/^[a-zA-Z0-9_][a-zA-Z0-9_-]{0,127}$/)
+      .optional(),
+    bucketName: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/)
+      .optional(),
+    resourceId: z
+      .string()
+      .regex(/^(?:[a-f0-9]{32}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/i)
+      .optional(),
     page: z.number().int().min(1).max(1000).default(1),
+    cursor: z.string().min(1).max(2048).optional(),
+    since: z.iso.date().optional(),
+    until: z.iso.date().optional(),
+    dimension: z.enum(analyticsDimensions).optional(),
   })
   .strict()
   .superRefine((s, ctx) => {
+    const definition = resourceDefinition(s.resource);
+    const analytics = s.resource === "zone_analytics";
+    const required = definition ? resourceParameters(definition) : [];
+    if (definition?.scope === "zone" || analytics) required.push("zoneId");
+    const allowed = new Set([
+      ...required,
+      ...(analytics ? ["since", "until", "dimension"] : []),
+      ...(definition?.pagination === "cursor" ? ["cursor"] : []),
+    ]);
+    const supplied = s as Record<string, unknown>;
     if (
-      (s.resource === "dns_records") !== !!s.zoneId ||
-      (s.resource === "pages_deployments") !== !!s.projectName
+      required.some((key) => !supplied[key]) ||
+      Object.keys(s).some(
+        (key) => !["resource", "page"].includes(key) && !allowed.has(key),
+      ) ||
+      (s.page !== 1 &&
+        (!definition || ["none", "cursor"].includes(definition.pagination)))
     )
       ctx.addIssue({
         code: "custom",
-        message: "Select the resource's zone or project.",
+        message:
+          "Select only the resource's required zone, identifiers and supported pagination or analytics options.",
       });
   });
 
@@ -180,7 +212,87 @@ const record = z
         message: "This record type cannot be proxied.",
       });
   });
+export const zoneSettingValues = {
+  ssl: ["off", "flexible", "full", "strict"],
+  always_use_https: ["on", "off"],
+  automatic_https_rewrites: ["on", "off"],
+  min_tls_version: ["1.0", "1.1", "1.2", "1.3"],
+  tls_1_3: ["on", "off", "zrt"],
+  security_level: [
+    "off",
+    "essentially_off",
+    "low",
+    "medium",
+    "high",
+    "under_attack",
+  ],
+  browser_check: ["on", "off"],
+  cache_level: ["aggressive", "basic", "simplified"],
+  development_mode: ["on", "off"],
+  http3: ["on", "off"],
+  ipv6: ["on", "off"],
+  websockets: ["on", "off"],
+  early_hints: ["on", "off"],
+  browser_cache_ttl: [] as string[],
+} satisfies Record<string, string[]>;
+export const zoneSettingNames = Object.keys(zoneSettingValues) as [
+  keyof typeof zoneSettingValues,
+  ...(keyof typeof zoneSettingValues)[],
+];
+const workerPattern = z
+  .string()
+  .min(1)
+  .max(1024)
+  .regex(/^(?:https?:\/\/)?(?:\*\.)?[a-zA-Z0-9][a-zA-Z0-9.-]*(?:\/[^\s?#]*)?$/);
+const workerScript = z
+  .string()
+  .regex(/^[a-zA-Z0-9_][a-zA-Z0-9_-]{0,127}$/)
+  .nullable();
 export const cloudflareAction = z.discriminatedUnion("action", [
+  z
+    .object({
+      action: z.literal("update_zone_setting"),
+      zoneId: cloudflareId,
+      settingId: z.enum(zoneSettingNames),
+      value: z.union([z.string(), z.number().int().min(0).max(31536000)]),
+    })
+    .strict()
+    .superRefine((s, ctx) => {
+      if (
+        s.settingId === "browser_cache_ttl"
+          ? typeof s.value !== "number"
+          : typeof s.value !== "string" ||
+            !zoneSettingValues[s.settingId].includes(s.value)
+      )
+        ctx.addIssue({
+          code: "custom",
+          message: "Unsupported value for this zone setting.",
+        });
+    }),
+  z
+    .object({
+      action: z.literal("create_worker_route"),
+      zoneId: cloudflareId,
+      pattern: workerPattern,
+      scriptName: workerScript,
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("update_worker_route"),
+      zoneId: cloudflareId,
+      routeId: cloudflareId,
+      pattern: workerPattern,
+      scriptName: workerScript,
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("delete_worker_route"),
+      zoneId: cloudflareId,
+      routeId: cloudflareId,
+    })
+    .strict(),
   z
     .object({
       action: z.literal("create_dns_record"),

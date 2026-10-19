@@ -15,12 +15,23 @@ import { decrypt, encrypt, fingerprint } from "../setup/credentials.ts";
 import { audit, authorize, runAllowed } from "../workspaces/policy.ts";
 import { deliver } from "../workspaces/service.ts";
 import {
+  actionSnapshot,
+  actionTarget,
+  actionWrite,
+  workerRouteWithinZone,
+} from "./actions.ts";
+import { analyticsOutput, analyticsRequest } from "./analytics.ts";
+import {
+  cloudflareResources,
+  resourceDefinition,
+  resourceOutput,
+  resourceParameters,
+  resourcePath,
+} from "./catalog.ts";
+import {
   CloudflareClient,
   type CloudflareTransport,
-  deployment,
-  dnsRecord,
   pick,
-  project,
   row,
 } from "./client.ts";
 import {
@@ -442,41 +453,99 @@ export class CloudflareService {
       await this.authorized(id, runId, revision);
       return { resource: input.resource, result: zones, complete: true };
     }
+    if (input.resource === "capabilities")
+      return {
+        resource: input.resource,
+        result: [
+          { resource: "zones", scope: "selected zones", parameters: [] },
+          {
+            resource: "zone_analytics",
+            scope: "zone",
+            parameters: [
+              "zoneId",
+              "since/until: YYYY-MM-DD (optional, max 31 UTC days)",
+              "dimension: overview/country/status/content/browser (optional)",
+            ],
+          },
+          ...Object.entries(cloudflareResources).map(
+            ([resource, definition]) => ({
+              resource,
+              scope: definition.scope,
+              parameters: [
+                ...(definition.scope === "zone" ? ["zoneId"] : []),
+                ...resourceParameters(definition),
+              ],
+              pagination: definition.pagination,
+            }),
+          ),
+        ],
+        complete: true,
+      };
     if (input.zoneId)
       await this.zone(id, runId, revision, input.zoneId, signal);
-    const path = input.zoneId
-      ? `/zones/${input.zoneId}/dns_records`
-      : `/accounts/${access.config.settings.accountId}/pages/projects${input.projectName ? `/${input.projectName}/deployments` : ""}`;
     const currentAccess = await this.access(id, runId, revision);
-    const result = await this.client.request(
+    const requestGuard = async () => {
+      await guard();
+      await this.authorized(id, runId, revision);
+    };
+    if (input.resource === "zone_analytics") {
+      const body = analyticsRequest(
+        input.zoneId as string,
+        input.since,
+        input.until,
+        input.dimension,
+      );
+      const response = await this.client.request(
+        currentAccess.token,
+        "/graphql",
+        { method: "POST", body, graphql: true, signal, guard: requestGuard },
+      );
+      const output = {
+        resource: input.resource,
+        zoneId: input.zoneId,
+        since: body.variables.start,
+        until: body.variables.end,
+        dimension: input.dimension ?? "overview",
+        result: analyticsOutput(
+          response.result,
+          input.zoneId as string,
+          input.dimension,
+        ),
+        guidance:
+          "UTC daily Cloudflare zone traffic, not Web Analytics sessions. Daily uniques are not deduplicated across days; do not add them as period visitors. Data availability, sampling and retention depend on the plan. Empty data does not establish zero traffic.",
+      };
+      requireThat(
+        Buffer.byteLength(JSON.stringify(output)) <= 24000,
+        "cloudflare_response_too_large",
+        409,
+      );
+      return output;
+    }
+    const definition = resourceDefinition(input.resource);
+    requireThat(definition, "cloudflare_invalid_request", 400);
+    const response = await this.client.request(
       currentAccess.token,
-      `${path}?page=${input.page}&per_page=20`,
-      {
-        signal,
-        guard: async () => {
-          await guard();
-          await this.authorized(id, runId, revision);
-        },
-      },
+      resourcePath(
+        definition,
+        input,
+        definition.scope === "zone"
+          ? (input.zoneId as string)
+          : access.config.settings.accountId,
+      ),
+      { signal, guard: requestGuard },
     );
-    requireThat(
-      Array.isArray(result.result) && result.result.length <= 20,
-      "cloudflare_response_too_large",
-      409,
-    );
-    const items = result.result.map(
-      input.resource === "dns_records"
-        ? dnsRecord
-        : input.resource === "pages_projects"
-          ? project
-          : deployment,
+    const projected = resourceOutput(
+      input.resource,
+      definition,
+      response.result,
+      input.page,
     );
     const output = {
       resource: input.resource,
-      result: items,
-      result_info: result.result_info,
+      result: projected.result,
+      result_info: projected.localPagination ?? response.result_info,
       guidance:
-        "One page only. Use the next page to retrieve more; missing pagination metadata does not establish completeness.",
+        "One page only. Follow result_info page/total_pages or cursor for more; missing pagination metadata does not establish completeness. Product permissions and plan entitlements apply.",
     };
     requireThat(
       Buffer.byteLength(JSON.stringify(output)) <= 24000,
@@ -520,11 +589,21 @@ export class CloudflareService {
         403,
       );
     let before: Record<string, unknown> | undefined;
-    if ("recordId" in request) {
+    if ("pattern" in request)
+      requireThat(
+        workerRouteWithinZone(request.pattern, zoneName),
+        "cloudflare_zone_denied",
+        403,
+      );
+    if (
+      "recordId" in request ||
+      "routeId" in request ||
+      "settingId" in request
+    ) {
       const access = await this.access(id, runId, revision, true);
       const response = await this.client.request(
         access.token,
-        `/zones/${request.zoneId}/dns_records/${request.recordId}`,
+        actionTarget(request),
         {
           signal,
           guard: async () => {
@@ -533,14 +612,31 @@ export class CloudflareService {
           },
         },
       );
-      before = dnsRecord(response.result);
-      requireThat(
-        before.id === request.recordId &&
-          typeof before.name === "string" &&
-          underZone(before.name),
-        "cloudflare_zone_denied",
-        403,
-      );
+      before = actionSnapshot(request, response.result) as Record<
+        string,
+        unknown
+      >;
+      if ("settingId" in request)
+        requireThat(
+          row(response.result).editable === true,
+          "cloudflare_setting_not_editable",
+          409,
+        );
+      if ("routeId" in request || "settingId" in request)
+        requireThat(
+          before.id ===
+            ("routeId" in request ? request.routeId : request.settingId),
+          "cloudflare_invalid_response",
+          502,
+        );
+      if ("recordId" in request)
+        requireThat(
+          before.id === request.recordId &&
+            typeof before.name === "string" &&
+            underZone(before.name),
+          "cloudflare_zone_denied",
+          403,
+        );
     }
     signal?.throwIfAborted();
     await guard();
@@ -592,7 +688,7 @@ export class CloudflareService {
         hash: fingerprint(payload),
         expiresAt: new Date(Date.now() + 900000).toISOString(),
       };
-      const preview = `Cloudflare: ${request.action}\nZone: ${zoneName} (${request.zoneId})\n\n${JSON.stringify(request, null, 2)}${before ? `\n\nCurrent record:\n${JSON.stringify(before, null, 2)}` : ""}\n\nApprove this exact Cloudflare change?`;
+      const preview = `Cloudflare: ${request.action}\nZone: ${zoneName} (${request.zoneId})\n\n${JSON.stringify(request, null, 2)}${before ? `\n\nCurrent target:\n${JSON.stringify(before, null, 2)}` : ""}\n\nApprove this exact Cloudflare change?`;
       requireThat(preview.length <= 3800, "cloudflare_preview_too_large", 409);
       w.approvals.push(approval);
       audit(w, actor, "cloudflare.proposed", approval.id);
@@ -641,7 +737,11 @@ export class CloudflareService {
         payload.request.zoneId,
       );
       requireThat(zone.name === payload.zoneName, "approval_stale", 409);
-      if ("recordId" in payload.request) {
+      if (
+        "recordId" in payload.request ||
+        "routeId" in payload.request ||
+        "settingId" in payload.request
+      ) {
         const access = await this.access(
           id,
           candidate.runId ?? "",
@@ -650,7 +750,7 @@ export class CloudflareService {
         );
         const response = await this.client.request(
           access.token,
-          `/zones/${payload.request.zoneId}/dns_records/${payload.request.recordId}`,
+          actionTarget(payload.request),
           {
             guard: async () => {
               await this.authorized(
@@ -663,9 +763,12 @@ export class CloudflareService {
           },
         );
         requireThat(
-          fingerprint(dnsRecord(response.result)) ===
+          fingerprint(actionSnapshot(payload.request, response.result)) ===
             fingerprint(payload.before),
-          "cloudflare_record_changed",
+          payload.request.action === "update_zone_setting" ||
+            payload.request.action.endsWith("worker_route")
+            ? "cloudflare_target_changed"
+            : "cloudflare_record_changed",
           409,
         );
       }
@@ -704,11 +807,7 @@ export class CloudflareService {
     });
     if (!reserved) return;
     const request = payload.request;
-    const base = `/zones/${request.zoneId}`;
-    const path =
-      request.action === "purge_cache"
-        ? `${base}/purge_cache`
-        : `${base}/dns_records${"recordId" in request ? `/${request.recordId}` : ""}`;
+    const write = actionWrite(request);
     try {
       const access = await this.access(
         id,
@@ -716,21 +815,9 @@ export class CloudflareService {
         payload.revision,
         true,
       );
-      await this.client.request(access.token, path, {
-        method:
-          request.action === "delete_dns_record"
-            ? "DELETE"
-            : request.action === "update_dns_record"
-              ? "PATCH"
-              : "POST",
-        body:
-          "record" in request
-            ? request.record
-            : request.action === "purge_cache"
-              ? request.purgeEverything
-                ? { purge_everything: true }
-                : { files: request.files }
-              : undefined,
+      await this.client.request(access.token, write.path, {
+        method: write.method,
+        body: write.body,
         guard: async () => {
           const current = await this.store.read(id);
           const a = current.approvals.find((a) => a.id === approvalId);

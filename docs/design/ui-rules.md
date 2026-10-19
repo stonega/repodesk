@@ -158,7 +158,8 @@ when implementing or reviewing a change.
 - **Exceptions:** Restricted tokens without account-list permission may use explicit
   account and zone IDs through a manual editor. Discovery does not grant access
   to every returned resource: allowed domains require an explicit selection, and
-  no domains means Pages-only access.
+  no domains means account resources only. The 2026-10-19 Cloudflare expansion
+  adds account metadata beyond Pages while selected-zone access stays explicit.
 
 ### Model providers are reused across services
 

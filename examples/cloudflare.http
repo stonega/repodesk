@@ -9,7 +9,9 @@
 # Prefer account API tokens: https://dash.cloudflare.com/?to=/:account/api-tokens
 # User API tokens also work; User Memberships Read enables their account discovery.
 # Account Settings Read verifies an account. Use manual IDs if discovery is unavailable.
-# Add Zone Read, DNS Read, Cloudflare Pages Read, DNS Edit and Cache Purge as needed.
+# Add Zone Read, DNS Read and Pages Read as needed; traffic needs zone Analytics Read.
+# Other products need their Read permissions. Reviewed writes need DNS Edit,
+# Cache Purge, Zone Settings Edit or Workers Routes Edit as appropriate.
 PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/cloudflare
 Cookie: repodesk_session={{session}}
 Origin: {{origin}}
@@ -40,7 +42,7 @@ Content-Type: application/json
 
 { "revision": 1, "resource": "zones", "accountId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "page": 1 }
 
-### Verify and save the explicit selection; omit domains for Pages-only access
+### Verify and save the explicit selection; omit domains for account resources only
 # If the token cannot discover accounts, manually supply IDs and omit verifyResources.
 # Manual saves do not verify provider permissions; tools still enforce their scope.
 PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/cloudflare
@@ -73,6 +75,16 @@ Cookie: repodesk_session={{session}}
 #    Inspect the complete proposal, then press its actor-bound Approve button.
 # 5. Owner/admin: "Purge https://www.example.com/index.html from the cache."
 #    Inspect and approve the new exact request separately.
+# 6. "Summarize example.com traffic for the last seven complete UTC days, then by country."
+#    Tool: {"resource":"zone_analytics","zoneId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
+#    Add since/until (YYYY-MM-DD, max 31 days), dimension country/status/content/browser.
+# 7. "List Worker scripts, schedules for my-worker, R2 buckets and D1 database metadata."
+#    Tools: {"resource":"capabilities"}, {"resource":"workers"},
+#    {"resource":"worker_schedules","scriptName":"my-worker"}, {"resource":"r2_buckets"}.
+# 8. "Set example.com's SSL mode to strict." Inspect zone_settings, then propose:
+#    {"action":"update_zone_setting","zoneId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","settingId":"ssl","value":"strict"}
+# 9. "Route example.com/api/* to my-worker." Inspect worker_routes, then propose:
+#    {"action":"create_worker_route","zoneId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","pattern":"example.com/api/*","scriptName":"my-worker"}
 # Unknown outcomes are never retried automatically; inspect Cloudflare first.
 
 ### Remove the token locally and disable; use current revision from GET

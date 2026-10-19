@@ -8,6 +8,10 @@ import { ExtensionCatalog } from "../../src/agent/extensions.ts";
 import { PluginService } from "../../src/agent/plugin-service.ts";
 import { type AgentInput, selectedModel } from "../../src/agent/runtime.ts";
 import { createApp } from "../../src/app.ts";
+import {
+  cloudflareResources,
+  resourceParameters,
+} from "../../src/cloudflare/catalog.ts";
 import type { CloudflareTransport } from "../../src/cloudflare/client.ts";
 import { cloudflareExtension } from "../../src/cloudflare/extension.ts";
 import { CloudflareService } from "../../src/cloudflare/service.ts";
@@ -90,6 +94,9 @@ const url = process.env.TEST_DATABASE_URL;
       const requests: { url: string; init: RequestInit }[] = [];
       let onRead: (() => Promise<void>) | undefined;
       let onWrite: (() => Promise<Response>) | undefined;
+      let override:
+        | ((url: string, init: RequestInit) => Promise<Response | undefined>)
+        | undefined;
       let zoneAccount = accountId;
       let currentRecord = { ...record };
       const transport: CloudflareTransport = async (url, init) => {
@@ -99,6 +106,8 @@ const url = process.env.TEST_DATABASE_URL;
           `Bearer ${apiToken}`,
         );
         expect(init.redirect).toBe("error");
+        const overridden = await override?.(url, init);
+        if (overridden) return overridden;
         if (init.method !== "GET")
           return onWrite
             ? onWrite()
@@ -141,6 +150,14 @@ const url = process.env.TEST_DATABASE_URL;
       };
       return {
         service: new CloudflareService(store, key, transport),
+        respond: (
+          fn?: (
+            url: string,
+            init: RequestInit,
+          ) => Promise<Response | undefined>,
+        ) => {
+          override = fn;
+        },
         requests,
         read: (f?: () => Promise<void>) => {
           onRead = f;
@@ -181,6 +198,286 @@ const url = process.env.TEST_DATABASE_URL;
       input: unknown = action,
     ) => f.service.propose(f.w.id, f.run.id, f.run.actor, "call1", 1, input);
 
+    test("expanded inventory constructs only saved-account/allowed-zone paths and projects every product", async () => {
+      const f = await fixture("202");
+      for (const [resource, definition] of Object.entries(
+        cloudflareResources,
+      )) {
+        if (
+          ["dns_records", "pages_projects", "pages_deployments"].includes(
+            resource,
+          )
+        )
+          continue;
+        const parameters: Record<string, unknown> = { resource };
+        for (const parameter of resourceParameters(definition))
+          parameters[parameter] =
+            parameter === "resourceId"
+              ? recordId
+              : parameter === "bucketName"
+                ? "my-bucket"
+                : "site";
+        if (definition.scope === "zone") parameters.zoneId = zoneId;
+        f.respond(async (url) => {
+          if (url.endsWith(`/zones/${zoneId}`)) return;
+          const item = {
+            id: recordId,
+            name: "site",
+            title: "namespace",
+            value: "on",
+            secret: "hidden",
+            origin: { password: "hidden" },
+            rules: [
+              { id: "rule", expression: "true", authorization: "hidden" },
+            ],
+          };
+          const result = definition.pagination === "none" ? item : [item];
+          return Response.json({
+            success: true,
+            result:
+              "key" in definition && typeof definition.key === "string"
+                ? { [definition.key]: result }
+                : result,
+          });
+        });
+        const result = await f.service.query(f.w.id, f.run.id, 1, parameters);
+        expect(JSON.stringify(result)).not.toContain("hidden");
+        expect(f.requests.at(-1)?.url).toStartWith(
+          `https://api.cloudflare.com/${"client/v4"}/${definition.scope === "zone" ? `zones/${zoneId}` : `accounts/${accountId}`}`,
+        );
+        expect(f.requests.at(-1)?.init.method).toBe("GET");
+        await expect(
+          f.service.query(f.w.id, f.run.id, 1, {
+            ...parameters,
+            zoneId: "d".repeat(32),
+          }),
+        ).rejects.toThrow();
+      }
+      const capabilities = await f.service.query(f.w.id, f.run.id, 1, {
+        resource: "capabilities",
+      });
+      expect(JSON.stringify(capabilities)).toContain("zone_analytics");
+      expect(JSON.stringify(capabilities)).toContain("r2_buckets");
+    });
+    test("traffic queries use scoped read-only GraphQL and never create action reservations", async () => {
+      const f = await fixture("202");
+      f.respond(async (url, init) => {
+        if (!url.endsWith("/graphql")) return;
+        const body = JSON.parse(String(init.body));
+        expect(body.variables).toEqual({
+          zoneTag: zoneId,
+          start: "2026-09-01",
+          end: "2026-09-07",
+        });
+        expect(body.query).not.toContain("mutation");
+        return Response.json({
+          data: {
+            viewer: {
+              zones: [
+                {
+                  zoneTag: zoneId,
+                  httpRequests1dGroups: [
+                    {
+                      dimensions: { date: "2026-09-01" },
+                      sum: { requests: 100, bytes: 2000, secret: "hidden" },
+                      uniq: { uniques: 10 },
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          errors: null,
+        });
+      });
+      const result = await f.service.query(f.w.id, f.run.id, 1, {
+        resource: "zone_analytics",
+        zoneId,
+        since: "2026-09-01",
+        until: "2026-09-07",
+      });
+      expect(result.result).toMatchObject([
+        { sum: { requests: 100, bytes: 2000 } },
+      ]);
+      expect(JSON.stringify(result)).not.toContain("hidden");
+      expect((await store.read(f.w.id)).approvals).toHaveLength(0);
+      f.respond(async (url) =>
+        url.endsWith("/graphql")
+          ? Response.json({
+              data: {},
+              errors: [{ message: "private upstream error" }],
+            })
+          : undefined,
+      );
+      await expect(
+        f.service.query(f.w.id, f.run.id, 1, {
+          resource: "zone_analytics",
+          zoneId,
+        }),
+      ).rejects.toThrow("cloudflare_analytics_unavailable");
+    });
+    test("expanded account reads retain private-chat boundaries and guard against mid-request revocation", async () => {
+      const group = await fixture("101", "-100100");
+      await expect(
+        group.service.query(group.w.id, group.run.id, 1, {
+          resource: "workers",
+        }),
+      ).rejects.toThrow("cloudflare_private_request_required");
+      expect(group.requests).toHaveLength(0);
+      const f = await fixture();
+      f.respond(async () => {
+        await store.change(f.w.id, (w) => {
+          if (w.plugins) w.plugins.revision++;
+        });
+        return Response.json({
+          success: true,
+          result: [{ id: "secret-result" }],
+        });
+      });
+      await expect(
+        f.service.query(f.w.id, f.run.id, 1, { resource: "workers" }),
+      ).rejects.toThrow("run_revoked");
+    });
+    test("zone setting and Worker route approvals execute exactly once with their API contracts", async () => {
+      for (const input of [
+        {
+          action: "update_zone_setting",
+          zoneId,
+          settingId: "ssl",
+          value: "strict",
+        },
+        {
+          action: "create_worker_route",
+          zoneId,
+          pattern: "https://*.example.com/*",
+          scriptName: "my-worker",
+        },
+        {
+          action: "update_worker_route",
+          zoneId,
+          routeId: recordId,
+          pattern: "example.com/*",
+          scriptName: null,
+        },
+        { action: "delete_worker_route", zoneId, routeId: recordId },
+      ]) {
+        const f = await fixture();
+        f.respond(async (url, init) => {
+          if (init.method !== "GET" || url.endsWith(`/zones/${zoneId}`)) return;
+          return Response.json({
+            success: true,
+            result: url.includes("/settings/")
+              ? { id: "ssl", value: "full", editable: true }
+              : {
+                  id: recordId,
+                  pattern: "example.com/old/*",
+                  script: "old-worker",
+                },
+          });
+        });
+        const a = await proposal(f, input);
+        expect(f.requests.every((r) => r.init.method === "GET")).toBe(true);
+        await store.change(f.w.id, (w) => decide(w, "101", a.approvalId, true));
+        await Promise.all([
+          f.service.send(f.w.id, a.approvalId),
+          f.service.send(f.w.id, a.approvalId),
+        ]);
+        await f.service.send(f.w.id, a.approvalId);
+        const writes = f.requests.filter((r) => r.init.method !== "GET");
+        expect(writes).toHaveLength(1);
+        expect(writes[0]?.init.method).toBe(
+          input.action === "update_zone_setting"
+            ? "PATCH"
+            : input.action === "create_worker_route"
+              ? "POST"
+              : input.action === "update_worker_route"
+                ? "PUT"
+                : "DELETE",
+        );
+        expect(writes[0]?.url).toEndWith(
+          input.action === "update_zone_setting"
+            ? "/settings/ssl"
+            : `/workers/routes${"routeId" in input ? `/${recordId}` : ""}`,
+        );
+        if (input.action === "update_zone_setting")
+          expect(JSON.parse(String(writes[0]?.init.body))).toEqual({
+            value: "strict",
+          });
+        if ("pattern" in input)
+          expect(JSON.parse(String(writes[0]?.init.body))).toEqual({
+            pattern: input.pattern,
+            script: input.scriptName,
+          });
+        expect((await store.read(f.w.id)).approvals[0]?.cloudflare?.state).toBe(
+          "completed",
+        );
+      }
+    });
+    test("reviewed settings/routes reject foreign hosts, member writes, immutable settings and changed targets", async () => {
+      const f = await fixture();
+      await expect(
+        proposal(f, {
+          action: "create_worker_route",
+          zoneId,
+          pattern: "example.com.evil.com/*",
+          scriptName: "worker",
+        }),
+      ).rejects.toThrow("cloudflare_zone_denied");
+      const member = await fixture("202");
+      await expect(
+        proposal(member, {
+          action: "update_zone_setting",
+          zoneId,
+          settingId: "ssl",
+          value: "strict",
+        }),
+      ).rejects.toThrow("access_denied");
+      for (const mode of ["immutable", "changed", "route-changed"]) {
+        const target = await fixture();
+        let value = "full";
+        target.respond(async (url, init) => {
+          if (init.method !== "GET" || url.endsWith(`/zones/${zoneId}`)) return;
+          return Response.json({
+            success: true,
+            result:
+              mode === "route-changed"
+                ? {
+                    id: recordId,
+                    pattern: `example.com/${value}/*`,
+                    script: "worker",
+                  }
+                : { id: "ssl", value, editable: mode !== "immutable" },
+          });
+        });
+        const request =
+          mode === "route-changed"
+            ? { action: "delete_worker_route", zoneId, routeId: recordId }
+            : {
+                action: "update_zone_setting",
+                zoneId,
+                settingId: "ssl",
+                value: "strict",
+              };
+        if (mode === "immutable") {
+          await expect(proposal(target, request)).rejects.toThrow(
+            "cloudflare_setting_not_editable",
+          );
+          continue;
+        }
+        const a = await proposal(target, request);
+        await store.change(target.w.id, (w) =>
+          decide(w, "101", a.approvalId, true),
+        );
+        value = "off";
+        await target.service.send(target.w.id, a.approvalId);
+        expect(target.requests.every((r) => r.init.method === "GET")).toBe(
+          true,
+        );
+        expect(
+          (await store.read(target.w.id)).approvals[0]?.cloudflare?.error,
+        ).toBe("cloudflare_target_changed");
+      }
+    });
     test("operator-only tenant settings encrypt, preserve, replace and remove write-only credentials", async () => {
       const f = await fixture();
       const page = await f.service.view(admin, f.w.id);

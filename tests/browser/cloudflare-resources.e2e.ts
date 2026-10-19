@@ -100,7 +100,7 @@ for (const width of [1280, 390]) {
       ),
     ).toBe(true);
   });
-  test(`Token multi-account setup asks for account choice and supports Pages only at ${width}px`, async ({
+  test(`Token multi-account setup asks for account choice and supports Account resources only at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 950 });
@@ -156,7 +156,7 @@ for (const width of [1280, 390]) {
         name: "Cloudflare configuration",
         exact: true,
       }),
-    ).toContainText("Pages only");
+    ).toContainText("Account resources only");
     await expect(
       page.getByRole("switch", { name: "Enable Cloudflare" }),
     ).toBeChecked();
