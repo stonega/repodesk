@@ -1,5 +1,28 @@
 # Implementation evidence
 
+## Container-compatible Codex intake sandbox (2026-10-19)
+
+Ordinary new/resumed Codex sessions explicitly select the pinned CLI's Landlock
+backend. Intake, factual analysis and result-only corrections retain their
+read-only filesystem/network boundaries; work retains its existing container
+isolation. Credential-denying PR review split policies keep bubblewrap and fail
+closed when unsupported. No dependency, migration, environment variable or Docker
+privilege change was added. Target-quote guidance also distinguishes local
+validation failures from GitHub availability and preserves short repository names.
+
+The real Docker smoke now probes the pinned Codex sandbox before substituting its
+fake executable: source reads succeed while repository/temporary writes and network
+socket creation are denied. New/resumed-session protocol regressions preserve the
+separate review policy. Biome, strict TypeScript, production build and **948 tests
+across 106 files** passed with disposable PostgreSQL. Matching app, supervisor and
+task images built; the Node 24 runtime contract, Compose validation, full Docker
+lifecycle smoke and pinned-CLI fake-provider protocol proof passed.
+
+The supplied screenshot's exact live attempt remains unverified because SSH to
+the documented VPS timed out and no authenticated admin session/task ID was
+available. No deployment, live model/Telegram call, GitHub mutation or historical
+task replay was performed. See the [investigation and evidence limits](../../postmortem/2026-10-19-codex-intake-sandbox-startup.md).
+
 ## Recovery of infrastructure-interrupted coding tasks (2026-10-19)
 
 New continuous coding attempts opt into recovery across repository preparation,

@@ -351,7 +351,12 @@ export async function runConversation(options: {
               },
             },
           }
-        : {}),
+        : {
+            // Hardened task containers cannot create bubblewrap namespaces.
+            // These legacy-equivalent policies retain read-only/network fences
+            // through Landlock; credential-denying split policies stay above.
+            config: { features: { use_legacy_landlock: true } },
+          }),
     };
     let started: unknown;
     const startThread = () =>

@@ -44,6 +44,12 @@ These instructions guide tool choice and never grant access or approve an action
   connected repository list. Set `repositoryId` to that target and quote its
   original name in `targetRepository`; use an empty quote for an implicit
   continuation. A documentation URL does not select the modification target.
+  Keep a short quote short: if the human names `product`, use that quote even
+  when the connected repository is `acme/product`. Errors starting with
+  `coding_repository_target_` are local target/evidence validation failures;
+  correct the quote or selection using authenticated sources in the same run.
+  They do not establish a GitHub outage or missing connection. Do not recommend
+  waiting, reconnecting or repeating the same rejected arguments as their remedy.
 - When the user corrects a wrongly bound repository, inspect the saved task and
   use `send_development_input` with the corrected `repositoryId` and the target
   quote from the current human message. The application can replace an idle task

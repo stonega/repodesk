@@ -85,6 +85,15 @@ Use a reviewed custom image based on this target if a repository needs additiona
 system tools. Set `CODEX_RUNNER_IMAGE` to its local tag; the runner never pulls
 images supplied by a model or task. Build before starting tasks.
 
+Ordinary intake, factual analysis and result-only corrections keep Codex's
+read-only filesystem/network policy and explicitly select the pinned CLI's
+Landlock backend. Docker's dropped capabilities and namespace restrictions can
+prevent the default bubblewrap backend from starting even for a read command.
+Work turns retain their existing container boundary. Credential-denying PR
+review policies keep bubblewrap because their denied subpaths cannot be represented
+by the legacy policy; unsupported hosts still fail closed for those reviews.
+No privileged container or relaxed Docker security option is introduced.
+
 Set these variables in the deployment's private `.env` or Compose environment:
 
 ```dotenv
@@ -372,6 +381,9 @@ For a repeatable smoke test without model calls or GitHub writes, build the
 `bun scripts/codex-smoke.ts`. It substitutes a local Git fixture and fake Codex
 executable while exercising the real supervisor, engine socket, resource limits,
 volumes, patch export and cancellation, and removes its test resources afterward.
+Before substituting Codex, it also runs the real pinned sandbox in a hardened
+container and checks that source reads succeed while repository/temporary writes
+and network socket creation are denied. This probe uses no model or credentials.
 `CODEX_SMOKE_JOB_IMAGE` and `CODEX_SMOKE_SUPERVISOR_IMAGE` can select other tags.
 The smoke always uses Docker. `CODEX_SMOKE_DOCKER_SOCKET` selects its socket.
 CI and release builds run the full Docker fixture.

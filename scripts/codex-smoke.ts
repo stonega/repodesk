@@ -28,6 +28,8 @@ const suffix = randomUUID().slice(0, 8);
 const name = `deepx-codex-smoke-${suffix}`;
 const dir = await mkdtemp(join(tmpdir(), `${name}-`));
 const image = `localhost/${name}:local`;
+const jobImage =
+  process.env.CODEX_SMOKE_JOB_IMAGE ?? "localhost/deepx-codex-job:verify";
 const workspaceId = randomUUID();
 const taskId = randomUUID();
 const key = taskKey(workspaceId, taskId);
@@ -56,9 +58,49 @@ const developmentKeys = developmentIds.map((id) => taskKey(workspaceId, id));
 const phases = ["prepare", "setup", "implement", "check", "export", "publish"];
 const token = "smoke-management-token-no-real-secrets";
 try {
+  // Exercise the real pinned CLI before replacing it with the lifecycle fixture.
+  // A fake app-server never launches a sandbox and cannot detect this regression.
+  const sandboxProbe = `
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+assert.equal(fs.readFileSync('README.md', 'utf8'), 'sandbox fixture');
+for (const path of ['README.md', '/tmp/sandbox-write', '/task/sandbox-write']) {
+  assert.throws(() => fs.writeFileSync(path, 'changed'),
+    error => ['EACCES', 'EPERM', 'EROFS'].includes(error.code));
+}
+const socket = require('node:net').connect(9, '127.0.0.1');
+socket.on('connect', () => { throw Error('Sandbox allowed network access'); });
+socket.on('error', error => {
+  assert.ok(['EACCES', 'EPERM'].includes(error.code), error.code);
+  console.log('Real Codex sandbox: reads succeed; writes and network denied.');
+});
+setTimeout(() => { throw Error('Sandbox network probe timed out'); }, 3000).unref();
+`;
+  console.log(
+    await engine([
+      "run",
+      "--rm",
+      "--pull=never",
+      "--network=none",
+      "--read-only",
+      "--cap-drop=ALL",
+      "--security-opt=no-new-privileges",
+      "--user=1000:1000",
+      "--tmpfs=/task:rw,nosuid,nodev,size=128m,uid=1000,gid=1000",
+      "--tmpfs=/tmp:rw,nosuid,nodev,size=128m,mode=1777",
+      "--env=HOME=/task/home",
+      "--entrypoint=bash",
+      jobImage,
+      "-e",
+      "-c",
+      'mkdir -p /task/home /task/repo; printf "sandbox fixture" > /task/repo/README.md; cd /task/repo; exec codex -c features.use_legacy_landlock=true -c \'sandbox_mode="read-only"\' sandbox -- node -e "$1"',
+      "sandbox-probe",
+      sandboxProbe,
+    ]),
+  );
   await writeFile(
     join(dir, "Dockerfile"),
-    `FROM ${process.env.CODEX_SMOKE_JOB_IMAGE ?? "localhost/deepx-codex-job:verify"}\nUSER root\nRUN rm /usr/local/bin/codex\nCOPY --chmod=755 codex /usr/local/bin/codex\nCOPY --chmod=755 git /usr/local/bin/git\nCOPY fake-github.cjs /opt/deepx/fake-github.cjs\nENV NODE_OPTIONS=--require=/opt/deepx/fake-github.cjs\nUSER node\n`,
+    `FROM ${jobImage}\nUSER root\nRUN rm /usr/local/bin/codex\nCOPY --chmod=755 codex /usr/local/bin/codex\nCOPY --chmod=755 git /usr/local/bin/git\nCOPY fake-github.cjs /opt/deepx/fake-github.cjs\nENV NODE_OPTIONS=--require=/opt/deepx/fake-github.cjs\nUSER node\n`,
   );
   await writeFile(
     join(dir, "Dockerfile.supervisor"),

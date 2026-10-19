@@ -117,7 +117,7 @@ export function codingExtension(
             targetRepository: Type.String({
               maxLength: 300,
               description:
-                "Copy the human's name/owner-name for the repository to MODIFY verbatim, e.g. product-land. Do not quote a documentation URL or reference source. Use an empty string only when the target is implicit in retained conversation context.",
+                "Copy the human's name/owner-name for the repository to MODIFY verbatim, e.g. product-land. If the human says product, use product even when the connected repository is acme/product; do not expand the quote to acme/product. Do not quote a documentation URL or reference source. Use an empty string only when the target is implicit in retained conversation context.",
             }),
             sourceIds: Type.Array(Type.String(), { minItems: 1, maxItems: 10 }),
           }),

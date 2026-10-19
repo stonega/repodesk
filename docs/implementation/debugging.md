@@ -41,6 +41,20 @@ Interpret the states separately:
 - No matching connected repository means the coding request has no resolved
   target. Use its full connected repository name; confirm workspace selection and
   actor grants. Do not assume a coding task started.
+- `coding_repository_target_unverified` means the tool's target quote was not
+  present in the authenticated source text. For example, a user can name
+  `componenthunt` while the tool incorrectly quotes `stonega/componenthunt`.
+  Keep `repositoryId` bound to the connected repository and quote the original
+  short name. Target mismatch/ambiguity errors also precede task creation; none
+  establishes a GitHub outage. Correct the arguments rather than advising a retry
+  after waiting or reconnecting.
+- A completed intake result reporting sandbox startup failure can hide a shell
+  tool error rather than a failed model turn or repository checkout. The shipped
+  Docker restrictions block the pinned CLI's default bubblewrap namespace setup
+  on the local reproduction host. Ordinary intake/analysis now select Landlock
+  while retaining read-only/network denial; protected PR reviews retain their
+  stronger split policy. Run the real sandbox probe in `scripts/codex-smoke.ts` on
+  the affected host. See the [sandbox investigation](../../postmortem/2026-10-19-codex-intake-sandbox-startup.md).
 - A `start_development_task` failure with no task record can be a policy mismatch,
   before GitHub is contacted. **Reviewed** (also the default when omitted) needs
   `propose_coding_task` and Telegram approval; only **Direct** supports the start

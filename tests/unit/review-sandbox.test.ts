@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runConversation } from "../../src/coding/local/conversation.ts";
 
-test("PR analysis pins credential-denying filesystem and clean shell policies without a legacy override", async () => {
+async function captureConversation(options: {
+  readOnly?: boolean;
+  protectCredentials?: boolean;
+  threadId?: string;
+}) {
   const root = await mkdtemp(join(tmpdir(), "repodesk-review-sandbox-"));
   const binary = join(root, "codex.mjs"),
     capture = join(root, "requests.jsonl");
@@ -29,7 +33,7 @@ createInterface({input:process.stdin}).on('line',(line)=>{
 const m=JSON.parse(line);appendFileSync(${JSON.stringify(capture)},line+'\\n');
 if(m.id===undefined)return;
 if(m.method==='initialize')send({id:m.id,result:{}});
-else if(m.method==='thread/start')send({id:m.id,result:{thread:{id:'review-thread'}}});
+else if(m.method==='thread/start'||m.method==='thread/resume')send({id:m.id,result:{thread:{id:'review-thread'}}});
 else if(m.method==='turn/start'){
  send({id:m.id,result:{turn:{id:'review-turn'}}});
  setTimeout(()=>{send({method:'item/completed',params:{item:{type:'agentMessage',text:JSON.stringify(${JSON.stringify(result)})}}});send({method:'turn/completed',params:{turn:{id:'review-turn',status:'completed'}}});},10);
@@ -42,16 +46,45 @@ else if(m.method==='turn/start'){
       cwd: root,
       env: { PATH: process.env.PATH },
       prompt: "Review only.",
-      readOnly: true,
-      protectCredentials: true,
+      ...options,
     });
     expect(outcome.result.summary).toBe("No supported findings.");
     const requests = (await readFile(capture, "utf8"))
       .trim()
       .split("\n")
       .map((s) => JSON.parse(s));
-    const start = requests.find((r) => r.method === "thread/start");
+    return requests;
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+test("ordinary read-only and work sessions select container-compatible isolation across new and resumed sessions", async () => {
+  for (const readOnly of [true, false])
+    for (const threadId of [undefined, "review-thread"]) {
+      const requests = await captureConversation({ readOnly, threadId });
+      const start = requests.find((r) =>
+        ["thread/start", "thread/resume"].includes(r.method),
+      );
+      expect(start.params.sandbox).toBe(
+        readOnly ? "read-only" : "danger-full-access",
+      );
+      expect(start.params.config.features.use_legacy_landlock).toBe(true);
+    }
+});
+
+test("PR analysis pins credential-denying filesystem and clean shell policies without a legacy override", async () => {
+  for (const threadId of [undefined, "review-thread"]) {
+    const requests = await captureConversation({
+      readOnly: true,
+      protectCredentials: true,
+      threadId,
+    });
+    const start = requests.find((r) =>
+      ["thread/start", "thread/resume"].includes(r.method),
+    );
     expect(start.params.sandbox).toBeUndefined();
+    expect(start.params.config.features?.use_legacy_landlock).toBeUndefined();
     expect(start.params.config.filesystem).toMatchObject({
       ":root": "read",
       "/auth": "deny",
@@ -65,7 +98,5 @@ else if(m.method==='turn/start'){
     expect(
       requests.find((r) => r.method === "turn/start").params,
     ).not.toHaveProperty("sandboxPolicy");
-  } finally {
-    await rm(root, { recursive: true, force: true });
   }
 });
