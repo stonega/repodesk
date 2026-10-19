@@ -38,7 +38,7 @@ export function ModalActions({ children }: { children: ReactNode }) {
   );
 }
 
-/** Mount only while open; native modal dialogs keep the background inert. */
+/** Mount only while open; the chat presentation keeps the panel interactive. */
 export function Modal({
   title,
   children,
@@ -52,7 +52,7 @@ export function Modal({
   onClose: () => void;
   busy?: boolean;
   cancelLabel?: string;
-  presentation?: "dialog" | "sheet";
+  presentation?: "dialog" | "sheet" | "chat";
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [pending, setPending] = useState(false);
@@ -60,22 +60,23 @@ export function Modal({
   useEffect(() => {
     const element = dialog.current;
     const trigger = document.activeElement;
-    element?.showModal();
+    if (presentation === "chat") element?.show();
+    else element?.showModal();
     element
       ?.querySelector<HTMLElement>(
         "input:enabled, textarea:enabled, select:enabled:not([hidden]), button[role=combobox]:enabled",
       )
-      ?.focus();
+      ?.focus({ preventScroll: presentation === "chat" });
     return () => {
       element?.close();
       if (trigger instanceof HTMLElement && trigger.isConnected)
         trigger.focus();
     };
-  }, []);
+  }, [presentation]);
   return createPortal(
     <dialog
       ref={dialog}
-      className={`modal${presentation === "sheet" ? " navigation-sheet" : ""}`}
+      className={`modal${presentation === "sheet" ? " navigation-sheet" : presentation === "chat" ? " chat-popup" : ""}`}
       aria-label={title}
       aria-busy={locked}
       onClick={(event) => {
@@ -104,6 +105,14 @@ export function Modal({
       }}
       onSubmit={(event) => event.stopPropagation()}
       onKeyDown={(event) => {
+        if (presentation === "chat") {
+          if (event.key === "Escape" && !locked) {
+            event.preventDefault();
+            event.stopPropagation();
+            onClose();
+          }
+          return;
+        }
         if (
           event.key !== "Tab" ||
           !(event.target instanceof Element) ||

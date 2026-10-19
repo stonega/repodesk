@@ -68,7 +68,7 @@ export function queryModelCost(
   let monthlyAccountedUsd = 0;
   let unpricedCalls = 0;
   let monthlyUnpricedCalls = 0;
-  for (const item of w.runs) {
+  for (const item of [...w.runs, ...(w.adminChecks ?? [])]) {
     if (scope === "self" && item.actor !== run.actor) continue;
     for (const attempt of item.attempts) {
       const at = Date.parse(attempt.at);

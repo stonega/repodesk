@@ -472,6 +472,16 @@ export interface Audit {
   version?: number;
 }
 export interface Workspace {
+  /** Panel diagnostics accounting only; conversation text is not persisted here. */
+  adminChecks?: {
+    id: string;
+    adminId: string;
+    actor: string;
+    model: string;
+    at: string;
+    status: "running" | "succeeded" | "failed";
+    attempts: Run["attempts"];
+  }[];
   memory?: MemoryState;
   chatModel?: { revision: number; selection: ModelSelection };
   repositorySelections?: {

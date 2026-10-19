@@ -59,6 +59,7 @@ import {
 import { createRun, visibleRuns } from "../workspaces/service.ts";
 import { claim, login, operator, session, throttle } from "./auth.ts";
 import { runSummaries } from "./run-history.ts";
+import { SelfCheckService } from "./self-check.ts";
 import { deploymentOrigin, SiteService } from "./site.ts";
 import {
   historyPage,
@@ -109,6 +110,7 @@ export function adminRoutes(
   deviceAuth?: LocalDeviceAuth & Partial<LocalRuntimeControl>,
   review?: ReviewService,
   updates?: ReleaseUpdates,
+  selfCheck = new SelfCheckService(store, setup),
 ) {
   const app = new Hono<Env>();
   const site = new SiteService(store, origin);
@@ -957,6 +959,7 @@ export function adminRoutes(
         /^(overview|settings|members|access-requests|skills)(\/.*)?$/.test(
           resource,
         ) ||
+          (resource === "self-check" && c.req.method === "POST") ||
           (c.req.method === "GET" &&
             (/^(runs|threads)(?:\/[^/]+)?$/.test(resource) ||
               (!admin.telegramId && /^workflows(?:\/[^/]+)?$/.test(resource)))),
@@ -965,6 +968,28 @@ export function adminRoutes(
       );
     }
     await next();
+  });
+  app.post("/api/admin/workspaces/:id/self-check", async (c) => {
+    const admin = c.get("session").admin;
+    const id = validId(c.req.param("id"));
+    await throttle(store.pool, `self-check:${admin.id}`);
+    return c.json(
+      await selfCheck.reply(
+        admin,
+        id,
+        await c.req.json(),
+        c.req.raw.signal,
+        async () => {
+          const current = await session(store.pool, sessionCookieValue(c));
+          requireThat(
+            current?.admin.id === admin.id,
+            "authentication_required",
+            401,
+          );
+          workspaceActor(await store.read(id), current.admin);
+        },
+      ),
+    );
   });
   app.get("/api/admin/workspaces/:id/:resource", async (c) => {
     const w = await store.read(validId(c.req.param("id")));
@@ -1124,7 +1149,7 @@ export function adminRoutes(
         });
       }
       case "usage": {
-        const attempts = w.runs.flatMap((r) =>
+        const attempts = [...w.runs, ...(w.adminChecks ?? [])].flatMap((r) =>
           r.attempts.map((a) => ({ ...a, runId: r.id, model: r.model })),
         );
         return c.json({

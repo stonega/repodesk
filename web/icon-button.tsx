@@ -4,6 +4,7 @@ import {
   Archive,
   ArrowDown,
   ArrowUp,
+  ChatRoundCheck,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -70,6 +71,7 @@ const icons = {
   delete: Trash6,
   latest: ArrowUp,
   older: ArrowDown,
+  chat: ChatRoundCheck,
 };
 export type ActionIcon = keyof typeof icons;
 

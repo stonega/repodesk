@@ -48,6 +48,7 @@ export function sweep(w: Workspace, now = new Date()) {
     w.threads = [];
     w.instructions = [];
     w.runs = [];
+    delete w.adminChecks;
     w.deliveries = [];
     w.approvals = [];
     w.tokens = [];
@@ -138,6 +139,20 @@ export function sweep(w: Workspace, now = new Date()) {
     }
   } while (removed);
   pruneSkillSources(w, now.getTime());
+  w.adminChecks = w.adminChecks?.filter((check) => {
+    if (
+      check.status === "running" &&
+      Date.parse(check.at) < now.getTime() - 120000
+    ) {
+      check.status = "failed";
+      for (const attempt of check.attempts)
+        if (attempt.status === "reserved") attempt.status = "unknown";
+    }
+    return (
+      Date.parse(check.at) > now.getTime() - 90 * 86400000 ||
+      check.attempts.some((attempt) => attempt.status !== "settled")
+    );
+  });
   w.runs = w.runs.filter(
     (r) =>
       Date.parse(r.at) > cutoff ||

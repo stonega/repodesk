@@ -1,5 +1,38 @@
 # Implementation evidence
 
+## Admin self-check chat (2026-10-19)
+
+The authenticated admin panel now has a bottom-right self-check chat button for
+the selected workspace. It opens a non-modal conversation popup with quick
+checks, follow-up messages, expandable findings and links to the relevant settings.
+Minimizing preserves the conversation; switching workspace/account or reloading
+clears it. Sign-in and setup do not show the widget.
+
+The server checks saved workspace/deployment activity, worker heartbeat, Telegram
+receiver readiness, chat model selection, active members, published skills, recent
+retained failed requests and saved GitHub selections. The configured workspace
+chat model provides read-only explanations through Pi, with no action or extension
+tools. Missing/unavailable models and exhausted budgets retain basic findings.
+Checks do not test external credentials or repository permissions. No private
+messages, raw logs or credentials enter the diagnostic snapshot.
+
+The endpoint enforces session, origin, CSRF, tenant and current admin authorization,
+duplicate request IDs, concurrent-call exclusion and the existing account throttle.
+Authorization is rechecked during generation and before returning findings.
+Provider accounting participates in existing workspace budgets/usage; uncertain
+calls retain reservations. Only accounting/deduplication metadata is persisted,
+with settled records retained for 90 days and workspace deletion removing all
+records. Diagnostics never enqueue bot runs or Telegram delivery.
+
+Validation: Biome, strict TypeScript and the production build passed; **958 tests
+across 107 files** passed with disposable PostgreSQL, including **10 new self-check
+integration scenarios**. **38 browser scenarios** passed across self-check, admin,
+Overview loading and sidebar behavior; the six self-check scenarios were rerun
+after final focus/layout refinements. Desktop/mobile light/dark screenshots were
+inspected for empty, conversation/findings, pending, failure, retry/fallback and
+compact viewport states. Live provider/Telegram behavior remains unverified; no
+deployment, webhook registration or live external messages were performed.
+
 ## Container-compatible Codex intake sandbox (2026-10-19)
 
 Ordinary new/resumed Codex sessions explicitly select the pinned CLI's Landlock

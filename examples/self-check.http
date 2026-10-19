@@ -1,0 +1,34 @@
+@baseUrl = http://localhost:3000
+@workspace = REPLACE_WITH_WORKSPACE_UUID
+@session = REPLACE_WITH_SESSION_COOKIE
+@csrf = REPLACE_WITH_SESSION_CSRF
+
+### Read-only admin self-check. Use a fresh requestId for each new message.
+### Conversation history is optional and never grants permissions.
+POST {{baseUrl}}/api/admin/workspaces/{{workspace}}/self-check
+Origin: {{baseUrl}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "requestId": "80eb5c25-6aeb-4abb-86fe-06c24b5b2d45",
+  "message": "Run a self-check and explain anything that needs attention.",
+  "history": []
+}
+
+### Follow up using only the conversation from this workspace.
+POST {{baseUrl}}/api/admin/workspaces/{{workspace}}/self-check
+Origin: {{baseUrl}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "requestId": "b543c73d-cd57-4e57-83d7-8dcd98e76d24",
+  "message": "Where should I check the worker?",
+  "history": [
+    { "role": "user", "content": "Why isn't the bot replying?" },
+    { "role": "assistant", "content": "No recent worker heartbeat was observed. Check the worker service." }
+  ]
+}

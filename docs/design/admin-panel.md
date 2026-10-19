@@ -46,6 +46,39 @@ execution and billing.
 Do not display inactive placeholders as working features. The configuration panel
 must work without manually editing database rows.
 
+## Admin self-check (implemented)
+
+Authenticated admins with a selected workspace can open the bottom-right chat
+button. The shared dialog has a non-modal chat presentation: it stays anchored
+to the corner while the panel remains usable. Closing preserves the in-memory
+conversation; workspace/account changes and page reload clear it. It is absent
+from sign-in and setup.
+
+`POST /api/admin/workspaces/:id/self-check` accepts a UUID `requestId`, a message
+and bounded user/assistant history. Session, origin, CSRF and workspace-admin or
+owning deployment-operator authorization apply. Regular/revoked members and
+foreign operators cannot check a workspace. A request ID is consumed once;
+concurrent requests by the same admin/workspace are rejected. Expensive requests
+use the existing 15-per-15-minute admin throttle, keyed by panel account.
+
+The server reads configuration, recent retained failure counts and worker
+heartbeat. Findings cover workspace activity, worker, Telegram receiver, chat
+model, membership, published skills and saved GitHub selections. They do not
+test live provider/GitHub permissions or inspect private messages, raw logs or
+secrets. The workspace chat model provides a single read-only Pi response with
+no application/extension tools. Basic findings remain available without a model
+or when its request fails. Diagnostic assistance remains usable while bot work
+is paused; it cannot resume or mutate that work.
+
+The model uses existing run/monthly budget enforcement. Workspace-scoped
+`adminChecks` retain accounting and deduplication metadata, without conversation
+text. Settled costs appear in usage and workspace cost summaries; failed or
+interrupted provider requests retain unknown reservations. Accounting has the
+same 90-day settled retention as ordinary requests, is purged with the workspace,
+and is never queued for Telegram execution or delivery. Authorization is checked
+again during generation and before returning findings. Model execution has a
+60-second timeout. Real provider behavior remains a live acceptance check.
+
 ## Identity and authorization
 
 Apply [active workspace membership](access-control.md) to bot access and retain role

@@ -3158,3 +3158,215 @@ input.plugin-toggle-input:disabled {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.self-check-launcher.icon-button {
+  position: fixed;
+  z-index: 45;
+  right: max(24px, env(safe-area-inset-right));
+  bottom: max(44px, calc(env(safe-area-inset-bottom) + 36px));
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  color: var(--ui-on-accent);
+  background: var(--ui-accent);
+  box-shadow: 0 6px 24px #17212b33;
+}
+.self-check-launcher.icon-button:hover:not(:disabled) {
+  background: var(--ui-accent-hover);
+}
+.self-check-launcher svg {
+  width: 26px;
+  height: 26px;
+}
+.modal.chat-popup {
+  position: fixed;
+  z-index: 50;
+  inset: auto max(24px, env(safe-area-inset-right))
+    max(112px, calc(env(safe-area-inset-bottom) + 104px)) auto;
+  width: min(420px, calc(100vw - 32px));
+  height: min(640px, calc(100dvh - 144px));
+  max-height: calc(100dvh - 32px);
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.chat-popup[open] {
+  display: flex;
+  flex-direction: column;
+}
+.chat-popup .modal-heading {
+  flex: none;
+  margin: 0;
+  padding: 12px 16px 0;
+}
+.chat-popup .modal-heading h2 {
+  font-size: 17px;
+}
+.chat-popup .modal-fields {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.self-check-context {
+  flex: none;
+  margin: 0;
+  padding: 0 20px 12px;
+  border-bottom: 1px solid var(--ui-border);
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.self-check-context-note {
+  color: var(--ui-muted);
+}
+.self-check-transcript {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.self-check-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  margin: auto 0;
+}
+.self-check-welcome > svg {
+  color: var(--ui-accent);
+}
+.self-check-welcome h3,
+.self-check-welcome p,
+.self-check-message p,
+.self-check-finding p,
+.self-check-retry p {
+  margin: 0;
+}
+.self-check-welcome h3 {
+  font-size: 20px;
+}
+.self-check-welcome p {
+  color: var(--ui-muted);
+  font-size: 14px;
+}
+.self-check-message {
+  flex: none;
+  max-width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--ui-surface-muted);
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.self-check-message > p {
+  white-space: pre-wrap;
+}
+.self-check-speaker {
+  display: block;
+  color: var(--ui-muted);
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+.self-check-user {
+  align-self: flex-end;
+  background: var(--ui-accent-soft);
+}
+.self-check-findings {
+  margin-top: 12px;
+  font-size: 12px;
+}
+.self-check-findings-toggle {
+  cursor: pointer;
+  min-height: 44px;
+  align-content: center;
+  color: var(--ui-accent);
+}
+.self-check-findings ul {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.self-check-finding {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.self-check-finding > svg {
+  flex: none;
+  margin-top: 2px;
+}
+.self-check-pass > svg {
+  color: var(--ui-success);
+}
+.self-check-warning > svg {
+  color: var(--ui-warning);
+}
+.self-check-info > svg {
+  color: var(--ui-accent);
+}
+.self-check-finding a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+.self-check-message .self-check-note {
+  margin-top: 12px;
+  color: var(--ui-muted);
+  font-size: 12px;
+}
+.self-check-pending {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: 13px;
+}
+.self-check-composer {
+  flex: none;
+  padding: 12px 16px;
+  border-top: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+}
+.self-check-label {
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.self-check-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+.self-check-composer textarea {
+  min-width: 0;
+  min-height: 64px;
+  max-height: 120px;
+  margin: 0;
+  resize: vertical;
+  font-size: 14px;
+}
+.self-check-privacy {
+  display: block;
+  margin-top: 8px;
+  color: var(--ui-muted);
+  font-size: 11px;
+}
+@media (max-width: 600px) {
+  .modal.chat-popup {
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(108px, calc(env(safe-area-inset-bottom) + 100px));
+    width: calc(100vw - 24px);
+    height: min(640px, calc(100dvh - 128px));
+  }
+  .self-check-launcher.icon-button {
+    right: max(16px, env(safe-area-inset-right));
+  }
+}

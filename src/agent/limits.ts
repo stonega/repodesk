@@ -17,12 +17,12 @@ export function inputByteLimit(
 
 export function remainingBudgets(
   workspace: Workspace,
-  run: Run,
+  run: Pick<Run, "attempts" | "settings">,
   now = new Date(),
 ) {
   const month = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
   const own = run.attempts.reduce((n, a) => n + (a.actual ?? a.reserved), 0);
-  const monthly = workspace.runs
+  const monthly = [...workspace.runs, ...(workspace.adminChecks ?? [])]
     .flatMap((r) => r.attempts)
     .filter((a) => Date.parse(a.at) >= month);
   const total = monthly.reduce((n, a) => n + (a.actual ?? a.reserved), 0);

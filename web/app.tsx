@@ -78,6 +78,7 @@ import { prefixFields, RecordForm } from "./record-form.tsx";
 import { RunAttempts } from "./run-attempts.tsx";
 import { RunStatistics } from "./run-statistics.tsx";
 import { Select } from "./select.tsx";
+import { SelfCheck } from "./self-check.tsx";
 import { workspaceFields } from "./settings-fields.ts";
 import { Sidebar } from "./sidebar.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
@@ -4455,6 +4456,16 @@ function Shell() {
           </Routes>
         )}
       </main>
+      {current && chosen && !setupLayout && (
+        <SelfCheck
+          key={`${current.admin.id}:${chosen}`}
+          workspaceId={chosen}
+          workspaceName={
+            workspaces.find((w) => w.id === chosen)?.name ?? "Workspace"
+          }
+          request={api}
+        />
+      )}
     </div>
   );
 }

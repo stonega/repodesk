@@ -38,6 +38,26 @@ when implementing or reviewing a change.
 
 ## Recorded preferences
 
+### Admin self-check lives in a corner chat popup
+
+- **Preference:** Keep a self-check assistant in the admin panel's bottom-right
+  corner. Opening its chat button shows a compact conversation popup, like a
+  customer-support widget, with messages and a composer.
+- **Scope:** Authenticated admin pages with a selected, authorized workspace, on
+  desktop and mobile. The popup identifies that workspace, retains the conversation
+  when minimized and clears it when the workspace or signed-in account changes.
+- **Source:** 2026-10-19 — user requested an admin self-check agent at the bottom
+  right with a conversation popup like a common customer-service panel.
+- **Acceptance:** Verify corner placement, readable empty/conversation/findings
+  states, pending and failure feedback, retry, close/Escape and focus return,
+  keyboard input, mobile containment, both themes, and workspace isolation.
+  Reuse the shared dialog and icon controls. Diagnostic findings remain readable
+  summaries; the composer is for conversation, not configuration editing.
+- **Exceptions:** This is a non-modal support conversation, so the rest of the
+  panel remains usable. Minimizing is allowed during read-only checks; duplicate
+  sends are disabled. Existing modal editor and pending-save locks still apply
+  to configuration forms. It is absent from sign-in and the setup wizard.
+
 ### Telegram Mini Apps follow official guidance
 
 - **Preference:** Follow Telegram's official Mini App design and platform guidance
