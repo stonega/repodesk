@@ -286,6 +286,7 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
       baseSha: r.baseSha,
       publishedSha: r.publishedSha,
       checkPassed: r.checkPassed,
+      hasChanges: r.hasChanges,
       repairCount: r.repairs,
     };
   }
@@ -922,6 +923,7 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
       409,
     );
     await writeFile(this.path(r, "patch"), artifact.patch, { mode: 0o600 });
+    r.hasChanges = artifact.patch.length > 0;
     r.threadId = artifact.threadId ?? r.threadId;
   }
   async publish(workspaceId: string, taskId: string, token: string) {

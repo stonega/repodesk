@@ -130,7 +130,7 @@ const url = process.env.TEST_DATABASE_URL;
       await expect(
         start.execute(
           "denied-start",
-          { repositoryId: 7002, sourceIds: [source.id] },
+          { repositoryId: 7002, sourceIds: [source.id], targetRepository: "" },
           input.signal,
         ),
       ).rejects.toThrow("github_user_access_denied");
@@ -165,7 +165,11 @@ const url = process.env.TEST_DATABASE_URL;
       const start = present(
         host.tools.find((t) => t.name === "start_development_task"),
       );
-      const args = { repositoryId: 7001, sourceIds: [source.id] };
+      const args = {
+        repositoryId: 7001,
+        sourceIds: [source.id],
+        targetRepository: "",
+      };
       await start.execute("start", args, input.signal);
       await start.execute("replayed-start", args, input.signal);
       const records = await store.pool.query(

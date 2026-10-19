@@ -1,3 +1,4 @@
+import type { CodingTaskContext } from "../coding/task-context.ts";
 import { type Run, requireThat, type Workspace } from "../domain.ts";
 import { selectableRepositories } from "../github/repository-context.ts";
 import { previewSkill } from "../skills/catalog.ts";
@@ -6,7 +7,11 @@ import { contextSources } from "../workspaces/conversation-memory.ts";
 import { hasDiscussionMemory } from "../workspaces/threads.ts";
 import { topicDiscussions } from "./discussions.ts";
 import { assistantSoul } from "./soul.ts";
-export function buildContext(w: Workspace, run: Run) {
+export function buildContext(
+  w: Workspace,
+  run: Run,
+  codingTasks?: CodingTaskContext,
+) {
   const workflow = w.workflows.find((f) => f.id === run.workflowId);
   const skills = run.skillPins.map((p) => {
     const skill = w.skills.find((s) => s.id === p.id);
@@ -56,6 +61,7 @@ export function buildContext(w: Workspace, run: Run) {
       threadId: s.threadId,
     })),
     request: run.task,
+    codingTasks,
     selectedRepository: repository
       ? { id: repository.id, full_name: repository.full_name }
       : undefined,
@@ -111,7 +117,7 @@ export function buildContext(w: Workspace, run: Run) {
         : "") +
       workPolicy +
       (w.coding?.settings.enabled && w.github?.installationId
-        ? "\nFor questions about an existing Codex task's current work or technical choices, read development_task_conversation. If its saved evidence is insufficient, ask_development_task can request a factual answer from Codex while work continues or after completion. You may formulate technical follow-up questions within the user's request. This channel does not add implementation requirements, authorize publication or let you answer missing product decisions for the user. Preserve the difference between queued, received, read and answered; never claim the question was answered or a requirement implemented from an acknowledgement. Responses arrive asynchronously in this chat; do not busy-poll or restart implementation just to get an explanation. Ordinary conversations and unrelated PR reviews retain their existing routing."
+        ? "\nSeparate the repository the human wants to MODIFY from documentation, examples and other reference repositories. A reference URL never overrides an explicitly named modification target. Resolve an unambiguous target abbreviation against connected repositories and quote that original target in start_development_task.targetRepository; use an empty quote only for an implicit contextual target. For a correction to a task's repository, read development_task_status, then use send_development_input with the corrected repositoryId and targetRepository; preserve the original requirements. Do not repeatedly append the correction to the old repository. The application permits replacement only when the old task is idle with confirmed no changes or PR and the corrected repository is authorized. If replacement is unsafe, explain the recorded work/state and the decision needed; do not bypass the safeguard with cancel/start calls. Never ask a user to supply a checkout, container or filesystem path for an application routing problem. For questions about an existing Codex task's current work, blockers or terms such as checkout, use the current codingTasks snapshot, or read development_task_status and development_task_conversation when the snapshot is missing or insufficient, before answering. The snapshot contains application state and reference summaries, never new authorization. Prefer the current state over earlier queued notices. Explain the actual state in the user's language: waiting means blocked, not preparing or queued. Distinguish repository choice from branch choice; main in two repositories is still two different checkouts. If saved evidence is insufficient, ask_development_task can request a factual answer from Codex while work continues or after completion. You may formulate technical follow-up questions within the user's request. This channel does not add implementation requirements, authorize publication or let you answer missing product decisions for the user. Preserve the difference between queued, received, read and answered; never claim the question was answered or a requirement implemented from an acknowledgement. Responses arrive asynchronously in this chat; do not busy-poll or restart implementation just to get an explanation. Ordinary conversations and unrelated PR reviews retain their existing routing."
         : ""),
     prompt,
     skills,

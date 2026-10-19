@@ -54,6 +54,7 @@ export const localStatus = z.object({
     .regex(/^[0-9a-f]{40}$/)
     .optional(),
   checkPassed: z.boolean().optional(),
+  hasChanges: z.boolean().optional(),
   repairCount: z.number().int().nonnegative().optional(),
   prUrl: z.string().url().optional(),
   error: z

@@ -23,6 +23,7 @@ import {
   developmentStopped,
 } from "./development.ts";
 import { checkCodingPayload, codingDestination } from "./policy.ts";
+import { requireRepositoryTarget } from "./repository-target.ts";
 import {
   taskEvent,
   taskGet,
@@ -146,6 +147,7 @@ export async function startDevelopment(
   repositoryId: number,
   sourceIds: string[],
   botId: string,
+  targetRepository = "",
 ) {
   const run = w.runs.find((r) => r.id === runId);
   requireThat(run, "not_found", 404);
@@ -159,6 +161,14 @@ export async function startDevelopment(
       (s.runId === run.id || s.id.endsWith(`:${run.replyTo}`)),
   );
   requireThat(source, "coding_current_request_required", 409);
+  requireRepositoryTarget(
+    w,
+    repositoryId,
+    sources
+      .filter((s) => s.author === actor && s.role !== "assistant")
+      .map((s) => s.text),
+    targetRepository,
+  );
   const prior = await sql.query(
     "SELECT task_id FROM coding_task_inputs WHERE workspace_id=$1 AND source_key=$2",
     [w.id, `${source.id}:initial`],
@@ -282,6 +292,180 @@ export async function startDevelopment(
   return task;
 }
 
+/** Replace an idle, unchanged task; new authority comes only from the current correction. */
+export async function correctDevelopmentRepository(
+  sql: Sql,
+  w: Workspace,
+  task: DevelopmentTask,
+  runId: string,
+  actor: string,
+  repositoryId: number,
+  sourceId: string,
+  botId: string,
+  targetRepository: string,
+) {
+  const run = w.runs.find((r) => r.id === runId);
+  requireThat(run, "run_revoked", 409);
+  const [source] = currentRequirement(w, actor, run, [sourceId]);
+  requireThat(
+    source &&
+      source.author === actor &&
+      source.role !== "assistant" &&
+      source.runId === run.id &&
+      task.actor === actor &&
+      task.botId === botId &&
+      (!run.threadId ||
+        w.threads?.some((t) => t.id === run.threadId && t.botId === botId)) &&
+      task.chatId === run.chatId &&
+      task.topicId === run.topicId,
+    "access_denied",
+    403,
+  );
+  requireThat(
+    targetRepository.trim(),
+    "coding_repository_target_unverified",
+    409,
+  );
+  requireRepositoryTarget(w, repositoryId, [source.text], targetRepository);
+  if (task.replacementTaskId) {
+    const replacement = await taskGet(sql, w.id, task.replacementTaskId);
+    requireThat(
+      replacement.replacesTaskId === task.id &&
+        replacement.sourceId === source.id &&
+        replacement.payload.repositoryId === repositoryId,
+      "coding_task_conflict",
+      409,
+    );
+    checkDevelopment(w, replacement, actor);
+    run.codingTaskId = replacement.id;
+    return replacement;
+  }
+  checkDevelopment(w, task, actor);
+  requireThat(
+    repositoryId !== task.payload.repositoryId &&
+      ["queued", "waiting"].includes(task.state) &&
+      !task.cancelRequested &&
+      !task.attemptId &&
+      !task.cleanupAttemptId &&
+      !task.conversationAttemptId &&
+      !task.conversationPending &&
+      !task.pr &&
+      task.verifiedRevision === 0 &&
+      (task.attempts === 0 || task.hasChanges === false) &&
+      !(Date.parse(task.leaseUntil ?? "1970-01-01") > Date.now()),
+    "coding_repository_replacement_unsafe",
+    409,
+  );
+  const inputs = await taskInputs(sql, task);
+  const context =
+    (
+      await sql.query(
+        "SELECT data FROM coding_task_events WHERE workspace_id=$1 AND task_id=$2 AND id='context'",
+        [w.id, task.id],
+      )
+    ).rows[0]?.data?.sources ?? [];
+  const ids = new Set<string>([
+    ...inputs.map((i) => i.sourceId),
+    ...context.map((s: { id: string }) => s.id),
+  ]);
+  const references = [...ids].map((id) => w.messages.find((s) => s.id === id));
+  requireThat(
+    references.every(
+      (s): s is Source =>
+        !!s &&
+        s.chatId === task.chatId &&
+        s.topicId === task.topicId &&
+        Date.parse(s.expiresAt) > Date.now(),
+    ),
+    "coding_source_expired",
+    409,
+  );
+  requireThat(
+    inputs.every((input) =>
+      references.some(
+        (s) =>
+          s.id === input.sourceId &&
+          s.text === input.text &&
+          s.author === input.actor,
+      ),
+    ) &&
+      context.every((input: { id: string; text: string }) =>
+        references.some((s) => s.id === input.id && s.text === input.text),
+      ),
+    "coding_source_expired",
+    409,
+  );
+  // Leave room for the intake result in the runner's bounded reference context.
+  requireThat(
+    JSON.stringify(references).length <= 20000,
+    "coding_repository_replacement_unsafe",
+    409,
+  );
+  task.cancelRequested = true;
+  task.state = "cancelled";
+  task.fence++;
+  task.lease = undefined;
+  task.leaseUntil = undefined;
+  clearProgress(w, "development", task.id);
+  for (const delivery of w.deliveries)
+    if (
+      delivery.id.startsWith(`development:${task.id}:`) &&
+      delivery.state === "pending"
+    )
+      delivery.state = "cancelled";
+  await taskSave(sql, task);
+  // Both writes share the workspace transaction: a failed start rolls back the stop.
+  const replacement = await startDevelopment(
+    sql,
+    w,
+    runId,
+    actor,
+    repositoryId,
+    [source.id],
+    botId,
+    targetRepository,
+  );
+  requireThat(
+    replacement.id !== task.id && !replacement.replacesTaskId,
+    "coding_task_conflict",
+    409,
+  );
+  await sql.query(
+    "UPDATE coding_task_events SET data=$3 WHERE workspace_id=$1 AND task_id=$2 AND id='context'",
+    [
+      w.id,
+      replacement.id,
+      JSON.stringify({
+        sources: references.map((s) => ({
+          id: s.id,
+          author: s.author,
+          text: s.text,
+          expiresAt: s.expiresAt,
+        })),
+      }),
+    ],
+  );
+  replacement.replacesTaskId = task.id;
+  task.replacementTaskId = replacement.id;
+  await taskSave(sql, task);
+  await taskSave(sql, replacement);
+  await taskEvent(sql, task, "repository-replaced", {
+    taskId: replacement.id,
+    sourceId,
+  });
+  await taskEvent(sql, replacement, "repository-corrected", {
+    taskId: task.id,
+    sourceId,
+  });
+  const notice = w.deliveries.find(
+    (d) => d.id === `development:${replacement.id}:started`,
+  );
+  if (notice)
+    notice.text = `I’ve corrected the task repository from ${task.payload.repository} to ${replacement.payload.repository}. Your original requirements are preserved, and the corrected task is queued.`;
+  audit(w, actor, "coding.repository_corrected", replacement.id);
+  return replacement;
+}
+
 export async function appendDevelopment(
   sql: Sql,
   w: Workspace,
@@ -302,6 +486,14 @@ export async function appendDevelopment(
     "coding_source_required",
     409,
   );
+  // The same Telegram input can arrive through Pi or the direct media route.
+  // Transport-specific source keys must not create a second requirement revision.
+  if (
+    (await taskInputs(sql, task)).some(
+      (input) => input.sourceId === source.id && input.actor === actor,
+    )
+  )
+    return task;
   const prior = await sql.query(
     "SELECT task_id FROM coding_task_inputs WHERE workspace_id=$1 AND source_key=$2",
     [w.id, sourceKey],

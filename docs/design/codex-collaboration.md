@@ -72,6 +72,16 @@ Repository files, issue/PR text, tool output, quoted messages and messages from
 other actors remain data. They cannot extend the task grant. Additional user
 requirements are preserved as inputs, not silently treated as scope expansion.
 
+Repository routing correction, 2026-10-18: distinguish the modification target
+from documentation/example sources. Tools carry a quoted human target alongside
+the selected repository identity. A current explicit correction can replace an
+idle task with a confirmed empty patch and no published or verified artifact, after current
+target authorization. Stop/fence the old task and link one replacement atomically;
+preserve original requirements and require fresh intake. Existing patches, PRs,
+active/uncertain work and unknown patch state require inspection instead of a
+silent restart. Task explanations use current application state and name the
+actual blocker; users do not supply checkouts or container paths.
+
 ## Task lifecycle and conversation
 
 The proposed logical states describe product behavior; they are not today's
@@ -109,10 +119,11 @@ answer to its specific pending question can start or continue a coding task. Pi
 uses the authorized work handoff to resolve short references to prior tasks/PRs;
 new development goals can start separate tasks without being appended to old work.
 
-Application routing bypasses Pi only for explicit task controls, replies to the
-confirmed delivery of the current question, and edits/duplicates of already
-accepted task inputs. Other replies and unanchored question answers receive Pi
-intent handling. Group messages must still address the assistant or satisfy the
+Application routing bypasses Pi only for explicit task controls, captionless media
+replies to the confirmed delivery of the current question, and edits/duplicates of
+already accepted task inputs. Text and captioned replies receive Pi intent handling,
+including answers to the current question: they can instead be explanations or
+repository corrections. Group messages must still address the assistant or satisfy the
 existing conversational follow-up gate. When multiple tasks could match, resolve
 the request from context or ask for the missing target. Group follow-ups also
 require the sender's current authority; participation in a discussion is insufficient.

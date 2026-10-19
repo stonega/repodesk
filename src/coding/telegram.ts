@@ -92,8 +92,9 @@ export async function routeDevelopment(
     const inputs = await taskInputs(sql, t);
     if (operation === "input") {
       // A topic or old task notice is context, not a request to resume Codex.
-      // Only received answers to the current question and edits/duplicates of
-      // already accepted inputs bypass the normal assistant's intent decision.
+      // Text answers need intent handling too: they may correct the repository
+      // or ask what a blocker means. Only captionless media answers and edits/
+      // duplicates of accepted inputs bypass the assistant.
       const acceptedInput = inputs.some(
         (i) =>
           i.actor === actor &&
@@ -114,7 +115,7 @@ export async function routeDevelopment(
             d.topicId === topicId &&
             d.remoteId === replyId,
         );
-      if (acceptedInput || questionReply) candidates.push(t);
+      if (acceptedInput || (questionReply && !text.trim())) candidates.push(t);
       continue;
     }
     const participant =

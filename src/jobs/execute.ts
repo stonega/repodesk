@@ -15,6 +15,9 @@ import {
   selectedModel,
 } from "../agent/runtime.ts";
 import { applicationTools } from "../agent/tools.ts";
+import { developmentStatus } from "../coding/feedback.ts";
+import { codingTaskContext } from "../coding/task-context.ts";
+import { taskGet } from "../coding/task-store.ts";
 import { DEFAULT_RUN_TIMEOUT_SECONDS } from "../config.ts";
 import type { Store } from "../db/repositories.ts";
 import { Fault, requireThat } from "../domain.ts";
@@ -276,8 +279,18 @@ export class Executor {
       : undefined;
     try {
       await guard();
+      const taskContext = () =>
+        this.store.change(workspaceId, async (w, sql) => {
+          const run = w.runs.find((r) => r.id === runId);
+          requireThat(
+            run && run.fence === fence && runAllowed(w, run),
+            "run_revoked",
+            409,
+          );
+          return codingTaskContext(sql, w, run, deployment.bot?.id);
+        });
       const w = await this.store.read(workspaceId);
-      let context = buildContext(w, claimed);
+      let context = buildContext(w, claimed, await taskContext());
       const transcript = claimed.transcript as AgentMessage[];
       // Restore only complete transcript boundaries. Tool effects and outcomes are committed atomically.
       const tail = transcript.at(-1);
@@ -449,7 +462,8 @@ export class Executor {
         } finally {
           compacting = false;
         }
-        context = buildContext(await this.store.read(workspaceId), claimed);
+        const current = await this.store.read(workspaceId);
+        context = buildContext(current, claimed, await taskContext());
         input.system = context.system;
         input.prompt = context.prompt;
       }
@@ -489,7 +503,7 @@ export class Executor {
         : await runner.run(input);
       await guard();
 
-      await this.store.change(workspaceId, (w) => {
+      await this.store.change(workspaceId, async (w, sql) => {
         const r = w.runs.find((r) => r.id === runId);
         requireThat(
           r && r.fence === fence && runAllowed(w, r),
@@ -504,8 +518,15 @@ export class Executor {
             Date.parse(a.expiresAt) > Date.now(),
         );
         const handoff = !!r.codingTaskId;
+        const task = r.codingTaskId
+          ? await taskGet(sql, w.id, r.codingTaskId)
+          : undefined;
         const text = handoff
-          ? "Your coding request has been queued for Codex. Task updates will appear in this conversation."
+          ? task?.state === "queued" && !task.cancelRequested && !task.error
+            ? `Your coding request for ${task.payload.repository} has been queued for Codex. Task updates will appear in this conversation.`
+            : task
+              ? developmentStatus(task)
+              : "Task status is unavailable."
           : result.text.trim()
             ? result.text
             : "";

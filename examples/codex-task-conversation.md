@@ -47,3 +47,31 @@ Messages and answers follow task audience, membership, repository and source
 retention checks. Expiry/deletion scrubs dialogue and retries owned-runner cleanup.
 Compatible surviving sessions may resume; otherwise retained context reconstructs
 the conversation. This local journey is distinct from a live model/Telegram pilot.
+
+## Repository source and target regression
+
+Use deterministic fake GitHub, model and Telegram transports locally. Repeat this
+journey in a separately authorized live pilot to assess model interpretation:
+
+1. Connect fixture repositories `acme/product` and `acme/product-landing`.
+   Ask “Add a /docs route to product-land using the original documents from
+   https://github.com/acme/product/blob/main/docs/README.md”.
+   The tool must select the landing repository and quote `product-land` as its
+   target evidence. Pairing that quote with the documentation repository ID must
+   fail before creating a task.
+2. Seed a historical wrong-repository task, waiting with a runner-confirmed empty
+   patch. Reply “Modify acme/product-landing; acme/product only supplies the
+   documentation.” Pi must classify this as a target correction and
+   pass the new repository and exact target quote through `send_development_input`.
+   Confirm one linked replacement, the old task stopped, the original requirements
+   retained, fresh intake, and no inherited patch/session/publication authority.
+   Duplicate the correction and confirm no second replacement.
+3. Reply “这里的 checkout 指什么？” or “用 main 分支可以吗？” to a pending task question.
+   Both text messages must reach Pi. An explanation must describe the actual
+   repository mismatch in the user's language without advancing the task revision
+   or claiming that waiting means preparing code. A genuine product answer still
+   uses `send_development_input`; captionless media retains direct answer routing.
+4. Repeat correction with a nonempty/unknown patch, active attempt, live lease,
+   existing PR, verified artifact, revoked target access or expired/edited original
+   source. Confirm refusal and an unchanged old task; do not work around refusal
+   using separate cancel/start calls.

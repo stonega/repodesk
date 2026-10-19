@@ -141,6 +141,52 @@ and Mini App work present; those independent changes are excluded from this comm
 Native Telegram desktop/mobile rendering and deployment remain unverified;
 no live Telegram messages were sent.
 
+## Repository target routing and task correction (2026-10-18)
+
+Chat Agent distinguishes modification targets from documentation/example sources.
+Coding tools carry a quoted human target alongside the repository ID; application
+checks reject contradictory IDs, invented quotes, document-URL substrings and
+ambiguous abbreviations before creating work. An implicit contextual target can
+use an empty quote. This validates repository identity and input evidence; the
+model's semantic target/reference interpretation remains a live pilot gate.
+
+An explicit current correction can replace an idle task with an independently
+exported empty patch, no PR/verified artifact, no active execution/conversation
+or cleanup, and current target permissions. A never-started task is also eligible.
+The workspace transaction fences/stops the old task and links one replacement;
+duplicate corrections reuse it. Original retained requirements remain references,
+while the current correction authorizes fresh intake. Existing patches, uncertain
+patch state, changed/expired sources and oversized history refuse replacement.
+No old patch, Codex session or implementation/publication grant is transferred.
+Old runner records without empty-patch evidence are not automatically recovered.
+
+Text/captioned question replies first reach Pi for intent handling; captionless
+media and accepted-input edits retain direct routing. Source identity deduplicates
+inputs across both routes. Up to five owned tasks in the same bot/conversation
+provide current state, repository and blocker context, with source-hash, retention
+and permission dependencies on derived replies. Handoff summaries report the
+saved state instead of always claiming queued. Tool/skill guidance explains
+repository versus branch mismatch without asking users for checkouts or containers.
+
+Validation passed Biome, strict TypeScript, production build, the host Node runtime
+contract and **897 deterministic tests across 102 files** with disposable PostgreSQL
+in the shared working tree. One intermediate full run hit the five-second timeout
+in the existing access-recovery scenario; its isolated replay and final full run
+passed. Fixtures cover target/reference separation, atomic/idempotent correction,
+existing work and live-lease refusal, source edits/expiry, tenant/actor/bot/topic
+and repository boundaries, patch evidence across runner restarts and factual
+waiting-state summaries. Synthetic examples retain no live conversation IDs or
+private transcripts. No dependency or SQL migration was added. Live model routing,
+native Telegram presentation and deployment remain unverified; no external model
+call, Telegram send, account connection or rollout was performed.
+
+These receipts cover the completed routing snapshot. Subsequent parallel transcript
+and mini-app edits appeared in the shared checkout; the final whole-tree Biome
+check reported formatting/import-order errors in that ongoing work. The routing
+files' focused Biome check and a fresh whole-tree TypeScript check still pass.
+Those parallel edits were preserved; this is not a claim that their current
+working tree has passed the complete validation suite.
+
 ## Telegram work-buddy personality (2026-10-18)
 
 The assistant now loads [SOUL.md](../../src/agent/SOUL.md) into its private,
@@ -260,6 +306,25 @@ edited workspace; the unrelated Review Bot test "Telegram follow-ups wait for a
 Review Bot fix on the same PR" reproducibly received `cancelled` instead of
 `queued`. Earlier access-link and Cloudflare OAuth failures passed in isolation
 and on the final full run. No live GitHub account was connected for validation.
+
+## Fresh VPS installation (2026-10-18)
+
+The operator-requested reset of `169.58.58.71`, explicitly including application
+data, deployed clean commit `cea5d410fa06b0e3c9cf2b420b1a3d7020238c99` (v0.1.39)
+in bundle `1792281550088-85350776`. Previous database/runner/task volumes,
+credentials, backups and deployment history were removed; fresh secrets were
+generated. All four services became healthy. Public readiness and setup returned
+HTTP 200; the fresh database had zero admins/workspaces and setup was unclaimed.
+Public JavaScript/CSS matched the verified image. The host updater, cleanup timer
+and separate Actions runners remained available.
+
+Validation passed Biome, types, build, **863 deterministic tests**, exact-image
+Node 24 runtime and full-stack Compose migration/rerun, readiness and backup/restore
+smoke checks. The full browser suite could not start because port 3107 was already
+occupied by another local test server; rendered UI was not verified. No bot/model
+test, external account connection or webhook registration was initiated. First-run
+setup and connections must be configured again. See the
+[fresh-installation receipt](vps-deployment.md#operator-requested-fresh-installation-2026-10-18).
 
 ## v0.1.40 release preparation (2026-10-18)
 

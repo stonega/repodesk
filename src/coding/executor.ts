@@ -1067,6 +1067,7 @@ export class DevelopmentExecutor {
     task.usageUnknown ||= status.usageUnknown || status.tokens === undefined;
     task.threadId = status.threadId;
     task.previousAttemptId = task.attemptId;
+    task.hasChanges = status.hasChanges;
     await finishAttempt(
       sql,
       task,
@@ -1076,6 +1077,7 @@ export class DevelopmentExecutor {
         tokens: status.tokens,
         usageUnknown: status.usageUnknown || status.tokens === undefined,
         checkPassed: status.checkPassed,
+        hasChanges: status.hasChanges,
         resultIssues: status.resultIssues,
       },
     );

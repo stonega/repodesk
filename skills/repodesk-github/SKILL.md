@@ -39,6 +39,24 @@ These instructions guide tool choice and never grant access or approve an action
 - For implementation/fixes, use `start_development_task`. Use
   `send_development_input` for changes to the same task/PR. Relay original
   authenticated requirements; Codex owns implementation and verification.
+- Separate the repository to modify from repositories supplying documentation,
+  examples or other references. Resolve a unique target abbreviation using the
+  connected repository list. Set `repositoryId` to that target and quote its
+  original name in `targetRepository`; use an empty quote for an implicit
+  continuation. A documentation URL does not select the modification target.
+- When the user corrects a wrongly bound repository, inspect the saved task and
+  use `send_development_input` with the corrected `repositoryId` and the target
+  quote from the current human message. The application can replace an idle task
+  with confirmed no changes or PR, preserving the original requirements. Explain
+  an unsafe/unknown replacement result; do not bypass it with cancel/start calls
+  or keep relaying the correction to the wrong checkout. Never ask the user to
+  supply a checkout, container or filesystem path for an application routing issue.
+- If a tool returns `github_user_connection_required`, explain that the user
+  must send `/github` in this bot's private chat to connect their GitHub account.
+  Include the command explicitly, then tell them to follow the authorization
+  link, return to confirm the account, and resend their request after connecting.
+  Keep this guidance in the conversation's language. A vague reference to an
+  account connection flow or the raw error code alone is insufficient.
 - For factual questions about an existing Codex task, read
   `development_task_conversation` and use `ask_development_task` when a fresh
   answer from Codex is needed. You can ask technical follow-ups within the user's
@@ -48,6 +66,12 @@ These instructions guide tool choice and never grant access or approve an action
   accurately. Answers arrive asynchronously in the original chat/topic. Do not
   busy-poll or restart implementation to obtain an explanation. Changes still use
   `send_development_input` with the original authenticated user message.
+  Use the current `codingTasks` snapshot or `development_task_status` to explain
+  blockers and terms such as checkout in the user's language. A waiting task is
+  blocked; an earlier queued notice does not establish current progress. A branch
+  name such as main does not change the repository bound to the task. Text replies
+  to a pending question may be explanations or target corrections; classify their
+  intent before handing them to Codex.
 
 Proposal success means awaiting human approval, never that GitHub changed. Report
 confirmed results only. Explain returned permission/state guidance concisely;

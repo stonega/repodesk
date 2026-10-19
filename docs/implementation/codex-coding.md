@@ -55,6 +55,12 @@ GitHub repositories. Its target list includes only repositories where the verifi
 user has current GitHub write access. Questions, status and ordinary conversation
 cannot authorize implementation or publication.
 
+When a request is blocked because the member has not connected GitHub, the tool
+description and bundled GitHub skill direct the assistant to explicitly say:
+send `/github` in the bot's private chat, follow the authorization link, return
+to confirm the account, then resend the request. Coding-task failure notices use
+the same recovery steps. `/github connect` remains a supported alias.
+
 ## Continuous collaboration
 
 A verified GitHub collaborator's clear instruction can authorize a task.
@@ -103,9 +109,11 @@ or while a product choice is pending use a separate read-only execution, preserv
 the result, question and PR. New implementation waits for its cleanup. See the
 [conversation examples](../../examples/codex-task-conversation.md).
 
-Replying to the confirmed notice for a current Codex question routes that answer
-directly to its task, including photo-only answers. Unanchored answers receive Pi
-intent handling. Edits/duplicates of accepted inputs retain their task binding.
+Text and captioned replies to a current Codex question receive Pi intent handling,
+so explanations and repository corrections do not become implementation answers.
+Captionless media replies to its confirmed notice still route directly to the task.
+Edits/duplicates of accepted inputs retain their task binding; source identity also
+deduplicates an input received through both Pi and the direct media route.
 Private conversations and unaddressed group messages are never imported across
 audiences. New implementation requirements reach the next completed turn boundary;
 factual questions can use the active-turn channel. A necessary Codex question checkpoints
@@ -179,6 +187,40 @@ it enables no new execution policy by itself. See [delivery evidence and rollout
 Migration `014_remove_coding_limits.sql` removes old limits from repository and
 current task policies, preserves historical grants and attempt envelopes, and
 rebuilds token totals from reported usage. It does not restart stopped tasks.
+
+## Repository targets and correction
+
+Chat Agent separates a modification target from documentation/example sources.
+Both coding tools accept the target `repositoryId` and `targetRepository`, a
+literal name quoted from the authenticated human input (empty for an implicit
+contextual target). The application checks quoted names, exact names and unique
+prefix abbreviations against connected repositories. Document/issue URL paths
+cannot supply that quote. The check validates identity and evidence; semantic
+target/reference classification still depends on the model and remains a live
+pilot gate.
+
+`send_development_input` can correct a repository when the initiating actor names
+the new target in the current message. Replacement requires an idle queued/waiting
+task, no active execution/conversation/cleanup/lease, no PR or verified artifact,
+and either no prior attempt or a runner-confirmed empty exported patch. Unknown
+patch state and existing work refuse replacement. Original retained sources must
+match their accepted text and fit the bounded handoff. The workspace transaction
+stops/fences the old task and creates one linked replacement, preserving original
+requirements as references. Duplicate corrections return that same task. The new
+task starts read-only intake with current target permissions and the current human
+correction as its authorization evidence; it inherits no old patch, session or
+implementation/publication grant. An unsafe result must not be bypassed by a
+chat-agent cancel/start sequence.
+
+For interactive chats, up to five recent tasks owned by the actor in the same bot
+and conversation supply a current-state snapshot. Retained source hashes, repository
+grants and coding revision fence derived replies. Explanations use the actual
+blocker and preserve the distinction between a repository and its branch. Saved
+handoff summaries use current task state rather than always claiming queued.
+
+Deploy matching app/worker and supervisor builds for empty-patch evidence. Old
+attempts without this evidence cannot be automatically replaced. No dependency,
+configuration or SQL migration is added; historical tasks are not bulk-restarted.
 
 ## Set up
 

@@ -1583,6 +1583,10 @@ Use this format for each preference:
   Explain known failure causes with their saved repository and branch when relevant,
   rather than only asking the user to inspect the panel. Give the configuration
   location and next action for recovery; keep credentials and raw logs private.
+  When a GitHub account connection is required, explicitly tell the person to
+  send `/github` in the bot's private chat, follow the authorization link, return
+  to confirm the account, then resend the request. Use this guidance in both
+  conversational tool-failure replies and coding-task failure notices.
   Acknowledge a stop request separately from confirmed termination when execution
   is still active.
   Maintain one task progress message, editing the acknowledgement as confirmed
@@ -1606,6 +1610,8 @@ Use this format for each preference:
   progress message, with new messages only when useful, to keep Telegram conversational.
   2026-10-09 — user showed a generic Docket checkout failure and requested the
   detailed cause in the user-facing reply.
+  2026-10-18 — user showed a missing-GitHub-connection reply and requested clear
+  instructions to connect the account through `/github`.
 - **Exceptions:** Keep short private replies on native thinking previews without
   an extra immediate queued acknowledgement. Unaddressed group traffic stays
   silent. Revocation and destination policy can prevent a notification. Unknown

@@ -168,6 +168,35 @@ No migration was added. Source, CI and post-deployment receipts remain in the
 bundle. This is another manual archive deployment, separate from the published
 release updater gate.
 
+## Operator-requested fresh installation (2026-10-18)
+
+At the operator's explicit request to clear the deployment **including data**, the
+VPS at `169.58.58.71` was reset and redeployed from clean commit
+`cea5d410fa06b0e3c9cf2b420b1a3d7020238c99` (package v0.1.39), in bundle
+`1792281550088-85350776`. This was a destructive fresh installation, separate from
+the normal data-preserving update procedure above.
+
+The old PostgreSQL and Codex runner volumes, six retained task containers and
+their three volumes, prior backups, credentials, update history and deployment
+artifacts were removed. The database password, encryption key and runner token
+were regenerated. HTTPS routing, the Compose project and the separate Actions
+runners were retained. No admin, workspace, bot or external account was created
+or connected. The fresh database had zero admins/workspaces and `claimed=false`.
+
+Biome, strict TypeScript, build and all **863 deterministic tests** passed with
+disposable PostgreSQL. The exact app, supervisor and task images built; Node 24
+runtime, full-stack Compose readiness, fresh migrations/rerun and backup/restore
+smoke checks passed. The browser suite could not start because another local test
+server occupied port 3107; no browser-suite or rendered-UI verification is claimed.
+The host verified the image archive before stopping services and reused the
+normal protected deployment script against fresh volumes. All four services were
+healthy after cutover; public health, readiness and setup checks returned HTTP 200,
+with setup uninitialized. Public JavaScript/CSS matched the verified image.
+The host updater and cleanup timer resumed. Source, verification, reset receipt
+and protected logs remain in the bundle; the temporary upload and duplicate
+bootstrap secrets were removed. Complete first-run setup at
+`https://dev.stonegate.me/setup` and reconfigure connections before using the bot.
+
 ## Custom domain from the panel
 
 Sign in as a deployment administrator and open **Deployment → Site domain**.

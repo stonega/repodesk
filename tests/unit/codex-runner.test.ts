@@ -1172,6 +1172,40 @@ test("device-auth tasks use only their workspace credential and remove the task 
   expect(raw).not.toContain("refreshed-secret");
 });
 
+test("waiting results report patch presence from the exported artifact, including empty patches across restart", async () => {
+  for (const hasChanges of [false, true]) {
+    const f = await fixture();
+    const originalRead = f.engine.readText;
+    f.engine.readText = async (container, path, max) => {
+      const text = await originalRead(container, path, max);
+      if (!path.endsWith("conversation.json")) return text;
+      const turn = JSON.parse(text);
+      turn.result.status = "needs_input";
+      turn.result.question = "The target repository needs correction.";
+      // A model's claim of no changes cannot override the exported patch.
+      turn.result.summary = "No changes made.";
+      return JSON.stringify(turn);
+    };
+    const command = f.engine.command;
+    f.engine.command = async (args, env) =>
+      args[0] === "start" && args.includes("--attach")
+        ? JSON.stringify({ patch: hasChanges ? "diff --git a/a b/a\n" : "" })
+        : command(args, env);
+    await f.supervisor.start(f.input);
+    for (let i = 0; i < 3; i++)
+      await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+    const saved = await f.supervisor.status(
+      f.input.workspaceId,
+      f.input.taskId,
+    );
+    expect(saved).toMatchObject({ state: "succeeded", hasChanges });
+    const restarted = new RunnerSupervisor(f.settings, f.engine);
+    await restarted.initialize();
+    expect(
+      await restarted.status(f.input.workspaceId, f.input.taskId),
+    ).toMatchObject({ state: "succeeded", hasChanges });
+  }
+});
 test("continuous questions checkpoint and release the runner; tenant-scoped answers reconstruct", async () => {
   const f = await fixture(1);
   const taskId = randomUUID();
@@ -1261,6 +1295,7 @@ test("continuous questions checkpoint and release the runner; tenant-scoped answ
   const ready = await f.supervisor.status(next.workspaceId, next.taskId);
   expect(ready.state).toBe("ready");
   expect(ready.checkPassed).toBe(true);
+  expect(ready.hasChanges).toBe(true);
   expect(ready.tokens).toBe(10);
   await f.supervisor.erase(input.workspaceId, input.taskId);
   const record = await readFile(

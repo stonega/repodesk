@@ -21,10 +21,12 @@ import type {
   LocalStart,
   LocalStatus,
 } from "../../src/coding/local/protocol.ts";
+import { codingTaskContext } from "../../src/coding/task-context.ts";
 import { taskGet, taskInputs, taskSave } from "../../src/coding/task-store.ts";
 import {
   appendDevelopment,
   cancelDevelopment,
+  correctDevelopmentRepository,
   notifyDevelopment,
   pruneDevelopment,
   startDevelopment,
@@ -57,6 +59,7 @@ import {
   taskControl,
 } from "../../src/telegram/task-controls.ts";
 import { Ingress } from "../../src/telegram/webhook.ts";
+import { runAllowed } from "../../src/workspaces/policy.ts";
 import { createRun } from "../../src/workspaces/service.ts";
 import { grantGitHubAccess, workspace } from "../fixtures.ts";
 import { githubFixtureConfig, githubTransport } from "../github-fixture.ts";
@@ -120,6 +123,7 @@ const url = process.env.TEST_DATABASE_URL;
     text = original,
     chatId = "101",
     attachments?: Source["attachments"],
+    configure?: (w: Workspace) => void,
   ) {
     const w = workspace();
     w.operatorId = operator;
@@ -144,6 +148,7 @@ const url = process.env.TEST_DATABASE_URL;
         development: developmentPolicy.parse({}),
       },
     };
+    configure?.(w);
     grantGitHubAccess(w, ["101", "202"]);
     const run = createRun(w, "101", text, chatId, 3, "gpt-4.1-mini", {
       replyTo: 10,
@@ -329,6 +334,379 @@ const url = process.env.TEST_DATABASE_URL;
       },
     };
   }
+  const docsRequest =
+    "Add a /docs route to product-land using the original documents from https://github.com/acme/product/blob/main/docs/README.md";
+  const correction =
+    "Modify acme/product-landing; acme/product only supplies the documentation.";
+  async function repositoryFixture() {
+    // A historical wrongly bound task, created before target evidence was available.
+    return fixture(docsRequest, "101", undefined, (w) => {
+      const github = present(w.github);
+      present(github.repositories[0]).full_name = "acme/product";
+      github.repositories.push({
+        id: 7002,
+        full_name: "acme/product-landing",
+        default_branch: "main",
+        private: false,
+      });
+    });
+  }
+  async function followup(wid: string, text = correction) {
+    return store.change(wid, (w) => {
+      const run = createRun(w, "101", text, "101", 3, "gpt-4.1-mini", {
+        replyTo: 100 + w.runs.length,
+        botId: "999",
+      });
+      run.status = "running";
+      return {
+        run: structuredClone(run),
+        source: present(
+          w.messages.find((s) => s.runId === run.id && s.role === "user"),
+        ),
+      };
+    });
+  }
+  async function toolsFor(wid: string, runId: string) {
+    const w = await store.read(wid);
+    const input: AgentInput = {
+      workspaceId: wid,
+      actor: "101",
+      runId,
+      model: selectedModel("gpt-4.1-mini"),
+      apiKey: "fixture",
+      system: "",
+      prompt: "",
+      transcript: [],
+      tools: [],
+      maxTurns: 2,
+      maxTools: 3,
+      signal: new AbortController().signal,
+      guard: async () => {},
+      reserve: async () => "attempt",
+      checkpoint: async () => {},
+    };
+    const host = present(
+      await ExtensionCatalog.fromSnapshot([], [codingExtension(store, w)]).open(
+        input,
+      ),
+    );
+    return { host, input };
+  }
+  test("the start tool rejects a documentation repo ID that contradicts the quoted target without creating a task", async () => {
+    const f = await repositoryFixture();
+    const { run, source } = await followup(f.w.id, docsRequest);
+    const { host, input } = await toolsFor(f.w.id, run.id);
+    try {
+      const tool = present(
+        host.tools.find((t) => t.name === "start_development_task"),
+      );
+      await expect(
+        tool.execute(
+          "wrong",
+          {
+            repositoryId: 7001,
+            sourceIds: [source.id],
+            targetRepository: "product-land",
+          },
+          input.signal,
+        ),
+      ).rejects.toThrow("coding_repository_target_mismatch");
+      expect(
+        (
+          await store.pool.query(
+            "SELECT count(*) FROM coding_tasks WHERE workspace_id=$1",
+            [f.w.id],
+          )
+        ).rows[0].count,
+      ).toBe("1");
+      await tool.execute(
+        "correct",
+        {
+          repositoryId: 7002,
+          sourceIds: [source.id],
+          targetRepository: "product-land",
+        },
+        input.signal,
+      );
+      const saved = present(
+        (await store.read(f.w.id)).runs.find((r) => r.id === run.id),
+      );
+      const task = await taskGet(
+        store.pool,
+        f.w.id,
+        present(saved.codingTaskId),
+      );
+      expect(task.payload.repository).toBe("acme/product-landing");
+      expect((await taskInputs(store.pool, task))[0]?.text).toBe(docsRequest);
+      expect(f.starts).toHaveLength(0);
+    } finally {
+      await host.close();
+    }
+  });
+  test("an explicit correction atomically replaces an unchanged waiting task once and dispatches the original requirements in the right repository", async () => {
+    const f = await repositoryFixture();
+    await f.tick();
+    await f.tick({
+      state: "succeeded",
+      hasChanges: false,
+      result: result({
+        status: "needs_input",
+        question:
+          "The task is bound to product; the requested site is product-landing.",
+        summary: "Repository mismatch; no changes made.",
+      }),
+    });
+    expect((await f.read()).hasChanges).toBe(false);
+    const { run, source } = await followup(f.w.id);
+    const { host, input } = await toolsFor(f.w.id, run.id);
+    try {
+      const tool = present(
+        host.tools.find((t) => t.name === "send_development_input"),
+      );
+      const args = {
+        taskId: f.task.id,
+        sourceId: source.id,
+        repositoryId: 7002,
+        targetRepository: "acme/product-landing",
+      };
+      await tool.execute("correct", args, input.signal);
+      await tool.execute("duplicate", args, input.signal);
+      const old = await f.read();
+      const replacement = await taskGet(
+        store.pool,
+        f.w.id,
+        present(old.replacementTaskId),
+      );
+      expect(old).toMatchObject({
+        state: "cancelled",
+        cancelRequested: true,
+        revision: 1,
+      });
+      expect(replacement).toMatchObject({
+        state: "queued",
+        phase: "intake",
+        replacesTaskId: old.id,
+        canImplement: false,
+        canPublish: false,
+        attempts: 0,
+      });
+      expect(replacement.payload.repositoryId).toBe(7002);
+      expect(replacement.previousAttemptId).toBeUndefined();
+      expect(replacement.threadId).toBeUndefined();
+      expect(
+        (await taskInputs(store.pool, replacement)).map((i) => i.text),
+      ).toEqual([correction]);
+      expect(
+        (
+          await store.pool.query(
+            "SELECT count(*) FROM coding_tasks WHERE workspace_id=$1",
+            [f.w.id],
+          )
+        ).rows[0].count,
+      ).toBe("2");
+      const saved = await store.read(f.w.id);
+      expect(saved.runs.find((r) => r.id === run.id)?.codingTaskId).toBe(
+        replacement.id,
+      );
+      expect(
+        saved.deliveries.find((d) =>
+          d.id.startsWith(`development:${old.id}:question:`),
+        )?.state,
+      ).toBe("cancelled");
+      expect(
+        saved.deliveries.filter(
+          (d) => d.id === `development:${replacement.id}:started`,
+        ),
+      ).toHaveLength(1);
+      await f.executor().advance(f.w.id, replacement.id);
+      const dispatched = present(f.starts.at(-1));
+      expect(dispatched.payload.repository).toBe("acme/product-landing");
+      expect(dispatched.development.context).toContain(docsRequest);
+      expect(dispatched.development.inputs[0]?.text).toBe(correction);
+      expect(dispatched.development.previousAttemptId).toBeUndefined();
+      expect(f.publications).toHaveLength(0);
+    } finally {
+      await host.close();
+    }
+  });
+  test("replacement preserves work, unknown checkpoints and concurrent execution instead of silently discarding them", async () => {
+    for (const boundary of [
+      "changes",
+      "unknown",
+      "working",
+      "attempt",
+      "conversation",
+      "cleanup",
+      "lease",
+      "pr",
+      "verified",
+    ] as const) {
+      const f = await repositoryFixture();
+      await store.change(f.w.id, async (_w, sql) => {
+        const task = await taskGet(sql, f.w.id, f.task.id);
+        task.state = "waiting";
+        task.attempts = 1;
+        task.hasChanges = false;
+        if (boundary === "changes") task.hasChanges = true;
+        if (boundary === "unknown") task.hasChanges = undefined;
+        if (boundary === "working") task.state = "working";
+        if (boundary === "attempt") task.attemptId = randomUUID();
+        if (boundary === "conversation")
+          task.conversationAttemptId = randomUUID();
+        if (boundary === "cleanup") task.cleanupAttemptId = randomUUID();
+        if (boundary === "lease")
+          task.leaseUntil = new Date(Date.now() + 60000).toISOString();
+        if (boundary === "pr")
+          task.pr = {
+            number: 43,
+            url: "https://github.com/acme/product/pull/43",
+            branch: "fix",
+            headSha: "a".repeat(40),
+          };
+        if (boundary === "verified") task.verifiedRevision = 1;
+        await taskSave(sql, task);
+      });
+      const { run, source } = await followup(f.w.id);
+      await expect(
+        store.change(f.w.id, async (w, sql) =>
+          correctDevelopmentRepository(
+            sql,
+            w,
+            await taskGet(sql, w.id, f.task.id),
+            run.id,
+            "101",
+            7002,
+            source.id,
+            "999",
+            "acme/product-landing",
+          ),
+        ),
+      ).rejects.toThrow("coding_repository_replacement_unsafe");
+      expect((await f.read()).cancelRequested).toBe(false);
+      expect((await f.read()).replacementTaskId).toBeUndefined();
+      expect(
+        (
+          await store.pool.query(
+            "SELECT count(*) FROM coding_tasks WHERE workspace_id=$1",
+            [f.w.id],
+          )
+        ).rows[0].count,
+      ).toBe("1");
+    }
+  });
+  test("replacement rechecks target grants and retained source scope, and rolls back the old stop if starting fails", async () => {
+    for (const boundary of [
+      "permission",
+      "expired",
+      "actor",
+      "topic",
+      "bot",
+      "tenant",
+      "old-source",
+      "edited-source",
+      "target-evidence",
+    ] as const) {
+      const f = await repositoryFixture();
+      const { run, source } = await followup(f.w.id);
+      await store.change(f.w.id, (w) => {
+        if (boundary === "permission")
+          present(w.members.find((m) => m.id === "101")?.github).repositories =
+            present(
+              w.members.find((m) => m.id === "101")?.github,
+            ).repositories.filter((r) => r.id !== 7002);
+        if (boundary === "expired")
+          present(w.messages.find((s) => s.id === f.source.id)).expiresAt =
+            "2000-01-01T00:00:00Z";
+        if (boundary === "edited-source")
+          present(w.messages.find((s) => s.id === f.source.id)).text =
+            "Changed after task acceptance";
+        if (boundary === "actor")
+          present(w.messages.find((s) => s.id === source.id)).author = "202";
+        if (boundary === "topic")
+          present(w.runs.find((r) => r.id === run.id)).topicId = 4;
+      });
+      const before = await f.read();
+      await expect(
+        store.change(f.w.id, async (w, sql) =>
+          correctDevelopmentRepository(
+            sql,
+            w,
+            await taskGet(
+              sql,
+              boundary === "tenant" ? randomUUID() : w.id,
+              f.task.id,
+            ),
+            run.id,
+            "101",
+            7002,
+            boundary === "old-source" ? f.source.id : source.id,
+            boundary === "bot" ? "998" : "999",
+            boundary === "target-evidence"
+              ? "invented-target"
+              : "acme/product-landing",
+          ),
+        ),
+      ).rejects.toThrow();
+      expect(await f.read()).toEqual(before);
+      expect(
+        (
+          await store.pool.query(
+            "SELECT count(*) FROM coding_tasks WHERE workspace_id=$1",
+            [f.w.id],
+          )
+        ).rows[0].count,
+      ).toBe("1");
+    }
+  });
+  test("task context provides the actual blocker to explanation requests and fences other audiences, bots, actors and expired sources", async () => {
+    const f = await repositoryFixture();
+    await f.tick();
+    await f.tick({
+      state: "succeeded",
+      hasChanges: false,
+      result: result({
+        status: "needs_input",
+        question: "Task repository is product; target is product-landing.",
+        summary: "Wrong repository. No changes made.",
+      }),
+    });
+    const { run } = await followup(f.w.id, "这里的 checkout 指什么？");
+    const w = await store.read(f.w.id);
+    const context = await codingTaskContext(store.pool, w, run, "999");
+    expect(context).toMatchObject([
+      {
+        state: "waiting",
+        repository: "acme/product",
+        question: "Task repository is product; target is product-landing.",
+      },
+    ]);
+    expect(run.handoffRead?.references.sourceIds).toContain(f.source.id);
+    expect(run.handoffRead?.repositoryIds).toEqual([7001]);
+    expect(runAllowed(w, run)).toBe(true);
+    const edited = structuredClone(w);
+    present(edited.messages.find((s) => s.id === f.source.id)).text =
+      "Edited requirement";
+    expect(runAllowed(edited, run)).toBe(false);
+    const revoked = structuredClone(w);
+    present(revoked.members.find((m) => m.id === "101")?.github).repositories =
+      [];
+    expect(runAllowed(revoked, run)).toBe(false);
+    for (const patch of [
+      { topicId: 4 },
+      { threadId: randomUUID() },
+      { actor: "202" },
+      { chatId: "-100100" },
+      { workflowId: "schedule" },
+    ])
+      expect(
+        await codingTaskContext(store.pool, w, { ...run, ...patch }, "999"),
+      ).toEqual([]);
+    expect(await codingTaskContext(store.pool, w, run, "998")).toEqual([]);
+    present(w.messages.find((s) => s.id === f.source.id)).expiresAt =
+      "2000-01-01T00:00:00Z";
+    expect(await codingTaskContext(store.pool, w, run, "999")).toEqual([]);
+  });
+
   test("task questions are durable, idempotent and never revise implementation or publication grants", async () => {
     const f = await fixture();
     const before = await f.read(),
@@ -767,9 +1145,36 @@ const url = process.env.TEST_DATABASE_URL;
         file_size: image.length,
       },
     };
-    await store.change(f.w.id, (w, sql) =>
-      routeDevelopment(sql, w, { update_id: 20, message: msg }, "999", msg),
-    );
+    expect(
+      await store.change(f.w.id, (w, sql) =>
+        routeDevelopment(sql, w, { update_id: 20, message: msg }, "999", msg),
+      ),
+    ).toBe(false);
+    // Captioned answers first reach Pi, which retains the received image metadata.
+    await store.change(f.w.id, async (w, sql) => {
+      const source: Source = {
+        ...f.source,
+        id: "999:101:20",
+        text: "Match this style",
+        attachments: [
+          {
+            ...photo,
+            kind: "document",
+            mimeType: "image/png",
+            fileId: "document-photo",
+          },
+        ],
+      };
+      w.messages.push(source);
+      await appendDevelopment(
+        sql,
+        w,
+        await taskGet(sql, w.id, f.task.id),
+        "101",
+        source,
+        `${source.id}:relay`,
+      );
+    });
     const edited = {
       ...msg,
       caption: "Keep the existing colors",
@@ -1558,7 +1963,7 @@ const url = process.env.TEST_DATABASE_URL;
     expect(f.erases).toHaveLength(1);
     await expect(f.read()).rejects.toThrow("not_found");
   });
-  test("only current question replies and accepted-input edits bypass assistant routing", async () => {
+  test("text question replies receive intent handling; accepted-input edits and duplicates retain their task binding", async () => {
     const f = await fixture();
     await f.tick();
     await f.tick({
@@ -1602,7 +2007,36 @@ const url = process.env.TEST_DATABASE_URL;
         await route({ update_id: 20, message: unrelated }, unrelated),
       ).toBe(false);
     expect((await f.read()).revision).toBe(1);
-    expect(await route({ update_id: 20, message }, message)).toBe(true);
+    for (const text of [
+      "Also handle empty pages",
+      "这里的 checkout 指什么？",
+      correction,
+      "用 main 分支可以吗？",
+    ])
+      expect(
+        await route(
+          { update_id: 20, message: { ...message, text } },
+          { ...message, text },
+        ),
+      ).toBe(false);
+    expect((await f.read()).revision).toBe(1);
+    // Pi has now classified this particular message as an implementation answer.
+    await store.change(f.w.id, async (w, sql) => {
+      const source: Source = {
+        ...f.source,
+        id: "999:101:20",
+        text: present(message.text),
+      };
+      w.messages.push(source);
+      await appendDevelopment(
+        sql,
+        w,
+        await taskGet(sql, w.id, f.task.id),
+        "101",
+        source,
+        `${source.id}:relay`,
+      );
+    });
     expect(await route({ update_id: 20, message }, message)).toBe(true);
     const edited = {
       ...message,
@@ -1772,12 +2206,22 @@ const url = process.env.TEST_DATABASE_URL;
       );
       await tool.execute(
         "continue",
-        { taskId: f.task.id, sourceId: source.id },
+        {
+          taskId: f.task.id,
+          sourceId: source.id,
+          repositoryId: 7001,
+          targetRepository: "",
+        },
         input.signal,
       );
       await tool.execute(
         "duplicate",
-        { taskId: f.task.id, sourceId: source.id },
+        {
+          taskId: f.task.id,
+          sourceId: source.id,
+          repositoryId: 7001,
+          targetRepository: "",
+        },
         input.signal,
       );
       expect((await f.read()).revision).toBe(2);
@@ -1792,7 +2236,12 @@ const url = process.env.TEST_DATABASE_URL;
       await expect(
         tool.execute(
           "past-message",
-          { taskId: f.task.id, sourceId: f.source.id },
+          {
+            taskId: f.task.id,
+            sourceId: f.source.id,
+            repositoryId: 7001,
+            targetRepository: "",
+          },
           input.signal,
         ),
       ).rejects.toThrow("coding_current_request_required");
@@ -3435,6 +3884,47 @@ const url = process.env.TEST_DATABASE_URL;
       w.deliveries.some((d) => d.text.includes("every check passed")),
     ).toBe(false);
     expect(completionPreview).toBe(false);
+  });
+  test("handoff summaries use the saved waiting state rather than overwriting it with queued", async () => {
+    const f = await fixture();
+    await f.tick();
+    await f.tick({
+      state: "succeeded",
+      hasChanges: false,
+      result: result({
+        status: "needs_input",
+        question: "The task is bound to the wrong repository.",
+        summary: "Repository mismatch.",
+      }),
+    });
+    const setup = {
+      client: async () => ({ call: async () => ({ message_id: 902 }) }),
+      modelKey: async () => "fixture",
+      models: { chat: async () => undefined },
+    } as unknown as SetupService;
+    await new Executor(store, setup, {
+      run: async (input) => {
+        expect(JSON.parse(input.prompt).codingTasks).toMatchObject([
+          {
+            state: "waiting",
+            question: "The task is bound to the wrong repository.",
+          },
+        ]);
+        return {
+          status: "succeeded",
+          text: "Queued and preparing checkout.",
+          turns: 0,
+          tools: 0,
+          transcript: [],
+        };
+      },
+    }).execute(f.w.id, f.run.id);
+    const run = present(
+      (await store.read(f.w.id)).runs.find((r) => r.id === f.run.id),
+    );
+    expect(run.result).toContain("wrong repository");
+    expect(run.result).not.toContain("queued");
+    expect(run.result).not.toContain("preparing checkout");
   });
   test("feedback delivery uses the current transaction even with a single database connection", async () => {
     const f = await fixture();
