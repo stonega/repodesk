@@ -1,5 +1,48 @@
 # Implementation evidence
 
+## Recovery of infrastructure-interrupted coding tasks (2026-10-19)
+
+New continuous coding attempts opt into recovery across repository preparation,
+setup, implementation and independent checks. A job-generation SIGTERM marker
+or changed Docker host boot ID with a confirmed non-OOM signal exit distinguishes
+interruption from ordinary failure. The runner persists a recovery identity,
+retains the work volume and releases capacity. The application revalidates the
+current lease, actors, sources, bot, configuration and live repository access,
+refreshes credentials and resumes the same attempt. Account recovery uses the
+current sealed credential generation; shared providers retain their pinned model
+and version. Partial preparation clones can be recreated; partial implementation
+and the frozen check plan remain preserved. Missing partial-turn usage is unknown.
+
+Recovery requests are idempotent across duplicate calls, lost acknowledgements
+and supervisor restarts. A running recovery is adopted; an uncertain created or
+missing container is not blindly started. Stop, revoked access, sign-in pauses,
+capacity waits and retention remain enforced. Publication retains unknown-outcome
+and read-only reconciliation handling. Old terminal failures and attempts without
+recovery opt-in/evidence are not automatically replayed. Review Bot and separate
+factual-question executions keep their existing recovery behavior.
+
+Recovery uses the existing Telegram progress message and Stop controls. The admin
+status reads **Restoring interrupted task**. No dependency, migration or new
+environment variable was added. The runner contract adds a private authenticated
+resume endpoint; app, worker, supervisor and task image must be updated together.
+
+Validation passed Biome, strict TypeScript, the production build and **947
+deterministic tests across 106 files** with disposable PostgreSQL. Focused tests
+cover all four phases, signal recording, host-boot fallback, OOM/ordinary failure
+exclusion, tenant/recovery identities, fresh credentials, revocation during token
+minting, cancellation, capacity, retention and ambiguous starts. All **12 focused
+browser scenarios** passed; recovery/Stop layouts were inspected at 1280px/390px.
+Pending/rejected Stop and completion races retain regression coverage. Matching
+Docker images built, the Node 24 runtime contract passed, Compose validated and
+the real Docker lifecycle fixture passed a SIGTERM interruption, supervisor
+restarts, duplicate recovery, retained partial code and independent checks.
+
+No live Telegram/model request, GitHub publication, historical-task recovery or
+deployment was performed. Actual host/daemon restarts and native Telegram rendering
+remain staging acceptance steps. See [runner behavior](codex-runner.md#lifecycle-and-recovery),
+[the repeatable fixture](../../examples/codex-interruption.md) and
+[incident evidence](../../postmortem/2026-10-18-codex-task-interrupted-by-vps-reboot.md).
+
 ## Cloudflare direct API token setup (2026-10-18)
 
 New Cloudflare settings default to API tokens. The panel replaces OAuth client

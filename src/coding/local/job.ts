@@ -13,6 +13,7 @@ import { CodexAuthError } from "./auth-failure.ts";
 import { checkoutFailureCode } from "./checkout-failure.ts";
 import { runConversation } from "./conversation.ts";
 import { CodexConversationError } from "./conversation-failure.ts";
+import { watchInterruption } from "./interruption.ts";
 import { JobTaskChannel } from "./job-channel.ts";
 import { prepareOpenCodeReview } from "./open-code-review.ts";
 import { localStart } from "./protocol.ts";
@@ -21,6 +22,8 @@ import { markPullRequestReady, publicationPushArgs } from "./publication.ts";
 const jobSchema = localStart
   .omit({ readToken: true, providerApiKey: true })
   .extend({
+    executionId: z.uuid().optional(),
+    recoveryId: z.uuid().optional(),
     baseSha: z
       .string()
       .regex(/^[0-9a-f]{40}$/)
@@ -217,11 +220,15 @@ async function implement(job: Job) {
           : {}),
       },
       prompt:
+        (job.recoveryId
+          ? "The previous execution was interrupted by an infrastructure shutdown. Continue from the retained checkout and inspect its existing changes before editing. Preserve authorized partial work. Reconstruct the conversation if its session is unavailable, and run the fixed verification plan in full.\n"
+          : "") +
         developmentPrompt(
           job.development,
           diagnostics,
           job.verificationCommands,
-        ) + (job.development.media?.prompt ?? ""),
+        ) +
+        (job.development.media?.prompt ?? ""),
       images: job.development.media?.images,
       outputSchema: developmentSchema(job.development),
       threadId:
@@ -487,7 +494,12 @@ try {
     const job = jobSchema.parse(
       JSON.parse(await readFile("/input/job.json", "utf8")),
     );
+    await rm("/task/interruption.json", { force: true });
+    await rm("/task/failure-code", { force: true });
+    watchInterruption(job.executionId, mode);
     if (mode === "prepare") {
+      // No implementation can have started in this phase; discard a partial clone.
+      if (job.recoveryId) await rm(repo, { recursive: true, force: true });
       await writeFile("/task/base-sha", await clone(job));
       try {
         if ((await readFile("/input/checkpoint.patch", "utf8")).length)

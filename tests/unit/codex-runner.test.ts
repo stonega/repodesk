@@ -92,7 +92,10 @@ test("task media survives runner restart and is scrubbed with task erasure", asy
   expect(JSON.parse(tombstone).input.development.media).toBeUndefined();
   await new RunnerSupervisor(g.settings, g.engine).initialize();
 });
-async function fixture(concurrency = 4) {
+async function fixture(
+  concurrency = 4,
+  readBootId?: () => Promise<string | undefined>,
+) {
   const dir = await mkdtemp(join(tmpdir(), "deepx-codex-test-"));
   dirs.push(dir);
   const settings = runnerSettings.parse({
@@ -156,7 +159,12 @@ async function fixture(concurrency = 4) {
       return "";
     },
   };
-  const supervisor = new RunnerSupervisor(settings, engine);
+  const supervisor = new RunnerSupervisor(
+    settings,
+    engine,
+    undefined,
+    readBootId,
+  );
   await supervisor.initialize();
   const input: LocalStart = {
     workspaceId: randomUUID(),
@@ -202,6 +210,409 @@ async function fixture(concurrency = 4) {
     },
   };
 }
+
+async function interruptedFixture(
+  phase = "implement",
+  options: {
+    marker?: boolean;
+    bootChanged?: boolean;
+    exitCode?: number;
+    oom?: boolean;
+    failure?: string;
+    device?: boolean;
+    recover?: boolean;
+  } = {},
+) {
+  let boot = randomUUID();
+  const f = await fixture(4, async () => boot);
+  f.input.recoverOnInterruption = options.recover === false ? undefined : true;
+  f.input.providerApiKey = "initial-recovery-key";
+  if (options.device) {
+    f.input.payload.authMode = "device_code";
+    await f.supervisor.device.save(
+      f.input.workspaceId,
+      '{"tokens":{"access_token":"original-account"}}',
+    );
+  }
+  const command = f.engine.command;
+  const read = f.engine.readText;
+  let stopped = false;
+  f.engine.command = async (args, env) =>
+    stopped && args[0] === "inspect" && args.at(-1)?.endsWith(`-${phase}`)
+      ? JSON.stringify({
+          Running: false,
+          Status: "exited",
+          ExitCode: options.exitCode ?? 143,
+          OOMKilled: options.oom ?? false,
+        })
+      : command(args, env);
+  f.engine.readText = async (name, path, max) => {
+    if (path === "/auth/auth.json")
+      return '{"tokens":{"access_token":"refreshed-account"}}';
+    if (path === "/task/failure-code")
+      return stopped ? (options.failure ?? "") : "";
+    if (path === "/task/interruption.json") {
+      if (options.marker === false) throw Error("No marker");
+      return JSON.stringify({
+        executionId: JSON.parse(f.jobInputs.at(-1) ?? "{}").executionId,
+        phase,
+      });
+    }
+    return read(name, path, max);
+  };
+  await f.supervisor.start(f.input);
+  for (
+    let n = 0;
+    n < ["prepare", "setup", "implement", "check"].indexOf(phase);
+    n++
+  )
+    await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  stopped = true;
+  const restart = async () => {
+    const supervisor = new RunnerSupervisor(
+      f.settings,
+      f.engine,
+      undefined,
+      async () => boot,
+    );
+    await supervisor.initialize();
+    return supervisor;
+  };
+  if (options.bootChanged) boot = randomUUID();
+  const supervisor = await restart();
+  const status = await supervisor.status(f.input.workspaceId, f.input.taskId);
+  return {
+    ...f,
+    supervisor,
+    status,
+    restart,
+    allow: () => {
+      stopped = false;
+    },
+  };
+}
+
+test("interrupted phases retain the task volume and frozen checks, with durable idempotent recovery", async () => {
+  for (const phase of ["prepare", "setup", "implement", "check"]) {
+    const f = await interruptedFixture(phase);
+    expect(f.status).toMatchObject({
+      state: "interrupted",
+      phase,
+      error: "coding_execution_interrupted",
+    });
+    const recoveryId = f.status.recoveryId;
+    if (!recoveryId) throw Error("Missing recovery identity");
+    expect(
+      (await f.supervisor.status(f.input.workspaceId, f.input.taskId))
+        .recoveryId,
+    ).toBe(recoveryId);
+    const originalJob = JSON.parse(f.jobInputs.at(-1) ?? "{}");
+    f.allow();
+    const request = {
+      recoveryId,
+      providerApiKey: "fresh-recovery-key",
+      readToken: phase === "prepare" ? "fresh-read-token" : undefined,
+    };
+    await Promise.all([
+      f.supervisor.resumeInterrupted(
+        f.input.workspaceId,
+        f.input.taskId,
+        request,
+      ),
+      f.supervisor.resumeInterrupted(
+        f.input.workspaceId,
+        f.input.taskId,
+        request,
+      ),
+    ]);
+    const restarted = await f.restart();
+    await restarted.resumeInterrupted(
+      f.input.workspaceId,
+      f.input.taskId,
+      request,
+    );
+    const key = taskKey(f.input.workspaceId, f.input.taskId);
+    const creations = f.calls.filter(
+      (c) => c.args[0] === "create" && c.args.includes(`${key}-${phase}`),
+    );
+    expect(creations).toHaveLength(2);
+    expect(creations.every((c) => c.args.includes(`${key}-work:/task`))).toBe(
+      true,
+    );
+    const job = JSON.parse(f.jobInputs.at(-1) ?? "{}");
+    expect(job.recoveryId).toBe(recoveryId);
+    expect(job.executionId).not.toBe(originalJob.executionId);
+    expect(job.development.inputs).toEqual(originalJob.development.inputs);
+    expect(job.verificationCommands).toEqual(originalJob.verificationCommands);
+    expect(f.jobInputs.join("\n")).not.toContain("fresh-recovery-key");
+    expect(f.jobInputs.join("\n")).not.toContain("fresh-read-token");
+    if (phase === "implement") {
+      const token = creations.at(-1)?.env?.CODEX_TASK_TOKEN;
+      if (!token) throw Error("Missing replacement proxy token");
+      expect(restarted.providerKey(token)).toBe("fresh-recovery-key");
+      expect(f.status.usageUnknown).toBe(true);
+    }
+    if (phase === "check")
+      expect(job.verificationCommands).toEqual(["bun test"]);
+    else {
+      await restarted.status(f.input.workspaceId, f.input.taskId);
+      expect(JSON.parse(f.jobInputs.at(-1) ?? "{}").recoveryId).toBeUndefined();
+    }
+  }
+});
+
+test("interruption recovery requires management auth and preserves tenant isolation over HTTP", async () => {
+  const f = await interruptedFixture();
+  const recoveryId = f.status.recoveryId;
+  if (!recoveryId) throw Error("Missing recovery identity");
+  const app = runnerApp(f.supervisor);
+  const path = `/tasks/${f.input.workspaceId}/${f.input.taskId}/resume-interrupted`;
+  expect(
+    (
+      await app.request(path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ recoveryId }),
+      })
+    ).status,
+  ).toBe(401);
+  const client = new LocalRunnerClient(
+    "http://runner",
+    f.settings.CODEX_RUNNER_TOKEN,
+    (async (input, init) =>
+      app.request(new Request(String(input), init))) as typeof fetch,
+  );
+  await expect(
+    client.resumeInterrupted(randomUUID(), f.input.taskId, { recoveryId }),
+  ).rejects.toThrow("coding_task_not_found");
+  await expect(
+    client.resumeInterrupted(f.input.workspaceId, f.input.taskId, {
+      recoveryId: randomUUID(),
+    }),
+  ).rejects.toThrow("coding_recovery_conflict");
+  f.allow();
+  await client.resumeInterrupted(f.input.workspaceId, f.input.taskId, {
+    recoveryId,
+    providerApiKey: "fresh-http-secret",
+  });
+  const view = await client.status(f.input.workspaceId, f.input.taskId);
+  expect(JSON.stringify(view)).not.toContain("fresh-http-secret");
+  expect(view.state).toBe("running");
+});
+
+test("account interruption removes private auth and reacquires the current credential generation", async () => {
+  const f = await interruptedFixture("implement", { device: true });
+  const recoveryId = f.status.recoveryId;
+  if (!recoveryId) throw Error("Missing recovery identity");
+  expect(
+    f.calls.some(
+      (c) =>
+        c.args[0] === "volume" &&
+        c.args[1] === "rm" &&
+        c.args.at(-1)?.endsWith("-auth"),
+    ),
+  ).toBe(true);
+  await f.supervisor.device.save(
+    f.input.workspaceId,
+    '{"tokens":{"access_token":"new-login-generation"}}',
+  );
+  const copies: string[] = [];
+  const command = f.engine.command;
+  f.engine.command = async (args, env) => {
+    if (args[0] === "cp" && args[1]?.endsWith(".auth"))
+      copies.push(await readFile(args[1], "utf8"));
+    return command(args, env);
+  };
+  f.allow();
+  await f.supervisor.resumeInterrupted(f.input.workspaceId, f.input.taskId, {
+    recoveryId,
+  });
+  expect(copies).toHaveLength(1);
+  expect(copies[0]).toContain("new-login-generation");
+  expect(f.jobInputs.join("\n")).not.toContain("new-login-generation");
+  const stopped = await interruptedFixture("implement", { device: true });
+  await stopped.supervisor.logoutDevice(stopped.input.workspaceId);
+  await stopped.supervisor.device.save(
+    stopped.input.workspaceId,
+    '{"tokens":{"access_token":"reconnected"}}',
+  );
+  await expect(
+    stopped.supervisor.resumeInterrupted(
+      stopped.input.workspaceId,
+      stopped.input.taskId,
+      { recoveryId: stopped.status.recoveryId ?? randomUUID() },
+    ),
+  ).rejects.toThrow("coding_task_not_ready");
+});
+
+test("a publication container terminated by SIGTERM remains unknown and cannot be recovered", async () => {
+  const f = await fixture();
+  f.input.recoverOnInterruption = true;
+  await f.supervisor.start(f.input);
+  for (let n = 0; n < 4; n++)
+    await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  await f.supervisor.publish(
+    f.input.workspaceId,
+    f.input.taskId,
+    "publication-secret",
+  );
+  const command = f.engine.command;
+  f.engine.command = async (args, env) =>
+    args[0] === "inspect"
+      ? JSON.stringify({
+          Running: false,
+          Status: "exited",
+          ExitCode: 143,
+          OOMKilled: false,
+        })
+      : command(args, env);
+  const status = await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  expect(status.state).toBe("unknown");
+  expect(status.error).toBe("coding_publication_unknown");
+  expect(status.recoveryId).toBeUndefined();
+});
+
+test("host boot evidence recovers a missing SIGTERM marker but ordinary failures and OOM do not", async () => {
+  const booted = await interruptedFixture("implement", {
+    marker: false,
+    bootChanged: true,
+  });
+  expect(booted.status.state).toBe("interrupted");
+  for (const options of [
+    { marker: false },
+    { recover: false },
+    { exitCode: 1 },
+    { exitCode: 137, oom: true, bootChanged: true },
+    { failure: "coding_provider_usage_limit" },
+  ]) {
+    const f = await interruptedFixture("implement", options);
+    expect(f.status.state).toBe("failed");
+    expect(f.status.recoveryId).toBeUndefined();
+  }
+});
+
+test("recovery refuses another tenant, stale identity, cancelled tasks and expired work", async () => {
+  for (const boundary of ["tenant", "identity", "cancelled", "expired"]) {
+    const f = await interruptedFixture();
+    const recoveryId = f.status.recoveryId;
+    if (!recoveryId) throw Error("Missing recovery identity");
+    if (boundary === "cancelled")
+      await f.supervisor.cancel(f.input.workspaceId, f.input.taskId);
+    if (boundary === "expired") {
+      const path = join(
+        f.settings.CODEX_RUNNER_STATE,
+        `${taskKey(f.input.workspaceId, f.input.taskId)}.json`,
+      );
+      const record = JSON.parse(await readFile(path, "utf8"));
+      record.finishedAt = Date.now() - 48 * 3600000;
+      await writeFile(path, JSON.stringify(record));
+      f.supervisor = await f.restart();
+    }
+    const count = f.calls.filter((c) => c.args[0] === "create").length;
+    await expect(
+      f.supervisor.resumeInterrupted(
+        boundary === "tenant" ? randomUUID() : f.input.workspaceId,
+        f.input.taskId,
+        {
+          recoveryId: boundary === "identity" ? randomUUID() : recoveryId,
+          providerApiKey: "fresh-key",
+        },
+      ),
+    ).rejects.toThrow();
+    expect(f.calls.filter((c) => c.args[0] === "create")).toHaveLength(count);
+  }
+});
+
+test("interrupted tasks release capacity and wait to recover until a slot is free", async () => {
+  const f = await interruptedFixture();
+  f.settings.CODEX_RUNNER_CONCURRENCY = 1;
+  const other = {
+    ...f.input,
+    taskId: randomUUID(),
+    development: { ...f.input.development, taskId: randomUUID() },
+  };
+  await f.supervisor.start(other);
+  const recoveryId = f.status.recoveryId;
+  if (!recoveryId) throw Error("Missing recovery identity");
+  await expect(
+    f.supervisor.resumeInterrupted(f.input.workspaceId, f.input.taskId, {
+      recoveryId,
+      providerApiKey: "fresh-key",
+    }),
+  ).rejects.toThrow("coding_runner_busy");
+  await f.supervisor.cancel(other.workspaceId, other.taskId);
+  f.allow();
+  await f.supervisor.resumeInterrupted(f.input.workspaceId, f.input.taskId, {
+    recoveryId,
+    providerApiKey: "fresh-key",
+  });
+});
+
+test("a lost recovery start ACK adopts its running container after restart without another launch", async () => {
+  const f = await interruptedFixture();
+  const recoveryId = f.status.recoveryId;
+  if (!recoveryId) throw Error("Missing recovery identity");
+  f.allow();
+  const command = f.engine.command;
+  f.engine.command = async (args, env) => {
+    const output = await command(args, env);
+    if (args[0] === "start" && args.at(-1)?.endsWith("-implement"))
+      throw Error("Lost start response");
+    return args[0] === "inspect" && args.at(-1)?.endsWith("-implement")
+      ? JSON.stringify({ Running: true, Status: "running", ExitCode: 0 })
+      : output;
+  };
+  await expect(
+    f.supervisor.resumeInterrupted(f.input.workspaceId, f.input.taskId, {
+      recoveryId,
+      providerApiKey: "fresh-key",
+    }),
+  ).rejects.toThrow("coding_outcome_unknown");
+  const restarted = await f.restart();
+  expect(
+    (await restarted.status(f.input.workspaceId, f.input.taskId)).state,
+  ).toBe("running");
+  await restarted.resumeInterrupted(f.input.workspaceId, f.input.taskId, {
+    recoveryId,
+    providerApiKey: "fresh-key",
+  });
+  expect(
+    f.calls.filter(
+      (c) => c.args[0] === "start" && c.args.at(-1)?.endsWith("-implement"),
+    ),
+  ).toHaveLength(2);
+});
+
+test("an unconfirmed recovery with only a created container stays unknown and is never replayed", async () => {
+  const f = await interruptedFixture();
+  const recoveryId = f.status.recoveryId;
+  if (!recoveryId) throw Error("Missing recovery identity");
+  f.allow();
+  const command = f.engine.command;
+  f.engine.command = async (args, env) => {
+    if (args[0] === "start" && args.at(-1)?.endsWith("-implement"))
+      throw Error("Start not acknowledged");
+    return args[0] === "inspect" && args.at(-1)?.endsWith("-implement")
+      ? JSON.stringify({ Running: false, Status: "created", ExitCode: 0 })
+      : command(args, env);
+  };
+  await expect(
+    f.supervisor.resumeInterrupted(f.input.workspaceId, f.input.taskId, {
+      recoveryId,
+      providerApiKey: "fresh-key",
+    }),
+  ).rejects.toThrow("coding_outcome_unknown");
+  const restarted = await f.restart();
+  expect(
+    (await restarted.status(f.input.workspaceId, f.input.taskId)).state,
+  ).toBe("unknown");
+  await expect(
+    restarted.resumeInterrupted(f.input.workspaceId, f.input.taskId, {
+      recoveryId,
+      providerApiKey: "fresh-key",
+    }),
+  ).rejects.toThrow("coding_task_not_ready");
+});
 test("the authenticated task conversation survives restart, scopes its token and scrubs messages on erasure", async () => {
   const f = await fixture();
   holdImplementations(f);

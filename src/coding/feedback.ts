@@ -64,6 +64,7 @@ export function codingStatusLabel(task: {
       analysis: "Investigating question",
       implement: "Implementing",
       repair: "Repairing failed checks",
+      recover: "Restoring interrupted task",
       check: "Running checks",
       publish: "Publishing PR",
     };

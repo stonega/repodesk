@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   chmod,
   mkdir,
@@ -42,11 +42,14 @@ import { checkoutFailureCodes } from "./checkout-failure.ts";
 import type { ContainerEngine } from "./container.ts";
 import { conversationFailureCodes } from "./conversation-failure.ts";
 import { DeviceAuth } from "./device-auth.ts";
+import { hostBootId, wasInterrupted } from "./interruption.ts";
 import { applyChannelEvent, closeMailbox, enqueueMessage } from "./mailbox.ts";
 import {
+  type LocalRecovery,
   type LocalRunner,
   type LocalStart,
   type LocalStatus,
+  localRecovery,
   localStart,
 } from "./protocol.ts";
 import { RuntimeSelection } from "./runtime-control.ts";
@@ -82,11 +85,20 @@ interface Record extends LocalStatus {
   baseSha?: string;
   authGeneration?: string;
   authPausedAt?: number;
+  executionId?: string;
+  bootId?: string;
+  resumedRecoveryId?: string;
+  recoveryPending?: boolean;
 }
 const terminal = (state: string) =>
-  ["succeeded", "failed", "cancelled", "unknown", "auth_required"].includes(
-    state,
-  );
+  [
+    "succeeded",
+    "failed",
+    "cancelled",
+    "unknown",
+    "auth_required",
+    "interrupted",
+  ].includes(state);
 const implementationFailures = new Set([
   ...conversationFailureCodes,
   "coding_setup_failed",
@@ -108,10 +120,12 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
   private tail: Promise<unknown> = Promise.resolve();
   private engine!: TaskRuntime;
   private selection: RuntimeSelection;
+  private bootId?: string;
   constructor(
     readonly settings: RunnerSettings,
     engine?: ContainerEngine | TaskRuntime,
     private factory = taskRuntime,
+    private readBootId = hostBootId,
   ) {
     if (engine)
       this.engine =
@@ -120,6 +134,7 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
     this.device = new DeviceAuth(settings);
   }
   async initialize() {
+    this.bootId = await this.readBootId();
     await mkdir(this.settings.CODEX_RUNNER_STATE, {
       recursive: true,
       mode: 0o700,
@@ -288,6 +303,7 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
       checkPassed: r.checkPassed,
       hasChanges: r.hasChanges,
       repairCount: r.repairs,
+      recoveryId: r.recoveryId,
     };
   }
   private volume(r: Record, mode: string) {
@@ -334,6 +350,11 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
     mode: TaskMode,
     env: { [key: string]: string } = {},
   ) {
+    if (mode !== "export") {
+      r.executionId = randomUUID();
+      r.bootId = this.bootId;
+      await this.save(r);
+    }
     if (mode === "implement") r.transcriptEnabled = true;
     if (mode === "implement" && r.input.development) {
       closeMailbox(r.conversation);
@@ -395,6 +416,8 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
             : {}),
           baseSha: r.baseSha,
           verificationCommands: r.verificationCommands,
+          executionId: r.executionId,
+          recoveryId: r.recoveryPending ? r.recoveryId : undefined,
           config: codexConfig(
             this.settings,
             r.input.payload.authMode,
@@ -632,17 +655,59 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
     }
   }
   private async advance(r: Record) {
-    if (r.state === "auth_required" && !r.cleaned) {
+    if (["auth_required", "interrupted"].includes(r.state) && !r.cleaned) {
       await this.removeAuthVolume(r);
       return;
     }
     if (terminal(r.state) || r.state === "ready") return;
     try {
       const state = await this.engine.inspect(`${r.key}-${r.phase}`);
+      if (r.recoveryPending) {
+        if (state.Status === "created") {
+          r.state = "unknown";
+          r.error = "coding_outcome_unknown";
+          r.recoveryPending = false;
+          await this.save(r);
+          return;
+        }
+        r.recoveryPending = false;
+        r.error = undefined;
+        await this.save(r);
+      }
       if (state.Running) return;
       if (state.Status !== "exited" && state.Status !== "stopped")
         throw new Error("Incomplete container start");
       await this.recoverTranscript(r);
+      if (
+        r.input.recoverOnInterruption &&
+        r.phase !== "publish" &&
+        state.ExitCode !== 0 &&
+        !(await this.copyResult(r, "failure-code").catch(() => "")).trim() &&
+        wasInterrupted(
+          state,
+          await this.copyResult(r, "interruption.json")
+            .then((text) => JSON.parse(text))
+            .catch(() => undefined),
+          r.executionId,
+          r.phase,
+          this.settings.CODEX_CONTAINER_ENGINE === "docker" &&
+            !!r.bootId &&
+            !!this.bootId &&
+            r.bootId !== this.bootId,
+        )
+      ) {
+        if (r.phase === "implement") {
+          // A shutdown may lose the last usage report or rotate the account cache.
+          r.usageUnknown = true;
+          await this.captureAuth(r).catch(() => {});
+        }
+        r.state = "interrupted";
+        r.error = "coding_execution_interrupted";
+        r.recoveryId = randomUUID();
+        await this.save(r);
+        if (r.phase === "implement") await this.removeAuthVolume(r);
+        return;
+      }
       if (
         r.phase === "implement" &&
         r.input.payload.authMode === "device_code"
@@ -901,7 +966,18 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
       if (state.ExitCode !== 0 && r.phase === "implement")
         await this.removeAuthVolume(r);
       await this.save(r);
-    } catch {
+    } catch (error) {
+      if (
+        r.recoveryPending &&
+        error instanceof Fault &&
+        error.code === "coding_container_not_found"
+      ) {
+        r.recoveryPending = false;
+        r.state = "unknown";
+        r.error = "coding_outcome_unknown";
+        await this.save(r);
+        return;
+      }
       // Reconcile engine outages on the next poll. Container names prevent duplicate starts.
       throw new Fault("coding_runner_unavailable", 503);
     }
@@ -983,8 +1059,111 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
       }
     });
   }
+  async resumeInterrupted(
+    workspaceId: string,
+    taskId: string,
+    input: LocalRecovery,
+  ) {
+    return this.serial(async () => {
+      const request = localRecovery.parse(input);
+      const r = this.get(workspaceId, taskId);
+      requireThat(
+        !r.cleaned &&
+          (!r.finishedAt ||
+            Date.now() <=
+              r.finishedAt +
+                this.settings.CODEX_RUNNER_RETENTION_HOURS * 3600000),
+        "coding_checkpoint_expired",
+        409,
+      );
+      requireThat(
+        r.input.recoverOnInterruption &&
+          r.phase !== "publish" &&
+          r.recoveryId === request.recoveryId,
+        "coding_recovery_conflict",
+        409,
+      );
+      if (r.state !== "interrupted") {
+        requireThat(
+          r.resumedRecoveryId === request.recoveryId &&
+            [
+              "preparing",
+              "running",
+              "ready",
+              "succeeded",
+              "auth_required",
+            ].includes(r.state),
+          "coding_task_not_ready",
+          409,
+        );
+        return;
+      }
+      requireThat(
+        this.hasCapacity() &&
+          this.canRunTask(r.input) &&
+          (r.phase !== "implement" || this.canImplement(r)),
+        "coding_runner_busy",
+        429,
+      );
+      requireThat(
+        r.phase !== "prepare" || request.readToken,
+        "coding_job_invalid",
+        409,
+      );
+      if (r.input.payload.authMode === "device_code") {
+        await this.device.read(workspaceId);
+      } else {
+        requireThat(
+          request.providerApiKey || this.settings.CODEX_PROVIDER_API_KEY,
+          "coding_provider_not_configured",
+          409,
+        );
+      }
+      r.state = r.phase === "prepare" ? "preparing" : "running";
+      r.finishedAt = undefined;
+      r.error = undefined;
+      r.checkPassed = false;
+      r.resumedRecoveryId = request.recoveryId;
+      r.recoveryPending = true;
+      r.proxyToken = randomBytes(32).toString("hex");
+      r.providerApiKey =
+        r.input.payload.authMode === "provider_key" && request.providerApiKey
+          ? encrypt(
+              hash(this.settings.CODEX_RUNNER_TOKEN),
+              `coding-provider:${r.key}`,
+              request.providerApiKey,
+            )
+          : undefined;
+      await this.save(r); // Reserve this recovery before removing or starting any container.
+      try {
+        await this.engine.remove([`${r.key}-${r.phase}`]);
+        if (r.phase === "implement") await this.removeAuthVolume(r);
+        await this.launch(
+          r,
+          r.phase,
+          r.phase === "prepare"
+            ? { GITHUB_TOKEN: request.readToken ?? "" }
+            : r.phase === "implement" &&
+                r.input.payload.authMode === "provider_key"
+              ? { CODEX_TASK_TOKEN: r.proxyToken }
+              : {},
+        );
+        r.recoveryPending = false;
+        await this.save(r);
+      } catch {
+        // Inspect this exact reservation after a lost ACK; never launch it twice.
+        r.error = "coding_outcome_unknown";
+        await this.save(r);
+        throw new Fault("coding_outcome_unknown", 503);
+      }
+    });
+  }
   private async stop(r: Record) {
-    if (terminal(r.state) && r.state !== "auth_required") return;
+    if (
+      terminal(r.state) &&
+      !["auth_required", "interrupted"].includes(r.state)
+    )
+      return;
     if (
       r.state !== "auth_required" &&
       r.phase === "implement" &&
@@ -1070,7 +1249,13 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
         if (
           r.input.workspaceId === workspaceId &&
           r.input.payload.authMode === "device_code" &&
-          ["preparing", "running", "ready", "auth_required"].includes(r.state)
+          [
+            "preparing",
+            "running",
+            "ready",
+            "auth_required",
+            "interrupted",
+          ].includes(r.state)
         )
           await this.stop(r);
       return this.device.logout(workspaceId);
@@ -1143,7 +1328,7 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
           ])
             await rm(this.path(r, suffix), { force: true });
           // Keep a small tombstone so delayed duplicate requests cannot replay the task.
-          if (r.state === "auth_required") {
+          if (["auth_required", "interrupted"].includes(r.state)) {
             r.state = "failed";
             r.error = "coding_checkpoint_expired";
           }

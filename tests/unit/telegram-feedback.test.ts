@@ -29,6 +29,33 @@ function task() {
   };
 }
 
+test("interruption recovery edits the confirmed progress message and deduplicates repeated observations", () => {
+  const w = workspace(),
+    t = task();
+  recordProgress(w, t, "development", "implement", "1", 10000);
+  const initial = w.deliveries[0];
+  if (!initial) throw Error("Missing progress delivery");
+  initial.state = "sent";
+  recordProgress(w, t, "development", "recover", "recovery-1", 21000);
+  const recovery = w.deliveries.at(-1);
+  expect(recovery?.text).toContain("restoring its saved workspace");
+  expect(recovery?.editOf).toBe(initial.id);
+  expect(recovery?.buttons?.flat().map((b) => b.text)).toEqual([
+    "Status",
+    "Cancel",
+  ]);
+  const count = w.deliveries.length;
+  recordProgress(w, t, "development", "recover", "recovery-1", 31000);
+  expect(w.deliveries).toHaveLength(count);
+  if (!t.progress) throw Error("Missing recovery progress");
+  expect(
+    codingStatusLabel({
+      state: "working",
+      progress: { ...t.progress, observedAt: Date.now() },
+    }),
+  ).toBe("Restoring interrupted task");
+});
+
 test("progress persists deduplication and coalesces rapid phases without a false milestone", () => {
   const w = workspace(),
     t = task();

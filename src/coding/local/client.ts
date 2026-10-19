@@ -8,6 +8,7 @@ import {
 import {
   deviceAuthStatus,
   type LocalDeviceAuth,
+  type LocalRecovery,
   type LocalRunner,
   type LocalStart,
   localStatus,
@@ -70,6 +71,8 @@ export class LocalRunnerClient
           error.error === "coding_device_auth_required" ||
           error.error === "coding_device_mode_required" ||
           error.error === "coding_checkpoint_expired" ||
+          error.error === "coding_recovery_conflict" ||
+          error.error === "coding_task_not_ready" ||
           error.error === "coding_token_limit" ||
           error.error === "coding_message_conflict" ||
           error.error === "coding_message_closed"
@@ -128,6 +131,16 @@ export class LocalRunnerClient
   }
   async resumeAuth(workspaceId: string, taskId: string) {
     await this.request(`${this.path(workspaceId, taskId)}/resume-auth`, {});
+  }
+  async resumeInterrupted(
+    workspaceId: string,
+    taskId: string,
+    input: LocalRecovery,
+  ) {
+    await this.request(
+      `${this.path(workspaceId, taskId)}/resume-interrupted`,
+      input,
+    );
   }
   async erase(workspaceId: string, taskId: string) {
     await this.request(`${this.path(workspaceId, taskId)}/erase`, {});

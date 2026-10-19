@@ -22,7 +22,15 @@ export class Docker implements ContainerEngine {
           maxBuffer: 8 * 1024 * 1024,
         },
       );
-    } catch {
+    } catch (error) {
+      if (
+        args[0] === "inspect" &&
+        error &&
+        typeof error === "object" &&
+        "stderr" in error &&
+        /No such (?:object|container):/.test(String(error.stderr))
+      )
+        throw new Fault("coding_container_not_found", 404);
       throw new Fault("coding_container_failed", 503);
     }
   }

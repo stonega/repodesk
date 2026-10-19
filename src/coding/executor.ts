@@ -234,6 +234,7 @@ export class DevelopmentExecutor {
     });
     if (!task) return;
     let dispatched = false;
+    let recovering = false;
     try {
       requireThat(this.runner, "coding_runner_not_configured", 409);
       if (task.contentRemoved) {
@@ -483,6 +484,7 @@ export class DevelopmentExecutor {
           providerApiKey,
           ...sharedProvider,
           development: reserved.run,
+          recoverOnInterruption: true,
         });
         await this.update(task, lease, async (_w, sql, t) => {
           await sql.query(
@@ -499,6 +501,11 @@ export class DevelopmentExecutor {
         task,
         task.attemptId,
       );
+      if (status.state === "interrupted") {
+        recovering = true;
+        await this.resumeInterrupted(task, lease, status);
+        return;
+      }
       const progress = status.conversation?.progress;
       if (progress)
         await this.update(
@@ -796,6 +803,23 @@ export class DevelopmentExecutor {
         return;
       }
       if (
+        recovering &&
+        [
+          "coding_runner_busy",
+          "coding_runner_unavailable",
+          "coding_runner_request_failed",
+          "coding_outcome_unknown",
+        ].includes(code)
+      ) {
+        await this.update(task, lease, async (w, _sql, t) => {
+          if (code !== "coding_runner_busy") {
+            markRunnerUnavailable(t);
+            clearProgress(w, "development", t.id);
+          }
+        });
+        return;
+      }
+      if (
         task.state === "auth_required" &&
         [
           "coding_runner_busy",
@@ -944,6 +968,100 @@ export class DevelopmentExecutor {
       },
       release,
     );
+  }
+  private async resumeInterrupted(
+    task: DevelopmentTask,
+    lease: string,
+    status: LocalStatus,
+  ) {
+    requireThat(
+      this.runner?.resumeInterrupted &&
+        task.attemptId &&
+        task.state !== "publishing" &&
+        status.phase !== "publish" &&
+        status.recoveryId,
+      "coding_recovery_conflict",
+      409,
+    );
+    const { token } = await this.token(task, "contents");
+    const snapshot = await this.store.read(task.workspaceId);
+    const provider =
+      task.payload.authMode === "provider_key"
+        ? await new ModelProviders(this.store, this.key ?? "").runner(
+            snapshot,
+            snapshot.coding?.settings.model,
+            task.runnerModel,
+          )
+        : {};
+    const providerApiKey =
+      provider.providerApiKey ??
+      (snapshot.coding?.providerApiKey
+        ? decrypt(
+            this.key ?? "",
+            `coding-provider:${task.workspaceId}`,
+            snapshot.coding.providerApiKey,
+          )
+        : undefined);
+    if (task.payload.authMode === "device_code")
+      requireThat(
+        await this.deviceConnected(task.workspaceId),
+        "coding_device_auth_required",
+        409,
+      );
+    const recoveryId = status.recoveryId;
+    const authorized = await this.update(
+      task,
+      lease,
+      async (w, sql, t) => {
+        await this.allowed(w, sql, t);
+        requireThat(
+          t.attemptId === task.attemptId &&
+            !t.cancelRequested &&
+            Date.parse(t.leaseUntil ?? "") > Date.now(),
+          "coding_task_stopped",
+          409,
+        );
+        if (task.runnerModel)
+          await new ModelProviders(this.store, this.key ?? "").modelKey(
+            w.operatorId,
+            task.runnerModel.id,
+            task.runnerModel.version,
+          );
+        recordProgress(w, t, "development", "recover", recoveryId);
+        await sql.query(
+          "INSERT INTO coding_task_events(workspace_id,task_id,id,data) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING",
+          [
+            w.id,
+            t.id,
+            `recovery:${status.recoveryId}`,
+            JSON.stringify({ phase: status.phase, state: "requested" }),
+          ],
+        );
+        return true;
+      },
+      false,
+    );
+    if (!authorized) return;
+    await this.runner.resumeInterrupted(task.workspaceId, task.attemptId, {
+      recoveryId: status.recoveryId,
+      providerApiKey:
+        task.payload.authMode === "provider_key" ? providerApiKey : undefined,
+      readToken: status.phase === "prepare" ? token : undefined,
+    });
+    await this.update(task, lease, async (w, sql, t) => {
+      await this.allowed(w, sql, t);
+      if (t.state === "auth_required") {
+        t.authWaitMs =
+          (t.authWaitMs ?? 0) +
+          Math.max(
+            0,
+            Date.now() - Date.parse(t.authPausedAt ?? new Date().toISOString()),
+          );
+        t.authPausedAt = undefined;
+      }
+      t.state = "working";
+      t.error = undefined;
+    });
   }
   private async ready(
     task: DevelopmentTask,

@@ -20,14 +20,24 @@ export const localStart = z
     modelProvider: runtimeProviderSchema.optional(),
     providerApiKey: z.string().trim().min(1).max(8192).optional(),
     readToken: z.string().min(1).max(8192),
+    recoverOnInterruption: z.literal(true).optional(),
   })
   .strict();
 export type LocalStart = z.infer<typeof localStart>;
+export const localRecovery = z
+  .object({
+    recoveryId: z.uuid(),
+    providerApiKey: z.string().trim().min(1).max(8192).optional(),
+    readToken: z.string().min(1).max(8192).optional(),
+  })
+  .strict();
+export type LocalRecovery = z.infer<typeof localRecovery>;
 export const localStatus = z.object({
   transcript: transcriptPage.optional(),
   conversation: taskConversation.optional(),
   state: z.enum([
     "auth_required",
+    "interrupted",
     "preparing",
     "running",
     "ready",
@@ -56,6 +66,7 @@ export const localStatus = z.object({
   checkPassed: z.boolean().optional(),
   hasChanges: z.boolean().optional(),
   repairCount: z.number().int().nonnegative().optional(),
+  recoveryId: z.uuid().optional(),
   prUrl: z.string().url().optional(),
   error: z
     .string()
@@ -92,6 +103,11 @@ export interface LocalRunner {
   erase?(workspaceId: string, taskId: string): Promise<void>;
   start(input: LocalStart): Promise<void>;
   resumeAuth?(workspaceId: string, taskId: string): Promise<void>;
+  resumeInterrupted?(
+    workspaceId: string,
+    taskId: string,
+    input: LocalRecovery,
+  ): Promise<void>;
   status(
     workspaceId: string,
     taskId: string,

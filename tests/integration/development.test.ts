@@ -49,6 +49,7 @@ import { GitHubApps } from "../../src/github/registry.ts";
 import { DeliveryWorker } from "../../src/jobs/delivery.ts";
 import { Executor } from "../../src/jobs/execute.ts";
 import { taskReference } from "../../src/miniapp/auth.ts";
+import { encrypt } from "../../src/setup/credentials.ts";
 import type { SetupService } from "../../src/setup/service.ts";
 import { TelegramError } from "../../src/telegram/client.ts";
 import { recordProgress } from "../../src/telegram/feedback.ts";
@@ -2489,6 +2490,162 @@ const url = process.env.TEST_DATABASE_URL;
     expect(completed.state).toBe("queued");
     expect(completed.tokens).toBe(30);
     expect(completed.activeMs).toBeLessThan(5000);
+  });
+  test("interruption recovery refreshes credentials and retains one attempt across every execution phase", async () => {
+    for (const phase of ["prepare", "setup", "implement", "check"] as const) {
+      const f = await fixture();
+      await f.tick();
+      expect(f.starts[0]?.recoverOnInterruption).toBe(true);
+      const attemptId = present((await f.read()).attemptId);
+      await store.change(f.w.id, (w) => {
+        present(w.coding).providerApiKey = encrypt(
+          "ab".repeat(32),
+          `coding-provider:${w.id}`,
+          "replacement-provider-key",
+        );
+      });
+      const resumes: unknown[] = [];
+      f.runner.resumeInterrupted = async (workspaceId, id, request) => {
+        resumes.push({ workspaceId, id, ...request });
+      };
+      const recoveryId = randomUUID();
+      const resumed = await f.tick({
+        state: "interrupted",
+        phase,
+        recoveryId,
+        error: "coding_execution_interrupted",
+      });
+      expect(resumed.state).toBe("working");
+      expect(resumed.attemptId).toBe(attemptId);
+      expect(resumed.attempts).toBe(1);
+      expect(resumed.progress?.stage).toBe("recover");
+      expect(resumes).toEqual([
+        {
+          workspaceId: f.w.id,
+          id: attemptId,
+          recoveryId,
+          providerApiKey: "replacement-provider-key",
+          readToken:
+            phase === "prepare" ? "ghs_fixture_installation_secret" : undefined,
+        },
+      ]);
+      expect(f.starts).toHaveLength(1);
+      expect(f.publications).toHaveLength(0);
+      expect(f.cancels).toHaveLength(0);
+      const events = await store.pool.query(
+        "SELECT id FROM coding_task_events WHERE workspace_id=$1 AND task_id=$2 AND id LIKE 'recovery:%'",
+        [f.w.id, f.task.id],
+      );
+      expect(events.rows).toEqual([{ id: `recovery:${recoveryId}` }]);
+    }
+  });
+  test("Stop, source expiry and permission loss before or during recovery deny resumed code", async () => {
+    for (const boundary of ["stop", "source", "member", "token-race"]) {
+      const f = await fixture();
+      await f.tick();
+      let resumes = 0;
+      f.runner.resumeInterrupted = async () => {
+        resumes++;
+      };
+      const revoke = () =>
+        store.change(f.w.id, async (w, sql) => {
+          if (boundary === "stop")
+            await cancelDevelopment(sql, w, "101", f.task.id);
+          else if (boundary === "source")
+            present(w.messages.find((m) => m.id === f.source.id)).expiresAt =
+              new Date(0).toISOString();
+          else present(w.members.find((m) => m.id === "101")).active = false;
+        });
+      if (boundary === "token-race") f.onToken(revoke);
+      else await revoke();
+      await f.tick({
+        state: "interrupted",
+        phase: "implement",
+        recoveryId: randomUUID(),
+      });
+      expect(resumes).toBe(0);
+      expect(f.cancels).toHaveLength(1);
+      expect(f.starts).toHaveLength(1);
+    }
+  });
+  test("busy and uncertain recovery responses retain the attempt without cancelling or starting new work", async () => {
+    for (const code of [
+      "coding_runner_busy",
+      "coding_runner_unavailable",
+      "coding_outcome_unknown",
+    ]) {
+      const f = await fixture();
+      await f.tick();
+      const attempt = present((await f.read()).attemptId);
+      const ids: string[] = [];
+      f.runner.resumeInterrupted = async (_workspace, _id, request) => {
+        ids.push(request.recoveryId);
+        throw new Fault(code, 503);
+      };
+      const recoveryId = randomUUID();
+      const pending = await f.tick({
+        state: "interrupted",
+        phase: "implement",
+        recoveryId,
+      });
+      expect(pending.state).toBe("working");
+      expect(pending.attemptId).toBe(attempt);
+      expect(f.cancels).toHaveLength(0);
+      expect(
+        (await f.tick({ state: "running", phase: "implement" })).state,
+      ).toBe("working");
+      expect(ids).toEqual([recoveryId]);
+      expect(f.starts).toHaveLength(1);
+    }
+  });
+  test("interrupted account tasks wait for sign-in and resume the same attempt after reconnect", async () => {
+    const f = await fixture();
+    const device = await configureDevice(f);
+    await f.tick();
+    const attempt = present((await f.read()).attemptId);
+    device.connect(false);
+    let resumes = 0;
+    f.runner.resumeInterrupted = async (_workspace, _attempt, request) => {
+      expect(request.providerApiKey).toBeUndefined();
+      resumes++;
+    };
+    const status = {
+      state: "interrupted" as const,
+      phase: "implement" as const,
+      recoveryId: randomUUID(),
+    };
+    expect((await f.tick(status)).state).toBe("auth_required");
+    expect(resumes).toBe(0);
+    device.connect(true);
+    expect((await f.tick(status)).state).toBe("working");
+    expect((await f.read()).attemptId).toBe(attempt);
+    expect(resumes).toBe(1);
+    expect(f.starts).toHaveLength(1);
+  });
+  test("publication is never replayed through the interruption recovery path", async () => {
+    const f = await fixture();
+    await f.tick();
+    await store.change(f.w.id, async (_w, sql) => {
+      const t = await taskGet(sql, f.w.id, f.task.id);
+      t.state = "publishing";
+      await taskSave(sql, t);
+    });
+    let resumes = 0;
+    f.runner.resumeInterrupted = async () => {
+      resumes++;
+    };
+    expect(
+      (
+        await f.tick({
+          state: "interrupted",
+          phase: "publish",
+          recoveryId: randomUUID(),
+        })
+      ).state,
+    ).toBe("unknown");
+    expect(resumes).toBe(0);
+    expect(f.publications).toHaveLength(0);
+    expect(f.cancels).toHaveLength(0);
   });
   test("Stop and permission revocation cancel an auth-paused runner before reconnect", async () => {
     for (const revoke of [false, true]) {

@@ -20,6 +20,7 @@ export const taskState = z.object({
   Running: z.boolean(),
   Status: z.string(),
   ExitCode: z.number().int(),
+  OOMKilled: z.boolean().optional(),
 });
 export type TaskState = z.infer<typeof taskState>;
 

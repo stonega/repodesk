@@ -79,6 +79,24 @@ Interpret the states separately:
   An operator-authorized live VPS retest on 0.1.21 completed the same wallshader
   request with 694350 reported tokens and passing repository checks; this workload
   would exceed the removed 200000-token guard.
+- `coding_execution_failed` can also follow an externally terminated implementation
+  container without a failure marker. Inspect its phase, exit code, `OOMKilled`,
+  host shutdown journal and retained work before interpreting the generic message
+  as a repository test failure. The 2026-10-18 landing task exited 143 during a VPS
+  reboot after earlier browser problems; its four-file diff survived, but no final
+  result, independent verification or publication was recorded. Follow-up host
+  logs show a power-key event and power-off; Docker and persistent services did
+  restart after the next boot. Task containers use `--restart=no`; the incident's
+  runner build did not resume an externally terminated implementation. The prior activity
+  gap and the actor behind the power event remain unexplained. See the
+  [reboot incident](../../postmortem/2026-10-18-codex-task-interrupted-by-vps-reboot.md).
+- `coding_execution_interrupted` on a new opted-in attempt means the runner has
+  confirmed a job signal or non-OOM host interruption and retained its workspace.
+  The application displays recovery, revalidates current access and reacquires
+  credentials before resuming the same attempt. Busy slots, temporary access
+  outages and account sign-in can delay recovery. Check the original task rather
+  than creating duplicate work. Ordinary failures, old terminal records, expired
+  work and uncertain publication are not replayed. See [runner recovery](codex-runner.md#lifecycle-and-recovery).
 - `coding_base_branch_missing` means Git reported that the configured base branch
   does not exist during preparation. Confirm the saved branch in **Plugins →
   Codex → Repositories** and choose an existing intended branch before a new request.

@@ -50,6 +50,7 @@ const developmentIds = [
   randomUUID(),
   randomUUID(),
   randomUUID(),
+  randomUUID(),
 ] as const;
 const developmentKeys = developmentIds.map((id) => taskKey(workspaceId, id));
 const phases = ["prepare", "setup", "implement", "check", "export", "publish"];
@@ -151,6 +152,16 @@ if(process.argv[2]==='app-server') {
    if(media && (r.params.input.filter(i=>i.type==='image').length!==media.images.length || !r.params.input[0].text.includes(media.prompt) || r.params.input.filter(i=>i.type==='image').some((i,n)=>i.url!=='data:'+media.images[n].mimeType+';base64,'+media.images[n].data)))process.exit(9);
    const text=r.params.input[0].text; const intake=text.includes('Mode: intake.'); const answer=text.includes('"kind":"answer"');
    const question=!intake&&text.includes('Question fixture')&&!answer;
+   if(text.includes('Interruption fixture')) {
+    if(!fs.existsSync('/task/interrupted-once')) {
+     fs.writeFileSync('/task/repo/README.md','retained-partial\\n');
+     fs.writeFileSync('/task/interrupted-once','yes');
+     send({id:r.id,result:{turn:{id:'smoke-turn'}}});
+     send({method:'turn/started',params:{threadId:'smoke-thread',turn:{id:'smoke-turn'}}});
+     fs.writeFileSync('/task/interruption-ready','yes');return;
+    }
+    if(fs.readFileSync('/task/repo/README.md','utf8')!=='retained-partial\\n')process.exit(17);
+   }
    if(text.includes('Auth pause fixture')&&!fs.existsSync('/task/auth-denied-once')) {
     fs.writeFileSync('/task/repo/README.md','auth-partial\\n');fs.writeFileSync('/task/auth-denied-once','yes');
     send({id:r.id,result:{turn:{id:'smoke-turn'}}});send({method:'turn/completed',params:{threadId:'smoke-thread',turn:{id:'smoke-turn',status:'failed',error:{codexErrorInfo:'unauthorized'}}}});return;
@@ -593,6 +604,77 @@ process.exit(16);
     }
     throw Error(`Continuous fixture timed out: ${JSON.stringify(last)}`);
   };
+  const interruptionTaskId = developmentIds[10];
+  const interruptionKey = taskKey(workspaceId, interruptionTaskId);
+  await request("/tasks", {
+    ...input,
+    taskId: interruptionTaskId,
+    recoverOnInterruption: true,
+    development: {
+      ...input.development,
+      taskId: interruptionTaskId,
+      context: "Interruption fixture",
+    },
+  });
+  for (let attempt = 0; ; attempt++) {
+    const status = (await request(
+      `/tasks/${workspaceId}/${interruptionTaskId}`,
+    )) as LocalStatus;
+    if (status.phase === "implement" && status.state === "running") {
+      const ready = await engine([
+        "exec",
+        `${interruptionKey}-implement`,
+        "test",
+        "-f",
+        "/task/interruption-ready",
+      ])
+        .then(() => true)
+        .catch(() => false);
+      if (ready) break;
+    }
+    if (attempt > 80) throw Error("Interruption fixture did not start");
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  await engine(["kill", "--signal=TERM", `${interruptionKey}-implement`]);
+  for (let attempt = 0; ; attempt++) {
+    if (
+      (await engine([
+        "inspect",
+        "--format",
+        "{{.State.Running}}",
+        `${interruptionKey}-implement`,
+      ])) === "false"
+    )
+      break;
+    if (attempt > 40) throw Error("Interrupted job did not stop");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  await restartSupervisor();
+  const interrupted = await waitFor(interruptionTaskId, "interrupted");
+  if (
+    !interrupted.recoveryId ||
+    interrupted.error !== "coding_execution_interrupted"
+  )
+    throw Error("Infrastructure interruption was not preserved");
+  const resume = {
+    recoveryId: interrupted.recoveryId,
+    providerApiKey: "fresh-smoke-recovery-key",
+  };
+  await request(
+    `/tasks/${workspaceId}/${interruptionTaskId}/resume-interrupted`,
+    resume,
+  );
+  await restartSupervisor();
+  await request(
+    `/tasks/${workspaceId}/${interruptionTaskId}/resume-interrupted`,
+    resume,
+  );
+  const recoveredInterruption = await waitFor(interruptionTaskId, "ready");
+  if (!recoveredInterruption.checkPassed || !recoveredInterruption.usageUnknown)
+    throw Error(
+      "Recovered work did not pass independent checks with honest usage",
+    );
+  await request(`/tasks/${workspaceId}/${interruptionTaskId}/cancel`, {});
   const conversationTaskId = developmentIds[9];
   await request("/tasks", {
     ...input,

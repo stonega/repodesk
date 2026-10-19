@@ -35,6 +35,10 @@ starts the supervisor, and waits for its engine, task-image and network readines
 before stopping application writers. Existing Docker databases and the Compose
 project remain in place; no database migration is needed.
 The supervisor restarts automatically after a host restart.
+Individual task containers use `--restart=no`. If host shutdown terminates an
+opted-in continuous coding attempt, the supervisor can record an interruption
+and wait for application-authorized recovery of the same attempt and work volume.
+Docker itself never restarts a repository job independently of that authorization.
 
 The first release generates a private management/encryption token at
 `secrets/codex-runner-token` (mode 600). Later releases reuse it and the
@@ -296,6 +300,41 @@ Docker jobs have no application deadline or container watchdog.
 Keep the supervisor running for cancellation, reconciliation and cleanup.
 A restart observes existing containers by their
 deterministic names, without launching duplicate work.
+Surviving containers are adopted without another start. New continuous coding
+attempts also opt into recovery of confirmed infrastructure interruptions. A
+generation-bound SIGTERM marker, or a changed Docker host boot ID with a confirmed
+non-OOM signal exit, can put a non-publication phase into `interrupted`. Ordinary
+failures, failure markers, OOM, cancellation and uncertain publication do not
+enter that recovery path.
+
+The application rechecks the task lease, actors, retained sources, workspace,
+bot, repository and live GitHub access before its private
+`POST /tasks/:workspace/:task/resume-interrupted` request. The request binds a
+durable recovery ID and supplies current model credentials, plus a fresh checkout
+token only when preparation must restart. Shared providers retain their pinned
+identity/version; account tasks reacquire the current sealed credential generation.
+Waiting releases capacity and follows checkpoint retention. Sign-in and temporary
+runner/access outages keep the same attempt pending.
+
+Recovery retains the work volume, authenticated requirements, base commit and
+frozen verification plan. Only a partial preparation clone is discarded before
+preparation reruns; later phases keep their partial code and environment. Codex
+is told to inspect and preserve existing changes, reconstructing conversation
+context when its session is gone. All independent checks still run before
+publication. Missing final usage from an interrupted model turn remains unknown.
+
+Recovery IDs and container names prevent duplicate launches after retries or a
+lost acknowledgement. A running recovered container is adopted after supervisor
+restart. A reservation with only a created/missing container is reported unknown
+for inspection, rather than blindly starting uncertain work. Publish containers
+retain their existing unknown-outcome and read-only reconciliation rules.
+
+The application reports **Restoring interrupted task** and reuses the existing
+Telegram progress message and Stop controls. Old terminal failures and attempts
+that lack recovery opt-in/evidence are not retroactively restarted. Separate
+Review Bot and factual-question executions retain their existing recovery rules.
+See the [incident](../../postmortem/2026-10-18-codex-task-interrupted-by-vps-reboot.md)
+and [local recovery fixture](../../examples/codex-interruption.md).
 
 For an **unknown** outcome, inspect the matching task branch and PR before
 starting another request. A reserved container with an uncertain start is reconciled

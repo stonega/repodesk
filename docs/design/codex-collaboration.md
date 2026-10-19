@@ -216,6 +216,13 @@ continue to apply to task content and runner resources.
 
 ## Current implementation
 
+Infrastructure interruption recovery, 2026-10-19: new continuous coding attempts
+can retain and resume their workspace after a confirmed non-publication job
+interruption. The application rechecks current authority and refreshes credentials;
+the same attempt and frozen independent verification plan remain bound. Ordinary
+failures, OOM, cancelled or expired work and uncertain publication do not acquire
+automatic replay. Recovery updates the task's existing progress message.
+
 All Codex tasks use the durable continuous task/input/grant model and native
 app-server conversation adapter. `start_development_task` receives original user
 requirements, `send_development_input` continues the same task/PR, and factual

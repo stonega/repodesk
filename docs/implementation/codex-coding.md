@@ -63,6 +63,14 @@ the same recovery steps. `/github connect` remains a supported alias.
 
 ## Continuous collaboration
 
+New coding attempts can recover confirmed infrastructure interruptions in
+preparation, setup, implementation and checks. The application revalidates
+authorization and supplies fresh credentials before resuming the same attempt
+and retained workspace. The fixed check plan remains enforced. Routine recovery
+updates the existing progress message; Stop remains available. Publication is
+never replayed through this path, and historical failures are not restarted.
+See [recovery evidence and boundaries](codex-runner.md#lifecycle-and-recovery).
+
 A verified GitHub collaborator's clear instruction can authorize a task.
 Verified implementations automatically publish PRs ready for review; no
 publication checkbox or separate PR request is required. Saved publication

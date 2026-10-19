@@ -87,6 +87,18 @@ async function fixture(page: Page, failed = false) {
   const cancellations: string[] = [];
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === "/api/admin/operator/coding-runtime") {
+      await route.fulfill({
+        json: {
+          revision: 1,
+          selection: null,
+          engine: "docker",
+          environmentDefault: "docker",
+          retainedTasks: 2,
+        },
+      });
+      return;
+    }
     if (path.startsWith(`${endpoint}/`) && path.endsWith("/cancel")) {
       expect(route.request().method()).toBe("POST");
       expect(route.request().postDataJSON()).toEqual({});
@@ -123,6 +135,49 @@ async function fixture(page: Page, failed = false) {
 }
 
 for (const width of [1280, 390]) {
+  test(`an interrupted task shows recovery and can still be stopped at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const f = await fixture(page);
+    const now = Date.now();
+    f.continuous.progress = {
+      key: "fixture:recover",
+      stage: "recover",
+      sequence: 2,
+      changedAt: now,
+      observedAt: now,
+    };
+    await page.reload();
+    const row = page
+      .getByRole("row")
+      .filter({ hasText: f.continuous.payload.title });
+    await expect(row).toContainText("Restoring interrupted task");
+    await expect(
+      page.getByText("The runtime request failed.", { exact: false }),
+    ).toHaveCount(0);
+    await expect(row).not.toContainText("Could not complete");
+    const stop = row.getByRole("button", {
+      name: `Stop coding task ${f.continuous.payload.title}`,
+    });
+    await expect(stop).toBeEnabled();
+    await page.getByRole("region", { name: "Coding tasks" }).screenshot({
+      path: test.info().outputPath("interruption-recovery.png"),
+    });
+    await stop.click();
+    const dialog = page.getByRole("dialog", { name: "Stop coding task?" });
+    await expect(dialog).toContainText(f.continuous.payload.title);
+    expect(f.cancellations).toEqual([]);
+    await dialog.getByRole("button", { name: "Stop", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(f.cancellations).toEqual([f.continuous.id]);
+    await expect(stop).toBeDisabled();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  });
   test(`saved permission failures distinguish automatic recovery from stopped work at ${width}px`, async ({
     page,
   }) => {

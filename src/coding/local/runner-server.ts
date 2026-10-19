@@ -6,7 +6,7 @@ import { Fault, requireThat } from "../../domain.ts";
 import { equal } from "../../setup/credentials.ts";
 import { taskMessage } from "../conversation.ts";
 import { runtimeSave } from "../runtime-config.ts";
-import { localStart } from "./protocol.ts";
+import { localRecovery, localStart } from "./protocol.ts";
 import { runnerSettings } from "./settings.ts";
 import { RunnerSupervisor } from "./supervisor.ts";
 
@@ -168,6 +168,14 @@ export function runnerApp(
     await supervisor.resumeAuth(
       z.uuid().parse(c.req.param("workspace")),
       z.uuid().parse(c.req.param("task")),
+    );
+    return c.json({ ok: true });
+  });
+  app.post("/tasks/:workspace/:task/resume-interrupted", async (c) => {
+    await supervisor.resumeInterrupted(
+      z.uuid().parse(c.req.param("workspace")),
+      z.uuid().parse(c.req.param("task")),
+      localRecovery.parse(await c.req.json()),
     );
     return c.json({ ok: true });
   });

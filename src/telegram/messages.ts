@@ -9,6 +9,8 @@ const stages: Record<string, string> = {
   implement: "I’m working on the changes.",
   check: "I’m running the checks now.",
   repair: "A check caught a problem. I’m working on the fix.",
+  recover:
+    "The server interrupted your task. I’m restoring its saved workspace so it can continue.",
   publish: "The checks passed. I’m opening or updating your PR.",
 };
 export const stageMessage = (stage: string) =>
@@ -23,6 +25,7 @@ const ongoingStages: Record<string, string> = {
   check:
     "The checks are still running. I’ll share the result when they finish.",
   repair: "I’m still working on the failed check.",
+  recover: "Your saved work is retained. I’m still waiting to resume the task.",
   publish: "I’m waiting for confirmation from GitHub about your PR.",
 };
 export const ongoingStageMessage = (stage: string) =>
