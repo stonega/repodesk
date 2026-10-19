@@ -12,6 +12,7 @@ const backend = await Bun.build({
     "scripts/evaluate.ts",
     "scripts/runtime-contract.ts",
     "scripts/register-webhook.ts",
+    "scripts/code-truth-token.ts",
   ],
   outdir: "dist",
   target: "node",

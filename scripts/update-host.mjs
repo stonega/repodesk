@@ -208,6 +208,7 @@ export async function installRelease(
     const image = `repodesk:release-${request.commit}`;
     const supervisor = `repodesk-codex-supervisor:release-${request.commit}`;
     const job = `repodesk-codex-job:release-${request.commit}`;
+    const codeTruth = `repodesk-code-truth:release-${request.commit}`;
     for (const [target, tag] of [
       ["app", image],
       ["codex-job", job],
@@ -225,6 +226,31 @@ export async function installRelease(
         source,
       ]);
     }
+    await requireUpdateSpace(config.root, readSpace);
+    await run("docker", [
+      "build",
+      "--platform",
+      "linux/amd64",
+      "-t",
+      codeTruth,
+      join(source, "services/code-truth"),
+    ]);
+    await run("docker", [
+      "run",
+      "--rm",
+      "--network",
+      "none",
+      "--read-only",
+      "--tmpfs",
+      "/tmp:rw,mode=1777",
+      "--cap-drop",
+      "ALL",
+      "--security-opt",
+      "no-new-privileges:true",
+      codeTruth,
+      "bun",
+      "scripts/smoke.ts",
+    ]);
     await run("docker", [
       "run",
       "--rm",
@@ -241,6 +267,7 @@ export async function installRelease(
       ["image-tag", image],
       ["codex-supervisor-tag", supervisor],
       ["codex-job-tag", job],
+      ["code-truth-tag", codeTruth],
     ]) {
       await writeFile(join(bundle, name), value, { mode: 0o600 });
       const id = await run(

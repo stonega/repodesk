@@ -70,6 +70,9 @@ export function createLocalService(options: {
     }
     next();
   });
+  app.get("/health/ready", (_req, res) => {
+    res.json({ status: "ok" });
+  });
   app.use(express.json({ limit: "64kb" }));
   const sync = (entry: Entry) => {
     if (entry.syncing) return;

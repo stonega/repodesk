@@ -6,7 +6,35 @@ Repository URLs and optional descriptions are editable independently per workspa
 internal IDs are generated automatically and indexing follows the default GitHub
 branch. No extension file registration is required.
 
-## Start the local service with Docker
+## Standard Docker deployment
+
+The base `compose.yaml` includes Code Truth. `docker compose up --build -d`
+builds and starts it, and configures the API and worker with its internal URL.
+A network-isolated, one-shot `code-truth-token` container runs the app image as
+root only to publish a random service token in the private `code_truth_auth`
+volume. It atomically preserves an existing token and fails on invalid saved
+credentials; the long-running Node/Bun containers mount this volume read-only.
+The initializer receives no database, model, GitHub or encryption credentials.
+
+The service has no published host port. Indexes remain in `code_truth_data`,
+including across upgrades from the former optional overlay. An idle service
+does not fetch repositories; enabled workspace use or an explicit index check
+configures/indexes the authorized repositories. Disabling a workspace plugin
+does not stop the shared service or delete another workspace's snapshots.
+
+Standard release updates build and smoke-test the service image alongside the
+app and Codex images, pin its ID in `release.env`, start it before the writers,
+and verify authenticated `/health/ready` requests from both app and worker before
+promoting the release. Existing host updaters must first be replaced with the
+current checked-in updater; an incomplete old bundle fails before cutover.
+See [updater installation](updates.md) and [release deployment](vps-deployment.md).
+
+## Custom and legacy service setup
+
+The following host-file token setup is optional. Preserve it for deployments
+already using `examples/code-truth.compose.yaml`; the overlay overrides the new
+automatic token mounts without replacing the saved host token. Direct Node
+deployments still need an explicitly configured service URL/token.
 
 From this repository root, install application and service dependencies for checks:
 
@@ -34,7 +62,7 @@ docker compose -f compose.yaml -f examples/code-truth.compose.yaml config --quie
 docker compose -f compose.yaml -f examples/code-truth.compose.yaml up --build -d
 ```
 
-To retain this service in subsequent plain `docker compose` commands, set
+To retain this host-file token override in subsequent plain `docker compose` commands, set
 `COMPOSE_FILE=compose.yaml:examples/code-truth.compose.yaml` in the local `.env`.
 Preserve the existing database password, encryption key, transport and origin.
 Keep token files readable by the service user and their parent directory private.
@@ -70,8 +98,9 @@ changes apply without a process restart.
    GitHub's current default branch, including after a default-branch change.
 4. Confirm the selected workspace in the sidebar. All eligible actors in this
    workspace receive access; other workspaces have independent repositories.
-5. Enable Code Truth and save. Settings can be saved before the local service is
-   running. Saving configuration does not contact GitHub or execute repository code.
+5. Enable Code Truth and save. Standard deployment already provides the service;
+   toggling the plugin changes workspace access, rather than deploying containers.
+   Saving configuration does not contact GitHub or execute repository code.
 6. Expand **Repository indexing status** and choose **Sync &
    check indexes**. Check again after indexing finishes. Each ready repository shows
    its branch, immutable commit SHA and indexing timestamp.

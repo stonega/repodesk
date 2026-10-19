@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 
 const exec = promisify(execFile);
 const releaseTag =
-  /^(repodesk|repodesk-codex-job|repodesk-codex-supervisor):release-([a-f0-9]{40})$/;
+  /^(repodesk|repodesk-codex-job|repodesk-codex-supervisor|repodesk-code-truth):release-([a-f0-9]{40})$/;
 const imageId = /^sha256:[a-f0-9]{64}$/;
 const imageFormat =
   '{"id":{{json .Id}},"created":{{json .Created}},"tags":{{json .RepoTags}}}';
@@ -72,11 +72,18 @@ export function planReleaseCleanup(
   );
   if (currentCommits.size !== 1) throw Error("current_release_invalid");
   // Keep two complete rollback sets in addition to the current release. Failed
-  // partial builds cannot displace a complete app/job/supervisor set.
+  // partial builds cannot displace a complete set for the current topology.
+  const required = new Set([
+    "repodesk",
+    "repodesk-codex-job",
+    "repodesk-codex-supervisor",
+    ...currentTags.map((tag) => releaseTag.exec(tag)[1]),
+  ]);
   const rollbacks = [...groups.values()]
     .filter(
       (group) =>
-        !currentCommits.has(group.commit) && group.repositories.size === 3,
+        !currentCommits.has(group.commit) &&
+        [...required].every((repository) => group.repositories.has(repository)),
     )
     .sort((a, b) => b.created - a.created || a.commit.localeCompare(b.commit))
     .slice(0, 2);
@@ -135,6 +142,13 @@ async function currentReleaseTags(root) {
   }
   // A half-written Codex bundle is not a trustworthy rollback anchor.
   if (tags.length === 2) throw Error("current_release_invalid");
+  try {
+    tags.push(
+      (await readFile(join(directory, "code-truth-tag"), "utf8")).trim(),
+    );
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
   return tags;
 }
 

@@ -8,7 +8,8 @@ runner registration, credentials, backups or release metadata.
 
 `scripts/cleanup-host.mjs` defaults to a dry run. In apply mode it removes only
 RepoDesk release tags older than 24 hours. It retains the current release plus
-the two newest complete app/job/supervisor image sets as rollback candidates.
+the two newest complete image sets for the current deployment topology as rollback
+candidates, including Code Truth when its image belongs to the current release.
 These candidates are complete local builds, not evidence that a previous
 deployment succeeded; verify schema compatibility before rollback. All images
 referenced by existing containers, including stopped task containers, remain.

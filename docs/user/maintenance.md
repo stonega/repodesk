@@ -10,7 +10,7 @@
 | `secrets/encryption-key` | 解密已保存的机器人、模型和连接凭据 |
 | `.env` 与部署配置 | 恢复同一数据库、地址、项目和服务拓扑 |
 | Codex runner 管理令牌和状态卷 | 账号认证及任务恢复，二者需匹配 |
-| Code Truth 数据卷 | 可选索引缓存，可在仓库 commit 仍可获取时重建 |
+| Code Truth 的 `code_truth_auth` 和 `code_truth_data` 卷 | 内部服务令牌与索引缓存；保留令牌，索引可在 commit 仍可获取时重建 |
 
 数据库备份与密钥分开保护，并保留加密的离机副本。只备份数据库不能恢复凭据；直接换密钥不会重新加密已有数据。
 
@@ -61,7 +61,7 @@ curl --fail http://localhost:3000/readyz
 docker build --target codex-job -t localhost/deepx-codex-job:local .
 ```
 
-如果使用自定义镜像名，构建对应配置的 tag。Code Truth 叠加文件也应保持选中。数据库迁移由 Compose 的 `migrate` 服务执行；失败时保持写入服务停止，检查原因后处理。
+如果使用自定义镜像名，构建对应配置的 tag。标准 Compose 已包含 Code Truth；旧部署若使用文件令牌叠加配置，应保留原叠加文件和令牌。数据库迁移由 Compose 的 `migrate` 服务执行；失败时保持写入服务停止，检查原因后处理。
 
 升级不会代替你注册 Telegram webhook、接受 GitHub 新权限或配置 BotFather。按发布说明完成这些操作。
 
@@ -69,11 +69,11 @@ docker build --target codex-job -t localhost/deepx-codex-job:local .
 
 登录后，版本旁出现更新箭头时可以查看新版本说明。查看说明不会安装更新；**Update now** 需要部署管理员明确操作，且宿主机已配置更新器。
 
-面板安装目前适用于专用 Linux x86_64 Docker VPS。自定义 Compose、可选 Code Truth 等服务不能直接假定由更新器接管，使用上面的手动升级方式。已有专用 VPS 更新器时，保持部署目录、项目名和状态卷不变。
+面板安装目前适用于专用 Linux x86_64 Docker VPS，包含标准 Code Truth 服务。自定义 Compose 服务使用上面的手动升级方式。已有专用 VPS 更新器时，保持部署目录、项目名和状态卷不变。
 
 ### 为专用 VPS 安装更新器
 
-仅在准备使用专用 VPS 更新方式时执行。它会管理基础应用和 Docker Codex runner，不负责保留自定义 Compose 叠加服务。已有自定义部署先规划迁移，不要直接让更新器覆盖它。
+仅在准备使用专用 VPS 更新方式时执行。它会管理基础应用、Code Truth 和 Docker Codex runner，不负责保留自定义 Compose 叠加服务。已有自定义部署先规划迁移，不要直接让更新器覆盖它。
 
 宿主机需要 Node 24、Git、Docker Engine、Compose v2（支持 `up --wait`）、Bash、gzip、sha256sum 和 flock。下面按部署目录 `/opt/repodesk`、Compose 项目名 `repodesk` 举例；实际值必须与已有运行栈一致，不能因安装更新器而随意改名。
 
@@ -98,6 +98,8 @@ docker compose up -d
 ```
 
 基础 Compose 将部署目录的 `updates/` 挂载给 app，与宿主机更新器共享队列。确认面板检测到更新器就绪，再安装已审阅的稳定发布。更新器会校验所选 commit 的 Verify 结果，并在宿主机构建镜像后切换服务。
+
+首次升级到标准部署内置 Code Truth 的版本时，先用该版本源码中的 `scripts/update-host.mjs` 和 `scripts/cleanup-host.mjs` 更新宿主机的两个文件，再执行 `sudo systemctl restart repodesk-updater`。确认没有正在执行的安装后再替换。旧更新器只构建三个镜像；新版切换脚本会在停止服务之前拒绝缺少 Code Truth 镜像的旧更新包。
 
 面板显示 queued/running/completed/failed。更新会等待安全检查点、备份、迁移并检查就绪，可能短暂不可用。失败先读日志并修复原因，再使用 **Retry update**；不要在结果未知时重复切换或删除数据卷。
 

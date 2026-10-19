@@ -29,6 +29,32 @@ const releases = [1, 2, 3, 4, 5, 6].flatMap((n) =>
 );
 const current = repositories.map((repository) => tag(5, repository));
 
+test("Code Truth release images remain part of complete rollback sets", () => {
+  const codeTruth = [1, 2, 3, 4, 5, 6].map((n) => ({
+    ...image(n),
+    id: `sha256:${(n * 10 + 3).toString(16).padStart(64, "0")}`,
+    tags: [tag(n, "repodesk-code-truth")],
+  }));
+  const plan = cleanup.planReleaseCleanup(
+    [
+      ...releases,
+      ...codeTruth.filter(
+        (value) => !value.tags.includes(tag(1, "repodesk-code-truth")),
+      ),
+    ],
+    [...current, tag(5, "repodesk-code-truth")],
+    [],
+    now,
+  );
+  const removed = plan.map((entry: { tag: string }) => entry.tag);
+  // Release 1 lacks its service image and cannot displace a complete rollback.
+  for (const n of [2, 3, 5]) {
+    expect(removed).not.toContain(tag(n));
+    expect(removed).not.toContain(tag(n, "repodesk-code-truth"));
+  }
+  expect(removed).toContain(tag(4, "repodesk-code-truth"));
+});
+
 test("cleanup retains current release even when older, two complete sets and every container reference", () => {
   const referenced = image(6, "repodesk-codex-job");
   const plan = cleanup.planReleaseCleanup(

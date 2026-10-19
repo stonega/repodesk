@@ -13,6 +13,7 @@
 !scripts/evaluate.ts
 !scripts/runtime-contract.ts
 !scripts/register-webhook.ts
+!scripts/code-truth-token.ts
 !migrations/
 !migrations/**
 

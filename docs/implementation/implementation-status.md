@@ -1,5 +1,35 @@
 # Implementation evidence
 
+## Code Truth in the standard deployment (2026-10-19)
+
+The base Compose stack now builds and starts the private Code Truth service and
+automatically connects both API and worker. A network-isolated one-shot app
+container atomically initializes a token in `code_truth_auth`; the long-running
+containers mount it read-only. Repeated/concurrent initialization preserves the
+token, invalid saved credentials stop startup, and `code_truth_data` retains
+existing indexes. The legacy host-file token overlay remains compatible.
+Workspace enablement controls repository indexing/tools, without deploying
+containers or granting the web app Docker access.
+
+The host updater builds and smoke-tests the fourth image, pins its immutable ID,
+starts Code Truth before the writers and checks authenticated readiness from
+both clients before promoting a release. Incomplete old updater bundles fail
+before stopping existing services; the first upgrade requires installing the
+current host updater. Cleanup retains Code Truth with complete rollback sets.
+CI now builds the service and runs offline real-index/MCP and Compose connection
+checks. User/operator setup and upgrade instructions were updated.
+
+Validation: Biome, strict application/service typechecks and the production build
+passed. **969 deterministic tests across 108 files passed** against disposable
+PostgreSQL. The verification pass also corrected an existing random invitation
+test whose attempted mutation could equal the original first character; no
+invitation runtime behavior changed. Both exact Docker images built; the Node runtime contract and offline
+real CodeGraph/MCP smoke passed. A disposable Compose stack verified automatic
+startup, API/worker authentication, retained token/index volumes after recreation,
+application readiness and the legacy host-file override. The fixture host's
+SELinux bind mounts required a test-only label override. Live VPS SSH timed out;
+no deployment, account connection, live GitHub/model call or Telegram send occurred.
+
 ## Admin self-check chat (2026-10-19)
 
 The authenticated admin panel now has a bottom-right self-check chat button for

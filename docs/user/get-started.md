@@ -60,7 +60,7 @@ docker compose ps
 curl --fail http://localhost:3000/readyz
 ```
 
-首次构建需要下载依赖。`migrate` 完成后退出是正常现象；`postgres`、`app` 和 `worker` 应持续运行。`/readyz` 还会检查 worker 就绪状态，启动后可稍等再试。
+首次构建需要下载依赖。`migrate` 和 `code-truth-token` 完成后退出是正常现象；`postgres`、`code-truth`、`app` 和 `worker` 应持续运行。Code Truth 的内部连接与令牌会自动配置，工作区启用插件后才会索引仓库。`/readyz` 还会检查 worker 就绪状态，启动后可稍等再试。
 
 默认只在宿主机 `127.0.0.1:3000` 提供面板，数据库没有公开端口。命令细节可参阅 [Docker Compose 官方文档](https://docs.docker.com/reference/cli/docker/compose/)。
 

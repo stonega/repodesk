@@ -1,3 +1,5 @@
+# Optional legacy host-file token override; standard compose.yaml includes the service.
+# Keep this overlay when preserving an existing host-mounted token.
 # Run from the repository root with compose.yaml as the first file.
 services:
   app:

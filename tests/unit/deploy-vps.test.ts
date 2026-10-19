@@ -26,6 +26,7 @@ case "$*" in
     case "$*" in
       *repodesk-codex-supervisor:*) echo "sha256:${"d".repeat(64)}" ;;
       *repodesk-codex-job:*) echo "sha256:${"e".repeat(64)}" ;;
+      *repodesk-code-truth:*) echo "sha256:${"f".repeat(64)}" ;;
       *) [[ "$*" = "image inspect --format {{.Id}} $DEPLOY_TEST_TAG" ]] || exit 43
          echo "$DEPLOY_TEST_IMAGE" ;;
     esac ;;
@@ -41,6 +42,7 @@ case "$*" in
     [[ "$DEPLOY_TEST_FAILURE" != checkpoint ]] || exit 42
     if [[ "$DEPLOY_TEST_FAILURE" = checkpoint-race* && "$count" = 2 ]]; then exit 42; fi ;;
   *"--wait-timeout 180 codex-runner"*) [[ "$DEPLOY_TEST_FAILURE" != runner ]] || exit 42 ;;
+  *"--wait-timeout 180 code-truth"*) [[ "$DEPLOY_TEST_FAILURE" != code-truth ]] || exit 42 ;;
   *"codex-release-config.mjs "*)
     CODEX_SUPERVISOR_IMAGE="sha256:${"d".repeat(64)}" CODEX_RUNNER_IMAGE="sha256:${"e".repeat(64)}" \
       node "$DEPLOY_TEST_ROOT/releases/123-1/codex-release-config.mjs" "$DEPLOY_TEST_ROOT" "$DEPLOY_TEST_ROOT/releases/123-1" fixture ;;
@@ -50,6 +52,9 @@ case "$*" in
     echo fake-custom-dump ;;
   *"pg_restore "*) cat > /dev/null ;;
   *"run --rm "*) [[ "$DEPLOY_TEST_FAILURE" != migration ]] || exit 42 ;;
+  *"/health/ready"*)
+    [[ "$DEPLOY_TEST_FAILURE" != code-truth-auth ]] || exit 42
+    [[ "$DEPLOY_TEST_FAILURE" != code-truth-worker-auth || "$*" != *"exec -T worker "* ]] || exit 42 ;;
   *"exec -T app "*)
     count=0
     [[ ! -f "$DEPLOY_TEST_READY_COUNT" ]] || count=$(cat "$DEPLOY_TEST_READY_COUNT")
@@ -92,6 +97,16 @@ function deploy(
       `${local && failure !== "local-image-changed" ? importedImageId : imageId}\n`,
     );
     writeFileSync(join(release, "image-tag"), `${imageTag}\n`);
+    if (failure !== "code-truth-artifact")
+      writeFileSync(
+        join(release, "code-truth-tag"),
+        `repodesk-code-truth:release-${"b".repeat(40)}\n`,
+      );
+    if (local)
+      writeFileSync(
+        join(release, "code-truth-id"),
+        `sha256:${(failure === "local-code-truth-changed" ? "0" : "f").repeat(64)}\n`,
+      );
     if (!local) {
       writeFileSync(
         join(release, "image-sha256"),
@@ -190,14 +205,20 @@ describe("VPS release cutover", () => {
     const result = deploy("", "x86_64", false, true, true);
     expect(result.exitCode).toBe(0);
     expect(result.current).toBe("123-1\n");
-    expect(result.releaseEnvironment).toBe(`APP_IMAGE=${importedImageId}\n`);
+    expect(result.releaseEnvironment).toBe(
+      `APP_IMAGE=${importedImageId}\nCODE_TRUTH_IMAGE=sha256:${"f".repeat(64)}\n`,
+    );
     expect(result.calls).not.toContain("image load");
     expect(result.calls).not.toContain("image save");
     expect(result.calls).toContain("pg_dump");
     expect(result.calls).toContain("--no-build --pull never");
   });
 
-  for (const failure of ["local-image-changed", "local-job-changed"]) {
+  for (const failure of [
+    "local-image-changed",
+    "local-job-changed",
+    "local-code-truth-changed",
+  ]) {
     test(`${failure} rejects a retagged local image before stopping writers`, () => {
       const result = deploy(failure, "x86_64", false, true, true);
       expect(result.exitCode).not.toBe(0);
@@ -211,7 +232,9 @@ describe("VPS release cutover", () => {
   test("pins the imported daemon's ID when the runner's ID is different", () => {
     const result = deploy();
     expect(result.exitCode).toBe(0);
-    expect(result.releaseEnvironment).toBe(`APP_IMAGE=${importedImageId}\n`);
+    expect(result.releaseEnvironment).toBe(
+      `APP_IMAGE=${importedImageId}\nCODE_TRUTH_IMAGE=sha256:${"f".repeat(64)}\n`,
+    );
     expect(result.calls).toContain(
       `image inspect --format {{.Id}} ${imageTag}`,
     );
@@ -222,7 +245,7 @@ describe("VPS release cutover", () => {
     const result = deploy("delayed-readiness");
     expect(result.exitCode).toBe(0);
     expect(result.current).toBe("123-1\n");
-    expect(result.calls.match(/exec -T app /g)?.length).toBe(3);
+    expect(result.calls.match(/exec -T app node -e fetch/g)?.length).toBe(3);
     expect(result.calls.match(/stop app worker/g)?.length).toBe(1);
     expect(result.stderr).toContain("Readiness HTTP 503");
     expect(result.stderr).toContain("Waiting for application readiness");
@@ -277,7 +300,9 @@ describe("VPS release cutover", () => {
           "run --rm --no-deps --pull never -T migrate\n",
         );
       if (failure === "readiness") {
-        expect(result.calls.match(/exec -T app /g)?.length).toBe(24);
+        expect(result.calls.match(/exec -T app node -e fetch/g)?.length).toBe(
+          24,
+        );
         expect(result.stderr).toContain("Readiness HTTP 503");
         expect(result.stderr).toContain(
           "did not succeed within the startup window",
@@ -376,3 +401,38 @@ test("runner startup failure preserves the prior marker and leaves writers stopp
   expect(result.calls.trim().endsWith("stop app worker")).toBe(true);
   expect(result.calls).not.toContain("pg_dump");
 });
+
+test("Code Truth starts with its token dependency before the application and both clients verify authentication", () => {
+  const result = deploy("", "x86_64", false, true, true);
+  expect(result.exitCode).toBe(0);
+  const service = result.calls.indexOf(
+    "up -d --no-build --pull never --wait --wait-timeout 180 code-truth",
+  );
+  const app = result.calls.indexOf("--wait-timeout 180 app worker");
+  expect(service).toBeGreaterThan(result.calls.indexOf("stop app worker"));
+  expect(service).toBeLessThan(app);
+  for (const client of ["app", "worker"])
+    expect(result.calls).toContain(`exec -T ${client} node -e const fs=`);
+});
+
+test("an old updater missing the service artifact fails before stopping writers", () => {
+  const result = deploy("code-truth-artifact");
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr).toContain("Missing release artifact: code-truth-tag");
+  expect(result.calls).toBe("");
+  expect(result.current).toBe("previous\n");
+});
+
+for (const failure of [
+  "code-truth",
+  "code-truth-auth",
+  "code-truth-worker-auth",
+]) {
+  test(`${failure} prevents release promotion and leaves writers stopped`, () => {
+    const result = deploy(failure);
+    expect(result.exitCode).toBe(42);
+    expect(result.current).toBe("previous\n");
+    expect(result.calls.trim().endsWith("stop app worker")).toBe(true);
+    if (failure === "code-truth") expect(result.calls).not.toContain("pg_dump");
+  });
+}

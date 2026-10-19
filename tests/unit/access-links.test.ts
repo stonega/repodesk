@@ -38,7 +38,8 @@ describe("single-account access links", () => {
 
   test("rejects tampering, malformed tokens, wrong keys, bots and workspaces", () => {
     const { w, raw } = invitation();
-    for (const token of ["", w.id, `${raw}a`, raw.slice(1), `x${raw.slice(1)}`])
+    const tampered = `${raw[0] === "x" ? "y" : "x"}${raw.slice(1)}`;
+    for (const token of ["", w.id, `${raw}a`, raw.slice(1), tampered])
       expect(links.resolve(token, bot.id, now)).toBeUndefined();
     expect(links.resolve(raw, "1000", now)).toBeUndefined();
     expect(

@@ -29,8 +29,8 @@ it discoverable; installation starts only after a deployment administrator click
 **Update now**. No Actions write token or GitHub SSH deployment secrets are needed.
 
 This currently supports the dedicated Linux x86_64 Docker VPS stack, including
-its Docker Codex runner. It does not replace a custom Compose topology, the
-optional Code Truth service or a local build overlay. See the VPS guide first.
+its Docker Codex runner and Code Truth service. It does not replace a custom
+Compose topology or local build overlay. See the VPS guide first.
 
 On the provisioned host, copy the checked-in daemon and service template:
 
@@ -45,6 +45,12 @@ sudo install -m 644 deploy/updates/repodesk-updater.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now repodesk-updater
 ```
+
+When upgrading an installation whose updater predates bundled Code Truth, copy
+both current `.mjs` files as above and restart `repodesk-updater` before requesting
+the release. The older daemon builds only three images, and the new cutover
+rejects its missing `code-truth-tag` before stopping existing services. Do not
+replace an updater during an active installation.
 
 Node 24, Git, Docker Engine/Compose v2, Bash, gzip, sha256sum and flock must be
 available. The service must have the deployment user's Docker/filesystem access.
@@ -79,15 +85,18 @@ one request. A missing/stale heartbeat or mismatched host repository prevents
 submission. No file is written by a release check or modal open.
 
 The host verifies the exact published stable release and a successful Verify run
-for its commit, fetches that commit, checks package version, builds app/Codex
-images locally, and smoke-tests the Node app image. It rechecks release metadata
+for its commit, fetches that commit, checks package version, builds app/Codex/Code
+Truth images locally, and smoke-tests the Node app and offline Code Truth index/MCP
+runtime. It rechecks release metadata
 immediately before passing the bundle to `deploy-vps.sh --local-images`. The
-bundle records all three local image IDs; the script checks the release tags
+bundle records all four local image IDs; the script checks the release tags
 still resolve to those IDs before stopping writers. Saving and reloading images
 on the same daemon is unnecessary. Manual transferred archives retain checksum
 verification and import support. The cutover waits for safe coding checkpoints,
 stops writers, backs up PostgreSQL, migrates,
-starts writers and confirms readiness. A changed release or unverified commit
+starts Code Truth and writers, verifies the API and worker's service-token access,
+and confirms readiness. Code Truth uses a persistent private token volume; no
+service secret enters bundle metadata or logs. A changed release or unverified commit
 fails before any cutover. Expect a brief outage; the queue and results survive it.
 
 The updater requires at least 1GiB free on the deployment filesystem before

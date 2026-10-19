@@ -11,10 +11,19 @@ See [host updater installation](updates.md) for the service and panel contract.
 
 Use a dedicated Linux x86_64 Docker stack with Docker Engine, Compose v2
 (supporting `up --wait`), Node 24, Git, Bash, gzip, sha256sum and flock. Reserve
-enough disk for local builds, three images, release archives and database backups.
+enough disk for local builds, four images, release archives and database backups.
 The updater service requires noninteractive Docker and deployment-directory access.
-It handles app, worker, migrations, PostgreSQL and the Docker Codex runner. The
-optional Code Truth service and local build overlay remain separate.
+It handles app, worker, migrations, PostgreSQL, Code Truth and the Docker Codex
+runner. Custom local build overlays remain separate. Code Truth is always
+available internally; workspace enablement controls indexing and tool access.
+Its generated service token and indexes persist in `code_truth_auth` and
+`code_truth_data` volumes under the existing Compose project.
+
+Before the first release with bundled Code Truth, install the current host
+updater using [the updater instructions](updates.md#install-the-host-updater-once).
+Older daemons build only three images; their incomplete bundles are rejected
+before stopping writers. Manual archives must include the Code Truth image and
+`code-truth-tag` artifact; local-image bundles also require `code-truth-id`.
 
 Keep the running deployment directory and Compose project stable. The default
 root is `/opt/repodesk`, and the default project is `repodesk`:
@@ -64,10 +73,11 @@ secrets, production deployment environment or Actions write token is required.
 
 The daemon checks the selected release ID, fingerprint and tag commit against
 GitHub and requires a successful Verify run for that commit. It fetches the exact
-commit, validates its package version, builds app, Codex task and supervisor images
-and smoke-tests the app's Node runtime. Builds run on the host before stopping any
-services. It records the locally built app, supervisor and task image IDs with
-release files in a fresh numeric bundle directory and invokes
+commit, validates its package version, builds app, Code Truth, Codex task and
+supervisor images, smoke-tests the app's Node runtime and runs the service's
+offline real-index/MCP smoke. Builds run on the host before stopping any
+services. It records the locally built app, Code Truth, supervisor and task image
+IDs with release files in a fresh numeric bundle directory and invokes
 `scripts/deploy-vps.sh --local-images`. The same-daemon path requires no duplicate
 image archive. Manual transferred archives retain checksum/import verification.
 
@@ -81,10 +91,12 @@ The script:
 3. Waits for safe coding checkpoints, stops app/worker and checks again for a
    just-started attempt before replacing the runner. Existing task containers
    finish their current phases; they are not cancelled to accelerate an update.
-4. Saves a restrictive PostgreSQL custom dump and verifies its archive listing.
+4. Starts the pinned runner and Code Truth with its persistent token initializer,
+   then saves a restrictive PostgreSQL custom dump and verifies its archive listing.
 5. Runs migrations once; writers remain stopped if migration fails.
-6. Starts app/worker and checks readiness for up to two minutes, allowing the
-   first Telegram long poll to finish. Response bodies are not printed in checks.
+6. Starts app/worker, verifies Code Truth authentication from both writers and checks app readiness
+   for up to two minutes, allowing the first Telegram long poll to finish.
+   Response bodies and service tokens are not printed in checks.
 7. Updates `.current-release` only on success and removes any transfer archive.
 
 The checkpoint budget defaults to 1800 seconds across both checks. It can be

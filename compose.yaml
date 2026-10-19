@@ -45,8 +45,11 @@ services:
       UPDATES_GITHUB_REPOSITORY: ${UPDATES_GITHUB_REPOSITORY:-stonega/repodesk}
       UPDATES_GITHUB_TOKEN: ${UPDATES_GITHUB_TOKEN:-}
       UPDATES_DIRECTORY: ${UPDATES_DIRECTORY:-/var/lib/repodesk-updates}
+      CODE_TRUTH_URL: http://code-truth:3010
+      CODE_TRUTH_TOKEN_FILE: /run/code-truth/token
     volumes:
       - ./updates:/var/lib/repodesk-updates
+      - code_truth_auth:/run/code-truth:ro
     healthcheck:
       test: [CMD, node, -e, "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 30s
@@ -58,9 +61,17 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      code-truth:
+        condition: service_healthy
   worker:
     <<: *runtime
     command: [node, dist/worker.js]
+    environment:
+      <<: *environment
+      CODE_TRUTH_URL: http://code-truth:3010
+      CODE_TRUTH_TOKEN_FILE: /run/code-truth/token
+    volumes:
+      - code_truth_auth:/run/code-truth:ro
     healthcheck:
       test: [CMD, node, -e, "const {Client}=require('pg');const c=new Client({connectionString:process.env.DATABASE_URL});c.connect().then(()=>c.query(\"SELECT 1 FROM worker_heartbeats WHERE at>now()-interval '30 seconds' LIMIT 1\")).then(r=>{if(!r.rowCount)process.exitCode=1}).catch(()=>{process.exitCode=1}).finally(()=>c.end())"]
       interval: 30s
@@ -70,8 +81,51 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      code-truth:
+        condition: service_healthy
+  code-truth-token:
+    build: .
+    image: ${APP_IMAGE:-deepx-agent:local}
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    command: [node, dist/code-truth-token.js]
+    healthcheck:
+      disable: true
+    restart: "no"
+    volumes:
+      - code_truth_auth:/run/code-truth
+  code-truth:
+    build: ./services/code-truth
+    image: ${CODE_TRUTH_IMAGE:-deepx-code-truth:local}
+    init: true
+    environment:
+      CODE_TRUTH_TOKEN_FILE: /run/code-truth/token
+      GITHUB_TOKEN: ${CODE_TRUTH_GITHUB_TOKEN:-}
+    volumes:
+      - code_truth_auth:/run/code-truth:ro
+      - code_truth_data:/data
+    tmpfs:
+      - /tmp:rw,mode=1777
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    stop_grace_period: 30s
+    depends_on:
+      code-truth-token:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, bun, -e, "fetch('http://127.0.0.1:3010/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 volumes:
   postgres_data:
+  code_truth_auth:
+  code_truth_data:
 secrets:
   encryption_key:
     file: ${ENCRYPTION_KEY_FILE:-./secrets/encryption-key}

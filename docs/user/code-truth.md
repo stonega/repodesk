@@ -2,11 +2,23 @@
 
 Code Truth 为指定 GitHub 仓库建立源码索引，让机器人回答“代码在哪里”“调用关系是什么”等问题，并给出文件位置、分支和 commit。它不执行仓库构建，也不替代实时 Issue/PR 查询。
 
-管理员需要先启动可选服务，再在各工作区配置仓库。只查看 GitHub PR 状态不需要本服务。
+标准 Docker Compose 部署已包含 Code Truth 服务，自动连接 app 和 worker。管理员只需在工作区添加仓库并启用插件。只查看 GitHub PR 状态不需要开启本插件。
 
-## 启动服务
+## 服务与升级
 
-在现有 RepoDesk 仓库根目录生成独立服务令牌，仅首次执行：
+按 [快速开始](get-started.md) 启动标准 Compose 栈时，`code-truth-token` 一次性生成内部服务令牌，`code-truth` 随后启动。令牌保存在 `code_truth_auth` 数据卷，app、worker 和 Code Truth 以只读方式共享；重启和升级不会替换已有令牌。无需手动填写 `CODE_TRUTH_URL` 或服务令牌。
+
+服务只在 Docker 内网提供接口，源码索引保存在 `code_truth_data` 数据卷。插件尚未启用或没有配置仓库时，不会拉取仓库或创建索引。停用插件保留内部服务和已有索引，供之后再次启用。
+
+从旧版源码 Compose 升级后，运行 `docker compose up --build -d`，使新增服务和 app/worker 连接一同生效。使用面板发布更新的部署，应先按维护说明更新宿主机 updater；新版 updater 会构建 Code Truth 镜像并检查两端连接。参见 [备份与升级](maintenance.md)。
+
+如果仍出现“服务未配置”，确认 app 和 worker 已按新版 Compose 重新创建。直接运行 Node 的自定义部署仍需由管理员单独配置 Code Truth 服务与连接。
+
+## 保留旧版文件令牌
+
+已经使用 `examples/code-truth.compose.yaml` 和 `secrets/code-truth-token` 的部署可以保留原有叠加文件与令牌；它们会覆盖标准部署的自动令牌配置。不要为升级重新生成已有令牌。
+
+自定义部署需要主机令牌文件时，在现有 RepoDesk 仓库根目录仅首次执行：
 
 ```sh
 mkdir -p secrets
@@ -37,7 +49,7 @@ docker compose up --build -d
 docker compose ps
 ```
 
-该服务只在内部网络提供接口，索引保留在 `code_truth_data` 数据卷。Compose 会将服务地址和令牌提供给 app/worker，无需在面板填写令牌。Docker 会构建服务依赖，宿主机无需额外安装 Bun。
+Compose 会把该文件提供给 app/worker 和 Code Truth；这套手动配置仅用于主机文件令牌覆盖。Docker 会构建服务依赖，宿主机无需额外安装 Bun。
 
 ## 配置工作区仓库
 

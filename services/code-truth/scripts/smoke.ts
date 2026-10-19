@@ -60,6 +60,10 @@ const config = {
 };
 const client = new Client({ name: "smoke", version: "1" });
 try {
+  if ((await fetch(`${url}/health/ready`)).status !== 401)
+    throw new Error("Readiness accepted missing service credentials");
+  if (!(await fetch(`${url}/health/ready`, { headers })).ok)
+    throw new Error("Authenticated readiness failed");
   let ready = false;
   let namespace = "";
   for (let i = 0; i < 100; i++) {

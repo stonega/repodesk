@@ -74,6 +74,7 @@ jobs:
       COMPOSE_PROJECT_NAME: deepx-ci
       ENCRYPTION_KEY_FILE: /tmp/deepx-ci-key
       APP_IMAGE: deepx-agent:ci
+      CODE_TRUTH_IMAGE: deepx-code-truth:ci
       NO_PROXY: localhost,127.0.0.1
     steps:
       - uses: actions/checkout@v4
@@ -89,11 +90,23 @@ jobs:
           # Cache uploads are optional and must leave time for smoke/restore checks.
           cache-to: type=gha,scope=verify-app,mode=max,timeout=2m,ignore-error=true
       - run: docker run --rm --network none --entrypoint node deepx-agent:ci dist/runtime-contract.js
+      - name: Build Code Truth image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/code-truth
+          load: true
+          tags: deepx-code-truth:ci
+          cache-from: type=gha,scope=verify-code-truth
+          cache-to: type=gha,scope=verify-code-truth,mode=max,timeout=2m,ignore-error=true
+      - run: docker run --rm --network none --read-only --tmpfs /tmp:rw,mode=1777 --cap-drop ALL --security-opt no-new-privileges:true deepx-code-truth:ci bun scripts/smoke.ts
       - name: Compose migration, smoke and restore
         run: |
           node -e "require('fs').writeFileSync('/tmp/deepx-ci-key', require('crypto').randomBytes(32).toString('hex'))"
           docker compose config --quiet
           docker compose up --no-build -d --wait
+          for service in app worker; do
+            docker compose exec -T "$service" node -e "const fs=require('fs');fetch(process.env.CODE_TRUTH_URL+'/health/ready',{headers:{authorization:'Bearer '+fs.readFileSync(process.env.CODE_TRUTH_TOKEN_FILE,'utf8').trim()}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+          done
           curl --retry 10 --retry-connrefused --retry-delay 2 --fail http://localhost:3000/readyz
           bash scripts/backup.sh
           bash scripts/restore-rehearsal.sh "$(find backups -name '*.dump' -print -quit)"

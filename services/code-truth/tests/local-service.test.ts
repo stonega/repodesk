@@ -103,6 +103,33 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
+test("deployment readiness verifies the service token without configuring repositories", async () => {
+  expect((await fetch(`${url}/health/ready`)).status).toBe(401);
+  expect(
+    (
+      await fetch(`${url}/health/ready`, {
+        headers: { authorization: "Bearer invalid" },
+      })
+    ).status,
+  ).toBe(401);
+  const response = await fetch(`${url}/health/ready`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ status: "ok" });
+  expect(syncs).toBe(0);
+  expect(
+    (
+      await fetch(`${url}/health/ready`, {
+        headers: {
+          authorization: `Bearer ${token}`,
+          origin: "https://example.com",
+        },
+      })
+    ).status,
+  ).toBe(403);
+});
+
 test("private management rejects missing credentials, origins and arbitrary repository locations", async () => {
   expect((await fetch(`${url}/configure`, { method: "POST" })).status).toBe(
     401,

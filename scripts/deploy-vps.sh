@@ -23,6 +23,7 @@ release_dir="$deploy_root/releases/$release_id"
 for file in compose.yaml image-tag; do
   [[ -f "$release_dir/$file" ]] || fail "Missing release artifact: $file"
 done
+[[ -f "$release_dir/code-truth-tag" ]] || fail 'Missing release artifact: code-truth-tag; install the current host updater before this release.'
 if [[ "$image_source" = --local-images ]]; then
   [[ -f "$release_dir/image-id" ]] || fail 'Missing release artifact: image-id'
 else
@@ -65,6 +66,16 @@ if [[ "$image_source" = --local-images ]]; then
 fi
 printf 'APP_IMAGE=%s\n' "$image_id" > "$release_dir/release.env"
 export APP_IMAGE="$image_id"
+code_truth_tag="$(cat "$release_dir/code-truth-tag")"
+[[ "$code_truth_tag" =~ ^repodesk-code-truth:release-[a-f0-9]{40}$ ]] || fail 'Invalid Code Truth image tag.'
+code_truth_id="$(docker image inspect --format '{{.Id}}' "$code_truth_tag")"
+[[ "$code_truth_id" =~ ^sha256:[a-f0-9]{64}$ ]] || fail 'Invalid imported Code Truth image ID.'
+if [[ "$image_source" = --local-images ]]; then
+  [[ -f "$release_dir/code-truth-id" ]] || fail 'Missing release artifact: code-truth-id; update the host updater before installing this release.'
+  [[ "$(cat "$release_dir/code-truth-id")" = "$code_truth_id" ]] || fail 'Local Code Truth image no longer matches the verified build.'
+fi
+printf 'CODE_TRUTH_IMAGE=%s\n' "$code_truth_id" >> "$release_dir/release.env"
+export CODE_TRUTH_IMAGE="$code_truth_id"
 compose=(docker compose --project-directory "$deploy_root" -p "$project"
   --env-file "$deploy_root/.env" --env-file "$release_dir/release.env"
   -f "$release_dir/compose.yaml")
@@ -154,6 +165,7 @@ cutover_started=true
 if [[ "$codex" = true ]]; then
   "${compose[@]}" up -d --no-deps --no-build --pull never --wait --wait-timeout 180 codex-runner
 fi
+"${compose[@]}" up -d --no-build --pull never --wait --wait-timeout 180 code-truth
 "${compose[@]}" up -d --no-deps --wait --wait-timeout 120 postgres
 mkdir -p "$deploy_root/backups"
 # A rerun has a new release ID, so an earlier backup is never overwritten.
@@ -165,6 +177,10 @@ mkdir -p "$deploy_root/backups"
 # Old writers are stopped, and migrations must succeed before either new writer starts.
 "${compose[@]}" run --rm --no-deps --pull never -T migrate
 "${compose[@]}" up -d --no-deps --no-build --pull never --wait --wait-timeout 180 app worker
+for service in app worker; do
+  "${compose[@]}" exec -T "$service" node -e \
+    "const fs=require('fs');fetch(process.env.CODE_TRUTH_URL+'/health/ready',{headers:{authorization:'Bearer '+fs.readFileSync(process.env.CODE_TRUTH_TOKEN_FILE,'utf8').trim()},signal:AbortSignal.timeout(10000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+done
 # Container health can precede the first Telegram long poll. Allow startup to finish.
 readiness_deadline=$((SECONDS + 120))
 readiness_status=1

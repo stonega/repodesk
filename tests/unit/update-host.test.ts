@@ -175,7 +175,18 @@ test("pinned local builds and runtime smoke precede protected host cutover", asy
     );
     expect(
       commands.filter((args) => args[0] === "docker" && args[1] === "build"),
-    ).toHaveLength(3);
+    ).toHaveLength(4);
+    const codeTruthBuild = commands.findIndex(
+      (args) =>
+        args.includes(`repodesk-code-truth:release-${commit}`) &&
+        args[1] === "build",
+    );
+    const codeTruthSmoke = commands.findIndex((args) =>
+      args.includes("scripts/smoke.ts"),
+    );
+    expect(codeTruthBuild).toBeGreaterThan(-1);
+    expect(codeTruthSmoke).toBeGreaterThan(codeTruthBuild);
+    expect(cutover).toBeGreaterThan(codeTruthSmoke);
     expect(
       commands.some((args) => args.includes("fetch") && args.includes(commit)),
     ).toBe(true);
@@ -188,6 +199,9 @@ test("pinned local builds and runtime smoke precede protected host cutover", asy
     expect(bundle).toBeDefined();
     expect(
       await readFile(join(dirname(bundle ?? ""), "image-id"), "utf8"),
+    ).toBe(`sha256:${"c".repeat(64)}`);
+    expect(
+      await readFile(join(dirname(bundle ?? ""), "code-truth-id"), "utf8"),
     ).toBe(`sha256:${"c".repeat(64)}`);
   } finally {
     await rm(root, { recursive: true, force: true });
