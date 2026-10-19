@@ -267,7 +267,7 @@ function ResourceEditor({
       <p className="muted">
         {manual
           ? "Use IDs from the Cloudflare dashboard when your token cannot discover accounts. Permissions are checked when a tool uses the token."
-          : "Choose the resources this workspace can use. Account discovery needs User Memberships Read and account verification needs Account Settings Read."}
+          : "Choose the resources this workspace can use. Account verification needs Account Settings Read. User tokens need User Memberships Read to discover accounts; if discovery is unavailable, enter IDs manually."}
       </p>
       <button
         className="secondary"

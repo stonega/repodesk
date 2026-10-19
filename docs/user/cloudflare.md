@@ -6,15 +6,15 @@
 
 在 **Plugins → Cloudflare → API token → Edit** 直接保存受限 Token，无需创建 OAuth client。
 
-1. 点击 **Create an API token** 打开 Cloudflare，创建 Token 并限制可访问的账号和域名。
-2. 按用途授予 Zone Read、DNS Read、Cloudflare Pages Read，以及需要的 DNS Edit 或 Cache Purge。账号发现另需 User Memberships Read，账号验证需 Account Settings Read。
+1. 点击 **Create an account API token** 打开 [Cloudflare 账号 Token 页面](https://dash.cloudflare.com/?to=/:account/api-tokens)，创建 Token 并限制可访问的账号和域名。建议使用不依赖个人用户的账号 API Token；也可继续使用受限的用户 API Token。
+2. 按用途授予 Zone Read、DNS Read、Cloudflare Pages Read，以及需要的 DNS Edit 或 Cache Purge。账号验证需 Account Settings Read；使用用户 API Token 发现账号时另需 User Memberships Read。
 3. 粘贴 Token 并保存。面板随后打开账号和域名选择；仅有一个账号时会自动选中到草稿，多个账号时请选择。
 4. 需要 DNS 或缓存操作时，搜索并勾选域名，最多二十个；不选域名可仅查询 Pages。不会自动把发现的所有域名授权给工具。
 5. 保存选择。首次设置账号会启用插件；更换 Token 后请确认范围，再启用插件。
 
 Token 加密保存，保存后不会显示；保存 Token 本身不代表权限已验证。按名称保存资源选择时会验证账号和域名归属。账号和域名较多时可用 **More accounts/domains** 加载下一页。
 
-如果 Token 无法列出账号，在 **Configuration → Edit** 选择 **Enter IDs manually**，填写账号 ID 和域名 ID。此方式保存时不验证远端权限，使用工具时仍会检查权限和域名归属。
+如果 Token 无法列出账号（包括没有账号发现权限的账号 API Token），在 **Configuration → Edit** 选择 **Enter IDs manually**，填写账号 ID 和域名 ID。此方式保存时不验证远端权限，使用工具时仍会检查权限和域名归属。
 
 Token 创建与权限名称见 [Cloudflare 官方说明](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)。各工作区有独立连接。
 

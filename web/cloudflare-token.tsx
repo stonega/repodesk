@@ -29,23 +29,29 @@ export function CloudflareTokenEditor({
   return (
     <Modal title="Edit Cloudflare API token" busy={busy} onClose={close}>
       <p>
-        Create a scoped token in Cloudflare, then paste it here. No OAuth
-        application is needed.
+        Prefer an account API token for credentials that are independent of a
+        user. Create a scoped token in Cloudflare, then paste it here. User API
+        tokens also work.
       </p>
       <p>
         <a
-          href="https://dash.cloudflare.com/profile/api-tokens"
+          href="https://dash.cloudflare.com/?to=/:account/api-tokens"
           target="_blank"
           rel="noopener noreferrer"
         >
-          Create an API token ↗
+          Create an account API token ↗
         </a>
       </p>
       <p className="muted">
-        For account discovery, include User Memberships Read and Account
-        Settings Read. Add Zone Read, DNS Read and Cloudflare Pages Read as
-        needed; DNS changes need DNS Edit and cache purges need Cache Purge.
-        Restrict the token to the accounts and domains you want to use.
+        Include Account Settings Read for account verification. Add Zone Read,
+        DNS Read and Cloudflare Pages Read as needed; DNS changes need DNS Edit
+        and cache purges need Cache Purge. Restrict the token to the accounts
+        and domains you want to use.
+      </p>
+      <p className="muted">
+        User API tokens need User Memberships Read to discover accounts. If your
+        token cannot list accounts, choose Enter IDs manually in Configuration
+        after saving.
       </p>
       {data.settings.authMethod === "oauth" && (
         <p className="notice">

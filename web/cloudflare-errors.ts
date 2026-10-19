@@ -10,7 +10,7 @@ export function cloudflareError(cause: unknown) {
     cloudflare_credentials_unavailable:
       "Cloudflare credential storage is unavailable. Check the API and worker configuration.",
     cloudflare_access_denied:
-      "Cloudflare denied access. Check the token’s resource restrictions and permissions. Account discovery needs User Memberships Read; account verification needs Account Settings Read.",
+      "Cloudflare denied access. Check the token’s resource restrictions and permissions. Account verification needs Account Settings Read. User tokens need User Memberships Read to discover accounts; if discovery is unavailable, enter IDs manually.",
     cloudflare_zone_denied:
       "A selected domain is unavailable or belongs to another account. Check your selection and token permissions.",
     cloudflare_oauth_account_denied:

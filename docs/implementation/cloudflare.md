@@ -4,6 +4,8 @@ Implemented locally, 2026-10-17. Live Cloudflare/Telegram acceptance and deploym
 remain release gates. No extra package, migration or environment variable is needed;
 the API and worker use the existing deployment encryption key.
 Account/domain discovery and the simplified connection flow were added 2026-10-18.
+Account API token guidance and the account token dashboard link were updated
+2026-10-19; scoped user API tokens remain supported.
 
 Open **Plugins → Cloudflare → API token → Edit**. Save a scoped token directly;
 no OAuth client registration, callback URL or client secret is needed. Tokens are
@@ -11,14 +13,19 @@ write-only and encrypted with workspace-specific authenticated data.
 
 ## Token setup and resource selection
 
-1. Follow **Create an API token** in the token editor. Restrict its resources to
-   the accounts and domains this workspace should use. For named account discovery,
-   grant **User Memberships Read**; for account verification grant **Account
-   Settings Read**. Add **Zone Read**, **DNS Read** and **Cloudflare Pages Read**
+1. Follow **Create an account API token** in the token editor to open the
+   [account token dashboard](https://dash.cloudflare.com/?to=/:account/api-tokens).
+   Prefer an account API token for credentials independent of a user; scoped user
+   API tokens also work. Restrict its resources to the accounts and domains this
+   workspace should use. For account verification grant **Account Settings Read**;
+   user API tokens also need **User Memberships Read** for named account discovery.
+   Add **Zone Read**, **DNS Read** and **Cloudflare Pages Read**
    for the queries needed, plus **DNS Edit** for DNS changes and **Cache Purge**
    for purges. [Token creation](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)
    and [permission names](https://developers.cloudflare.com/fundamentals/api/reference/permissions/)
    describe the Cloudflare controls.
+   Cloudflare's [account API token guide](https://developers.cloudflare.com/fundamentals/api/get-started/account-owned-tokens/)
+   explains account token creation and service compatibility.
 2. Paste and save the token. Saving a new/replacement token disables the plugin
    and opens **Configuration**. Saving alone does not verify provider permissions.
 3. Choose the named account, or accept the sole account selected in the draft.
@@ -36,7 +43,8 @@ disabled and never grant tools access to discovered resources. Failed requests a
 saves preserve the saved settings and open draft. A changed account clears the
 domain draft. Tokens and provider-only fields are excluded from responses.
 
-For tokens that cannot list accounts, select **Enter IDs manually** in Configuration.
+For tokens that cannot list accounts, including account tokens without discovery
+access, select **Enter IDs manually** in Configuration.
 Supply the account and up to 20 zone IDs from Cloudflare. Manual saves do not verify
 remote permissions; DNS access still checks the zone's account before using it.
 Pages-only tokens can leave domains empty, including when Zone Read is unavailable.

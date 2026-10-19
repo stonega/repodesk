@@ -17,7 +17,7 @@ const url = process.env.TEST_DATABASE_URL;
   const root = database(url ?? "postgres://unused@localhost/unused");
   const name = `repodesk_cftoken_${randomUUID().replaceAll("-", "")}`;
   const key = "ab".repeat(32),
-    apiToken = "fixture-token-for-cloudflare-12345",
+    apiToken = "cfat_fixture-token-for-cloudflare-12345",
     accountId = "a".repeat(32),
     zoneId = "b".repeat(32);
   let store: Store, admin: Admin, auth: { raw: string; csrf: string };

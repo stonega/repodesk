@@ -31,11 +31,26 @@ for (const width of [1280, 390]) {
     });
     await expect(token.getByLabel("Client ID")).toHaveCount(0);
     await expect(
-      token.getByRole("link", { name: "Create an API token" }),
-    ).toHaveAttribute("href", "https://dash.cloudflare.com/profile/api-tokens");
+      token.getByRole("link", { name: "Create an account API token" }),
+    ).toHaveAttribute(
+      "href",
+      "https://dash.cloudflare.com/?to=/:account/api-tokens",
+    );
+    await expect(
+      token.getByRole("link", { name: "Create an account API token" }),
+    ).toHaveAttribute("target", "_blank");
+    await expect(token).toContainText(
+      "Prefer an account API token for credentials that are independent of a user.",
+    );
+    await expect(token).toContainText("User API tokens also work.");
     await token
       .getByLabel("API token", { exact: true })
-      .fill("fixture-direct-token-123456");
+      .fill("cfat_fixture-direct-token-123456");
+    expect(
+      await token.evaluate(
+        (dialog) => dialog.scrollWidth <= dialog.clientWidth,
+      ),
+    ).toBe(true);
     await token.screenshot({
       path: test.info().outputPath("token-editor.png"),
     });
@@ -51,7 +66,7 @@ for (const width of [1280, 390]) {
     await resources.getByRole("button", { name: "Save", exact: true }).click();
     await expect(resources).toHaveCount(0);
     expect(f.writes[0]?.body).toMatchObject({
-      apiToken: "fixture-direct-token-123456",
+      apiToken: "cfat_fixture-direct-token-123456",
       settings: { enabled: false, authMethod: "api_token" },
     });
     expect(f.writes[1]?.body).toMatchObject({
@@ -63,7 +78,7 @@ for (const width of [1280, 390]) {
       page.getByRole("region", { name: "Cloudflare configuration" }),
     ).toContainText("Pages only");
     await expect(page.locator("body")).not.toContainText(
-      "fixture-direct-token-123456",
+      "cfat_fixture-direct-token-123456",
     );
     await page.screenshot({
       path: test.info().outputPath("saved.png"),

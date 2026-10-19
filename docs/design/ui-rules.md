@@ -104,13 +104,18 @@ when implementing or reviewing a change.
 
 - **Preference:** Connect Cloudflare by saving a scoped API token. Keep the saved
   token status and resource names as summaries, with token and resource editors
-  in shared modals. Offer a direct link to Cloudflare token creation and clear
-  permission guidance; secrets stay write-only.
+  in shared modals. Recommend account API tokens for credentials independent of
+  a user, linking directly to the account token dashboard. Keep scoped user API
+  tokens supported and distinguish their discovery permissions in setup guidance;
+  secrets stay write-only.
 - **Scope:** Cloudflare setup and management on desktop and mobile. Account/domain
   restrictions and exact-action approvals still apply.
 - **Source:** 2026-10-18 — after checking that Cloudflare client registration needs
   a separate bootstrap token, the user requested using the token directly.
   This supersedes the 2026-10-17 browser-authorization preference.
+- **Source update:** 2026-10-19 — the user supplied Cloudflare's recommendation
+  for account API tokens and the [account token dashboard](https://dash.cloudflare.com/?to=/:account/api-tokens)
+  link, requesting that the plugin be updated.
 - **Exceptions:** Existing OAuth connections retain backend compatibility until
   replaced. The panel guides them to an API token and does not offer new OAuth
   client setup. Replacement clears local OAuth credentials; operators revoke old

@@ -6,7 +6,9 @@
 
 ### Save the token, initially disabled (use current revision for existing settings)
 # Token resource restrictions should match the intended account and domains.
-# User Memberships Read lists accounts; Account Settings Read verifies an account.
+# Prefer account API tokens: https://dash.cloudflare.com/?to=/:account/api-tokens
+# User API tokens also work; User Memberships Read enables their account discovery.
+# Account Settings Read verifies an account. Use manual IDs if discovery is unavailable.
 # Add Zone Read, DNS Read, Cloudflare Pages Read, DNS Edit and Cache Purge as needed.
 PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/cloudflare
 Cookie: repodesk_session={{session}}

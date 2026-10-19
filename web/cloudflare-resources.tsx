@@ -180,8 +180,9 @@ export function CloudflareResourceEditor({
         )}
         {!accountsLoading && !accountError && !accounts.length && (
           <p className="muted">
-            No accounts are available. Check the token’s account restrictions
-            and User Memberships Read permission, or enter IDs manually.
+            No accounts are available. Check the token’s account restrictions.
+            User tokens need User Memberships Read for discovery. If accounts
+            cannot be listed, enter IDs manually.
           </p>
         )}
         {moreAccounts && (
