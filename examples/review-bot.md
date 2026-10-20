@@ -16,8 +16,12 @@ are still required. Existing Apps follow the manual webhook steps in the guide.
 
 1. Use a workspace connected only to dedicated test repositories and enable automatic review. Open a non-draft PR
    containing a concrete regression. Expect one informational review at that head
-   with supported file/line findings. Check that the summary reports OCR exclusions,
-   reviewed/skipped files and coverage. Redeliver its webhook: expect no duplicate.
+   with supported file/line findings. Expect a brief outcome first and short,
+   actionable inline comments explaining the trigger and impact, with no repeated
+   severity/location labels or copied findings in the summary. Check that compact
+   coverage reports OCR exclusions, reviewed/skipped files and reasons; long path
+   lists should be collapsed. For a clean fixture, expect no findings and a
+   conclusion scoped to the reviewed files. Redeliver its webhook: expect no duplicate.
 2. Open a PR in an repository outside the workspace connection and a draft in the selected repository.
    Expect no automatic review. Mark the selected draft ready: expect a review.
 3. Push a new commit while review is running. Expect the old result to stop and the

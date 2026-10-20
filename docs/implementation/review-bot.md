@@ -97,8 +97,15 @@ revalidates the OCR plan, complete rule coverage and actual merge base before th
 first model turn. Invalid preparation fails with `coding_review_preparation_failed`.
 Repository investigation does not require nested bubblewrap namespaces or weaker
 container restrictions. Remaining native tools retain the split read-only policy;
-there is no unrestricted fallback. It returns a concise summary
-and up to 20 supported findings. Application code validates inline paths, sides and
+there is no unrestricted fallback. The review prompt asks for a short, natural
+summary led by the outcome and up to 20 supported findings, ordered by severity
+and deduplicated. Finding bodies explain the trigger and impact in one short
+paragraph without repeating GitHub's location or the application's severity label.
+Coverage follows the summary in a compact line, grouping exclusion/skip reasons
+and collapsing long path lists while retaining file-level accounting. Material
+gaps remain explicit; a review with no findings is scoped to the files reviewed.
+This is model guidance, not a guarantee of writing quality.
+Application code validates inline paths, sides and
 diff lines and publishes a `COMMENT` review pinned to the head commit. Findings
 without a valid inline anchor remain in the summary. Inline placement examines up
 to 1,000 changed files and discloses incomplete placement coverage. A stale result
