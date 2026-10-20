@@ -357,6 +357,26 @@ class Runner implements LocalRunner {
       },
     };
   }
+  test("review source preparation failures stop the task without a question or publication", async () => {
+    const f = await fixture();
+    await f.accept();
+    const task = await f.task();
+    await f.executor.advance(f.w.id, task.id);
+    f.runner.states.set(task.attemptId, {
+      state: "failed",
+      error: "coding_review_preparation_failed",
+    });
+    await f.executor.advance(f.w.id, task.id);
+    await f.executor.advance(f.w.id, task.id);
+    expect(await f.task()).toMatchObject({
+      state: "failed",
+      error: "coding_review_preparation_failed",
+    });
+    expect((await f.task()).result).toBeUndefined();
+    expect(f.reviews).toHaveLength(0);
+    expect(f.runner.pushes).toHaveLength(0);
+    expect(f.runner.starts).toHaveLength(1);
+  });
   test("selected PR events deduplicate semantically and produce one commit-pinned review", async () => {
     const f = await fixture();
     const delivery = randomUUID();

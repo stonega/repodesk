@@ -18,6 +18,7 @@ import { JobTaskChannel } from "./job-channel.ts";
 import { prepareOpenCodeReview } from "./open-code-review.ts";
 import { localStart } from "./protocol.ts";
 import { markPullRequestReady, publicationPushArgs } from "./publication.ts";
+import { ReviewSource } from "./review-source.ts";
 
 const jobSchema = localStart
   .omit({ readToken: true, providerApiKey: true })
@@ -210,8 +211,21 @@ async function implement(job: Job) {
   } catch {}
   let turn: Awaited<ReturnType<typeof runConversation>>;
   try {
+    let reviewSource: ReviewSource | undefined;
+    if (job.development.review && job.development.mode !== "work") {
+      try {
+        reviewSource = await ReviewSource.create(repo, job.development.review);
+      } catch {
+        await writeFile(
+          "/task/failure-code",
+          "coding_review_preparation_failed",
+        );
+        throw Error("coding_review_preparation_failed");
+      }
+    }
     turn = await runConversation({
       channel,
+      reviewSource,
       cwd: repo,
       env: {
         ...env,
@@ -220,6 +234,9 @@ async function implement(job: Job) {
           : {}),
       },
       prompt:
+        (reviewSource
+          ? "Use only repodesk_review_source for repository investigation. Its plan action reads the prepared OCR plan; read and list accept head/base/merge_base revisions, and diff returns the pinned merge-base-to-head diff for a literal path. Follow nextOffset until null for complete content. Runtime filesystem paths and arbitrary shell commands are unavailable. Do not ask the user to restore shell access. Report unavailable committed source as a coverage gap.\n"
+          : "") +
         (job.recoveryId
           ? "The previous execution was interrupted by an infrastructure shutdown. Continue from the retained checkout and inspect its existing changes before editing. Preserve authorized partial work. Reconstruct the conversation if its session is unavailable, and run the fixed verification plan in full.\n"
           : "") +

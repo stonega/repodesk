@@ -1,5 +1,45 @@
 # Implementation evidence
 
+## VPS Review Bot sandbox failure and source-tool correction (2026-10-20)
+
+Operator-authorized inspection found two automatic reviews of `stonega/wallshader`
+PR #2 that returned `needs_input` after bubblewrap failed before reading the OCR
+plan. Both assessed zero files; neither recorded a published review ID. They
+were subsequently cancelled. A third retained review task was cancelled without
+a result; its cause remains unverified.
+
+Credential-free probes of the current VPS task image reproduced the review
+policy's namespace startup failure, while ordinary read-only Landlock startup
+passed. App/worker/runner health and application version 0.1.42 do not establish
+review compatibility. The earlier intake fix deliberately retained the review
+policy's credential-denying paths.
+
+Read-only review/answer sessions now investigate through an application-owned
+source tool, with native shell/image/subagent tools disabled. OCR plans, committed
+files and literal-path diffs are pinned to the task's base/head/merge-base commits;
+runtime files, symlink targets, arbitrary commands/revisions, inherited credentials
+and external Git drivers are unavailable. Pagination, read limits and explicit
+errors preserve coverage gaps. Startup revalidates the plan and complete rule
+coverage before model execution, failing preparation directly when invalid. The
+credential-denying split policy and Docker restrictions remain in place.
+
+The real OCR/pinned app-server proof passed under Node 24 in hardened local Docker
+and on the VPS using a bundled correction in a disposable container. It covers
+source/diff/plan/list reads, new/resumed sessions, native shell exclusion and
+credential/process-path rejection with a local fake provider. Production rollout
+and successful live review acceptance remain open. No configuration change, task
+replay, paid model call or external message was performed. See the
+[VPS incident](../../postmortem/2026-10-20-review-bot-vps-sandbox.md).
+
+Validation: lint, strict TypeScript, production build and **1,060 deterministic
+tests across 119 files** passed with disposable PostgreSQL. App, task and
+supervisor images built; the packaged Node runtime contract, Compose validation
+and full Docker lifecycle smoke passed, including the real review source proof.
+New tests cover immutable commits/merge-base diffs, literal paths, traversal,
+runtime files, symlink targets, binary reads, pagination, invalid/stale plans,
+external Git drivers, start/resume policies and terminal preparation failures
+without publication. No dependency, migration, UI or container-policy change.
+
 ## Compact GitHub skill selection (2026-10-20)
 
 GitHub import discovery rows now show only a checkbox and skill name in a compact

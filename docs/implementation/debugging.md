@@ -55,6 +55,13 @@ Interpret the states separately:
   while retaining read-only/network denial; protected PR reviews retain their
   stronger split policy. Run the real sandbox probe in `scripts/codex-smoke.ts` on
   the affected host. See the [sandbox investigation](../../postmortem/2026-10-19-codex-intake-sandbox-startup.md).
+- A Review Bot result asking to restore sandbox access with zero inspected files
+  can be the bubblewrap namespace failure confirmed on VPS v0.1.42. Read the saved
+  result separately from a later cancellation. Updated review/answer jobs disable
+  native shell and use application-owned committed-source tools; rebuild the task
+  image and run the real review source proof in `scripts/codex-smoke.ts` before
+  rollout. No host namespace/security-policy relaxation is required. See the
+  [review incident](../../postmortem/2026-10-20-review-bot-vps-sandbox.md).
 - A `start_development_task` failure with no task record can be a policy mismatch,
   before GitHub is contacted. **Reviewed** (also the default when omitted) needs
   `propose_coding_task` and Telegram approval; only **Direct** supports the start

@@ -6,6 +6,10 @@
   to a local CLI 0.155.1 binary; otherwise it uses the pinned package through Bun.
 - `codex-smoke.ts`: Docker lifecycle smoke with fake Codex, including live task
   conversation, duplicate message submission and supervisor restart recovery.
+- `review-source-proof.ts`: bundled by `codex-smoke.ts` into a temporary task image;
+  real OCR and pinned Codex app-server against a local fake provider verify read-only
+  review tools, disabled native shell, pinned source/diffs and session resume with
+  no external network, real account or paid model calls.
 
 - `build.ts`: backend Node entry points and React Router assets.
 - `operator.ts`: host-only password recovery.

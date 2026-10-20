@@ -76,16 +76,28 @@ setup scripts or tests. OCR never receives a GitHub/model credential or calls an
 Missing OCR, incompatible/malformed output or incomplete rules fail the task with
 `coding_review_preparation_failed`; there is no alternate review engine.
 
-Codex reads the OCR plan and reviews in its read-only sandbox. Its review instructions
+Codex reads the OCR plan and committed source through the application-owned
+`repodesk_review_source` tool. It exposes only paginated plan, file-list, blob-read
+and per-file diff operations, pinned to the task's base/head/merge-base commits.
+Its review instructions
 require a checklist of every reviewable file, matching rules, merge-base diffs,
 reviewed/skipped coverage and explicit reasons for OCR exclusions and skipped files.
 Coverage reporting is model-generated; the application validates preparation coverage
 and inline anchors, but does not independently prove the model inspected every file.
 OCR rules and repository content remain reference data, never authorization.
-Review/answer turns declare
+Review/answer turns disable native shell, image-viewer and subagent tools, declare
 credential directories and `/proc` unreadable, remove inherited shell credentials
-and keep project configuration untrusted. The runner host must support Codex’s
-Linux command sandbox; a sandbox failure has no unrestricted fallback. It returns a concise summary
+and keep project configuration untrusted. Source reads never open working-tree,
+credential or process files; committed symlinks return their target text without
+following it. Fixed Git commands disable external diff/textconv, hooks, fsmonitor
+and replacement objects, use literal paths and receive no inherited credentials.
+Read/command output is capped at 6 MiB and tool pages at 24,000 characters;
+unsupported or oversized reads return an explicit coverage gap. Review startup
+revalidates the OCR plan, complete rule coverage and actual merge base before the
+first model turn. Invalid preparation fails with `coding_review_preparation_failed`.
+Repository investigation does not require nested bubblewrap namespaces or weaker
+container restrictions. Remaining native tools retain the split read-only policy;
+there is no unrestricted fallback. It returns a concise summary
 and up to 20 supported findings. Application code validates inline paths, sides and
 diff lines and publishes a `COMMENT` review pinned to the head commit. Findings
 without a valid inline anchor remain in the summary. Inline placement examines up
@@ -205,6 +217,15 @@ An offline command probe of the pinned Codex 0.155.1 image on this development
 Docker host failed at bubblewrap namespace/devpts setup. This confirms fail-closed
 behavior, not successful review execution. Verify sandbox compatibility on the
 intended runner before the live pilot.
+
+VPS inspection on 2026-10-20 confirmed the same namespace startup failure in two
+automatic PR reviews and reproduced it in the current task image without
+credentials. Both reviews inspected zero files and returned `needs_input` before
+later cancellation; neither recorded a published review. Ordinary read-only
+Landlock startup passed, but does not support the review policy's denied subpaths.
+The source-tool correction removes nested shell execution from review/answer
+investigation while retaining credential protections. See the
+[incident and verification limits](../../postmortem/2026-10-20-review-bot-vps-sandbox.md).
 
 Live webhook delivery, semantic review quality and real same-PR Codex publication
 remain explicit pilot acceptance. Local implementation does not deploy, connect an

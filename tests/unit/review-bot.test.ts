@@ -91,7 +91,10 @@ test("review turns are read-only, pinned to exact commits, with strict structure
     },
   });
   const prompt = developmentPrompt(run);
-  expect(prompt).toContain(`git diff ${"b".repeat(40)}...${"a".repeat(40)}`);
+  expect(prompt).toContain("repodesk_review_source with action plan");
+  expect(prompt).toContain(
+    "diff action compares preview.merge_base against preview.to",
+  );
   expect(prompt).toContain("Open Code Review (OCR) delegation");
   expect(prompt).toContain("/task/open-code-review.json");
   expect(prompt).toContain("do not substitute an ad-hoc review");

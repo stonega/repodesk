@@ -8,6 +8,12 @@ async function captureConversation(options: {
   readOnly?: boolean;
   protectCredentials?: boolean;
   threadId?: string;
+  reviewSource?: {
+    handle(value: unknown): Promise<{
+      success: boolean;
+      contentItems: { type: string; text: string }[];
+    }>;
+  };
 }) {
   const root = await mkdtemp(join(tmpdir(), "repodesk-review-sandbox-"));
   const binary = join(root, "codex.mjs"),
@@ -98,5 +104,37 @@ test("PR analysis pins credential-denying filesystem and clean shell policies wi
     expect(
       requests.find((r) => r.method === "turn/start").params,
     ).not.toHaveProperty("sandboxPolicy");
+  }
+});
+
+test("review source tools disable native shell access and preserve credential-denying policy on start and resume", async () => {
+  for (const threadId of [undefined, "review-thread"]) {
+    const requests = await captureConversation({
+      readOnly: true,
+      protectCredentials: true,
+      threadId,
+      reviewSource: {
+        handle: async () => ({ success: true, contentItems: [] }),
+      },
+    });
+    const start = requests.find((r) =>
+      ["thread/start", "thread/resume"].includes(r.method),
+    );
+    expect(start.params.config.features.shell_tool).toBe(false);
+    expect(start.params.config.features.view_image).toBe(false);
+    expect(start.params.config.features.multi_agent).toBe(false);
+    expect(start.params.config.filesystem["/auth"]).toBe("deny");
+    expect(start.params.config.filesystem["/proc"]).toBe("deny");
+    expect(Object.values(start.params.config.projects)).toEqual([
+      { trust_level: "untrusted" },
+    ]);
+    if (!threadId)
+      expect(
+        start.params.dynamicTools.map((tool: { name: string }) => tool.name),
+      ).toEqual(["repodesk_review_source"]);
+    expect(
+      requests.find((r) => r.method === "initialize").params.capabilities
+        .experimentalApi,
+    ).toBe(true);
   }
 });

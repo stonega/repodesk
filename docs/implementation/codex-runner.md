@@ -89,9 +89,14 @@ Ordinary intake, factual analysis and result-only corrections keep Codex's
 read-only filesystem/network policy and explicitly select the pinned CLI's
 Landlock backend. Docker's dropped capabilities and namespace restrictions can
 prevent the default bubblewrap backend from starting even for a read command.
-Work turns retain their existing container boundary. Credential-denying PR
-review policies keep bubblewrap because their denied subpaths cannot be represented
-by the legacy policy; unsupported hosts still fail closed for those reviews.
+Work turns retain their existing container boundary. Read-only PR reviews and
+answers use application-owned tools for paginated OCR plans, committed source and
+fixed Git diffs, with native shell, image-viewer and subagent tools disabled. Those
+tools receive no credentials and never read runtime files or follow repository
+symlinks. The split credential-denying policy remains in place for remaining native
+tools; it is not replaced with Landlock. Repository investigation therefore does
+not need bubblewrap namespaces. Invalid/stale OCR preparation fails before the
+first model turn.
 No privileged container or relaxed Docker security option is introduced.
 
 Set these variables in the deployment's private `.env` or Compose environment:
@@ -384,9 +389,14 @@ volumes, patch export and cancellation, and removes its test resources afterward
 Before substituting Codex, it also runs the real pinned sandbox in a hardened
 container and checks that source reads succeed while repository/temporary writes
 and network socket creation are denied. This probe uses no model or credentials.
+It then bundles `scripts/review-source-proof.ts` into a temporary task-image
+derivative and runs real OCR plus the pinned Codex app-server with a local fake
+provider and no external network. The proof exercises plan/source/diff/list tools,
+native shell exclusion, immutable source and new/resumed sessions. Its results
+establish the integration path, not live model review quality.
 `CODEX_SMOKE_JOB_IMAGE` and `CODEX_SMOKE_SUPERVISOR_IMAGE` can select other tags.
 The smoke always uses Docker. `CODEX_SMOKE_DOCKER_SOCKET` selects its socket.
-CI and release builds run the full Docker fixture.
+Run the full Docker fixture before a runner release.
 When a host HTTP proxy is configured, exempt localhost with `NO_PROXY`/`no_proxy`
 for tests; a loopback-only build proxy may need `docker build --network=host`.
 

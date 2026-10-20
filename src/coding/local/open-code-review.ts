@@ -45,6 +45,38 @@ const rulesSchema = z.object({
   ),
 });
 
+export function parseOpenCodeReview(
+  value: unknown,
+  review: { baseSha: string; headSha: string },
+) {
+  const plan = z
+    .object({
+      engine: z.literal("open-code-review"),
+      mode: z.literal("delegate"),
+      preview: previewSchema,
+      ruleGroups: rulesSchema.shape.groups,
+    })
+    .parse(value);
+  const { preview, ruleGroups } = plan;
+  const paths = preview.reviewable_files.map((file) => file.path);
+  const reviewable = new Set(paths);
+  const covered = ruleGroups.flatMap((group) => group.files);
+  if (
+    preview.from !== review.baseSha ||
+    preview.to !== review.headSha ||
+    preview.reviewable_count !== paths.length ||
+    preview.excluded_count !== preview.excluded_files.length ||
+    preview.total_files !== paths.length + preview.excluded_files.length ||
+    new Set([...paths, ...preview.excluded_files.map((file) => file.path)])
+      .size !== preview.total_files ||
+    covered.length !== paths.length ||
+    new Set(covered).size !== paths.length ||
+    covered.some((path) => !reviewable.has(path))
+  )
+    throw Error("coding_review_preparation_failed");
+  return plan;
+}
+
 /** OCR's deterministic, LLM-free preparation runs before credentials are mounted. */
 export async function prepareOpenCodeReview(
   review: { baseSha: string; headSha: string },
@@ -99,12 +131,15 @@ export async function prepareOpenCodeReview(
       throw new Error("coding_review_preparation_failed");
     ruleGroups.push(...rules.groups);
   }
-  const plan = {
-    engine: "open-code-review",
-    mode: "delegate",
-    preview,
-    ruleGroups,
-  };
+  const plan = parseOpenCodeReview(
+    {
+      engine: "open-code-review",
+      mode: "delegate",
+      preview,
+      ruleGroups,
+    },
+    review,
+  );
   if (Buffer.byteLength(JSON.stringify(plan)) > 6 * 1024 * 1024)
     throw new Error("coding_review_preparation_failed");
   return plan;

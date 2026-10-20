@@ -98,6 +98,42 @@ setTimeout(() => { throw Error('Sandbox network probe timed out'); }, 3000).unre
       sandboxProbe,
     ]),
   );
+  // Use real OCR + the real app-server to exercise credential-safe review reads.
+  // Protocol-only fixtures cannot detect a broken repository investigation path.
+  const proof = await Bun.build({
+    entrypoints: ["scripts/review-source-proof.ts"],
+    target: "node",
+    outdir: dir,
+    naming: "review-source-proof.mjs",
+  });
+  if (!proof.success) throw Error("Review source proof build failed");
+  await writeFile(
+    join(dir, "Dockerfile.review-proof"),
+    `FROM ${jobImage}\nCOPY --chown=node:node review-source-proof.mjs /opt/deepx/review-source-proof.mjs\nENTRYPOINT ["node", "/opt/deepx/review-source-proof.mjs"]\n`,
+  );
+  await engine([
+    "build",
+    "-f",
+    join(dir, "Dockerfile.review-proof"),
+    "-t",
+    `${image}-review-proof`,
+    dir,
+  ]);
+  console.log(
+    await engine([
+      "run",
+      "--rm",
+      "--pull=never",
+      "--network=none",
+      "--read-only",
+      "--cap-drop=ALL",
+      "--security-opt=no-new-privileges",
+      "--user=1000:1000",
+      "--tmpfs=/task:rw,nosuid,nodev,size=128m,uid=1000,gid=1000",
+      "--tmpfs=/tmp:rw,nosuid,nodev,size=128m,mode=1777",
+      `${image}-review-proof`,
+    ]),
+  );
   await writeFile(
     join(dir, "Dockerfile"),
     `FROM ${jobImage}\nUSER root\nRUN rm /usr/local/bin/codex\nCOPY --chmod=755 codex /usr/local/bin/codex\nCOPY --chmod=755 git /usr/local/bin/git\nCOPY fake-github.cjs /opt/deepx/fake-github.cjs\nENV NODE_OPTIONS=--require=/opt/deepx/fake-github.cjs\nUSER node\n`,
@@ -1120,5 +1156,6 @@ process.exit(16);
   await engine(["network", "rm", name]).catch(() => {});
   await engine(["rmi", image]).catch(() => {});
   await engine(["rmi", `${image}-supervisor`]).catch(() => {});
+  await engine(["rmi", `${image}-review-proof`]).catch(() => {});
   await rm(dir, { recursive: true, force: true });
 }

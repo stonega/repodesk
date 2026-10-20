@@ -25,6 +25,7 @@ import {
   conversationTools,
   type JobTaskChannel,
 } from "./job-channel.ts";
+import { type ReviewSource, reviewSourceTools } from "./review-source.ts";
 
 /** Private JSONL client. Only completed turns cross the durable application boundary. */
 export async function runConversation(options: {
@@ -41,6 +42,7 @@ export async function runConversation(options: {
   timeoutMs?: number;
   outputSchema?: typeof developmentOutputSchema;
   channel?: JobTaskChannel;
+  reviewSource?: Pick<ReviewSource, "handle">;
 }): Promise<{
   threadId: string;
   turnId: string;
@@ -196,7 +198,7 @@ export async function runConversation(options: {
         if (message.id !== undefined && message.method) {
           const p = message.params;
           if (
-            options.channel &&
+            (options.channel || options.reviewSource) &&
             turnActive &&
             message.method === "item/tool/call" &&
             p?.threadId === threadId &&
@@ -205,11 +207,15 @@ export async function runConversation(options: {
             typeof p.tool === "string" &&
             !p.namespace
           ) {
-            void options.channel
-              .handle(p.callId, p.tool, p.arguments)
-              .then((result) => {
-                if (!settled) write({ id: message.id, result });
-              });
+            const result =
+              p.tool === "repodesk_review_source" && options.reviewSource
+                ? options.reviewSource.handle(p.arguments)
+                : options.channel?.handle(p.callId, p.tool, p.arguments);
+            void Promise.resolve(
+              result ?? { success: false, contentItems: [] },
+            ).then((result) => {
+              if (!settled) write({ id: message.id, result });
+            });
             continue;
           }
           // No implicit approval or connection-local user wait. Questions use completed-turn envelopes.
@@ -318,7 +324,9 @@ export async function runConversation(options: {
     if (options.signal?.aborted) throw new Fault("coding_cancelled", 409);
     await request("initialize", {
       clientInfo: { name: "repodesk", version: "1" },
-      capabilities: { experimentalApi: !!options.channel },
+      capabilities: {
+        experimentalApi: !!(options.channel || options.reviewSource),
+      },
     });
     write({ method: "initialized" });
     const config = {
@@ -333,6 +341,15 @@ export async function runConversation(options: {
         ? {
             config: {
               sandbox_mode: "read-only",
+              ...(options.reviewSource
+                ? {
+                    features: {
+                      shell_tool: false,
+                      view_image: false,
+                      multi_agent: false,
+                    },
+                  }
+                : {}),
               filesystem: {
                 ":root": "read",
                 "/auth": "deny",
@@ -347,8 +364,8 @@ export async function runConversation(options: {
                   HOME: "/task/home",
                   LANG: "C.UTF-8",
                 },
-                projects: { [options.cwd]: { trust_level: "untrusted" } },
               },
+              projects: { [options.cwd]: { trust_level: "untrusted" } },
             },
           }
         : {
@@ -362,7 +379,14 @@ export async function runConversation(options: {
     const startThread = () =>
       request("thread/start", {
         ...config,
-        ...(options.channel ? { dynamicTools: conversationTools } : {}),
+        ...(options.channel || options.reviewSource
+          ? {
+              dynamicTools: [
+                ...(options.channel ? conversationTools : []),
+                ...(options.reviewSource ? reviewSourceTools : []),
+              ],
+            }
+          : {}),
       });
     if (options.threadId) {
       try {
