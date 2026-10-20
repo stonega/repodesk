@@ -11,6 +11,7 @@ import { GitHubIssues } from "./github/issues.ts";
 import { GitHubPullRequests } from "./github/pull-requests.ts";
 import { GitHubApps } from "./github/registry.ts";
 import { GitHubUsers } from "./github/users.ts";
+import { GoogleService } from "./google/service.ts";
 import { startWorker } from "./jobs/queue.ts";
 import { RuntimeLogger } from "./observability/logs.ts";
 import { ReviewExecutor } from "./review-bot/executor.ts";
@@ -40,6 +41,7 @@ const plugins = new PluginService(
     cfg.PUBLIC_ORIGIN,
   ),
   new SearchConsoleService(store, cfg.ENCRYPTION_KEY),
+  new GoogleService(store, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN),
 );
 const stop = await startWorker(
   store,

@@ -14,6 +14,7 @@ import {
   type Workspace,
 } from "../domain.ts";
 import { githubReadAllowed } from "../github/metadata-policy.ts";
+import { googleReadAllowed } from "../google/policy.ts";
 import { searchConsoleReadAllowed } from "../search-console/policy.ts";
 import { skillSourcesPresent } from "../skills/provenance.ts";
 import { memoryReferences } from "../workspaces/conversation-memory.ts";
@@ -183,6 +184,12 @@ function assistantEntries(w: Workspace, r: Run, cutoff: number): Entry[] {
       Date.parse(run.at) <= cutoff ||
       !readable(w, r, run.actor, run.chatId, run.topicId) ||
       !githubReadAllowed(w, run) ||
+      !googleReadAllowed(w, {
+        ...run,
+        actor: r.actor,
+        chatId: r.chatId,
+        workflowId: r.workflowId,
+      }) ||
       !cloudflareReadAllowed(w, {
         ...run,
         actor: r.actor,

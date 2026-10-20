@@ -245,3 +245,11 @@ credentials and discovers/selects properties through modal editors. Key replacem
 clears property grants and disables the plugin. Current plugin revisions fence
 provider calls, retained evidence and delivery; group requests and schedules are
 excluded. No verification, submission, deletion or indexing writes are exposed.
+
+## Independent Google plugins
+
+Google Docs, Google Sheets, Google Drive and Gmail each have their own built-in
+Pi extension, catalog/detail page, connection and enablement. Read/search tools
+require an active workspace owner/admin in a private interactive conversation.
+No file extension or Google suite-wide activation is needed. See
+[setup, scopes and boundaries](../implementation/google-workspace.md).

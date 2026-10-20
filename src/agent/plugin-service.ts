@@ -28,6 +28,13 @@ import { GitHubMetadata } from "../github/metadata.ts";
 import { GitHubPullRequests } from "../github/pull-requests.ts";
 import { GitHubApps } from "../github/registry.ts";
 import { repositoryAccess } from "../github/user-access.ts";
+import {
+  type GooglePlugin,
+  googleDefinitions,
+  googlePlugins,
+} from "../google/config.ts";
+import { googleExtension } from "../google/extension.ts";
+import type { GoogleService } from "../google/service.ts";
 import { searchConsoleTool } from "../search-console/config.ts";
 import { searchConsoleExtension } from "../search-console/extension.ts";
 import type { SearchConsoleService } from "../search-console/service.ts";
@@ -57,6 +64,7 @@ export class PluginService {
     private githubApp?: GitHubApp | GitHubApps,
     readonly cloudflare?: CloudflareService,
     readonly searchConsole?: SearchConsoleService,
+    readonly google?: GoogleService,
   ) {}
   private legacy?: Promise<PluginRecord[]>;
   private fallback(): Promise<PluginRecord[]> {
@@ -126,6 +134,9 @@ export class PluginService {
       );
       const builtin = prior?.codeTruth;
       const names = new Set<string>(TOOLS);
+      for (const plugin of googlePlugins)
+        if (workspace.plugins?.google?.[plugin]?.settings.enabled)
+          names.add(googleDefinitions[plugin].tool);
       if (workspace.plugins?.cloudflare?.settings.enabled)
         for (const name of cloudflareTools) names.add(name);
       if (workspace.plugins?.searchConsole?.settings.enabled)
@@ -190,6 +201,23 @@ export class PluginService {
       serviceConfigured: Boolean(this.codeTruth),
       workspaces: [{ id: workspace.id, name: workspace.settings.name }],
     };
+  }
+  async saveGoogle(
+    admin: Admin,
+    workspaceId: string,
+    plugin: GooglePlugin,
+    value: unknown,
+  ) {
+    requireThat(this.google, "google_credentials_unavailable", 503);
+    await this.google.view(admin, workspaceId, plugin);
+    const workspace = await this.store.read(workspaceId);
+    return this.google.save(
+      admin,
+      workspaceId,
+      plugin,
+      value,
+      await this.entries(workspace),
+    );
   }
   async searchConsoleView(admin: Admin, workspaceId: string) {
     requireThat(
@@ -352,6 +380,18 @@ export class PluginService {
     const config = workspace.plugins?.codeTruth;
     const targets = config?.enabled ? targetsFor(config, workspaceId) : [];
     const builtins = [];
+    for (const plugin of googlePlugins)
+      if (workspace.plugins?.google?.[plugin]?.settings.enabled) {
+        requireThat(this.google, "google_credentials_unavailable", 503);
+        builtins.push(
+          googleExtension(
+            this.google,
+            workspaceId,
+            workspace.plugins.revision,
+            plugin,
+          ),
+        );
+      }
     if (workspace.plugins?.searchConsole?.settings.enabled) {
       requireThat(
         this.searchConsole,

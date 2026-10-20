@@ -4,6 +4,7 @@ import type { PluginSettings } from "./agent/plugin-config.ts";
 import type { CodingConfig } from "./coding/config.ts";
 import type { GitHubConnection } from "./github/config.ts";
 import type { GitHubUserAccess } from "./github/user-access.ts";
+import type { GooglePlugin } from "./google/config.ts";
 import type { MemoryContext, MemoryState } from "./memory/types.ts";
 import type { ModelProvider, ModelSelection } from "./models/config.ts";
 import type { ReviewConfig, ReviewTask } from "./review-bot/config.ts";
@@ -314,6 +315,9 @@ export interface Run {
   repository?: { id: number; full_name: string; installationId: number };
   githubRead?: RepositorySources;
   cloudflareRead?: { revision: number; accountId: string };
+  googleRead?: Partial<
+    Record<GooglePlugin, { revision: number; connectionId: string }>
+  >;
   searchConsoleRead?: { revision: number };
   handoffRead?: {
     references: MemoryReferences;

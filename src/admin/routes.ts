@@ -25,6 +25,8 @@ import {
 } from "../domain.ts";
 import { type GitHubMember, githubUsernameSchema } from "../github/app.ts";
 import { assignGitHubAccount } from "../github/member-account.ts";
+import { googlePlugin, googleRevision } from "../google/config.ts";
+import { googleStateWorkspace } from "../google/service.ts";
 import { reconcileCharge, resolveDelivery } from "../jobs/recovery.ts";
 import { logQuery, readRuntimeLogs } from "../observability/logs.ts";
 import { requestDeletion } from "../privacy/service.ts";
@@ -869,6 +871,89 @@ export function adminRoutes(
       ),
     ),
   );
+  app.get("/api/admin/workspaces/:id/plugins/google/:plugin", async (c) => {
+    requireThat(plugins.google, "google_credentials_unavailable", 503);
+    return c.json(
+      await plugins.google.view(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+        googlePlugin.parse(c.req.param("plugin")),
+      ),
+    );
+  });
+  app.put("/api/admin/workspaces/:id/plugins/google/:plugin", async (c) =>
+    c.json(
+      await plugins.saveGoogle(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+        googlePlugin.parse(c.req.param("plugin")),
+        await c.req.json(),
+      ),
+    ),
+  );
+  app.post(
+    "/api/admin/workspaces/:id/plugins/google/:plugin/connect",
+    async (c) => {
+      requireThat(plugins.google, "google_credentials_unavailable", 503);
+      const input = googleRevision.parse(await c.req.json());
+      return c.json(
+        await plugins.google.begin(
+          c.get("session").admin,
+          validId(c.req.param("id")),
+          googlePlugin.parse(c.req.param("plugin")),
+          input.revision,
+          hash(sessionCookieValue(c) ?? ""),
+        ),
+      );
+    },
+  );
+  app.post(
+    "/api/admin/workspaces/:id/plugins/google/:plugin/disconnect",
+    async (c) => {
+      requireThat(plugins.google, "google_credentials_unavailable", 503);
+      const input = googleRevision.parse(await c.req.json());
+      return c.json(
+        await plugins.google.disconnect(
+          c.get("session").admin,
+          validId(c.req.param("id")),
+          googlePlugin.parse(c.req.param("plugin")),
+          input.revision,
+        ),
+      );
+    },
+  );
+  app.get("/api/admin/google/:plugin/callback", async (c) => {
+    c.header("Cache-Control", "no-store");
+    c.header("Referrer-Policy", "no-referrer");
+    const plugin = googlePlugin.parse(c.req.param("plugin"));
+    let id: string | undefined;
+    try {
+      requireThat(plugins.google, "google_credentials_unavailable", 503);
+      const input = z
+        .object({
+          state: z.string().max(200),
+          code: z.string().min(1).max(4096).optional(),
+        })
+        .parse(c.req.query());
+      id = googleStateWorkspace(input.state, plugin);
+      await plugins.google.callback(
+        c.get("session").admin,
+        plugin,
+        hash(sessionCookieValue(c) ?? ""),
+        input.state,
+        c.req.query("error") ? undefined : input.code,
+      );
+      return c.redirect(
+        `/admin/plugins/${plugin}?workspace=${id}&google=connected`,
+      );
+    } catch {
+      return c.redirect(
+        id
+          ? `/admin/plugins/${plugin}?workspace=${id}&google=failed`
+          : "/admin/plugins?google=failed",
+      );
+    }
+  });
   app.get("/api/admin/workspaces/:id/plugins", async (c) =>
     c.json(
       await plugins.view(c.get("session").admin, validId(c.req.param("id"))),

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { CloudflareConfig } from "../cloudflare/config.ts";
 import type { CodeTruthSettings } from "../code-truth/config.ts";
+import type { GoogleConfig, GooglePlugin } from "../google/config.ts";
 import type { SearchConsoleConfig } from "../search-console/config.ts";
 
 export const pluginSchema = z
@@ -28,6 +29,7 @@ export interface PluginSettings {
   entries: PluginRecord[];
   codeTruth?: CodeTruthSettings;
   cloudflare?: CloudflareConfig;
+  google?: Partial<Record<GooglePlugin, GoogleConfig>>;
   searchConsole?: SearchConsoleConfig;
 }
 export interface PluginPage {

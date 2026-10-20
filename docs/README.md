@@ -36,6 +36,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [First-run setup](design/first-run-setup.md) | Initial admin creation, bot onboarding, secrets and activation |
 | [LLM extensions / plugins](design/llm-extensions.md) | Existing Pi extension loading, headless compatibility, grants and recovery |
 | [Google Search Console](implementation/search-console.md) | Service account setup, selected properties, read-only search analytics, sitemaps and URL inspection |
+| [Google Docs, Sheets, Drive and Gmail](implementation/google-workspace.md) | Four standalone read/search plugins with independent Google sign-in and enablement |
 | [Cloudflare plugin](implementation/cloudflare.md) | Direct API tokens, account/domain discovery, scoped DNS/Pages queries and approved changes |
 | [Agent skills](design/agent-skills.md) | Web-managed catalog, settings, versioning and Pi integration |
 | [Workspace membership and access](design/access-control.md) | Active membership, roles, enforcement and revocation |

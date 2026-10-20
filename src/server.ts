@@ -10,6 +10,7 @@ import { Store } from "./db/repositories.ts";
 import { configuredGitHubApp } from "./github/app.ts";
 import { GitHubApps } from "./github/registry.ts";
 import { GitHubService } from "./github/service.ts";
+import { GoogleService } from "./google/service.ts";
 import { RuntimeLogger } from "./observability/logs.ts";
 import { ReviewService } from "./review-bot/service.ts";
 import { SearchConsoleService } from "./search-console/service.ts";
@@ -49,6 +50,7 @@ const app = createApp(
       cfg.PUBLIC_ORIGIN,
     ),
     new SearchConsoleService(store, cfg.ENCRYPTION_KEY),
+    new GoogleService(store, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN),
   ),
   new GitHubService(store, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN, githubApp),
   cfg.ENCRYPTION_KEY,

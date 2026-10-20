@@ -38,6 +38,20 @@ when implementing or reviewing a change.
 
 ## Recorded preferences
 
+### Google integrations have independent plugin pages
+
+- **Preference:** Google Docs, Google Sheets, Google Drive and Gmail each appear
+  as a standalone plugin with their own catalog entry, details, connection editor
+  and Enable switch. Connecting or enabling one must not require another.
+- **Scope:** These four Google integrations on desktop and mobile.
+- **Source:** 2026-10-20 — user requested separate plugins for Docs, Sheets, Drive
+  and Gmail.
+- **Acceptance:** Verify four distinct cards/routes, saved summaries separated
+  from modal editors, independent account/enablement changes, and no mandatory
+  suite connection. Apply shared plugin layout, loading, toast and modal rules.
+- **Exceptions:** Shared backend authentication/transport code is appropriate;
+  Google may associate provider authorizations when an operator reuses a client.
+
 ### Admin self-check lives in a corner chat popup
 
 - **Preference:** Keep a self-check assistant in the admin panel's bottom-right

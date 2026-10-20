@@ -1,5 +1,36 @@
 # Implementation evidence
 
+## Independent Google Docs, Sheets, Drive and Gmail plugins (2026-10-20)
+
+Added four standalone built-in plugins with separate catalog/detail pages, OAuth
+clients, account connections, enable switches and Pi tools. Docs reads text across
+document tabs; Sheets reads metadata and explicit formatted A1 ranges; Drive
+searches filenames and reads metadata; Gmail searches messages and reads headers,
+snippets and plain-text MIME parts. Lists preserve provider pagination. Editing,
+sharing, deletion, email sending and attachment downloads are unavailable.
+
+Configuration is operator/workspace/session protected. OAuth uses offline consent,
+S256 PKCE and one-use ten-minute state bound to the product, workspace, operator,
+session, revision and callback. Credentials are encrypted per workspace/product;
+refresh claims serialize workers and fence late disconnect results. Connections
+remain disabled until explicitly enabled. Runtime reads require an active owner
+or admin in a private interactive conversation. Revocation applies to cached
+tool results, retained/derived evidence and delivery. Local disconnect affects
+only the selected plugin; operators revoke provider grants separately. Shared
+OAuth clients can couple revocation at Google.
+
+Validation: `bun run check`, strict TypeScript, production build and the Node
+runtime contract passed. **1008 deterministic tests across 113 files** passed
+against disposable PostgreSQL, including **15 focused Google tests**. All **15
+Google browser scenarios** passed at 1280px/390px, covering independent catalog
+entries, saved summaries/modal separation, first setup, blank-secret retention,
+pending locks, errors/retry, cancellation, local disconnect and consent navigation.
+Desktop/mobile light/dark layouts and affected card spacing were inspected.
+Live Google consent and real account/API behavior remain staging acceptance
+steps. No dependency, migration, account connection, Telegram/model call or
+deployment was added/performed. See [setup and boundaries](google-workspace.md)
+and [runnable requests](../../examples/google-workspace.http).
+
 ## Google Search Console plugin (2026-10-20)
 
 Added a built-in, read-only Google Search Console plugin for finalized search

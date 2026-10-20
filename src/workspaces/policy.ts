@@ -12,6 +12,7 @@ import {
   workflowRepositoriesAllowed,
 } from "../github/metadata-policy.ts";
 import { repositoryAccess } from "../github/user-access.ts";
+import { googleReadAllowed } from "../google/policy.ts";
 import { memoryContextValid } from "../memory/state.ts";
 import { searchConsoleReadAllowed } from "../search-console/policy.ts";
 import { validMemory } from "./conversation-memory.ts";
@@ -94,6 +95,7 @@ function allowedRun(
     !run.cancelled &&
     githubReadAllowed(w, run) &&
     cloudflareReadAllowed(w, run) &&
+    googleReadAllowed(w, run) &&
     searchConsoleReadAllowed(w, run) &&
     (!run.handoffRead ||
       (validMemory(run.handoffRead.references, w.messages) &&

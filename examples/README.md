@@ -52,3 +52,6 @@ page manages installed-file registrations and grants; it does not upload or inst
 Use it after `code-truth.compose.yaml`; follow [GitHub App setup](../docs/implementation/github-app.md).
 
 - [Google Search Console](search-console.http): save a service account, discover/select properties, enable or remove the connection, and try private Telegram queries.
+
+See [google-workspace.http](google-workspace.http) for the four independent Google
+plugins, OAuth setup, explicit enablement, local disconnect and read-tool inputs.
