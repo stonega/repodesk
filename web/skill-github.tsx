@@ -1,8 +1,12 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import type { Skill, SkillSpec } from "../src/domain.ts";
-import type { GitHubSkillDiscovery } from "../src/skills/github-source.ts";
-import { ModalActions, ModalPending } from "./modal.tsx";
+import type {
+  GitHubSkillCandidate,
+  GitHubSkillDiscovery,
+} from "../src/skills/github-source.ts";
+import { Modal, ModalActions, ModalPending } from "./modal.tsx";
 import { Select } from "./select.tsx";
+import { SkillSourceDetails } from "./skill-preview.tsx";
 import { useToast } from "./toast.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
@@ -38,9 +42,21 @@ const messages: Record<string, string> = {
     "A skill with this name already exists. Rename the existing draft before importing.",
   invalid_markdown: "The file must be valid UTF-8 Markdown, at most 16 KB.",
   unsupported_frontmatter:
-    "This skill uses unsupported frontmatter. Supported fields: name, description, allowed-tools.",
+    "Supported frontmatter fields: name, description, allowed-tools, license, compatibility, metadata.",
+  invalid_frontmatter:
+    "The frontmatter must be valid YAML without aliases or custom tags.",
+  duplicate_metadata:
+    "The frontmatter contains duplicate fields. Each field must appear once.",
+  skill_description_too_long:
+    "The skill description must be at most 1,024 characters.",
+  unsupported_skill_tools:
+    "This skill requests tools that RepoDesk does not provide. Adapt allowed-tools to the available application tools.",
+  invalid_skill_resources:
+    "Supporting files must be UTF-8 text: at most 32 files, 64 KB each and 256 KB combined.",
+  skill_reference_unavailable:
+    "A linked supporting file is missing or cannot be imported. Use regular Markdown or text files inside this skill's folder.",
   invalid_skill_metadata:
-    "The skill metadata or requested tools are unsupported.",
+    "Check the skill name, description and metadata types. Names use lowercase letters, digits and hyphens (up to 64 characters); descriptions allow up to 1,024 characters; metadata values must be strings.",
   frontmatter_required:
     "This file needs SKILL.md name and description frontmatter.",
   skill_contains_secret_or_binary:
@@ -49,6 +65,51 @@ const messages: Record<string, string> = {
 function message(error: unknown) {
   const code = error instanceof Error ? error.message : String(error);
   return messages[code] ?? code;
+}
+function skillName(skill: GitHubSkillCandidate) {
+  return skill.spec?.name ?? skill.path.split("/").at(-2) ?? skill.path;
+}
+function importIssue(skill: GitHubSkillCandidate) {
+  return skill.error
+    ? message(skill.error)
+    : skill.alreadyImported
+      ? "Already imported. Check for updates on its card."
+      : skill.duplicate
+        ? "Duplicate skill name. Rename the existing draft or choose a source with a unique name."
+        : undefined;
+}
+function SkillImportPreview({
+  skill,
+  onClose,
+}: {
+  skill: GitHubSkillCandidate;
+  onClose: () => void;
+}) {
+  const issue = importIssue(skill);
+  return (
+    <Modal
+      title={`Skill: ${skillName(skill)}`}
+      onClose={onClose}
+      cancelLabel="Back"
+    >
+      <div className="skill-source-preview">
+        <p className="muted skill-source-path">{skill.path}</p>
+        {issue && (
+          <p className="notice" role="status">
+            {issue}
+          </p>
+        )}
+        {skill.spec && (
+          <>
+            <p>{skill.spec.description}</p>
+            <p className="prose">{skill.spec.body}</p>
+            <SkillSourceDetails spec={skill.spec} />
+          </>
+        )}
+        <ModalActions>{null}</ModalActions>
+      </div>
+    </Modal>
+  );
 }
 function useOperation() {
   const [busy, setBusy] = useState(false);
@@ -89,6 +150,7 @@ export function SkillImport({
   const [markdown, setMarkdown] = useState("");
   const [discovery, setDiscovery] = useState<GitHubSkillDiscovery>();
   const [selected, setSelected] = useState<string[]>([]);
+  const [previewing, setPreviewing] = useState<GitHubSkillCandidate>();
   const { busy, error, run } = useOperation();
   const notify = useToast();
   const base = `/api/admin/workspaces/${id}/skills`;
@@ -110,8 +172,8 @@ export function SkillImport({
         <>
           <p className="muted">
             Paste a repository, folder, or SKILL.md link. Private repositories
-            use this workspace's connected GitHub App. Only instruction Markdown
-            is imported.
+            use this workspace's connected GitHub App. Linked Markdown and text
+            files inside each skill's folder are included for review.
           </p>
           <label className="field">
             <span>GitHub link</span>
@@ -149,11 +211,13 @@ export function SkillImport({
               {discovery.skills.map((skill) => {
                 const unavailable =
                   !!skill.error || skill.alreadyImported || skill.duplicate;
+                const name = skillName(skill);
                 return (
                   <div className="skill-source-option" key={skill.path}>
                     <label className="check">
                       <input
                         type="checkbox"
+                        aria-label={name}
                         disabled={busy || unavailable}
                         checked={selected.includes(skill.path)}
                         onChange={(e) =>
@@ -164,25 +228,17 @@ export function SkillImport({
                           )
                         }
                       />
-                      <span>{skill.spec?.name ?? skill.path}</span>
                     </label>
-                    <p className="muted skill-source-path">{skill.path}</p>
-                    {skill.spec && <p>{skill.spec.description}</p>}
-                    {unavailable && (
-                      <p className="muted">
-                        {skill.error
-                          ? message(skill.error)
-                          : skill.alreadyImported
-                            ? "Already imported. Check for updates on its card."
-                            : "Duplicate skill name. Rename the existing draft or choose a source with a unique name."}
-                      </p>
-                    )}
-                    {skill.spec && (
-                      <details>
-                        <summary>Preview instructions</summary>
-                        <p className="prose">{skill.spec.body}</p>
-                      </details>
-                    )}
+                    <button
+                      type="button"
+                      className="text-button skill-source-name"
+                      aria-label={`View ${name}`}
+                      aria-haspopup="dialog"
+                      disabled={busy}
+                      onClick={() => setPreviewing(skill)}
+                    >
+                      {name}
+                    </button>
                   </div>
                 );
               })}
@@ -192,8 +248,10 @@ export function SkillImport({
       ) : (
         <>
           <p className="muted">
-            Frontmatter supports name, description, and allowed-tools. Files are
-            limited to 16 KB; executable bundles are not imported.
+            YAML frontmatter supports name, description, allowed-tools, license,
+            compatibility, and metadata. Descriptions allow up to 1,024
+            characters. Files are limited to 16 KB. Use a GitHub link to include
+            supporting files.
           </p>
           <label className="field">
             <span>Markdown file</span>
@@ -303,6 +361,12 @@ export function SkillImport({
           </button>
         )}
       </ModalActions>
+      {previewing && (
+        <SkillImportPreview
+          skill={previewing}
+          onClose={() => setPreviewing(undefined)}
+        />
+      )}
     </>
   );
 }
@@ -349,11 +413,13 @@ export function SkillGitHubUpdate({
                 <h3>Current draft</h3>
                 <p>{skill.draft.description}</p>
                 <pre>{skill.draft.body}</pre>
+                <SkillSourceDetails spec={skill.draft} />
               </section>
               <section>
                 <h3>Source update</h3>
                 <p>{result.spec.description}</p>
                 <pre>{result.spec.body}</pre>
+                <SkillSourceDetails spec={result.spec} />
               </section>
             </div>
             <details>

@@ -321,14 +321,116 @@ input[type="radio"] {
   padding: 0;
   accent-color: var(--ui-accent);
 }
-input[type="checkbox"] {
+input[type="checkbox"]:not([role="switch"]) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: 0 0 auto;
   width: 20px;
   height: 20px;
+  margin: 2px 0;
+  border: 1.5px solid var(--ui-muted);
+  border-radius: 6px;
+  background: var(--ui-surface);
+  color: var(--ui-on-accent);
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+input[type="checkbox"]:not([role="switch"])::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  background: currentColor;
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m3.5 8 3 3 6-6' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  opacity: 0;
+}
+input[type="checkbox"]:not([role="switch"]):is(:checked, :indeterminate) {
+  background: var(--ui-accent);
+  border-color: var(--ui-accent);
+}
+input[type="checkbox"]:not([role="switch"]):is(
+  :checked,
+  :indeterminate
+)::before {
+  opacity: 1;
+}
+input[type="checkbox"]:not([role="switch"]):indeterminate::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8h8' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+input[type="checkbox"]:not([role="switch"]):hover:not(:disabled) {
+  border-color: var(--ui-accent);
+}
+input[type="checkbox"]:not([role="switch"]):is(
+  :checked,
+  :indeterminate
+):hover:not(:disabled) {
+  background: var(--ui-accent-hover);
+  border-color: var(--ui-accent-hover);
+}
+input[type="checkbox"]:not([role="switch"]):disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+:is(label.check, label.checkbox, .plugin-check, .record-form .form-check) {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 8px;
+  border-radius: 8px;
+  color: var(--ui-text);
+  font-size: 14px;
+  line-height: 24px;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+:is(
+  label.check,
+  label.checkbox,
+  .plugin-check,
+  .record-form .form-check
+):hover:not(:has(input:disabled)) {
+  background: var(--ui-surface-muted);
+}
+:is(label.check, label.checkbox, .plugin-check, .record-form .form-check):has(
+  input:is(:checked, :indeterminate)
+) {
+  background: var(--ui-accent-soft);
+}
+:is(label.check, label.checkbox, .plugin-check, .record-form .form-check):has(
+  input:is(:checked, :indeterminate)
+):hover:not(:has(input:disabled)) {
+  background: var(--ui-accent-soft-hover);
+}
+:is(label.check, label.checkbox, .plugin-check, .record-form .form-check):has(
+  input:disabled
+) {
+  color: var(--ui-muted);
+  cursor: not-allowed;
+}
+@media (prefers-reduced-motion: reduce) {
+  input[type="checkbox"]:not([role="switch"]) {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  input[type="checkbox"]:not([role="switch"]) {
+    appearance: auto;
+  }
+  input[type="checkbox"]:not([role="switch"])::before {
+    display: none;
+  }
 }
 textarea {
   resize: vertical;
 }
-input:focus,
+input:not([type="checkbox"]):focus,
+input[type="checkbox"]:focus-visible,
 textarea:focus,
 select:focus,
 button:focus-visible,
@@ -919,10 +1021,6 @@ input.plugin-toggle-input:checked::before {
   display: grid;
   max-height: 260px;
   overflow: auto;
-}
-.cloudflare-domain-list .check {
-  min-height: 44px;
-  overflow-wrap: anywhere;
 }
 .repository-list-stacked {
   display: grid;
@@ -2564,16 +2662,6 @@ input.plugin-toggle-input:disabled {
   margin: 0;
   min-width: 0;
 }
-.plugin-check {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin: 9px 0;
-  font-size: 13px;
-}
-.plugin-check input {
-  flex-shrink: 0;
-}
 .plugin-check > :last-child {
   overflow-wrap: anywhere;
 }
@@ -2938,15 +3026,6 @@ input.plugin-toggle-input:disabled {
   font-weight: 600;
   padding: 0 4px;
 }
-.record-form .form-check {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 44px;
-}
-.record-form .form-check input {
-  width: auto;
-}
 .record-form .field > label {
   font-weight: 600;
 }
@@ -3165,16 +3244,32 @@ input.plugin-toggle-input:disabled {
   overflow-wrap: anywhere;
 }
 .skill-source-option {
-  padding-block: 16px;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0;
   border-top: 1px solid var(--ui-border);
 }
-.skill-source-option p {
-  margin-block: 8px;
+.skill-source-option > .check {
+  flex: 0 0 44px;
+  justify-content: center;
 }
-.skill-source-option .check {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
+.skill-source-option:has(input:checked) {
+  background: var(--ui-accent-soft);
+}
+button.skill-source-name {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.skill-source-preview {
+  display: grid;
+  gap: 16px;
+}
+.skill-source-preview > p {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 .skill-source-retry:has(button) {
   margin-block: 12px;

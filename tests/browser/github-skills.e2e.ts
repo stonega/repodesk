@@ -1,6 +1,8 @@
 import { expect, type Page, test } from "@playwright/test";
 import type { Skill } from "../../src/domain.ts";
 import type { GitHubSkillDiscovery } from "../../src/skills/github-source.ts";
+import { importMarkdown } from "../../src/skills/import.ts";
+import { harnessSkills } from "../fixtures/harness-skills.ts";
 import { chooseOption } from "./dropdown-helpers.ts";
 
 const workspaceId = "github-skills-fixture";
@@ -88,6 +90,257 @@ async function fixture(page: Page, items: Skill[] = []) {
 }
 
 for (const width of [1280, 375]) {
+  test(`harness skills select, review metadata and supporting files, then display saved summaries at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    if (width === 375)
+      await page.addInitScript(() =>
+        localStorage.setItem("repodesk.theme", "dark"),
+      );
+    const items: Skill[] = [];
+    const candidates = Object.entries(harnessSkills).map(([name, source]) => ({
+      path: `skills/${name}/SKILL.md`,
+      sha: "f".repeat(40),
+      spec: {
+        ...importMarkdown(source),
+        ...(name === "new-project"
+          ? {
+              resources: [
+                { path: "WEB.md", body: "Web guide from the source commit." },
+                {
+                  path: "DESIGN.md",
+                  body: "Design guide from the source commit.",
+                },
+              ],
+            }
+          : {}),
+      },
+    }));
+    await fixture(page, items);
+    await page.route("**/skills/github/discover", (route) =>
+      route.fulfill({
+        json: {
+          ...discovery,
+          skills: [
+            ...candidates,
+            {
+              path: "invalid/description/SKILL.md",
+              sha: "d".repeat(40),
+              error: "skill_description_too_long",
+            },
+            {
+              path: "invalid/tools/SKILL.md",
+              sha: "e".repeat(40),
+              error: "unsupported_skill_tools",
+            },
+          ],
+        },
+      }),
+    );
+    await page.route("**/skills/github/import", async (route) => {
+      expect(route.request().postDataJSON().paths).toHaveLength(4);
+      const source = importedSkill().githubSource;
+      if (!source) throw Error("missing source fixture");
+      for (const candidate of candidates)
+        items.push({
+          ...importedSkill(),
+          id: candidate.spec.slug,
+          draft: candidate.spec,
+          githubSource: {
+            ...source,
+            path: candidate.path,
+          },
+        });
+      await route.fulfill({ json: { items } });
+    });
+    await page
+      .getByRole("button", { name: "Import skill", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "Import SKILL.md" });
+    await dialog.getByLabel("GitHub link", { exact: true }).fill(url);
+    await dialog.getByRole("button", { name: "Find skills" }).click();
+    for (const [index, name] of Object.keys(harnessSkills).entries()) {
+      await expect(
+        dialog.getByRole("checkbox", { name, exact: true }),
+      ).toBeEnabled();
+      const checkbox = dialog.getByRole("checkbox", { name, exact: true });
+      if (index === 0) {
+        await checkbox.focus();
+        await page.keyboard.press("Space");
+        await expect(checkbox).toBeChecked();
+      } else await checkbox.check();
+    }
+    const rows = dialog.locator(".skill-source-option");
+    await expect(rows).toHaveText([
+      ...Object.keys(harnessSkills),
+      "description",
+      "tools",
+    ]);
+    await expect(rows.locator("p, details")).toHaveCount(0);
+    const heights = await rows.evaluateAll((items) =>
+      items.map((item) => item.getBoundingClientRect().height),
+    );
+    expect(heights.every((height) => height >= 44 && height <= 48)).toBe(true);
+    const chromeName = dialog.getByRole("button", {
+      name: "View live-system-chrome",
+      exact: true,
+    });
+    await chromeName.focus();
+    await page.keyboard.press("Enter");
+    const chrome = page.getByRole("dialog", {
+      name: "Skill: live-system-chrome",
+      exact: true,
+    });
+    await chrome.getByText("Source metadata", { exact: true }).click();
+    await expect(
+      chrome.getByText(/Requires agent-browser with auto-connect support/),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(chrome).toHaveCount(0);
+    await expect(chromeName).toBeFocused();
+    await expect(
+      dialog.getByRole("checkbox", { name: "live-system-chrome", exact: true }),
+    ).toBeChecked();
+    await dialog
+      .getByRole("button", { name: "View new-project", exact: true })
+      .click();
+    const project = page.getByRole("dialog", {
+      name: "Skill: new-project",
+      exact: true,
+    });
+    await project.getByText("Supporting files (2)", { exact: true }).click();
+    await project.getByText("WEB.md", { exact: true }).click();
+    await expect(
+      project.getByText("Web guide from the source commit.", { exact: true }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: test.info().outputPath("harness-import-review.png"),
+      fullPage: true,
+    });
+    await project.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(project).toHaveCount(0);
+    await page.screenshot({
+      path: test.info().outputPath("harness-compact-list.png"),
+    });
+    await expect(
+      dialog.getByRole("checkbox", {
+        name: "description",
+        exact: true,
+      }),
+    ).toBeDisabled();
+    await dialog
+      .getByRole("button", { name: "View description", exact: true })
+      .click();
+    const descriptionIssue = page.getByRole("dialog", {
+      name: "Skill: description",
+      exact: true,
+    });
+    await expect(
+      descriptionIssue.getByText(
+        "The skill description must be at most 1,024 characters.",
+      ),
+    ).toBeVisible();
+    await expect(
+      descriptionIssue.getByText("invalid/description/SKILL.md", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await descriptionIssue
+      .getByRole("button", { name: "Back", exact: true })
+      .click();
+    await expect(
+      dialog.getByRole("checkbox", {
+        name: "tools",
+        exact: true,
+      }),
+    ).toBeDisabled();
+    await dialog
+      .getByRole("button", { name: "View tools", exact: true })
+      .click();
+    const toolsIssue = page.getByRole("dialog", {
+      name: "Skill: tools",
+      exact: true,
+    });
+    await toolsIssue
+      .getByText(/This skill requests tools that RepoDesk does not provide/)
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: test.info().outputPath("harness-validation-errors.png"),
+    });
+    await toolsIssue.getByRole("button", { name: "Back", exact: true }).click();
+    await dialog
+      .getByRole("button", { name: "Import 4 drafts", exact: true })
+      .click();
+    await expect(dialog).toHaveCount(0);
+    const card = page
+      .locator(".skill-card")
+      .filter({ has: page.getByText("new-project", { exact: true }) });
+    await card
+      .getByText("Preview instructions & dependent schedules", { exact: true })
+      .click();
+    await card.getByText("Supporting files (2)", { exact: true }).click();
+    await card.getByText("WEB.md", { exact: true }).click();
+    await expect(
+      card.getByText("Web guide from the source commit.", { exact: true }),
+    ).toBeVisible();
+    await expect(card.locator("input, select, textarea")).toHaveCount(0);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(width);
+    await page.screenshot({
+      path: test.info().outputPath("harness-saved-summary.png"),
+      fullPage: true,
+    });
+    const projectSpec = candidates.find(
+      (candidate) => candidate.spec.slug === "new-project",
+    )?.spec;
+    if (!projectSpec) throw Error("missing project fixture");
+    await page.route("**/github/check", (route) =>
+      route.fulfill({
+        json: {
+          changed: true,
+          locallyModified: false,
+          commit: "e".repeat(40),
+          spec: {
+            ...projectSpec,
+            resources: [
+              {
+                path: "WEB.md",
+                body: "Updated web guide from the source commit.",
+              },
+            ],
+          },
+        },
+      }),
+    );
+    await card.getByRole("button", { name: "Check for updates" }).click();
+    const update = page.getByRole("dialog", { name: "Update new-project" });
+    await update
+      .getByRole("button", { name: "Check for updates", exact: true })
+      .click();
+    const current = update.locator("section").filter({
+      has: page.getByRole("heading", { name: "Current draft", exact: true }),
+    });
+    const next = update.locator("section").filter({
+      has: page.getByRole("heading", { name: "Source update", exact: true }),
+    });
+    await current.getByText("Supporting files (2)", { exact: true }).click();
+    await current.getByText("WEB.md", { exact: true }).click();
+    await next.getByText("Supporting files (1)", { exact: true }).click();
+    await next.getByText("WEB.md", { exact: true }).click();
+    await expect(
+      current.getByText("Web guide from the source commit.", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      next.getByText("Updated web guide from the source commit.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: test.info().outputPath("harness-guide-update.png"),
+    });
+  });
   test(`unchanged sources and successful updates keep published instructions at ${width}px in dark mode`, async ({
     page,
   }) => {
@@ -234,7 +487,7 @@ for (const width of [1280, 375]) {
       dialog.getByText(/3 skills found · Connected GitHub App/),
     ).toBeVisible();
     await expect(
-      dialog.getByRole("checkbox", { name: "skills/broken/SKILL.md" }),
+      dialog.getByRole("checkbox", { name: "broken", exact: true }),
     ).toBeDisabled();
     await expect(
       dialog.getByRole("button", { name: "Import selected drafts" }),
@@ -258,6 +511,11 @@ for (const width of [1280, 375]) {
     await expect(
       dialog.getByRole("button", { name: "Importing…" }),
     ).toBeDisabled();
+    for (const name of ["source-recap", "source-review", "broken"]) {
+      await expect(
+        dialog.getByRole("button", { name: `View ${name}`, exact: true }),
+      ).toBeDisabled();
+    }
     await expect(
       dialog.getByRole("button", { name: "Cancel", exact: true }),
     ).toBeDisabled();

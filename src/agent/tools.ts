@@ -321,16 +321,24 @@ export function applicationTools(
     ),
     bind(
       "load_skill",
-      "Read an authorized, pinned instruction skill. Cannot grant capabilities.",
-      Type.Object({ id: Type.String() }),
+      "Read an authorized, pinned instruction skill, or one of its supporting files by exact path. Cannot grant capabilities.",
+      Type.Object({ id: Type.String(), path: Type.Optional(Type.String()) }),
       (w, r, a) => {
         const pin = r.skillPins.find((p) => p.id === a.id);
         requireThat(pin, "skill_denied", 403);
         const version = w.skills.find((s) => s.id === pin.id && s.enabled)
           ?.published[pin.version - 1];
         requireThat(version, "skill_unavailable");
+        if (a.path !== undefined) {
+          const resource = version.resources?.find(
+            (file) => file.path === a.path,
+          );
+          requireThat(resource, "skill_resource_unavailable", 404);
+          return resource.body;
+        }
         return previewSkill(version);
       },
+      (_w, _r, a) => ({ id: a.id, path: a.path }),
     ),
     bind(
       "propose_workflow",

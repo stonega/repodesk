@@ -1,0 +1,11 @@
+// Regression samples retain the metadata of the reported harness skills.
+export const harnessSkills: Record<string, string> = {
+  "gnome-svg-icons":
+    "---\nname: gnome-svg-icons\ndescription: Add, package, and troubleshoot custom SVG icons in native GNOME applications using GTK 4, libadwaita, and GJS. Use for bundled toolbar and menu icons, symbolic recoloring, light/dark/high-contrast behavior, preserved multicolor artwork, and icons missing from installed builds. GNOME Shell St widgets use a different styling API.\n---\nFollow the host application conventions and available tools.",
+  "live-system-chrome":
+    "---\nname: live-system-chrome\ndescription: Verify local web applications in the user's already-running system Chrome and real browser profile through agent-browser auto-connect, without launching a separate Chrome. Use whenever the user asks to check a page they opened, reuse their current Chrome/profile/login state, attach to an existing browser, or avoid a fresh automation browser.\nmetadata:\n  compatibility: Requires agent-browser with auto-connect support and Google Chrome 144 or newer.\n---\nFollow the host application conventions and available tools.",
+  "new-project":
+    '---\nname: new-project\ndescription: Bootstrap a new project from this harness, including repo layout, project-specific AGENTS instructions, starter documentation, and the default app stack. Use whenever the user wants to create, scaffold, initialize, or structure a new repo, especially when they mention Bun, Expo, React Router, Hono, Cloudflare, Ink, theme-aware TUIs, native GNOME apps, GNOME Shell extensions, monorepos, standalone apps, or "start a new project" without a fully specified setup.\n---\nRead [Web](WEB.md) and [Design](DESIGN.md).',
+  "read-github-repo":
+    "---\nname: read-github-repo\ndescription: Read and analyze GitHub repository content by cloning it into a fresh temporary directory, honoring any ref, path, and line anchor in the URL, then searching the local checkout for surrounding context. Use when a user provides a github.com repository, blob, tree, commit, or pull-request link and wants the code or repository content inspected, explained, reviewed, or traced. Do not use for issue or discussion content that is not stored in Git.\n---\nFollow the host application conventions and available tools.",
+};

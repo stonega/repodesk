@@ -1,5 +1,83 @@
 # Implementation evidence
 
+## Compact GitHub skill selection (2026-10-20)
+
+GitHub import discovery rows now show only a checkbox and skill name in a compact
+44px selection row. Names open the shared read-only dialog with the source path,
+description, instructions, metadata, supporting files and any import issue.
+Unavailable entries retain working detail links; their selection stays disabled.
+Files without readable name metadata display the containing folder's name, or
+`SKILL.md` at the repository root. Closing details preserves selected skills and
+returns keyboard focus to the name; pending imports lock both selection and
+detail actions. Saved catalog cards and update review retain their existing UI.
+Removed the old description/path blocks and row padding. The scoped preference
+is recorded in [UI rules](../design/ui-rules.md#skill-import-lists-show-names-only).
+
+Validation: lint, strict TypeScript, production build and all **1,053 deterministic
+tests across 118 files** passed with disposable PostgreSQL. All **10 GitHub skill
+browser scenarios** passed, including name-only row content/height, keyboard
+selection, Enter/Escape and focus restoration, preserved selection, metadata and
+supporting-file review, unavailable reasons, pending locks, empty/error recovery
+and saved summaries at 1280px/375px. Desktop/mobile light/dark list, detail,
+pending and error screenshots were inspected. No deployment was performed.
+
+## Harness-compatible skill packages (2026-10-20)
+
+Markdown and GitHub skill imports now parse YAML frontmatter with the explicit
+`yaml` 2.9.0 dependency. Descriptions accept 1,024 characters and names accept 64;
+quoted/multiline values, comments, string/list tool declarations, `license`,
+`compatibility` and string-valued `metadata` are preserved. Invalid YAML, duplicate
+fields, aliases/custom tags, unavailable tools and excessive descriptions have
+specific import errors. The four reported files from `~/Documents/harness` passed
+unchanged through deterministic GitHub discovery; `new-project` included all five
+linked guides.
+
+GitHub discovery bundles recursively linked Markdown/text guides within each
+skill directory from the pinned commit, capped at 32 files, 64 KB each and 256 KB
+combined. Missing guides, secrets, binary text, symlinks and links into another
+skill package cannot supply supporting content. External/outside-directory links,
+scripts and archives are not fetched or executed. Import review, saved previews
+and source-update comparisons expose metadata and guides as read-only details.
+Standalone Markdown uploads still contain only the selected file.
+
+Published versions retain their resource snapshots. `load_skill` can read an exact
+resource path only through the existing workspace, actor, run, enabled-skill and
+version-pin checks, with argument-bound durable replay. Guide-only changes trigger
+source update review without modifying published versions or existing pins.
+Stable draft hashing avoids false local-edit warnings after PostgreSQL JSONB key
+reordering and accepts legacy schema-ordered hashes.
+
+Validation: `bun run check`, strict TypeScript, production build and packaged Node
+runtime contract passed; **1,053 deterministic tests across 118 files** passed
+against disposable PostgreSQL. **29 browser scenarios** passed across GitHub
+imports, presets and search, including the four harness regressions, source
+metadata, supporting files, guide-only update comparisons, explicit errors and
+saved summaries at 1280px and 375px. Desktop/mobile layouts and pending/error
+screenshots were inspected. No migration or deployment was performed. See
+[skill format and bounds](../design/agent-skills.md),
+[user guide](../user/skills.md) and [API examples](../../examples/github-skills.http).
+
+## Consistent admin checkboxes (2026-10-20)
+
+Admin and shared setup checkboxes use rounded controls with SVG checkmarks,
+themed selection/hover backgrounds, visible keyboard focus and 44px minimum
+label targets. Long labels wrap without shrinking the checkbox. Disabled and
+mixed states, reduced motion and native forced-color rendering are supported;
+member and plugin enable switches retain their appearance.
+
+The shared styles replace separate form, plugin, resource and skill-import label
+rules, including the form width override that could shrink checkbox inputs.
+Saved summaries and modal editing remain separate. The reusable preference and
+exceptions are recorded in [UI rules](../design/ui-rules.md#admin-checkboxes-share-a-clear-comfortable-style).
+
+Validation: lint, strict TypeScript, the production build and deterministic tests
+with disposable PostgreSQL passed. All 27 focused browser scenarios passed,
+including four new checkbox scenarios at 1280px/390px in both themes, the admin
+suite and Search Console resource selection. Screenshots were inspected for
+checkbox states, wrapped labels, editors, pending saves, failed saves and forced
+colors, plus saved Search Console summaries and resource editors. No dependency
+or migration was added.
+
 ## Built-in Defuddle web reader (2026-10-20)
 
 Added `read_web` as an internal preset for authorized chat and scheduled runs,

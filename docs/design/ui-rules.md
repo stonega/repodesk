@@ -19,7 +19,7 @@ when implementing or reviewing a change.
 | Code Truth setup | [URL and description](#code-truth-repositories-use-a-url-and-description) |
 | Card spacing after content changes | [Content layout owns card spacing](#content-layout-owns-card-spacing) |
 | Repository display | [Shared repository cards](#repository-cards-share-one-style), [member GitHub details](#member-github-columns-show-only-a-view-button), [connected repositories](#connected-github-repositories-stay-compact-and-directly-accessible) |
-| Action labels and controls | [Card action placement](#card-actions-stay-at-the-top-right), [Edit/New labels](#edit-and-add-buttons-use-short-labels), [shared icons](#common-action-buttons-use-reicon), [dropdown styling](#dropdown-inputs-share-the-workspace-selector-style) |
+| Action labels and controls | [Card action placement](#card-actions-stay-at-the-top-right), [Edit/New labels](#edit-and-add-buttons-use-short-labels), [shared icons](#common-action-buttons-use-reicon), [dropdown styling](#dropdown-inputs-share-the-workspace-selector-style), [checkbox styling](#admin-checkboxes-share-a-clear-comfortable-style) |
 | Dialog actions | [Cancel order](#modal-cancel-follows-the-primary-action), [close controls](#modal-close-controls-use-a-plain-x), [secondary actions](#dialog-support-actions-use-secondary-buttons) |
 | Feedback and loading | [Toasts and error placement](#routine-action-confirmations-and-request-errors-use-toasts), [visible loading layout](#loading-keeps-the-layout-visible) |
 | Log pagination and density | [Shared pagination and compact log text](#logs-reuse-run-pagination-with-compact-text), [refresh menu](#logs-use-an-auto-refresh-menu) |
@@ -37,6 +37,25 @@ when implementing or reviewing a change.
 - Keep illustrative examples separate from established preferences.
 
 ## Recorded preferences
+
+### Admin checkboxes share a clear, comfortable style
+
+- **Preference:** Give checkbox choices one consistent appearance across the admin
+  panel: rounded boxes, a clear SVG checkmark, visible keyboard focus and labels
+  that form a comfortable click/tap target. Keep long labels aligned and readable,
+  with distinct selected and disabled states in both themes.
+- **Scope:** Admin and shared setup checkbox controls, including modal forms,
+  permission choices, resource selection and skill imports.
+- **Source:** 2026-10-20 — user requested improving checkbox UI in the admin panel.
+  The rounded blue control, highlighted selection row and 44px minimum label
+  target are implementation choices following the existing visual language.
+- **Acceptance:** Verify label clicks and Space toggle the native input, keyboard
+  focus remains visible, disabled choices cannot change, and pending forms retain
+  their locks. Check wrapped labels, checked/unchecked/mixed states, desktop/mobile
+  layouts and both themes. Honor reduced motion and forced-color settings.
+- **Exceptions:** Existing member and plugin enable switches retain their switch
+  appearance and placement. Checkboxes stay inside existing editors; saved records
+  continue to use readable summaries under the modal-editor rule.
 
 ### Web search providers live in Model settings
 
@@ -1837,6 +1856,24 @@ Use this format for each preference:
   Selection and draft-update review are the implementation interpretation.
 - **Exceptions:** Source update checks are deliberate skill operations, so their
   labeled card action is permitted by the rule against routine refresh buttons.
+
+### Skill import lists show names only
+
+- **Preference:** Keep each discovered skill to its selection checkbox and name.
+  Open the description, source path, import issue, instructions and supporting
+  files from the name, instead of repeating them below every row.
+- **Scope:** GitHub skill discovery inside the import modal. Saved catalog cards
+  and source-update comparisons retain their existing information and controls.
+- **Source:** 2026-10-20 — user requested showing only the skill name in each
+  list item to keep the skill list short, following the GitHub import discussion.
+  A read-only details dialog is the implementation choice.
+- **Acceptance:** Rows contain only the checkbox and name at desktop/mobile
+  widths. Selection and keyboard access still work; details preserve selection,
+  show unavailable reasons and return focus to the name. Pending imports lock
+  selection and detail actions. Remove the old row padding and empty wrappers.
+- **Exceptions:** A file without readable name metadata uses its containing
+  folder's name, or `SKILL.md` for a repository-root file. Full paths and duplicate
+  names can be distinguished in details. Unavailable skills keep details accessible.
 
 ### Codex runtime is configurable in the admin panel
 

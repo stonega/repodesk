@@ -118,11 +118,44 @@ export const TOOLS = [
 ] as const;
 export const skillSchema = z
   .object({
-    slug: z.string().regex(/^[a-z][a-z0-9-]{1,49}$/),
+    slug: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
     name: z.string().min(1).max(80),
-    description: z.string().min(1).max(300),
-    body: z.string().min(1).max(12000),
+    description: z.string().min(1).max(1024),
+    body: z.string().min(1).max(16384),
     tools: z.array(z.enum(TOOLS)).max(TOOLS.length),
+    frontmatter: z
+      .object({
+        license: z.string().max(2000).optional(),
+        compatibility: z.string().max(2000).optional(),
+        metadata: z
+          .record(z.string().max(100), z.string().max(2000))
+          .optional(),
+      })
+      .strict()
+      .optional(),
+    resources: z
+      .array(
+        z
+          .object({
+            path: z
+              .string()
+              .min(1)
+              .max(1000)
+              .refine(
+                (path) =>
+                  /\.(md|txt)$/i.test(path) &&
+                  !path.includes("\\") &&
+                  !Array.from(path).some((char) => char.charCodeAt(0) < 32) &&
+                  path
+                    .split("/")
+                    .every((part) => part && part !== "." && part !== ".."),
+              ),
+            body: z.string().max(65536),
+          })
+          .strict(),
+      )
+      .max(32)
+      .optional(),
     settings: z
       .object({
         sections: z
@@ -242,6 +275,7 @@ export interface Skill {
     path: string;
     commit: string;
     blobSha: string;
+    bundleHash?: string;
     draftHash: string;
     importedAt: string;
     access: "public" | "connected";

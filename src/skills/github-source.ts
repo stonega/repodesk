@@ -1,6 +1,10 @@
+import { posix } from "node:path";
 import { z } from "zod";
 import { Fault, requireThat, type SkillSpec } from "../domain.ts";
+import { fingerprint } from "../setup/credentials.ts";
+import { validateSkill } from "./catalog.ts";
 import { importMarkdown } from "./import.ts";
+import { skillResourcePaths } from "./resources.ts";
 
 const sha = z.string().regex(/^[a-f0-9]{40}$/);
 export const githubSkillUrl = z.string().trim().min(1).max(2048);
@@ -16,6 +20,14 @@ export type GitHubSkillCandidate = {
   error?: string;
   alreadyImported?: boolean;
   duplicate?: boolean;
+  bundleHash?: string;
+};
+type SkillFile = {
+  path: string;
+  sha: string;
+  type: string;
+  mode: string;
+  size?: number;
 };
 export type GitHubSkillDiscovery = {
   repository: string;
@@ -167,7 +179,7 @@ export class GitHubSkillReader {
       .object({ sha })
       .parse(await this.read(`commits/${encodeURIComponent(ref)}`)).sha;
   }
-  async files(commit: string, scope: string, exact = false) {
+  async tree(commit: string): Promise<SkillFile[]> {
     const tree = z
       .object({
         truncated: z.boolean(),
@@ -185,7 +197,15 @@ export class GitHubSkillReader {
       })
       .parse(await this.read(`git/trees/${commit}?recursive=1`));
     requireThat(!tree.truncated, "github_skill_repository_too_large");
-    const files = tree.tree.filter(
+    return tree.tree;
+  }
+  async files(
+    commit: string,
+    scope: string,
+    exact = false,
+    tree?: SkillFile[],
+  ) {
+    const files = (tree ?? (await this.tree(commit))).filter(
       (file) =>
         file.type === "blob" &&
         ["100644", "100755"].includes(file.mode) &&
@@ -204,28 +224,96 @@ export class GitHubSkillReader {
       })
       .sort((a, b) => a.path.localeCompare(b.path));
   }
-  async candidate(file: {
-    path: string;
-    sha: string;
-    size?: number;
-  }): Promise<GitHubSkillCandidate> {
-    if ((file.size ?? 0) > 16384)
-      return { path: file.path, sha: file.sha, error: "invalid_markdown" };
+  private async text(
+    file: { sha: string; size?: number },
+    limit: number,
+    code: string,
+  ) {
+    requireThat((file.size ?? 0) <= limit, code);
     const blob = z
       .object({
         sha,
         encoding: z.literal("base64"),
-        size: z.number().max(16384),
-        content: z.string().max(24000),
+        size: z.number().max(limit),
+        content: z.string().max(Math.ceil(limit / 3) * 4 + 2048),
       })
       .safeParse(await this.read(`git/blobs/${file.sha}`));
-    if (!blob.success || blob.data.sha !== file.sha)
-      return { path: file.path, sha: file.sha, error: "invalid_markdown" };
+    requireThat(blob.success && blob.data.sha === file.sha, code);
+    const bytes = Buffer.from(blob.data.content, "base64");
+    requireThat(bytes.length === blob.data.size, code);
     try {
-      const bytes = Buffer.from(blob.data.content, "base64");
-      requireThat(bytes.length === blob.data.size, "invalid_markdown");
-      const markdown = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-      return { path: file.path, sha: file.sha, spec: importMarkdown(markdown) };
+      return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      throw new Fault(code);
+    }
+  }
+  async candidate(
+    file: { path: string; sha: string; size?: number },
+    tree: SkillFile[] = [],
+  ): Promise<GitHubSkillCandidate> {
+    try {
+      let spec = importMarkdown(
+        await this.text(file, 16384, "invalid_markdown"),
+      );
+      const root = posix.dirname(file.path);
+      const prefix = root === "." ? "" : `${root}/`;
+      const files = new Map(
+        tree
+          .filter(
+            (entry) =>
+              entry.type === "blob" &&
+              ["100644", "100755"].includes(entry.mode) &&
+              entry.path.startsWith(prefix) &&
+              safePath(entry.path),
+          )
+          .map((entry) => [entry.path.slice(prefix.length), entry]),
+      );
+      const queue = skillResourcePaths(spec.body);
+      const seen = new Set<string>();
+      const resources: { path: string; body: string }[] = [];
+      let bytes = 0;
+      for (const path of queue) {
+        if (seen.has(path)) continue;
+        seen.add(path);
+        requireThat(seen.size <= 32, "invalid_skill_resources");
+        const resource = files.get(path);
+        requireThat(
+          resource &&
+            !tree.some(
+              (entry) =>
+                entry.path !== file.path &&
+                (entry.path === "SKILL.md" ||
+                  entry.path.endsWith("/SKILL.md")) &&
+                `${prefix}${path}`.startsWith(`${posix.dirname(entry.path)}/`),
+            ),
+          "skill_reference_unavailable",
+        );
+        requireThat(
+          bytes + (resource.size ?? 0) <= 262144,
+          "invalid_skill_resources",
+        );
+        const body = await this.text(
+          resource,
+          65536,
+          "invalid_skill_resources",
+        );
+        bytes += Buffer.byteLength(body);
+        requireThat(bytes <= 262144, "invalid_skill_resources");
+        resources.push({ path, body });
+        queue.push(...skillResourcePaths(body, path));
+      }
+      resources.sort((a, b) => a.path.localeCompare(b.path));
+      if (resources.length) spec = validateSkill({ ...spec, resources });
+      return {
+        path: file.path,
+        sha: file.sha,
+        spec,
+        ...(resources.length
+          ? {
+              bundleHash: fingerprint(resources),
+            }
+          : {}),
+      };
     } catch (error) {
       return {
         path: file.path,
@@ -236,17 +324,19 @@ export class GitHubSkillReader {
   }
   async discover(link: GitHubSkillLink) {
     const source = await this.resolve(link);
+    const tree = await this.tree(source.commit);
     const files = await this.files(
       source.commit,
       source.scope,
       link.kind === "blob",
+      tree,
     );
     const skills: GitHubSkillCandidate[] = [];
     // Bound upstream concurrency and retain invalid candidates for explicit UI feedback.
     for (let i = 0; i < files.length; i += 4)
       skills.push(
         ...(await Promise.all(
-          files.slice(i, i + 4).map((file) => this.candidate(file)),
+          files.slice(i, i + 4).map((file) => this.candidate(file, tree)),
         )),
       );
     return { ...source, skills };

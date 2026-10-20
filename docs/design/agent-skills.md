@@ -55,7 +55,7 @@ The skill manager configures instructions and already-registered tools in P0.
 | Control | P0 behavior |
 | --- | --- |
 | Catalog | Search/filter skills by name and enabled state; show purpose, required tools and a Preset badge for built-ins. Custom skills also show version metadata. |
-| Create/import | Create an instruction skill, import a Markdown file, or discover and select multiple `SKILL.md` files from a GitHub repository/folder link, including connected private repositories; validate metadata, size and tool references. |
+| Create/import | Create an instruction skill, import a Markdown file, or discover and select multiple `SKILL.md` packages from a GitHub repository/folder link, including connected private repositories and linked Markdown/text guides; validate metadata, size and tool references. |
 | Detail/editor | Preview every skill's instructions. Edit name, description, instructions and settings for custom skills; presets are read-only. |
 | Enable/disable | Enable approved published versions per workspace and optionally narrow availability per group/workflow. |
 | Tool permissions | Show required tools and effective allowed subset; unavailable tools block activation or require an explicit reduced capability variant. |
@@ -152,7 +152,12 @@ check current restrictions before subsequent tools and delivery.
 
 Imports accept one Markdown file or an HTTPS `github.com` repository, folder
 (`tree`) or `SKILL.md` (`blob`) link. GitHub discovery lists every matching file
-under that scope, including invalid files with reasons. Users explicitly select
+under that scope, including invalid files. Discovery rows show only a selection
+checkbox and skill name; selecting the name opens a read-only dialog with the
+description, source path, instructions, supporting files and any unavailable
+reason. Files without readable name metadata use their containing folder name
+or `SKILL.md` at the repository root. Closing details restores focus and keeps
+the selection. Pending imports lock selection and details. Users explicitly select
 the drafts to import; duplicate slugs fail atomically. A direct file link selects
 only that file. Branch names containing slashes are resolved against GitHub.
 
@@ -165,7 +170,7 @@ approved instructions.
 
 Each imported skill records repository, tracked branch/tag/ref, file path, commit,
 blob SHA and imported draft hash. **Check for updates** opens a review dialog and
-compares that file with the tracked ref. **Save update draft** imports changed
+compares that file and its bundled guides with the tracked ref. **Save update draft** imports changed
 instructions without publishing, enabling or changing scheduled version pins.
 Local draft edits require an explicit replacement checkbox. The server rechecks
 the skill revision and previewed source commit; a changed repository requires a
@@ -173,14 +178,33 @@ fresh preview. Removed files and upstream failures retain the saved skill.
 Updates are initiated in the panel; automatic publication or background syncing
 is not implemented. Commit links remain pinned to that commit.
 
-GitHub imports retain the Markdown format and limits: UTF-8, at most 16 KB,
-supported frontmatter fields `name`, `description`, `allowed-tools`, and registered
-tool names only. Supporting reference files, scripts, symlinks and archives are
-not imported or executed. Discovery caps at 100 skills and rejects truncated or
-oversized GitHub trees rather than presenting incomplete results as complete.
-Supporting reference bundles and reviewed scripted skills remain later additions.
-Only fixed GitHub API endpoints are fetched; links do not authorize arbitrary URL
-downloads or broader tool access.
+Imports accept UTF-8 `SKILL.md` files up to 16 KB with YAML frontmatter. Supported
+fields are `name`, `description`, `allowed-tools`, `license`, `compatibility` and
+`metadata` (string values). Names allow up to 64 characters and descriptions up to
+1,024 characters, preserved without truncation. Quoted and multiline scalars,
+comments, and string/list tool declarations are supported. Duplicate fields,
+aliases, custom tags, unknown fields and unregistered tool names fail explicitly.
+The explicit `yaml` dependency supplies YAML 1.2 parsing instead of the old
+line-based parser. Source metadata is retained as reference data, never authority.
+When tools are omitted, defaults include context/instruction reads and `load_skill`.
+
+GitHub imports recursively include linked `.md`/`.txt` guides inside the skill's
+own directory from the same commit: at most 32 files, 64 KB each and 256 KB total.
+Reference-style links, fragments and cycles are supported. Missing local guides,
+symlinks, links into another skill package, oversized content, secrets or binary
+text make that candidate unavailable with a reason. External links, paths outside
+the skill directory and non-text links are not fetched. Scripts and archives are
+not executed or installed. A standalone Markdown upload includes only that file;
+use GitHub import to include supporting guides.
+
+Guides and source metadata are visible in import review, saved instruction previews
+and source-update comparisons. They are saved in immutable published versions.
+`load_skill` accepts an optional exact resource `path` and checks the existing
+workspace, actor, enabled-skill, run and version-pin boundaries. A content hash
+detects guide-only updates; they still require draft review and publication, and
+cannot rewrite existing run or schedule pins. Discovery caps at 100 skills and
+rejects truncated or oversized GitHub trees rather than showing partial results.
+Only fixed GitHub API endpoints are fetched.
 
 ## APIs and acceptance
 

@@ -1,6 +1,32 @@
 import type { SkillSpec } from "../src/domain.ts";
 import { DataDetails, detailLabel } from "./data-details.tsx";
 
+export function SkillSourceDetails({ spec }: { spec: SkillSpec }) {
+  return (
+    <>
+      {spec.frontmatter && (
+        <details>
+          <summary>Source metadata</summary>
+          <DataDetails value={spec.frontmatter} />
+        </details>
+      )}
+      {!!spec.resources?.length && (
+        <details>
+          <summary>Supporting files ({spec.resources.length})</summary>
+          {spec.resources.map((resource) => (
+            <details key={resource.path}>
+              <summary>
+                <code>{resource.path}</code>
+              </summary>
+              <p className="prose">{resource.body}</p>
+            </details>
+          ))}
+        </details>
+      )}
+    </>
+  );
+}
+
 export function SkillPreview({
   spec,
   dependents,
@@ -15,6 +41,7 @@ export function SkillPreview({
       </summary>
       <div className="skill-preview-content">
         <p className="prose">{spec.body}</p>
+        <SkillSourceDetails spec={spec} />
         <dl
           className="plugin-summary skill-preview-settings"
           aria-label="Settings"

@@ -11,10 +11,32 @@ import { audit, authorize, revokeWork } from "../workspaces/policy.ts";
 import { skillSourcesPresent } from "./provenance.ts";
 export function validateSkill(value: unknown) {
   const spec = skillSchema.parse(value);
+  const resources = spec.resources ?? [];
   requireThat(
-    !spec.body.includes("\0") &&
+    new Set(resources.map((resource) => resource.path)).size ===
+      resources.length &&
+      resources.every(
+        (resource) => Buffer.byteLength(resource.body) <= 65536,
+      ) &&
+      resources.reduce(
+        (bytes, resource) => bytes + Buffer.byteLength(resource.body),
+        0,
+      ) <= 262144,
+    "invalid_skill_resources",
+  );
+  const content = [
+    spec.name,
+    spec.description,
+    spec.body,
+    spec.frontmatter?.license ?? "",
+    spec.frontmatter?.compatibility ?? "",
+    ...Object.values(spec.frontmatter?.metadata ?? {}),
+    ...resources.flatMap((resource) => [resource.path, resource.body]),
+  ].join("\n");
+  requireThat(
+    !content.includes("\0") &&
       !/-----BEGIN .*PRIVATE KEY-----|sk-[A-Za-z0-9]{20,}|\d{8,}:[A-Za-z0-9_-]{30,}/.test(
-        spec.body,
+        content,
       ),
     "skill_contains_secret_or_binary",
   );
@@ -185,7 +207,13 @@ export function changeSkill(
   return skill;
 }
 export function previewSkill(spec: SkillSpec) {
-  return `${spec.name}\n${spec.body}\nSections: ${spec.settings.sections}\nMaximum words: ${spec.settings.maxWords}`;
+  const metadata = spec.frontmatter
+    ? `\nSource metadata (reference only): ${JSON.stringify(spec.frontmatter)}`
+    : "";
+  const resources = spec.resources?.length
+    ? `\nSupporting files: ${spec.resources.map((resource) => resource.path).join(", ")}. Read them using load_skill with this skill's id and the exact path. Relative links inside a supporting file resolve from that file's directory.`
+    : "";
+  return `${spec.name}\n${spec.body}\nSections: ${spec.settings.sections}\nMaximum words: ${spec.settings.maxWords}${metadata}${resources}`;
 }
 export function testSkill(
   w: Workspace,

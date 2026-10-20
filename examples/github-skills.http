@@ -5,7 +5,10 @@
 @csrf = replace-with-csrf-token
 @source = https://github.com/owner/repository/tree/main/skills
 
-### Discover SKILL.md files. Connected private repositories use the GitHub App.
+### Discover SKILL.md packages and linked Markdown/text guides at one source commit.
+# Connected private repositories use the GitHub App. Candidates retain YAML metadata
+# and descriptions up to 1,024 characters. Inspect spec.frontmatter, spec.resources
+# and error before selecting. Missing/oversized guides make a candidate unavailable.
 POST {{origin}}/api/admin/workspaces/{{workspace}}/skills/github/discover
 Origin: {{origin}}
 Cookie: repodesk_session={{session}}
@@ -23,7 +26,7 @@ Content-Type: application/json
 
 {"url":"{{source}}","commit":"replace-with-discovered-40-character-sha","paths":["skills/recap/SKILL.md","skills/review/SKILL.md"]}
 
-### Review an imported skill's tracked source using its current revision.
+### Review an imported skill's tracked source and guide-only changes using its current revision.
 @skill = replace-with-skill-uuid
 POST {{origin}}/api/admin/workspaces/{{workspace}}/skills/{{skill}}/github/check
 Origin: {{origin}}

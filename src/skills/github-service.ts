@@ -1,8 +1,13 @@
 import { z } from "zod";
 import type { Store } from "../db/repositories.ts";
-import { requireThat, type Skill, type Workspace } from "../domain.ts";
+import {
+  requireThat,
+  type Skill,
+  skillSchema,
+  type Workspace,
+} from "../domain.ts";
 import type { GitHubApps } from "../github/registry.ts";
-import { hash } from "../setup/credentials.ts";
+import { fingerprint, hash } from "../setup/credentials.ts";
 import { audit, authorize } from "../workspaces/policy.ts";
 import { saveSkill } from "./catalog.ts";
 import {
@@ -57,6 +62,15 @@ function sameSource(
     skill.githubSource?.repository.toLowerCase() === repository.toLowerCase() &&
     skill.githubSource.ref === ref &&
     skill.githubSource.path === path
+  );
+}
+
+function unchangedDraft(skill: Skill) {
+  const saved = skill.githubSource?.draftHash;
+  return (
+    saved === fingerprint(skill.draft) ||
+    // Older imports hashed schema-ordered JSON before PostgreSQL reordered keys.
+    saved === hash(JSON.stringify(skillSchema.parse(skill.draft)))
   );
 }
 
@@ -181,7 +195,10 @@ export class GitHubSkills {
             path: candidate.path,
             commit: discovery.commit,
             blobSha: candidate.sha,
-            draftHash: hash(JSON.stringify(skill.draft)),
+            ...(candidate.bundleHash
+              ? { bundleHash: candidate.bundleHash }
+              : {}),
+            draftHash: fingerprint(skill.draft),
             importedAt: new Date().toISOString(),
             access: access.access,
             ...(access.repositoryId
@@ -212,9 +229,10 @@ export class GitHubSkills {
     const source = skill.githubSource;
     const { reader, access } = await this.reader(w, source.repository, source);
     const commit = await reader.commit(source.ref);
-    const file = (await reader.files(commit, source.path, true))[0];
+    const tree = await reader.tree(commit);
+    const file = (await reader.files(commit, source.path, true, tree))[0];
     requireThat(file, "github_skill_source_missing", 404);
-    const candidate = await reader.candidate(file);
+    const candidate = await reader.candidate(file, tree);
     requireThat(
       candidate.spec && !candidate.error,
       candidate.error ?? "invalid_skill_metadata",
@@ -224,8 +242,10 @@ export class GitHubSkills {
       commit,
       access,
       source,
-      changed: file.sha !== source.blobSha,
-      locallyModified: hash(JSON.stringify(skill.draft)) !== source.draftHash,
+      changed:
+        file.sha !== source.blobSha ||
+        candidate.bundleHash !== source.bundleHash,
+      locallyModified: !unchangedDraft(skill),
     };
   }
   async check(id: string, actor: string, skillId: string, version: number) {
@@ -266,8 +286,7 @@ export class GitHubSkills {
       );
       requireThat(!skill.archived, "github_skill_archived", 409);
       requireThat(
-        hash(JSON.stringify(skill.draft)) === skill.githubSource.draftHash ||
-          replaceLocal,
+        unchangedDraft(skill) || replaceLocal,
         "github_skill_local_changes",
         409,
       );
@@ -278,7 +297,8 @@ export class GitHubSkills {
         ...skill.githubSource,
         commit,
         blobSha: result.candidate.sha,
-        draftHash: hash(JSON.stringify(skill.draft)),
+        bundleHash: result.candidate.bundleHash,
+        draftHash: fingerprint(skill.draft),
         importedAt: new Date().toISOString(),
       };
       audit(w, actor, "skill.github_updated", skill.id, skill.version);

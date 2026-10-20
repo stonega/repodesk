@@ -4,6 +4,7 @@ import {
   parseGitHubSkillLink,
   publicSkillResource,
 } from "../../src/skills/github-source.ts";
+import { harnessSkills } from "../fixtures/harness-skills.ts";
 import {
   skillGitHubFixture,
   skillLink,
@@ -115,6 +116,119 @@ describe("GitHub skill source discovery", () => {
     expect(
       (await invalid.candidate({ path: "SKILL.md", sha: "a".repeat(40) }))
         .error,
-    ).toBe("invalid_skill_metadata");
+    ).toBe("invalid_markdown");
+  });
+  test("imports the reported harness metadata and recursively bundles linked guides from the pinned tree", async () => {
+    const { transport, state } = skillGitHubFixture();
+    state.files.clear();
+    for (const [name, body] of Object.entries(harnessSkills))
+      state.files.set(`skills/${name}/SKILL.md`, body);
+    state.files.set(
+      "skills/new-project/WEB.md",
+      "Web guide. [API][api]\n\n[api]: references/API.md#usage",
+    );
+    state.files.set("skills/new-project/DESIGN.md", "Design guide.");
+    state.files.set(
+      "skills/new-project/references/API.md",
+      "[Back](../WEB.md) [Remote](https://example.com/private.md) [Outside](../../../private.md) [Script](install.sh)",
+    );
+    state.files.set("private.md", "Must never load.");
+    const reader = new GitHubSkillReader((path) =>
+      publicSkillResource(skillRepository, path, transport),
+    );
+    const result = await reader.discover(parseGitHubSkillLink(skillLink));
+    expect(result.skills).toHaveLength(4);
+    expect(
+      result.skills.every((candidate) => candidate.spec && !candidate.error),
+    ).toBe(true);
+    expect(
+      result.skills.find(
+        (candidate) => candidate.spec?.slug === "live-system-chrome",
+      )?.spec?.frontmatter?.metadata?.compatibility,
+    ).toContain("Chrome 144");
+    const project = result.skills.find(
+      (candidate) => candidate.spec?.slug === "new-project",
+    );
+    expect(project?.spec?.resources?.map((file) => file.path)).toEqual([
+      "DESIGN.md",
+      "references/API.md",
+      "WEB.md",
+    ]);
+    expect(project?.bundleHash).toHaveLength(64);
+    expect(
+      state.requests.filter((request) => request.url.includes("git/trees")),
+    ).toHaveLength(1);
+    expect(
+      state.requests.every(
+        (request) => new URL(request.url).hostname === "api.github.com",
+      ),
+    ).toBe(true);
+  });
+  test("missing files, other skill packages and symlinks cannot supply supporting content", async () => {
+    const { transport, state } = skillGitHubFixture();
+    const reader = new GitHubSkillReader((path) =>
+      publicSkillResource(skillRepository, path, transport),
+    );
+    for (const target of [
+      "missing.md",
+      "linked/SKILL.md",
+      "skills/second/README.md",
+    ]) {
+      state.files.set(
+        "SKILL.md",
+        skillMarkdown("with-guide", `[Guide](${target})`),
+      );
+      state.files.set("skills/second/README.md", "Other skill content.");
+      const result = await reader.discover(
+        parseGitHubSkillLink(`${skillLink}/blob/main/SKILL.md`),
+      );
+      expect(result.skills[0]?.error).toBe("skill_reference_unavailable");
+    }
+  });
+  test("supporting files enforce secret, binary, individual size, total size and count boundaries", async () => {
+    const { transport, state } = skillGitHubFixture();
+    const reader = new GitHubSkillReader((path) =>
+      publicSkillResource(skillRepository, path, transport),
+    );
+    for (const body of [
+      `sk-${"x".repeat(25)}`,
+      "binary\0text",
+      "a".repeat(65537),
+    ]) {
+      state.files.set(
+        "SKILL.md",
+        skillMarkdown("with-guide", "[Guide](guide.md)"),
+      );
+      state.files.set("guide.md", body);
+      const result = await reader.discover(
+        parseGitHubSkillLink(`${skillLink}/blob/main/SKILL.md`),
+      );
+      expect(result.skills[0]?.error).toBe(
+        body.length > 65536
+          ? "invalid_skill_resources"
+          : "skill_contains_secret_or_binary",
+      );
+    }
+    for (const count of [5, 33]) {
+      state.files.set(
+        "SKILL.md",
+        skillMarkdown(
+          "with-guides",
+          Array.from(
+            { length: count },
+            (_, index) => `[Guide](guide-${index}.md)`,
+          ).join("\n"),
+        ),
+      );
+      for (let index = 0; index < count; index++)
+        state.files.set(
+          `guide-${index}.md`,
+          "a".repeat(count === 5 ? 65536 : 1),
+        );
+      const result = await reader.discover(
+        parseGitHubSkillLink(`${skillLink}/blob/main/SKILL.md`),
+      );
+      expect(result.skills[0]?.error).toBe("invalid_skill_resources");
+    }
   });
 });

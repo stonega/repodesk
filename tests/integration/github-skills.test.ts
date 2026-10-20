@@ -1,15 +1,18 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { claim } from "../../src/admin/auth.ts";
+import { applicationTools } from "../../src/agent/tools.ts";
 import { createApp } from "../../src/app.ts";
 import { migrate } from "../../src/db/migrate.ts";
 import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
 import { GitHubApps } from "../../src/github/registry.ts";
 import { GitHubService } from "../../src/github/service.ts";
+import { hash } from "../../src/setup/credentials.ts";
 import { SetupService } from "../../src/setup/service.ts";
 import { changeSkill, saveSkill } from "../../src/skills/catalog.ts";
 import { GitHubSkills } from "../../src/skills/github-service.ts";
+import { createRun } from "../../src/workspaces/service.ts";
 import { spec, workspace } from "../fixtures.ts";
 import {
   skillGitHubFixture,
@@ -78,6 +81,16 @@ const url = process.env.TEST_DATABASE_URL;
       expect(skill.enabled).toBe(false);
       expect(skill.published).toHaveLength(0);
       expect(skill.githubSource?.installationId).toBe(501);
+      // Pre-compatibility imports stored a schema-ordered JSON hash.
+      await store.change(w.id, (current) => {
+        const saved = current.skills.find((entry) => entry.id === skill.id);
+        if (!saved?.githubSource) throw Error("missing saved source");
+        saved.githubSource.draftHash = hash(JSON.stringify(skill.draft));
+      });
+      expect(
+        (await service.check(w.id, "101", skill.id, skill.version))
+          .locallyModified,
+      ).toBe(false);
     }
     const tokenRequest = state.requests.find((r) =>
       r.url.endsWith("/access_tokens"),
@@ -142,6 +155,96 @@ const url = process.env.TEST_DATABASE_URL;
     expect(
       (await store.read(w.id)).skills.find((s) => s.id === skill.id)?.draft,
     ).toEqual(skill.draft);
+  });
+  test("guide-only updates preserve published pins and supporting-file tools enforce scope, replay and disablement", async () => {
+    const { w, service, state } = await fixture();
+    state.files.set(
+      "SKILL.md",
+      skillMarkdown("bundled-skill", "Read [Guide](guide.md)."),
+    );
+    state.files.set("guide.md", "Original guide.");
+    const skill = (
+      await service.import(w.id, "101", {
+        url: skillLink,
+        commit: state.commit,
+        paths: ["SKILL.md"],
+      })
+    ).items[0];
+    if (!skill) throw Error("missing bundled skill");
+    const run = await store.change(w.id, (current) => {
+      changeSkill(current, "101", skill.id, 1, "publish");
+      changeSkill(current, "101", skill.id, 2, "enable");
+      const run = createRun(
+        current,
+        "101",
+        "Read guide",
+        "-100100",
+        0,
+        "gpt-4.1-mini",
+      );
+      run.status = "running";
+      run.fence = 1;
+      return run;
+    });
+    const loader = applicationTools(
+      new Store(store.pool),
+      w.id,
+      run.id,
+      run.fence,
+    ).find((tool) => tool.name === "load_skill");
+    if (!loader) throw Error("missing skill loader");
+    const args = { id: skill.id, path: "guide.md" };
+    const loaded = await loader.execute("guide-read", args);
+    expect(loaded.content).toEqual([
+      { type: "text", text: JSON.stringify("Original guide.") },
+    ]);
+    expect(await loader.execute("guide-read", args)).toEqual(loaded);
+    await expect(
+      loader.execute("guide-read", { ...args, path: "other.md" }),
+    ).rejects.toThrow("tool_call_conflict");
+    await expect(
+      loader.execute("outside", { ...args, path: "../guide.md" }),
+    ).rejects.toThrow("skill_resource_unavailable");
+    await expect(
+      loader.execute("not-pinned", {
+        id: "another-tenant-skill",
+        path: "guide.md",
+      }),
+    ).rejects.toThrow("skill_denied");
+    const description = await loader.execute("instructions", { id: skill.id });
+    expect(description.content[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("Supporting files: guide.md"),
+    });
+    state.commit = "b".repeat(40);
+    state.files.set("guide.md", "Updated guide only.");
+    const check = await service.check(w.id, "101", skill.id, 3);
+    expect(check.changed).toBe(true);
+    expect(check.locallyModified).toBe(false);
+    expect(check.spec?.resources).toEqual([
+      { path: "guide.md", body: "Updated guide only." },
+    ]);
+    const updated = await service.update(
+      w.id,
+      "101",
+      skill.id,
+      3,
+      state.commit,
+      false,
+    );
+    expect(updated.draft.resources?.[0]?.body).toBe("Updated guide only.");
+    expect(updated.published[0]?.resources?.[0]?.body).toBe("Original guide.");
+    expect((await service.check(w.id, "101", skill.id, 4)).changed).toBe(false);
+    await store.change(w.id, (current) =>
+      changeSkill(current, "101", skill.id, 4, "publish"),
+    );
+    expect(await loader.execute("old-pin", args)).toEqual(loaded);
+    await store.change(w.id, (current) =>
+      changeSkill(current, "101", skill.id, 5, "disable"),
+    );
+    await expect(loader.execute("after-disable", args)).rejects.toThrow(
+      "tool_policy_denied",
+    );
   });
   test("updates require the previewed commit and explicit local-edit replacement, preserving published content, enablement and workflow pins", async () => {
     const { w, service, state } = await fixture();
