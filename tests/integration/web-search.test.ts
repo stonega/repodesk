@@ -7,6 +7,10 @@ import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
 import type { Admin, Workspace } from "../../src/domain.ts";
 import { Executor } from "../../src/jobs/execute.ts";
+import {
+  DUCKDUCKGO_PRESET_ID,
+  duckduckgoPreset,
+} from "../../src/search/config.ts";
 import { searchTool } from "../../src/search/tool.ts";
 import { passwordHash } from "../../src/setup/credentials.ts";
 import { SetupService } from "../../src/setup/service.ts";
@@ -33,6 +37,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     status = 200;
   let duringSearch: (() => Promise<void>) | undefined;
   let modelId: string;
+  const searches: { url: string; headers: Headers }[] = [];
   beforeAll(async () => {
     await root.query(`CREATE DATABASE ${name}`);
     const url = new URL(rootUrl ?? "");
@@ -76,9 +81,14 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       undefined,
       "webhook",
       async () => Response.json({ data: [{ id: "gpt-4.1-mini" }] }),
-      async () => {
+      async (url, init) => {
         calls++;
+        searches.push({ url, headers: new Headers(init.headers) });
         await duringSearch?.();
+        if (status === 200 && url.includes("duckduckgo.com"))
+          return new Response(
+            '<a class="result__a" href="https://example.com/source">Source</a><div class="result__snippet">Verified excerpt</div>',
+          );
         return status === 200
           ? Response.json({
               results: [
@@ -175,11 +185,119 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       ),
     };
   };
-  test("all provider types persist encrypted, write-only, tenant-scoped credentials", async () => {
-    const free = await provider("duckduckgo"),
-      paid = await provider(),
+  test("DuckDuckGo is an immediate read-only preset without stored provider records", async () => {
+    const before = await store.deployment();
+    const catalog = await setup.search.catalog(admin);
+    expect(catalog.providers).toEqual([duckduckgoPreset]);
+    expect((await setup.search.catalog(other)).providers).toEqual([
+      duckduckgoPreset,
+    ]);
+    expect(
+      (await store.read(w.id)).chatModel?.searchProviderId,
+    ).toBeUndefined();
+    expect(await store.deployment()).toEqual(before);
+    for (const method of ["PUT", "DELETE"]) {
+      const response = await request(
+        method === "PUT" ? endpoint : `${endpoint}/${DUCKDUCKGO_PRESET_ID}`,
+        method,
+        {
+          version: catalog.version,
+          ...(method === "PUT"
+            ? { id: DUCKDUCKGO_PRESET_ID, name: "Changed", type: "duckduckgo" }
+            : {}),
+        },
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: "search_preset_read_only",
+      });
+    }
+    const duplicate = await request(endpoint, "PUT", {
+      version: catalog.version,
+      name: "Duplicate",
+      type: "duckduckgo",
+    });
+    expect(duplicate.status).toBe(400);
+    expect(await duplicate.json()).toMatchObject({
+      error: "duckduckgo_is_preset",
+    });
+    expect(await store.deployment()).toEqual(before);
+  });
+  test("the preset searches without credentials, stays tenant-bound, and is revoked when deselected", async () => {
+    const { tool, pin, run } = await runFixture(DUCKDUCKGO_PRESET_ID);
+    expect(pin).toMatchObject({
+      id: DUCKDUCKGO_PRESET_ID,
+      operatorId: admin.id,
+      type: "duckduckgo",
+      version: 1,
+    });
+    const result = await tool.execute("preset", { query: "release notes" });
+    expect(JSON.stringify(result)).toContain("Verified excerpt");
+    expect(searches.at(-1)?.headers.has("authorization")).toBe(false);
+    expect(searches.at(-1)?.headers.has("x-api-key")).toBe(false);
+    expect((await store.deployment()).searchProviders).toBeUndefined();
+    const before = calls;
+    const foreignTool = searchTool(
+      store,
+      setup.search,
+      w.id,
+      run.id,
+      1,
+      { ...pin, operatorId: other.id },
+      async () => {},
+    );
+    await expect(
+      foreignTool.execute("foreign", { query: "release notes" }),
+    ).rejects.toThrow("search_configuration_changed");
+    await expect(setup.search.current({ ...pin, type: "exa" })).rejects.toThrow(
+      "search_provider_changed",
+    );
+    await expect(setup.search.current({ ...pin, version: 2 })).rejects.toThrow(
+      "search_provider_changed",
+    );
+    await select(null);
+    await expect(
+      tool.execute("preset", { query: "release notes" }),
+    ).rejects.toThrow("search_configuration_changed");
+    expect(calls).toBe(before);
+  });
+  test("existing saved DuckDuckGo records and selections remain usable", async () => {
+    const d = await store.deployment(),
+      id = randomUUID();
+    d.searchProviders = [
+      {
+        id,
+        operatorId: admin.id,
+        name: "Legacy free search",
+        type: "duckduckgo",
+        version: 1,
+      },
+    ];
+    d.version++;
+    await store.saveDeployment(store.pool, d);
+    expect((await setup.search.catalog(admin)).providers).toHaveLength(2);
+    const { tool } = await runFixture(id);
+    expect(
+      JSON.stringify(await tool.execute("legacy", { query: "release notes" })),
+    ).toContain("Verified excerpt");
+    await setup.search.save(admin, {
+      version: d.version,
+      id,
+      name: "Renamed legacy",
+      type: "duckduckgo",
+    });
+    await expect(
+      setup.search.remove(admin, id, (await store.deployment()).version),
+    ).rejects.toThrow("search_provider_in_use");
+    await select(DUCKDUCKGO_PRESET_ID);
+    await setup.search.remove(admin, id, (await store.deployment()).version);
+    expect((await setup.search.catalog(admin)).providers).toEqual([
+      duckduckgoPreset,
+    ]);
+  });
+  test("paid providers persist encrypted, write-only, tenant-scoped credentials", async () => {
+    const paid = await provider(),
       exa = await provider("exa");
-    expect(free.apiKeyConfigured).toBe(false);
     expect(paid.apiKeyConfigured).toBe(true);
     expect(exa.type).toBe("exa");
     expect(JSON.stringify(await setup.search.catalog(admin))).not.toContain(
@@ -188,7 +306,9 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     expect(JSON.stringify(await store.deployment())).not.toContain(
       "fixture-search-secret",
     );
-    expect((await setup.search.catalog(other)).providers).toEqual([]);
+    expect((await setup.search.catalog(other)).providers).toEqual([
+      duckduckgoPreset,
+    ]);
     const result = await setup.search.save(admin, {
       version: (await store.deployment()).version,
       id: paid.id,
@@ -235,8 +355,9 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     ).toBe(403);
     const input = {
       version: (await store.deployment()).version,
-      name: "Free",
-      type: "duckduckgo",
+      name: "Paid",
+      type: "deepseek",
+      apiKey: "fixture-search-secret",
     };
     expect(
       (await request(endpoint, "PUT", input, { "x-csrf-token": "wrong" }))
@@ -250,7 +371,13 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       ).status,
     ).toBe(403);
     expect(
-      (await request(endpoint, "PUT", { ...input, type: "exa" })).status,
+      (
+        await request(endpoint, "PUT", {
+          ...input,
+          type: "exa",
+          apiKey: undefined,
+        })
+      ).status,
     ).toBe(400);
     const created = await request(endpoint, "PUT", input);
     expect(created.status).toBe(200);
@@ -266,9 +393,10 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       await setup.search.save(other, {
         version: (await store.deployment()).version,
         name: "Foreign",
-        type: "duckduckgo",
+        type: "exa",
+        apiKey: "foreign-fixture-key",
       })
-    ).providers[0];
+    ).providers.at(-1);
     const inputModel = {
       revision: (await store.read(w.id)).chatModel?.revision ?? 0,
       selection: { providerId: modelId, model: "gpt-4.1-mini" },
@@ -398,9 +526,10 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     d.active = true;
     d.paused = false;
     await store.saveDeployment(store.pool, d);
-    for (const enabled of [false, true]) {
-      const p = await provider();
-      await select(enabled ? p.id : null);
+    const p = await provider();
+    for (const selectedId of [null, DUCKDUCKGO_PRESET_ID, p.id]) {
+      const enabled = !!selectedId;
+      await select(selectedId);
       const run = await store.change(w.id, (current) =>
         createRun(
           current,
@@ -441,7 +570,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       expect(seen).toBe(true);
       const saved = (await store.read(w.id)).runs.find((r) => r.id === run.id);
       expect(saved?.status).toBe("succeeded");
-      expect(saved?.searchProvider?.id).toBe(enabled ? p.id : undefined);
+      expect(saved?.searchProvider?.id).toBe(selectedId ?? undefined);
     }
   });
 });

@@ -5,6 +5,8 @@ import type { Store } from "../db/repositories.ts";
 import { type Admin, requireThat, type Workspace } from "../domain.ts";
 import { decrypt, encrypt } from "../setup/credentials.ts";
 import {
+  DUCKDUCKGO_PRESET_ID,
+  duckduckgoPreset,
   type SearchCatalog,
   type SearchPin,
   type SearchProvider,
@@ -21,22 +23,35 @@ export class SearchProviders {
   private aad(p: Pick<SearchProvider, "id" | "operatorId" | "type">) {
     return `search-provider:${p.operatorId}:${p.id}:${p.type}`;
   }
+  private preset(operatorId: string): SearchProvider {
+    return {
+      id: duckduckgoPreset.id,
+      name: duckduckgoPreset.name,
+      type: duckduckgoPreset.type,
+      version: duckduckgoPreset.version,
+      operatorId,
+    };
+  }
   async catalog(admin: Admin): Promise<SearchCatalog> {
     operator(admin);
     const d = await this.store.deployment();
     return {
       version: d.version,
-      providers: (d.searchProviders ?? [])
-        .filter((p) => p.operatorId === admin.id)
-        .map(({ credential, operatorId: _owner, ...p }) => ({
-          ...p,
-          apiKeyConfigured: !!credential,
-        })),
+      providers: [
+        { ...duckduckgoPreset },
+        ...(d.searchProviders ?? [])
+          .filter((p) => p.operatorId === admin.id)
+          .map(({ credential, operatorId: _owner, ...p }) => ({
+            ...p,
+            apiKeyConfigured: !!credential,
+          })),
+      ],
     };
   }
   async save(admin: Admin, value: unknown) {
     operator(admin);
     const input = searchInput.parse(value);
+    requireThat(input.id !== DUCKDUCKGO_PRESET_ID, "search_preset_read_only");
     await transaction(this.store.pool, async (sql) => {
       const d = await this.store.deployment(sql, true);
       requireThat(d.version === input.version, "version_conflict", 409);
@@ -44,6 +59,10 @@ export class SearchProviders {
         (p) => p.id === input.id && p.operatorId === admin.id,
       );
       requireThat(!input.id || old, "search_provider_not_found", 404);
+      requireThat(
+        input.type !== "duckduckgo" || old?.type === "duckduckgo",
+        "duckduckgo_is_preset",
+      );
       requireThat(
         input.type !== "duckduckgo" || !input.apiKey,
         "search_key_not_required",
@@ -81,6 +100,7 @@ export class SearchProviders {
   }
   async remove(admin: Admin, id: string, version: number) {
     operator(admin);
+    requireThat(id !== DUCKDUCKGO_PRESET_ID, "search_preset_read_only");
     await transaction(this.store.pool, async (sql) => {
       const d = await this.store.deployment(sql, true);
       requireThat(d.version === version, "version_conflict", 409);
@@ -116,10 +136,12 @@ export class SearchProviders {
   async pin(w: Workspace): Promise<SearchPin | undefined> {
     const id = w.chatModel?.searchProviderId;
     if (!id) return undefined;
-    const d = await this.store.deployment();
-    const p = d.searchProviders?.find(
-      (p) => p.id === id && p.operatorId === w.operatorId,
-    );
+    const p =
+      id === DUCKDUCKGO_PRESET_ID
+        ? this.preset(w.operatorId)
+        : (await this.store.deployment()).searchProviders?.find(
+            (p) => p.id === id && p.operatorId === w.operatorId,
+          );
     requireThat(!w.deletion && p, "search_provider_not_found", 409);
     return {
       id: p.id,
@@ -130,10 +152,12 @@ export class SearchProviders {
     };
   }
   async current(pin: SearchPin) {
-    const d = await this.store.deployment();
-    const p = d.searchProviders?.find(
-      (p) => p.id === pin.id && p.operatorId === pin.operatorId,
-    );
+    const p =
+      pin.id === DUCKDUCKGO_PRESET_ID
+        ? this.preset(pin.operatorId)
+        : (await this.store.deployment()).searchProviders?.find(
+            (p) => p.id === pin.id && p.operatorId === pin.operatorId,
+          );
     requireThat(
       p && p.version === pin.version && p.type === pin.type,
       "search_provider_changed",

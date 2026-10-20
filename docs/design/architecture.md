@@ -334,6 +334,11 @@ results return to the PR, independently of Telegram destinations.
 Bot chat web search is configured separately in Model settings. Operator-owned
 search providers are stored in deployment JSONB with encrypted, write-only API
 keys; each workspace's chat model selects one provider or disables search.
+The `duckduckgo` selection is an application preset, synthesized per operator
+without persisting a provider record. Its catalog entry is read-only and always
+available; run pins still bind it to the workspace operator and chat revision.
+Existing UUID-based DuckDuckGo records retain compatibility. New provider records
+are for keyed services; paid provider credentials remain operator-owned.
 DuckDuckGo uses its free HTML results page; DeepSeek and Exa use fixed official
 search endpoints. The worker exposes `search_tool` only when selected, pins the
 provider version and chat revision, and checks run/actor/fence/configuration before

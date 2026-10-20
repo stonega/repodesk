@@ -1,5 +1,27 @@
 # Implementation evidence
 
+## Built-in DuckDuckGo search preset (2026-10-20)
+
+DuckDuckGo is now a read-only preset in Search providers and is immediately
+available in the bot chat model editor. Selecting it needs no saved provider
+record or API key; search remains disabled until selected. New provider dialogs
+offer DeepSeek and Exa. The preset stays visible while saved settings load or fail
+to load. Existing saved DuckDuckGo providers and selections remain usable, and
+operators can switch to the preset before removing their old record.
+
+The semantic `duckduckgo` selection resolves to an operator-bound runtime pin and
+retains the existing workspace/run authorization and revocation checks. Preset
+edits/removal and creation of duplicate DuckDuckGo records are rejected. Catalog
+reads do not write deployment settings. No migration or dependency was added.
+
+Validation: lint, strict TypeScript and the production build passed. All **1,024
+deterministic tests across 115 files** passed against disposable PostgreSQL,
+including **15 focused search tests**. All **28 model-provider and eight search
+browser scenarios** passed. Desktop/mobile light/dark screenshots were inspected
+for preset summaries, saved selection, new and legacy editors, loading/error,
+pending and retry states. Provider calls use deterministic fixtures; no live
+search/model/Telegram call or deployment was performed for this follow-up.
+
 ## Bot chat web search providers (2026-10-20)
 
 Model settings now includes a separate Search providers section with saved

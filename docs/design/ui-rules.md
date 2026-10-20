@@ -42,17 +42,23 @@ when implementing or reviewing a change.
 
 - **Preference:** Manage DuckDuckGo, DeepSeek and Exa in a separate Search
   providers section on `/admin/model`. Choose the search provider in the bot chat
-  model editor and show the saved choice in its summary.
+  model editor and show the saved choice in its summary. DuckDuckGo is a built-in,
+  read-only preset available without creating a record; New offers keyed providers.
 - **Scope:** Bot chat search configuration in setup and Model settings. Provider
   records belong to the operator; each workspace chooses its own provider.
 - **Source:** 2026-10-20 — user requested a new search-provider section and
   selection in model settings, with free DuckDuckGo and keyed DeepSeek/Exa.
+- **Source update:** 2026-10-20 — user requested DuckDuckGo as a preset so users
+  do not need to add it themselves.
 - **Acceptance:** Saved records contain no form controls or readable secrets.
-  New/Edit use shared dialogs, dropdowns and actions; DuckDuckGo asks for no key.
+  New/Edit use shared dialogs, dropdowns and actions. Verify DuckDuckGo is visible
+  immediately, including during loading/error states, has no Edit/Remove action,
+  and can be selected and saved without adding a provider or entering a key.
   Verify selection persistence, disabled search, pending/error recovery and
   readable desktop/mobile summaries.
 - **Exceptions:** Setup retains its guided chat-model form. Search selection
   does not change Codex or Review Bot model settings.
+  Previously saved DuckDuckGo records remain usable and manageable for compatibility.
 
 ### Google integrations have independent plugin pages
 

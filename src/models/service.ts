@@ -7,6 +7,10 @@ import type { Store } from "../db/repositories.ts";
 import { type Admin, Fault, requireThat, type Workspace } from "../domain.ts";
 import { discoverModels, MetadataError } from "../model-metadata/discover.ts";
 import { withPriceTier } from "../model-metadata/normalize.ts";
+import {
+  DUCKDUCKGO_PRESET_ID,
+  searchProviderIdSchema,
+} from "../search/config.ts";
 import { decrypt, encrypt } from "../setup/credentials.ts";
 import {
   discoveryInput,
@@ -235,7 +239,7 @@ export class ModelProviders {
       .object({
         revision: z.number().int().nonnegative(),
         selection: modelSelectionSchema,
-        searchProviderId: z.uuid().nullable().optional(),
+        searchProviderId: searchProviderIdSchema.nullable().optional(),
       })
       .strict()
       .parse(value);
@@ -257,7 +261,7 @@ export class ModelProviders {
         input.searchProviderId === undefined
           ? current.chatModel?.searchProviderId
           : (input.searchProviderId ?? undefined);
-      if (searchProviderId) {
+      if (searchProviderId && searchProviderId !== DUCKDUCKGO_PRESET_ID) {
         const d = await this.store.deployment();
         requireThat(
           d.searchProviders?.some(

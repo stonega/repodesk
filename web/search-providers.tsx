@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  duckduckgoPreset,
   type SearchCatalog,
   type SearchProviderView,
   type SearchType,
@@ -53,36 +54,35 @@ export function SearchProvidersPanel({
             onClick={() => {
               if (catalog) {
                 setError("");
-                setDraft({ type: "duckduckgo", version: catalog.version });
+                setDraft({ type: "deepseek", version: catalog.version });
               }
             }}
           />
         </div>
         <p className="muted">
-          Connect a search provider, then choose it for the bot chat model.
-          DuckDuckGo is free; DeepSeek and Exa use an API key.
+          DuckDuckGo is ready to use. Add an API key for DeepSeek or Exa, then
+          choose a provider for the bot chat model.
         </p>
-        {!catalog ? (
-          <SkeletonRows label="Search providers" />
-        ) : catalog.providers.length ? (
-          <ul className="settings-list">
-            {catalog.providers.map((p) => (
-              <li className="settings-item model-provider-item" key={p.id}>
-                <div className="settings-item-details">
-                  <h3>{p.name}</h3>
-                  <p className="muted">
-                    {searchLabels[p.type]} ·{" "}
-                    {p.type === "duckduckgo"
-                      ? "No API key required"
-                      : "API key configured"}
-                  </p>
-                </div>
+        <ul className="settings-list">
+          {(catalog?.providers ?? [duckduckgoPreset]).map((p) => (
+            <li className="settings-item model-provider-item" key={p.id}>
+              <div className="settings-item-details">
+                <h3>{p.name}</h3>
+                <p className="muted">
+                  {p.preset ? "Preset" : searchLabels[p.type]} ·{" "}
+                  {p.type === "duckduckgo"
+                    ? "No API key required"
+                    : "API key configured"}
+                </p>
+              </div>
+              {!p.preset && (
                 <div className="row">
                   <IconButton
                     icon="edit"
                     label={`Edit search provider ${p.name}`}
                     disabled={busy}
                     onClick={() => {
+                      if (!catalog) return;
                       setError("");
                       setDraft({
                         original: p,
@@ -101,12 +101,11 @@ export function SearchProvidersPanel({
                     }}
                   />
                 </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p>No search providers yet. Choose New to add one.</p>
-        )}
+              )}
+            </li>
+          ))}
+        </ul>
+        {!catalog && <SkeletonRows label="Search providers" />}
       </section>
       {draft && (
         <Modal
@@ -163,11 +162,17 @@ export function SearchProvidersPanel({
                     setDraft({ ...draft, type: e.target.value as SearchType })
                   }
                 >
-                  {searchTypes.map((type) => (
-                    <option key={type} value={type}>
-                      {searchLabels[type]}
-                    </option>
-                  ))}
+                  {searchTypes
+                    .filter(
+                      (type) =>
+                        type !== "duckduckgo" ||
+                        draft.original?.type === "duckduckgo",
+                    )
+                    .map((type) => (
+                      <option key={type} value={type}>
+                        {searchLabels[type]}
+                      </option>
+                    ))}
                 </Select>
               </label>
               {draft.type !== "duckduckgo" && (

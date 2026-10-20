@@ -2,6 +2,10 @@ export function modelError(error: unknown) {
   const code = error instanceof Error ? error.message : String(error);
   return (
     {
+      search_preset_read_only:
+        "Built-in search providers cannot be edited or removed.",
+      duckduckgo_is_preset:
+        "DuckDuckGo is already available. Choose it in the chat model's Search provider setting.",
       search_provider_in_use:
         "Choose another search provider or disable search in each chat model before removing this one.",
       search_provider_not_found:

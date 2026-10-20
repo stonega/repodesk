@@ -31,6 +31,7 @@ import { reconcileCharge, resolveDelivery } from "../jobs/recovery.ts";
 import { logQuery, readRuntimeLogs } from "../observability/logs.ts";
 import { requestDeletion } from "../privacy/service.ts";
 import type { ReviewService } from "../review-bot/service.ts";
+import { searchProviderIdSchema } from "../search/config.ts";
 import { equal, hash, passwordHash } from "../setup/credentials.ts";
 import type { SetupService } from "../setup/service.ts";
 import {
@@ -247,7 +248,7 @@ export function adminRoutes(
     return c.json(
       await setup.search.remove(
         c.get("session").admin,
-        validId(c.req.param("provider")),
+        searchProviderIdSchema.parse(c.req.param("provider")),
         input.version,
       ),
     );

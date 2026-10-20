@@ -5,11 +5,12 @@ import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
+import { DUCKDUCKGO_PRESET_ID } from "../../src/search/config.ts";
 import { encrypt, passwordHash } from "../../src/setup/credentials.ts";
 import { workspace } from "../fixtures.ts";
 import { chooseOption } from "./dropdown-helpers.ts";
 
-async function fixture(page: Page) {
+async function fixture(page: Page, legacy = false) {
   const db = JSON.parse(
     await readFile(
       process.env.BROWSER_DB_PATH ??
@@ -54,6 +55,20 @@ async function fixture(page: Page) {
         fetchedAt: new Date().toISOString(),
       },
     ];
+    if (legacy) {
+      const legacyId = randomUUID();
+      d.searchProviders = [
+        ...(d.searchProviders ?? []),
+        {
+          id: legacyId,
+          operatorId: id,
+          version: 1,
+          name: "Saved DuckDuckGo",
+          type: "duckduckgo",
+        },
+      ];
+      w.chatModel.searchProviderId = legacyId;
+    }
     await store.saveDeployment(pool, d);
     await pool.query(
       "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",
@@ -79,17 +94,71 @@ const screenshot = (page: Page, name: string) =>
     fullPage: true,
   });
 for (const width of [1280, 390]) {
+  test(`saved DuckDuckGo selections can move to the preset at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await fixture(page, true);
+    const section = page.getByRole("region", {
+      name: "Search providers",
+      exact: true,
+    });
+    const chat = page.getByRole("region", { name: "Bot chat model" });
+    await expect(chat).toContainText("Saved DuckDuckGo");
+    await section
+      .getByRole("button", { name: "Edit search provider Saved DuckDuckGo" })
+      .click();
+    const editor = page.getByRole("dialog", { name: "Edit search provider" });
+    await expect(editor.getByLabel("Search provider type")).toHaveAttribute(
+      "value",
+      "duckduckgo",
+    );
+    await expect(editor.getByLabel("API key", { exact: true })).toHaveCount(0);
+    await editor.getByLabel("Provider name").fill("Previous free search");
+    await screenshot(page, `legacy-editor-${width}`);
+    await editor.getByRole("button", { name: "Save search provider" }).click();
+    await expect(editor).toHaveCount(0);
+    await expect(chat).toContainText("Previous free search");
+    await chat.getByRole("button", { name: "Edit chat model" }).click();
+    const model = page.getByRole("dialog", { name: "Edit chat model" });
+    await chooseOption(
+      model.getByLabel("Search provider", { exact: true }),
+      DUCKDUCKGO_PRESET_ID,
+    );
+    await model.getByRole("button", { name: "Save chat model" }).click();
+    await expect(model).toHaveCount(0);
+    await section
+      .getByRole("button", {
+        name: "Remove search provider Previous free search",
+      })
+      .click();
+    const remove = page.getByRole("dialog", { name: "Remove search provider" });
+    await remove
+      .getByRole("button", { name: "Remove provider", exact: true })
+      .click();
+    await expect(remove).toHaveCount(0);
+    await expect(section.getByRole("listitem")).toHaveCount(1);
+    await expect(chat).toContainText("DuckDuckGo (free)");
+    await page.reload();
+    await expect(chat).toContainText("DuckDuckGo (free)");
+  });
   test(`search providers use modal editors and persist chat choice at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
-    await fixture(page);
+    const w = await fixture(page);
     const section = page.getByRole("region", {
         name: "Search providers",
         exact: true,
       }),
       chat = page.getByRole("region", { name: "Bot chat model" });
-    await expect(section).toContainText("No search providers yet");
+    await expect(section).toContainText("DuckDuckGo (free)");
+    const preset = section
+      .getByRole("listitem")
+      .filter({ hasText: "DuckDuckGo (free)" });
+    await expect(preset).toContainText("Preset · No API key required");
+    await expect(preset.locator("button,input,select")).toHaveCount(0);
+    await expect(section.getByRole("listitem")).toHaveCount(1);
     await expect(section.locator("input,select")).toHaveCount(0);
     await expect(chat).toContainText("Disabled");
     for (const title of ["Model providers", "Search providers"]) {
@@ -116,16 +185,53 @@ for (const width of [1280, 390]) {
       expect(Math.abs(layout.lastBottom - layout.bottom)).toBeLessThan(1);
     }
     await screenshot(page, `empty-${width}`);
+    const model = page.getByRole("dialog", { name: "Edit chat model" });
+    let providerSaves = 0;
+    page.on("request", (request) => {
+      if (
+        request.method() === "PUT" &&
+        request.url().endsWith("/api/admin/operator/search-providers")
+      )
+        providerSaves++;
+    });
+    await chat.getByRole("button", { name: "Edit chat model" }).click();
+    await chooseOption(
+      model.getByLabel("Search provider", { exact: true }),
+      DUCKDUCKGO_PRESET_ID,
+    );
+    await model.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(chat).toContainText("Disabled");
+    await chat.getByRole("button", { name: "Edit chat model" }).click();
+    await chooseOption(
+      model.getByLabel("Search provider", { exact: true }),
+      DUCKDUCKGO_PRESET_ID,
+    );
+    await model.getByRole("button", { name: "Save chat model" }).click();
+    await expect(model).toHaveCount(0);
+    await page.reload();
+    await expect(chat).toContainText("DuckDuckGo (free)");
+    await expect(chat.locator("input,select")).toHaveCount(0);
+    expect(providerSaves).toBe(0);
+    const savedModel = await (
+      await page.request.get(`/api/admin/workspaces/${w.id}/models`)
+    ).json();
+    expect(savedModel.searchProviderId).toBe(DUCKDUCKGO_PRESET_ID);
+    await screenshot(page, `preset-selected-${width}`);
     await section.getByRole("button", { name: "New search provider" }).click();
     const editor = page.getByRole("dialog", { name: "New search provider" });
-    await expect(editor.getByLabel("API key", { exact: true })).toHaveCount(0);
-    await editor.getByLabel("Provider name").fill("Free web");
+    await expect(editor.getByLabel("API key", { exact: true })).toHaveAttribute(
+      "required",
+      "",
+    );
+    await editor.getByLabel("Search provider type").click();
+    await expect(page.getByRole("option")).toHaveCount(2);
+    await expect(
+      page.getByRole("option", { name: "DuckDuckGo (free)" }),
+    ).toHaveCount(0);
+    await page.getByRole("option", { name: "Exa", exact: true }).click();
+    await editor.getByLabel("Provider name").fill("Cancelled search");
     await editor.getByRole("button", { name: "Cancel", exact: true }).click();
-    await expect(section).toContainText("No search providers yet");
-    await section.getByRole("button", { name: "New search provider" }).click();
-    await editor.getByLabel("Provider name").fill("Free web");
-    await editor.getByRole("button", { name: "Save search provider" }).click();
-    await expect(editor).toHaveCount(0);
+    await expect(section.getByRole("listitem")).toHaveCount(1);
     await section.getByRole("button", { name: "New search provider" }).click();
     await editor.getByLabel("Provider name").fill("Paid web");
     await chooseOption(editor.getByLabel("Search provider type"), "deepseek");
@@ -148,7 +254,6 @@ for (const width of [1280, 390]) {
     );
     expect(JSON.stringify(catalog)).not.toContain("fixture-search-secret");
     await chat.getByRole("button", { name: "Edit chat model" }).click();
-    const model = page.getByRole("dialog", { name: "Edit chat model" });
     await chooseOption(
       model.getByLabel("Search provider", { exact: true }),
       paid.id,
@@ -214,6 +319,9 @@ for (const width of [1280, 390]) {
     await page.getByRole("button", { name: "New search provider" }).click();
     const editor = page.getByRole("dialog", { name: "New search provider" });
     await editor.getByLabel("Provider name").fill("Retained search");
+    await editor
+      .getByLabel("API key", { exact: true })
+      .fill("fixture-search-secret");
     let fail = true;
     let release: () => void = () => {};
     await page.route(
@@ -284,7 +392,15 @@ for (const width of [1280, 390]) {
     await expect(
       section.getByRole("button", { name: "New search provider" }),
     ).toBeDisabled();
-    await expect(section).not.toContainText("No search providers yet");
+    await expect(
+      section.getByRole("listitem").filter({ hasText: "DuckDuckGo (free)" }),
+    ).toContainText("Preset");
+    await expect(
+      section
+        .getByRole("listitem")
+        .filter({ hasText: "DuckDuckGo (free)" })
+        .locator("button,input,select"),
+    ).toHaveCount(0);
     const spacing = await section
       .locator(".skeleton-rows")
       .evaluate((element) => {

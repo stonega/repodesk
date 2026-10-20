@@ -174,7 +174,7 @@ and encryption key stay operator-level deployment settings.
 | `/api/setup/*` | Initial admin claim, authenticated setup draft, validation and activation |
 | `/api/admin/auth/*` | Local login, optional Telegram linking/login, session, logout |
 | `/api/admin/workspaces` | List authorized workspaces |
-| `/api/admin/operator/search-providers` | Operator-owned search catalog; GET lists safe summaries, PUT saves with deployment `version`, DELETE `/:provider` rejects in-use records |
+| `/api/admin/operator/search-providers` | GET includes the read-only `duckduckgo` preset and operator-owned safe summaries; PUT saves keyed providers with deployment `version`, DELETE `/:provider` rejects presets and in-use records |
 | `/api/admin/workspaces/:id/models` | Read/update the chat model with workspace `revision`; `searchProviderId` selects an owned search provider, null disables search, omission preserves the current choice |
 | `/api/admin/workspaces/:id/settings` | Read/update versioned bot/model/usage/retention settings |
 | `/api/admin/workspaces/:id/chats` | List/link/unlink chat bindings and context collection |

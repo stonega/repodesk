@@ -27,17 +27,17 @@ RepoDesk 的聊天、Codex 开发和 Review Bot 审查可以选择不同模型�
 
 ## 聊天网页搜索
 
-在 **Model settings → Search providers → New** 添加搜索供应商：
+在 **Model settings → Search providers** 查看搜索供应商：
 
-- **DuckDuckGo (free)**：免费，不需要 API Key。使用公开搜索结果页，可能遇到限流或验证而暂时不可用。
-- **DeepSeek**：填写 DeepSeek API Key，使用官方 Search API。
-- **Exa**：填写 Exa API Key。
+- **DuckDuckGo (free)**：内置免费预设，无需添加或填写 API Key，直接在聊天模型中选择即可。预设不能编辑或删除。使用公开搜索结果页，可能遇到限流或验证而暂时不可用。
+- **DeepSeek**：点击 **New**，填写 DeepSeek API Key，使用官方 Search API。
+- **Exa**：点击 **New**，填写 Exa API Key。
 
 供应商可供同一部署管理员的工作区复用；Key 加密保存且不会回显。
 编辑同一类型的供应商时，Key 留空保留原值；切换到另一种付费类型需要重新填写。
 保存凭据不会发起搜索，也不验证余额或配额。
 
-在 **Bot chat model → Edit → Search provider** 选择已添加的供应商，
+在 **Bot chat model → Edit → Search provider** 选择 DuckDuckGo 预设或已添加的供应商，
 或选择 **Disabled** 关闭搜索。保存后，聊天模型可按需要调用 `search_tool`
 查询公开网页，并引用结果链接。首次配置默认关闭，Codex 和 Review Bot 不受此选项影响。
 每次搜索最多返回 10 条带标题、链接和摘要的结果，查询最长 128 个字符。
@@ -46,6 +46,7 @@ RepoDesk 的聊天、Codex 开发和 Review Bot 审查可以选择不同模型�
 DeepSeek、Exa 的搜索请求费用由供应商单独计费，不计入模型 token 预算或 Usage 金额。
 替换供应商凭据或更改聊天模型设置会使使用旧配置的运行停止。
 删除正在使用的供应商前，先在各工作区切换供应商或关闭搜索。
+已有的自定义 DuckDuckGo 记录及其选择继续生效；切换到内置预设后，可删除不再使用的旧记录。
 
 ## 推理强度、容量和价格
 
