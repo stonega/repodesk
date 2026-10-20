@@ -5,6 +5,7 @@ const backend = await Bun.build({
   entrypoints: [
     "src/server.ts",
     "src/worker.ts",
+    "src/web-reader/web-reader-extract.ts",
     "src/coding/local/runner-server.ts",
     "src/coding/local/job.ts",
     "src/db/migrate.ts",

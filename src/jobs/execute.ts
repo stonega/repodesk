@@ -32,6 +32,7 @@ import {
   requestFailureMessage,
 } from "../telegram/feedback.ts";
 import { discardFollowup } from "../telegram/followup.ts";
+import { webReaderTool } from "../web-reader/tool.ts";
 import { commitDiscussions } from "../workspaces/conversation-memory.ts";
 import { audit, runAllowed } from "../workspaces/policy.ts";
 import { confirmRunStopped, deliver } from "../workspaces/service.ts";
@@ -365,6 +366,7 @@ export class Executor {
         transcript,
         tools: [
           ...applicationTools(this.store, workspaceId, runId, fence),
+          webReaderTool(this.store, workspaceId, runId, fence, guard),
           ...(claimed.searchProvider
             ? [
                 searchTool(

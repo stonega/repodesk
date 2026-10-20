@@ -548,6 +548,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
           await input.guard();
           const tool = input.tools.find((t) => t.name === "search_tool");
           expect(!!tool).toBe(enabled);
+          expect(input.tools.some((t) => t.name === "read_web")).toBe(true);
           if (tool)
             expect(
               JSON.stringify(

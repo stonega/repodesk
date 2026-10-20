@@ -1,5 +1,35 @@
 # Implementation evidence
 
+## Built-in Defuddle web reader (2026-10-20)
+
+Added `read_web` as an internal preset for authorized chat and scheduled runs,
+independent of search-provider configuration, API keys and skill grants. It
+returns clean Markdown and bounded source metadata with the final URL and an
+explicit truncation flag. Defuddle 0.19.5 and linkedom 0.18.13 are pinned runtime
+dependencies. A separate extraction worker executes no page scripts or extra
+extractor requests and suppresses raw parser diagnostics.
+
+Public-address validation covers URL schemes/credentials/ports, all DNS answers
+and each redirect; connections pin the checked IP while preserving TLS and Host.
+Requests carry no application credentials or cookies. A twenty-second deadline,
+five-redirect cap, 2 MiB encoded/decompressed limits and 24,000-character Markdown
+limit bound reads. Deployment, membership, destination, run status and fence guards
+protect requests and cached reuse. Durable reservations deduplicate completed
+calls, reject conflicting arguments and prevent unknown-call replay; revocation
+discards in-flight results. Web contents remain untrusted reference data.
+
+Validation: lint, strict TypeScript, production build and the packaged Node runtime
+contract passed. All **1,043 deterministic tests across 117 files** passed against
+disposable PostgreSQL, including 18 reader tests for extraction, metadata,
+truncation, address/redirect/size boundaries, cancellation, transport pinning,
+durable replay and permission revocation. Search registration and citation tests
+also cover the always-available reader. No UI layout or database migration was
+changed. The Docker image built and passed its offline Node 24 runtime smoke,
+including extraction and pinned HTTP transport; Compose configuration validated.
+No live model/Telegram calls, account connections or deployment were performed.
+See [implementation and boundaries](web-reader.md) and
+[runnable examples](../../examples/web-reader.md).
+
 ## Built-in DuckDuckGo search preset (2026-10-20)
 
 DuckDuckGo is now a read-only preset in Search providers and is immediately

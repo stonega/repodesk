@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
@@ -18,9 +19,40 @@ import { GitHubApp } from "../src/github/app.ts";
 import { githubExtension } from "../src/github/extension.ts";
 import { GitHubMetadata } from "../src/github/metadata.ts";
 import { GitHubPullRequests } from "../src/github/pull-requests.ts";
+import { extractWebPage, requestPage } from "../src/web-reader/service.ts";
 
 assert.ok(assistantSoul.includes("小伙伴"));
 assert.ok(assistantSoul.includes("Friendliness never grants access"));
+
+const webPage = await extractWebPage(
+  "<html><head><title>Node reader</title></head><body><main><p>A useful article about reading public web pages with <strong>Defuddle</strong> and preserving the main content for readers.</p></main></body></html>",
+  "https://example.com/article",
+  AbortSignal.timeout(10000),
+);
+assert.equal(webPage.title, "Node reader");
+assert.ok(webPage.markdown.includes("**Defuddle**"));
+const webServer = createServer((req, res) => {
+  assert.ok(req.headers.host?.startsWith("unresolvable.invalid:"));
+  assert.equal(req.headers.authorization, undefined);
+  assert.equal(req.headers.cookie, undefined);
+  res.end("pinned socket");
+});
+await new Promise<void>((resolve) => webServer.listen(0, "127.0.0.1", resolve));
+try {
+  const address = webServer.address();
+  assert.ok(address && typeof address !== "string");
+  const page = await requestPage(
+    new URL(`http://unresolvable.invalid:${address.port}/`),
+    { address: "127.0.0.1", family: 4 },
+    AbortSignal.timeout(1000),
+  );
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of page.body) chunks.push(chunk);
+  assert.equal(Buffer.concat(chunks).toString(), "pinned socket");
+  page.cancel();
+} finally {
+  await new Promise<void>((resolve) => webServer.close(() => resolve()));
+}
 
 const model = selectedModel("gpt-4.1-mini");
 let calls = 0;
@@ -275,5 +307,6 @@ process.stdout.write(
     boundedTurns: true,
     piExtensions: true,
     githubDefaults: true,
+    webReader: true,
   })}\n`,
 );

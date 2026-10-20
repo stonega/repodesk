@@ -346,10 +346,21 @@ dispatch and before returning results. Durable started/completed calls prevent
 duplicate requests and unknown-outcome replay. Search URLs and excerpts are
 untrusted public reference data. Responses are bounded to 2 MiB, ten results and
 20 seconds per request; source excerpts and URLs are also capped. Paid search
-fees are separate from model token accounting. No page-fetch or external-write
-capability is added. See [runnable requests](../../examples/web-search.http),
+fees are separate from model token accounting. Search returns excerpts; the
+independent built-in reader below fetches full pages. See [runnable requests](../../examples/web-search.http),
 [DeepSeek's Search API](https://api-docs.deepseek.com/guides/search/) and
 [Exa's Search API](https://docs.exa.ai/reference/search), checked 2026-10-20.
+
+### Built-in web reading
+
+`read_web` is an internal preset available independently of search providers and
+skill grants, including in authorized schedules. A bounded HTTP client validates
+public URLs, all DNS answers and redirects, pins the checked address at connection,
+and sends no credentials or cookies. Defuddle and linkedom extract clean Markdown
+in an isolated, cancellable worker with no scripts or extractor network requests.
+Existing deployment/run/membership/destination/fence guards protect requests and
+cached outcomes through the durable tool ledger. Page contents are untrusted
+references; answers cite the final public URL. See [limits and dependencies](../implementation/web-reader.md).
 
 ### Shared model provider catalog
 

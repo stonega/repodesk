@@ -35,6 +35,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [UI rules](design/ui-rules.md) | User design preferences, their scope, and how to apply and maintain them |
 | [First-run setup](design/first-run-setup.md) | Initial admin creation, bot onboarding, secrets and activation |
 | [LLM extensions / plugins](design/llm-extensions.md) | Existing Pi extension loading, headless compatibility, grants and recovery |
+| [Built-in web reader](implementation/web-reader.md) | Defuddle Markdown extraction, public network boundaries and durable reads |
 | [Google Search Console](implementation/search-console.md) | Service account setup, selected properties, read-only search analytics, sitemaps and URL inspection |
 | [Google Docs, Sheets, Drive and Gmail](implementation/google-workspace.md) | Four standalone read/search plugins with independent Google sign-in and enablement |
 | [Cloudflare plugin](implementation/cloudflare.md) | Direct API tokens, account/domain discovery, scoped DNS/Pages queries and approved changes |

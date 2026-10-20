@@ -104,6 +104,7 @@ export const workflowSchema = z
   .strict();
 export type WorkflowSpec = z.infer<typeof workflowSchema>;
 export const TOOLS = [
+  "read_web",
   "query_model_cost",
   "query_chat_history",
   "read_chat_context",
