@@ -5,6 +5,7 @@ import type { CloudflarePage } from "../src/cloudflare/config.ts";
 import type { CodeTruthPage } from "../src/code-truth/config.ts";
 import type { CodingPage } from "../src/coding/config.ts";
 import type { ReviewPage } from "../src/review-bot/config.ts";
+import type { SearchConsolePage } from "../src/search-console/config.ts";
 import { Cloudflare } from "./cloudflare.tsx";
 import { CodeTruth } from "./code-truth.tsx";
 import { Coding } from "./coding.tsx";
@@ -13,6 +14,7 @@ import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
 import { ReviewBot } from "./review-bot.tsx";
+import { SearchConsole } from "./search-console.tsx";
 import { SkeletonRows } from "./skeleton.tsx";
 import { ErrorToast, useToast } from "./toast.tsx";
 
@@ -110,6 +112,7 @@ export function Plugins({
     codex?: boolean;
     reviewBot?: boolean;
     cloudflare?: boolean;
+    searchConsole?: boolean;
   }>({});
   const path = (suffix = "") =>
     `/admin/plugins${suffix}?workspace=${encodeURIComponent(workspaceId)}`;
@@ -135,6 +138,7 @@ export function Plugins({
       (view === "installed" &&
         pluginId !== "code-truth" &&
         pluginId !== "cloudflare" &&
+        pluginId !== "search-console" &&
         pluginId !== "codex" &&
         pluginId !== "review-bot")
     )
@@ -148,9 +152,14 @@ export function Plugins({
       request<CodingPage>(`${endpoint}/coding`),
       request<ReviewPage>(`${endpoint}/review-bot`),
       request<CloudflarePage>(`${endpoint}/cloudflare`),
-    ]).then(([truth, coding, review, cloudflare]) => {
+      request<SearchConsolePage>(`${endpoint}/search-console`),
+    ]).then(([truth, coding, review, cloudflare, searchConsole]) => {
       if (!active) return;
       setBuiltIns({
+        searchConsole:
+          searchConsole.status === "fulfilled"
+            ? searchConsole.value.settings?.enabled
+            : undefined,
         cloudflare:
           cloudflare.status === "fulfilled"
             ? cloudflare.value.settings?.enabled
@@ -232,6 +241,7 @@ export function Plugins({
         </header>
       ) : (pluginId !== "code-truth" &&
           pluginId !== "cloudflare" &&
+          pluginId !== "search-console" &&
           pluginId !== "codex" &&
           pluginId !== "review-bot") ||
         view === "market" ? (
@@ -335,6 +345,18 @@ export function Plugins({
                 }
               />
               <PluginCard
+                to={path("/search-console")}
+                name="Google Search Console"
+                summary="Search performance, sitemaps and indexed URL status."
+                status={
+                  builtIns.searchConsole === undefined
+                    ? "Built in"
+                    : builtIns.searchConsole
+                      ? "Enabled"
+                      : "Disabled"
+                }
+              />
+              <PluginCard
                 to={path("/cloudflare")}
                 name="Cloudflare"
                 summary="DNS, Pages queries and approved cache purges"
@@ -410,6 +432,14 @@ export function Plugins({
           backTo={path()}
         />
       )}
+      {view === "installed" && pluginId === "search-console" && (
+        <SearchConsole
+          key={workspaceId}
+          request={request}
+          workspaceId={workspaceId}
+          backTo={path()}
+        />
+      )}
       {view === "installed" && pluginId === "cloudflare" && (
         <Cloudflare
           key={workspaceId}
@@ -432,6 +462,7 @@ export function Plugins({
       {view === "installed" &&
         pluginId !== "code-truth" &&
         pluginId !== "cloudflare" &&
+        pluginId !== "search-console" &&
         pluginId !== "codex" &&
         pluginId !== "review-bot" && (
           <>

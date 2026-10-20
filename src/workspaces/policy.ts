@@ -13,6 +13,7 @@ import {
 } from "../github/metadata-policy.ts";
 import { repositoryAccess } from "../github/user-access.ts";
 import { memoryContextValid } from "../memory/state.ts";
+import { searchConsoleReadAllowed } from "../search-console/policy.ts";
 import { validMemory } from "./conversation-memory.ts";
 export function eligible(w: Workspace, actor: string, admin = false) {
   const member = w.members.find((m) => m.id === actor && m.active);
@@ -93,6 +94,7 @@ function allowedRun(
     !run.cancelled &&
     githubReadAllowed(w, run) &&
     cloudflareReadAllowed(w, run) &&
+    searchConsoleReadAllowed(w, run) &&
     (!run.handoffRead ||
       (validMemory(run.handoffRead.references, w.messages) &&
         run.handoffRead.chatIds.every(

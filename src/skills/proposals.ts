@@ -8,6 +8,7 @@ import {
   type Workspace,
 } from "../domain.ts";
 import { githubReadAllowed } from "../github/metadata-policy.ts";
+import { searchConsoleReadAllowed } from "../search-console/policy.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import { memoryReferences } from "../workspaces/conversation-memory.ts";
 import { audience, audit, authorize } from "../workspaces/policy.ts";
@@ -39,7 +40,7 @@ export function completedSkillSource(
   const references = memoryReferences(source.sources);
   requireThat(githubReadAllowed(w, source), "skill_source_unavailable", 404);
   requireThat(
-    cloudflareReadAllowed(w, source),
+    cloudflareReadAllowed(w, source) && searchConsoleReadAllowed(w, source),
     "skill_source_unavailable",
     404,
   );

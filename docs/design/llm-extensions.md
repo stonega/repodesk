@@ -234,3 +234,14 @@ domains means account resources only. Product-specific token permissions and pla
 entitlements still apply. Metadata projections exclude credentials, source code,
 object contents, database rows and arbitrary API/GraphQL/SQL execution. New writes
 reuse exact actor approvals, current-state checks and durable ambiguity handling.
+
+## Predefined Google Search Console
+
+The [Search Console plugin](../implementation/search-console.md) uses a workspace
+service account with `webmasters.readonly`, an explicit property allowlist and
+`query_search_console`. Active members can read performance, sitemaps and indexed
+URL status in private interactive conversations. The operator configures encrypted
+credentials and discovers/selects properties through modal editors. Key replacement
+clears property grants and disables the plugin. Current plugin revisions fence
+provider calls, retained evidence and delivery; group requests and schedules are
+excluded. No verification, submission, deletion or indexing writes are exposed.

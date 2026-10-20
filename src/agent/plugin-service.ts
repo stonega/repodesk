@@ -28,6 +28,9 @@ import { GitHubMetadata } from "../github/metadata.ts";
 import { GitHubPullRequests } from "../github/pull-requests.ts";
 import { GitHubApps } from "../github/registry.ts";
 import { repositoryAccess } from "../github/user-access.ts";
+import { searchConsoleTool } from "../search-console/config.ts";
+import { searchConsoleExtension } from "../search-console/extension.ts";
+import type { SearchConsoleService } from "../search-console/service.ts";
 import { audit } from "../workspaces/policy.ts";
 import { ExtensionCatalog } from "./extensions.ts";
 import {
@@ -53,6 +56,7 @@ export class PluginService {
     private codeTruth?: CodeTruthClient,
     private githubApp?: GitHubApp | GitHubApps,
     readonly cloudflare?: CloudflareService,
+    readonly searchConsole?: SearchConsoleService,
   ) {}
   private legacy?: Promise<PluginRecord[]>;
   private fallback(): Promise<PluginRecord[]> {
@@ -124,6 +128,8 @@ export class PluginService {
       const names = new Set<string>(TOOLS);
       if (workspace.plugins?.cloudflare?.settings.enabled)
         for (const name of cloudflareTools) names.add(name);
+      if (workspace.plugins?.searchConsole?.settings.enabled)
+        names.add(searchConsoleTool);
       names.add("record_discussion");
       names.add("query_discussions");
       if (builtin?.enabled && targetsFor(builtin, workspaceId).length)
@@ -184,6 +190,35 @@ export class PluginService {
       serviceConfigured: Boolean(this.codeTruth),
       workspaces: [{ id: workspace.id, name: workspace.settings.name }],
     };
+  }
+  async searchConsoleView(admin: Admin, workspaceId: string) {
+    requireThat(
+      this.searchConsole,
+      "search_console_credentials_unavailable",
+      503,
+    );
+    return this.searchConsole.view(admin, workspaceId);
+  }
+  async saveSearchConsole(
+    admin: Admin,
+    workspaceId: string,
+    value: unknown,
+    sessionHash?: string,
+  ) {
+    requireThat(
+      this.searchConsole,
+      "search_console_credentials_unavailable",
+      503,
+    );
+    await this.searchConsole.view(admin, workspaceId);
+    const workspace = await this.store.read(workspaceId);
+    return this.searchConsole.save(
+      admin,
+      workspaceId,
+      value,
+      await this.entries(workspace),
+      sessionHash,
+    );
   }
   async cloudflareView(admin: Admin, workspaceId: string) {
     requireThat(this.cloudflare, "cloudflare_credentials_unavailable", 503);
@@ -317,6 +352,20 @@ export class PluginService {
     const config = workspace.plugins?.codeTruth;
     const targets = config?.enabled ? targetsFor(config, workspaceId) : [];
     const builtins = [];
+    if (workspace.plugins?.searchConsole?.settings.enabled) {
+      requireThat(
+        this.searchConsole,
+        "search_console_credentials_unavailable",
+        503,
+      );
+      builtins.push(
+        searchConsoleExtension(
+          this.searchConsole,
+          workspaceId,
+          workspace.plugins.revision,
+        ),
+      );
+    }
     if (workspace.plugins?.cloudflare?.settings.enabled) {
       requireThat(this.cloudflare, "cloudflare_credentials_unavailable", 503);
       builtins.push(

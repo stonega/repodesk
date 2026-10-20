@@ -34,6 +34,7 @@ RepoDesk 是一个自托管的 Telegram AI 助手，让你在聊天中查询 Git
 | [代码问答：Code Truth](code-truth.md) | 为选定仓库建立源码索引，获取带代码位置的回答 |
 | [Codex 开发任务](codex.md) | 配置执行环境，发起修改，补充需求并查看 PR |
 | [自动代码审查：Review Bot](review-bot.md) | 自动审查 PR，在 GitHub 评论中提问或请求修复 |
+| [Google Search Console](search-console.md) | 查询选定资源的搜索表现、Sitemap 与 URL 索引状态 |
 | [Cloudflare](cloudflare.md) | 查询流量、DNS、Workers、存储与安全资源；经确认修改 DNS、缓存、设置和路由 |
 
 ## 使用范围

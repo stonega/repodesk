@@ -12,6 +12,7 @@ import { GitHubApps } from "./github/registry.ts";
 import { GitHubService } from "./github/service.ts";
 import { RuntimeLogger } from "./observability/logs.ts";
 import { ReviewService } from "./review-bot/service.ts";
+import { SearchConsoleService } from "./search-console/service.ts";
 import { SetupService } from "./setup/service.ts";
 import { ReleaseUpdates } from "./updates/releases.ts";
 
@@ -47,6 +48,7 @@ const app = createApp(
       undefined,
       cfg.PUBLIC_ORIGIN,
     ),
+    new SearchConsoleService(store, cfg.ENCRYPTION_KEY),
   ),
   new GitHubService(store, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN, githubApp),
   cfg.ENCRYPTION_KEY,

@@ -1,5 +1,28 @@
 # Implementation evidence
 
+## Google Search Console plugin (2026-10-20)
+
+Added a built-in, read-only Google Search Console plugin for finalized search
+performance, sitemap metadata and indexed URL inspection. Operators save encrypted
+service account credentials, discover properties and explicitly select an allowlist.
+The panel uses saved summary cards, modal editors and an independent Enable switch.
+Active members query through private interactive Telegram runs. Revision, tenant,
+permission and destination checks apply to provider calls, retained/derived answers,
+handoffs and delivery. Rotation clears selections and disables access; duplicate
+completed tool calls replay through the existing durable ledger.
+
+Validation: 12 focused unit/integration tests and 20 browser regressions across
+Search Console, Cloudflare and Code Truth passed. Search Console's six desktop/mobile
+scenarios passed again after the final UI adjustment; screenshots were inspected
+for saved/empty/loading, credential/property editors, pending and error states at
+1280px and 390px. Lint, strict typecheck and production build passed. A full run
+had 1005 passes and three failures in concurrently edited Google/Codex tests; all
+106 tests in those two files passed on an isolated rerun. This is not a clean full
+suite result. No migration or dependency was added. No live Google account,
+Telegram/model call or deployment was performed; live provider permissions and
+quotas remain staging checks. See [setup and boundaries](search-console.md) and
+[runnable requests](../../examples/search-console.http).
+
 ## Code Truth in the standard deployment (2026-10-19)
 
 The base Compose stack now builds and starts the private Code Truth service and

@@ -2437,6 +2437,12 @@ input.plugin-toggle-input:disabled {
   display: grid;
   gap: 18px;
 }
+.plugin-summary.search-console-summary {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+}
+.plugin-summary.search-console-properties {
+  grid-template-columns: minmax(0, 1fr);
+}
 .cloudflare-summary-card > h2,
 .cloudflare-summary-card > p,
 .cloudflare-summary-card > .plugin-card-heading {
@@ -2942,6 +2948,9 @@ input.plugin-toggle-input:disabled {
   .plugin-summary,
   .repository-card-details .plugin-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .plugin-summary.search-console-summary {
+    grid-template-columns: minmax(0, 1fr);
   }
   .data-details > div {
     grid-template-columns: 1fr;

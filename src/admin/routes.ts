@@ -698,6 +698,42 @@ export function adminRoutes(
       ),
     );
   });
+  app.get("/api/admin/workspaces/:id/plugins/search-console", async (c) =>
+    c.json(
+      await plugins.searchConsoleView(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+      ),
+    ),
+  );
+  app.put("/api/admin/workspaces/:id/plugins/search-console", async (c) =>
+    c.json(
+      await plugins.saveSearchConsole(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+        await c.req.json(),
+        hash(sessionCookieValue(c) ?? ""),
+      ),
+    ),
+  );
+  app.post(
+    "/api/admin/workspaces/:id/plugins/search-console/properties",
+    async (c) => {
+      requireThat(
+        plugins.searchConsole,
+        "search_console_credentials_unavailable",
+        503,
+      );
+      return c.json(
+        await plugins.searchConsole.properties(
+          c.get("session").admin,
+          validId(c.req.param("id")),
+          hash(sessionCookieValue(c) ?? ""),
+          await c.req.json(),
+        ),
+      );
+    },
+  );
   app.get("/api/admin/workspaces/:id/plugins/cloudflare", async (c) =>
     c.json(
       await plugins.cloudflareView(

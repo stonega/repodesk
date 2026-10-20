@@ -1,0 +1,52 @@
+@base = http://localhost:3000
+@cookie = repodesk_session=REPLACE_WITH_SESSION
+@csrf = REPLACE_WITH_CSRF
+@workspace = 00000000-0000-4000-8000-000000000001
+
+### Read redacted settings (workspace deployment operator)
+GET {{base}}/api/admin/workspaces/{{workspace}}/plugins/search-console
+Cookie: {{cookie}}
+
+### Save a JSON key. Use the latest revision from GET; this clears properties and disables.
+# Paste the real escaped JSON through the panel, not into version-controlled files.
+PUT {{base}}/api/admin/workspaces/{{workspace}}/plugins/search-console
+Cookie: {{cookie}}
+Origin: {{base}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"revision": 0, "settings": {"enabled": false, "siteUrls": []}, "serviceAccount": "REPLACE_WITH_ESCAPED_SERVICE_ACCOUNT_JSON"}
+
+### Discover properties. Add the service account email as a Search Console user first.
+POST {{base}}/api/admin/workspaces/{{workspace}}/plugins/search-console/properties
+Cookie: {{cookie}}
+Origin: {{base}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"revision": 1}
+
+### Select exact returned property identifiers and enable; Google access is verified.
+PUT {{base}}/api/admin/workspaces/{{workspace}}/plugins/search-console
+Cookie: {{cookie}}
+Origin: {{base}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"revision": 1, "settings": {"enabled": true, "siteUrls": ["sc-domain:example.com"]}}
+
+### Remove the local credential and disable. Revoke the remote key in Google Cloud separately.
+PUT {{base}}/api/admin/workspaces/{{workspace}}/plugins/search-console
+Cookie: {{cookie}}
+Origin: {{base}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"revision": 2, "settings": {"enabled": false, "siteUrls": []}, "removeCredential": true}
+
+### Telegram private chat examples (active workspace member)
+# List the Search Console properties available to this workspace.
+# Show clicks, impressions, CTR and average position for example.com during September 2026.
+# Show the top search queries for sc-domain:example.com from 2026-09-01 to 2026-09-07.
+# List sitemaps for example.com.
+# Inspect Google's indexed version of https://example.com/blog/intro.

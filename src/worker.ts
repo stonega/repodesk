@@ -14,6 +14,7 @@ import { GitHubUsers } from "./github/users.ts";
 import { startWorker } from "./jobs/queue.ts";
 import { RuntimeLogger } from "./observability/logs.ts";
 import { ReviewExecutor } from "./review-bot/executor.ts";
+import { SearchConsoleService } from "./search-console/service.ts";
 import { SetupService } from "./setup/service.ts";
 
 const cfg = config();
@@ -38,6 +39,7 @@ const plugins = new PluginService(
     undefined,
     cfg.PUBLIC_ORIGIN,
   ),
+  new SearchConsoleService(store, cfg.ENCRYPTION_KEY),
 );
 const stop = await startWorker(
   store,

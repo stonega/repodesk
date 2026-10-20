@@ -314,6 +314,7 @@ export interface Run {
   repository?: { id: number; full_name: string; installationId: number };
   githubRead?: RepositorySources;
   cloudflareRead?: { revision: number; accountId: string };
+  searchConsoleRead?: { revision: number };
   handoffRead?: {
     references: MemoryReferences;
     runIds?: string[];

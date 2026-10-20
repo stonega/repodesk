@@ -8,6 +8,7 @@ import {
   type Workspace,
 } from "../domain.ts";
 import { attachMemoryContext, memoryDependencies } from "../memory/state.ts";
+import { searchConsoleReadAllowed } from "../search-console/policy.ts";
 import { validMemory } from "./conversation-memory.ts";
 
 export function retainedSource(w: Workspace, source: Source, now = Date.now()) {
@@ -16,7 +17,9 @@ export function retainedSource(w: Workspace, source: Source, now = Date.now()) {
       ? w.runs.find((r) => r.id === source.runId)
       : undefined;
   return (
-    (!origin || cloudflareReadAllowed(w, origin)) &&
+    (!origin ||
+      (cloudflareReadAllowed(w, origin) &&
+        searchConsoleReadAllowed(w, origin))) &&
     Date.parse(source.expiresAt) > now &&
     Date.parse(source.retentionOriginAt ?? source.at) >
       now - w.settings.retentionDays * 86400000
