@@ -329,6 +329,23 @@ use verified GitHub identities and current GitHub repository permissions. Review
 fixes require verified checks and a distinct publication token. Progress and
 results return to the PR, independently of Telegram destinations.
 
+### Bot chat web search
+
+Bot chat web search is configured separately in Model settings. Operator-owned
+search providers are stored in deployment JSONB with encrypted, write-only API
+keys; each workspace's chat model selects one provider or disables search.
+DuckDuckGo uses its free HTML results page; DeepSeek and Exa use fixed official
+search endpoints. The worker exposes `search_tool` only when selected, pins the
+provider version and chat revision, and checks run/actor/fence/configuration before
+dispatch and before returning results. Durable started/completed calls prevent
+duplicate requests and unknown-outcome replay. Search URLs and excerpts are
+untrusted public reference data. Responses are bounded to 2 MiB, ten results and
+20 seconds per request; source excerpts and URLs are also capped. Paid search
+fees are separate from model token accounting. No page-fetch or external-write
+capability is added. See [runnable requests](../../examples/web-search.http),
+[DeepSeek's Search API](https://api-docs.deepseek.com/guides/search/) and
+[Exa's Search API](https://docs.exa.ai/reference/search), checked 2026-10-20.
+
 ### Shared model provider catalog
 
 Deployment JSONB stores operator-owned provider records with encrypted keys, cached

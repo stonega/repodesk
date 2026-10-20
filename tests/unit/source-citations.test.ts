@@ -62,3 +62,17 @@ test("base policy distinguishes chat IDs from code provenance", () => {
   expect(system).toContain("syntax is reserved for chat messages");
   expect(system).toContain("Cite code/tool evidence separately in plain text");
 });
+
+test("completed web search supports URL citations for web summaries", () => {
+  const { run } = fixture();
+  run.task = "Summarize the latest release notes";
+  const answer = "Release notes: https://example.com/releases";
+  expect(() => validateSources(answer, run)).toThrow("recap_requires_sources");
+  run.tools.search = { name: "search_tool", state: "started" };
+  expect(() => validateSources(answer, run)).toThrow("recap_requires_sources");
+  run.tools.search.state = "done";
+  expect(validateSources(answer, run)).toBe(answer);
+  expect(() =>
+    validateSources(`${answer} [source:https://example.com/releases]`, run),
+  ).toThrow("invalid_source_citation");
+});

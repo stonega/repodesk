@@ -38,6 +38,22 @@ when implementing or reviewing a change.
 
 ## Recorded preferences
 
+### Web search providers live in Model settings
+
+- **Preference:** Manage DuckDuckGo, DeepSeek and Exa in a separate Search
+  providers section on `/admin/model`. Choose the search provider in the bot chat
+  model editor and show the saved choice in its summary.
+- **Scope:** Bot chat search configuration in setup and Model settings. Provider
+  records belong to the operator; each workspace chooses its own provider.
+- **Source:** 2026-10-20 — user requested a new search-provider section and
+  selection in model settings, with free DuckDuckGo and keyed DeepSeek/Exa.
+- **Acceptance:** Saved records contain no form controls or readable secrets.
+  New/Edit use shared dialogs, dropdowns and actions; DuckDuckGo asks for no key.
+  Verify selection persistence, disabled search, pending/error recovery and
+  readable desktop/mobile summaries.
+- **Exceptions:** Setup retains its guided chat-model form. Search selection
+  does not change Codex or Review Bot model settings.
+
 ### Google integrations have independent plugin pages
 
 - **Preference:** Google Docs, Google Sheets, Google Drive and Gmail each appear

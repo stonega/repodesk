@@ -3103,6 +3103,19 @@ input.plugin-toggle-input:disabled {
   justify-content: space-between;
   gap: 0.75rem;
 }
+.model-settings-card {
+  display: grid;
+  gap: 16px;
+}
+.model-settings-card > p {
+  margin: 0;
+}
+.model-settings-card .skeleton-row:first-child {
+  padding-top: 0;
+}
+.model-settings-card .skeleton-row:last-child {
+  padding-bottom: 0;
+}
 .model-provider-item .settings-item-details {
   min-width: 0;
   flex: 1;

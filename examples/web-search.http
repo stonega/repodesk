@@ -1,0 +1,68 @@
+@baseUrl = http://localhost:3000
+@csrf = REPLACE_WITH_SESSION_CSRF
+@session = REPLACE_WITH_SESSION_COOKIE
+@workspace = REPLACE_WITH_WORKSPACE_UUID
+
+### Read operator-owned providers and the current version before each mutation
+GET {{baseUrl}}/api/admin/operator/search-providers
+Cookie: repodesk_session={{session}}
+
+### Free DuckDuckGo, with no API key
+PUT {{baseUrl}}/api/admin/operator/search-providers
+Origin: {{baseUrl}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "version": 1,
+  "name": "Free web search",
+  "type": "duckduckgo"
+}
+
+### DeepSeek; use the latest version from GET (change type to exa for Exa)
+PUT {{baseUrl}}/api/admin/operator/search-providers
+Origin: {{baseUrl}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "version": 2,
+  "name": "DeepSeek search",
+  "type": "deepseek",
+  "apiKey": "REPLACE_WITH_API_KEY"
+}
+
+### Read the chat model's current revision and selection
+GET {{baseUrl}}/api/admin/workspaces/{{workspace}}/models
+Cookie: repodesk_session={{session}}
+
+### Save a search choice together with the chat model
+### Use the current revision and full model selection from GET above.
+### Set searchProviderId to null to disable; omitting it preserves the saved choice.
+PUT {{baseUrl}}/api/admin/workspaces/{{workspace}}/models
+Origin: {{baseUrl}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "revision": 0,
+  "selection": {
+    "providerId": "REPLACE_WITH_MODEL_PROVIDER_UUID",
+    "model": "REPLACE_WITH_MODEL_ID"
+  },
+  "searchProviderId": "REPLACE_WITH_SEARCH_PROVIDER_UUID"
+}
+
+### Remove a provider after all workspace chat models stop using it
+DELETE {{baseUrl}}/api/admin/operator/search-providers/REPLACE_WITH_SEARCH_PROVIDER_UUID
+Origin: {{baseUrl}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "version": 3
+}

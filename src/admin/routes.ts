@@ -233,6 +233,25 @@ export function adminRoutes(
   app.get("/api/admin/operator/model-providers", async (c) =>
     c.json(await setup.models.catalog(c.get("session").admin)),
   );
+  app.get("/api/admin/operator/search-providers", async (c) =>
+    c.json(await setup.search.catalog(c.get("session").admin)),
+  );
+  app.put("/api/admin/operator/search-providers", async (c) =>
+    c.json(await setup.search.save(c.get("session").admin, await c.req.json())),
+  );
+  app.delete("/api/admin/operator/search-providers/:provider", async (c) => {
+    const input = z
+      .object({ version })
+      .strict()
+      .parse(await c.req.json());
+    return c.json(
+      await setup.search.remove(
+        c.get("session").admin,
+        validId(c.req.param("provider")),
+        input.version,
+      ),
+    );
+  });
   app.post("/api/admin/operator/model-providers/discover", async (c) =>
     c.json(
       await setup.models.discover(c.get("session").admin, await c.req.json()),

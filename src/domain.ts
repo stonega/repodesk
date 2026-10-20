@@ -8,6 +8,7 @@ import type { GooglePlugin } from "./google/config.ts";
 import type { MemoryContext, MemoryState } from "./memory/types.ts";
 import type { ModelProvider, ModelSelection } from "./models/config.ts";
 import type { ReviewConfig, ReviewTask } from "./review-bot/config.ts";
+import type { SearchPin, SearchProvider } from "./search/config.ts";
 
 export class Fault extends Error {
   constructor(
@@ -310,6 +311,7 @@ export interface Approval {
   };
 }
 export interface Run {
+  searchProvider?: SearchPin;
   memoryContext?: MemoryContext;
   memoryMutation?: boolean;
   repository?: { id: number; full_name: string; installationId: number };
@@ -488,7 +490,11 @@ export interface Workspace {
     attempts: Run["attempts"];
   }[];
   memory?: MemoryState;
-  chatModel?: { revision: number; selection: ModelSelection };
+  chatModel?: {
+    revision: number;
+    selection: ModelSelection;
+    searchProviderId?: string;
+  };
   repositorySelections?: {
     actor: string;
     chatId: string;
@@ -549,6 +555,7 @@ export interface Workspace {
   };
 }
 export interface Deployment extends ModelOptions {
+  searchProviders?: SearchProvider[];
   modelProviders?: ModelProvider[];
   site?: { domain: string | null; revision: number };
   version: number;

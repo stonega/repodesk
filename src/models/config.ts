@@ -45,6 +45,7 @@ export interface ProviderCatalog {
   providers: ProviderView[];
 }
 export interface WorkspaceModels extends ProviderCatalog {
+  searchProviderId?: string | null;
   revision: number;
   selection: ModelSelection | null;
   legacy: boolean;

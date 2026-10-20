@@ -19,41 +19,20 @@ import type {
   ProviderView,
   WorkspaceModels,
 } from "../src/models/config.ts";
+import type { SearchCatalog } from "../src/search/config.ts";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
+import { modelError } from "./model-errors.ts";
 import { AutomaticModelInfo, providerLabels } from "./model-metadata.tsx";
+import { SearchProvidersPanel } from "./search-providers.tsx";
 import { Select } from "./select.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 import { ErrorToast, useToast } from "./toast.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 const catalogPath = "/api/admin/operator/model-providers";
-export function modelError(error: unknown) {
-  const code = error instanceof Error ? error.message : String(error);
-  return (
-    {
-      model_provider_auth_failed:
-        "The provider rejected the API key. Check the key and try again.",
-      model_discovery_failed:
-        "Could not fetch models. Check the API base URL and try again.",
-      model_discovery_invalid: "The provider did not return a model list.",
-      model_provider_in_use:
-        "Choose another provider for each service before removing this one.",
-      model_not_available:
-        "The selected model is no longer in the provider's model list.",
-      model_price_tier_unavailable:
-        "The selected price tier is no longer available. Choose the model again to review its current prices.",
-      custom_model_pricing_required:
-        "Enter both token prices in Advanced model settings for this custom model.",
-      model_limits_required:
-        "Enter the context window and maximum output in Advanced model settings for this custom model.",
-      new_endpoint_requires_api_key:
-        "Enter the API key again when changing the provider URL.",
-      version_conflict:
-        "Settings changed. Reload saved settings and try again.",
-    }[code.split(".")[0] ?? code] ?? code
-  );
-}
+
+export { modelError } from "./model-errors.ts";
 export function selectionFromForm(
   selection: ModelSelection | undefined,
   form: HTMLFormElement,
@@ -452,6 +431,7 @@ export function ModelProvidersPanel({
 }) {
   const path = `/api/admin/workspaces/${workspaceId}/models`;
   const [page, setPage] = useState<WorkspaceModels>();
+  const [searchCatalog, setSearchCatalog] = useState<SearchCatalog>();
   const [error, setError] = useState("");
   const [formError, setFormError] = useState("");
   const modelFeedback = useRef<HTMLDivElement>(null);
@@ -473,14 +453,19 @@ export function ModelProvidersPanel({
   useEffect(() => {
     let active = true;
     setPage(undefined);
+    setSearchCatalog(undefined);
     setError("");
     setProviderDraft(undefined);
     setRemoving(undefined);
     setEditingModel(false);
-    void request<WorkspaceModels>(path)
-      .then((value) => {
+    void Promise.all([
+      request<WorkspaceModels>(path),
+      request<SearchCatalog>("/api/admin/operator/search-providers"),
+    ])
+      .then(([value, searches]) => {
         if (active) {
           setPage(value);
+          setSearchCatalog(searches);
           setSelection(value.selection ?? undefined);
         }
       })
@@ -503,8 +488,12 @@ export function ModelProvidersPanel({
       const result = await request<WorkspaceModels>(path, "PUT", {
         revision: page.revision,
         selection: selectionFromForm(selection, form),
+        searchProviderId: new FormData(form).get("searchProviderId") || null,
       });
       setPage(result);
+      setSearchCatalog((current) =>
+        current ? { ...current, version: result.version } : current,
+      );
       setSelection(result.selection ?? undefined);
       setEditingModel(false);
       notify("Chat model saved.");
@@ -538,6 +527,26 @@ export function ModelProvidersPanel({
           autoFocus={!onContinue}
           disabled={busy}
         />
+        <label className="field" htmlFor="chat-search-provider">
+          <span>Search provider</span>
+          <Select
+            id="chat-search-provider"
+            name="searchProviderId"
+            aria-label="Search provider"
+            defaultValue={page?.searchProviderId ?? ""}
+            disabled={busy || !searchCatalog}
+          >
+            <option value="">Disabled</option>
+            {searchCatalog?.providers.map((provider) => (
+              <option key={provider.id} value={provider.id}>
+                {provider.name}
+              </option>
+            ))}
+          </Select>
+          <small className="muted">
+            Allows the chat model to search the public web when needed.
+          </small>
+        </label>
         <div ref={modelFeedback}>
           {formError && (
             <p className="notice" role="alert">
@@ -564,15 +573,13 @@ export function ModelProvidersPanel({
           </button>
         </ErrorToast>
       )}
-      <section className="card" aria-label="Model providers" aria-busy={!page}>
-        <div className="row team-card-heading">
-          <div>
-            <h2>Model providers</h2>
-            <p className="muted">
-              Save each OpenAI-compatible API provider once. Chat, Codex and
-              Code Review can reuse its models across your workspaces.
-            </p>
-          </div>
+      <section
+        className="card model-settings-card"
+        aria-label="Model providers"
+        aria-busy={!page}
+      >
+        <div className="card-heading">
+          <h2>Model providers</h2>
           <IconButton
             icon="add"
             label="New model provider"
@@ -586,6 +593,10 @@ export function ModelProvidersPanel({
             }}
           />
         </div>
+        <p className="muted">
+          Save each OpenAI-compatible API provider once. Chat, Codex and Code
+          Review can reuse its models across your workspaces.
+        </p>
         {!page ? (
           <SkeletonRows label="Model providers" />
         ) : page.providers.length ? (
@@ -643,6 +654,18 @@ export function ModelProvidersPanel({
           </p>
         )}
       </section>
+      <SearchProvidersPanel
+        request={request}
+        catalog={searchCatalog}
+        busy={busy}
+        onPending={pending}
+        onSaved={(catalog) => {
+          setSearchCatalog(catalog);
+          setPage((current) =>
+            current ? { ...current, version: catalog.version } : current,
+          );
+        }}
+      />
       <section className="card" aria-label="Bot chat model" aria-busy={!page}>
         <div className="row team-card-heading">
           <h2>Bot chat model</h2>
@@ -664,6 +687,19 @@ export function ModelProvidersPanel({
         ) : (
           <>
             <dl className="plugin-summary">
+              <div>
+                <dt>Search provider</dt>
+                <dd>
+                  {page && searchCatalog ? (
+                    (searchCatalog.providers.find(
+                      (p) => p.id === page.searchProviderId,
+                    )?.name ??
+                    (page.searchProviderId ? "Unavailable" : "Disabled"))
+                  ) : (
+                    <Skeleton />
+                  )}
+                </dd>
+              </div>
               <div>
                 <dt>Provider</dt>
                 <dd>
@@ -857,6 +893,9 @@ export function ModelProvidersPanel({
                   },
                 );
                 if (page) setPage({ ...page, ...catalog });
+                setSearchCatalog((current) =>
+                  current ? { ...current, version: catalog.version } : current,
+                );
                 if (!providerDraft.original && !selection) {
                   const created = catalog.providers.find(
                     (p) => !page?.providers.some((old) => old.id === p.id),
@@ -1001,6 +1040,11 @@ export function ModelProvidersPanel({
                     { version: page.version },
                   );
                   setPage({ ...page, ...catalog });
+                  setSearchCatalog((current) =>
+                    current
+                      ? { ...current, version: catalog.version }
+                      : current,
+                  );
                   setRemoving(undefined);
                   notify("Model provider removed.");
                 } catch (error) {

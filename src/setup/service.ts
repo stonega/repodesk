@@ -21,6 +21,8 @@ import {
   type ModelTransport,
   providerModelOptions,
 } from "../models/service.ts";
+import type { SearchTransport } from "../search/providers.ts";
+import { SearchProviders } from "../search/service.ts";
 import {
   type BotIdentity,
   registerWebhook,
@@ -58,6 +60,7 @@ function activationModelReady(d: Deployment, w: Workspace) {
   }
 }
 export class SetupService {
+  readonly search: SearchProviders;
   readonly models: ModelProviders;
   readonly accessLinks: AccessLinks;
   constructor(
@@ -68,8 +71,10 @@ export class SetupService {
       new TelegramClient(t),
     public readonly telegramTransport: TelegramTransport = "webhook",
     modelTransport: ModelTransport = fetch,
+    searchTransport: SearchTransport = fetch,
   ) {
     this.models = new ModelProviders(store, key, modelTransport);
+    this.search = new SearchProviders(store, key, searchTransport);
     this.accessLinks = new AccessLinks(key);
   }
   async client(d?: Deployment) {

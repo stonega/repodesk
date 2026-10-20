@@ -21,6 +21,8 @@ import { taskGet } from "../coding/task-store.ts";
 import { DEFAULT_RUN_TIMEOUT_SECONDS } from "../config.ts";
 import type { Store } from "../db/repositories.ts";
 import { Fault, requireThat } from "../domain.ts";
+import type { SearchPin } from "../search/config.ts";
+import { searchTool } from "../search/tool.ts";
 import type { SetupService } from "../setup/service.ts";
 import { attachmentErrors, loadAttachments } from "../telegram/attachments.ts";
 import { TelegramDraft } from "../telegram/draft.ts";
@@ -52,8 +54,12 @@ export class Executor {
     const codingRevision = extensionWorkspace.coding?.revision ?? 0;
     let runner: AgentRunner;
     let chatModel: Awaited<ReturnType<SetupService["models"]["chat"]>>;
+    let searchProvider: SearchPin | undefined;
     try {
       chatModel = await this.setup.models.chat(extensionWorkspace);
+      searchProvider = extensionWorkspace.chatModel?.searchProviderId
+        ? await this.setup.search.pin(extensionWorkspace)
+        : undefined;
       runner =
         typeof this.runner === "function"
           ? await this.runner(deployment, workspaceId)
@@ -124,6 +130,7 @@ export class Executor {
         r.model = chatModel.model;
         r.modelOptions = chatModel.options;
         r.modelProvider = chatModel.provider;
+        r.searchProvider = searchProvider;
       }
       r.modelOptions ??= {
         modelBaseUrl: deployment.modelBaseUrl ?? DEFAULT_MODEL_BASE_URL,
@@ -173,6 +180,8 @@ export class Executor {
       signal.throwIfAborted();
       const d = await this.store.deployment();
       requireThat(d.active && !d.paused, "deployment_paused", 409);
+      if (claimed.searchProvider)
+        await this.setup.search.current(claimed.searchProvider);
       if (claimed.modelProvider) {
         await this.setup.models.modelKey(
           claimed.modelProvider.operatorId,
@@ -354,7 +363,22 @@ export class Executor {
         system: context.system,
         prompt: context.prompt,
         transcript,
-        tools: applicationTools(this.store, workspaceId, runId, fence),
+        tools: [
+          ...applicationTools(this.store, workspaceId, runId, fence),
+          ...(claimed.searchProvider
+            ? [
+                searchTool(
+                  this.store,
+                  this.setup.search,
+                  workspaceId,
+                  runId,
+                  fence,
+                  claimed.searchProvider,
+                  guard,
+                ),
+              ]
+            : []),
+        ],
         extensionTool: extensionToolExecution(
           this.store,
           workspaceId,

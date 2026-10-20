@@ -1,5 +1,39 @@
 # Implementation evidence
 
+## Bot chat web search providers (2026-10-20)
+
+Model settings now includes a separate Search providers section with saved
+summaries and New/Edit/Remove dialogs. Operators can save free, keyless DuckDuckGo
+or encrypted DeepSeek/Exa API credentials and reuse them across their workspaces.
+The chat model editor selects one provider or Disabled; existing configurations
+default to disabled. The saved choice appears in the chat model summary. Provider
+management is session/origin/CSRF/operator protected; selection requires workspace
+ownership, revisions and a provider belonging to the same operator. In-use removal
+is rejected, and changing paid provider types requires a new key.
+
+The worker exposes `search_tool` only for configured chat runs, pins search
+provider/selection versions and rechecks membership, run/fence and configuration
+around network calls and cached-result reuse. Started calls are durable; duplicate
+completed calls reuse their result, conflicting arguments are rejected and unknown
+calls are not replayed. Responses have time/size/result limits and safe URL/summary
+normalization; provider errors exclude raw response bodies and credentials. Web
+results are untrusted references with URL citations. DeepSeek uses the official
+`/v1/tools/search` endpoint; Exa uses `/search`; DuckDuckGo parses public HTML and
+reports challenges/rate limits as failures. Paid search fees remain outside model
+token budgets and Usage totals. Codex and Review Bot selections remain independent.
+
+Validation: lint, strict TypeScript and production build passed. All **1,021
+deterministic tests across 115 files** passed against disposable PostgreSQL.
+All **34 browser scenarios** across model providers and web search passed; the
+six search scenarios passed again after final layout refinements. Desktop/mobile
+screenshots were inspected for saved/empty/loading states, provider/model editors,
+pending and failure/retry states, including both themes. The affected provider
+cards reuse the shared heading layout and have explicit spacing regression checks.
+No dependency or migration was added. Provider requests use injected test fixtures;
+live search/model/Telegram calls and deployment were not performed.
+See [runnable API examples](../../examples/web-search.http) and
+[user configuration](../user/configuration.md#聊天网页搜索).
+
 ## Independent Google Docs, Sheets, Drive and Gmail plugins (2026-10-20)
 
 Added four standalone built-in plugins with separate catalog/detail pages, OAuth

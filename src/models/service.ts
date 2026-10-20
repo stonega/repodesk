@@ -224,6 +224,7 @@ export class ModelProviders {
       ...(await this.catalog(admin)),
       revision: w.chatModel?.revision ?? 0,
       selection,
+      searchProviderId: w.chatModel?.searchProviderId ?? null,
       legacy: !selection && !!d.credentials.model,
       configured: !!selection || !!d.credentials.model,
     };
@@ -234,6 +235,7 @@ export class ModelProviders {
       .object({
         revision: z.number().int().nonnegative(),
         selection: modelSelectionSchema,
+        searchProviderId: z.uuid().nullable().optional(),
       })
       .strict()
       .parse(value);
@@ -251,6 +253,21 @@ export class ModelProviders {
         409,
       );
       const { provider } = await this.selected(current, input.selection);
+      const searchProviderId =
+        input.searchProviderId === undefined
+          ? current.chatModel?.searchProviderId
+          : (input.searchProviderId ?? undefined);
+      if (searchProviderId) {
+        const d = await this.store.deployment();
+        requireThat(
+          d.searchProviders?.some(
+            (p) =>
+              p.id === searchProviderId && p.operatorId === current.operatorId,
+          ),
+          "search_provider_not_found",
+          404,
+        );
+      }
       selectedModel(
         input.selection.model,
         providerModelOptions(provider, input.selection),
@@ -258,6 +275,7 @@ export class ModelProviders {
       current.chatModel = {
         revision: input.revision + 1,
         selection: input.selection,
+        searchProviderId,
       };
     });
     return this.workspace(admin, id);
