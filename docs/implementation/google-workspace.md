@@ -12,7 +12,9 @@ key and workspace/product-specific authenticated encryption.
 Open **Plugins → Google Docs / Google Sheets / Google Drive / Gmail → Connection → Edit**.
 Create a Google **Web application** OAuth client, enable that product's API,
 configure its consent screen/test users, and register the exact callback URL shown
-in the dialog. Save the client ID and secret, reopen Edit and connect an account.
+in the dialog. Copy buttons beside **Callback URL** and **Read scope** copy their
+exact values, briefly show a checkmark, and offer manual-copy guidance on failure.
+Save the client ID and secret, reopen Edit and connect an account.
 After Google returns, review the account and explicitly enable the plugin.
 Saving client settings and connecting alone never enable runtime access.
 

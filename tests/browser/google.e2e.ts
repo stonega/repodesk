@@ -129,7 +129,9 @@ for (const width of [1280, 390]) {
     const name = googleDefinitions[plugin].name;
     test(`${name} saved display and separate modal at ${width}px`, async ({
       page,
+      context,
     }) => {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
       await page.setViewportSize({ width, height: 950 });
       const f = await fixture(page);
       await f.open(plugin);
@@ -171,6 +173,41 @@ for (const width of [1280, 390]) {
         fullPage: true,
       });
       await expect(dialog).toContainText(f.pages[plugin].redirectUri);
+      for (const [label, value] of [
+        ["Callback URL", f.pages[plugin].redirectUri],
+        ["Read scope", f.pages[plugin].scope],
+      ]) {
+        const copy = dialog.getByRole("button", {
+          name: `Copy ${label}`,
+          exact: true,
+        });
+        const box = await copy.boundingBox();
+        expect(box?.width).toBeGreaterThanOrEqual(44);
+        expect(box?.height).toBeGreaterThanOrEqual(44);
+        await copy.focus();
+        await page.keyboard.press("Enter");
+        await expect(
+          dialog.getByRole("button", { name: `Copied ${label}`, exact: true }),
+        ).toBeDisabled();
+        expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+          value,
+        );
+        await expect(copy).toBeEnabled();
+      }
+      expect(f.writes).toHaveLength(0);
+      for (const theme of ["light", "dark"]) {
+        await page.evaluate((value) => {
+          document.documentElement.dataset.theme = value;
+        }, theme);
+        const contained = await dialog
+          .locator(".google-connection-details")
+          .evaluate((details) => details.scrollWidth <= details.clientWidth);
+        expect(contained).toBe(true);
+        await page.screenshot({
+          path: test.info().outputPath(`copy-editor-${theme}.png`),
+          fullPage: true,
+        });
+      }
       await dialog
         .getByLabel("Client ID", { exact: true })
         .fill("discarded.apps.googleusercontent.com");
@@ -215,6 +252,56 @@ for (const width of [1280, 390]) {
       for (const gap of spacing) expect(Math.abs(gap)).toBeLessThan(1);
     });
   }
+  test(`Google copy failure preserves the editor and allows retry at ${width}px`, async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.setViewportSize({ width, height: 950 });
+    const f = await fixture(page, false);
+    await f.open("gmail");
+    await page.getByRole("button", { name: "Edit Gmail connection" }).click();
+    const dialog = page.getByRole("dialog", { name: "Edit Gmail connection" });
+    await dialog
+      .getByLabel("Client ID", { exact: true })
+      .fill("draft.apps.googleusercontent.com");
+    await page.evaluate(() => {
+      Object.defineProperty(navigator.clipboard, "writeText", {
+        configurable: true,
+        value: async () => {
+          throw new DOMException("Clipboard denied", "NotAllowedError");
+        },
+      });
+    });
+    await dialog.getByRole("button", { name: "Copy Callback URL" }).click();
+    await expect(dialog.getByRole("alert")).toHaveText(
+      "Could not copy. Select the URL to copy it manually.",
+    );
+    await expect(dialog.getByLabel("Client ID", { exact: true })).toHaveValue(
+      "draft.apps.googleusercontent.com",
+    );
+    await expect(dialog.locator("code").first()).toHaveText(
+      f.pages.gmail.redirectUri,
+    );
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate((value) => {
+        document.documentElement.dataset.theme = value;
+      }, theme);
+      await page.screenshot({
+        path: test.info().outputPath(`copy-error-${theme}.png`),
+        fullPage: true,
+      });
+    }
+    await page.evaluate(() => {
+      delete (navigator.clipboard as Partial<Clipboard>).writeText;
+    });
+    await dialog.getByRole("button", { name: "Copy Callback URL" }).click();
+    await expect(dialog.getByRole("alert")).toHaveCount(0);
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      f.pages.gmail.redirectUri,
+    );
+    expect(f.writes).toHaveLength(0);
+  });
   test(`Google first setup, pending locks and failed-save draft preservation at ${width}px`, async ({
     page,
   }) => {

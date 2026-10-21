@@ -13,6 +13,7 @@ Plugins 提供四个独立插件：**Google Docs**、**Google Sheets**、**Googl
    Drive API 或 Gmail API，配置 OAuth 同意界面及测试用户。
 3. 创建 **Web application** OAuth 客户端，将对话框显示的 **Callback URL** 原样添加为
    Authorized redirect URI。线上管理地址需要 HTTPS；本机开发支持 localhost。
+   **Callback URL** 和 **Read scope** 旁的复制按钮可复制完整值；若复制失败，可选中文字手动复制。
 4. 填入 Client ID 和 Client secret，点击 **Save**。再次打开 **Edit**，点击
    **Connect Google account**，在 Google 确认账号及权限。
 5. 返回插件页面，核对账号，再打开标题右侧的 **Enable**。

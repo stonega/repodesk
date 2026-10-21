@@ -38,6 +38,20 @@ when implementing or reviewing a change.
 
 ## Recorded preferences
 
+### Google OAuth setup links have copy actions
+
+- **Preference:** Put a copy icon beside the callback URL and read scope in Google
+  connection editors. Keep the full values readable and selectable, show a brief
+  checkmark after copying, and provide manual-copy guidance if clipboard access fails.
+- **Scope:** Google Docs, Google Sheets, Google Drive and Gmail connection editors
+  on desktop and mobile. Reuse the shared URL rows and borderless icon buttons.
+- **Source:** 2026-10-21 — user showed the Gmail callback URL and read scope and
+  requested copy buttons for these links.
+- **Acceptance:** Each button copies its exact value without submitting the form;
+  verify keyboard access, 44px targets, wrapped URLs, success/reset and failure
+  recovery in both themes at desktop and mobile widths.
+- **Exceptions:** External navigation links retain their existing behavior.
+
 ### Admin checkboxes share a clear, comfortable style
 
 - **Preference:** Give checkbox choices one consistent appearance across the admin

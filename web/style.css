@@ -3140,6 +3140,10 @@ input.plugin-toggle-input:disabled {
 .service-url .error {
   margin: 4px 0 0;
 }
+.plugin-summary.google-connection-details > .service-url {
+  padding: 0;
+  border: 0;
+}
 
 /* Reserve space for unknown values while keeping the surrounding UI visible. */
 .skeleton {

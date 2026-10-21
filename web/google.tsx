@@ -8,6 +8,7 @@ import {
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
+import { ServiceUrl } from "./service-url.tsx";
 import { Skeleton } from "./skeleton.tsx";
 import { ErrorToast, useToast } from "./toast.tsx";
 
@@ -329,14 +330,8 @@ function GoogleEditor({
         register this exact callback URL.
       </p>
       <dl className="plugin-summary google-connection-details">
-        <div>
-          <dt>Callback URL</dt>
-          <dd>{data.redirectUri}</dd>
-        </div>
-        <div>
-          <dt>Read scope</dt>
-          <dd>{data.scope}</dd>
-        </div>
+        <ServiceUrl label="Callback URL" value={data.redirectUri} />
+        <ServiceUrl label="Read scope" value={data.scope} />
       </dl>
       <p className="muted">
         Sign-in also requests your email to identify the account. Use a separate
