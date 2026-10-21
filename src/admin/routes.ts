@@ -72,11 +72,7 @@ import {
   threadKey,
   threadSummaries,
 } from "./thread-history.ts";
-import {
-  visibleWorkflows,
-  workflowMetadata,
-  workflowRepositories,
-} from "./workflow-view.ts";
+import { workflowOwner, workflowRepositories } from "./workflow-view.ts";
 
 type Env = { Variables: { session: Session } };
 const sessionCookie = "repodesk_session";
@@ -1097,13 +1093,14 @@ export function adminRoutes(
     if (actor === admin.id) {
       const resource = c.req.path.split("/").slice(5).join("/");
       requireThat(
-        /^(overview|settings|members|access-requests|skills)(\/.*)?$/.test(
+        /^(overview|settings|members|access-requests|skills|workflows)(\/.*)?$/.test(
           resource,
         ) ||
           (resource === "self-check" && c.req.method === "POST") ||
+          (c.req.method === "GET" && resource === "approvals") ||
+          (c.req.method === "POST" && /^approvals\/[^/]+$/.test(resource)) ||
           (c.req.method === "GET" &&
-            (/^(runs|threads)(?:\/[^/]+)?$/.test(resource) ||
-              (!admin.telegramId && /^workflows(?:\/[^/]+)?$/.test(resource)))),
+            /^(runs|threads)(?:\/[^/]+)?$/.test(resource)),
         "access_denied",
         403,
       );
@@ -1157,9 +1154,7 @@ export function adminRoutes(
             members: w.members.filter((m) => m.active).length,
             runs: w.runs.length,
             threads: threadGroups(w).size,
-            workflows: operatorView
-              ? w.workflows.filter((f) => f.status !== "deleted").length
-              : visibleWorkflows(w, actor).length,
+            workflows: w.workflows.filter((f) => f.status !== "deleted").length,
             ...(operatorView
               ? {
                   codingTasks: (await taskList(store.pool, w.id)).length,
@@ -1215,28 +1210,26 @@ export function adminRoutes(
       case "chats":
         return c.json(take(w.chats));
       case "workflows":
-        if (actor === w.operatorId)
-          return c.json({
-            mode: "operator",
-            ...take(
-              w.workflows
-                .filter((f) => f.status !== "deleted")
-                .map((f) => workflowMetadata(f)),
-            ),
-          });
         return c.json({
-          mode: "member",
+          mode: actor === w.operatorId ? "operator" : "member",
           repositorySources: workflowRepositories(w, actor),
           ...take(
-            visibleWorkflows(w, actor).map((f) => ({
-              ...f,
-              next: nextOccurrences(f.spec.recurrence, new Date()),
-            })),
+            w.workflows
+              .filter((f) => f.status !== "deleted")
+              .map((f) => ({
+                ...f,
+                next: nextOccurrences(f.spec.recurrence, new Date()),
+              })),
           ),
         });
       case "approvals":
         return c.json(
-          take(w.approvals.filter((a) => a.actor === actor && !a.decision)),
+          take(
+            w.approvals.filter(
+              (a) =>
+                (a.kind === "workflow" || a.actor === actor) && !a.decision,
+            ),
+          ),
         );
       case "skills":
         return c.json(
@@ -1481,14 +1474,12 @@ export function adminRoutes(
     const actor = workspaceActor(w, c.get("session").admin);
     const id = validId(c.req.param("workflow"));
     const operatorView = actor === w.operatorId;
-    const workflow = (
-      operatorView ? w.workflows : visibleWorkflows(w, actor)
-    ).find((f) => f.id === id && f.status !== "deleted");
+    const workflow = w.workflows.find(
+      (f) => f.id === id && f.status !== "deleted",
+    );
     requireThat(workflow, "not_found", 404);
-    if (operatorView)
-      return c.json({ mode: "operator", workflow: workflowMetadata(workflow) });
     return c.json({
-      mode: "member",
+      mode: operatorView ? "operator" : "member",
       workflow: {
         ...workflow,
         next: nextOccurrences(workflow.spec.recurrence, new Date()),
@@ -1499,7 +1490,17 @@ export function adminRoutes(
   app.post("/api/admin/workspaces/:id/workflows", async (c) => {
     const input = workflowSchema.parse(await c.req.json());
     return c.json(
-      await change(c, (w, actor) => proposeWorkflow(w, actor, input)),
+      await change(c, (w, actor) =>
+        proposeWorkflow(
+          w,
+          workflowOwner(w, actor, input),
+          input,
+          new Date(),
+          undefined,
+          undefined,
+          actor,
+        ),
+      ),
       201,
     );
   });
@@ -1512,11 +1513,12 @@ export function adminRoutes(
       await change(c, (w, actor) =>
         proposeWorkflow(
           w,
-          actor,
+          workflowOwner(w, actor, input.spec, c.req.param("workflow")),
           input.spec,
           new Date(),
           c.req.param("workflow"),
           input.version,
+          actor,
         ),
       ),
     );
@@ -1536,11 +1538,12 @@ export function adminRoutes(
         await change(c, (w, actor) =>
           workflowAction(
             w,
-            actor,
+            workflowOwner(w, actor, undefined, c.req.param("workflow")),
             c.req.param("workflow"),
             input.action,
             input.version,
             d.model,
+            actor,
           ),
         ),
       );
@@ -1553,7 +1556,17 @@ export function adminRoutes(
       .parse(await c.req.json());
     return c.json(
       await change(c, (w, actor) =>
-        decide(w, actor, c.req.param("approval"), input.approve),
+        decide(
+          w,
+          actor,
+          c.req.param("approval"),
+          input.approve,
+          new Date(),
+          w.approvals.find((a) => a.id === c.req.param("approval"))?.kind ===
+            "workflow"
+            ? actor
+            : undefined,
+        ),
       ),
     );
   });

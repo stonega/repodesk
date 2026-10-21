@@ -320,14 +320,32 @@ when implementing or reviewing a change.
 - **Preference:** Improve workflow card readability and provide a dedicated
   detail page. Keep the name and status prominent, group schedule information
   into labeled values, and put technical identifiers in details.
-- **Scope:** Scheduled workflow cards and their detail pages, including the
-  read-only deployment-operator view, on desktop and mobile.
+- **Scope:** Scheduled workflow cards and their detail pages for all authorized
+  panel administrators, on desktop and mobile.
 - **Source:** 2026-10-08 — user requested improving card content, adding a workflow
   detail page and updating related APIs, with a screenshot of the workflows page.
   The labeled summary layout is the implementation choice for that request.
-- **Exceptions:** Existing privacy and identity requirements still govern task
-  content, destinations and management actions. Display recurrence previews as
-  previews when a workflow is not active.
+- **Exceptions:** Workspace boundaries still apply. Display recurrence previews
+  as previews when a workflow is not active.
+
+### Panel administrators manage workflows without Telegram linking
+
+- **Preference:** Treat authorized panel administrators as workflow managers.
+  Show full saved workflow details and New, Edit, approval and lifecycle actions
+  without requiring their personal Telegram identity to be linked.
+- **Scope:** Workflow lists, details and modal editors, including deployment
+  operators before Telegram linking. This does not change Telegram command access.
+- **Source:** 2026-10-21 — user rejected the read-only workflow notice because
+  the web panel is for administrators who already have management permission.
+- **Acceptance:** At desktop and mobile widths, an unlinked administrator can
+  open details, create/edit in modals, approve and control schedules. Remove the
+  read-only notice and its spacing. Keep saved summaries separate from editors,
+  pending locks, retained failed drafts and actionable errors.
+- **Exceptions:** Execution still uses an active Telegram member's permissions.
+  Existing workflows retain that owner. New private schedules use their active
+  recipient; new group schedules use the linked administrator's membership or
+  an active workspace owner/admin. Destinations, repositories, versions, skills
+  and team budgets are rechecked through the existing execution policy.
 
 ### Workflow budgets follow team settings
 
@@ -962,8 +980,8 @@ when implementing or reviewing a change.
   2026-10-17 — the requested thread-list refactor changes the primary history
   count to conversations; individual request counts remain within each thread.
 - **Exceptions:** Deployment administrators can read all workspace run messages
-  without linking Telegram. Unlinked administrators still see only workflow metadata;
-  workflow content and mutations retain their existing identity requirements.
+  and manage workspace workflows without linking Telegram. Individual run recovery
+  actions retain their existing identity requirements.
 
 ### Thread summaries open a continuous conversation
 

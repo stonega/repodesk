@@ -373,7 +373,7 @@ suite("PostgreSQL integration (isolated database)", () => {
       );
     }
   });
-  test("unlinked deployment operator sees all run messages and read-only workflow history", async () => {
+  test("unlinked deployment operator sees run messages and manages full workflow details", async () => {
     const w = await seed();
     await store.change(w.id, (saved) => {
       const run = createRun(
@@ -466,16 +466,17 @@ suite("PostgreSQL integration (isolated database)", () => {
       expect(workflowHistory.mode).toBe("operator");
       expect(workflowHistory.total).toBe(1);
       expect(workflowHistory.items[0]).toMatchObject({
-        name: "Friday recap",
+        spec: { name: "Friday recap" },
         status: "draft",
       });
-      expect(workflowHistory.items[0]).not.toHaveProperty("spec");
+      expect(workflowHistory.items[0].spec).toEqual(spec(w));
       const workflowId = workflowHistory.items[0].id;
       const workflowDetail = await request(`${base}/workflows/${workflowId}`);
       expect(workflowDetail.status).toBe(200);
       expect(await workflowDetail.json()).toEqual({
         mode: "operator",
         workflow: workflowHistory.items[0],
+        repositorySources: { revision: 0, repositories: [] },
       });
       expect((await request(`${base}/workflows/${randomUUID()}`)).status).toBe(
         404,
@@ -495,7 +496,7 @@ suite("PostgreSQL integration (isolated database)", () => {
             action: "pause",
           })
         ).status,
-      ).toBe(403);
+      ).toBe(200);
       expect(
         (
           await request(`${base}/workflows/${workflowId}`, "PUT", {
@@ -503,9 +504,9 @@ suite("PostgreSQL integration (isolated database)", () => {
             spec: spec(w),
           })
         ).status,
-      ).toBe(403);
+      ).toBe(200);
       expect((await request(`${base}/runs`, "POST", {})).status).toBe(403);
-      expect((await request(`${base}/workflows`, "POST", {})).status).toBe(403);
+      expect((await request(`${base}/workflows`, "POST", {})).status).toBe(400);
     } finally {
       await store.pool.query(
         "UPDATE admins SET telegram_id='101' WHERE id=$1",
@@ -513,7 +514,118 @@ suite("PostgreSQL integration (isolated database)", () => {
       );
     }
   });
-  test("workflow details share list visibility and retain private content boundaries", async () => {
+  test("unlinked panel admins create, approve, edit and control workflows without changing the execution owner", async () => {
+    const w = await seed();
+    const base = `/api/admin/workspaces/${w.id}`;
+    await store.pool.query("UPDATE admins SET telegram_id=NULL WHERE id=$1", [
+      operatorId,
+    ]);
+    try {
+      const input = { ...spec(w), chatId: "202" };
+      const created = await request(`${base}/workflows`, "POST", input);
+      expect(created.status).toBe(201);
+      const { workflow, approval } = await created.json();
+      expect(workflow.owner).toBe("202");
+      expect(approval).toMatchObject({ actor: operatorId, kind: "workflow" });
+      expect(approval.decision).toBeUndefined();
+      const approve = () =>
+        request(`${base}/approvals/${approval.id}`, "POST", { approve: true });
+      expect((await approve()).status).toBe(200);
+      expect((await approve()).status).toBe(409);
+      const action = (action: string, version = 1) =>
+        request(`${base}/workflows/${workflow.id}/action`, "POST", {
+          action,
+          version,
+        });
+      const run = await action("run");
+      expect(run.status).toBe(200);
+      expect(await run.json()).toMatchObject({
+        actor: "202",
+        chatId: "202",
+        workflowId: workflow.id,
+      });
+      expect((await action("pause")).status).toBe(200);
+      expect((await action("resume")).status).toBe(200);
+      const edited = await request(`${base}/workflows/${workflow.id}`, "PUT", {
+        version: 1,
+        spec: { ...input, task: "Updated by panel admin" },
+      });
+      expect(edited.status).toBe(200);
+      const proposal = await edited.json();
+      expect(proposal.workflow).toMatchObject({
+        owner: "202",
+        version: 2,
+        status: "draft",
+      });
+      expect((await action("pause")).status).toBe(409);
+      expect(
+        (
+          await request(`${base}/approvals/${proposal.approval.id}`, "POST", {
+            approve: true,
+          })
+        ).status,
+      ).toBe(200);
+      expect((await action("delete", 2)).status).toBe(200);
+      expect((await request(`${base}/workflows/${workflow.id}`)).status).toBe(
+        404,
+      );
+      const group = await request(`${base}/workflows`, "POST", spec(w));
+      expect(group.status).toBe(201);
+      expect((await group.json()).workflow.owner).toBe("101");
+      expect(
+        (
+          await request(`${base}/workflows`, "POST", {
+            ...input,
+            chatId: "999",
+          })
+        ).status,
+      ).toBe(409);
+      expect(
+        (
+          await request(`${base}/workflows`, "POST", input, {
+            "x-csrf-token": "wrong",
+          })
+        ).status,
+      ).toBe(403);
+      expect(
+        (
+          await request(`${base}/workflows`, "POST", input, {
+            origin: "https://other.example",
+          })
+        ).status,
+      ).toBe(403);
+      const foreign = await foreignWorkspace();
+      expect(
+        (
+          await request(
+            `/api/admin/workspaces/${foreign.id}/workflows`,
+            "POST",
+            input,
+          )
+        ).status,
+      ).toBe(403);
+      const saved = await store.read(w.id);
+      expect(
+        saved.audit
+          .filter((a) =>
+            [
+              "workflow.proposed",
+              "workflow.run",
+              "workflow.pause",
+              "workflow.resume",
+              "workflow.delete",
+            ].includes(a.action),
+          )
+          .every((a) => a.actor === operatorId),
+      ).toBe(true);
+    } finally {
+      await store.pool.query(
+        "UPDATE admins SET telegram_id='101' WHERE id=$1",
+        [operatorId],
+      );
+    }
+  });
+  test("panel admins see all workflow details while authentication and tenant boundaries remain", async () => {
     const w = await seed();
     const workflows = await store.change(w.id, (saved) => {
       const own = proposeWorkflow(saved, "101", {
@@ -537,9 +649,13 @@ suite("PostgreSQL integration (isolated database)", () => {
     const base = `/api/admin/workspaces/${w.id}/workflows`;
     const list = await (await request(base)).json();
     expect(list.items.map((f: { id: string }) => f.id).sort()).toEqual(
-      [workflows.own.id, workflows.shared.id].sort(),
+      [workflows.own.id, workflows.privateOther.id, workflows.shared.id].sort(),
     );
-    for (const workflow of [workflows.own, workflows.shared]) {
+    for (const workflow of [
+      workflows.own,
+      workflows.privateOther,
+      workflows.shared,
+    ]) {
       const response = await request(`${base}/${workflow.id}`);
       expect(response.status).toBe(200);
       const detail = await response.json();
@@ -554,11 +670,7 @@ suite("PostgreSQL integration (isolated database)", () => {
       });
       expect(detail.workflow.next).toHaveLength(3);
     }
-    for (const id of [
-      workflows.privateOther.id,
-      workflows.deleted.id,
-      randomUUID(),
-    ])
+    for (const id of [workflows.deleted.id, randomUUID()])
       expect((await request(`${base}/${id}`)).status).toBe(404);
     expect(
       (
@@ -570,12 +682,56 @@ suite("PostgreSQL integration (isolated database)", () => {
     await store.change(w.id, (saved) => {
       for (const chat of saved.chats) chat.active = false;
     });
-    expect((await request(`${base}/${workflows.shared.id}`)).status).toBe(404);
+    expect((await request(`${base}/${workflows.shared.id}`)).status).toBe(200);
     await store.change(w.id, (saved) => {
       for (const member of saved.members)
         if (member.id === "101") member.role = "member";
     });
-    expect((await request(`${base}/${workflows.own.id}`)).status).toBe(403);
+    // Deployment authority remains valid independently of Telegram membership.
+    expect((await request(`${base}/${workflows.own.id}`)).status).toBe(200);
+    const adminId = randomUUID();
+    const username = `workflow-admin-${adminId}`;
+    await store.change(w.id, (saved) => {
+      saved.members.push({ id: "909090909", role: "admin", active: true });
+    });
+    await store.pool.query(
+      "INSERT INTO admins(id,username,password_hash,telegram_id,operator) VALUES($1,$2,$3,'909090909',false)",
+      [adminId, username, await passwordHash("a long workflow password")],
+    );
+    const admin = await login(store.pool, username, "a long workflow password");
+    const headers = {
+      cookie: `repodesk_session=${admin.raw}`,
+      "x-csrf-token": admin.csrf,
+    };
+    expect(
+      (await request(`${base}/${workflows.own.id}`, "GET", undefined, headers))
+        .status,
+    ).toBe(200);
+    expect(
+      (
+        await request(
+          `${base}/${workflows.own.id}/action`,
+          "POST",
+          { action: "pause", version: 1 },
+          headers,
+        )
+      ).status,
+    ).toBe(200);
+    await store.change(w.id, (saved) => {
+      const member = saved.members.find((m) => m.id === "909090909");
+      if (member) member.role = "member";
+    });
+    expect((await request(base, "GET", undefined, headers)).status).toBe(403);
+    expect(
+      (
+        await request(
+          `${base}/${workflows.own.id}/action`,
+          "POST",
+          { action: "delete", version: 1 },
+          headers,
+        )
+      ).status,
+    ).toBe(403);
   });
   test("workspace admins see every run while members and revoked admins are denied", async () => {
     const w = await seed();

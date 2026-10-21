@@ -28,7 +28,7 @@ Public static assets can load before login, but contain no workspace data or sec
 | Bot settings | Display label, timezone, base instructions, response style, directed-response mode, pause switch | Validated form, versioned save, audit entry, saved/effective version shown. |
 | Model settings | Operator-configured model/search providers and bot chat model, search selection, thinking level, optional capacity and token prices; saved summaries and modal editors | Successful model setup activates automatically when prerequisites are ready, without a separate activation card. Invalid settings rejected locally; provider capabilities require evaluation. Runs pin provider/selection versions and endpoint/thinking/prices at first execution; configuration changes stop old runs. |
 | Groups and access | Connected group/topic, owner, bot visibility, history coverage, opt-in collection, unlink | Linking verifies authority; no arbitrary chat ID can be used to obtain access. |
-| Workflows | Create/edit draft, preview schedule and destination, approve, pause/resume, run now, delete; unlinked deployment administrators can inspect read-only schedule metadata | Same policy and version checks as Telegram buttons; edits cannot bypass approval or reveal private task/destination content to unlinked administrators. |
+| Workflows | All authorized panel admins, including unlinked deployment operators, can inspect full details, create/edit drafts, preview, approve, pause/resume, run now and delete | Panel authority permits management across workflow owners. Preserve execution ownership, approval, versions, destination/repository checks and team budgets. |
 | Plugins | Compact Installed and Market catalog; dedicated detail pages for Code Truth, Codex and registered file extensions; operator-managed version/path/tool editing, enable/disable/remove, file status and revision conflicts | Database-backed settings reach workers without restart; settings and revisions isolated per workspace; external market packages are discovery links and no code executes on API reads/saves. |
 | GitHub | Manage GitHub modal for guided App creation, workspace OAuth, installation/repository selection and connected repository links, opened on Overview without navigation; GitHub callbacks return to Plugins; disconnect API | Manifest state bound to operator/session/workspace; encrypted operator App credentials; one-use PKCE OAuth; verify user installation/repository access; installation tokens limited to selected repositories and Contents read. |
 | Agent skills | Create/import/edit, test, publish, enable/disable, scope, settings and version rollback | Permission-bounded skills; pinned workflow versions; disabling blocks dependent execution. |
@@ -388,21 +388,26 @@ the explicit schedule timezone and the next recurrence time. Workflow runs use t
 team's per-run and monthly budget settings; workflows have no separate budget.
 The name links to `/admin/workflows/:workflowId?workspace=:id&offset=:offset`;
 direct visits, refreshes and Back to Workflows retain workspace and list position.
-The detail view adds upcoming recurrence times, owner/version/ID and, for linked
-authorized members, task, output format, destination/topic, context window and
+The detail view adds upcoming recurrence times, owner/version/ID and, for all
+authorized panel administrators, task, output format, destination/topic, context window and
 pinned skill version. Existing proposal and lifecycle controls remain available.
 Deleting from details returns to the list. Loading and failed reads have explicit
 states and retry; draft/paused/suspended times are labeled schedule previews.
 
 `GET /api/admin/workspaces/:id/workflows/:workflowId` returns
-`{ mode, workflow, repositorySources? }`. Member details include the full workflow
-and current accessible repository choices. Unlinked deployment operators receive
-only the same allowlisted schedule metadata as their list, never the task, chat,
-skill or historical specs. Both reads share visibility rules: deleted workflows
-are hidden; linked members see their own workflows and active workspace-group
-workflows. Missing or inaccessible workflow IDs return 404; foreign workspace
-access is denied. The list API remains compatible. Recurrence previews do not
+`{ mode, workflow, repositorySources }`. Both operator and member modes include
+the full workflow and current accessible repository choices. Authorized panel
+admins see every non-deleted workflow in their workspace and can manage pending
+workflow approvals across owners. Missing or deleted workflow IDs return 404;
+foreign workspace access is denied. The list API likewise returns full workflows
+in both modes. Recurrence previews do not
 guarantee dispatch, which still depends on workspace and workflow policy.
+Panel changes are audited under the manager; execution retains the workflow owner.
+New private schedules use the active recipient as owner; new group schedules use
+the linked administrator or an active workspace owner/admin. No personal Telegram
+link is required for panel management. A workspace with no active execution member
+must enroll one before creating a schedule. Other approval kinds retain their
+actor-specific boundaries.
 See [workflow API examples](../../examples/workflows.http).
 
 ### Access request review (implemented)

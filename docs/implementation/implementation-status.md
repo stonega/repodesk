@@ -1,5 +1,31 @@
 # Implementation evidence
 
+## Admin workflow management without Telegram linking (2026-10-21)
+
+Authorized panel administrators can view full workspace workflow details and
+create, edit, approve, pause/resume, run and delete schedules without linking
+their own Telegram identity. The read-only notice and separate operator summary
+were removed. Workflow counts match the complete admin list; saved summaries and
+modal editors remain separate, with Edit at the card's top right on mobile too.
+
+Existing workflows retain their execution owner. New private schedules use the
+active recipient; new group schedules use the linked administrator or an active
+workspace owner/admin. Manager authority is rechecked inside each transaction and
+audited separately. Owner membership, destinations, repository scope, skills,
+approval hashes/expiry, version conflicts and team budgets still govern execution.
+Operator workflow approvals survive normal reconciliation; other approval kinds
+and individual run recovery retain their existing actor requirements.
+
+Validation: lint, strict TypeScript, production build and **1,073 deterministic
+tests across 120 files** passed with disposable PostgreSQL in an isolated checkout
+containing this workflow change, avoiding concurrent Google integration edits.
+All **30 browser scenarios** across workflows, admin and Overview passed.
+Desktop (1280px) and mobile (390px) summaries, New/Edit, loading/empty, pending and
+error states were inspected. Tests cover unlinked and cross-owner management,
+approval replay, tenant/CSRF/Origin boundaries, revoked admins/owners, source
+revocation, duplicate ticks, budgets and preserved execution/audit identities.
+No dependency, migration, deployment or external message was added.
+
 ## Workflow budgets follow team settings (2026-10-21)
 
 Workflow lists, details and New/Edit dialogs no longer expose a separate per-run

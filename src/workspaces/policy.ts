@@ -159,7 +159,15 @@ function allowedRun(
 }
 export function revokeWork(w: Workspace, now = new Date()) {
   for (const approval of w.approvals)
-    if (!approval.decision && !eligible(w, approval.actor))
+    if (
+      !approval.decision &&
+      !eligible(w, approval.actor) &&
+      !(
+        approval.kind === "workflow" &&
+        approval.actor === w.operatorId &&
+        !w.deletion
+      )
+    )
       approval.decision = "revoked";
   for (const workflow of w.workflows)
     if (

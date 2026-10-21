@@ -29,9 +29,13 @@ metadata; names and usernames never enroll users or change authorization.
 
 Workspace owners/admins manage membership and roles. The password-authenticated
 deployment operator may manage configuration and membership in workspaces they
-created before linking Telegram. Operators can inspect retained workspace runs
-under the existing admin history rules; bot execution and run mutations still
-require a linked, active Telegram identity. Regular members cannot manage access.
+created before linking Telegram. Authorized panel admins can inspect full workflows
+and create, edit, approve and control them across owners without linking their
+personal Telegram identity. Workflow execution retains an active member's identity
+and its data/destination permissions; panel actions audit the manager separately.
+Operators can inspect retained workspace runs under the existing admin history
+rules; ordinary bot execution and individual run recovery actions still require
+a linked, active Telegram identity. Regular members cannot manage access.
 Reject member edits that would remove the last active owner/admin's management
 access. Owner edits use the existing audited operator recovery flow.
 

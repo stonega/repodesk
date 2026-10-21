@@ -29,7 +29,9 @@ export function proposeWorkflow(
   now = new Date(),
   id?: string,
   expectedVersion?: number,
+  manager?: string,
 ) {
+  if (manager) authorize(w, manager, true);
   authorize(w, actor);
   const spec = workflowSchema.parse(input);
   audience(w, actor, spec.chatId);
@@ -77,7 +79,7 @@ export function proposeWorkflow(
   };
   const approval: Approval = {
     id: randomUUID(),
-    actor,
+    actor: manager ?? actor,
     kind: "workflow",
     target: workflow.id,
     version: workflow.version,
@@ -87,7 +89,14 @@ export function proposeWorkflow(
   };
   w.approvals.push(approval);
   revokeWork(w);
-  audit(w, actor, "workflow.proposed", workflow.id, workflow.version, now);
+  audit(
+    w,
+    manager ?? actor,
+    "workflow.proposed",
+    workflow.id,
+    workflow.version,
+    now,
+  );
   return { workflow, approval, next: nextOccurrences(spec.recurrence, now) };
 }
 export function proposeInstruction(
@@ -156,10 +165,16 @@ export function decide(
   id: string,
   accept: boolean,
   now = new Date(),
+  manager?: string,
 ) {
-  authorize(w, actor);
   const approval = w.approvals.find((a) => a.id === id);
-  requireThat(approval && approval.actor === actor, "approval_denied", 403);
+  if (manager) {
+    authorize(w, manager, true);
+    requireThat(approval?.kind === "workflow", "approval_denied", 403);
+  } else {
+    authorize(w, actor);
+    requireThat(approval && approval.actor === actor, "approval_denied", 403);
+  }
   requireThat(!approval.decision, "approval_consumed", 409);
   requireThat(
     Date.parse(approval.expiresAt) > now.getTime(),
@@ -179,7 +194,6 @@ export function decide(
   if (accept && approval.kind === "github_pull_request")
     checkPullApproval(w, approval);
   if (accept && approval.kind === "workflow") {
-    authorize(w, actor);
     const workflow = w.workflows.find((f) => f.id === approval.target);
     requireThat(
       workflow &&
@@ -197,12 +211,12 @@ export function decide(
       "approval_changed",
       409,
     );
-    audience(w, actor, workflow.spec.chatId);
+    audience(w, workflow.owner, workflow.spec.chatId);
     requireThat(
       !workflow.spec.github ||
         workflowRepositoriesAllowed(
           w,
-          actor,
+          workflow.owner,
           workflow.spec.chatId,
           workflow.spec.github,
         ),
@@ -242,7 +256,14 @@ export function decide(
     !w.approvals.some((a) => a.runId === run.id && !a.decision)
   )
     run.status = "succeeded";
-  audit(w, actor, `approval.${approval.decision}`, id, approval.version, now);
+  audit(
+    w,
+    manager ?? actor,
+    `approval.${approval.decision}`,
+    id,
+    approval.version,
+    now,
+  );
   return approval;
 }
 export function workflowAction(
@@ -252,13 +273,15 @@ export function workflowAction(
   action: "pause" | "resume" | "delete" | "run",
   version: number,
   model: string,
+  manager?: string,
 ) {
-  authorize(w, actor, action !== "run");
+  authorize(w, manager ?? actor, manager ? true : action !== "run");
   const f = w.workflows.find((f) => f.id === id);
   requireThat(f, "not_found", 404);
   requireThat(f.version === version, "version_conflict", 409);
-  if (action === "run")
-    return createRun(
+  if (manager) requireThat(f.owner === actor, "owner_required", 403);
+  if (action === "run") {
+    const run = createRun(
       w,
       actor,
       f.spec.task,
@@ -267,6 +290,9 @@ export function workflowAction(
       model,
       { workflowId: id },
     );
+    if (manager) audit(w, manager, "workflow.run", id, f.version);
+    return run;
+  }
   requireThat(f.owner === actor, "owner_required", 403);
   if (action === "resume") {
     requireThat(f.status === "paused", "new_approval_required", 409);
@@ -282,7 +308,7 @@ export function workflowAction(
     f.nextAt = nextOccurrences(f.spec.recurrence, new Date(), 1)[0];
   } else f.status = action === "pause" ? "paused" : "deleted";
   revokeWork(w);
-  audit(w, actor, `workflow.${action}`, id, f.version);
+  audit(w, manager ?? actor, `workflow.${action}`, id, f.version);
   return f;
 }
 export function tick(w: Workspace, model: string, now = new Date()) {

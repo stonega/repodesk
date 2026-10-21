@@ -8,7 +8,7 @@ import {
   teamWorkspace,
 } from "../team-workflows-fixture.ts";
 
-async function fixture(page: Page, noSkill = false) {
+async function fixture(page: Page, noSkill = false, unlinked = false) {
   const w = teamWorkspace(),
     source = successfulRun(w);
   const draft: Skill = {
@@ -87,7 +87,7 @@ async function fixture(page: Page, noSkill = false) {
     ) {
       await route.fulfill({
         json: {
-          mode: "member",
+          mode: unlinked ? "operator" : "member",
           workflow,
           repositorySources: {
             revision: 2,
@@ -127,7 +127,7 @@ async function fixture(page: Page, noSkill = false) {
                   id: "fixture",
                   username: "fixture",
                   operator: true,
-                  telegramId: "101",
+                  ...(unlinked ? {} : { telegramId: "101" }),
                 },
                 csrf: "test",
               }
@@ -135,7 +135,7 @@ async function fixture(page: Page, noSkill = false) {
               ? [{ id: w.id, name: "Team workflows" }]
               : path.endsWith("/workflows")
                 ? {
-                    mode: "member",
+                    mode: unlinked ? "operator" : "member",
                     items: workflow.status === "deleted" ? [] : [workflow],
                     total: workflow.status === "deleted" ? 0 : 1,
                     repositorySources: {
@@ -153,7 +153,7 @@ async function fixture(page: Page, noSkill = false) {
                     : {},
     });
   });
-  return { w, draft, saved: () => saved };
+  return { w, draft, workflow, saved: () => saved };
 }
 
 test("repository schedule editing preserves selections and submits numeric sources with the current connection revision", async ({
@@ -185,11 +185,11 @@ test("repository schedule editing preserves selections and submits numeric sourc
 });
 
 for (const width of [1280, 390]) {
-  test(`free-form schedules use a modal without a skill and retain drafts on failure at ${width}px`, async ({
+  test(`unlinked admins manage free-form schedules in modals and retain drafts on failure at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
-    const f = await fixture(page, true);
+    const f = await fixture(page, true, true);
     let finishLoading: (() => void) | undefined;
     let loading = true;
     await page.route(
@@ -430,72 +430,118 @@ test("workflow cards link to readable details with local times and retain list p
   await expect(page.getByText("No scheduled workflows yet.")).toBeVisible();
 });
 
-test("operator workflow details remain read-only and recover from unavailable records", async ({
+test("unlinked admins see full workflow details and controls and recover from unavailable records", async ({
   page,
 }) => {
-  const f = await fixture(page);
-  const workflow = {
-    id: "operator-workflow",
-    name: "Daily GitHub development report — stonega/repodesk",
-    owner: "101",
-    version: 2,
-    status: "paused",
-    recurrence: {
-      frequency: "daily",
-      weekday: 7,
-      hour: 9,
-      minute: 0,
-      timezone: "Asia/Taipei",
-    },
-    next: ["2026-10-09T01:00:00Z"],
-    reason: "Paused by owner",
-  };
+  const f = await fixture(page, false, true);
+  f.workflow.spec.name = "Daily GitHub development report — stonega/repodesk";
+  f.workflow.status = "paused";
+  f.workflow.spec.recurrence.frequency = "daily";
+  f.workflow.spec.recurrence.hour = 9;
   let unavailable = false;
-  await page.route("**/api/admin/workspaces/*/workflows/**", async (route) => {
-    if (unavailable)
-      await route.fulfill({ status: 404, json: { error: "not_found" } });
-    else await route.fulfill({ json: { mode: "operator", workflow } });
-  });
-  await page.goto(`/admin/workflows/operator-workflow?workspace=${f.w.id}`);
+  await page.route(
+    "**/api/admin/workspaces/*/workflows/repository-report",
+    async (route) => {
+      if (unavailable)
+        await route.fulfill({ status: 404, json: { error: "not_found" } });
+      else await route.fallback();
+    },
+  );
+  await page.goto(`/admin/workflows/repository-report?workspace=${f.w.id}`);
   await expect(page.getByText("Not scheduled while paused")).toBeVisible();
   await expect(page.getByText("Every day at 09:00")).toBeVisible();
-  await expect(page.getByText("Budget per run", { exact: true })).toHaveCount(
-    0,
-  );
   await expect(
-    page.getByText("Workspace schedule details are read-only here.", {
-      exact: false,
-    }),
-  ).toBeVisible();
+    page.getByText(/Workspace schedule details are read-only/),
+  ).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: "Task", exact: true }),
-  ).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Edit proposal" })).toHaveCount(
-    0,
-  );
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Edit proposal" }),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "pause", exact: true }),
-  ).toHaveCount(0);
+  ).toBeVisible();
+  await expect(page.locator(".workflow-card form")).toHaveCount(0);
   await page.screenshot({
     path: "test-results/workflow-operator-detail-desktop.png",
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
+  const card = page.locator(".workflow-card");
+  const bounds = await card.boundingBox();
+  const editBounds = await card
+    .getByRole("button", { name: "Edit proposal" })
+    .boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(editBounds).not.toBeNull();
+  if (bounds && editBounds) {
+    expect(editBounds.x + editBounds.width).toBeGreaterThan(
+      bounds.x + bounds.width - 30,
+    );
+    expect(editBounds.y).toBeLessThan(bounds.y + 32);
+  }
   await page.screenshot({
     path: "test-results/workflow-operator-detail-mobile.png",
     fullPage: true,
   });
+  await page.getByRole("button", { name: "Edit proposal" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("Task", { exact: true })).toHaveValue(
+    "Recap the team",
+  );
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Edit proposal" }),
+  ).toBeFocused();
   unavailable = true;
   await page.reload();
   await expect(page.getByRole("alert")).toContainText(
     "Workflow not found or no longer available.",
   );
   await expect(page.locator(".workflow-card")).toHaveCount(0);
+  await page.screenshot({
+    path: "test-results/workflow-operator-unavailable-mobile.png",
+    fullPage: true,
+  });
   unavailable = false;
-  workflow.recurrence.frequency = "weekly";
+  f.workflow.spec.recurrence.frequency = "weekly";
   await page.getByRole("button", { name: "Try again" }).click();
   await expect(
-    page.getByRole("heading", { name: workflow.name }),
+    page.getByRole("heading", { name: f.workflow.spec.name }),
   ).toBeVisible();
-  await expect(page.getByText("Every Sunday at 09:00")).toBeVisible();
+  await expect(page.getByText("Every Friday at 09:00")).toBeVisible();
+  let approved = false;
+  f.workflow.status = "draft";
+  await page.route("**/api/admin/workspaces/*/approvals**", async (route) => {
+    if (route.request().method() === "POST") {
+      expect(route.request().postDataJSON()).toEqual({ approve: true });
+      approved = true;
+      f.workflow.status = "active";
+      await route.fulfill({ json: { decision: "approved" } });
+    } else {
+      await route.fulfill({
+        json: {
+          items: approved
+            ? []
+            : [
+                {
+                  id: "pending-workflow",
+                  actor: "101",
+                  kind: "workflow",
+                  version: 1,
+                  payload: { spec: f.workflow.spec, owner: "101" },
+                  expiresAt: "2030-01-01T00:00:00Z",
+                },
+              ],
+        },
+      });
+    }
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Approve exact proposal" }).click();
+  await expect(page.getByText("No pending proposals.")).toBeVisible();
+  await expect(page.locator(".workflow-card .pill")).toHaveText("active");
+  expect(approved).toBe(true);
 });

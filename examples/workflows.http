@@ -1,23 +1,42 @@
 # Sign in as the workspace deployment operator or a linked workspace owner/admin.
-# Unlinked operators receive schedule metadata only. Linked members can inspect
-# their own workflows and workflows whose group is active in this workspace.
+# All authorized panel admins can inspect and manage full workspace workflows,
+# including deployment operators without a personal Telegram link.
 # Workflow runs use team per-run/monthly budgets; proposals omit budgetUsd.
 @origin = http://localhost:3000
 @workspaceId = REPLACE_WITH_WORKSPACE_UUID
 @workflowId = REPLACE_WITH_WORKFLOW_UUID
 @session = REPLACE_WITH_SESSION
+@csrf = REPLACE_WITH_CSRF
+@approvalId = REPLACE_WITH_APPROVAL_UUID
 
-### List workflows (100 per page); the existing response contract is preserved.
+### List full workflows (100 per page) with current repository choices.
 GET {{origin}}/api/admin/workspaces/{{workspaceId}}/workflows?offset=0
 Cookie: repodesk_session={{session}}
 
-### Fetch one workflow: { mode, workflow, repositorySources? }.
-# Member details include the spec and saved versions. Operator details contain
-# only the same metadata as the operator list, without task, destination or skill.
-# Missing, deleted and member-inaccessible workflows return 404.
+### Fetch one workflow: { mode, workflow, repositorySources }.
+# Both modes include the spec and saved versions. Missing/deleted records return
+# 404; foreign workspaces remain denied.
 # `next` contains recurrence previews, including when the workflow is not active.
 GET {{origin}}/api/admin/workspaces/{{workspaceId}}/workflows/{{workflowId}}
 Cookie: repodesk_session={{session}}
+
+### Approve an exact workflow proposal as a panel admin, across workflow owners.
+POST {{origin}}/api/admin/workspaces/{{workspaceId}}/approvals/{{approvalId}}
+Cookie: repodesk_session={{session}}
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{ "approve": true }
+
+### Control a workflow; pause/resume/delete/run retain its execution owner.
+POST {{origin}}/api/admin/workspaces/{{workspaceId}}/workflows/{{workflowId}}/action
+Cookie: repodesk_session={{session}}
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{ "version": 1, "action": "pause" }
 
 ### Open details; workspace and list offset survive refresh and the back link.
 GET {{origin}}/admin/workflows/{{workflowId}}?workspace={{workspaceId}}&offset=0

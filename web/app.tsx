@@ -2049,17 +2049,13 @@ function WorkflowsPage({
   const data: WorkflowCollection | undefined =
     !error && response
       ? "workflow" in response
-        ? response.mode === "member"
-          ? { ...response, items: [response.workflow], total: 1 }
-          : { ...response, items: [response.workflow], total: 1 }
+        ? { ...response, items: [response.workflow], total: 1 }
         : response
       : undefined;
-  const memberData = data?.mode === "member" ? data : undefined;
-  const repositorySources = memberData?.repositorySources ?? {
+  const repositorySources = data?.repositorySources ?? {
     revision: 0,
     repositories: [],
   };
-  const operatorData = data?.mode === "operator" ? data : undefined;
   const skills = useData<{ items: Skill[] }>(
     `/api/admin/workspaces/${id}/skills`,
   );
@@ -2091,10 +2087,11 @@ function WorkflowsPage({
       description="Daily and weekly schedules use the displayed timezone. Late runs over five minutes are skipped; daylight-saving gaps are skipped and repeated times run once."
       actions={
         <>
-          {memberData && !workflowId && (
+          {!workflowId && (
             <IconButton
               icon="add"
               label="Add workflow"
+              disabled={!data}
               onClick={() => setCreating(true)}
             />
           )}
@@ -2129,45 +2126,30 @@ function WorkflowsPage({
         <Pager data={data} />
       )}
       {loading && !data && <SkeletonRows label="Workflows" />}
-      {operatorData && (
-        <p className="muted">
-          Workspace schedule details are read-only here. Link your Telegram
-          identity in <NavLink to="/setup">Setup</NavLink> to manage workflows.
-        </p>
-      )}
       {data?.total === 0 && (
         <section className="card">No scheduled workflows yet.</section>
       )}
-      {operatorData?.items.map((f) => (
+      {data?.items.map((f) => (
         <section className="card workflow-card" key={f.id}>
-          <div className="row">
-            <h2>
-              {workflowId ? (
-                f.name
-              ) : (
-                <Link className="workflow-title-link" to={detailUrl(f.id)}>
-                  {f.name}
-                </Link>
-              )}
-            </h2>
-            <span className="pill">{f.status}</span>
-          </div>
-          <WorkflowSummary workflow={f} detail={!!workflowId} />
-        </section>
-      ))}
-      {memberData?.items.map((f) => (
-        <section className="card workflow-card" key={f.id}>
-          <div className="row">
-            <h2>
-              {workflowId ? (
-                f.spec.name
-              ) : (
-                <Link className="workflow-title-link" to={detailUrl(f.id)}>
-                  {f.spec.name}
-                </Link>
-              )}
-            </h2>
-            <span className="pill">{f.status}</span>
+          <div className="card-heading">
+            <div className="row">
+              <h2>
+                {workflowId ? (
+                  f.spec.name
+                ) : (
+                  <Link className="workflow-title-link" to={detailUrl(f.id)}>
+                    {f.spec.name}
+                  </Link>
+                )}
+              </h2>
+              <span className="pill">{f.status}</span>
+            </div>
+            <IconButton
+              icon="edit"
+              label="Edit proposal"
+              type="button"
+              onClick={() => setEditing(f)}
+            />
           </div>
           <WorkflowSummary
             workflow={{
@@ -2229,12 +2211,6 @@ function WorkflowsPage({
             </p>
           )}
           <div className="row">
-            <IconButton
-              icon="edit"
-              label="Edit proposal"
-              type="button"
-              onClick={() => setEditing(f)}
-            />
             {(["run", "pause", "resume", "delete"] as const).map((action) => (
               <Action
                 icon={
@@ -2265,15 +2241,16 @@ function WorkflowsPage({
           </div>
         </section>
       ))}
-      {memberData && (creating || editing) && (
+      {data && (creating || editing) && (
         <Modal
           title={editing ? `Edit ${editing.spec.name}` : "Propose a schedule"}
           onClose={closeEditor}
         >
           <p>
-            Use a linked group ID or your verified Telegram ID for private
-            delivery. Editing requires a new approval. Unsupported recurrence
-            needs clarification.
+            Use a linked group ID or an active member’s Telegram ID for private
+            delivery. Existing workflows keep their execution owner; new group
+            schedules use your linked membership or the workspace owner/admin.
+            Editing requires a new approval.
           </p>
           <RecordForm
             fields={prefixFields(
@@ -2336,9 +2313,7 @@ function WorkflowsPage({
           <DataDetails value={proposal} />
         </section>
       )}
-      {memberData && (
-        <ApprovalList id={id} reloadParent={reload} refreshKey={data} />
-      )}
+      {data && <ApprovalList id={id} reloadParent={reload} refreshKey={data} />}
     </Page>
   );
 }

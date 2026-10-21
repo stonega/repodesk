@@ -1,30 +1,35 @@
-import type { Workflow, Workspace } from "../domain.ts";
+import {
+  requireThat,
+  type Workflow,
+  type WorkflowSpec,
+  type Workspace,
+} from "../domain.ts";
 import { repositoryAccess } from "../github/user-access.ts";
-import { nextOccurrences } from "../workflows/schedule.ts";
+import { eligible } from "../workspaces/policy.ts";
 
-export const visibleWorkflows = (w: Workspace, actor: string) =>
-  w.workflows.filter(
-    (f) =>
-      f.status !== "deleted" &&
-      (f.owner === actor ||
-        w.chats.some((chat) => chat.id === f.spec.chatId && chat.active)),
-  );
-
-export function workflowMetadata(
-  f: Workflow,
-  now = new Date(),
-): WorkflowMetadata {
-  return {
-    id: f.id,
-    name: f.spec.name,
-    owner: f.owner,
-    status: f.status,
-    version: f.version,
-    recurrence: f.spec.recurrence,
-    // These are recurrence previews, not promises that a run will dispatch.
-    next: nextOccurrences(f.spec.recurrence, now),
-    reason: f.reason,
-  };
+// Panel authority and the Telegram identity used at execution are separate.
+export function workflowOwner(
+  w: Workspace,
+  actor: string,
+  spec?: WorkflowSpec,
+  id?: string,
+) {
+  if (id) {
+    const workflow = w.workflows.find(
+      (f) => f.id === id && f.status !== "deleted",
+    );
+    requireThat(workflow, "not_found", 404);
+    return workflow.owner;
+  }
+  requireThat(spec, "invalid_workflow");
+  const owner = spec.chatId.startsWith("-")
+    ? eligible(w, actor)
+      ? actor
+      : (w.members.find((m) => m.active && m.role === "owner")?.id ??
+        w.members.find((m) => m.active && m.role === "admin")?.id)
+    : spec.chatId;
+  requireThat(owner && eligible(w, owner), "workflow_owner_unavailable", 409);
+  return owner;
 }
 
 export function workflowRepositories(w: Workspace, actor: string) {
@@ -52,18 +57,14 @@ export type WorkflowMetadata = Pick<
 };
 export type MemberWorkflow = Workflow & { next: string[] };
 type RepositorySources = ReturnType<typeof workflowRepositories>;
-export type WorkflowCollection =
-  | { mode: "operator"; items: WorkflowMetadata[]; total: number }
-  | {
-      mode: "member";
-      items: MemberWorkflow[];
-      repositorySources: RepositorySources;
-      total: number;
-    };
-export type WorkflowDetail =
-  | { mode: "operator"; workflow: WorkflowMetadata }
-  | {
-      mode: "member";
-      workflow: MemberWorkflow;
-      repositorySources: RepositorySources;
-    };
+export type WorkflowCollection = {
+  mode: "operator" | "member";
+  items: MemberWorkflow[];
+  repositorySources: RepositorySources;
+  total: number;
+};
+export type WorkflowDetail = {
+  mode: "operator" | "member";
+  workflow: MemberWorkflow;
+  repositorySources: RepositorySources;
+};
