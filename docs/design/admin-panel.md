@@ -384,7 +384,8 @@ The **Plugins** page also offers predefined **Code Truth**: enable/disable, add/
 ### Workflow details (implemented)
 
 Scheduled workflow cards show name/status, a readable daily or weekly schedule,
-the explicit schedule timezone, the next recurrence time and budget per run.
+the explicit schedule timezone and the next recurrence time. Workflow runs use the
+team's per-run and monthly budget settings; workflows have no separate budget.
 The name links to `/admin/workflows/:workflowId?workspace=:id&offset=:offset`;
 direct visits, refreshes and Back to Workflows retain workspace and list position.
 The detail view adds upcoming recurrence times, owner/version/ID and, for linked

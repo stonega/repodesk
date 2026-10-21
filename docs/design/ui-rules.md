@@ -315,6 +315,22 @@ when implementing or reviewing a change.
   content, destinations and management actions. Display recurrence previews as
   previews when a workflow is not active.
 
+### Workflow budgets follow team settings
+
+- **Preference:** Configure per-run and monthly spending limits only in the team
+  settings. Scheduled workflows inherit those limits without a separate budget
+  field, summary row or default spending cap.
+- **Scope:** Workflow lists, details, New/Edit dialogs and Telegram proposals;
+  both scheduled and manually triggered workflow runs.
+- **Source:** 2026-10-21 — user requested removing the workflow's default $0.10
+  budget and following the team's global settings.
+- **Acceptance:** Verify saved summaries and New/Edit contain no workflow budget
+  control or value at desktop/mobile widths, with no leftover gap from the removed
+  row. Existing workflows must also follow the team limits on future dispatches,
+  including None and zero. Preserve modal editing and pending/error behavior.
+- **Exceptions:** Historical run snapshots and approval evidence remain intact.
+  Team spending limits and normal run accounting still apply.
+
 ### Repository cards share one style
 
 - **Preference:** Use one shared repository card for names, badges, external

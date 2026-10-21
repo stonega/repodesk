@@ -1,6 +1,7 @@
 # Sign in as the workspace deployment operator or a linked workspace owner/admin.
 # Unlinked operators receive schedule metadata only. Linked members can inspect
 # their own workflows and workflows whose group is active in this workspace.
+# Workflow runs use team per-run/monthly budgets; proposals omit budgetUsd.
 @origin = http://localhost:3000
 @workspaceId = REPLACE_WITH_WORKSPACE_UUID
 @workflowId = REPLACE_WITH_WORKFLOW_UUID

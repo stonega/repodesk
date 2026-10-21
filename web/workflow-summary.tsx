@@ -65,16 +65,6 @@ export function WorkflowSummary({
             )}
           </dd>
         </div>
-        <div>
-          <dt>Budget per run</dt>
-          <dd>
-            {new Intl.NumberFormat("en", {
-              style: "currency",
-              currency: "USD",
-              maximumFractionDigits: 3,
-            }).format(f.budgetUsd)}
-          </dd>
-        </div>
       </dl>
       {detail && (
         <>

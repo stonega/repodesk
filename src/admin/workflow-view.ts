@@ -21,7 +21,6 @@ export function workflowMetadata(
     status: f.status,
     version: f.version,
     recurrence: f.spec.recurrence,
-    budgetUsd: f.spec.budgetUsd,
     // These are recurrence previews, not promises that a run will dispatch.
     next: nextOccurrences(f.spec.recurrence, now),
     reason: f.reason,
@@ -49,7 +48,6 @@ export type WorkflowMetadata = Pick<
 > & {
   name: string;
   recurrence: Workflow["spec"]["recurrence"];
-  budgetUsd: number;
   next: string[];
 };
 export type MemberWorkflow = Workflow & { next: string[] };

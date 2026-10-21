@@ -254,18 +254,13 @@ describe("approvals and scheduling", () => {
       proposeWorkflow(w, "101", { ...spec(w), skillId: "missing" }),
     ).toThrow("skill_unavailable");
   });
-  test("free-form schedules retain budget, audience, missed-run and dispatch capacity checks", () => {
+  test("free-form schedules retain audience, missed-run and dispatch capacity checks", () => {
     const w = workspace();
     const input = { ...spec(w), skillId: undefined };
     w.skills = [];
     expect(() =>
       proposeWorkflow(w, "101", { ...input, chatId: "202" }),
     ).toThrow("destination_denied");
-    w.settings.runBudgetUsd = 0.01;
-    expect(() => proposeWorkflow(w, "101", input)).toThrow(
-      "budget_exceeds_workspace_limit",
-    );
-    w.settings.runBudgetUsd = null;
     const now = new Date("2026-09-18T08:59:00Z");
     const p = proposeWorkflow(w, "101", input, now);
     decide(w, "101", p.approval.id, true, now);

@@ -389,7 +389,6 @@ export function applicationTools(
             format: a.format,
             skillId: a.skillId,
             windowDays: a.windowDays,
-            budgetUsd: r.settings.runBudgetUsd ?? 0.1,
             github: a.repositoryIds
               ? { revision: w.github?.revision, repositoryIds: a.repositoryIds }
               : undefined,
@@ -400,7 +399,7 @@ export function applicationTools(
           w,
           r.actor,
           r.chatId,
-          `Approve schedule: ${result.workflow.spec.name}\nOwner: ${r.actor}\nSource/destination: ${r.chatId}, topic ${r.topicId}\n${result.workflow.spec.github ? `Repository sources: ${result.workflow.spec.github.repositoryIds.map((id) => w.github?.repositories.find((repo) => repo.id === id)?.full_name).join(", ")}\n${r.chatId === r.actor ? "Reports stay in your private chat." : "Approving shares repository metadata with this group/topic."}\n` : ""}Timezone: ${result.workflow.spec.recurrence.timezone}\nNext: ${result.next.join(", ")}\nBudget: $${result.workflow.spec.budgetUsd}/run\nFormat: ${result.workflow.spec.format}`,
+          `Approve schedule: ${result.workflow.spec.name}\nOwner: ${r.actor}\nSource/destination: ${r.chatId}, topic ${r.topicId}\n${result.workflow.spec.github ? `Repository sources: ${result.workflow.spec.github.repositoryIds.map((id) => w.github?.repositories.find((repo) => repo.id === id)?.full_name).join(", ")}\n${r.chatId === r.actor ? "Reports stay in your private chat." : "Approving shares repository metadata with this group/topic."}\n` : ""}Timezone: ${result.workflow.spec.recurrence.timezone}\nNext: ${result.next.join(", ")}\nBudget: follows team settings\nFormat: ${result.workflow.spec.format}`,
           {
             topicId: r.topicId,
             runId: r.id,

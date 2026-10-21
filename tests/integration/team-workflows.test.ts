@@ -345,8 +345,9 @@ const url = process.env.TEST_DATABASE_URL;
       expect(result.complete).toBe(true);
     });
     test("free-form schedule proposals and runs survive persistence without a skill or extra tool grants", async () => {
-      const w = teamWorkspace(),
-        r = requestRun(w);
+      const w = teamWorkspace();
+      w.settings.runBudgetUsd = 25;
+      const r = requestRun(w);
       for (const skill of w.skills)
         for (const version of skill.published)
           version.tools = ["read_chat_context"];
@@ -374,9 +375,14 @@ const url = process.env.TEST_DATABASE_URL;
       expect(proposed.approvals).toHaveLength(1);
       expect(proposed.deliveries).toHaveLength(1);
       expect(proposed.workflows[0]?.spec.skillId).toBeUndefined();
+      expect(proposed.workflows[0]?.spec).not.toHaveProperty("budgetUsd");
+      expect(proposed.deliveries[0]?.text).toContain(
+        "Budget: follows team settings",
+      );
       await restart.change(w.id, (current) => {
         decide(current, "101", fixtureValue(proposed.approvals[0]).id, true);
         current.skills = [];
+        current.settings.runBudgetUsd = null;
         fixtureValue(current.runs.find((run) => run.id === r.id)).status =
           "succeeded";
       });
@@ -393,6 +399,7 @@ const url = process.env.TEST_DATABASE_URL;
         saved.runs.find((run) => run.workflowId === proposed.workflows[0]?.id),
       );
       expect(scheduled.skillPins).toEqual([]);
+      expect(scheduled.settings.runBudgetUsd).toBeNull();
       expect(runAllowed(saved, scheduled)).toBe(true);
       await restart.change(w.id, (current) => {
         const run = fixtureValue(

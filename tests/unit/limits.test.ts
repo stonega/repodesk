@@ -2,10 +2,86 @@ import { expect, test } from "bun:test";
 import { inputByteLimit, remainingBudgets } from "../../src/agent/limits.ts";
 import { modelLimitsSchema } from "../../src/agent/model-settings.ts";
 import { modelCapabilities, selectedModel } from "../../src/agent/runtime.ts";
-import { Fault, settingsSchema } from "../../src/domain.ts";
+import { Fault, settingsSchema, workflowSchema } from "../../src/domain.ts";
 import { safeLogCode } from "../../src/observability/logs.ts";
+import {
+  decide,
+  proposeWorkflow,
+  tick,
+  workflowAction,
+} from "../../src/workflows/service.ts";
 import { createRun } from "../../src/workspaces/service.ts";
-import { workspace } from "../fixtures.ts";
+import { spec, workspace } from "../fixtures.ts";
+
+test("workflow proposals discard legacy budgets and keep other validation strict", () => {
+  const w = workspace();
+  const input = spec(w);
+  expect(input).not.toHaveProperty("budgetUsd");
+  for (const budgetUsd of [0, 0.1, 25, null]) {
+    const legacy = { ...input, budgetUsd };
+    expect(workflowSchema.parse(legacy)).toEqual(input);
+    expect(proposeWorkflow(w, "101", legacy).workflow.spec).not.toHaveProperty(
+      "budgetUsd",
+    );
+  }
+  expect(workflowSchema.safeParse({ ...input, unexpected: true }).success).toBe(
+    false,
+  );
+});
+
+test.each([null, 0, 0.01, 25])(
+  "manual workflow runs inherit team budget %s and ignore saved overrides",
+  (runBudgetUsd) => {
+    const w = workspace();
+    w.settings.runBudgetUsd = runBudgetUsd;
+    w.settings.monthlyBudgetUsd = 100;
+    const p = proposeWorkflow(w, "101", spec(w));
+    decide(w, "101", p.approval.id, true);
+    // Represent an existing workflow saved before its own budget was retired.
+    Object.assign(p.workflow.spec, { budgetUsd: 0.1 });
+    const run = workflowAction(
+      w,
+      "101",
+      p.workflow.id,
+      "run",
+      p.workflow.version,
+      "gpt-4.1-mini",
+    );
+    if (!("attempts" in run)) throw Error("Expected a workflow run");
+    expect(run.settings.runBudgetUsd).toBe(runBudgetUsd);
+    expect(run.settings.monthlyBudgetUsd).toBe(100);
+    run.attempts.push({
+      id: "reserved",
+      reserved: 0.02,
+      status: "reserved",
+      at: run.at,
+    });
+    expect(remainingBudgets(w, run)).toEqual({
+      run: (runBudgetUsd ?? Infinity) - 0.02,
+      workspace: 99.98,
+    });
+    w.settings.runBudgetUsd = 0;
+    w.settings.monthlyBudgetUsd = 0;
+    expect(remainingBudgets(w, run)).toEqual({ run: -0.02, workspace: -0.02 });
+  },
+);
+
+test("scheduled runs use team settings at dispatch and deduplicate occurrences", () => {
+  const w = workspace();
+  w.settings.runBudgetUsd = 0.01;
+  const p = proposeWorkflow(w, "101", spec(w));
+  decide(w, "101", p.approval.id, true);
+  Object.assign(p.workflow.spec, { budgetUsd: 0.1 });
+  const due = new Date(p.workflow.nextAt as string);
+  w.settings.runBudgetUsd = null;
+  w.settings.monthlyBudgetUsd = 12;
+  tick(w, "gpt-4.1-mini", due);
+  tick(w, "gpt-4.1-mini", due);
+  expect(w.runs).toHaveLength(1);
+  expect(w.occurrences).toHaveLength(1);
+  expect(w.runs[0]?.settings.runBudgetUsd).toBeNull();
+  expect(w.runs[0]?.settings.monthlyBudgetUsd).toBe(12);
+});
 
 test("budgets have no pilot ceiling while invalid numbers and policy limits remain rejected", () => {
   const settings = settingsSchema.parse({

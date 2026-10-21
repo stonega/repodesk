@@ -39,11 +39,6 @@ export function proposeWorkflow(
     "github_workflow_scope_denied",
     403,
   );
-  requireThat(
-    w.settings.runBudgetUsd === null ||
-      spec.budgetUsd <= w.settings.runBudgetUsd,
-    "budget_exceeds_workspace_limit",
-  );
   const skill = w.skills.find(
     (s) =>
       s.id === spec.skillId && s.enabled && !s.archived && s.published.length,

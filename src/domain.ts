@@ -85,23 +85,32 @@ export const repositorySourcesSchema = z
   .strict()
   .refine((s) => new Set(s.repositoryIds).size === s.repositoryIds.length);
 export type RepositorySources = z.infer<typeof repositorySourcesSchema>;
-export const workflowSchema = z
-  .object({
-    name: z.string().trim().min(1).max(80),
-    task: z.string().min(1).max(2000),
-    chatId,
-    topicId: z.number().int().nonnegative().default(0),
-    recurrence: recurrenceSchema,
-    format: z
-      .string()
-      .max(2000)
-      .default("Decisions, blockers, next steps. Cite source IDs."),
-    budgetUsd: z.number().min(0.001).max(5),
-    skillId: z.string().min(1).optional(),
-    windowDays: z.number().int().min(1).max(30).default(7),
-    github: repositorySourcesSchema.optional(),
-  })
-  .strict();
+export const workflowSchema = z.preprocess(
+  (value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      return value;
+    // Older clients and saved workflows may still include the retired override.
+    const spec = { ...value } as Record<string, unknown>;
+    delete spec.budgetUsd;
+    return spec;
+  },
+  z
+    .object({
+      name: z.string().trim().min(1).max(80),
+      task: z.string().min(1).max(2000),
+      chatId,
+      topicId: z.number().int().nonnegative().default(0),
+      recurrence: recurrenceSchema,
+      format: z
+        .string()
+        .max(2000)
+        .default("Decisions, blockers, next steps. Cite source IDs."),
+      skillId: z.string().min(1).optional(),
+      windowDays: z.number().int().min(1).max(30).default(7),
+      github: repositorySourcesSchema.optional(),
+    })
+    .strict(),
+);
 export type WorkflowSpec = z.infer<typeof workflowSchema>;
 export const TOOLS = [
   "read_web",

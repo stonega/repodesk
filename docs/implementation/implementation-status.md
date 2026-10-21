@@ -1,5 +1,25 @@
 # Implementation evidence
 
+## Workflow budgets follow team settings (2026-10-21)
+
+Workflow lists, details and New/Edit dialogs no longer expose a separate per-run
+budget or the former $0.10 default. Both scheduled and manually triggered workflow
+runs inherit the team's per-run and monthly limits at dispatch, including None
+and zero. Existing saved workflow caps are ignored; older clients' `budgetUsd`
+fields are discarded on save. Historical run snapshots and approval evidence
+remain intact. Telegram proposals say that budgets follow team settings.
+The UI preference, API documentation, user guide and runnable proposals were updated.
+
+Validation: lint, strict TypeScript, production build and **1,066 deterministic
+tests across 119 files** passed with disposable PostgreSQL. All **six workflow
+browser scenarios** passed, including editing legacy records, saving without a
+workflow budget, draft retention, pending locks, permissions and navigation.
+Desktop (1280px) and mobile (390px) summaries, New/Edit dialogs, loading/empty,
+pending and error states were inspected for the removed row and leftover spacing.
+Budget tests cover unlimited/zero/finite team limits, legacy caps, current settings
+at dispatch, reservations and duplicate scheduler ticks. No dependency or migration
+was added; no deployment, live model call or external message was performed.
+
 ## VPS Review Bot sandbox failure and source-tool correction (2026-10-20)
 
 Operator-authorized inspection found two automatic reviews of `stonega/wallshader`

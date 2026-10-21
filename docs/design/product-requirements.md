@@ -126,7 +126,8 @@ Scheduling does not add tools, data sources or external-action permissions.
 
 Inspired by E-08–11, E-15. Convert a natural-language instruction into a structured
 draft containing name, task, input sources, time window, timezone, recurrence,
-destination, owner, instructions, allowed tools, budget and approval policy.
+destination, owner, instructions, allowed tools and approval policy. Scheduled and
+manually triggered workflow runs use the team's per-run and monthly budgets.
 
 - Show a readable preview and next three execution times; require activation.
 - Confirm ambiguous dates/timezones. Store an IANA timezone and explicitly define

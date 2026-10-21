@@ -10,6 +10,5 @@
     "timezone": "Asia/Taipei"
   },
   "format": "One concise sentence.",
-  "budgetUsd": 0.1,
   "windowDays": 1
 }

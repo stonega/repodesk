@@ -51,7 +51,7 @@ import type {
   SkillSpec,
   Workflow,
 } from "../src/domain.ts";
-import { settingsSchema } from "../src/domain.ts";
+import { settingsSchema, workflowSchema } from "../src/domain.ts";
 import { AccessRequests } from "./access-requests.tsx";
 import { AuthNetwork } from "./auth-network.tsx";
 import { DataDetails, DataTable } from "./data-details.tsx";
@@ -2083,7 +2083,6 @@ function WorkflowsPage({
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     },
     format: "Decisions, blockers, next steps",
-    budgetUsd: 0.1,
     windowDays: 7,
   };
   return (
@@ -2175,7 +2174,6 @@ function WorkflowsPage({
               ...f,
               name: f.spec.name,
               recurrence: f.spec.recurrence,
-              budgetUsd: f.spec.budgetUsd,
             }}
             detail={!!workflowId}
           />
@@ -2300,7 +2298,7 @@ function WorkflowsPage({
                 ? {
                     version: editing.version,
                     spec: {
-                      ...editing.spec,
+                      ...workflowSchema.parse(editing.spec),
                       repositoryIds: editing.spec.github?.repositoryIds ?? [],
                     },
                   }

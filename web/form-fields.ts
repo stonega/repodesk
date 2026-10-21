@@ -87,15 +87,6 @@ export function workflowFields(
       maxLength: 2000,
     },
     {
-      path: "budgetUsd",
-      label: "Budget per run (USD)",
-      kind: "number",
-      required: true,
-      min: 0.001,
-      max: 5,
-      step: "any",
-    },
-    {
       path: "skillId",
       label: "Skill",
       kind: "select",

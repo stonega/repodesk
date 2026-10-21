@@ -720,7 +720,6 @@ test.describe
               minute: 0,
               timezone: "Asia/Taipei",
             },
-            budgetUsd: 0.1,
             skillId: w.skills[0]?.id,
           }),
         );

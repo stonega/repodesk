@@ -227,7 +227,8 @@ are disabled. The worker checks cancellation every second and between tool/model
 steps, with configurable run deadlines (five minutes by default), model capacity and
 optional budget limits, with no fixed model-call or tool-call quota. Workspace run
 and monthly budgets default to `null` (unlimited); zero permits only zero-cost
-requests. Explicit workflow budgets remain independent. `RUN_TIMEOUT_SECONDS` accepts 1–1800
+requests. Workflow runs inherit these team settings without a separate budget.
+`RUN_TIMEOUT_SECONDS` accepts 1–1800
 seconds. New queue jobs expire 60 seconds after the configured run deadline; the
 120-second conversation lease is renewed by the one-second guard. Deadline expiry
 is recorded as `failed (run_timeout)`, distinct from user cancellation and worker

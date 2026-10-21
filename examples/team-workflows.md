@@ -27,7 +27,8 @@ example/project 当前有哪些 PR 等待审核？附链接和查询时间。
 ```
 
 Review the schedule's repository sources, destination, timezone, next occurrences
-and budget, then approve it. In the panel, **Workflows → New/Edit → Repository
+then approve it. Workflow runs inherit the team's per-run and monthly budgets;
+there is no separate workflow budget. In the panel, **Workflows → New/Edit → Repository
 sources** selects up to six repositories. Editing needs a new approval.
 Default merged-PR report windows cover the previous complete calendar days in the
 schedule's timezone; daylight-saving days may have 23 or 25 hours. Explicit query

@@ -50,6 +50,7 @@ async function fixture(page: Page, noSkill = false) {
       "2026-10-23T09:00:00Z",
     ],
   };
+  Object.assign(workflow.spec, { budgetUsd: 0.1 });
   let saved:
     | {
         version: number;
@@ -180,6 +181,7 @@ test("repository schedule editing preserves selections and submits numeric sourc
     repositoryIds: [7001, 7002],
   });
   expect(f.saved()?.spec.skillId).toBeUndefined();
+  expect(f.saved()?.spec).not.toHaveProperty("budgetUsd");
 });
 
 for (const width of [1280, 390]) {
@@ -188,23 +190,62 @@ for (const width of [1280, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 900 });
     const f = await fixture(page, true);
+    let finishLoading: (() => void) | undefined;
+    let loading = true;
+    await page.route(
+      "**/api/admin/workspaces/*/workflows/repository-report",
+      async (route) => {
+        if (loading)
+          await new Promise<void>((resolve) => {
+            finishLoading = resolve;
+          });
+        await route.fallback();
+      },
+    );
     await page.goto(`/admin/workflows/repository-report?workspace=${f.w.id}`);
+    await expect.poll(() => !!finishLoading).toBe(true);
+    await expect(page.locator(".workflow-card")).toHaveCount(0);
+    await page.screenshot({
+      path: `test-results/workflow-loading-${width}.png`,
+      fullPage: true,
+    });
+    loading = false;
+    finishLoading?.();
     await expect(page.getByText("No skill", { exact: true })).toBeVisible();
     await expect(page.getByText(/Pinned version/)).toHaveCount(0);
     await expect(page.locator(".workflow-card form")).toHaveCount(0);
+    await expect(page.getByText("Budget per run", { exact: true })).toHaveCount(
+      0,
+    );
     await page.screenshot({
       path: `test-results/workflow-no-skill-detail-${width}.png`,
       fullPage: true,
     });
     await page.getByRole("button", { name: "Edit proposal" }).click();
     const edit = page.getByRole("dialog", { name: "Edit Repository report" });
+    await expect(edit.getByLabel("Budget per run (USD)")).toHaveCount(0);
     await expect(
       edit.getByRole("combobox", { name: "Skill", exact: true }),
     ).toHaveText("No skill");
+    await edit
+      .getByRole("button", { name: "Cancel", exact: true })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: `test-results/workflow-edit-${width}.png`,
+      fullPage: true,
+    });
     await edit.getByRole("button", { name: "Cancel", exact: true }).click();
     await page.getByRole("link", { name: "Back to Workflows" }).click();
+    await expect(page.getByText("Budget per run", { exact: true })).toHaveCount(
+      0,
+    );
+    await page.screenshot({
+      path: `test-results/workflow-list-${width}.png`,
+      fullPage: true,
+    });
     await page.getByRole("button", { name: "Add workflow" }).click();
     const dialog = page.getByRole("dialog", { name: "Propose a schedule" });
+    await expect(dialog.getByLabel("Budget per run (USD)")).toHaveCount(0);
     await expect(
       dialog.getByRole("combobox", { name: "Skill", exact: true }),
     ).toHaveText("No skill");
@@ -248,6 +289,9 @@ for (const width of [1280, 390]) {
     await expect(dialog.getByLabel("Task", { exact: true })).toHaveValue(
       "Remind me to take a break",
     );
+    await dialog
+      .getByRole("button", { name: "Cancel", exact: true })
+      .scrollIntoViewIfNeeded();
     await page.screenshot({
       path: `test-results/workflow-no-skill-error-${width}.png`,
       fullPage: true,
@@ -258,6 +302,7 @@ for (const width of [1280, 390]) {
       .click();
     await expect(dialog).toHaveCount(0);
     expect(f.saved()?.spec.skillId).toBeUndefined();
+    expect(f.saved()?.spec).not.toHaveProperty("budgetUsd");
     await page
       .getByRole("link", { name: "Daily reminder", exact: true })
       .click();
@@ -270,6 +315,12 @@ for (const width of [1280, 390]) {
         () => document.documentElement.scrollWidth <= window.innerWidth,
       ),
     ).toBe(true);
+    await page.getByRole("button", { name: "delete", exact: true }).click();
+    await expect(page.getByText("No scheduled workflows yet.")).toBeVisible();
+    await page.screenshot({
+      path: `test-results/workflow-empty-${width}.png`,
+      fullPage: true,
+    });
   });
 }
 
@@ -389,7 +440,6 @@ test("operator workflow details remain read-only and recover from unavailable re
     owner: "101",
     version: 2,
     status: "paused",
-    budgetUsd: 0.1,
     recurrence: {
       frequency: "daily",
       weekday: 7,
@@ -409,6 +459,9 @@ test("operator workflow details remain read-only and recover from unavailable re
   await page.goto(`/admin/workflows/operator-workflow?workspace=${f.w.id}`);
   await expect(page.getByText("Not scheduled while paused")).toBeVisible();
   await expect(page.getByText("Every day at 09:00")).toBeVisible();
+  await expect(page.getByText("Budget per run", { exact: true })).toHaveCount(
+    0,
+  );
   await expect(
     page.getByText("Workspace schedule details are read-only here.", {
       exact: false,
@@ -424,7 +477,12 @@ test("operator workflow details remain read-only and recover from unavailable re
     page.getByRole("button", { name: "pause", exact: true }),
   ).toHaveCount(0);
   await page.screenshot({
-    path: "test-results/workflow-detail-desktop.png",
+    path: "test-results/workflow-operator-detail-desktop.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: "test-results/workflow-operator-detail-mobile.png",
     fullPage: true,
   });
   unavailable = true;
