@@ -12,7 +12,9 @@ Open **Plugins → Google → Web application → Edit**. Reuse an existing Goog
 **Web application** OAuth client. Enable the Docs, Sheets, Drive, Gmail and Search
 Console APIs, configure consent and test users, and register the exact callback
 shown in the dialog: `https://YOUR_ADMIN_HOST/api/admin/google/callback`.
-Callback and individual read-scope rows retain their copy controls.
+The callback URL stays visible and copyable. A short read-only access summary
+replaces the expanded scope list; open **OAuth scopes** for the exact permission
+identifiers and their individual copy controls when configuring consent.
 Save the client ID and secret, then enable Google. The application can be enabled
 before any member connects. The panel shows saved application settings; personal
 accounts and property selection are managed in Telegram.

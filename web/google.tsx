@@ -260,10 +260,20 @@ function GoogleEditor({
       </p>
       <dl className="plugin-summary google-connection-details">
         <ServiceUrl label="Callback URL" value={data.redirectUri} />
-        {data.scope.split(" ").map((scope) => (
-          <ServiceUrl key={scope} label="Read scope" value={scope} />
-        ))}
       </dl>
+      <p>Read-only access to Docs, Sheets, Drive, Gmail and Search Console.</p>
+      <details className="setup-advanced google-oauth-scopes">
+        <summary>OAuth scopes</summary>
+        <p className="muted">
+          Use these permission identifiers when configuring Google’s consent
+          screen.
+        </p>
+        <dl className="plugin-summary google-connection-details">
+          {data.scope.split(" ").map((scope) => (
+            <ServiceUrl key={scope} label="Read scope" value={scope} />
+          ))}
+        </dl>
+      </details>
       <p className="muted">
         Sign-in also requests your email to identify the account. All five
         services use this client. Each member connects their own Google account

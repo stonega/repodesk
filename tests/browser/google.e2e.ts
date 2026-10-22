@@ -124,22 +124,50 @@ for (const width of [1280, 390]) {
         dialog.getByRole("button", { name: /Connect.*Google|Disconnect/ }),
       ).toHaveCount(0);
       await expect(dialog).toContainText("confirms the account there");
-      for (const [label, value] of [
+      await expect(dialog).toContainText(
+        "Read-only access to Docs, Sheets, Drive, Gmail and Search Console.",
+      );
+      const scopes = dialog.locator(".google-oauth-scopes");
+      const disclosure = scopes.locator("summary");
+      await expect(disclosure).toHaveText("OAuth scopes");
+      await expect(scopes).not.toHaveAttribute("open");
+      for (const scope of googleScopes)
+        await expect(dialog.getByText(scope, { exact: true })).toBeHidden();
+      await expect(
+        dialog.getByRole("button", { name: "Copy Callback URL", exact: true }),
+      ).toBeVisible();
+      await dialog.evaluate((element) => {
+        element.scrollTop = 0;
+      });
+      await page.screenshot({
+        path: test.info().outputPath(`editor-collapsed-${theme}.png`),
+        fullPage: true,
+      });
+      await dialog.getByLabel("Replace client secret").fill("draft-secret");
+      const values = [
         ["Callback URL", f.pages.google.redirectUri],
-        ["Read scope", googleScopes[0]],
-      ]) {
-        const copy = dialog
-          .getByRole("button", { name: `Copy ${label}`, exact: true })
-          .first();
+        ...googleScopes.map((scope) => ["Read scope", scope]),
+      ] as const;
+      for (const [index, [label, value]] of values.entries()) {
+        if (index === 1) {
+          const box = await disclosure.boundingBox();
+          expect(box?.height).toBeGreaterThanOrEqual(44);
+          await disclosure.focus();
+          await page.keyboard.press("Enter");
+          await expect(scopes).toHaveAttribute("open");
+        }
+        const row = dialog.locator(".service-url").filter({ hasText: value });
+        const copy = row.getByRole("button", {
+          name: `Copy ${label}`,
+          exact: true,
+        });
         const box = await copy.boundingBox();
         expect(box?.width).toBeGreaterThanOrEqual(44);
         expect(box?.height).toBeGreaterThanOrEqual(44);
         await copy.focus();
         await page.keyboard.press("Enter");
         await expect(
-          dialog
-            .getByRole("button", { name: `Copied ${label}`, exact: true })
-            .first(),
+          row.getByRole("button", { name: `Copied ${label}`, exact: true }),
         ).toBeDisabled();
         expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
           value,
@@ -149,12 +177,25 @@ for (const width of [1280, 390]) {
       expect(
         await dialog
           .locator(".google-connection-details")
-          .evaluate((el) => el.scrollWidth <= el.clientWidth),
+          .evaluateAll((rows) =>
+            rows.every((el) => el.scrollWidth <= el.clientWidth),
+          ),
       ).toBe(true);
+      await dialog.evaluate((element) => {
+        element.scrollTop = 0;
+      });
       await page.screenshot({
-        path: test.info().outputPath(`editor-${theme}.png`),
+        path: test.info().outputPath(`editor-expanded-${theme}.png`),
         fullPage: true,
       });
+      await disclosure.focus();
+      await page.keyboard.press("Space");
+      await expect(scopes).not.toHaveAttribute("open");
+      for (const scope of googleScopes)
+        await expect(dialog.getByText(scope, { exact: true })).toBeHidden();
+      await expect(dialog.getByLabel("Replace client secret")).toHaveValue(
+        "draft-secret",
+      );
       await page.keyboard.press("Escape");
       await expect(dialog).toHaveCount(0);
       await expect(edit).toBeFocused();
@@ -330,6 +371,16 @@ for (const width of [1280, 390]) {
       .getByRole("button", { name: "Copy Callback URL", exact: true })
       .click();
     await expect(dialog.getByRole("alert")).toContainText("Select the URL");
+    await expect(dialog.getByLabel("Replace client secret")).toHaveValue(
+      "draft-secret",
+    );
+    const scopes = dialog.locator(".google-oauth-scopes");
+    await scopes.locator("summary").click();
+    const scopeRow = scopes
+      .locator(".service-url")
+      .filter({ hasText: googleScopes[0] });
+    await scopeRow.getByRole("button", { name: "Copy Read scope" }).click();
+    await expect(scopeRow.getByRole("alert")).toContainText("Select the URL");
     await expect(dialog.getByLabel("Replace client secret")).toHaveValue(
       "draft-secret",
     );

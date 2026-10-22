@@ -2542,6 +2542,17 @@ input.plugin-toggle-input:disabled {
 .plugin-summary.google-connection-details {
   grid-template-columns: minmax(0, 1fr);
 }
+.google-oauth-scopes {
+  margin: 0 0 18px;
+  padding-top: 0;
+}
+.setup-advanced.google-oauth-scopes > summary {
+  min-height: 44px;
+  align-content: center;
+}
+.setup-advanced.google-oauth-scopes[open] > summary {
+  margin-bottom: 0;
+}
 .google-summary-card > ul {
   overflow-wrap: anywhere;
   padding-inline-start: 1.25rem;

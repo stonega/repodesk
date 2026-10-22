@@ -1,5 +1,23 @@
 # Implementation evidence
 
+## Compact Google OAuth setup (2026-10-22)
+
+The Google Web application editor keeps its callback URL visible and copyable,
+summarizes read-only access in one sentence, and starts with **OAuth scopes**
+collapsed. Expanding it reveals all five exact permission identifiers with the
+existing copy controls and manual-copy recovery. Credential drafts survive
+expansion/collapse; authorization requests and required grants are unchanged.
+Setup documentation and the scoped UI preference describe the new presentation.
+
+Validation: lint, strict TypeScript and production build passed. **1,101
+deterministic tests across 121 files** passed with disposable PostgreSQL, plus
+**15 focused browser scenarios** for Google and the shared URL controls. Checks
+cover default collapse, keyboard toggling, copying every scope, draft retention
+and copy failure. Saved summaries, collapsed/expanded editors, loading/empty,
+pending/error states and spacing were visually inspected at 1280px/390px;
+summaries and both disclosure states were checked in light/dark themes.
+No dependency, migration or deployment was added.
+
 ## Review Bot Standards and Spec assessments (2026-10-22)
 
 Review instructions now call for surrounding implementation, affected callers,

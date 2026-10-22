@@ -50,6 +50,14 @@ when implementing or reviewing a change.
 - **Acceptance:** Each button copies its exact value without submitting the form;
   verify keyboard access, 44px targets, wrapped URLs, success/reset and failure
   recovery in both themes at desktop and mobile widths.
+- **Source update:** 2026-10-22 — user approved replacing the five expanded read
+  scope rows with a short read-only access summary and a collapsed **OAuth scopes**
+  section. Keep the callback URL visible and copyable; retain the exact scope
+  values and their copy actions inside the disclosure for consent setup.
+- **Acceptance update:** Scope URLs are hidden whenever the editor opens. Verify
+  keyboard expansion/collapse, visible access summary, preserved credential drafts,
+  copy recovery and spacing in both disclosure states at desktop/mobile widths.
+  This preference changes presentation only; OAuth requests retain their scopes.
 - **Exceptions:** External navigation links retain their existing behavior.
 
 ### Admin checkboxes share a clear, comfortable style
