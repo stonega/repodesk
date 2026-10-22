@@ -1,56 +1,105 @@
-# 自动代码审查：Review Bot
+# Automatic code review with Review Bot
 
-Review Bot 在 GitHub 上审查所连接仓库的 PR，也可以回答评论中的问题、按明确要求修复同一 PR。它使用现有 GitHub App、Codex runner 和模型认证，不需要再注册一个机器人。
+Review Bot reviews PRs in connected GitHub repositories, answers questions in
+comments and makes explicitly requested fixes in the same PR. It uses the existing
+GitHub App, Codex runner and model credentials; no separate bot registration is
+required.
 
-## 配置前提
+## Prerequisites
 
-- 已连接 [GitHub App 和目标仓库](github.md)。
-- [Codex](codex.md) 已启用，runner、任务镜像及模型认证可用。
-- RepoDesk 有公开 HTTPS 地址，GitHub 能投递 webhook。
+- Connect the [GitHub App and target repositories](github.md).
+- Enable [Codex](codex.md) with a working runner, task image and model credentials.
+- Give RepoDesk a public HTTPS address so GitHub can deliver webhooks.
 
-默认任务镜像包含审查所需的 Open Code Review 工具。自定义任务镜像需保留该工具；缺少时会明确失败。
+The default task image includes Open Code Review. Custom task images must retain
+this tool; reviews fail explicitly when it is missing.
 
-## 管理员：启用审查
+## Enable reviews as an administrator
 
-1. 打开 **Plugins → Review Bot**。
-2. 检查 **Webhook secret**。通过当前 RepoDesk 创建的 App 通常已保存；旧 App 若缺失，配置或生成 secret，并在 GitHub 设置相同值。
-3. 在 GitHub App 的 webhook 设置中核对页面显示的 URL、secret 和启用状态，订阅 `pull_request`、`issue_comment`、`pull_request_review_comment`。
-4. 在 **Configuration → Edit** 设置自动审查、评论请求、明确请求的修复和审查模型，保存后启用。
+1. Open **Plugins → Review Bot**.
+2. Check **Webhook secret**. Apps created through current RepoDesk versions usually
+   have it saved. If an older App has no secret, configure or generate one and set
+   the same value in GitHub.
+3. In the GitHub App webhook settings, verify the displayed URL, secret and enabled
+   status. Subscribe to `pull_request`, `issue_comment` and
+   `pull_request_review_comment`.
+4. Use **Configuration → Edit** to configure automatic reviews, comment requests,
+   explicitly requested fixes and the review model. Save, then enable the plugin.
 
-在公开 HTTPS 站点创建的新 App 会预填 webhook。若创建时使用 localhost，上线后需要把未启用的占位地址改为真实地址。保存 RepoDesk secret 不会替你修改 GitHub。
+New Apps created on a public HTTPS site have their webhook settings prefilled. If
+the App was created using localhost, replace the inactive placeholder with the
+public address when going live. Saving a secret in RepoDesk does not update GitHub.
 
-配置对插件统一生效，没有额外仓库名单。避免在多个工作区对同一 App/仓库启用 Review Bot，确保事件路由清楚。
+Configuration applies to the whole plugin, with no additional repository list.
+Avoid enabling Review Bot for the same App and repository in multiple workspaces
+so event routing remains unambiguous.
 
-## 自动审查
+## Automatic reviews
 
-新建、重新打开、推送新 commit、从草稿标为可审查等事件会触发审查；自动跳过草稿 PR。新 commit 会取代旧 commit 的待完成自动审查。关闭 PR 会取消待处理工作。
+Opening or reopening a PR, pushing new commits and marking a draft ready for
+review trigger automatic reviews. Draft PRs are skipped. New commits supersede
+unfinished automatic reviews of older commits. Closing a PR cancels pending work.
 
-结果是绑定具体 commit 的信息性审查，包含摘要和可定位的问题；不会代替人工批准或自动合并。查看它实际审查、跳过或无法覆盖的文件，不要将无发现视为无缺陷证明。
+The result is an informational review pinned to a specific commit, with a summary
+and findings linked to relevant locations. It does not replace human approval or
+automatically merge the PR. Check which files were reviewed, skipped or unavailable;
+an empty findings list does not prove that the PR has no defects.
 
-自动审查基于管理员启用的 App installation 授权。成员评论请求另外检查成员身份和 GitHub 权限。
+The summary separates **Standards** and **Spec**. Standards covers repository
+rules, correctness and maintainability; Spec checks the originating requirements
+for missing, partial, incorrect or out-of-scope behavior. When no usable spec is
+available, Spec is marked skipped and Standards continues. A passing assessment on
+one axis does not imply that the other passes.
 
-## 在 GitHub 评论中使用
+Review instructions call for checking relevant callers, documentation and tests,
+and comparing the previous implementation for regressions. Documented rule and
+requirement violations should cite their source. Design concerns labeled
+"Possible" are advisory; documented repository choices take precedence. Findings
+retain their axis label, with severity ordering and duplicates combined within
+each axis. Reviews return up to 20 findings and should disclose omissions per axis.
+Missing tests or unsupported personal style preferences alone do not qualify as
+findings. These instructions guide the model and do not guarantee review quality.
 
-使用插件页面显示的实际 App bot 名称。以下 `repodesk` 仅为示例：
+Automatic reviews use the App installation grant enabled by an administrator.
+Member comment requests additionally check membership and GitHub permissions.
 
-| 评论 | 结果 |
+## Use GitHub comments
+
+Use the actual App bot name displayed on the plugin page. Here, `repodesk` is only
+an example:
+
+| Comment | Result |
 | --- | --- |
-| `@repodesk[bot] review` | 审查当前 PR |
-| `@repodesk[bot] explain this finding` | 解释发现的问题 |
-| `@repodesk[bot] fix this` | 实现明确要求、运行检查并更新同一 PR |
-| `@repodesk[bot] status` | 查看已确认状态 |
-| `@repodesk[bot] cancel` | 请求停止活动任务 |
+| `@repodesk[bot] review` | Review the current PR |
+| `@repodesk[bot] explain this finding` | Explain a finding |
+| `@repodesk[bot] fix this` | Implement the explicit request, run checks and update the same PR |
+| `@repodesk[bot] status` | Show confirmed status |
+| `@repodesk[bot] cancel` | Request cancellation of active work |
 
-`@repodesk` 简写也受支持。提及放在一行开头，代码块或引用中的提及不会授权工作。回复行内审查意见时，可以将原意见作为参考。
+The short form `@repodesk` is also supported. Put the mention at the start of a
+line. Mentions inside code blocks or quotes cannot authorize work. Replies to
+inline findings can use the original review comment as reference context.
 
-评论用户需是活跃成员，已通过 Telegram `/github` 验证身份，并有当前仓库读权限；修复需写权限且管理员已启用 requested fixes。普通问题保持只读。必要的澄清由原请求者再次 @回复继续。
+Comment authors must be active members, have verified their GitHub identity through
+Telegram `/github` and have current repository read access. Fixes require write
+access and administrator enablement of requested fixes. Ordinary questions remain
+read-only. When clarification is necessary, the original requester can continue by
+replying with another mention.
 
-审查和普通问题只读取当前任务绑定提交的文件、差异和审查规则，不执行仓库脚本或测试。无法读取的文件会作为覆盖缺口说明，不会被视为已完成审查。
+Reviews and ordinary questions only read files, diffs and review rules at the
+commits pinned to the task. They do not execute repository scripts or tests.
+Unavailable files are disclosed as coverage gaps rather than counted as reviewed.
 
-## 修复范围
+## Fix scope
 
-同仓库 PR 支持检查后更新原分支，fork PR 支持审查和问答。明确修复请求可启动任务，无需再次点击开发批准；不包含合并或部署授权。
+PRs within the same repository support updating the original branch after checks.
+Fork PRs support reviews and answers. Explicit fix requests can start work without
+another development approval click; they do not authorize merging or deployment.
 
-其他维护者推送更新时，尚未发布的工作会重新核对当前代码，避免覆盖新提交。发布结果不确定时先检查 GitHub。停止、移除授权和删除工作区都不会撤回已发出的评论或提交。
+If another maintainer pushes updates, unpublished work rechecks the current code
+to avoid overwriting new commits. Check GitHub before retrying when publication
+has an unknown outcome. Cancellation, revoked access and workspace deletion do not
+retract comments or commits already published.
 
-未收到结果时，依次检查 GitHub webhook delivery、插件状态、成员验证和 runner 状态，参阅 [排障指南](troubleshooting.md)。
+If no result arrives, check GitHub webhook deliveries, plugin status, member
+verification and runner status. See [Troubleshooting](troubleshooting.md).

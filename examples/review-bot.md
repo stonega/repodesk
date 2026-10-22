@@ -18,10 +18,29 @@ are still required. Existing Apps follow the manual webhook steps in the guide.
    containing a concrete regression. Expect one informational review at that head
    with supported file/line findings. Expect a brief outcome first and short,
    actionable inline comments explaining the trigger and impact, with no repeated
-   severity/location labels or copied findings in the summary. Check that compact
+   axis/severity/location labels or copied findings in the summary. Check that compact
    coverage reports OCR exclusions, reviewed/skipped files and reasons; long path
    lists should be collapsed. For a clean fixture, expect no findings and a
    conclusion scoped to the reviewed files. Redeliver its webhook: expect no duplicate.
+   Include a changed caller that violates an unchanged helper's contract, an
+   apparent bug prevented by existing validation, and an unchanged pre-existing
+   defect. Expect the cross-file regression to be reported with its trigger and
+   impact, and the prevented/pre-existing issues to be omitted. Relevant test
+   inspection must not be described as a passing test run. These are semantic
+   acceptance checks requiring a model, not guarantees from deterministic tests.
+   Check that the summary has separate **Standards** and **Spec** assessments,
+   with findings counted and prioritized within each axis. For a fixture that
+   follows repository rules but misses a requirement, expect the Spec mismatch to
+   remain visible. For a fixture that meets the requirement but violates an
+   applicable documented standard, expect a Standards finding citing that rule.
+   When no usable spec is supplied or discoverable, expect Spec to be skipped with
+   "No spec available" and Standards to continue without a clarification pause.
+   A linked issue whose contents are unavailable must not be treated as verified.
+   For design concerns, expect advisory "Possible" wording and concrete maintenance
+   consequences; a documented repository choice overrides a conflicting heuristic.
+   Configured formatter/linter/type-check observations should not be repeated.
+   Check that inline and unanchored findings retain their assessment axis and that
+   a finding from one axis does not replace a supported finding from the other.
 2. Open a PR in an repository outside the workspace connection and a draft in the selected repository.
    Expect no automatic review. Mark the selected draft ready: expect a review.
 3. Push a new commit while review is running. Expect the old result to stop and the

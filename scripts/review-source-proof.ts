@@ -31,6 +31,7 @@ let calls = 0;
 const outputs: string[] = [];
 const actions = [
   { action: "plan" },
+  { action: "commits" },
   { action: "read", path: "example.ts" },
   { action: "diff", path: "example.ts" },
   { action: "list" },
@@ -83,6 +84,7 @@ const server = createServer(async (request, responseStream) => {
       verificationCommands: [],
       reviewFindings: [
         {
+          axis: "standards",
           path: "example.ts",
           line: 1,
           side: "RIGHT",
@@ -216,7 +218,11 @@ try {
   const result = await runConversation(options);
   assert.equal(result.result.status, "analysis");
   assert.equal(result.result.reviewFindings?.length, 1);
+  assert.equal(result.result.reviewFindings?.[0]?.axis, "standards");
   assert.ok(outputs.some((output) => output.includes("ruleGroups")));
+  assert.ok(
+    outputs.some((output) => output.includes(`commit ${review.headSha}`)),
+  );
   assert.ok(
     outputs.some((output) => output.includes("Review source unavailable")),
   );

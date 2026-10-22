@@ -6,7 +6,11 @@ import {
   developmentRun,
   developmentSchema,
 } from "../../src/coding/development.ts";
-import { diffLines } from "../../src/review-bot/github.ts";
+import {
+  diffLines,
+  reviewFindings,
+  reviewOutputFindings,
+} from "../../src/review-bot/github.ts";
 import { reviewMention } from "../../src/review-bot/mentions.ts";
 import { verifyReviewSignature } from "../../src/review-bot/service.ts";
 
@@ -106,6 +110,12 @@ test("review turns are read-only, pinned to exact commits, with strict structure
   expect(prompt).toContain("Never claim tests ran");
   const schema = developmentSchema(run);
   expect(schema.required).toContain("reviewFindings");
+  expect(schema.properties.reviewFindings).toMatchObject({
+    items: {
+      required: expect.arrayContaining(["axis"]),
+      properties: { axis: { enum: ["standards", "spec"] } },
+    },
+  });
   expect(Object.keys(schema.properties).sort()).toEqual(
     [...schema.required].sort(),
   );
@@ -123,4 +133,23 @@ test("review turns are read-only, pinned to exact commits, with strict structure
     });
     expect(followup).not.toContain("/task/open-code-review.json");
   }
+});
+
+test("new findings require an assessment axis while historical findings remain readable", () => {
+  const historical = {
+    path: "src/api.ts",
+    line: 1,
+    side: "RIGHT",
+    severity: "high",
+    body: "An unauthenticated caller can update the record.",
+  } as const;
+  expect(reviewFindings.parse([historical])).toEqual([historical]);
+  expect(reviewOutputFindings.safeParse([historical]).success).toBe(false);
+  for (const axis of ["standards", "spec"] as const)
+    expect(reviewOutputFindings.parse([{ ...historical, axis }])).toEqual([
+      { ...historical, axis },
+    ]);
+  expect(
+    reviewFindings.safeParse([{ ...historical, axis: "other" }]).success,
+  ).toBe(false);
 });

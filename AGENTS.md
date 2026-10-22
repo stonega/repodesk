@@ -26,6 +26,8 @@ from design proposals.
 
 ## Workflow
 
+Write project documentation in English.
+
 Read the relevant design and implementation docs before coding. Keep the standalone
 layout unless a second independently deployed surface justifies a change. Use Bun
 for packages and scripts, TypeScript strict mode, and Biome for linting/formatting.

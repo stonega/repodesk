@@ -51,7 +51,7 @@ async function fixture() {
   await writeFile(join(repo, "example.ts"), "export const total = 2;\n");
   await writeFile(join(repo, "$(touch hacked).ts"), "literal name\n");
   await git("add", ".");
-  await git("commit", "-qm", "head");
+  await git("commit", "-qm", "head\n\nCloses #123");
   const headSha = await git("rev-parse", "HEAD");
   await git("checkout", "--detach", mergeBase);
   await writeFile(join(repo, "base-only.ts"), "base branch only\n");
@@ -180,6 +180,32 @@ test("runtime paths, traversal, arbitrary revisions/commands, binary files and s
   );
   expect(link.content).toBe(join(f.root, "secret"));
   expect(link.content).not.toContain("runtime-secret-never-returned");
+});
+
+test("commit context includes only the pinned PR range and paginates complete spec references", async () => {
+  const f = await fixture();
+  await f.git("checkout", "--detach", f.review.headSha);
+  await f.git("commit", "--allow-empty", "-qm", "unreviewed later commit");
+  let offset: number | null = 0;
+  let content = "";
+  do {
+    const result = page(
+      await f.source.handle({ action: "commits", offset, limit: 17 }),
+    );
+    content += result.content;
+    offset = result.nextOffset;
+  } while (offset !== null);
+  expect(content).toContain(`commit ${f.review.headSha}`);
+  expect(content).toContain("Closes #123");
+  expect(content).not.toContain(`commit ${f.mergeBase}`);
+  expect(content).not.toContain(f.review.baseSha);
+  expect(content).not.toContain("unreviewed later commit");
+  for (const args of [
+    { action: "commits", revision: "base" },
+    { action: "commits", path: "/proc/self/environ" },
+    { action: "commits", command: "env" },
+  ])
+    expect((await f.source.handle(args)).success).toBe(false);
 });
 
 test("source and OCR plan pagination preserve complete content and exclusions/rules", async () => {

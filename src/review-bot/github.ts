@@ -18,8 +18,11 @@ export const pullSnapshot = z.object({
   base: z.object({ ref: z.string(), sha }),
 });
 export type PullSnapshot = z.infer<typeof pullSnapshot>;
+export const reviewAxis = z.enum(["standards", "spec"]);
 export const reviewFinding = z
   .object({
+    // Older stored reviews did not distinguish the two assessment axes.
+    axis: reviewAxis.optional(),
     path: z
       .string()
       .min(1)
@@ -32,6 +35,9 @@ export const reviewFinding = z
   })
   .strict();
 export const reviewFindings = z.array(reviewFinding).max(20);
+export const reviewOutputFindings = z
+  .array(reviewFinding.extend({ axis: reviewAxis }))
+  .max(20);
 export type ReviewFinding = z.infer<typeof reviewFinding>;
 export const progressMarker = (task: ReviewTask) =>
   `<!-- repodesk-review-task:${task.id} -->`;
@@ -179,7 +185,11 @@ export class ReviewGitHub {
     }[] = [];
     const unanchored: string[] = [];
     for (const finding of findings) {
-      const body = `**${finding.severity}**: ${finding.body}`;
+      const axis = finding.axis === "standards" ? "Standards" : "Spec";
+      const label = finding.axis
+        ? `${axis} · ${finding.severity}`
+        : finding.severity;
+      const body = `**${label}**: ${finding.body}`;
       if (anchors.get(finding.path)?.has(`${finding.side}:${finding.line}`))
         comments.push({
           path: finding.path,

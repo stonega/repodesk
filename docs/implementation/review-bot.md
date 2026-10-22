@@ -77,11 +77,19 @@ Missing OCR, incompatible/malformed output or incomplete rules fail the task wit
 `coding_review_preparation_failed`; there is no alternate review engine.
 
 Codex reads the OCR plan and committed source through the application-owned
-`repodesk_review_source` tool. It exposes only paginated plan, file-list, blob-read
-and per-file diff operations, pinned to the task's base/head/merge-base commits.
+`repodesk_review_source` tool. It exposes only paginated plan, file-list, blob-read,
+per-file diff and PR commit-message operations, pinned to the task's
+base/head/merge-base commits. Commit messages come only from merge-base..head,
+without configurable Git commands or arbitrary revisions.
 Its review instructions
 require a checklist of every reviewable file, matching rules, merge-base diffs,
 reviewed/skipped coverage and explicit reasons for OCR exclusions and skipped files.
+They also require surrounding implementation, affected callers, contracts and
+relevant tests to be inspected as needed. Suspected regressions are compared with
+the merge-base implementation and checked against existing safeguards and
+counterexamples before reporting. Findings identify defects, documented rule or
+requirement violations, or explicitly advisory design concerns in changed code.
+Reading tests is evidence about intended behavior, not proof they passed.
 Coverage reporting is model-generated; the application validates preparation coverage
 and inline anchors, but does not independently prove the model inspected every file.
 OCR rules and repository content remain reference data, never authorization.
@@ -98,9 +106,13 @@ first model turn. Invalid preparation fails with `coding_review_preparation_fail
 Repository investigation does not require nested bubblewrap namespaces or weaker
 container restrictions. Remaining native tools retain the split read-only policy;
 there is no unrestricted fallback. The review prompt asks for a short, natural
-summary led by the outcome and up to 20 supported findings, ordered by severity
-and deduplicated. Finding bodies explain the trigger and impact in one short
-paragraph without repeating GitHub's location or the application's severity label.
+summary with separate Standards and Spec outcomes and up to 20 supported findings.
+Findings are grouped by axis, with severity ordering and deduplication within each
+axis. Finding bodies explain the evidence and impact in one short paragraph,
+without repeating GitHub's location or the application's axis/severity label.
+Severity reflects the supported impact and trigger; design heuristics remain
+advisory. If the shared 20-finding limit omits additional supported issues, the
+summary should disclose omissions per axis and retain both affected axes.
 Coverage follows the summary in a compact line, grouping exclusion/skip reasons
 and collapsing long path lists while retaining file-level accounting. Material
 gaps remain explicit; a review with no findings is scoped to the files reviewed.
@@ -110,6 +122,40 @@ diff lines and publishes a `COMMENT` review pinned to the head commit. Findings
 without a valid inline anchor remain in the summary. Inline placement examines up
 to 1,000 changed files and discloses incomplete placement coverage. A stale result
 cannot publish against a newer head.
+
+### Standards and Spec assessments
+
+Review criteria are adapted from Matt Pocock's
+[code-review skill](https://github.com/mattpocock/skills/blob/5beb35b040e3de97e54fa9e386d7e42d15c295c2/skills/engineering/code-review/SKILL.md),
+inspected on 2026-10-22. RepoDesk uses two passes in the existing read-only model
+session. These are not the source skill's isolated parallel subagents; native
+subagents remain disabled. OCR still supplies the validated file/rule plan.
+
+The **Standards** pass discovers applicable repository guidance, including
+`CODING_STANDARDS.md`, `CONTRIBUTING.md` and scoped `AGENTS.md`, and cites the rule
+for documented violations. It also checks correctness and security and considers
+design heuristics such as duplication, unclear names and misplaced responsibilities.
+Heuristic findings require changed-code evidence and a meaningful maintenance
+consequence, are labeled "Possible" and remain advisory. Documented repository
+choices override conflicting heuristics. Observations already enforced by configured
+formatters, linters or type checks are skipped without claiming those checks ran.
+
+The **Spec** pass looks for issue/spec references in pinned PR commit messages,
+explicit request paths and relevant committed specification files. Supplied issue
+contents and concrete PR acceptance criteria can provide requirements. The pass
+checks missing, partial, out-of-scope and incorrectly implemented requirements,
+citing the source for each finding. An issue number or vague PR title alone does
+not establish requirements. The source tool does not fetch linked issues; missing
+contents are disclosed. When no usable spec exists, the summary says **Spec** was
+skipped with "No spec available" while Standards continues.
+
+The model writes separate `## Standards` and `## Spec` sections with outcomes,
+finding counts and the most important concern within each axis. Conclusions are
+not merged or ranked across axes. New model output requires a `standards` or `spec`
+axis on each structured finding; publication preserves it in both inline comments
+and summary fallbacks. Historical findings without an axis remain readable and keep
+their existing labels. Criteria discovery, axis conclusions and coverage remain
+model-generated; deterministic checks do not establish their semantic accuracy.
 
 The page displays the existing App's actual bot handle, for example
 `@repodesk[bot]`; Review Bot does not register a second GitHub App.

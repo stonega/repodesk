@@ -1,5 +1,30 @@
 # Implementation evidence
 
+## Review Bot Standards and Spec assessments (2026-10-22)
+
+Review instructions now call for surrounding implementation, affected callers,
+contracts and relevant tests, with merge-base comparison for suspected regressions.
+Defect candidates need a supported trigger, reachable path and consequence, and are
+checked against existing safeguards. Criteria now follow the linked Matt Pocock
+code-review skill's separate Standards and Spec assessments: documented rules are
+cited, design heuristics are advisory and repository choices override them. Spec
+checks cite requirements and explicitly skip when no usable source exists. PR commit
+messages are available through the pinned read-only source tool for reference
+discovery. New finding output requires an axis; inline and unanchored publication
+preserve it, while historical results without axes remain compatible. The model
+uses two passes in one session, not isolated parallel subagents. Severity ordering,
+deduplication and omission disclosure apply within each axis. The affected user
+guide is now in English, and AGENTS.md records English-only documentation.
+
+Validation: lint, strict TypeScript, production build and **1,101 deterministic
+tests across 121 files** passed with disposable PostgreSQL. Axis labels and pinned
+source access have deterministic regression coverage. The offline proof passed
+with real OCR and the pinned Codex app-server in hardened Docker, covering new and
+resumed sessions, commit context, structured finding axes and credential protection.
+Assessment quality remains model-generated and unverified without live model
+acceptance. No dependency, migration, deployment, live model call or external
+message was added.
+
 ## Codex tasks isolate unrelated GitHub repository changes (2026-10-22)
 
 New coding authority snapshots retain the GitHub connection generation and target

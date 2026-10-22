@@ -428,6 +428,67 @@ class Runner implements LocalRunner {
     expect(f.runner.starts[0]?.development?.review?.action).toBe("review");
     expect(f.runner.pushes).toHaveLength(0);
   });
+  test("publication preserves both assessment axes for inline and unanchored findings", async () => {
+    const f = await fixture();
+    await f.accept();
+    await f.executor.advance(f.w.id, (await f.task()).id);
+    const t = await f.task();
+    const summary =
+      "## Standards\n1 advisory finding.\n\n## Spec\n2 requirements are incomplete.";
+    const finding = {
+      path: "src/api.ts",
+      line: 1,
+      side: "RIGHT" as const,
+      severity: "low" as const,
+      body: "Possible duplication: two update paths can drift apart.",
+    };
+    f.runner.states.set(t.attemptId, {
+      state: "succeeded",
+      result: {
+        ...analysis,
+        summary,
+        reviewFindings: [
+          { ...finding, axis: "standards" },
+          {
+            ...finding,
+            axis: "spec",
+            severity: "high",
+            body: "The requested permission check is absent.",
+          },
+          {
+            ...finding,
+            axis: "spec",
+            path: "src/missing.ts",
+            body: "The required error response is missing.",
+          },
+        ],
+      },
+    });
+    await f.executor.advance(f.w.id, t.id);
+    await f.executor.advance(f.w.id, t.id);
+    expect((await f.task()).state).toBe("completed");
+    const write = f.writes.find((r) => r.url.endsWith("/reviews"));
+    expect(JSON.stringify(write?.body)).toContain(
+      "src/missing.ts:1 — **Spec · low**: The required error response is missing.",
+    );
+    expect(write?.body).toMatchObject({
+      commit_id: head,
+      event: "COMMENT",
+      body: expect.stringContaining(summary),
+      comments: [
+        {
+          path: "src/api.ts",
+          body: expect.stringContaining("**Standards · low**"),
+        },
+        {
+          path: "src/api.ts",
+          body: expect.stringContaining("**Spec · high**"),
+        },
+      ],
+    });
+    expect(f.reviews).toHaveLength(1);
+    expect(f.runner.pushes).toHaveLength(0);
+  });
   test("tagged reviews use GitHub read access and never acquire a fix grant", async () => {
     const f = await fixture();
     await store.change(f.w.id, (w) => {
