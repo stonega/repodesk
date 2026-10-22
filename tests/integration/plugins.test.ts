@@ -338,7 +338,7 @@ const url = process.env.TEST_DATABASE_URL;
         expect(
           (await service.runner(await store.deployment(), workspaceId))
             .extensionVersion,
-        ).toBeUndefined();
+        ).toBeDefined();
       } finally {
         await server.stop(true);
       }
@@ -411,7 +411,7 @@ const url = process.env.TEST_DATABASE_URL;
             workspaceId,
           )
         ).extensionVersion,
-      ).toBeUndefined();
+      ).toBeDefined();
     });
     test("predefined Code Truth settings enforce grants, revisions and registered-tool collisions", async () => {
       const endpoint = `/api/admin/workspaces/${workspaceId}/plugins/code-truth`;
@@ -520,7 +520,7 @@ const url = process.env.TEST_DATABASE_URL;
       expect(
         (await service.runner(await store.deployment(), workspaceId))
           .extensionVersion,
-      ).toBeUndefined();
+      ).toBeDefined();
     });
 
     test("Code Truth generates IDs and persists descriptions without network settings", async () => {
@@ -771,7 +771,7 @@ const url = process.env.TEST_DATABASE_URL;
             empty.id,
           )
         ).extensionVersion,
-      ).toBeUndefined();
+      ).toBeDefined();
       expect((await store.deployment()) as object).not.toHaveProperty(
         "plugins",
       );

@@ -27,6 +27,7 @@ import { type GitHubMember, githubUsernameSchema } from "../github/app.ts";
 import { assignGitHubAccount } from "../github/member-account.ts";
 import { reconcileCharge, resolveDelivery } from "../jobs/recovery.ts";
 import { logQuery, readRuntimeLogs } from "../observability/logs.ts";
+import { ObsidianService } from "../obsidian/service.ts";
 import { requestDeletion } from "../privacy/service.ts";
 import type { ReviewService } from "../review-bot/service.ts";
 import { searchProviderIdSchema } from "../search/config.ts";
@@ -863,6 +864,58 @@ export function adminRoutes(
         "google",
       ),
     );
+  });
+  const obsidian = new ObsidianService(store);
+  app.get("/api/admin/workspaces/:id/plugins/obsidian", async (c) => {
+    const query = c.req.query();
+    return c.json(
+      await obsidian.view(c.get("session").admin, validId(c.req.param("id")), {
+        ...query,
+        ...(query.offset !== undefined ? { offset: Number(query.offset) } : {}),
+        ...(query.limit !== undefined ? { limit: Number(query.limit) } : {}),
+        ...(query.trash !== undefined ? { trash: query.trash === "true" } : {}),
+      }),
+    );
+  });
+  app.put("/api/admin/workspaces/:id/plugins/obsidian", async (c) =>
+    c.json(
+      await plugins.configureObsidian(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+        await c.req.json(),
+      ),
+    ),
+  );
+  app.get("/api/admin/workspaces/:id/plugins/obsidian/file", async (c) =>
+    c.json(
+      await obsidian.read(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+        c.req.query("path") ?? "",
+      ),
+    ),
+  );
+  app.post("/api/admin/workspaces/:id/plugins/obsidian/files", async (c) =>
+    c.json(
+      await obsidian.mutate(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+        await c.req.json(),
+      ),
+    ),
+  );
+  app.get("/api/admin/workspaces/:id/plugins/obsidian/export", async (c) => {
+    const zip = await obsidian.export(
+      c.get("session").admin,
+      validId(c.req.param("id")),
+    );
+    return new Response(Buffer.from(zip), {
+      headers: {
+        "content-type": "application/zip",
+        "content-disposition": 'attachment; filename="organization-vault.zip"',
+        "cache-control": "no-store",
+      },
+    });
   });
   app.put("/api/admin/workspaces/:id/plugins/google", async (c) =>
     c.json(

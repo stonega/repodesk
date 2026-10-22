@@ -102,7 +102,9 @@ tools or collide with another extension. Workspace grants also scope hooks: ungr
 extensions are never imported for that workspace. All eligible actors in a granted
 workspace receive these tools; these grants are separate from skill-declared tools.
 An empty saved panel registry overrides the manifest and enables none for that
-workspace. With no panel settings and no manifest, plugins remain off.
+workspace. With no panel settings and no manifest, no file extensions load.
+The built-in Obsidian organization vault is enabled by default independently of
+this registry; other built-ins retain their own connection and enablement rules.
 
 Run a factory afresh for every invocation; keep tenant-specific state inside it.
 Do not keep tenant data in module globals, which Node or extension dependencies may
@@ -210,6 +212,23 @@ The credential-free setup phase resolves OCR files/rules; Codex performs read-on
 analysis from that plan. Its application services own standing review policy, task grants,
 repository permissions, durable publication and GitHub progress comments. It does
 not broaden the executable file-extension API or expose an arbitrary GitHub write tool.
+
+## Predefined Obsidian
+
+The [managed Obsidian vault](../implementation/obsidian.md) is enabled by default
+for existing and new workspaces, without a manifest, account or desktop process.
+It registers `obsidian_query`, `obsidian_read` and `obsidian_write` plus a bundled
+skill. All active members may read shared organization notes; owners/admins may
+make requested internal note changes in interactive runs. The workspace's deployment
+operator manages files, import/export and enablement in the panel. These trusted
+application mutations do not grant external write, shell or desktop capabilities.
+Revisions, run/call deduplication, membership, execution fences and plugin generations
+protect persistence and delivery. Disabling retains files while revoking bot tools.
+
+Native Markdown, Canvas and Bases remain portable through ZIP snapshots. Obsidian
+renders their desktop features; RepoDesk does not run community plugins, evaluate
+Bases expressions or provide live synchronization. See the
+[user guide](../user/obsidian.md) and [runnable requests](../../examples/obsidian.http).
 
 ## Predefined Cloudflare
 

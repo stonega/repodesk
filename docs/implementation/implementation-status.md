@@ -1,5 +1,33 @@
 # Implementation evidence
 
+## Default-enabled Obsidian organization notes (2026-10-22)
+
+Existing and new workspaces receive an independent managed vault, enabled by
+default without credentials, a desktop process or a migration. Native Markdown,
+properties, aliases, tags, tasks, links/backlinks, templates, daily notes, Canvas
+and Bases files are available through three bundled Pi tools and the plugin panel.
+Saved summaries, modal editors, recoverable Trash, bounded ZIP import and native
+vault export share the current admin components. Desktop Obsidian renders native
+maps/views; live synchronization, Publish and community-plugin execution remain
+outside the implementation. See [behavior and limits](obsidian.md),
+[user guide](../user/obsidian.md) and [runnable examples](../../examples/obsidian.http).
+
+All active members can read shared notes; owner/admin mutations require an
+interactive run. Tenant, run, actor, execution-fence and current permission checks
+run inside the workspace transaction. Revisions protect concurrent edits, native
+validation makes imports atomic, and durable call receipts prevent duplicate
+daily-note appends. Disable/re-enable invalidates retained history, derived
+answers, skill-source reads and pending delivery. Workspace deletion purges notes.
+The added `fflate` dependency provides portable ZIP handling; no deployment
+configuration or filesystem mount is required.
+
+Validation: lint, strict TypeScript, production build, **1,139 deterministic tests
+across 125 files** with isolated PostgreSQL, and the Node runtime contract passed. Four focused
+browser journeys passed at 1280px/390px. Saved displays, New/Edit, import/Trash,
+loading/empty, pending/error recovery and both themes were visually inspected.
+Native desktop Obsidian rendering and live Telegram/model acceptance remain
+staging checks. No deployment, account connection or external message was performed.
+
 ## Direct skill saves and GitHub history (2026-10-22)
 
 Admin Skills recommends GitHub for instruction changes and history, with GitHub

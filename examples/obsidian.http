@@ -1,0 +1,56 @@
+@origin = http://localhost:3000
+@workspace = REPLACE_WITH_WORKSPACE_UUID
+@cookie = REPLACE_WITH_ADMIN_SESSION
+@csrf = REPLACE_WITH_CSRF_TOKEN
+
+### The built-in vault is enabled even without saved plugin settings.
+GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/obsidian
+Cookie: repodesk_session={{cookie}}
+
+### Save against the vaultRevision returned above (initially 0).
+POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/obsidian/files
+Cookie: repodesk_session={{cookie}}
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"action":"save","revision":0,"path":"Projects/Launch.md","content":"---\ntags: [project/launch]\nstatus: open\n---\n# Launch\n\n[[Home]]\n- [ ] Confirm the owner\n"}
+
+### Search shared notes and open tasks. Follow nextOffset for more results.
+GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/obsidian?tag=project&tasks=open&limit=25&offset=0
+Cookie: repodesk_session={{cookie}}
+
+### Read source and metadata.
+GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/obsidian/file?path=Projects%2FLaunch.md
+Cookie: repodesk_session={{cookie}}
+
+### Native daily-note append. Replace revision with the latest vaultRevision.
+POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/obsidian/files
+Cookie: repodesk_session={{cookie}}
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"action":"daily","revision":1,"date":"2026-10-22","content":"Discussed [[Projects/Launch]]."}
+
+### Export a ZIP snapshot; extract and open the folder as a vault in Obsidian.
+GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/obsidian/export
+Cookie: repodesk_session={{cookie}}
+
+### Atomic merge import; overwrite requires deliberate opt-in.
+POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/obsidian/files
+Cookie: repodesk_session={{cookie}}
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"action":"import","revision":2,"overwrite":false,"files":[{"path":"Decisions/Scope.md","content":"# Scope\n\nRelated: [[Projects/Launch]]."}]}
+
+### Disable bot tools without deleting notes. Use the common plugin revision.
+PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/obsidian
+Cookie: repodesk_session={{cookie}}
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"revision":0,"enabled":false}

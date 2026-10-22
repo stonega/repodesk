@@ -3513,3 +3513,62 @@ button.skill-source-name {
     right: max(16px, env(safe-area-inset-right));
   }
 }
+
+/* Shared organization vault: saved summaries stay separate from modal editors. */
+.obsidian-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.obsidian-card > p,
+.obsidian-note p {
+  margin: 0;
+}
+.obsidian-card .plugin-card-heading {
+  margin: 0;
+}
+.obsidian-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.obsidian-note {
+  padding-top: 1rem;
+  border-top: 1px solid var(--ui-border);
+  overflow-wrap: anywhere;
+}
+.obsidian-note .plugin-card-heading {
+  align-items: flex-start;
+}
+.obsidian-note .plugin-card-heading > div:first-child {
+  min-width: 0;
+}
+.obsidian-path {
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+.obsidian-filters {
+  display: flex;
+  align-items: end;
+  gap: 0.75rem;
+}
+.obsidian-search-field {
+  flex: 1;
+  margin: 0;
+}
+.obsidian-content pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.obsidian-editor {
+  font-family: monospace;
+  width: 100%;
+}
+@media (max-width: 600px) {
+  .obsidian-card > .plugin-card-heading {
+    align-items: flex-start;
+  }
+  .obsidian-actions {
+    flex-wrap: nowrap;
+  }
+}

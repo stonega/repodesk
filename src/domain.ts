@@ -355,6 +355,7 @@ export interface Approval {
   };
 }
 export interface Run {
+  obsidianRead?: { generation: number };
   searchProvider?: SearchPin;
   memoryContext?: MemoryContext;
   memoryMutation?: boolean;
@@ -533,6 +534,7 @@ export interface Audit {
   version?: number;
 }
 export interface Workspace {
+  obsidian?: import("./obsidian/config.ts").VaultState;
   googleUsers?: Record<string, GoogleUser>;
   /** Panel diagnostics accounting only; conversation text is not persisted here. */
   adminChecks?: {

@@ -35,6 +35,10 @@ import {
 } from "../google/config.ts";
 import { googleWorkspaceExtension } from "../google/extension.ts";
 import type { GoogleService } from "../google/service.ts";
+import { obsidianTools } from "../obsidian/config.ts";
+import { obsidianExtension } from "../obsidian/extension.ts";
+import { ObsidianService } from "../obsidian/service.ts";
+import { obsidianEnabled, obsidianGeneration } from "../obsidian/vault.ts";
 import { searchConsoleTool } from "../search-console/config.ts";
 import type { SearchConsoleService } from "../search-console/service.ts";
 import { audit } from "../workspaces/policy.ts";
@@ -133,6 +137,8 @@ export class PluginService {
       );
       const builtin = prior?.codeTruth;
       const names = new Set<string>(TOOLS);
+      // Reserve default built-ins even while disabled, so re-enabling is safe.
+      for (const name of obsidianTools) names.add(name);
       for (const plugin of googlePlugins)
         if (workspace.plugins?.google?.google?.settings.enabled)
           names.add(googleDefinitions[plugin].tool);
@@ -350,6 +356,14 @@ export class PluginService {
     const config = workspace.plugins?.codeTruth;
     const targets = config?.enabled ? targetsFor(config, workspaceId) : [];
     const builtins = [];
+    if (obsidianEnabled(workspace))
+      builtins.push(
+        obsidianExtension(
+          new ObsidianService(this.store),
+          workspaceId,
+          obsidianGeneration(workspace),
+        ),
+      );
     const suite = workspace.plugins?.google?.google;
     if (suite?.settings.enabled) {
       requireThat(this.google, "google_credentials_unavailable", 503);
@@ -429,6 +443,16 @@ export class PluginService {
       scoped.length || builtins.length
         ? ExtensionCatalog.fromSnapshot(scoped, builtins)
         : undefined,
+    );
+  }
+  async configureObsidian(admin: Admin, workspaceId: string, value: unknown) {
+    const workspace = await this.store.read(workspaceId);
+    authorizePlugins(admin, workspace);
+    return new ObsidianService(this.store).configure(
+      admin,
+      workspaceId,
+      value,
+      await this.entries(workspace),
     );
   }
 }

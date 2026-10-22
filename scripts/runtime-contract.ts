@@ -19,6 +19,11 @@ import { GitHubApp } from "../src/github/app.ts";
 import { githubExtension } from "../src/github/extension.ts";
 import { GitHubMetadata } from "../src/github/metadata.ts";
 import { GitHubPullRequests } from "../src/github/pull-requests.ts";
+import { exportVault } from "../src/obsidian/archive.ts";
+import { obsidianExtension } from "../src/obsidian/extension.ts";
+import { importArchive } from "../src/obsidian/import.ts";
+import { ObsidianService } from "../src/obsidian/service.ts";
+import { initialVault } from "../src/obsidian/vault.ts";
 import { extractWebPage, requestPage } from "../src/web-reader/service.ts";
 
 assert.ok(assistantSoul.includes("小伙伴"));
@@ -293,6 +298,30 @@ try {
     (await runner.run({ ...input, workspaceId })).text,
     "github ready",
   );
+  const vault = initialVault();
+  assert.equal(
+    importArchive(exportVault(vault)).files.length,
+    vault.files.length,
+  );
+  const obsidian = new ObsidianService(githubStore);
+  // No persisted run exists in this packaging probe; integration tests check the fence.
+  obsidian.executionFence = async () => 0;
+  const notesRunner = new PiRunner(
+    (_model, context) => {
+      assert.ok(context.systemPrompt?.includes("# RepoDesk Obsidian"));
+      for (const name of ["obsidian_query", "obsidian_read", "obsidian_write"])
+        assert.ok(context.tools?.some((tool) => tool.name === name));
+      return emit([{ type: "text", text: "obsidian ready" }], "stop");
+    },
+    ExtensionCatalog.fromSnapshot(
+      [],
+      [obsidianExtension(obsidian, workspaceId, 0)],
+    ),
+  );
+  assert.equal(
+    (await notesRunner.run({ ...input, workspaceId })).text,
+    "obsidian ready",
+  );
 } finally {
   await githubStore.pool.end();
 }
@@ -307,6 +336,7 @@ process.stdout.write(
     boundedTurns: true,
     piExtensions: true,
     githubDefaults: true,
+    obsidianDefaults: true,
     webReader: true,
   })}\n`,
 );

@@ -5,6 +5,7 @@ import type { CloudflarePage } from "../src/cloudflare/config.ts";
 import type { CodeTruthPage } from "../src/code-truth/config.ts";
 import type { CodingPage } from "../src/coding/config.ts";
 import { type GooglePage, googlePlugins } from "../src/google/config.ts";
+import type { ObsidianPage } from "../src/obsidian/config.ts";
 import type { ReviewPage } from "../src/review-bot/config.ts";
 import { Cloudflare } from "./cloudflare.tsx";
 import { CodeTruth } from "./code-truth.tsx";
@@ -13,6 +14,7 @@ import { GitHubConnection } from "./github.tsx";
 import { Google } from "./google.tsx";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
+import { Obsidian } from "./obsidian.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
 import { ReviewBot } from "./review-bot.tsx";
 import { SkeletonRows } from "./skeleton.tsx";
@@ -113,6 +115,7 @@ export function Plugins({
     reviewBot?: boolean;
     cloudflare?: boolean;
     google?: boolean;
+    obsidian?: boolean;
   }>({});
   const path = (suffix = "") =>
     `/admin/plugins${suffix}?workspace=${encodeURIComponent(workspaceId)}`;
@@ -145,6 +148,7 @@ export function Plugins({
     if (
       view === "catalog" ||
       (view === "installed" &&
+        pluginId !== "obsidian" &&
         pluginId !== "google" &&
         !googlePlugins.some((id) => id === pluginId) &&
         pluginId !== "code-truth" &&
@@ -164,9 +168,14 @@ export function Plugins({
       request<CodingPage>(`${endpoint}/coding`),
       request<ReviewPage>(`${endpoint}/review-bot`),
       request<CloudflarePage>(`${endpoint}/cloudflare`),
-    ]).then(([google, truth, coding, review, cloudflare]) => {
+      request<ObsidianPage>(`${endpoint}/obsidian`),
+    ]).then(([google, truth, coding, review, cloudflare, obsidian]) => {
       if (!active) return;
       setBuiltIns({
+        obsidian:
+          obsidian.status === "fulfilled"
+            ? obsidian.value.settings?.enabled
+            : undefined,
         google:
           google.status === "fulfilled"
             ? google.value.settings?.enabled
@@ -250,7 +259,8 @@ export function Plugins({
             Manage installed extensions and explore the Pi ecosystem.
           </p>
         </header>
-      ) : (pluginId !== "google" &&
+      ) : (pluginId !== "obsidian" &&
+          pluginId !== "google" &&
           !googlePlugins.some((id) => id === pluginId) &&
           pluginId !== "code-truth" &&
           pluginId !== "cloudflare" &&
@@ -321,6 +331,18 @@ export function Plugins({
               </p>
             )}
             <div className="plugin-catalog-grid">
+              <PluginCard
+                to={path("/obsidian")}
+                name="Obsidian"
+                summary="Shared organization notes, links, tasks and native vault files."
+                status={
+                  builtIns.obsidian === undefined
+                    ? "Built in"
+                    : builtIns.obsidian
+                      ? "Enabled"
+                      : "Disabled"
+                }
+              />
               <PluginCard
                 to={path("/code-truth")}
                 name="Code Truth"
@@ -446,6 +468,14 @@ export function Plugins({
           backTo={path()}
         />
       )}
+      {view === "installed" && pluginId === "obsidian" && (
+        <Obsidian
+          key={workspaceId}
+          request={request}
+          workspaceId={workspaceId}
+          backTo={path()}
+        />
+      )}
       {view === "installed" && pluginId === "code-truth" && (
         <CodeTruth
           request={request}
@@ -473,6 +503,7 @@ export function Plugins({
         <Coding request={request} workspaceId={workspaceId} backTo={path()} />
       )}
       {view === "installed" &&
+        pluginId !== "obsidian" &&
         pluginId !== "google" &&
         !googlePlugins.some((id) => id === pluginId) &&
         pluginId !== "code-truth" &&

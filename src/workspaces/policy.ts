@@ -14,6 +14,7 @@ import {
 import { repositoryAccess } from "../github/user-access.ts";
 import { googleReadAllowed } from "../google/policy.ts";
 import { memoryContextValid } from "../memory/state.ts";
+import { obsidianReadAllowed } from "../obsidian/policy.ts";
 import { searchConsoleReadAllowed } from "../search-console/policy.ts";
 import { validMemory } from "./conversation-memory.ts";
 export function eligible(w: Workspace, actor: string, admin = false) {
@@ -93,6 +94,7 @@ function allowedRun(
     eligible(w, run.actor) &&
     !w.settings.paused &&
     !run.cancelled &&
+    obsidianReadAllowed(w, run) &&
     githubReadAllowed(w, run) &&
     cloudflareReadAllowed(w, run) &&
     googleReadAllowed(w, run) &&

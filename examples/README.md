@@ -45,6 +45,9 @@ Copy both to `extensions/`, name the manifest `extensions.json`, then use
 [plugins.http](plugins.http) demonstrates the operator plugin registry API. The Plugins
 page manages installed-file registrations and grants; it does not upload or install code.
 
+[obsidian.http](obsidian.http) demonstrates the default-enabled organization vault,
+native file saves, daily notes, search, atomic import and ZIP export.
+
 - `code-truth.compose.yaml`: optional private local Code Truth service with a separate bearer secret and persistent indexes.
 - `code-truth.http`: configure repositories and check workspace index status through authenticated operator APIs.
 

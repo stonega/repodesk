@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { CloudflareConfig } from "../cloudflare/config.ts";
 import type { CodeTruthSettings } from "../code-truth/config.ts";
 import type { GoogleConfig, GoogleRegistration } from "../google/config.ts";
+import type { ObsidianSettings } from "../obsidian/config.ts";
 import type { SearchConsoleConfig } from "../search-console/config.ts";
 
 export const pluginSchema = z
@@ -25,6 +26,7 @@ export const pluginSaveSchema = z
 export type PluginSpec = z.infer<typeof pluginSchema>;
 export type PluginRecord = PluginSpec & { hash?: string };
 export interface PluginSettings {
+  obsidian?: ObsidianSettings;
   revision: number;
   entries: PluginRecord[];
   codeTruth?: CodeTruthSettings;

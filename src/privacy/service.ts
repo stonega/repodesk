@@ -45,6 +45,7 @@ export function sweep(w: Workspace, now = new Date()) {
     delete w.coding;
     delete w.chatModel;
     delete w.memory;
+    delete w.obsidian;
     w.messages = [];
     w.threads = [];
     w.instructions = [];

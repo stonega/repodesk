@@ -9,6 +9,7 @@ import {
 } from "../domain.ts";
 import { googleReadAllowed } from "../google/policy.ts";
 import { attachMemoryContext, memoryDependencies } from "../memory/state.ts";
+import { obsidianReadAllowed } from "../obsidian/policy.ts";
 import { searchConsoleReadAllowed } from "../search-console/policy.ts";
 import { validMemory } from "./conversation-memory.ts";
 
@@ -20,6 +21,7 @@ export function retainedSource(w: Workspace, source: Source, now = Date.now()) {
   return (
     (!origin ||
       (cloudflareReadAllowed(w, origin) &&
+        obsidianReadAllowed(w, origin) &&
         googleReadAllowed(w, origin) &&
         searchConsoleReadAllowed(w, origin))) &&
     Date.parse(source.expiresAt) > now &&

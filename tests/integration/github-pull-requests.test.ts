@@ -284,6 +284,9 @@ const url = process.env.TEST_DATABASE_URL;
       expect(tools.map((t) => t.function.name).sort()).toEqual(
         [
           "find_connected_repository",
+          "obsidian_query",
+          "obsidian_read",
+          "obsidian_write",
           "propose_github_issue",
           "propose_github_pull_request_action",
           "query_github_metadata",

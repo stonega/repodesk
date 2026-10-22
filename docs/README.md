@@ -35,6 +35,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [UI rules](design/ui-rules.md) | User design preferences, their scope, and how to apply and maintain them |
 | [First-run setup](design/first-run-setup.md) | Initial admin creation, bot onboarding, secrets and activation |
 | [LLM extensions / plugins](design/llm-extensions.md) | Existing Pi extension loading, headless compatibility, grants and recovery |
+| [Obsidian organization notes](implementation/obsidian.md) | Default-enabled managed vault, native note formats, shared access and import/export |
 | [Built-in web reader](implementation/web-reader.md) | Defuddle Markdown extraction, public network boundaries and durable reads |
 | [Google Search Console](implementation/search-console.md) | Personal Google connections and property selections, read-only search analytics, sitemaps and URL inspection |
 | [Google plugin](implementation/google-workspace.md) | Shared Web application, Telegram account connection and enablement for Docs, Sheets, Drive, Gmail and Search Console |
