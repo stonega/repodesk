@@ -29,7 +29,13 @@ export function createApp(
   updates = new ReleaseUpdates(store),
 ) {
   const app = new Hono();
-  const ingress = new Ingress(store, setup, github.users);
+  const ingress = new Ingress(
+    store,
+    setup,
+    github.users,
+    plugins.google,
+    plugins.searchConsole,
+  );
   app.use("*", (c, next) =>
     secureHeaders({
       xFrameOptions: c.req.path === "/mini" ? false : "SAMEORIGIN",
@@ -119,6 +125,28 @@ export function createApp(
     return c.text(
       "Return to Telegram and confirm your GitHub account there. This window can be closed.",
     );
+  });
+  app.get("/api/admin/google/callback", async (c) => {
+    c.header("Cache-Control", "no-store");
+    c.header("Referrer-Policy", "no-referrer");
+    requireThat(plugins.google, "google_credentials_unavailable", 503);
+    const state = c.req.query("state") ?? "";
+    const code = c.req.query("error") ? undefined : c.req.query("code");
+    requireThat(
+      state.length <= 200 && (!code || code.length <= 4096),
+      "invalid_request",
+    );
+    try {
+      await plugins.google.callback(state, code);
+      return c.text(
+        "Return to Telegram and confirm your Google account there. This window can be closed.",
+      );
+    } catch {
+      return c.text(
+        "Google sign-in did not complete or the link expired. Return to Telegram and send /google connect to try again.",
+        409,
+      );
+    }
   });
   if (encryptionKey)
     app.route("/mini-api", miniAppRoutes(store, setup, encryptionKey));

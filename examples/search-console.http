@@ -1,46 +1,20 @@
-@base = http://localhost:3000
-@cookie = repodesk_session=REPLACE_WITH_SESSION
-@csrf = REPLACE_WITH_CSRF
-@workspace = 00000000-0000-4000-8000-000000000001
-
-### Read redacted settings (workspace deployment operator)
-GET {{base}}/api/admin/workspaces/{{workspace}}/plugins/search-console
-Cookie: {{cookie}}
-
-# First connect the shared Google Web application using google-workspace.http.
-# Use the current plugin revision from GET; the examples below assume it is 2.
-
-### Discover properties available to the connected Google account.
-POST {{base}}/api/admin/workspaces/{{workspace}}/plugins/search-console/properties
-Cookie: {{cookie}}
-Origin: {{base}}
-X-CSRF-Token: {{csrf}}
-Content-Type: application/json
-
-{"revision": 2}
-
-### Select exact returned property identifiers; Google access is verified.
-# Enablement is controlled by the Google plugin, not this property helper.
-PUT {{base}}/api/admin/workspaces/{{workspace}}/plugins/search-console
-Cookie: {{cookie}}
-Origin: {{base}}
-X-CSRF-Token: {{csrf}}
-Content-Type: application/json
-
-{"revision": 2, "settings": {"enabled": true, "siteUrls": ["sc-domain:example.com"]}}
-
-### Clear the selected properties; Docs, Sheets, Drive and Gmail remain enabled.
-PUT {{base}}/api/admin/workspaces/{{workspace}}/plugins/search-console
-Cookie: {{cookie}}
-Origin: {{base}}
-X-CSRF-Token: {{csrf}}
-Content-Type: application/json
-
-{"revision": 3, "settings": {"enabled": true, "siteUrls": []}}
-
-### Telegram private chat examples (active workspace owner/admin)
-# List the Search Console properties available to this workspace.
-# Show clicks, impressions, CTR and average position for example.com during September 2026.
-# Show the top search queries for sc-domain:example.com from 2026-09-01 to 2026-09-07.
-# List sitemaps for example.com.
+# Search Console uses personal Google accounts. Configure the shared application
+# with google-workspace.http, then use the bot's private Telegram chat:
+# /google
+# Complete Google consent and confirm your account in Telegram.
+# /google properties
+# Select up to 20 properties, page with Previous/Next, and press Save.
+# /google status
+# /google disconnect
+#
+# Natural-language requests after selection:
+# List my selected Search Console properties.
+# Show clicks and impressions for example.com from 2026-10-01 to 2026-10-10.
+# List the sitemaps for example.com.
 # Inspect Google's indexed version of https://example.com/blog/intro.
+#
+# Tool inputs use the requesting member's saved selection:
+# query_search_console: {"resource":"properties"}
+# query_search_console: {"resource":"sitemaps","siteUrl":"sc-domain:example.com"}
+# query_search_console: {"resource":"analytics","siteUrl":"sc-domain:example.com","startDate":"2026-10-01","endDate":"2026-10-10"}
+# Admin Search Console credential and property endpoints are retired.

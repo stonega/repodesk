@@ -10,10 +10,12 @@ import type { Store } from "../db/repositories.ts";
 import type { GitHubIssues } from "../github/issues.ts";
 import type { GitHubPullRequests } from "../github/pull-requests.ts";
 import type { GitHubUsers } from "../github/users.ts";
+import type { GoogleService } from "../google/service.ts";
 import { MemoryService } from "../memory/service.ts";
 import { pruneRuntimeLogs, RuntimeLogger } from "../observability/logs.ts";
 import { sweep } from "../privacy/service.ts";
 import type { ReviewExecutor } from "../review-bot/executor.ts";
+import type { SearchConsoleService } from "../search-console/service.ts";
 import type { SetupService } from "../setup/service.ts";
 import { TelegramCommandMenu } from "../telegram/commands.ts";
 import { queuedRunFeedback } from "../telegram/feedback.ts";
@@ -79,6 +81,8 @@ export async function startWorker(
   review?: ReviewExecutor,
   githubPullRequests?: GitHubPullRequests,
   cloudflare?: CloudflareService,
+  google?: GoogleService,
+  searchConsole?: SearchConsoleService,
 ) {
   const boss = queue(url, store.log);
   await boss.start();
@@ -240,7 +244,13 @@ export async function startWorker(
   await maintain();
   const polling =
     setup.telegramTransport === "polling"
-      ? new TelegramPoller(store, setup, githubUsers).run(shutdown.signal)
+      ? new TelegramPoller(
+          store,
+          setup,
+          githubUsers,
+          google,
+          searchConsole,
+        ).run(shutdown.signal)
       : Promise.resolve();
   // Observe unexpected infrastructure failures immediately; normal poll failures retry in the loop.
   void polling.catch((error) =>

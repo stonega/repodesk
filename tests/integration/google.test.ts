@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { claim } from "../../src/admin/auth.ts";
 import { extensionToolExecution } from "../../src/agent/extension-execution.ts";
 import { ExtensionCatalog } from "../../src/agent/extensions.ts";
@@ -12,46 +13,37 @@ import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
 import type { Admin } from "../../src/domain.ts";
 import {
-  type GooglePlugin,
-  type GoogleRegistration,
   googleDefinitions,
   googlePlugins,
   googleScopes,
-  registrationScopes,
 } from "../../src/google/config.ts";
-import {
-  googleExtension,
-  googleWorkspaceExtension,
-} from "../../src/google/extension.ts";
+import { googleWorkspaceExtension } from "../../src/google/extension.ts";
 import { googleReadAllowed } from "../../src/google/policy.ts";
-import { GoogleService } from "../../src/google/service.ts";
+import { DeliveryWorker } from "../../src/jobs/delivery.ts";
 import { sweep } from "../../src/privacy/service.ts";
-import { searchConsoleReadAllowed } from "../../src/search-console/policy.ts";
-import { SearchConsoleService } from "../../src/search-console/service.ts";
-import { decrypt, hash } from "../../src/setup/credentials.ts";
+import { decrypt, encrypt, hash } from "../../src/setup/credentials.ts";
 import { SetupService } from "../../src/setup/service.ts";
-import { runAllowed } from "../../src/workspaces/policy.ts";
+import { TelegramPoller } from "../../src/telegram/polling.ts";
+import { Ingress } from "../../src/telegram/webhook.ts";
+import { revokeWork, runAllowed } from "../../src/workspaces/policy.ts";
 import { createRun } from "../../src/workspaces/service.ts";
-import { retainedSource } from "../../src/workspaces/threads.ts";
-import { workspace } from "../fixtures.ts";
+import { spec } from "../fixtures.ts";
+import { googleFixture } from "../google-fixture.ts";
 
 const rootUrl = process.env.TEST_DATABASE_URL;
-(rootUrl ? describe : describe.skip)("Google integrations", () => {
+(rootUrl ? describe : describe.skip)("Personal Google accounts", () => {
   const root = database(rootUrl ?? "postgres://unused@localhost/unused");
   const name = `repodesk_google_${randomUUID().replaceAll("-", "")}`;
-  const key = "ab".repeat(32);
-  let store: Store;
-  let admin: Admin;
-  let auth: { raw: string; csrf: string };
+  const key = "ab".repeat(32),
+    origin = "http://localhost:3000";
+  let store: Store, admin: Admin, auth: { raw: string; csrf: string };
+  let update = 4000;
   beforeAll(async () => {
     await root.query(`CREATE DATABASE ${name}`);
-    const url = new URL(rootUrl ?? "");
+    const url = new URL(rootUrl as string);
     url.pathname = `/${name}`;
     store = new Store(database(url.toString()));
     await migrate(store.pool);
-    await store.pool.query(
-      "UPDATE deployment SET data=jsonb_set(data,'{active}','true')",
-    );
     auth = await claim(store.pool, "googleoperator", "google fixture password");
     admin = {
       id: (
@@ -62,574 +54,604 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       username: "googleoperator",
       operator: true,
     };
+    const d = await store.deployment();
+    d.credentials.bot = encrypt(key, "bot", "fixture-bot");
+    d.active = true;
+    d.bot = { id: "999", username: "repodesk", visibleAll: true };
+    await store.saveDeployment(store.pool, d);
   });
   afterAll(async () => {
     await store?.pool.end();
     await root.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
     await root.end();
   });
-  async function fixture(actor = "101", chat = actor) {
-    const w = workspace();
-    w.operatorId = admin.id;
-    const run = createRun(
-      w,
-      actor,
-      "Read Google data",
-      chat,
-      0,
-      "gpt-4.1-mini",
-    );
-    run.status = "running";
-    await store.pool.query(
-      "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",
-      [w.id, admin.id, JSON.stringify(w)],
-    );
-    const requests: { url: URL; init: RequestInit }[] = [];
-    const controls = {
-      scopes: true,
-      grantedScopes: undefined as string | undefined,
-      refreshToken: true,
-      refreshFailure: false,
-      beforeRead: undefined as (() => Promise<void>) | undefined,
-      beforeToken: undefined as (() => Promise<void>) | undefined,
-    };
-    const service = new GoogleService(
-      store,
-      key,
-      "http://localhost:3000",
-      async (rawUrl, init) => {
-        const url = new URL(rawUrl);
-        requests.push({ url, init });
-        expect(init.redirect).toBe("error");
-        if (url.hostname === "oauth2.googleapis.com") {
-          const params = new URLSearchParams(String(init.body));
-          const plugin = (["google", ...googlePlugins] as const).find(
-            (p) =>
-              params.get("client_id") === `${p}.apps.googleusercontent.com`,
-          ) as GoogleRegistration;
-          expect(plugin).toBeDefined();
-          await controls.beforeToken?.();
-          if (
-            controls.refreshFailure &&
-            params.get("grant_type") === "refresh_token"
-          )
-            return Response.json(
-              {
-                error: "invalid_grant",
-                error_description: "private upstream detail",
-              },
-              { status: 400 },
-            );
-          return Response.json({
-            access_token: `access-${plugin}`,
-            ...(controls.refreshToken
-              ? { refresh_token: `refresh-${plugin}` }
-              : {}),
-            expires_in: 3600,
-            token_type: "Bearer",
-            scope: controls.scopes
-              ? (controls.grantedScopes ??
-                `openid email ${registrationScopes(plugin).join(" ")}`)
-              : "openid email",
-          });
-        }
-        if (url.hostname === "openidconnect.googleapis.com")
-          return Response.json({
-            sub: "fixture-account",
-            email: "fixture@example.test",
-            email_verified: true,
-          });
-        await controls.beforeRead?.();
-        expect(init.method).toBe("GET");
-        expect(new Headers(init.headers).get("authorization")).toStartWith(
-          "Bearer access-",
-        );
-        if (url.hostname === "docs.googleapis.com")
-          return Response.json({
-            documentId: "doc1",
-            title: "Fixture",
-            tabs: [
-              {
-                tabProperties: { tabId: "t1", title: "Main" },
-                documentTab: {
-                  body: {
-                    content: [
-                      {
-                        paragraph: {
-                          elements: [
-                            { textRun: { content: "Document content" } },
-                          ],
-                        },
-                      },
-                    ],
-                  },
-                },
-                childTabs: [
-                  {
-                    tabProperties: { tabId: "child", title: "Nested" },
-                    documentTab: {
-                      body: {
-                        content: [
-                          {
-                            table: {
-                              tableRows: [
-                                {
-                                  tableCells: [
-                                    {
-                                      content: [
-                                        {
-                                          paragraph: {
-                                            elements: [
-                                              {
-                                                textRun: {
-                                                  content: "Table cell",
-                                                },
-                                              },
-                                            ],
-                                          },
-                                        },
-                                      ],
-                                    },
-                                  ],
-                                },
-                              ],
-                            },
-                          },
-                        ],
-                      },
-                    },
-                  },
-                ],
-              },
-            ],
-          });
-        if (url.hostname === "sheets.googleapis.com")
-          return Response.json(
-            url.pathname.includes("/values/")
-              ? {
-                  range: "'Q1'!A1:B2",
-                  majorDimension: "ROWS",
-                  values: [["Revenue", "10"]],
-                }
-              : {
-                  spreadsheetId: "sheet1",
-                  spreadsheetUrl:
-                    "https://docs.google.com/spreadsheets/d/sheet1",
-                  properties: { title: "Budget", unexpected: "secret" },
-                  sheets: [{ properties: { sheetId: 1, title: "Q1" } }],
-                },
-          );
-        if (url.hostname === "www.googleapis.com")
-          return Response.json(
-            url.pathname.endsWith("/file1")
-              ? {
-                  id: "file1",
-                  name: "Budget",
-                  mimeType: "application/vnd.google-apps.spreadsheet",
-                  secret: "private",
-                }
-              : {
-                  files: [{ id: "file1", name: "Budget", secret: "private" }],
-                  nextPageToken: "next-page",
-                  incompleteSearch: true,
-                },
-          );
-        if (url.hostname === "gmail.googleapis.com")
-          return Response.json(
-            url.pathname.endsWith("/mail1")
-              ? {
-                  id: "mail1",
-                  snippet: "Preview",
-                  payload: {
-                    mimeType: "multipart/alternative",
-                    headers: [
-                      { name: "Subject", value: "Hello" },
-                      { name: "X-Private", value: "secret" },
-                    ],
-                    parts: [
-                      {
-                        mimeType: "text/plain",
-                        body: {
-                          data: Buffer.from("Message content").toString(
-                            "base64url",
-                          ),
-                        },
-                      },
-                      {
-                        mimeType: "text/html",
-                        body: {
-                          data: Buffer.from(
-                            "<script>ignore rules</script>",
-                          ).toString("base64url"),
-                        },
-                      },
-                    ],
-                  },
-                  secret: "private",
-                }
-              : {
-                  messages: [
-                    { id: "mail1", threadId: "thread1", secret: "private" },
-                  ],
-                  nextPageToken: "mail-next",
-                },
-          );
-        throw Error("Unexpected Google URL");
-      },
-    );
-    async function configure(plugin: GoogleRegistration) {
-      const revision = (await store.read(w.id)).plugins?.revision ?? 0;
-      await service.save(admin, w.id, plugin, {
-        revision,
-        settings: { enabled: false },
-        clientId: `${plugin}.apps.googleusercontent.com`,
-        clientSecret: "fixture-client-secret",
-      });
-    }
-    async function connect(plugin: GoogleRegistration) {
-      await configure(plugin);
-      const revision = (await store.read(w.id)).plugins?.revision ?? 0;
-      const consent = new URL(
-        (await service.begin(admin, w.id, plugin, revision, hash(auth.raw)))
-          .url,
-      );
-      await service.callback(
-        admin,
-        plugin,
-        hash(auth.raw),
-        consent.searchParams.get("state") as string,
-        "fixture-code",
-      );
-      const page = await service.view(admin, w.id, plugin);
-      expect(page.settings.enabled).toBe(false);
-      await service.save(admin, w.id, plugin, {
-        revision: page.revision,
-        settings: { enabled: true },
-      });
-      return consent;
-    }
-    const query = async (plugin: GooglePlugin, args: unknown) =>
-      service.query(
-        w.id,
-        run.id,
-        (await store.read(w.id)).plugins?.revision ?? 0,
-        plugin,
-        args,
-      );
-    return { w, run, service, requests, controls, configure, connect, query };
+  function must<T>(value: T): NonNullable<T> {
+    if (value === undefined || value === null)
+      throw Error("missing fixture value");
+    return value;
   }
-  test("one Google registration authorizes all five services and shares tokens and disconnect", async () => {
-    const f = await fixture();
-    const consent = await f.connect("google");
+  const fixture = (actor = "101", chat = actor) =>
+    googleFixture(store, admin, key, actor, chat);
+  function message(text: string, actor = 202, chat = actor) {
+    return {
+      update_id: ++update,
+      message: {
+        message_id: update,
+        date: 1,
+        from: { id: actor, is_bot: false, first_name: "Fixture" },
+        chat: {
+          id: chat,
+          type: chat === actor ? ("private" as const) : ("supergroup" as const),
+        },
+        text,
+        entities: [
+          {
+            type: "bot_command",
+            offset: 0,
+            length: text.split(" ")[0]?.length ?? 0,
+          },
+        ],
+      },
+    };
+  }
+  function callback(data: string, actor = 202) {
+    return {
+      update_id: ++update,
+      callback_query: {
+        id: String(update),
+        from: { id: actor, is_bot: false, first_name: "Fixture" },
+        message: {
+          message_id: update,
+          date: 1,
+          chat: { id: actor, type: "private" as const },
+        },
+        data,
+      },
+    };
+  }
+  test("one client and callback serve every member, with separately encrypted account grants", async () => {
+    const f = await fixture("202");
+    const consent = await f.connect();
+    await f.connect("101");
     expect(consent.searchParams.get("scope")).toBe(
       `openid email ${googleScopes.join(" ")}`,
     );
     expect(consent.searchParams.get("redirect_uri")).toBe(
-      "http://localhost:3000/api/admin/google/callback",
+      `${origin}/api/admin/google/callback`,
     );
-    expect(consent.searchParams.get("include_granted_scopes")).toBe("true");
-    const current = await store.read(f.w.id);
-    expect(Object.keys(current.plugins?.google ?? {})).toEqual(["google"]);
-    const revision = current.plugins?.revision ?? 0;
-    const searchRequests: string[] = [];
-    const search = new SearchConsoleService(
-      store,
-      key,
-      async (url, init) => {
-        searchRequests.push(url);
-        expect(new Headers(init.headers).get("authorization")).toBe(
-          "Bearer access-google",
-        );
-        if (url.endsWith("/sites"))
-          return Response.json({
-            siteEntry: [
-              {
-                siteUrl: "sc-domain:example.test",
-                permissionLevel: "siteOwner",
-              },
-              {
-                siteUrl: "sc-domain:unverified.test",
-                permissionLevel: "siteUnverifiedUser",
-              },
-            ],
-          });
-        if (url.endsWith("/sitemaps")) return Response.json({ sitemap: [] });
-        return Response.json({
-          siteUrl: "sc-domain:example.test",
-          permissionLevel: "siteOwner",
-        });
+    expect(consent.searchParams.get("code_challenge_method")).toBe("S256");
+    const w = await store.read(f.w.id);
+    const c = w.googleUsers?.["202"]?.connection;
+    expect(c?.account).toBe("202@example.test");
+    expect(w.googleUsers?.["101"]?.connection?.account).toBe(
+      "101@example.test",
+    );
+    expect(w.plugins?.google?.google?.connection).toBeUndefined();
+    expect(
+      decrypt(key, `google-user:${w.id}:202:refresh`, c?.refreshToken ?? ""),
+    ).toBe("refresh-202");
+    expect(() =>
+      decrypt(key, `google-user:${w.id}:101:refresh`, c?.refreshToken ?? ""),
+    ).toThrow();
+    await f.query("gmail", { resource: "messages" });
+    expect(
+      new Headers(f.requests.at(-1)?.init.headers).get("authorization"),
+    ).toBe("Bearer access-202");
+    await store.change(w.id, (current) => f.service.disconnect(current, "101"));
+    await f.query("google-drive", { resource: "files" });
+    expect(
+      (await store.read(w.id)).plugins?.google?.google?.settings.enabled,
+    ).toBe(true);
+    expect(
+      googleReadAllowed(
+        await store.read(w.id),
+        must((await store.read(w.id)).runs[0]),
+      ),
+    ).toBe(true);
+  });
+  test("Telegram starts consent once, browser return needs no panel session, and Telegram confirms the actual account", async () => {
+    const f = await fixture("202");
+    await f.configure();
+    const notices: string[] = [];
+    const setup = new SetupService(store, key, origin, () => ({
+      async call<T>(method: string, body: Record<string, unknown> = {}) {
+        if (method === "answerCallbackQuery") notices.push(String(body.text));
+        return {} as T;
       },
+    }));
+    const ingress = new Ingress(store, setup, undefined, f.service);
+    await store.pool.query(
+      "INSERT INTO telegram_selections(actor,workspace_id) VALUES('202',$1) ON CONFLICT(actor) DO UPDATE SET workspace_id=$1",
+      [f.w.id],
+    );
+    const event = message("/google");
+    await ingress.accept(event);
+    const w = await store.read(f.w.id);
+    const url = new URL(w.deliveries.at(-1)?.buttons?.[0]?.[0]?.url ?? "");
+    const state = url.searchParams.get("state") as string;
+    expect(await ingress.accept(event)).toEqual({ duplicate: true });
+    expect((await store.read(w.id)).googleUsers?.["202"]?.flow?.stateHash).toBe(
+      hash(state),
+    );
+    const plugins = new PluginService(
+      store,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       f.service,
     );
-    expect(
-      (await search.properties(admin, f.w.id, hash(auth.raw), { revision }))
-        .items,
-    ).toHaveLength(1);
-    await search.save(
-      admin,
-      f.w.id,
-      {
-        revision,
-        settings: { enabled: true, siteUrls: ["sc-domain:example.test"] },
-      },
-      [],
-      hash(auth.raw),
+    const app = createApp(store, setup, origin, plugins);
+    const response = await app.request(
+      `/api/admin/google/callback?state=${state}&code=202`,
     );
-    await f.query("google-docs", { documentId: "doc1" });
-    await f.query("google-sheets", {
-      resource: "spreadsheet",
-      spreadsheetId: "sheet1",
-    });
-    await f.query("google-drive", { resource: "files" });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.text()).toContain("confirm your Google account");
+    expect(
+      (await store.read(w.id)).googleUsers?.["202"]?.connection,
+    ).toBeUndefined();
+    await expect(f.query("gmail", { resource: "messages" })).rejects.toThrow(
+      "google_not_connected",
+    );
+    const data = (await store.read(w.id)).deliveries.at(-1)?.buttons?.[0]?.[0]
+      ?.callback_data as string;
+    expect(Buffer.byteLength(data)).toBeLessThanOrEqual(64);
+    await ingress.accept(callback(data, 101));
+    expect(
+      (await store.read(w.id)).googleUsers?.["202"]?.connection,
+    ).toBeUndefined();
+    const other = await fixture("202");
+    await store.pool.query(
+      "UPDATE telegram_selections SET workspace_id=$1 WHERE actor='202'",
+      [other.w.id],
+    );
+    const confirmation = callback(data);
+    await ingress.accept(confirmation);
+    expect(
+      (await store.read(w.id)).googleUsers?.["202"]?.connection?.account,
+    ).toBe("202@example.test");
+    expect((await store.read(other.w.id)).googleUsers).toBeUndefined();
+    await ingress.accept(confirmation);
+    expect(notices.at(-1)).toContain("expired or is unavailable");
+    expect(
+      (await store.read(w.id)).audit.filter(
+        (a) => a.action === "google.connected",
+      ),
+    ).toHaveLength(1);
+    expect(
+      (await app.request(`/api/admin/google/callback?state=${state}&code=202`))
+        .status,
+    ).toBe(409);
     await f.query("gmail", { resource: "messages" });
-    const next = (await store.read(f.w.id)).plugins?.revision ?? 0;
-    await search.query(f.w.id, f.run.id, next, {
-      resource: "sitemaps",
-      siteUrl: "sc-domain:example.test",
-    });
-    expect(searchRequests.some((url) => url.endsWith("/sitemaps"))).toBe(true);
-    expect(
-      f.requests.filter((r) => r.url.hostname === "oauth2.googleapis.com"),
-    ).toHaveLength(1);
-    const combined = googleWorkspaceExtension(f.service, search, f.w.id, next);
-    expect(combined.id).toBe("google");
-    expect(combined.tools.sort()).toEqual(
-      [
-        ...googlePlugins.map((p) => googleDefinitions[p].tool),
-        "query_search_console",
-      ].sort(),
-    );
-    const saved = await store.read(f.w.id);
-    const readRun = saved.runs.find((r) => r.id === f.run.id);
-    if (!readRun) throw Error("missing run");
-    expect(googleReadAllowed(saved, readRun)).toBe(true);
-    expect(searchConsoleReadAllowed(saved, readRun)).toBe(true);
-    await store.change(f.w.id, (w) => {
-      const m = w.members.find((m) => m.id === "101");
-      if (m) m.role = "member";
-    });
-    const before = searchRequests.length;
-    await expect(
-      search.query(f.w.id, f.run.id, next, {
-        resource: "sitemaps",
-        siteUrl: "sc-domain:example.test",
-      }),
-    ).rejects.toThrow("run_revoked");
-    expect(searchRequests).toHaveLength(before);
-    await store.change(f.w.id, (w) => {
-      const m = w.members.find((m) => m.id === "101");
-      if (m) m.role = "owner";
-    });
-    await f.service.disconnect(admin, f.w.id, "google", next);
-    const disconnected = await store.read(f.w.id);
-    expect(googleReadAllowed(disconnected, readRun)).toBe(false);
-    expect(searchConsoleReadAllowed(disconnected, readRun)).toBe(false);
-    for (const plugin of googlePlugins)
-      await expect(
-        f.query(
-          plugin,
-          plugin === "google-docs"
-            ? { documentId: "doc1" }
-            : plugin === "google-sheets"
-              ? { resource: "spreadsheet", spreadsheetId: "sheet1" }
-              : plugin === "google-drive"
-                ? { resource: "files" }
-                : { resource: "messages" },
-        ),
-      ).rejects.toThrow("run_revoked");
+    const before = f.requests.length;
+    await ingress.accept(message("/google connect", 202, -100100));
+    expect(f.requests.length).toBe(before);
   });
-  test("consolidation reuses the existing Web client without inheriting product tokens or old scopes", async () => {
-    const f = await fixture();
-    await f.connect("gmail");
-    const before = await store.read(f.w.id);
-    const legacy = await f.service.view(admin, f.w.id, "google");
-    expect(legacy.legacy).toBe(true);
-    expect(legacy.clientId).toBe("gmail.apps.googleusercontent.com");
-    expect(legacy.settings.enabled).toBe(true);
-    expect(legacy.status).toBe("not_connected");
-    await f.service.save(admin, f.w.id, "google", {
-      revision: legacy.revision,
-      settings: { enabled: false },
-    });
-    const saved = await store.read(f.w.id);
-    expect(Object.keys(saved.plugins?.google ?? {})).toEqual(["google"]);
-    expect(saved.plugins?.google?.google?.connection).toBeUndefined();
-    expect(saved.plugins?.entries).toEqual(before.plugins?.entries);
-    expect(
-      decrypt(
-        key,
-        `google:${f.w.id}:google:client:gmail.apps.googleusercontent.com`,
-        saved.plugins?.google?.google?.clientSecret ?? "",
-      ),
-    ).toBe("fixture-client-secret");
-    expect(saved.plugins?.searchConsole?.credential).toBeUndefined();
-    expect(saved.plugins?.searchConsole?.settings.siteUrls).toEqual([]);
-    const consent = new URL(
-      (
-        await f.service.begin(
-          admin,
-          f.w.id,
-          "google",
-          saved.plugins?.revision ?? 0,
-          hash(auth.raw),
-        )
-      ).url,
+  test("polling passes Google services to the same Telegram account controls", async () => {
+    const f = await fixture("202");
+    await f.configure();
+    await store.pool.query(
+      "INSERT INTO telegram_selections(actor,workspace_id) VALUES('202',$1) ON CONFLICT(actor) DO UPDATE SET workspace_id=$1",
+      [f.w.id],
     );
-    // Fixture returns only the legacy Gmail scope for this reused client.
-    await expect(
-      f.service.callback(
-        admin,
-        "google",
-        hash(auth.raw),
-        consent.searchParams.get("state") ?? "",
-        "code",
-      ),
-    ).rejects.toThrow("google_scope_required");
-    await expect(
-      f.service.save(admin, f.w.id, "gmail", {
-        revision: saved.plugins?.revision,
-        settings: { enabled: false },
-      }),
-    ).rejects.toThrow("google_plugin_merged");
-  });
-  test("the merged switch can disable legacy Search Console without an OAuth client", async () => {
-    const f = await fixture();
-    await store.change(f.w.id, (w) => {
-      w.plugins = {
-        revision: 1,
-        entries: [],
-        searchConsole: {
-          credential: "legacy-encrypted-key",
-          settings: { enabled: true, siteUrls: ["sc-domain:example.test"] },
+    const d = await store.deployment();
+    d.credentials.bot = encrypt(key, "bot", "fixture-bot");
+    await store.saveDeployment(store.pool, d);
+    let sent = false;
+    const setup = new SetupService(
+      store,
+      key,
+      origin,
+      () => ({
+        async call<T>(method: string) {
+          if (method === "getWebhookInfo") return { url: "" } as T;
+          if (method === "getUpdates" && !sent) {
+            sent = true;
+            return [message("/google")] as T;
+          }
+          return [] as T;
         },
-      };
-    });
-    const before = await f.service.view(admin, f.w.id, "google");
-    expect(before.legacy).toBe(true);
-    expect(before.settings.enabled).toBe(true);
-    const after = await f.service.save(admin, f.w.id, "google", {
-      revision: before.revision,
-      settings: { enabled: false },
-    });
-    expect(after.settings.enabled).toBe(false);
-    expect(after.clientSecretConfigured).toBe(false);
-    const saved = await store.read(f.w.id);
-    expect(saved.plugins?.searchConsole?.credential).toBeUndefined();
-    expect(saved.plugins?.google?.google?.connection).toBeUndefined();
+      }),
+      "polling",
+    );
+    await new TelegramPoller(store, setup, undefined, f.service).pollOnce(
+      new AbortController().signal,
+    );
+    expect((await store.read(f.w.id)).googleUsers?.["202"]?.flow).toBeDefined();
   });
-  test("shared consent rejects a missing Search Console scope and replayed returns", async () => {
-    const f = await fixture();
-    await f.configure("google");
-    const revision = (await store.read(f.w.id)).plugins?.revision ?? 0;
-    f.controls.grantedScopes = `openid email ${googleScopes.slice(0, -1).join(" ")}`;
-    const consent = new URL(
-      (await f.service.begin(admin, f.w.id, "google", revision, hash(auth.raw)))
-        .url,
-    );
-    const state = consent.searchParams.get("state") ?? "";
+  test("regular members read only their account; groups, schedules, unconnected members and stale revisions fail before provider reads", async () => {
+    const f = await fixture("202");
+    await f.connect();
+    await f.query("google-docs", { documentId: "doc1" });
+    const before = f.requests.length;
+    for (const [actor, chat, scheduled] of [
+      ["101", "101", false],
+      ["202", "-100100", false],
+      ["202", "202", true],
+    ] as const) {
+      const run = await store.change(f.w.id, (w) => {
+        const r = createRun(w, actor, "Read Gmail", chat, 0, "gpt-4.1-mini");
+        r.status = "running";
+        if (scheduled) {
+          const id = randomUUID();
+          w.workflows.push({
+            id,
+            version: 1,
+            owner: actor,
+            status: "active",
+            spec: { ...spec(w), chatId: chat },
+            versions: [],
+          });
+          r.workflowId = id;
+        }
+        expect(runAllowed(w, r)).toBe(true);
+        return r;
+      });
+      await expect(
+        f.query("gmail", { resource: "messages" }, run.id),
+      ).rejects.toThrow(
+        actor === "101"
+          ? "google_not_connected"
+          : "google_private_request_required",
+      );
+    }
     await expect(
-      f.service.callback(admin, "google", hash(auth.raw), state, "code"),
-    ).rejects.toThrow("google_scope_required");
-    expect((await f.service.view(admin, f.w.id, "google")).status).toBe(
-      "not_connected",
-    );
-    const requests = f.requests.length;
+      f.service.query(f.w.id, f.run.id, 0, "gmail", { resource: "messages" }),
+    ).rejects.toThrow();
+    expect(f.requests.length).toBe(before);
+  });
+  test("missing scopes, offline tokens, verified identity and denied consent never create an account", async () => {
+    for (const mode of ["scope", "refresh", "identity", "denied"] as const) {
+      const f = await fixture("202");
+      await f.configure();
+      f.controls.scopes = mode !== "scope";
+      f.controls.refreshToken = mode !== "refresh";
+      f.controls.identityVerified = mode !== "identity";
+      const consent = await f.begin();
+      await expect(
+        f.service.callback(
+          consent.searchParams.get("state") as string,
+          mode === "denied" ? undefined : "202",
+        ),
+      ).rejects.toThrow();
+      expect(
+        (await store.read(f.w.id)).googleUsers?.["202"]?.connection,
+      ).toBeUndefined();
+      expect(
+        (await store.read(f.w.id)).googleUsers?.["202"]?.flow,
+      ).toBeUndefined();
+    }
+  });
+  test("state and confirmation expire, reject replay, and fence client, membership, domain and bot changes", async () => {
+    for (const mode of [
+      "expired",
+      "client",
+      "member",
+      "bot",
+      "domain",
+    ] as const) {
+      const f = await fixture("202");
+      await f.configure();
+      const url = await f.begin();
+      const state = url.searchParams.get("state") as string;
+      if (mode === "expired")
+        await store.change(f.w.id, (w) => {
+          must(must(w.googleUsers?.["202"]).flow).expiresAt = new Date(
+            0,
+          ).toISOString();
+        });
+      if (mode === "member")
+        await store.change(f.w.id, (w) => {
+          must(w.members.find((m) => m.id === "202")).active = false;
+          revokeWork(w);
+        });
+      if (mode === "client")
+        await f.service.save(admin, f.w.id, "google", {
+          revision: 1,
+          settings: { enabled: true },
+          clientSecret: "replacement",
+        });
+      if (mode === "bot" || mode === "domain") {
+        const d = await store.deployment();
+        if (mode === "bot") must(d.bot).id = "998";
+        else d.site = { domain: "changed.example.test", revision: 1 };
+        await store.saveDeployment(store.pool, d);
+      }
+      await expect(f.service.callback(state, "202")).rejects.toThrow();
+      if (mode === "bot" || mode === "domain") {
+        const d = await store.deployment();
+        must(d.bot).id = "999";
+        delete d.site;
+        await store.saveDeployment(store.pool, d);
+      }
+      expect(
+        (await store.read(f.w.id)).googleUsers?.["202"]?.connection,
+      ).toBeUndefined();
+    }
+    const f = await fixture("202");
+    await f.configure();
+    const url = await f.begin();
+    const state = url.searchParams.get("state") as string;
+    await f.service.callback(state, "202");
+    await store.change(f.w.id, async (w) => {
+      expect(
+        await f.service.confirm(w, "202", "999", hash(state), false),
+      ).toContain("rejected");
+    });
     await expect(
-      f.service.callback(admin, "google", hash(auth.raw), state, "code"),
+      store.change(f.w.id, (w) =>
+        f.service.confirm(w, "202", "999", hash(state), true),
+      ),
     ).rejects.toThrow("google_authorization_expired");
-    expect(f.requests).toHaveLength(requests);
   });
-  test("shared refresh serializes different Google tools and preserves the plugin revision", async () => {
-    const f = await fixture();
-    await f.connect("google");
-    const revision = (await store.read(f.w.id)).plugins?.revision;
+  test("refresh is serialized per account, revision-neutral, and discarded after disconnect", async () => {
+    const f = await fixture("202");
+    await f.connect();
     await store.change(f.w.id, (w) => {
-      const c = w.plugins?.google?.google?.connection;
-      if (c) c.expiresAt = new Date(0).toISOString();
+      must(w.googleUsers?.["202"]?.connection).expiresAt = new Date(
+        0,
+      ).toISOString();
     });
-    let release = () => {};
-    let started = () => {};
-    const ready = new Promise<void>((resolve) => {
-      started = resolve;
-    });
-    const blocked = new Promise<void>((resolve) => {
+    const revision = (await store.read(f.w.id)).plugins?.revision;
+    let release!: () => void, entered!: () => void;
+    const held = new Promise<void>((resolve) => {
       release = resolve;
     });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
     f.controls.beforeToken = async () => {
-      started();
-      await blocked;
+      entered();
+      await held;
     };
-    const reading = f.query("gmail", { resource: "messages" });
-    await ready;
+    const first = f.query("gmail", { resource: "messages" });
+    await started;
     await expect(
       f.query("google-drive", { resource: "files" }),
     ).rejects.toThrow("google_refresh_pending");
     release();
-    await reading;
+    await first;
     expect((await store.read(f.w.id)).plugins?.revision).toBe(revision);
-    await f.query("google-drive", { resource: "files" });
-    expect(
-      f.requests.filter((r) => r.url.hostname === "oauth2.googleapis.com"),
-    ).toHaveLength(2);
+    f.controls.beforeToken = async () => {
+      await store.change(f.w.id, (w) => f.service.disconnect(w, "202"));
+    };
+    await store.change(f.w.id, (w) => {
+      must(w.googleUsers?.["202"]?.connection).expiresAt = new Date(
+        0,
+      ).toISOString();
+    });
+    await expect(f.query("gmail", { resource: "messages" })).rejects.toThrow();
+    expect((await store.read(f.w.id)).googleUsers?.["202"]).toBeUndefined();
   });
-  test("four standalone connections request separate scopes, encrypt tokens and preserve each other", async () => {
-    const f = await fixture();
-    for (const plugin of googlePlugins) {
-      const url = await f.connect(plugin);
-      expect(url.searchParams.get("scope")).toBe(
-        `openid email ${registrationScopes(plugin).join(" ")}`,
-      );
-      expect(url.searchParams.get("access_type")).toBe("offline");
-      expect(url.searchParams.get("code_challenge_method")).toBe("S256");
-      expect(url.searchParams.get("include_granted_scopes")).toBe("false");
-      expect(url.searchParams.get("redirect_uri")).toBe(
-        `http://localhost:3000/api/admin/google/${plugin}/callback`,
-      );
-      expect(googleExtension(f.service, f.w.id, 1, plugin).tools).toEqual([
-        googleDefinitions[plugin].tool,
-      ]);
-    }
-    const saved = await store.read(f.w.id);
-    expect(Object.keys(saved.plugins?.google ?? {})).toHaveLength(4);
-    for (const plugin of googlePlugins) {
-      const config = saved.plugins?.google?.[plugin];
-      expect(config?.settings.enabled).toBe(true);
-      expect(
-        JSON.stringify(await f.service.view(admin, f.w.id, plugin)),
-      ).not.toContain("fixture-client-secret");
-      expect(config?.connection?.accessToken).not.toContain("access-");
-      expect(
-        decrypt(
-          key,
-          `google:${f.w.id}:${plugin}:access`,
-          config?.connection?.accessToken ?? "",
-        ),
-      ).toBe(`access-${plugin}`);
-      expect(() =>
-        decrypt(
-          key,
-          `google:other-workspace:${plugin}:access`,
-          config?.connection?.accessToken ?? "",
-        ),
-      ).toThrow();
-    }
-    await f.service.disconnect(
-      admin,
-      f.w.id,
-      "gmail",
-      saved.plugins?.revision ?? 0,
+  test("refresh failure requires reconnect and suppressed upstream details", async () => {
+    const f = await fixture("202");
+    await f.connect();
+    await store.change(f.w.id, (w) => {
+      must(w.googleUsers?.["202"]?.connection).expiresAt = new Date(
+        0,
+      ).toISOString();
+    });
+    f.controls.refreshFailure = true;
+    await expect(f.query("gmail", { resource: "messages" })).rejects.toThrow(
+      "google_reconnect_required",
     );
     expect(
-      (await store.read(f.w.id)).plugins?.google?.["google-docs"]?.settings
-        .enabled,
+      (await store.read(f.w.id)).googleUsers?.["202"]?.connection
+        ?.reconnectRequired,
     ).toBe(true);
+  });
+  test("retained and derived evidence remains private to the same actor and is revoked during reads or after disconnect", async () => {
+    const f = await fixture("202");
+    await f.connect();
+    await f.query("gmail", { resource: "messages" });
+    const w = await store.read(f.w.id),
+      original = must(w.runs[0]);
+    expect(googleReadAllowed(w, original)).toBe(true);
+    expect(googleReadAllowed(w, original, "998")).toBe(false);
+    const source = {
+      id: "derived-source",
+      runId: original.id,
+      role: "assistant" as const,
+      chatId: "202",
+      topicId: 0,
+      author: "assistant",
+      text: "private",
+      at: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+      directed: true,
+    };
+    const derived = {
+      ...original,
+      id: randomUUID(),
+      googleRead: undefined,
+      sources: [source],
+    };
+    expect(googleReadAllowed(w, derived)).toBe(true);
+    expect(
+      googleReadAllowed(w, { ...derived, actor: "101", chatId: "101" }),
+    ).toBe(false);
+    f.controls.beforeRead = () =>
+      store.change(w.id, (current) => f.service.disconnect(current, "202"));
+    await expect(f.query("gmail", { resource: "messages" })).rejects.toThrow();
+    const current = await store.read(w.id);
+    expect(googleReadAllowed(current, derived)).toBe(false);
+    expect(runAllowed(current, must(current.runs[0]))).toBe(false);
+    expect(current.runs[0]?.result).toBeUndefined();
+  });
+  test("admin APIs configure only the client, preserve blank secrets and enforce Origin, CSRF, operator, tenant and revision boundaries", async () => {
+    const f = await fixture("202");
+    await f.connect();
+    const plugins = new PluginService(
+      store,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      f.service,
+    );
+    const app = createApp(
+      store,
+      new SetupService(store, key, origin, () => ({
+        async call<T>() {
+          return {} as T;
+        },
+      })),
+      origin,
+      plugins,
+    );
+    const endpoint = `/api/admin/workspaces/${f.w.id}/plugins/google`;
+    const headers = {
+      cookie: `repodesk_session=${auth.raw}`,
+      origin,
+      "x-csrf-token": auth.csrf,
+      "content-type": "application/json",
+    };
+    expect((await app.request(endpoint)).status).toBe(401);
+    const data = await (await app.request(endpoint, { headers })).json();
+    expect(data.clientSecretConfigured).toBe(true);
+    for (const secret of [
+      "clientSecret",
+      "account",
+      "accessToken",
+      "refreshToken",
+      "googleUsers",
+    ])
+      expect(data).not.toHaveProperty(secret);
+    expect(JSON.stringify(data)).not.toContain("202@example.test");
+    const body = JSON.stringify({ revision: 1, settings: { enabled: true } });
+    expect(
+      (
+        await app.request(endpoint, {
+          method: "PUT",
+          headers: { ...headers, origin: "https://foreign.test" },
+          body,
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await app.request(endpoint, {
+          method: "PUT",
+          headers: { ...headers, "x-csrf-token": "bad" },
+          body,
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (await app.request(endpoint, { method: "PUT", headers, body })).status,
+    ).toBe(200);
+    expect(
+      (await app.request(endpoint, { method: "PUT", headers, body })).status,
+    ).toBe(409);
+    expect(
+      (await store.read(f.w.id)).googleUsers?.["202"]?.connection,
+    ).toBeDefined();
+    for (const path of [
+      `${endpoint}/connect`,
+      `${endpoint}/disconnect`,
+      endpoint.replace("google", "search-console/properties"),
+    ])
+      expect(
+        (await app.request(path, { method: "POST", headers, body: "{}" }))
+          .status,
+      ).toBeGreaterThanOrEqual(400);
+    await expect(
+      f.service.view({ ...admin, id: randomUUID() }, f.w.id),
+    ).rejects.toThrow("access_denied");
+    await expect(
+      f.service.view({ ...admin, operator: false }, f.w.id),
+    ).rejects.toThrow("operator_required");
+    await f.service.save(admin, f.w.id, "google", {
+      revision: 2,
+      settings: { enabled: true },
+      clientSecret: "replacement",
+    });
+    expect((await store.read(f.w.id)).googleUsers).toBeUndefined();
+  });
+  test("legacy clients can be reused but old shared tokens never authorize personal reads; migration erases them", async () => {
+    const f = await fixture("202");
+    await store.change(f.w.id, (w) => {
+      w.plugins = {
+        revision: 1,
+        entries: [],
+        google: {
+          gmail: {
+            settings: { enabled: true },
+            clientId: "legacy.apps.googleusercontent.com",
+            clientSecret: encrypt(
+              key,
+              `google:${w.id}:gmail:client:legacy.apps.googleusercontent.com`,
+              "old-secret",
+            ),
+            connection: {
+              id: "old",
+              subject: "old",
+              account: "old@example.test",
+              accessToken: "old-access",
+              refreshToken: "old-refresh",
+              expiresAt: new Date(Date.now() + 60000).toISOString(),
+            },
+          },
+        },
+        searchConsole: {
+          settings: { enabled: true, siteUrls: ["sc-domain:example.test"] },
+          credential: "old-service-key",
+        },
+      };
+    });
+    expect((await f.service.view(admin, f.w.id)).legacy).toBe(true);
+    await expect(f.query("gmail", { resource: "messages" })).rejects.toThrow(
+      "google_not_configured",
+    );
+    await store.pool.query(
+      await readFile("migrations/020_google_personal_accounts.sql", "utf8"),
+    );
+    await store.pool.query(
+      await readFile("migrations/020_google_personal_accounts.sql", "utf8"),
+    );
     expect(
       (await store.read(f.w.id)).plugins?.google?.gmail?.connection,
     ).toBeUndefined();
+    expect((await store.read(f.w.id)).plugins?.searchConsole).toBeUndefined();
+    const page = await f.service.save(admin, f.w.id, "google", {
+      revision: 1,
+      settings: { enabled: true },
+    });
+    expect(page.clientId).toBe("legacy.apps.googleusercontent.com");
+    expect(
+      decrypt(
+        key,
+        `google:${f.w.id}:google:client:${page.clientId}`,
+        must((await store.read(f.w.id)).plugins?.google?.google).clientSecret,
+      ),
+    ).toBe("old-secret");
+    expect((await store.read(f.w.id)).googleUsers).toBeUndefined();
+  });
+  test("membership revocation and workspace purge erase personal tokens and pending flows", async () => {
+    const f = await fixture("202");
+    await f.connect();
+    await f.begin();
+    await store.change(f.w.id, (w) => {
+      must(w.members.find((m) => m.id === "202")).active = false;
+      revokeWork(w);
+    });
+    expect((await store.read(f.w.id)).googleUsers?.["202"]).toBeUndefined();
+    await f.connect("101");
+    await store.change(f.w.id, (w) => {
+      w.deletion = {
+        requestedAt: new Date().toISOString(),
+        providerState: "pending",
+      };
+      sweep(w);
+    });
+    expect((await store.read(f.w.id)).googleUsers).toBeUndefined();
   });
   test("bounded read tools handle tabs, ranges, filename escaping and Gmail MIME without arbitrary API access", async () => {
     const f = await fixture();
-    for (const plugin of googlePlugins) await f.connect(plugin);
+    await f.connect();
     expect(
       JSON.stringify(await f.query("google-docs", { documentId: "doc1" })),
     ).toContain("Table cell");
@@ -704,321 +726,9 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       }),
     ).rejects.toThrow();
   });
-  test("members, group chats, scheduled runs, disabled plugins and stale revisions cannot read", async () => {
-    for (const [actor, chat, workflow] of [
-      ["202", "202", false],
-      ["101", "-100100", false],
-      ["101", "101", true],
-    ] as const) {
-      const f = await fixture(actor, chat);
-      await f.connect("gmail");
-      if (workflow)
-        await store.change(f.w.id, (w) => {
-          const r = w.runs[0];
-          if (r) r.workflowId = randomUUID();
-        });
-      const before = f.requests.length;
-      await expect(
-        f.query("gmail", { resource: "messages" }),
-      ).rejects.toThrow();
-      expect(f.requests).toHaveLength(before);
-    }
-    const f = await fixture();
-    await f.connect("gmail");
-    await expect(
-      f.service.query(f.w.id, f.run.id, 1, "gmail", { resource: "messages" }),
-    ).rejects.toThrow("extension_configuration_changed");
-    const view = await f.service.view(admin, f.w.id, "gmail");
-    await f.service.save(admin, f.w.id, "gmail", {
-      revision: view.revision,
-      settings: { enabled: false },
-    });
-    await expect(f.query("gmail", { resource: "messages" })).rejects.toThrow(
-      "google_not_connected",
-    );
-  });
-  test("OAuth state is actor/session/plugin bound, one use, expiring and fenced by revision/disconnect", async () => {
-    const f = await fixture();
-    await f.configure("gmail");
-    const begin = async () =>
-      new URL(
-        (
-          await f.service.begin(
-            admin,
-            f.w.id,
-            "gmail",
-            (
-              await f.service.view(admin, f.w.id, "gmail")
-            ).revision,
-            hash(auth.raw),
-          )
-        ).url,
-      ).searchParams.get("state") as string;
-    const state = await begin();
-    const before = f.requests.length;
-    await expect(
-      f.service.callback(admin, "google-docs", hash(auth.raw), state, "code"),
-    ).rejects.toThrow();
-    await expect(
-      f.service.callback(admin, "gmail", "other-session", state, "code"),
-    ).rejects.toThrow();
-    expect(f.requests).toHaveLength(before);
-    await f.service.callback(admin, "gmail", hash(auth.raw), state, "code");
-    await expect(
-      f.service.callback(admin, "gmail", hash(auth.raw), state, "code"),
-    ).rejects.toThrow("google_authorization_expired");
-    const late = await begin();
-    await f.service.disconnect(
-      admin,
-      f.w.id,
-      "gmail",
-      (await f.service.view(admin, f.w.id, "gmail")).revision,
-    );
-    await expect(
-      f.service.callback(admin, "gmail", hash(auth.raw), late, "code"),
-    ).rejects.toThrow("google_authorization_expired");
-    const expired = await begin();
-    await store.change(f.w.id, (w) => {
-      const flow = w.plugins?.google?.gmail?.flow;
-      if (flow) flow.expiresAt = new Date(0).toISOString();
-    });
-    await expect(
-      f.service.callback(admin, "gmail", hash(auth.raw), expired, "code"),
-    ).rejects.toThrow("google_authorization_expired");
-  });
-  test("missing product scope, absent offline token and denied consent fail closed", async () => {
-    for (const mode of ["scopes", "refreshToken", "denied"] as const) {
-      const f = await fixture();
-      await f.configure("gmail");
-      if (mode !== "denied") f.controls[mode] = false;
-      const state = new URL(
-        (await f.service.begin(admin, f.w.id, "gmail", 1, hash(auth.raw))).url,
-      ).searchParams.get("state") as string;
-      await expect(
-        f.service.callback(
-          admin,
-          "gmail",
-          hash(auth.raw),
-          state,
-          mode === "denied" ? undefined : "code",
-        ),
-      ).rejects.toThrow();
-      expect(
-        (await store.read(f.w.id)).plugins?.google?.gmail?.connection,
-      ).toBeUndefined();
-      expect(
-        (await store.read(f.w.id)).plugins?.google?.gmail?.flow,
-      ).toBeUndefined();
-    }
-  });
-  test("replacing credentials disconnects one plugin, blank saves retain tokens and conflicts preserve saved state", async () => {
-    const f = await fixture();
-    await f.connect("gmail");
-    await f.connect("google-docs");
-    const old = await store.read(f.w.id);
-    await f.service.save(admin, f.w.id, "gmail", {
-      revision: old.plugins?.revision,
-      settings: { enabled: true },
-    });
-    expect(
-      (await store.read(f.w.id)).plugins?.google?.gmail?.connection,
-    ).toEqual(old.plugins?.google?.gmail?.connection);
-    await expect(
-      f.service.save(admin, f.w.id, "gmail", {
-        revision: old.plugins?.revision,
-        settings: { enabled: false },
-      }),
-    ).rejects.toThrow("version_conflict");
-    await f.service.save(admin, f.w.id, "gmail", {
-      revision: (old.plugins?.revision ?? 0) + 1,
-      settings: { enabled: true },
-      clientSecret: "replacement-secret",
-    });
-    const updated = await store.read(f.w.id);
-    expect(updated.plugins?.google?.gmail?.connection).toBeUndefined();
-    expect(updated.plugins?.google?.gmail?.settings.enabled).toBe(false);
-    expect(updated.plugins?.google?.["google-docs"]).toEqual(
-      old.plugins?.google?.["google-docs"],
-    );
-  });
-  test("refresh is durable, serialized, revision-neutral and discarded after disconnect", async () => {
-    const f = await fixture();
-    await f.connect("gmail");
-    await store.change(f.w.id, (w) => {
-      const c = w.plugins?.google?.gmail?.connection;
-      if (c) c.expiresAt = new Date(0).toISOString();
-    });
-    let release!: () => void;
-    let started!: () => void;
-    const entered = new Promise<void>((resolve) => {
-      started = resolve;
-    });
-    const wait = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    f.controls.beforeToken = async () => {
-      started();
-      await wait;
-    };
-    const revision = (await store.read(f.w.id)).plugins?.revision;
-    const first = f.query("gmail", { resource: "messages" });
-    await entered;
-    await expect(f.query("gmail", { resource: "messages" })).rejects.toThrow(
-      "google_refresh_pending",
-    );
-    release();
-    await first;
-    expect((await store.read(f.w.id)).plugins?.revision).toBe(revision);
-    expect(
-      f.requests.filter(
-        (r) =>
-          new URLSearchParams(String(r.init.body)).get("grant_type") ===
-          "refresh_token",
-      ),
-    ).toHaveLength(1);
-    await store.change(f.w.id, (w) => {
-      const c = w.plugins?.google?.gmail?.connection;
-      if (c) c.expiresAt = new Date(0).toISOString();
-    });
-    f.controls.beforeToken = async () => {
-      await f.service.disconnect(admin, f.w.id, "gmail", revision ?? 0);
-    };
-    await expect(f.query("gmail", { resource: "messages" })).rejects.toThrow();
-    expect(
-      (await store.read(f.w.id)).plugins?.google?.gmail?.connection,
-    ).toBeUndefined();
-  });
-  test("failed refresh requires reconnect and omits upstream errors", async () => {
-    const f = await fixture();
-    await f.connect("gmail");
-    f.controls.refreshFailure = true;
-    await store.change(f.w.id, (w) => {
-      const c = w.plugins?.google?.gmail?.connection;
-      if (c) c.expiresAt = new Date(0).toISOString();
-    });
-    await expect(f.query("gmail", { resource: "messages" })).rejects.toThrow(
-      "google_reconnect_required",
-    );
-    expect((await f.service.view(admin, f.w.id, "gmail")).status).toBe(
-      "reconnect_required",
-    );
-  });
-  test("revocation during provider reads suppresses evidence, delivery and derived sources", async () => {
-    const f = await fixture();
-    await f.connect("gmail");
-    await f.query("gmail", { resource: "messages" });
-    const current = await store.read(f.w.id);
-    const readRun = current.runs[0];
-    if (!readRun) throw Error("missing run");
-    expect(googleReadAllowed(current, readRun)).toBe(true);
-    const source = {
-      id: randomUUID(),
-      role: "assistant" as const,
-      runId: readRun.id,
-      actor: "101",
-      chatId: "101",
-      topicId: 0,
-      text: "Mail result",
-      author: "assistant",
-      directed: true,
-      at: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 86400000).toISOString(),
-    };
-    const derived = {
-      ...readRun,
-      id: randomUUID(),
-      sources: [source],
-      googleRead: undefined,
-    };
-    current.runs.push(derived);
-    expect(
-      googleReadAllowed(current, { ...derived, actor: "202", chatId: "202" }),
-    ).toBe(false);
-    const config = current.plugins?.google?.gmail;
-    if (config) config.settings.enabled = false;
-    expect(runAllowed(current, readRun)).toBe(false);
-    expect(googleReadAllowed(current, derived)).toBe(false);
-    expect(retainedSource(current, source)).toBe(false);
-    f.controls.beforeRead = async () => {
-      await f.service.disconnect(
-        admin,
-        f.w.id,
-        "gmail",
-        (await f.service.view(admin, f.w.id, "gmail")).revision,
-      );
-    };
-    await expect(f.query("gmail", { resource: "messages" })).rejects.toThrow();
-  });
-  test("admin routes enforce tenant/operator, Origin, CSRF, redaction and version checks", async () => {
-    const f = await fixture();
-    await f.configure("gmail");
-    const plugins = new PluginService(
-      store,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      f.service,
-    );
-    const app = createApp(
-      store,
-      new SetupService(store, key, "http://localhost:3000"),
-      "http://localhost:3000",
-      plugins,
-    );
-    const endpoint = `/api/admin/workspaces/${f.w.id}/plugins/google`;
-    const headers = {
-      cookie: `repodesk_session=${auth.raw}`,
-      origin: "http://localhost:3000",
-      "x-csrf-token": auth.csrf,
-      "content-type": "application/json",
-    };
-    expect((await app.request(endpoint)).status).toBe(401);
-    const response = await app.request(endpoint, { headers });
-    expect(response.status).toBe(200);
-    const data = await response.json();
-    expect(data.clientSecretConfigured).toBe(true);
-    expect(data.clientSecret).toBeUndefined();
-    expect(JSON.stringify(data)).not.toContain("fixture-client-secret");
-    const body = JSON.stringify({
-      revision: 1,
-      settings: { enabled: false },
-    });
-    expect(
-      (
-        await app.request(endpoint, {
-          method: "PUT",
-          headers: { ...headers, origin: "https://other.test" },
-          body,
-        })
-      ).status,
-    ).toBe(403);
-    expect(
-      (
-        await app.request(endpoint, {
-          method: "PUT",
-          headers: { ...headers, "x-csrf-token": "bad" },
-          body,
-        })
-      ).status,
-    ).toBe(403);
-    expect(
-      (await app.request(endpoint, { method: "PUT", headers, body })).status,
-    ).toBe(200);
-    expect(
-      (await app.request(endpoint, { method: "PUT", headers, body })).status,
-    ).toBe(409);
-    await expect(
-      f.service.view({ ...admin, id: randomUUID() }, f.w.id, "gmail"),
-    ).rejects.toThrow("access_denied");
-    await expect(
-      f.service.view({ ...admin, operator: false }, f.w.id, "gmail"),
-    ).rejects.toThrow("operator_required");
-  });
   test("Pi registers one Google plugin with four account tools and reuses a duplicate completed read", async () => {
     const f = await fixture();
-    await f.connect("google");
+    await f.connect();
     const revision = (await store.read(f.w.id)).plugins?.revision ?? 0;
     const input: AgentInput = {
       workspaceId: f.w.id,
@@ -1062,7 +772,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         await tool.execute("read-once", { resource: "messages" }, input.signal),
       ).toEqual(result);
       expect(f.requests).toHaveLength(before + 1);
-      await f.service.disconnect(admin, f.w.id, "google", revision);
+      await store.change(f.w.id, (w) => f.service.disconnect(w, "101"));
       await expect(
         tool.execute("read-once", { resource: "messages" }, input.signal),
       ).rejects.toThrow();
@@ -1070,58 +780,78 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       await host?.close();
     }
   });
-  test("the shared callback route connects once and returns to the merged page", async () => {
-    const f = await fixture();
-    await f.configure("google");
-    const plugins = new PluginService(
-      store,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      f.service,
-    );
-    const app = createApp(
-      store,
-      new SetupService(store, key, "http://localhost:3000"),
-      "http://localhost:3000",
-      plugins,
-    );
-    const headers = {
-      cookie: `repodesk_session=${auth.raw}`,
-      origin: "http://localhost:3000",
-      "x-csrf-token": auth.csrf,
-      "content-type": "application/json",
-    };
-    const endpoint = `/api/admin/workspaces/${f.w.id}/plugins/google`;
-    const start = await app.request(`${endpoint}/connect`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ revision: 1 }),
-    });
-    expect(start.status).toBe(200);
-    const consent = new URL((await start.json()).url);
-    const callback = new URL(consent.searchParams.get("redirect_uri") ?? "");
-    callback.search = new URLSearchParams({
-      state: consent.searchParams.get("state") ?? "",
-      code: "fixture-code",
-    }).toString();
-    const result = await app.request(callback.toString(), { headers });
-    expect(result.status).toBe(302);
-    expect(result.headers.get("location")).toBe(
-      `/admin/plugins/google?workspace=${f.w.id}&google=connected`,
-    );
-    expect(result.headers.get("referrer-policy")).toBe("no-referrer");
-    const count = f.requests.length;
-    const replay = await app.request(callback.toString(), { headers });
-    expect(replay.headers.get("location")).toContain("google=failed");
-    expect(f.requests).toHaveLength(count);
-    expect(
-      (await f.service.view(admin, f.w.id, "google")).settings.enabled,
-    ).toBe(false);
+  test("queued connection prompts recheck flow, member, configuration and bot before mock delivery", async () => {
+    let sends = 0;
+    const setup = new SetupService(store, key, origin, () => ({
+      async call<T>() {
+        sends++;
+        return { message_id: 700 } as T;
+      },
+    }));
+    for (const mode of [
+      "valid",
+      "expired",
+      "disconnected",
+      "revision",
+      "member",
+      "bot",
+    ] as const) {
+      const f = await fixture("202");
+      await f.configure();
+      const url = await f.begin();
+      await f.service.callback(url.searchParams.get("state") as string, "202");
+      const id = (await store.read(f.w.id)).deliveries.at(-1)?.id ?? "";
+      await store.change(f.w.id, (w) => {
+        if (mode === "expired")
+          must(must(w.googleUsers?.["202"]).flow).expiresAt = new Date(
+            0,
+          ).toISOString();
+        if (mode === "disconnected") f.service.disconnect(w, "202");
+        if (mode === "revision" && w.plugins) w.plugins.revision++;
+        if (mode === "member") {
+          must(w.members.find((m) => m.id === "202")).active = false;
+          revokeWork(w);
+        }
+      });
+      if (mode === "bot") {
+        const d = await store.deployment();
+        must(d.bot).id = "998";
+        await store.saveDeployment(store.pool, d);
+      }
+      const before = sends;
+      await new DeliveryWorker(store, setup).send(f.w.id, id);
+      expect(sends - before).toBe(mode === "valid" ? 1 : 0);
+      if (mode === "bot") {
+        const d = await store.deployment();
+        must(d.bot).id = "999";
+        await store.saveDeployment(store.pool, d);
+      }
+    }
   });
-  test("Google saves preserve legacy file grants and tool collisions are rejected in both directions", async () => {
+  test("a site address change after browser consent invalidates Telegram confirmation", async () => {
+    const f = await fixture("202");
+    await f.configure();
+    const url = await f.begin();
+    const state = url.searchParams.get("state") as string;
+    await f.service.callback(state, "202");
+    const d = await store.deployment();
+    d.site = { domain: "changed.example.test", revision: 1 };
+    await store.saveDeployment(store.pool, d);
+    try {
+      await expect(
+        store.change(f.w.id, (w) =>
+          f.service.confirm(w, "202", "999", hash(state), true),
+        ),
+      ).rejects.toThrow("google_authorization_expired");
+      expect(
+        (await store.read(f.w.id)).googleUsers?.["202"]?.connection,
+      ).toBeUndefined();
+    } finally {
+      delete d.site;
+      await store.saveDeployment(store.pool, d);
+    }
+  });
+  test("file grants are preserved and Google tool collisions are rejected in both directions", async () => {
     const f = await fixture();
     const legacy: PluginRecord = {
       id: "legacy-plugin",
@@ -1135,16 +865,15 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     await f.service.save(
       admin,
       f.w.id,
-      "gmail",
+      "google",
       {
         revision: 0,
-        settings: { enabled: false },
-        clientId: "gmail.apps.googleusercontent.com",
+        settings: { enabled: true },
+        clientId: "google.apps.googleusercontent.com",
         clientSecret: "fixture-secret",
       },
       [legacy],
     );
-    await f.connect("gmail");
     const plugins = new PluginService(
       store,
       undefined,
@@ -1154,32 +883,22 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       undefined,
       f.service,
     );
-    const before = await store.read(f.w.id);
-    expect(before.plugins?.entries).toEqual([legacy]);
+    expect((await store.read(f.w.id)).plugins?.entries).toEqual([legacy]);
     await expect(
       plugins.save(admin, f.w.id, {
-        revision: before.plugins?.revision,
+        revision: 1,
         entries: [{ ...legacy, enabled: true }],
       }),
     ).rejects.toThrow("extension_tool_collision");
     await store.change(f.w.id, (w) => {
-      if (w.plugins?.entries[0]) w.plugins.entries[0].enabled = true;
+      const entry = w.plugins?.entries[0];
+      if (entry) entry.enabled = true;
     });
     await expect(
-      f.service.save(admin, f.w.id, "gmail", {
-        revision: before.plugins?.revision,
+      f.service.save(admin, f.w.id, "google", {
+        revision: 1,
         settings: { enabled: true },
       }),
     ).rejects.toThrow("extension_tool_collision");
-  });
-  test("workspace deletion purges Google credentials with the plugin registry", async () => {
-    const f = await fixture();
-    await f.connect("gmail");
-    const current = await store.read(f.w.id);
-    current.deletion = {
-      requestedAt: new Date().toISOString(),
-    } as NonNullable<typeof current.deletion>;
-    sweep(current);
-    expect(current.plugins).toBeUndefined();
   });
 });

@@ -25,6 +25,8 @@ export function pollingErrorCode(error: unknown) {
 }
 
 import type { GitHubUsers } from "../github/users.ts";
+import type { GoogleService } from "../google/service.ts";
+import type { SearchConsoleService } from "../search-console/service.ts";
 
 export class TelegramPoller {
   private id = randomUUID();
@@ -34,8 +36,16 @@ export class TelegramPoller {
     private store: Store,
     private setup: SetupService,
     githubUsers?: GitHubUsers,
+    google?: GoogleService,
+    searchConsole?: SearchConsoleService,
   ) {
-    this.ingress = new Ingress(store, setup, githubUsers);
+    this.ingress = new Ingress(
+      store,
+      setup,
+      githubUsers,
+      google,
+      searchConsole,
+    );
   }
 
   async pollOnce(signal: AbortSignal): Promise<void> {

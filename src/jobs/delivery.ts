@@ -4,7 +4,9 @@ import type { Sql } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import { type Delivery, requireThat, type Workspace } from "../domain.ts";
 import { repositoryDeliveryAllowed } from "../github/repository-context.ts";
+import { googleDeliveryAllowed, googleReadAllowed } from "../google/policy.ts";
 import { taskReference } from "../miniapp/auth.ts";
+import { searchConsoleReadAllowed } from "../search-console/policy.ts";
 import type { SetupService } from "../setup/service.ts";
 import { TelegramError } from "../telegram/client.ts";
 import { telegramMarkdown, telegramRichMessage } from "../telegram/format.ts";
@@ -45,6 +47,21 @@ export class DeliveryWorker {
     d: Delivery,
     sql: Sql = this.store.pool,
   ) {
+    if (
+      d.googleControl &&
+      !googleDeliveryAllowed(w, d, (await this.store.deployment(sql)).bot?.id)
+    )
+      return false;
+    if (d.runId) {
+      const run = w.runs.find((r) => r.id === d.runId);
+      const botId = (await this.store.deployment(sql)).bot?.id;
+      if (
+        run &&
+        (!googleReadAllowed(w, run, botId) ||
+          !searchConsoleReadAllowed(w, run, botId))
+      )
+        return false;
+    }
     if (!repositoryDeliveryAllowed(w, d)) return false;
     if (!(await selectionAllowed(sql, w, d))) return false;
     if (d.cancellationRunId) {

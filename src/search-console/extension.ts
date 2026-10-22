@@ -34,6 +34,8 @@ export function searchConsoleExtension(
       "search_console_invalid_response",
       "search_console_unavailable",
       "google_not_connected",
+      "google_not_configured",
+      "google_connection_changed",
       "google_reconnect_required",
       "google_refresh_pending",
       "google_scope_required",
@@ -52,7 +54,7 @@ export function searchConsoleExtension(
         name: searchConsoleTool,
         label: "Query Google Search Console",
         description:
-          "Read selected Google Search Console properties, search performance, sitemaps or Google's indexed URL status. Private interactive requests only; the shared Google connection requires an active workspace owner/admin. Start with properties to find allowed siteUrl values. Analytics requires inclusive YYYY-MM-DD dates (Pacific time), returns finalized top rows only (up to 100/page). URL inspection reads the indexed version; it does not perform a live test or request indexing.",
+          "Read selected Google Search Console properties, search performance, sitemaps or Google's indexed URL status. Private interactive requests only; uses only the requesting member’s Google account and their personal property selection. Send /google properties in private Telegram to change that selection. Start with properties to find allowed siteUrl values. Analytics requires inclusive YYYY-MM-DD dates (Pacific time), returns finalized top rows only (up to 100/page). URL inspection reads the indexed version; it does not perform a live test or request indexing.",
         parameters: Type.Object(
           {
             resource: Type.Union(

@@ -587,3 +587,13 @@ budgets. API metadata and manual overrides are pinned with each run. See the
 is made by provider discovery. Old deployment chat settings and saved Codex keys
 remain supported until the service switches to a shared provider. ChatGPT device
 code sign-in remains an independent option.
+
+## Personal Google accounts
+
+Apply `020_google_personal_accounts.sql` before starting the updated API and worker.
+It retires old workspace Google tokens and Search Console service-account credentials,
+while preserving registered Web application clients. Configure/enable **Plugins → Google**
+in the panel; members then send `/google` in private Telegram, complete browser consent
+and confirm the account there. Search Console selection uses `/google properties`.
+Existing accounts must reconnect; no shared token is assigned to a member.
+See [Google setup and migration](google-workspace.md).

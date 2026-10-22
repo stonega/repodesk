@@ -1,131 +1,114 @@
 # Google plugin
 
-One built-in plugin, `google`, combines Docs, Sheets, Drive, Gmail and Search
-Console. It has one catalog card, detail page, OAuth Web application client,
-account connection, Enable switch and runtime registration. No dependency,
-database migration, separate service or environment variable is required.
-Credentials use the existing deployment key and workspace-bound encryption.
+One built-in `google` plugin combines Docs, Sheets, Drive, Gmail and Search Console.
+The deployment operator configures one Web application OAuth client, callback URL
+and Enable switch per workspace. Each active Telegram member owns their account
+connection and Search Console property selection in that workspace. No new dependency
+or independently deployed service is required.
 
-## Setup
+## Operator setup
 
-Open **Plugins → Google → Connection → Edit**. Reuse an existing Google **Web
-application** OAuth client. Enable all five APIs listed below, configure consent
-and test users, and add the exact callback URL shown in the dialog:
-`https://YOUR_ADMIN_HOST/api/admin/google/callback`.
-Copy buttons beside **Callback URL** and each **Read scope** copy their exact
-values, briefly show a checkmark, and offer manual-copy guidance on failure.
-Save the client ID and secret, reopen Edit and connect an account. After Google
-returns, review the account and explicitly enable Google. Saving credentials or
-connecting alone never enables runtime access. All five scopes must be granted.
+Open **Plugins → Google → Web application → Edit**. Reuse an existing Google
+**Web application** OAuth client. Enable the Docs, Sheets, Drive, Gmail and Search
+Console APIs, configure consent and test users, and register the exact callback
+shown in the dialog: `https://YOUR_ADMIN_HOST/api/admin/google/callback`.
+Callback and individual read-scope rows retain their copy controls.
+Save the client ID and secret, then enable Google. The application can be enabled
+before any member connects. The panel shows saved application settings; personal
+accounts and property selection are managed in Telegram.
 
-Under **Search Console properties → Edit**, discover and select up to 20 properties
-available to the same Google account. Discovery excludes unverified properties;
-saving verifies current access. Without a selection, the other four tools remain
-available and Search Console is excluded from the runtime registration.
+Saving a blank secret preserves the existing secret for the same client ID.
+Changing the client ID or supplying a replacement secret clears all personal account
+connections and pending authorization flows in that workspace. Disabling the plugin
+blocks reads and new connections; it does not disconnect members from other workspaces.
 
-Disconnect clears the shared local access/refresh tokens and pending sign-in,
-and disables all five services. Client settings remain for reconnecting. Revoke
-provider access separately in Google's account connections page. Replacing client
-credentials clears the connection and Search Console selection and disables Google.
-Blank secret edits preserve the saved secret only for the same client ID.
-Reconnecting also clears the property selection to avoid transferring another
-account's saved access.
+## Member connection in Telegram
 
-## Existing installations
+In the bot's private chat, select the workspace when needed and send:
 
-Old Docs, Sheets, Drive, Gmail and Search Console page links lead to Google.
-The shared editor prefills the first existing OAuth client (Docs, Sheets, Drive,
-then Gmail); save to reuse its encrypted secret without re-entering it. Operators
-with several clients can instead enter their chosen client ID and secret. Saving
-replaces all legacy Google connections, pending sign-ins and Search Console service
-account credentials, without changing file registrations or unrelated plugins.
-Existing product tokens are never promoted to shared access: reconnect for the
-combined scopes and select Search Console properties again. Legacy backend
-records continue their previous scope until this explicit upgrade.
+- `/google`: show your connected account/status, or offer **Connect Google account**.
+- `/google connect` (also `/google reconnect`): start fresh Google consent.
+- `/google status`: show connection status without starting sign-in.
+- `/google properties`: discover and select your Search Console properties.
+- `/google disconnect`: remove only your local connection and pending flows.
 
-| Plugin | Google API to enable | Read scope | Pi tool |
-| --- | --- | --- | --- |
-| Google Docs | Google Docs API | `documents.readonly` | `query_google_docs` |
-| Google Sheets | Google Sheets API | `spreadsheets.readonly` | `query_google_sheets` |
-| Google Drive | Google Drive API | `drive.readonly` | `query_google_drive` |
-| Gmail | Gmail API | `gmail.readonly` | `query_gmail` |
-| Search Console | Google Search Console API | `webmasters.readonly` | `query_search_console` |
+The consent link expires after ten minutes. Follow it in a browser, choose the
+Google account and grant all five read scopes. The callback requires no admin-panel
+login. Return to Telegram and press **Connect account** only if the displayed account
+is yours, or **Reject**. Browser consent alone grants no runtime access. Confirmation
+binds the encrypted tokens to the initiating Telegram member, workspace and bot.
+Reconnect replaces only that member's connection and clears their Search Console
+selection. Disconnect does not disable the shared plugin or other members' accounts.
+Revoke provider authorization separately from Google's account connections page.
 
-Scopes use the prefix `https://www.googleapis.com/auth/`. Sign-in additionally
-requests `openid email` to identify the Google account. Google consent, verification,
-Workspace administrator policies and refresh-token lifetime rules still apply.
-HTTPS is required except loopback development. Callback URLs follow the saved
-admin site address; a site address change invalidates an outstanding return.
+Property discovery filters unverified properties. The Telegram menu shows ten choices
+per page and supports up to 20 selected properties, explicit Save and Cancel. Save
+rechecks upstream access to every selected property. Drafts expire after ten minutes;
+failed saves preserve them. Without a selection the other four services remain usable.
+Property saves change only that member's selection revision, not the workspace plugin
+revision or another member's account. See [Search Console](search-console.md).
+
+## Migration
+
+Apply `020_google_personal_accounts.sql` with the normal application migrations.
+It removes old shared account tokens, pending admin consent and Search Console
+service-account credentials/selections. Registered OAuth clients remain available.
+The unified client can be used immediately; older separate clients can be reused by
+opening the Google editor and saving once. Old product page links still lead to Google.
+Every member must authorize and confirm their own account. Old shared tokens are
+never promoted or assigned to a member, and old admin connection/property APIs are retired.
 
 ## Tools and limits
 
-Only active workspace owners/admins in **private interactive conversations** can
-read the connected account. Regular members, groups and scheduled workflows are
-denied before provider requests. These are workspace-owned connections, not
-personal Google sign-ins for every Telegram user. Enabling grants authorized
-owners/admins access to the connected account within the listed product scope.
-Docs/Sheets require a known resource ID; use the shared Drive tool for discovery.
+Only active workspace members in **private interactive conversations** can read their
+own confirmed account. Workspace roles grant no access to another member's Google
+data. Groups and scheduled workflows are denied before provider calls. Tokens and
+refresh state are encrypted with workspace/member-specific associated data. Revoking
+membership erases that member's connection and pending flows; workspace purge erases all.
 
-| Tool | Arguments / result |
-| --- | --- |
-| `query_google_docs` | `{documentId}`; title and text from all document tabs, nested tabs, paragraphs and tables |
-| `query_google_sheets` | `{resource:"spreadsheet",spreadsheetId}` for sheet metadata; `{resource:"values",spreadsheetId,range}` for an explicit A1 range of formatted cell values |
-| `query_google_drive` | `{resource:"files",query?,pageToken?}` for a literal filename search; `{resource:"file",fileId}` for metadata; preserves `nextPageToken` and `incompleteSearch` |
-| `query_gmail` | `{resource:"messages",query?,pageToken?}` for Gmail search syntax and message IDs; `{resource:"message",messageId}` for selected headers, snippets and plain-text MIME parts |
+| Tool | API / read scope | Arguments and result |
+| --- | --- | --- |
+| `query_google_docs` | Google Docs / `documents.readonly` | `{documentId}`; title and text from document tabs, paragraphs and tables |
+| `query_google_sheets` | Google Sheets / `spreadsheets.readonly` | `{resource:"spreadsheet",spreadsheetId}` for metadata; `{resource:"values",spreadsheetId,range}` for explicit A1 formatted values |
+| `query_google_drive` | Google Drive / `drive.readonly` | `{resource:"files",query?,pageToken?}` for literal filename search; `{resource:"file",fileId}` for metadata |
+| `query_gmail` | Gmail / `gmail.readonly` | `{resource:"messages",query?,pageToken?}` for IDs; `{resource:"message",messageId}` for headers, snippets and plain text |
+| `query_search_console` | Search Console / `webmasters.readonly` | Personal selected properties, finalized analytics, sitemaps and indexed URL inspection |
 
-Search Console supports saved properties, finalized analytics, sitemaps and indexed
-URL inspection. Its property allowlist and data limits are documented in
-[Search Console](search-console.md).
+Scopes use `https://www.googleapis.com/auth/`; sign-in additionally requests `openid email`.
+Google consent verification, Workspace policies, test-mode users and refresh-token
+lifetimes still apply. HTTPS is required except loopback development. All members
+and services share the exact callback URI from the saved admin site address.
 
-Lists fetch up to 20 items per page. Follow `nextPageToken`; these are not complete
-account inventories. Drive returns metadata only. Gmail HTML and attachments are
-not downloaded; HTML-only messages retain the provider snippet with
-`plainTextAvailable:false`. Docs return text rather than exact visual formatting.
-Responses are bounded to 1 MiB, projected tool output to 32,000 bytes. Oversized
-results fail explicitly; narrow the requested range/query. No arbitrary URL,
-mailbox identity, HTTP method or raw API request is exposed. Editing documents,
-changing cells, uploading/sharing/deleting files and drafting/sending mail are
-not implemented. No action approvals are created by these read tools.
+Drive/Gmail lists return up to 20 items per page and preserve pagination/coverage
+indicators. Gmail HTML and attachments are not downloaded; HTML-only messages retain
+the provider snippet with `plainTextAvailable:false`. Responses are bounded to 1 MiB;
+projected account-tool output to 32,000 bytes. Editing documents/cells, uploading,
+sharing/deleting files and drafting/sending mail are unavailable.
 
-## Authorization, durability and API
+## Authorization and durability
 
-Operator configuration requires the existing session, exact Origin and CSRF
-checks. Only the owning deployment operator can view/edit it. Configurations
-share the workspace's optimistic plugin revision and preserve other built-ins,
-file registrations and legacy manifest fallbacks. Enabled tools cannot collide
-with registered file tools. Worker catalog pinning revokes older executions after
-settings change. Each read also binds its connection identity/revision to the run;
-retained answers, derived sources, handoff and delivery recheck that private/admin
-scope. Workspace deletion purges credentials with the plugin registry.
+Admin application configuration retains session, exact Origin, CSRF, operator and
+workspace checks plus optimistic plugin revisions. One-use consent state and S256
+PKCE bind workspace, initiating member, bot, configuration revision and exact redirect
+URI. The exchange is claimed durably before contacting Google. A verified account,
+all five scopes and offline refresh token are required; confirmation happens in Telegram.
+Duplicate/late callbacks cannot replace a disconnected or changed connection.
+Telegram updates are deduplicated in the existing inbox transaction; confirmation and
+property callbacks find their original workspace even if the user changes workspaces.
 
-OAuth uses offline consent, S256 PKCE, random one-use ten-minute state tied to the
-operator, session, workspace, registration, revision and exact callback URI. Granted
-combined scopes, refresh token and verified Google account identity are required.
-Callback exchange is claimed durably before contacting Google; duplicate/late
-returns cannot replace a disconnected or changed connection. Refresh claims
-serialize concurrent workers without changing the plugin revision. Failed or
-abandoned refresh requires reconnection. Requests have a 15-second timeout,
-reject redirects and do not automatically retry. Upstream error text and secrets
-are excluded from tool errors, audit and configuration responses.
+Refresh claims serialize reads per member without changing plugin revisions. Failed
+or abandoned refresh requires reconnecting. Tool reads and retained/derived answers,
+handoffs and delivery recheck the same member, private destination, connection identity
+and current plugin revision. Search Console also checks the personal selection revision.
+Queued consent/property controls also recheck their flow and bot before delivery.
+Existing authorized admin history inspection rules still apply to retained runs.
+Provider calls reject redirects and automatic retries, time out after 15 seconds,
+and exclude upstream details/tokens from routine errors and audit records.
 
-- `GET/PUT /api/admin/workspaces/:id/plugins/google`: redacted page / versioned settings.
-- `POST .../connect` with `{revision}`: Google consent URL; no provider write.
-- `POST .../disconnect` with `{revision}`: local connection removal.
-- `GET /api/admin/google/callback`: session-bound provider return.
+- `GET/PUT /api/admin/workspaces/:id/plugins/google`: redacted application settings.
+- `GET /api/admin/google/callback`: public one-use consent return; grants nothing until Telegram confirmation.
 
-See [runnable setup requests and tool inputs](../../examples/google-workspace.http).
-Protocol references: [Google web-server OAuth](https://developers.google.com/identity/protocols/oauth2/web-server),
-[Docs get](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/get),
-[Sheets values](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets.values/get),
-[Drive files](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list),
-[Gmail messages](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/get),
-[Search Console OAuth](https://developers.google.com/webmaster-tools/v1/how-tos/authorizing).
-
-## Verification
-
-Deterministic provider fixtures cover all five services, authorization, OAuth
-replays/denial, token encryption and refresh, races with disconnect, retained
-evidence and tenant isolation. Browser fixtures cover the merged catalog card, saved
-summaries, modal editing, pending/error/retry and desktop/mobile layouts.
-Live Google consent, API quotas and actual account data remain staging acceptance
-steps. No account connection or deployment is part of local verification.
+See [application requests and Telegram examples](../../examples/google-workspace.http).
+OAuth behavior was checked with Context7 against [Google's web-server OAuth guide](https://developers.google.com/identity/protocols/oauth2/web-server).
+Live Google consent, actual permissions/quotas and native Telegram presentation remain
+staging checks. Local verification uses deterministic provider and browser fixtures.

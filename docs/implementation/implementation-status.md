@@ -1,5 +1,38 @@
 # Implementation evidence
 
+## Personal Google accounts through Telegram (2026-10-22)
+
+The Google panel now configures only the shared Web application client and plugin
+Enable switch. Active members use `/google` in private Telegram for connection,
+status, reconnect and disconnect. Browser consent uses the same callback URL for
+all members/services, requires no admin session, and grants access only after the
+initiating member confirms the displayed account in Telegram. Webhook and polling
+use the same controls; callbacks resolve their original workspace after switching.
+
+Encrypted tokens, refresh claims and Search Console property selection belong to
+each member within the workspace and bot. `/google properties` offers paginated
+selection, explicit Save/Cancel, up to 20 properties and upstream access checks.
+Account and property changes fence in-flight reads, retained/derived evidence and
+queued delivery without disabling other members. Group/scheduled reads are denied;
+member revocation and workspace purge remove personal credentials. Existing admin
+history-inspection permissions remain unchanged.
+
+Migration `020_google_personal_accounts.sql` retires shared tokens, pending admin
+consent and Search Console service-account credentials, preserving reusable OAuth
+clients. Members must reconnect; legacy admin account/property APIs and editors
+are removed. User guides, design preferences, runtime instructions and runnable
+examples describe the personal flow. No dependency or deployment was added.
+
+Validation: lint, strict TypeScript and production build passed. **1,078 deterministic
+tests across 121 files** passed with disposable PostgreSQL, including personal
+account/tenant boundaries, duplicate updates, consent replay/expiry, refresh races,
+property selection and delivery revocation. **11 browser scenarios** passed at
+1280px/390px, covering Google and the shared site-URL copy controls. Application
+summaries/editors, loading/empty, pending/error and both themes were visually
+inspected. Live Google consent and native Telegram presentation remain staging
+checks; no real account connection or deployment was performed.
+See [setup and migration](google-workspace.md).
+
 ## Unified Google plugin (2026-10-21)
 
 Docs, Sheets, Drive, Gmail and Search Console now share one Google catalog card,

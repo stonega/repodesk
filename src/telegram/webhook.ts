@@ -11,7 +11,10 @@ import {
   type Workspace,
 } from "../domain.ts";
 import type { GitHubUsers } from "../github/users.ts";
+import type { GoogleService } from "../google/service.ts";
+import { googleControl } from "../google/telegram.ts";
 import { requestDeletion } from "../privacy/service.ts";
+import type { SearchConsoleService } from "../search-console/service.ts";
 import { hash, token } from "../setup/credentials.ts";
 import type { SetupService } from "../setup/service.ts";
 import {
@@ -47,6 +50,8 @@ export class Ingress {
     private store: Store,
     private setup: SetupService,
     private githubUsers?: GitHubUsers,
+    private google?: GoogleService,
+    private searchConsole?: SearchConsoleService,
   ) {}
   async accept(update: Update) {
     const d = await this.store.deployment();
@@ -308,11 +313,13 @@ export class Ingress {
     });
     if (update.callback_query) {
       try {
-        const fallback = /^(?:t[rcd][cs]:|repo:)/.test(
-          update.callback_query.data ?? "",
-        )
-          ? ""
-          : "Request checked. See the bot or admin panel for status.";
+        const fallback = update.callback_query.data?.startsWith("google_")
+          ? "accepted" in result && result.accepted
+            ? ""
+            : "This Google control expired or is unavailable. Send /google in this private chat."
+          : /^(?:t[rcd][cs]:|repo:)/.test(update.callback_query.data ?? "")
+            ? ""
+            : "Request checked. See the bot or admin panel for status.";
         await (await this.setup.client()).call("answerCallbackQuery", {
           callback_query_id: update.callback_query.id,
           text:
@@ -379,6 +386,29 @@ export class Ingress {
       : cmd?.name === "start" && cmd.args.startsWith("access_")
         ? cmd.args.slice(7)
         : undefined;
+    if (
+      u.callback_query?.data?.startsWith("google_") &&
+      actor &&
+      c?.type === "private"
+    ) {
+      const [action, key] = u.callback_query.data.split(":");
+      if (!key || !/^[A-Za-z0-9_-]{43}$/.test(key)) return;
+      const confirmation =
+        action === "google_confirm" || action === "google_reject";
+      const digest = confirmation
+        ? Buffer.from(key, "base64url").toString("hex")
+        : key;
+      const row = await sql.query(
+        "SELECT data FROM workspaces WHERE data->'googleUsers'->$1->$2->>$3=$4 AND NOT (data ? 'deletion') FOR UPDATE",
+        [
+          String(actor),
+          confirmation ? "flow" : "properties",
+          confirmation ? "stateHash" : "key",
+          digest,
+        ],
+      );
+      return row.rows[0]?.data as Workspace | undefined;
+    }
     if (requestedId !== undefined && c?.type === "private") {
       const legacy =
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
@@ -527,6 +557,8 @@ export class Ingress {
       );
       return true;
     }
+    if (await googleControl(w, u, d, this.google, this.searchConsole))
+      return true;
     if (cmd?.name === "github" && actor && msg) {
       authorize(w, actor);
       requireThat(
@@ -784,7 +816,7 @@ export class Ingress {
       case "start":
       case "help":
         reply(
-          `RepoDesk · ${w.settings.name}\nTimezone: ${w.settings.timezone}\n/ask <request>, /repos [name], /recap, /status, /cancel [reference], /automations, /memory, /usage, /privacy\n/repos selects a repository for this chat/topic; recently mentioned repositories appear first.\nGitHub: /github (connect), /github sync, /github disconnect (private chat)\nAdmins: /linktoken, /capture on|off, /timezone <IANA>, /remember <instruction>\nIn groups, mention me or reply to start; clear follow-ups within five minutes can continue without mentioning me when Telegram delivers ordinary messages. Send photos, image files, UTF-8 text/code files or selectable-text PDFs with a caption describing your request. In private Topics, just send messages to continue the topic's conversation. Use Telegram Topics to separate conversations. Outside Topics, reply to an answer or your own message to continue it; standalone messages start new conversations. For configured Codex repositories, ask for a change in your own words. Reply to a current task question to answer it directly. Other Topic messages go to the assistant, which handles conversation and review requests and passes clear code changes to the matching task; /status checks the bound task and /cancel or stop cancels it. Direct execution follows the repository's saved policy. Context contains only received retained messages. Access is managed in the admin panel. /workspace <id> selects a workspace.`,
+          `RepoDesk · ${w.settings.name}\nTimezone: ${w.settings.timezone}\n/ask <request>, /repos [name], /recap, /status, /cancel [reference], /automations, /memory, /usage, /privacy\n/repos selects a repository for this chat/topic; recently mentioned repositories appear first.\nGitHub: /github (connect), /github sync, /github disconnect (private chat)\nGoogle: /google (connect/status), /google connect, /google properties, /google disconnect (private chat)\nAdmins: /linktoken, /capture on|off, /timezone <IANA>, /remember <instruction>\nIn groups, mention me or reply to start; clear follow-ups within five minutes can continue without mentioning me when Telegram delivers ordinary messages. Send photos, image files, UTF-8 text/code files or selectable-text PDFs with a caption describing your request. In private Topics, just send messages to continue the topic's conversation. Use Telegram Topics to separate conversations. Outside Topics, reply to an answer or your own message to continue it; standalone messages start new conversations. For configured Codex repositories, ask for a change in your own words. Reply to a current task question to answer it directly. Other Topic messages go to the assistant, which handles conversation and review requests and passes clear code changes to the matching task; /status checks the bound task and /cancel or stop cancels it. Direct execution follows the repository's saved policy. Context contains only received retained messages. Access is managed in the admin panel. /workspace <id> selects a workspace.`,
         );
         break;
       case "workspace":

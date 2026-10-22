@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
 import type { GooglePage } from "../src/google/config.ts";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
-import { PropertyEditor } from "./search-console.tsx";
 import { ServiceUrl } from "./service-url.tsx";
 import { Skeleton } from "./skeleton.tsx";
 import { ErrorToast, useToast } from "./toast.tsx";
@@ -15,23 +13,15 @@ function message(cause: unknown) {
   const messages: Record<string, string> = {
     version_conflict:
       "These plugins changed in another session. Close the dialog and retry loading saved settings before editing again.",
-    search_console_property_denied:
-      "A selected property is no longer available. Check the connected Google account’s Search Console permissions.",
-    google_scope_required:
-      "Reconnect and grant all five Google read permissions.",
-    google_not_connected:
-      "Connect your Google account before enabling this plugin.",
     google_client_required:
       "Save a Google Web application client ID and secret first.",
     google_client_secret_required: "Enter a client secret for this client ID.",
-    google_reconnect_required:
-      "Reconnect your Google account to restore access.",
     google_credentials_unavailable:
       "Google integrations are unavailable on this server. Check the deployment configuration.",
     google_https_required:
       "Google sign-in needs an HTTPS admin address. Localhost is supported for development.",
     access_denied:
-      "Only this workspace’s deployment operator can manage this connection.",
+      "Only this workspace’s deployment operator can manage this application.",
     extension_tool_collision:
       "An enabled file plugin uses this Google tool name. Resolve the conflict before enabling.",
     invalid_request: "Check the Google client ID and client secret.",
@@ -40,17 +30,8 @@ function message(cause: unknown) {
     return (
       messages.version_conflict ?? "Plugins changed. Reload saved settings."
     );
-  return (
-    messages[code] ??
-    "Could not complete the Google connection request. Try again."
-  );
+  return messages[code] ?? "Could not save Google settings. Try again.";
 }
-const statuses: Record<GooglePage["status"], string> = {
-  not_connected: "Not connected",
-  connected: "Connected",
-  refreshing: "Refreshing connection",
-  reconnect_required: "Reconnect required",
-};
 export function Google({
   request,
   workspaceId,
@@ -71,8 +52,7 @@ export function Google({
   const [busy, setBusy] = useState(false);
   const pendingAction = useRef(false);
   const [error, setError] = useState("");
-  const [editing, setEditing] = useState<"connection" | "properties">();
-  const [params, setParams] = useSearchParams();
+  const [editing, setEditing] = useState(false);
   const notify = useToast();
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,19 +68,6 @@ export function Google({
   useEffect(() => {
     void load();
   }, [load]);
-  useEffect(() => {
-    const result = params.get("google");
-    if (!result) return;
-    if (result === "connected")
-      notify(`${def.name} connected. Enable the plugin when you’re ready.`);
-    else if (result === "failed")
-      setError(
-        "Google sign-in did not complete. Check the enabled API, consent scopes, test users and exact callback URL, then try connecting again.",
-      );
-    const next = new URLSearchParams(params);
-    next.delete("google");
-    setParams(next, { replace: true });
-  }, [params, setParams, notify, def.name]);
   async function action<T>(work: () => Promise<T>): Promise<T> {
     if (pendingAction.current) throw new Error("pending");
     pendingAction.current = true;
@@ -131,7 +98,7 @@ export function Google({
       });
       setData(result);
       setError("");
-      setEditing(undefined);
+      setEditing(false);
       notify(`${def.name} settings saved.`);
     });
   }
@@ -145,8 +112,11 @@ export function Google({
           loading={loading && !data}
           disabled={busy || loading || !data}
           onChange={(enabled) => {
-            if (enabled && data?.status !== "connected") {
-              setEditing("connection");
+            if (
+              enabled &&
+              (!data?.clientId || !data.clientSecretConfigured || data.legacy)
+            ) {
+              setEditing(true);
               return;
             }
             void save(undefined, undefined, enabled).catch((cause) =>
@@ -169,37 +139,23 @@ export function Google({
       )}
       <section
         className="card google-summary-card"
-        aria-label={`${def.name} connection`}
+        aria-label={`${def.name} application`}
         aria-busy={loading || busy}
       >
         <div className="plugin-card-heading coding-card-heading">
           <div>
-            <h2>Connection</h2>
-            <p className="muted">Google account for this workspace</p>
+            <h2>Web application</h2>
+            <p className="muted">Shared OAuth client for this workspace</p>
           </div>
           <IconButton
             icon="edit"
-            label={`Edit ${def.name} connection`}
+            label={`Edit ${def.name} application`}
             showLabel
             disabled={!data || loading || busy}
-            onClick={() => setEditing("connection")}
+            onClick={() => setEditing(true)}
           />
         </div>
         <dl className="plugin-summary">
-          <div>
-            <dt>Status</dt>
-            <dd>
-              {data
-                ? data.legacy
-                  ? "Separate connections"
-                  : statuses[data.status]
-                : pending}
-            </dd>
-          </div>
-          <div>
-            <dt>Account</dt>
-            <dd>{data ? (data.account ?? "No account connected") : pending}</dd>
-          </div>
           <div>
             <dt>Client ID</dt>
             <dd>{data ? data.clientId || "Not configured" : pending}</dd>
@@ -215,26 +171,15 @@ export function Google({
             </dd>
           </div>
         </dl>
-        {data?.status === "not_connected" && (
-          <p className="muted">
-            Open Edit to save a Google OAuth client, then connect an account.
-            One connection is shared by Docs, Sheets, Drive, Gmail and Search
-            Console.
-          </p>
-        )}
+        <p className="muted">
+          Configure the Web application here, then enable Google. Each member
+          connects their own account with <code>/google</code> in the bot’s
+          private chat.
+        </p>
         {data?.legacy && (
           <p className="notice">
-            {data.clientSecretConfigured
-              ? "Your existing Web application client can be reused."
-              : "Use a Web application to connect all Google services."}{" "}
-            Open Edit, save once, then reconnect for the combined permissions.
-            This replaces the separate connections. Existing access remains
-            active until you save or disable Google.
-          </p>
-        )}
-        {data?.status === "reconnect_required" && (
-          <p className="notice">
-            Open Edit and reconnect your Google account to restore access.
+            Your existing Web application client can be reused. Open Edit and
+            save it once. Members must connect their own accounts in Telegram.
           </p>
         )}
       </section>
@@ -244,121 +189,27 @@ export function Google({
       >
         <h2>Access</h2>
         <p>
-          {def.summary} Read-only access is available to workspace owners and
-          admins in private conversations.
+          {def.summary} Each active member can read only their own connected
+          account in private conversations.
         </p>
         <p className="muted">
           Use Drive to discover document and spreadsheet IDs. Gmail reads plain
           text, headers and snippets; attachments are not downloaded. Search
-          Console reads only the properties you select below.
+          Console reads only properties that member selects with /google
+          properties.
         </p>
         <p className="muted">
-          Editing, sharing, deleting and sending are unavailable.{" "}
-          <a
-            href="https://myaccount.google.com/connections"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Manage Google authorizations ↗
-          </a>
+          Editing, sharing, deleting and sending are unavailable.
         </p>
       </section>
-      <section
-        className="card google-summary-card"
-        aria-label="Search Console properties"
-        aria-busy={loading || busy}
-      >
-        <div className="plugin-card-heading coding-card-heading">
-          <div>
-            <h2>Search Console properties</h2>
-            <p className="muted">
-              Choose which properties the assistant can read
-            </p>
-          </div>
-          <IconButton
-            icon="edit"
-            label="Edit Search Console properties"
-            showLabel
-            disabled={data?.status !== "connected" || loading || busy}
-            onClick={() => setEditing("properties")}
-          />
-        </div>
-        {data ? (
-          data.siteUrls?.length ? (
-            <ul className="resource-list">
-              {data.siteUrls.map((site) => (
-                <li key={site}>{site}</li>
-              ))}
-            </ul>
-          ) : (
-            <p className="muted">
-              No properties selected. Connect Google, then open Edit to choose
-              properties.
-            </p>
-          )
-        ) : (
-          <div>{pending}</div>
-        )}
-      </section>
-      {editing === "properties" && data && (
-        <PropertyEditor
-          data={{
-            revision: data.revision,
-            settings: {
-              enabled: data.settings.enabled,
-              siteUrls: data.siteUrls ?? [],
-            },
-            credentialConfigured: data.status === "connected",
-          }}
-          request={request}
-          endpoint={`/api/admin/workspaces/${workspaceId}/plugins/search-console`}
-          busy={busy}
-          close={() => setEditing(undefined)}
-          save={(settings) =>
-            action(async () => {
-              await request(
-                `/api/admin/workspaces/${workspaceId}/plugins/search-console`,
-                "PUT",
-                { revision: data.revision, settings },
-              );
-              await load();
-              setEditing(undefined);
-              notify("Search Console properties saved.");
-            })
-          }
-        />
-      )}
-      {editing === "connection" && data && (
+      {editing && data && (
         <GoogleEditor
           key={data.revision}
           data={data}
           name={def.name}
           busy={busy}
-          close={() => setEditing(undefined)}
+          close={() => setEditing(false)}
           save={save}
-          connect={() =>
-            action(async () => {
-              const result = await request<{ url: string }>(
-                `${endpoint}/connect`,
-                "POST",
-                { revision: data.revision },
-              );
-              const url = new URL(result.url);
-              if (url.origin !== "https://accounts.google.com")
-                throw new Error("invalid_redirect");
-              window.location.assign(url.toString());
-            })
-          }
-          disconnect={() =>
-            action(async () => {
-              setData(
-                await request<GooglePage>(`${endpoint}/disconnect`, "POST", {
-                  revision: data.revision,
-                }),
-              );
-              notify(`${def.name} disconnected from this workspace.`);
-            })
-          }
         />
       )}
     </section>
@@ -370,22 +221,17 @@ function GoogleEditor({
   busy,
   close,
   save,
-  connect,
-  disconnect,
 }: {
   data: GooglePage;
   name: string;
   busy: boolean;
   close: () => void;
   save: (clientId?: string, clientSecret?: string) => Promise<void>;
-  connect: () => Promise<void>;
-  disconnect: () => Promise<void>;
 }) {
   const [clientId, setClientId] = useState(data.clientId);
   const [secret, setSecret] = useState("");
   const [error, setError] = useState("");
   const [operation, setOperation] = useState("");
-  const dirty = clientId.trim() !== data.clientId || !!secret;
   async function run(label: string, work: () => Promise<void>) {
     if (busy) return;
     setOperation(label);
@@ -399,7 +245,7 @@ function GoogleEditor({
     }
   }
   return (
-    <Modal title={`Edit ${name} connection`} busy={busy} onClose={close}>
+    <Modal title={`Edit ${name} application`} busy={busy} onClose={close}>
       <p>
         Use your registered Web application OAuth client in{" "}
         <a
@@ -420,7 +266,8 @@ function GoogleEditor({
       </dl>
       <p className="muted">
         Sign-in also requests your email to identify the account. All five
-        services use this client and Google account.
+        services use this client. Each member connects their own Google account
+        in private Telegram with /google and confirms the account there.
       </p>
       {error && (
         <p className="notice" role="alert">
@@ -438,6 +285,7 @@ function GoogleEditor({
         <label className="field">
           <span>Client ID</span>
           <input
+            disabled={busy}
             required
             maxLength={256}
             pattern="[A-Za-z0-9_\-]+\.apps\.googleusercontent\.com"
@@ -452,6 +300,7 @@ function GoogleEditor({
               : "Client secret"}
           </span>
           <input
+            disabled={busy}
             type="password"
             aria-label={
               data.clientSecretConfigured
@@ -469,41 +318,10 @@ function GoogleEditor({
           />
           <small className="muted" id="google-client-secret-help">
             Leave blank to keep the saved secret for the same client ID.
-            Replacing credentials disconnects and disables this plugin.
+            Replacing credentials disconnects all personal Google accounts in
+            this workspace.
           </small>
         </label>
-        <div className="row">
-          <button
-            type="button"
-            className="secondary"
-            disabled={
-              busy || dirty || !data.clientSecretConfigured || data.legacy
-            }
-            onClick={() => void run("Opening Google sign-in…", connect)}
-          >
-            {data.status === "not_connected"
-              ? "Connect Google account"
-              : "Reconnect Google account"}
-          </button>
-          {data.account && (
-            <button
-              type="button"
-              className="secondary"
-              disabled={busy || dirty}
-              onClick={() => void run("Disconnecting…", disconnect)}
-            >
-              Disconnect
-            </button>
-          )}
-        </div>
-        {(dirty || data.legacy) && (
-          <p className="muted">Save your client settings before connecting.</p>
-        )}
-        <p className="muted">
-          Disconnect removes the shared local tokens and disables access to all
-          five services. Revoke authorization in your Google account to remove
-          provider access.
-        </p>
         {busy && <p role="status">{operation || "Saving…"}</p>}
         <ModalActions>
           <button type="submit" disabled={busy}>

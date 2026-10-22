@@ -4,7 +4,7 @@ import type { PluginSettings } from "./agent/plugin-config.ts";
 import type { CodingConfig } from "./coding/config.ts";
 import type { GitHubConnection } from "./github/config.ts";
 import type { GitHubUserAccess } from "./github/user-access.ts";
-import type { GooglePlugin } from "./google/config.ts";
+import type { GooglePlugin, GoogleUser } from "./google/config.ts";
 import type { MemoryContext, MemoryState } from "./memory/types.ts";
 import type { ModelProvider, ModelSelection } from "./models/config.ts";
 import type { ReviewConfig, ReviewTask } from "./review-bot/config.ts";
@@ -364,7 +364,11 @@ export interface Run {
   googleRead?: Partial<
     Record<GooglePlugin, { revision: number; connectionId: string }>
   >;
-  searchConsoleRead?: { revision: number; connectionId?: string };
+  searchConsoleRead?: {
+    revision: number;
+    connectionId?: string;
+    selectionRevision?: number;
+  };
   handoffRead?: {
     references: MemoryReferences;
     runIds?: string[];
@@ -467,6 +471,12 @@ export interface Run {
   error?: string;
 }
 export interface Delivery {
+  googleControl?: {
+    botId: string;
+    connectionId?: string;
+    flow?: { hash: string; phase: "oauth" | "confirm" };
+    properties?: string;
+  };
   repositoryMenu?: {
     installationId: number;
     revision: number;
@@ -523,6 +533,7 @@ export interface Audit {
   version?: number;
 }
 export interface Workspace {
+  googleUsers?: Record<string, GoogleUser>;
   /** Panel diagnostics accounting only; conversation text is not persisted here. */
   adminChecks?: {
     id: string;

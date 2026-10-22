@@ -39,6 +39,7 @@ export function sweep(w: Workspace, now = new Date()) {
     delete w.reviewTasks;
     delete w.reviewBot;
     delete w.plugins;
+    delete w.googleUsers;
     delete w.github;
     delete w.repositorySelections;
     delete w.coding;
@@ -89,6 +90,19 @@ export function sweep(w: Workspace, now = new Date()) {
   w.accessLinkClaims = w.accessLinkClaims?.filter(
     (claim) => Date.parse(claim.expiresAt) > now.getTime(),
   );
+  for (const [actor, user] of Object.entries(w.googleUsers ?? {})) {
+    if (!w.members.some((m) => m.id === actor && m.active)) {
+      delete w.googleUsers?.[actor];
+      continue;
+    }
+    if (user.flow && Date.parse(user.flow.expiresAt) <= now.getTime())
+      delete user.flow;
+    if (
+      user.properties &&
+      Date.parse(user.properties.expiresAt) <= now.getTime()
+    )
+      delete user.properties;
+  }
   const cutoff = now.getTime() - w.settings.retentionDays * 86400000;
   w.repositorySelections = w.repositorySelections?.filter(
     (s) => Date.parse(s.at) > cutoff,

@@ -32,6 +32,25 @@ export const ongoingStageMessage = (stage: string) =>
   ongoingStages[stage] ?? "I’m still on it. I’ll keep you posted.";
 
 const failures: Record<string, string> = {
+  google_not_configured:
+    "Google is not enabled or configured for this workspace. Ask the administrator to configure Plugins → Google in the panel.",
+  google_not_connected:
+    "Connect your own Google account with /google in this private chat, complete sign-in, confirm the account here, then retry.",
+  google_reconnect_required:
+    "Your Google connection needs sign-in again. Send /google connect in this private chat, complete sign-in and confirm the account here, then retry.",
+  google_refresh_pending:
+    "Your Google connection is refreshing. Try again shortly; if it remains unavailable, send /google connect.",
+  google_authorization_expired:
+    "This Google connection request expired or changed. Send /google connect to start again.",
+  google_properties_expired:
+    "This Search Console selection expired or changed. Send /google properties to open it again.",
+  google_property_limit:
+    "Select at most 20 Search Console properties. Deselect one before adding another.",
+  google_connection_changed:
+    "Your Google connection changed. Send /google to check its status, then retry.",
+  search_console_property_denied:
+    "That Search Console property is not available in your current selection. Send /google properties to check your access and selection.",
+  use_private_chat: "Open the bot’s private chat to manage your account.",
   repository_menu_expired:
     "This repository menu has expired or access changed. Send /repos to open the current choices.",
   empty_response:

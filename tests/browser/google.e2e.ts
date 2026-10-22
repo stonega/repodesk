@@ -12,11 +12,6 @@ async function fixture(page: Page, connected = true) {
       clientSecretConfigured: connected,
       redirectUri: "https://admin.example.test/api/admin/google/callback",
       scope: googleScopes.join(" "),
-      status: connected ? "connected" : "not_connected",
-      account: connected
-        ? "fixture-with-a-long-account-name@example.test"
-        : undefined,
-      siteUrls: connected ? ["sc-domain:example.test"] : [],
     },
   } as { google: GooglePage };
   const writes: { plugin: "google"; body: Record<string, unknown> }[] = [];
@@ -25,35 +20,14 @@ async function fixture(page: Page, connected = true) {
     pending: Promise.resolve(),
     failure: "",
     loadError: "",
-    connectError: "",
   };
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
-    const match = /\/plugins\/(google)(\/(connect|disconnect))?$/.exec(path);
-    if (match) {
-      const plugin = match[1] as "google";
-      const data = pages[plugin];
-      if (match[3] === "connect") {
-        await controls.pending;
-        await route.fulfill(
-          controls.connectError
-            ? { status: 409, json: { error: controls.connectError } }
-            : {
-                json: {
-                  url: `https://accounts.google.com/o/oauth2/v2/auth?state=fixture-${plugin}`,
-                },
-              },
-        );
-        return;
-      }
-      if (match[3] === "disconnect") {
-        data.status = "not_connected";
-        data.account = undefined;
-        data.settings.enabled = false;
-        data.revision++;
-      } else if (route.request().method() === "PUT") {
+    if (path.endsWith("/plugins/google")) {
+      const data = pages.google;
+      if (route.request().method() === "PUT") {
         const body = route.request().postDataJSON();
-        writes.push({ plugin, body });
+        writes.push({ plugin: "google", body });
         await controls.pending;
         if (controls.failure) {
           await route.fulfill({
@@ -66,12 +40,7 @@ async function fixture(page: Page, connected = true) {
         data.legacy = false;
         data.settings = body.settings;
         if (body.clientId) data.clientId = body.clientId;
-        if (body.clientSecret) {
-          data.clientSecretConfigured = true;
-          data.status = "not_connected";
-          data.account = undefined;
-          data.settings.enabled = false;
-        }
+        if (body.clientSecret) data.clientSecretConfigured = true;
       } else {
         await controls.loading;
         if (controls.loadError) {
@@ -116,63 +85,51 @@ async function fixture(page: Page, connected = true) {
   };
 }
 for (const width of [1280, 390]) {
-  for (const plugin of ["google"] as const) {
-    const name = "Google";
-    test(`${name} saved display and separate modal at ${width}px`, async ({
-      page,
-      context,
-    }) => {
-      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-      await page.setViewportSize({ width, height: 950 });
-      const f = await fixture(page);
-      await f.open(plugin);
-      await expect(
-        page.getByRole("heading", { name, exact: true }),
-      ).toHaveCount(1);
-      const card = page.getByRole("region", {
-        name: `${name} connection`,
-        exact: true,
-      });
-      await expect(card).toContainText("Connected");
-      await expect(card).toContainText(f.pages[plugin].account ?? "");
-      await expect(card.locator("input,textarea,select")).toHaveCount(0);
-      const edit = page.getByRole("button", {
-        name: `Edit ${name} connection`,
-      });
-      await expectTopRightAction(card, edit);
-      await expect(
-        page.getByRole("switch", { name: `Enable ${name}` }),
-      ).toBeChecked();
+  test(`Google application summary, modal and copy controls at ${width}px`, async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.setViewportSize({ width, height: 950 });
+    const f = await fixture(page);
+    await f.open("google");
+    const card = page.getByRole("region", {
+      name: "Google application",
+      exact: true,
+    });
+    const edit = page.getByRole("button", { name: "Edit Google application" });
+    await expect(card).toContainText("shared.apps.googleusercontent.com");
+    await expect(card).toContainText("Each member connects their own account");
+    await expect(card.locator("input,textarea,select")).toHaveCount(0);
+    await expectTopRightAction(card, edit);
+    await expect(
+      page.getByRole("button", {
+        name: /Connect.*Google|Disconnect|Edit Search Console/,
+      }),
+    ).toHaveCount(0);
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate((value) => {
+        document.documentElement.dataset.theme = value;
+      }, theme);
       await page.screenshot({
-        path: test.info().outputPath("saved-light.png"),
-        fullPage: true,
-      });
-      await page.evaluate(() => {
-        document.documentElement.dataset.theme = "dark";
-      });
-      await page.screenshot({
-        path: test.info().outputPath("saved-dark.png"),
+        path: test.info().outputPath(`summary-${theme}.png`),
         fullPage: true,
       });
       await edit.click();
       const dialog = page.getByRole("dialog", {
-        name: `Edit ${name} connection`,
+        name: "Edit Google application",
       });
       await expect(dialog.getByLabel("Replace client secret")).toHaveValue("");
-      await page.screenshot({
-        path: test.info().outputPath("editor-dark.png"),
-        fullPage: true,
-      });
-      await expect(dialog).toContainText(f.pages[plugin].redirectUri);
+      await expect(
+        dialog.getByRole("button", { name: /Connect.*Google|Disconnect/ }),
+      ).toHaveCount(0);
+      await expect(dialog).toContainText("confirms the account there");
       for (const [label, value] of [
-        ["Callback URL", f.pages[plugin].redirectUri],
+        ["Callback URL", f.pages.google.redirectUri],
         ["Read scope", googleScopes[0]],
       ]) {
         const copy = dialog
-          .getByRole("button", {
-            name: `Copy ${label}`,
-            exact: true,
-          })
+          .getByRole("button", { name: `Copy ${label}`, exact: true })
           .first();
         const box = await copy.boundingBox();
         expect(box?.width).toBeGreaterThanOrEqual(44);
@@ -189,137 +146,71 @@ for (const width of [1280, 390]) {
         );
         await expect(copy).toBeEnabled();
       }
-      expect(f.writes).toHaveLength(0);
-      for (const theme of ["light", "dark"]) {
-        await page.evaluate((value) => {
-          document.documentElement.dataset.theme = value;
-        }, theme);
-        const contained = await dialog
+      expect(
+        await dialog
           .locator(".google-connection-details")
-          .evaluate((details) => details.scrollWidth <= details.clientWidth);
-        expect(contained).toBe(true);
-        await page.screenshot({
-          path: test.info().outputPath(`copy-editor-${theme}.png`),
-          fullPage: true,
-        });
-      }
-      await dialog
-        .getByLabel("Client ID", { exact: true })
-        .fill("discarded.apps.googleusercontent.com");
+          .evaluate((el) => el.scrollWidth <= el.clientWidth),
+      ).toBe(true);
+      await page.screenshot({
+        path: test.info().outputPath(`editor-${theme}.png`),
+        fullPage: true,
+      });
       await page.keyboard.press("Escape");
       await expect(dialog).toHaveCount(0);
       await expect(edit).toBeFocused();
-      expect(f.writes).toHaveLength(0);
-      await edit.click();
-      await expect(dialog.getByLabel("Client ID", { exact: true })).toHaveValue(
-        f.pages[plugin].clientId,
-      );
-      await dialog.getByRole("button", { name: "Save", exact: true }).click();
-      await expect(dialog).toHaveCount(0);
-      expect(f.writes[0]?.body).not.toHaveProperty("clientSecret");
-      expect(
-        await page.evaluate(
-          () => document.documentElement.scrollWidth <= innerWidth,
-        ),
-      ).toBe(true);
-      const spacing = await page
-        .locator(".google-summary-card")
-        .evaluateAll((cards) =>
-          cards.flatMap((card) => {
-            const box = card.getBoundingClientRect();
-            const style = getComputedStyle(card);
-            const first = card.firstElementChild?.getBoundingClientRect();
-            const last = card.lastElementChild?.getBoundingClientRect();
-            return first && last
-              ? [
-                  first.top -
-                    box.top -
-                    parseFloat(style.borderTopWidth) -
-                    parseFloat(style.paddingTop),
-                  box.bottom -
-                    last.bottom -
-                    parseFloat(style.borderBottomWidth) -
-                    parseFloat(style.paddingBottom),
-                ]
-              : [Infinity];
-          }),
-        );
-      for (const gap of spacing) expect(Math.abs(gap)).toBeLessThan(1);
-    });
-  }
-  test(`Google copy failure preserves the editor and allows retry at ${width}px`, async ({
-    page,
-    context,
-  }) => {
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-    await page.setViewportSize({ width, height: 950 });
-    const f = await fixture(page, false);
-    await f.open("google");
-    await page.getByRole("button", { name: "Edit Google connection" }).click();
-    const dialog = page.getByRole("dialog", { name: "Edit Google connection" });
-    await dialog
-      .getByLabel("Client ID", { exact: true })
-      .fill("draft.apps.googleusercontent.com");
-    await page.evaluate(() => {
-      Object.defineProperty(navigator.clipboard, "writeText", {
-        configurable: true,
-        value: async () => {
-          throw new DOMException("Clipboard denied", "NotAllowedError");
-        },
-      });
-    });
-    await dialog.getByRole("button", { name: "Copy Callback URL" }).click();
-    await expect(dialog.getByRole("alert")).toHaveText(
-      "Could not copy. Select the URL to copy it manually.",
-    );
-    await expect(dialog.getByLabel("Client ID", { exact: true })).toHaveValue(
-      "draft.apps.googleusercontent.com",
-    );
-    await expect(dialog.locator("code").first()).toHaveText(
-      f.pages.google.redirectUri,
-    );
-    for (const theme of ["light", "dark"]) {
-      await page.evaluate((value) => {
-        document.documentElement.dataset.theme = value;
-      }, theme);
-      await page.screenshot({
-        path: test.info().outputPath(`copy-error-${theme}.png`),
-        fullPage: true,
-      });
     }
-    await page.evaluate(() => {
-      delete (navigator.clipboard as Partial<Clipboard>).writeText;
-    });
-    await dialog.getByRole("button", { name: "Copy Callback URL" }).click();
-    await expect(dialog.getByRole("alert")).toHaveCount(0);
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      f.pages.google.redirectUri,
-    );
     expect(f.writes).toHaveLength(0);
+    const spacing = await page
+      .locator(".google-summary-card")
+      .evaluateAll((cards) =>
+        cards.flatMap((card) => {
+          const box = card.getBoundingClientRect(),
+            style = getComputedStyle(card),
+            first = card.firstElementChild?.getBoundingClientRect(),
+            last = card.lastElementChild?.getBoundingClientRect();
+          return first && last
+            ? [
+                first.top -
+                  box.top -
+                  parseFloat(style.borderTopWidth) -
+                  parseFloat(style.paddingTop),
+                box.bottom -
+                  last.bottom -
+                  parseFloat(style.borderBottomWidth) -
+                  parseFloat(style.paddingBottom),
+              ]
+            : [Infinity];
+        }),
+      );
+    for (const gap of spacing) expect(Math.abs(gap)).toBeLessThanOrEqual(1);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
   });
-  test(`Google first setup, pending locks and failed-save draft preservation at ${width}px`, async ({
+  test(`Google first setup, errors, pending save and enable without a personal account at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 950 });
     const f = await fixture(page, false);
     await f.open("google");
     const card = page.getByRole("region", {
-      name: "Google connection",
+      name: "Google application",
       exact: true,
     });
-    await expect(card).toContainText("Not connected");
+    await expect(card).toContainText("Not configured");
     await page.screenshot({
       path: test.info().outputPath("empty.png"),
       fullPage: true,
     });
     await page.getByRole("switch", { name: "Enable Google" }).click();
-    const dialog = page.getByRole("dialog", { name: "Edit Google connection" });
-    await expect(
-      dialog.getByRole("button", { name: "Connect Google account" }),
-    ).toBeDisabled();
+    const dialog = page.getByRole("dialog", {
+      name: "Edit Google application",
+    });
     await dialog
       .getByLabel("Client ID", { exact: true })
-      .fill("gmail.apps.googleusercontent.com");
+      .fill("google.apps.googleusercontent.com");
     await dialog
       .getByLabel("Client secret", { exact: true })
       .fill("fixture-secret");
@@ -334,21 +225,7 @@ for (const width of [1280, 390]) {
       fullPage: true,
     });
     f.controls.failure = "";
-    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText("another session");
-    await page
-      .getByRole("button", { name: "Reload Google settings", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "Edit Google connection", exact: true })
-      .click();
-    await dialog
-      .getByLabel("Client ID", { exact: true })
-      .fill("gmail.apps.googleusercontent.com");
-    await dialog
-      .getByLabel("Client secret", { exact: true })
-      .fill("fixture-secret");
-    let release!: () => void;
+    let release = () => {};
     f.controls.pending = new Promise<void>((resolve) => {
       release = resolve;
     });
@@ -359,6 +236,12 @@ for (const width of [1280, 390]) {
     await expect(
       dialog.getByRole("button", { name: "Cancel", exact: true }),
     ).toBeDisabled();
+    await expect(
+      dialog.getByLabel("Client ID", { exact: true }),
+    ).toBeDisabled();
+    await expect(
+      dialog.getByLabel("Client secret", { exact: true }),
+    ).toBeDisabled();
     await page.keyboard.press("Escape");
     await expect(dialog).toBeVisible();
     await page.screenshot({
@@ -367,39 +250,36 @@ for (const width of [1280, 390]) {
     });
     release();
     await expect(dialog).toHaveCount(0);
+    await expect(card).toContainText("Configured");
+    await page.getByRole("switch", { name: "Enable Google" }).click();
     await expect(
       page.getByRole("switch", { name: "Enable Google" }),
-    ).not.toBeChecked();
-    await expect(card).toContainText("Configured");
-    await page.getByRole("button", { name: "Edit Google connection" }).click();
-    f.controls.connectError = "google_reconnect_required";
-    await dialog
-      .getByRole("button", { name: "Connect Google account" })
-      .click();
-    await expect(dialog.getByRole("alert")).toContainText(
-      "Reconnect your Google account",
-    );
-    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    ).toBeChecked();
+    await expect(dialog).toHaveCount(0);
+    await page.getByRole("button", { name: "Edit Google application" }).click();
+    await expect(dialog.getByLabel("Replace client secret")).toHaveValue("");
+    await dialog.getByRole("button", { name: "Save", exact: true }).click();
+    expect(f.writes.at(-1)?.body).not.toHaveProperty("clientSecret");
   });
-  test(`Google initial loading, retry and single catalog entry at ${width}px`, async ({
+  test(`Google loading, retry and legacy Web client reuse at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 950 });
     const f = await fixture(page);
-    let release!: () => void;
+    let release = () => {};
     f.controls.loading = new Promise<void>((resolve) => {
       release = resolve;
     });
     await f.open("google");
     await expect(
-      page.getByRole("heading", { name: "Google", exact: true }),
+      page.getByRole("heading", { name: "Web application" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Edit Google connection" }),
+      page.getByRole("button", { name: "Edit Google application" }),
     ).toBeDisabled();
     await expect(
-      page.getByRole("region", { name: "Google connection", exact: true }),
-    ).not.toContainText("Not connected");
+      page.getByRole("region", { name: "Google application", exact: true }),
+    ).not.toContainText("Not configured");
     await page.screenshot({
       path: test.info().outputPath("loading.png"),
       fullPage: true,
@@ -412,10 +292,73 @@ for (const width of [1280, 390]) {
       fullPage: true,
     });
     f.controls.loadError = "";
+    f.pages.google.legacy = true;
     await page.getByRole("button", { name: "Reload Google settings" }).click();
     await expect(
-      page.getByRole("region", { name: "Google connection", exact: true }),
-    ).toContainText("Connected");
+      page.getByRole("region", { name: "Google application", exact: true }),
+    ).toContainText("Web application client can be reused");
+    await page.getByRole("button", { name: "Edit Google application" }).click();
+    const dialog = page.getByRole("dialog", {
+      name: "Edit Google application",
+    });
+    await dialog.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(f.writes[0]?.body).not.toHaveProperty("clientSecret");
+  });
+  test(`Google copy failure keeps manual recovery and drafts at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 950 });
+    const f = await fixture(page);
+    await f.open("google");
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async () => {
+            throw Error("denied");
+          },
+        },
+      });
+    });
+    await page.getByRole("button", { name: "Edit Google application" }).click();
+    const dialog = page.getByRole("dialog", {
+      name: "Edit Google application",
+    });
+    await dialog.getByLabel("Replace client secret").fill("draft-secret");
+    await dialog
+      .getByRole("button", { name: "Copy Callback URL", exact: true })
+      .click();
+    await expect(dialog.getByRole("alert")).toContainText("Select the URL");
+    await expect(dialog.getByLabel("Replace client secret")).toHaveValue(
+      "draft-secret",
+    );
+    expect(f.writes).toHaveLength(0);
+    await page.screenshot({
+      path: test.info().outputPath("copy-failure.png"),
+      fullPage: true,
+    });
+  });
+  test(`Google catalog and old product routes lead to application setup at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 950 });
+    const f = await fixture(page);
+    for (const old of [
+      "google-docs",
+      "google-sheets",
+      "google-drive",
+      "gmail",
+      "search-console",
+    ]) {
+      await page.goto(`/admin/plugins/${old}?workspace=${workspace}`);
+      await expect(
+        page.getByRole("heading", { name: "Google", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Edit Search Console properties" }),
+      ).toHaveCount(0);
+    }
     await page
       .getByRole("link", { name: "Plugins", exact: true })
       .first()
@@ -423,89 +366,6 @@ for (const width of [1280, 390]) {
     await expect(
       page.getByRole("link", { name: "Open Google", exact: true }),
     ).toHaveCount(1);
-    for (const old of [
-      "Google Docs",
-      "Google Sheets",
-      "Google Drive",
-      "Gmail",
-      "Google Search Console",
-    ])
-      await expect(
-        page.getByRole("link", { name: `Open ${old}`, exact: true }),
-      ).toHaveCount(0);
-    await page.getByRole("link", { name: "Open Google", exact: true }).click();
-    await page.getByRole("switch", { name: "Enable Google" }).click();
-    await expect(
-      page.getByRole("switch", { name: "Enable Google" }),
-    ).not.toBeChecked();
-    expect(f.pages.google.settings.enabled).toBe(false);
-  });
-  test(`Google reuses the registered client but requires consent after merging at ${width}px`, async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width, height: 950 });
-    const f = await fixture(page, false);
-    Object.assign(f.pages.google, {
-      legacy: true,
-      clientId: "existing.apps.googleusercontent.com",
-      clientSecretConfigured: true,
-    });
-    await f.open("google");
-    await expect(
-      page.getByRole("region", { name: "Google connection", exact: true }),
-    ).toContainText("existing Web application client can be reused");
-    await page.getByRole("button", { name: "Edit Google connection" }).click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.getByLabel("Client ID", { exact: true })).toHaveValue(
-      "existing.apps.googleusercontent.com",
-    );
-    await expect(
-      dialog.getByRole("button", { name: "Connect Google account" }),
-    ).toBeDisabled();
-    await dialog.getByRole("button", { name: "Save", exact: true }).click();
-    expect(f.writes[0]?.body).not.toHaveProperty("clientSecret");
-    await page.getByRole("button", { name: "Edit Google connection" }).click();
-    await expect(
-      page
-        .getByRole("dialog")
-        .getByRole("button", { name: "Connect Google account" }),
-    ).toBeEnabled();
-  });
-  test(`Google disconnect disables the shared connection at ${width}px`, async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width, height: 950 });
-    const f = await fixture(page);
-    await f.open("google");
-    await page.getByRole("button", { name: "Edit Google connection" }).click();
-    await page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Disconnect", exact: true })
-      .click();
-    await expect(
-      page
-        .getByRole("dialog")
-        .getByRole("button", { name: "Connect Google account" }),
-    ).toBeEnabled();
-    await page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Cancel", exact: true })
-      .click();
-    await expect(
-      page.getByRole("region", { name: "Google connection", exact: true }),
-    ).toContainText("Not connected");
-    expect(f.pages.google.status).toBe("not_connected");
+    expect(f.writes).toHaveLength(0);
   });
 }
-test("Google connect follows the server's Google consent URL", async ({
-  page,
-}) => {
-  const f = await fixture(page);
-  await f.open("google");
-  await page.route("https://accounts.google.com/**", (route) =>
-    route.fulfill({ contentType: "text/html", body: "Fixture consent" }),
-  );
-  await page.getByRole("button", { name: "Edit Google connection" }).click();
-  await page.getByRole("button", { name: "Reconnect Google account" }).click();
-  await expect(page).toHaveURL(/accounts\.google\.com.*state=fixture-google/);
-});

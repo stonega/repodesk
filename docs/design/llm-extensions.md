@@ -235,21 +235,15 @@ entitlements still apply. Metadata projections exclude credentials, source code,
 object contents, database rows and arbitrary API/GraphQL/SQL execution. New writes
 reuse exact actor approvals, current-state checks and durable ambiguity handling.
 
-## Predefined Google Search Console
+## Google accounts and Search Console
 
-The [Search Console plugin](../implementation/search-console.md) uses a workspace
-service account with `webmasters.readonly`, an explicit property allowlist and
-`query_search_console`. Active members can read performance, sitemaps and indexed
-URL status in private interactive conversations. The operator configures encrypted
-credentials and discovers/selects properties through modal editors. Key replacement
-clears property grants and disables the plugin. Current plugin revisions fence
-provider calls, retained evidence and delivery; group requests and schedules are
-excluded. No verification, submission, deletion or indexing writes are exposed.
-
-## Independent Google plugins
-
-Google Docs, Google Sheets, Google Drive and Gmail each have their own built-in
-Pi extension, catalog/detail page, connection and enablement. Read/search tools
-require an active workspace owner/admin in a private interactive conversation.
-No file extension or Google suite-wide activation is needed. See
-[setup, scopes and boundaries](../implementation/google-workspace.md).
+One built-in Google plugin combines Docs, Sheets, Drive, Gmail and Search Console.
+The operator configures the shared Web application client, callback and Enable switch.
+Each active member connects their own Google account through `/google` in private
+Telegram, completes browser consent, then confirms the account in Telegram.
+Tokens and Search Console selections belong to that member within the workspace.
+Tools use only the requesting member's account in private interactive conversations;
+groups and scheduled workflows cannot read these personal sources. Reconnect clears
+that member's property selection, and disconnect revokes their retained evidence.
+Legacy shared tokens and service-account credentials are retired, without silently
+assigning them to a member. See [implementation and setup](../implementation/google-workspace.md).

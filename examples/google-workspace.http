@@ -18,36 +18,23 @@ Content-Type: application/json
 
 {"revision":0,"settings":{"enabled":false},"clientId":"REPLACE.apps.googleusercontent.com","clientSecret":"REPLACE_WITH_CLIENT_SECRET"}
 
-### Open the returned Google URL in the SAME signed-in browser session
-POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/google/connect
-Origin: {{origin}}
-Cookie: repodesk_session={{session}}
-X-CSRF-Token: {{csrf}}
-Content-Type: application/json
-
-{"revision":1}
-
-### After Google callback: GET settings, review account, use its latest revision
+### Enable the application; individual accounts connect in Telegram
 PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/google
 Origin: {{origin}}
 Cookie: repodesk_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
-{"revision":2,"settings":{"enabled":true}}
+{"revision":1,"settings":{"enabled":true}}
 
-### Local disconnect; disables the shared connection for all five services
-POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/google/disconnect
-Origin: {{origin}}
-Cookie: repodesk_session={{session}}
-X-CSRF-Token: {{csrf}}
-Content-Type: application/json
-
-{"revision":3}
-
-# Search Console properties use the same connection; see search-console.http.
-# Add /api/admin/google/callback to the existing Web application's redirect URIs.
-# Tool examples for an active owner/admin in a private Telegram conversation:
+# In the bot's private Telegram chat:
+# /google -- open consent, then confirm the displayed account in Telegram
+# /google status
+# /google connect -- reconnect your own account
+# /google properties -- select up to 20 personal Search Console properties, then Save
+# /google disconnect -- remove only your local account in this workspace
+# All users share /api/admin/google/callback; no admin-panel session is needed for consent.
+# Tool examples for an active member with their own confirmed account in a private Telegram conversation:
 # query_google_docs: {"documentId":"DOCUMENT_ID"}
 # query_google_sheets: {"resource":"spreadsheet","spreadsheetId":"SPREADSHEET_ID"}
 # query_google_sheets: {"resource":"values","spreadsheetId":"SPREADSHEET_ID","range":"Budget!A1:D20"}

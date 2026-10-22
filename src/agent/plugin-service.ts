@@ -30,17 +30,12 @@ import { GitHubApps } from "../github/registry.ts";
 import { repositoryAccess } from "../github/user-access.ts";
 import {
   type GoogleRegistration,
-  googleConfig,
   googleDefinitions,
   googlePlugins,
 } from "../google/config.ts";
-import {
-  googleExtension,
-  googleWorkspaceExtension,
-} from "../google/extension.ts";
+import { googleWorkspaceExtension } from "../google/extension.ts";
 import type { GoogleService } from "../google/service.ts";
 import { searchConsoleTool } from "../search-console/config.ts";
-import { searchConsoleExtension } from "../search-console/extension.ts";
 import type { SearchConsoleService } from "../search-console/service.ts";
 import { audit } from "../workspaces/policy.ts";
 import { ExtensionCatalog } from "./extensions.ts";
@@ -139,14 +134,11 @@ export class PluginService {
       const builtin = prior?.codeTruth;
       const names = new Set<string>(TOOLS);
       for (const plugin of googlePlugins)
-        if (googleConfig(workspace.plugins, plugin)?.settings.enabled)
+        if (workspace.plugins?.google?.google?.settings.enabled)
           names.add(googleDefinitions[plugin].tool);
       if (workspace.plugins?.cloudflare?.settings.enabled)
         for (const name of cloudflareTools) names.add(name);
-      if (
-        workspace.plugins?.google?.google?.settings.enabled ||
-        workspace.plugins?.searchConsole?.settings.enabled
-      )
+      if (workspace.plugins?.google?.google?.settings.enabled)
         names.add(searchConsoleTool);
       names.add("record_discussion");
       names.add("query_discussions");
@@ -224,35 +216,6 @@ export class PluginService {
       plugin,
       value,
       await this.entries(workspace),
-    );
-  }
-  async searchConsoleView(admin: Admin, workspaceId: string) {
-    requireThat(
-      this.searchConsole,
-      "search_console_credentials_unavailable",
-      503,
-    );
-    return this.searchConsole.view(admin, workspaceId);
-  }
-  async saveSearchConsole(
-    admin: Admin,
-    workspaceId: string,
-    value: unknown,
-    sessionHash?: string,
-  ) {
-    requireThat(
-      this.searchConsole,
-      "search_console_credentials_unavailable",
-      503,
-    );
-    await this.searchConsole.view(admin, workspaceId);
-    const workspace = await this.store.read(workspaceId);
-    return this.searchConsole.save(
-      admin,
-      workspaceId,
-      value,
-      await this.entries(workspace),
-      sessionHash,
     );
   }
   async cloudflareView(admin: Admin, workspaceId: string) {
@@ -390,46 +353,14 @@ export class PluginService {
     const suite = workspace.plugins?.google?.google;
     if (suite?.settings.enabled) {
       requireThat(this.google, "google_credentials_unavailable", 503);
-      const search = workspace.plugins?.searchConsole?.settings.siteUrls.length
-        ? this.searchConsole
-        : undefined;
-      requireThat(
-        !workspace.plugins?.searchConsole?.settings.siteUrls.length || search,
-        "search_console_credentials_unavailable",
-        503,
-      );
+      const search = this.searchConsole;
+      requireThat(search, "search_console_credentials_unavailable", 503);
       builtins.push(
         googleWorkspaceExtension(
           this.google,
           search,
           workspaceId,
           workspace.plugins?.revision ?? 0,
-        ),
-      );
-    }
-    for (const plugin of googlePlugins)
-      if (!suite && googleConfig(workspace.plugins, plugin)?.settings.enabled) {
-        requireThat(this.google, "google_credentials_unavailable", 503);
-        builtins.push(
-          googleExtension(
-            this.google,
-            workspaceId,
-            workspace.plugins?.revision ?? 0,
-            plugin,
-          ),
-        );
-      }
-    if (!suite && workspace.plugins?.searchConsole?.settings.enabled) {
-      requireThat(
-        this.searchConsole,
-        "search_console_credentials_unavailable",
-        503,
-      );
-      builtins.push(
-        searchConsoleExtension(
-          this.searchConsole,
-          workspaceId,
-          workspace.plugins.revision,
         ),
       );
     }

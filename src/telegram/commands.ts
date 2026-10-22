@@ -21,6 +21,7 @@ export const commandMenus = [
     commands: [
       commonCommands[0],
       { command: "github", description: "Connect your GitHub account" },
+      { command: "google", description: "Manage your Google account" },
       ...commonCommands.slice(1),
     ],
   },

@@ -76,6 +76,8 @@ const stop = await startWorker(
   ),
   new GitHubPullRequests(store, githubApps),
   plugins.cloudflare,
+  plugins.google,
+  plugins.searchConsole,
 );
 log.write("worker_started");
 let stopping = false;

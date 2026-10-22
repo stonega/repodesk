@@ -45,14 +45,6 @@ export function registrationScopes(
 ): readonly string[] {
   return plugin === "google" ? googleScopes : [googleDefinitions[plugin].scope];
 }
-export function googleConfig(
-  plugins:
-    | { google?: Partial<Record<GoogleRegistration, GoogleConfig>> }
-    | undefined,
-  product: GooglePlugin,
-) {
-  return plugins?.google?.google ?? plugins?.google?.[product];
-}
 export interface GoogleConnection {
   id: string;
   account: string;
@@ -67,6 +59,7 @@ export interface GoogleConfig {
   settings: { enabled: boolean };
   clientId: string;
   clientSecret: string;
+  /** Legacy records only; new grants live in Workspace.googleUsers. */
   connection?: GoogleConnection;
   flow?: {
     stateHash: string;
@@ -79,6 +72,29 @@ export interface GoogleConfig {
     exchanging?: boolean;
   };
 }
+export interface GoogleUser {
+  botId: string;
+  connection?: GoogleConnection;
+  siteUrls: string[];
+  siteRevision: number;
+  flow?: {
+    stateHash: string;
+    revision: number;
+    redirectUri: string;
+    verifier: string;
+    expiresAt: string;
+    exchanging?: boolean;
+    candidate?: GoogleConnection;
+  };
+  properties?: {
+    key: string;
+    connectionId: string;
+    revision: number;
+    items: string[];
+    selected: string[];
+    expiresAt: string;
+  };
+}
 export interface GooglePage {
   revision: number;
   settings: { enabled: boolean };
@@ -86,10 +102,7 @@ export interface GooglePage {
   clientSecretConfigured: boolean;
   redirectUri: string;
   scope: string;
-  status: "not_connected" | "connected" | "refreshing" | "reconnect_required";
-  account?: string;
   legacy?: boolean;
-  siteUrls?: string[];
 }
 export const googleSave = z
   .object({
@@ -103,9 +116,6 @@ export const googleSave = z
       .optional(),
     clientSecret: z.string().trim().min(1).max(4096).optional(),
   })
-  .strict();
-export const googleRevision = z
-  .object({ revision: z.number().int().nonnegative() })
   .strict();
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,256}$/);
 const pageToken = z.string().min(1).max(2048).optional();

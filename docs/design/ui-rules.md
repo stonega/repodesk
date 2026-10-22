@@ -43,7 +43,7 @@ when implementing or reviewing a change.
 - **Preference:** Put a copy icon beside the callback URL and read scope in Google
   connection editors. Keep the full values readable and selectable, show a brief
   checkmark after copying, and provide manual-copy guidance if clipboard access fails.
-- **Scope:** The shared Google connection editor for Docs, Sheets, Drive, Gmail
+- **Scope:** The shared Google Web application editor for Docs, Sheets, Drive, Gmail
   and Search Console on desktop and mobile. Reuse the shared URL rows and borderless icon buttons.
 - **Source:** 2026-10-21 — user showed the Gmail callback URL and read scope and
   requested copy buttons for these links.
@@ -97,19 +97,28 @@ when implementing or reviewing a change.
 
 - **Preference:** Show one Google catalog entry and detail page for Docs, Sheets,
   Drive, Gmail and Search Console. Reuse one registered Web application client,
-  one account connection, one callback URL and one Enable switch. Keep Search
-  Console property selection on that page, in a separate modal editor.
+  one callback URL and one Enable switch. Each member connects their own Google
+  account in private Telegram; Search Console property selection belongs to that member.
 - **Scope:** All built-in Google integrations on desktop and mobile.
 - **Source:** 2026-10-21 — user requested merging all Google-related plugins into
   one and using the same registered Web application. This supersedes the
   2026-10-20 request for four independent product plugins.
 - **Acceptance:** Verify a single catalog card, old links leading to the merged
-  page, shared connection/enablement/disconnect, and existing Web client reuse.
+  page, shared client/enablement, personal account isolation and existing Web client reuse.
   Saved summaries contain no forms; use shared modal, action, loading and toast
   components. Callback and individual scope copy actions remain available.
   Check desktop/mobile, both themes, pending/error recovery and card spacing.
-- **Exceptions:** Legacy credentials remain a backend upgrade path until the
-  operator saves the shared connection; they do not silently authorize new scopes.
+- **Source update:** 2026-10-22 — user clarified that account connection belongs
+  on the user side in Telegram and requested refactoring the plugin. The admin
+  panel configures only the application; remove account connection/disconnection
+  and personal Search Console selection controls from that panel.
+- **Acceptance update:** Verify the saved application summary and modal at desktop
+  and mobile widths, loading/empty/pending/error states, both themes and card spacing.
+  Telegram offers connection/status/reconnect/disconnect and personal property
+  selection. Browser consent requires confirmation by its initiating Telegram user.
+  One user's account, selections and disconnect never grant or remove another's access.
+- **Exceptions:** Existing registered clients can be reused. Old workspace tokens
+  and service-account credentials are retired and never become personal grants.
 
 ### Admin self-check lives in a corner chat popup
 

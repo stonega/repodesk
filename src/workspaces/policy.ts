@@ -158,6 +158,8 @@ function allowedRun(
   return result;
 }
 export function revokeWork(w: Workspace, now = new Date()) {
+  for (const actor of Object.keys(w.googleUsers ?? {}))
+    if (!eligible(w, actor)) delete w.googleUsers?.[actor];
   for (const approval of w.approvals)
     if (
       !approval.decision &&

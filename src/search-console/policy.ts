@@ -1,7 +1,11 @@
 import type { Run, Workspace } from "../domain.ts";
 
 /** Apply the same current scope to retained evidence, derived answers and delivery. */
-export function searchConsoleReadAllowed(w: Workspace, run: Run) {
+export function searchConsoleReadAllowed(
+  w: Workspace,
+  run: Run,
+  botId?: string,
+) {
   if (!run.searchConsoleRead && !w.runs.some((r) => r.searchConsoleRead))
     return true;
   const origins = new Map(w.runs.map((r) => [r.id, r]));
@@ -13,22 +17,18 @@ export function searchConsoleReadAllowed(w: Workspace, run: Run) {
     seen.add(current.id);
     const scope = current.searchConsoleRead;
     const suite = w.plugins?.google?.google;
-    const connected = suite
-      ? suite.settings.enabled &&
-        suite.connection &&
-        !suite.connection.reconnectRequired &&
-        suite.connection.id === scope?.connectionId &&
-        w.plugins?.searchConsole?.settings.siteUrls.length &&
-        [run, current].every((r) =>
-          w.members.some(
-            (m) =>
-              m.id === r.actor &&
-              m.active &&
-              ["owner", "admin"].includes(m.role),
-          ),
-        )
-      : w.plugins?.searchConsole?.settings.enabled &&
-        w.plugins.searchConsole.credential;
+    const user = w.googleUsers?.[current.actor];
+    const connected =
+      suite?.settings.enabled &&
+      user?.connection &&
+      (botId === undefined || user.botId === botId) &&
+      !user.connection.reconnectRequired &&
+      user.connection.id === scope?.connectionId &&
+      user.siteRevision === scope?.selectionRevision &&
+      run.actor === current.actor &&
+      [run, current].every((r) =>
+        w.members.some((m) => m.id === r.actor && m.active),
+      );
     if (
       scope &&
       (run.chatId !== run.actor ||

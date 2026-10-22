@@ -175,9 +175,27 @@ test("retained Search Console answers and handoffs respect revocation and privat
   w.plugins = {
     revision: 1,
     entries: [],
-    searchConsole: {
-      settings: { enabled: true, siteUrls: [siteUrl] },
-      credential: "fixture-encrypted",
+    google: {
+      google: {
+        settings: { enabled: true },
+        clientId: "fixture",
+        clientSecret: "fixture",
+      },
+    },
+  };
+  w.googleUsers = {
+    "101": {
+      botId: "999",
+      siteUrls: [siteUrl],
+      siteRevision: 1,
+      connection: {
+        id: "personal",
+        account: "fixture@example.test",
+        subject: "fixture",
+        accessToken: "encrypted",
+        refreshToken: "encrypted",
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      },
     },
   };
   const original = createRun(
@@ -188,7 +206,11 @@ test("retained Search Console answers and handoffs respect revocation and privat
     0,
     "gpt-4.1-mini",
   );
-  original.searchConsoleRead = { revision: 1 };
+  original.searchConsoleRead = {
+    revision: 1,
+    connectionId: "personal",
+    selectionRevision: 1,
+  };
   original.status = "succeeded";
   original.result = "private search data";
   const source = {

@@ -1,36 +1,16 @@
 import { z } from "zod";
-import { operator } from "../admin/auth.ts";
-import type { PluginRecord } from "../agent/plugin-config.ts";
 import type { Store } from "../db/repositories.ts";
-import { type Admin, requireThat, type Workspace } from "../domain.ts";
-import { GoogleService } from "../google/service.ts";
-import { decrypt, encrypt } from "../setup/credentials.ts";
+import { requireThat, type Workspace } from "../domain.ts";
+import { GoogleService, googleUserScope } from "../google/service.ts";
+import { token } from "../setup/credentials.ts";
+import { revokeWork, runAllowed } from "../workspaces/policy.ts";
+import { SearchConsoleClient, type SearchConsoleTransport } from "./client.ts";
 import {
-  audit,
-  authorize,
-  revokeWork,
-  runAllowed,
-} from "../workspaces/policy.ts";
-import {
-  parseServiceAccount,
-  SearchConsoleClient,
-  type SearchConsoleTransport,
-} from "./client.ts";
-import {
-  emptySearchConsole,
   inspectionInProperty,
   propertyUrl,
-  type SearchConsolePage,
   searchConsoleQuery,
-  searchConsoleSave,
-  searchConsoleTool,
 } from "./config.ts";
 
-const aad = (id: string) => `search-console:${id}`;
-function authority(admin: Admin, w: Workspace) {
-  operator(admin);
-  requireThat(w.operatorId === admin.id && !w.deletion, "access_denied", 403);
-}
 const siteSchema = z.object({
   siteUrl: propertyUrl,
   permissionLevel: z.enum([
@@ -43,248 +23,107 @@ const siteSchema = z.object({
 function scope(w: Workspace, runId: string, revision: number) {
   const run = w.runs.find((r) => r.id === runId);
   requireThat(run && runAllowed(w, run), "run_revoked", 403);
-  authorize(w, run.actor, !!w.plugins?.google?.google);
   requireThat(
     run.chatId === run.actor && !run.workflowId,
     "search_console_private_request_required",
     403,
-  );
-  const config = w.plugins?.searchConsole;
-  requireThat(
-    config &&
-      (w.plugins?.google?.google
-        ? w.plugins.google.google.settings.enabled &&
-          w.plugins.google.google.connection &&
-          !w.plugins.google.google.connection.reconnectRequired &&
-          config.settings.siteUrls.length
-        : config.settings.enabled && config.credential),
-    "search_console_not_configured",
-    409,
   );
   requireThat(
     w.plugins?.revision === revision,
     "extension_configuration_changed",
     409,
   );
-  return { run, config };
+  return { run, ...googleUserScope(w, run.actor) };
 }
 export class SearchConsoleService {
   private client: SearchConsoleClient;
   constructor(
     private store: Store,
-    private key: string,
+    key: string,
     transport?: SearchConsoleTransport,
     private google = new GoogleService(store, key),
   ) {
     this.client = new SearchConsoleClient(transport);
   }
-  async view(admin: Admin, id: string): Promise<SearchConsolePage> {
-    const w = await this.store.read(id);
-    authority(admin, w);
-    return {
-      revision: w.plugins?.revision ?? 0,
-      settings: {
-        ...structuredClone(
-          w.plugins?.searchConsole?.settings ?? emptySearchConsole,
-        ),
-        ...(w.plugins?.google?.google
-          ? { enabled: w.plugins.google.google.settings.enabled }
-          : {}),
-      },
-      credentialConfigured: w.plugins?.google?.google
-        ? !!w.plugins.google.google.connection &&
-          !w.plugins.google.google.connection.reconnectRequired
-        : !!w.plugins?.searchConsole?.credential,
-      email:
-        w.plugins?.google?.google?.connection?.account ??
-        w.plugins?.searchConsole?.email,
-    };
-  }
-  private async adminAccess(
-    admin: Admin,
-    id: string,
-    revision: number,
-    sessionHash?: string,
-  ) {
+  async properties(w: Workspace, actor: string, botId: string) {
+    const { user, connection } = googleUserScope(w, actor, botId);
     const guard = async () => {
-      const w = await this.store.read(id);
-      authority(admin, w);
-      requireThat(
-        (w.plugins?.revision ?? 0) === revision,
-        "version_conflict",
-        409,
-      );
-      const result = await this.store.pool.query(
-        sessionHash
-          ? "SELECT 1 FROM admins a JOIN sessions s ON a.id=s.admin_id WHERE a.id=$1 AND a.operator=true AND s.token_hash=$2 AND s.expires_at>now()"
-          : "SELECT 1 FROM admins WHERE id=$1 AND operator=true",
-        sessionHash ? [admin.id, sessionHash] : [admin.id],
-      );
-      requireThat(result.rowCount, "access_denied", 403);
-      const suite = w.plugins?.google?.google;
-      requireThat(
-        suite
-          ? suite.connection && !suite.connection.reconnectRequired
-          : w.plugins?.searchConsole?.credential,
-        "search_console_credential_required",
-        409,
-      );
-      return suite ? undefined : w.plugins?.searchConsole?.credential;
+      googleUserScope(w, actor, botId);
+      await this.google.assertBot(botId);
     };
-    const credential = await guard();
-    const options = {
-      guard: async () => {
-        await guard();
-      },
-    };
-    const token = credential
-      ? await this.client.token(
-          parseServiceAccount(decrypt(this.key, aad(id), credential)),
-          options,
-        )
-      : await this.google.accountAccess(id, options.guard);
-    return { token, options };
-  }
-  async properties(
-    admin: Admin,
-    id: string,
-    sessionHash: string,
-    value: unknown,
-  ) {
-    operator(admin);
-    const { revision } = z
-      .object({ revision: z.number().int().nonnegative() })
-      .strict()
-      .parse(value);
-    const { token, options } = await this.adminAccess(
-      admin,
-      id,
-      revision,
-      sessionHash,
+    const access = await this.google.accountAccess(
+      w.id,
+      actor,
+      guard,
+      undefined,
+      w,
     );
     const data = z
       .object({ siteEntry: z.array(siteSchema).max(5000).default([]) })
-      .safeParse(await this.client.api(token, "sites", options));
+      .safeParse(await this.client.api(access, "sites", { guard }));
     requireThat(data.success, "search_console_invalid_response", 502);
-    return {
-      items: data.data.siteEntry.filter(
-        (site) => site.permissionLevel !== "siteUnverifiedUser",
+    const items = [
+      ...new Set(
+        data.data.siteEntry
+          .filter((s) => s.permissionLevel !== "siteUnverifiedUser")
+          .map((s) => s.siteUrl),
       ),
+    ];
+    user.properties = {
+      key: token(),
+      connectionId: connection.id,
+      revision: w.plugins?.revision ?? 0,
+      items,
+      selected: user.siteUrls.filter((site) => items.includes(site)),
+      expiresAt: new Date(Date.now() + 600000).toISOString(),
     };
   }
-  async save(
-    admin: Admin,
-    id: string,
-    value: unknown,
-    fallback: PluginRecord[] = [],
-    sessionHash?: string,
+  async saveProperties(
+    w: Workspace,
+    actor: string,
+    botId: string,
+    key: string,
   ) {
-    operator(admin);
-    const input = searchConsoleSave.parse(value);
-    const snapshot = await this.store.read(id);
-    authority(admin, snapshot);
+    const { user, connection } = googleUserScope(w, actor, botId);
+    const draft = user.properties;
     requireThat(
-      (snapshot.plugins?.revision ?? 0) === input.revision,
-      "version_conflict",
+      draft?.key === key &&
+        draft.connectionId === connection.id &&
+        draft.revision === w.plugins?.revision &&
+        Date.parse(draft.expiresAt) > Date.now(),
+      "google_properties_expired",
       409,
     );
-    requireThat(this.key, "search_console_credentials_unavailable", 503);
-    const suite = snapshot.plugins?.google?.google;
-    requireThat(
-      !suite || (!input.serviceAccount && !input.removeCredential),
-      "google_plugin_merged",
-      409,
+    requireThat(draft.selected.length <= 20, "google_property_limit", 409);
+    const guard = async () => {
+      googleUserScope(w, actor, botId);
+      await this.google.assertBot(botId);
+    };
+    const access = await this.google.accountAccess(
+      w.id,
+      actor,
+      guard,
+      undefined,
+      w,
     );
-    const account = input.serviceAccount
-      ? parseServiceAccount(input.serviceAccount)
-      : undefined;
-    let access:
-      | Awaited<ReturnType<SearchConsoleService["adminAccess"]>>
-      | undefined;
-    if (
-      !account &&
-      !input.removeCredential &&
-      input.settings.siteUrls.length &&
-      (input.settings.enabled ||
-        JSON.stringify(input.settings.siteUrls) !==
-          JSON.stringify(snapshot.plugins?.searchConsole?.settings.siteUrls))
-    ) {
-      access = await this.adminAccess(admin, id, input.revision, sessionHash);
-      for (const site of input.settings.siteUrls) {
-        const result = siteSchema.safeParse(
-          await this.client.api(
-            access.token,
-            `sites/${encodeURIComponent(site)}`,
-            access.options,
-          ),
-        );
-        requireThat(
-          result.success &&
-            result.data.siteUrl === site &&
-            result.data.permissionLevel !== "siteUnverifiedUser",
-          "search_console_property_denied",
-          403,
-        );
-      }
+    for (const site of draft.selected) {
+      const result = siteSchema.safeParse(
+        await this.client.api(access, `sites/${encodeURIComponent(site)}`, {
+          guard,
+        }),
+      );
+      requireThat(
+        result.success &&
+          result.data.siteUrl === site &&
+          result.data.permissionLevel !== "siteUnverifiedUser",
+        "search_console_property_denied",
+        403,
+      );
     }
-    await this.store.change(id, async (w) => {
-      authority(admin, w);
-      requireThat(
-        (w.plugins?.revision ?? 0) === input.revision,
-        "version_conflict",
-        409,
-      );
-      if (access) await access.options.guard();
-      const previous = w.plugins?.searchConsole;
-      const credential = input.removeCredential
-        ? undefined
-        : account
-          ? encrypt(this.key, aad(id), JSON.stringify(account))
-          : previous?.credential;
-      const settings =
-        account || input.removeCredential
-          ? { ...emptySearchConsole, siteUrls: [] }
-          : input.settings;
-      requireThat(
-        !!suite ||
-          !settings.enabled ||
-          (credential && settings.siteUrls.length),
-        "search_console_not_configured",
-        409,
-      );
-      requireThat(
-        !settings.enabled ||
-          !(w.plugins?.entries ?? fallback).some(
-            (entry) =>
-              entry.enabled &&
-              (entry.id === "search-console" ||
-                entry.tools.includes(searchConsoleTool)),
-          ),
-        "extension_tool_collision",
-        409,
-      );
-      w.plugins = {
-        ...w.plugins,
-        entries: w.plugins?.entries ?? fallback,
-        revision: input.revision + 1,
-        searchConsole: {
-          settings: suite ? { ...settings, enabled: false } : settings,
-          credential,
-          email: input.removeCredential
-            ? undefined
-            : (account?.client_email ?? previous?.email),
-        },
-      };
-      revokeWork(w);
-      audit(
-        w,
-        admin.id,
-        "plugins.updated",
-        "search-console",
-        w.plugins.revision,
-      );
-    });
-    return this.view(admin, id);
+    user.siteUrls = [...draft.selected];
+    user.siteRevision++;
+    delete user.properties;
+    revokeWork(w);
   }
   async query(
     id: string,
@@ -295,22 +134,34 @@ export class SearchConsoleService {
     guard = async () => {},
   ) {
     const input = searchConsoleQuery.parse(value);
+    const initial = scope(await this.store.read(id), runId, revision);
+    const connectionId = initial.connection.id;
+    const selectionRevision = initial.user.siteRevision;
     const check = async () => {
       signal?.throwIfAborted();
       await guard();
-      const w = await this.store.read(id);
-      const current = scope(w, runId, revision);
+      const current = scope(await this.store.read(id), runId, revision);
       const d = await this.store.deployment();
-      requireThat(d.active && !d.paused, "deployment_paused", 409);
+      requireThat(
+        d.active && !d.paused && d.bot?.id === current.user.botId,
+        "deployment_paused",
+        409,
+      );
+      requireThat(
+        current.connection.id === connectionId &&
+          current.user.siteRevision === selectionRevision,
+        "google_connection_changed",
+        409,
+      );
       if (input.siteUrl)
         requireThat(
-          current.config.settings.siteUrls.includes(input.siteUrl),
+          current.user.siteUrls.includes(input.siteUrl),
           "search_console_property_denied",
           403,
         );
       return current;
     };
-    const { config } = await check();
+    const { user, run } = await check();
     if (input.resource === "inspect_url")
       requireThat(
         inspectionInProperty(
@@ -321,16 +172,22 @@ export class SearchConsoleService {
         403,
       );
     await this.store.change(id, (w) => {
-      scope(w, runId, revision).run.searchConsoleRead = {
+      const current = scope(w, runId, revision);
+      requireThat(
+        current.connection.id === connectionId &&
+          current.user.siteRevision === selectionRevision,
+        "google_connection_changed",
+        409,
+      );
+      current.run.searchConsoleRead = {
         revision,
-        ...(w.plugins?.google?.google
-          ? { connectionId: w.plugins.google.google.connection?.id }
-          : {}),
+        connectionId,
+        selectionRevision,
       };
     });
     if (input.resource === "properties") {
       await check();
-      return { resource: "properties", siteUrls: config.settings.siteUrls };
+      return { resource: "properties", siteUrls: user.siteUrls };
     }
     const options = {
       signal,
@@ -338,14 +195,12 @@ export class SearchConsoleService {
         await check();
       },
     };
-    const token = (await this.store.read(id)).plugins?.google?.google
-      ? await this.google.accountAccess(id, options.guard, signal)
-      : await this.client.token(
-          parseServiceAccount(
-            decrypt(this.key, aad(id), config.credential as string),
-          ),
-          options,
-        );
+    const access = await this.google.accountAccess(
+      id,
+      run.actor,
+      options.guard,
+      signal,
+    );
     const path = `sites/${encodeURIComponent(input.siteUrl as string)}`;
     let result: unknown;
     if (input.resource === "analytics") {
@@ -367,7 +222,7 @@ export class SearchConsoleService {
         })
         .safeParse(
           await this.client.api(
-            token,
+            access,
             `${path}/searchAnalytics/query`,
             options,
             {
@@ -426,7 +281,7 @@ export class SearchConsoleService {
             .max(5000)
             .default([]),
         })
-        .safeParse(await this.client.api(token, `${path}/sitemaps`, options));
+        .safeParse(await this.client.api(access, `${path}/sitemaps`, options));
       requireThat(data.success, "search_console_invalid_response", 502);
       result = {
         sitemaps: data.data.sitemap.slice(0, 100),
@@ -456,7 +311,7 @@ export class SearchConsoleService {
         })
         .safeParse(
           await this.client.api(
-            token,
+            access,
             "urlInspection/index:inspect",
             options,
             { siteUrl: input.siteUrl, inspectionUrl: input.inspectionUrl },
