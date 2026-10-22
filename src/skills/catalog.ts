@@ -119,7 +119,7 @@ export function saveSkill(
   spec: SkillSpec,
   id?: string,
   version?: number,
-) {
+): Skill {
   authorize(w, actor, true);
   spec = validateSkill(spec);
   requireThat(
@@ -152,6 +152,17 @@ export function saveSkill(
   audit(w, actor, "skill.created", skill.id, 1);
   return skill;
 }
+function approveSkill(w: Workspace, skill: Skill) {
+  requireThat(
+    !skill.origin ||
+      skill.published.length > 0 ||
+      skillSourcesPresent(w, skill.origin.references),
+    "skill_source_changed",
+    409,
+  );
+  validateSkill(skill.draft);
+  skill.published.push(structuredClone(skill.draft));
+}
 export function changeSkill(
   w: Workspace,
   actor: string,
@@ -171,15 +182,7 @@ export function changeSkill(
     403,
   );
   if (action === "publish") {
-    requireThat(
-      !skill.origin ||
-        skill.published.length > 0 ||
-        skillSourcesPresent(w, skill.origin.references),
-      "skill_source_changed",
-      409,
-    );
-    validateSkill(skill.draft);
-    skill.published.push(structuredClone(skill.draft));
+    approveSkill(w, skill);
   }
   if (action === "enable") {
     requireThat(
@@ -204,6 +207,20 @@ export function changeSkill(
   skill.preset = preset;
   revokeWork(w);
   audit(w, actor, `skill.${action}`, id, skill.version);
+  return skill;
+}
+/** Admin saves approve instructions atomically; runtime history keeps its pins. */
+export function saveManagedSkill(
+  w: Workspace,
+  actor: string,
+  spec: SkillSpec,
+  id?: string,
+  version?: number,
+) {
+  const skill = saveSkill(w, actor, spec, id, version);
+  approveSkill(w, skill);
+  revokeWork(w);
+  audit(w, actor, "skill.saved", skill.id, skill.version);
   return skill;
 }
 export function previewSkill(spec: SkillSpec) {

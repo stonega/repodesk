@@ -38,6 +38,26 @@ when implementing or reviewing a change.
 
 ## Recorded preferences
 
+### Skills use direct saves and GitHub history
+
+- **Preference:** Remove draft, publication and version management from the admin
+  Skills flow. Recommend GitHub for editing, reviewing changes and managing history;
+  retain import, source update review, instruction previews and enable/disable.
+  Custom editors save instructions in one action without a separate publish step.
+- **Scope:** Admin skill catalog, New/Edit, Markdown/GitHub imports and source updates.
+- **Source:** 2026-10-22 — user requested removing version management and drafts from
+  the admin panel and recommending that users manage skills through GitHub.
+- **Acceptance:** No draft/publish labels, revision counts, version selectors or rollback
+  controls in this flow. GitHub is the default recommended import source, with source
+  links and reviewed updates. New imports remain disabled until enabled; saved edits
+  and applied updates are ready for future runs. Existing run and schedule snapshots
+  stay intact. Verify saved summaries and dialogs, spacing, loading/empty/pending/error
+  states and keyboard recovery in both themes at desktop and mobile widths.
+- **Exceptions:** Internal revisions protect concurrent saves and immutable snapshots
+  support execution history and schedule pins. Telegram's consent flow may still
+  propose an unapproved procedure; admins can review and enable it directly.
+  Presets retain their read-only instructions and enable/disable actions.
+
 ### Google OAuth setup links have copy actions
 
 - **Preference:** Put a copy icon beside the callback URL and read scope in Google

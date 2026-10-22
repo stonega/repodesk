@@ -1,5 +1,34 @@
 # Implementation evidence
 
+## Direct skill saves and GitHub history (2026-10-22)
+
+Admin Skills recommends GitHub for instruction changes and history, with GitHub
+as the default recommended import source and **Manage on GitHub** links on saved
+imports. Removed revision counts, Publish draft, version selectors and rollback
+controls. Custom New/Edit uses **Save skill**; Markdown/GitHub imports save skills
+ready to enable, and reviewed source changes use **Apply update**. Imports remain
+disabled until explicitly enabled; edits and source updates preserve enablement.
+
+Saves and source updates validate and approve an immutable execution snapshot in
+one transaction. Existing run and workflow pins remain intact. Legacy unpublished
+entries can be reviewed and enabled directly, while conversation-source validity,
+preset restrictions, optimistic revisions, duplicate-source checks and workspace
+permissions remain enforced. Legacy publish/rollback API actions are retained for
+compatibility without panel controls. No schema migration or dependency was added.
+
+Saved cards remain readable summaries, with modal editors, toast feedback and
+layout-preserving loading. Card spacing uses container gaps; obsolete version and
+rollback styles were removed. Updated the skill design, scoped UI preference,
+English user guide and runnable workflow/API examples.
+
+Validation: **1,104 deterministic tests across 122 files** and **52 browser
+scenarios** passed, including new direct-save, snapshot preservation, stale-save,
+legacy enablement, missing-source and duplicate-import checks. Biome, strict
+TypeScript, production build and the packaged Node runtime contract passed for
+the skill changes. Desktop/mobile (1280px/375px), light/dark saved summaries and editors, loading/empty/pending/error states, GitHub update review,
+keyboard recovery and card spacing were inspected. GitHub used deterministic
+fixtures; no live integration change or deployment was performed.
+
 ## Compact Google OAuth setup (2026-10-22)
 
 The Google Web application editor keeps its callback URL visible and copyable,

@@ -17,7 +17,7 @@ Content-Type: application/json
 
 {"url":"{{source}}"}
 
-### Copy commit and paths from discovery; imports create disabled unpublished drafts.
+### Copy commit and paths from discovery; imports create saved skills, disabled until explicitly enabled.
 POST {{origin}}/api/admin/workspaces/{{workspace}}/skills/github/import
 Origin: {{origin}}
 Cookie: repodesk_session={{session}}
@@ -36,7 +36,7 @@ Content-Type: application/json
 
 {"version":1}
 
-### Save a reviewed update. Set replaceLocal true only after reviewing local edits.
+### Apply a reviewed update for future runs; existing run/schedule pins stay intact. Set replaceLocal true only after reviewing local edits.
 POST {{origin}}/api/admin/workspaces/{{workspace}}/skills/{{skill}}/github/update
 Origin: {{origin}}
 Cookie: repodesk_session={{session}}

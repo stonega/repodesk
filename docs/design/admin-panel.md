@@ -31,7 +31,7 @@ Public static assets can load before login, but contain no workspace data or sec
 | Workflows | All authorized panel admins, including unlinked deployment operators, can inspect full details, create/edit drafts, preview, approve, pause/resume, run now and delete | Panel authority permits management across workflow owners. Preserve execution ownership, approval, versions, destination/repository checks and team budgets. |
 | Plugins | Compact Installed and Market catalog; dedicated detail pages for Code Truth, Codex and registered file extensions; operator-managed version/path/tool editing, enable/disable/remove, file status and revision conflicts | Database-backed settings reach workers without restart; settings and revisions isolated per workspace; external market packages are discovery links and no code executes on API reads/saves. |
 | GitHub | Manage GitHub modal for guided App creation, workspace OAuth, installation/repository selection and connected repository links, opened on Overview without navigation; GitHub callbacks return to Plugins; disconnect API | Manifest state bound to operator/session/workspace; encrypted operator App credentials; one-use PKCE OAuth; verify user installation/repository access; installation tokens limited to selected repositories and Contents read. |
-| Agent skills | Create/import/edit, test, publish, enable/disable, scope, settings and version rollback | Permission-bounded skills; pinned workflow versions; disabling blocks dependent execution. |
+| Agent skills | Direct create/import/edit saves, test, enable/disable, settings and reviewed GitHub updates; recommend GitHub for history | Permission-bounded skills; pinned workflow versions; disabling blocks dependent execution. |
 | Shared instructions | List, edit, scope, provenance, versions, forget | Never lists other users' personal memories by virtue of admin role. |
 | Threads | Compact conversation summaries with Telegram user/group identity, latest activity and request counts; dedicated chronological conversations with aggregate statistics and links to individual run diagnostics | Paginate threads after grouping by saved identity; preserve workspace, list and request offsets. Names/usernames are display metadata; IDs and existing workspace authorization govern access. Unlinked deployment administrators can inspect retained messages. Existing cancel/retry/recovery controls remain on individual runs. |
 | Usage and limits | Recorded/estimated usage, daily/monthly caps, reservations and blocked jobs | Changes apply atomically; concurrent workers cannot overspend the displayed cap. |
@@ -179,7 +179,7 @@ and encryption key stay operator-level deployment settings.
 | `/api/admin/workspaces/:id/settings` | Read/update versioned bot/model/usage/retention settings |
 | `/api/admin/workspaces/:id/chats` | List/link/unlink chat bindings and context collection |
 | `/api/admin/workspaces/:id/workflows/*` | Workflow drafts, previews, approval and lifecycle actions |
-| `/api/admin/workspaces/:id/skills/*` | Catalog, versions, tests, publication and assignments |
+| `/api/admin/workspaces/:id/skills/*` | Catalog, direct saves, imports, tests, enablement and source update review |
 | `/api/admin/workspaces/:id/instructions/*` | Scoped memory/instruction management |
 | `/api/admin/workspaces/:id/runs/*` | Authorized history, details, cancel and retry |
 | `/api/admin/workspaces/:id/threads` | Paginated conversation summaries with saved Telegram user/group identity |

@@ -1,8 +1,10 @@
 # Agent skills managed in the web panel
 
 Status: **P0 design contract with local implementation**. Admins manage Markdown
-skills, versions and settings through the web panel. The Test control validates policy
-and previews context without paid calls. See [implementation evidence](../implementation/implementation-status.md).
+skills and settings through the web panel. GitHub is the recommended place to edit
+skills and manage their history; the panel uses direct saves, imports and reviewed
+source updates, without draft/publication or rollback controls. The Test control
+validates policy and previews context without paid calls. See [implementation evidence](../implementation/implementation-status.md).
 
 Executable **plugins** are [Pi extensions](llm-extensions.md), a separate capability
 from instruction skills. Operators install reviewed extension tools and hooks and
@@ -14,14 +16,14 @@ Users can ask to preserve a successful assistant procedure as a reusable skill.
 The bot reads a retained successful run owned by that actor, proposes sanitized
 inputs/steps/output conventions and an example, and shows the complete draft for
 approval. Approval shares it with admins as a disabled, unpublished catalog entry.
-Current admin controls handle editing, publication and enablement. Source run,
+Admins review the saved instructions and edit or enable the skill directly. Source run,
 actor, sharing time and source hashes are retained as provenance.
 
 Private inputs cannot be selected from another person's chat or imported into a
 group. Group sources stay in their topic. Source changes/removal block pending
 proposals and unpublished drafts, and cleanup removes derived draft content.
-Admin publication approves a standalone procedure with its own lifecycle, like
-other approved instructions; it survives source expiry until edited/archived.
+An admin save or enable action approves a standalone procedure with its own
+lifecycle; it survives source expiry until edited/archived.
 Workspace deletion removes it. Tool requests never carry the original user's
 credentials or repository grants. Existing schedules retain their pinned versions.
 See [implementation plan](../implementation/team-workflows-plan.md) and
@@ -36,7 +38,7 @@ to existing workspaces without a custom plugin manifest or catalog migration.
 The skill is appended to the ordinary agent system instructions on every interactive
 run, alongside registered tools; it never grants permissions. Optional Code Truth
 and Codex execution still require their own configuration. Custom workspace skill
-drafts, publication, enablement and pinned versions remain independently managed.
+saves, enablement and internal execution snapshots remain independently managed.
 Internal compaction/follow-up classification does not load extension tools or skills.
 
 Pi's coding-agent documentation describes skills as `SKILL.md` packages with metadata,
@@ -54,14 +56,14 @@ The skill manager configures instructions and already-registered tools in P0.
 
 | Control | P0 behavior |
 | --- | --- |
-| Catalog | Search/filter skills by name and enabled state; show purpose, required tools and a Preset badge for built-ins. Custom skills also show version metadata. |
+| Catalog | Search/filter skills by name and enabled state; show purpose, required tools and a Preset badge for built-ins. GitHub imports show their repository and source link, with a Manage on GitHub action. |
 | Create/import | Create an instruction skill, import a Markdown file, or discover and select multiple `SKILL.md` packages from a GitHub repository/folder link, including connected private repositories and linked Markdown/text guides; validate metadata, size and tool references. |
 | Detail/editor | Preview every skill's instructions. Edit name, description, instructions and settings for custom skills; presets are read-only. |
-| Enable/disable | Enable approved published versions per workspace and optionally narrow availability per group/workflow. |
+| Enable/disable | Enable saved instructions per workspace and optionally narrow availability per group/workflow. |
 | Tool permissions | Show required tools and effective allowed subset; unavailable tools block activation or require an explicit reduced capability variant. |
 | Settings | Configure skill-specific values such as recap sections, date window and response length; secrets remain credential references. |
-| Test | Test custom drafts with explicit sample input and fake/read-only tools; no message publishing or schedule activation. |
-| Publish/version | Custom skills save drafts, publish immutable versions and select a prior version for rollback. Presets expose no version management. |
+| Test | Test saved custom instructions with explicit sample input and fake/read-only tools; no message publishing or schedule activation. |
+| Save/history | Save custom instructions or apply a reviewed GitHub update in one action. Manage version history and rollbacks on GitHub, then review and apply the source change here. |
 | Usage | Show authorized runs/workflows using the skill and pinned version; respect run-level visibility. |
 | Archive | Archive custom skills while retaining referenced versions for history. Presets use enable/disable only. |
 
@@ -87,19 +89,20 @@ Internal revisions and published snapshots remain for stale-write protection,
 run history and workflow pins; presets cannot append or restore versions through
 admin management. See [preset API examples](../../examples/preset-skills.http).
 
-The implemented custom catalog groups management icons beside the title, separates the
-description from revision metadata, and places Publish draft and Test draft policy
-below the instruction preview. Restore a published version expands a version
-selector and rollback action; the selected source is independent for each card.
-Skills without published versions do not show restore controls.
+Custom catalog cards show saved descriptions and expandable instruction previews,
+with Edit, enable/disable and Archive actions at the top right. New/Edit use the
+shared modal and **Save skill**; imports use **Import skills**, and reviewed source
+updates use **Apply update**. These operations approve the saved instructions
+atomically. Imports and new skills stay disabled until explicitly enabled; saves
+and updates preserve current enablement. The optional **Test skill policy** action
+validates the saved instructions without a paid model or delivery call.
 
-Enable stays disabled until a version is published, with guidance to review the
-instructions and choose Publish draft. Publication and enablement remain separate
-actions. Archived cards show an Archived badge and explain that their instructions
-can be reused in a new skill; Enable and Archive are unavailable. Management icons
-stay together when the header wraps, and request errors appear below the header
-without displacing individual buttons. A rejected enable request explains the
-published/unarchived requirement instead of exposing `publish_first`.
+No revision counts, publication controls, version selectors or rollback UI is
+shown. GitHub is the default recommended import source, and imported cards link
+to **Manage on GitHub**. Legacy unpublished entries, including conversation-created
+procedures, can be reviewed and enabled directly. Archived cards cannot be enabled.
+Errors use shared toasts on the page and remain inside open dialogs; failed saves
+retain input, and pending saves lock dismissal and repeated submission.
 
 The catalog has a right-aligned search and state toolbar with accessible names in
 place of visible field labels. Search ignores case and repeated whitespace, and
@@ -121,12 +124,12 @@ admins create separate custom instructions when they need a different procedure.
 | Skill | ID, workspace/curated scope, stable slug, display name, description, owner, archived state |
 | SkillVersion | Immutable version, instruction body, validated metadata/settings schema, declared tools, checksum, author, created/published times |
 | SkillAssignment | Workspace/group/workflow scope, pinned version, enabled state, validated settings, grant ceiling, revision |
-| SkillTest | Draft version/hash, input references, result, usage, timestamp, authorized actor |
+| SkillTest | Saved instruction hash, input references, result, usage, timestamp, authorized actor |
 
-Editing creates a draft. Publishing does not automatically update every pinned
-workflow. Show an explicit upgrade action and affected schedules. Invalid drafts
-may be saved but cannot be enabled. Duplicate slugs in the same scope require an
-explicit rename; no silent first-file-wins behavior.
+Admin saves validate and approve an immutable internal snapshot in the same
+transaction; no separate publication step is needed. Existing pinned workflows
+and run history are not rewritten. Invalid instructions cannot be saved. Duplicate
+slugs in the same scope require an explicit rename; no silent first-file-wins behavior.
 
 ## Runtime contract
 
@@ -158,7 +161,7 @@ description, source path, instructions, supporting files and any unavailable
 reason. Files without readable name metadata use their containing folder name
 or `SKILL.md` at the repository root. Closing details restores focus and keeps
 the selection. Pending imports lock selection and details. Users explicitly select
-the drafts to import; duplicate slugs fail atomically. A direct file link selects
+the skills to import; duplicate slugs fail atomically. A direct file link selects
 only that file. Branch names containing slashes are resolved against GitHub.
 
 Public sources are read without credentials. Private sources must be selected in
@@ -170,13 +173,13 @@ approved instructions.
 
 Each imported skill records repository, tracked branch/tag/ref, file path, commit,
 blob SHA and imported draft hash. **Check for updates** opens a review dialog and
-compares that file and its bundled guides with the tracked ref. **Save update draft** imports changed
-instructions without publishing, enabling or changing scheduled version pins.
-Local draft edits require an explicit replacement checkbox. The server rechecks
+compares that file and its bundled guides with the tracked ref. **Apply update**
+saves and approves the reviewed instructions for future runs while preserving enablement and scheduled pins.
+Local edits require an explicit replacement checkbox. The server rechecks
 the skill revision and previewed source commit; a changed repository requires a
 fresh preview. Removed files and upstream failures retain the saved skill.
-Updates are initiated in the panel; automatic publication or background syncing
-is not implemented. Commit links remain pinned to that commit.
+Updates are initiated in the panel; background syncing is not implemented.
+Internal source commits and resource snapshots remain pinned for audit and execution.
 
 Imports accept UTF-8 `SKILL.md` files up to 16 KB with YAML frontmatter. Supported
 fields are `name`, `description`, `allowed-tools`, `license`, `compatibility` and
@@ -201,21 +204,22 @@ Guides and source metadata are visible in import review, saved instruction previ
 and source-update comparisons. They are saved in immutable published versions.
 `load_skill` accepts an optional exact resource `path` and checks the existing
 workspace, actor, enabled-skill, run and version-pin boundaries. A content hash
-detects guide-only updates; they still require draft review and publication, and
-cannot rewrite existing run or schedule pins. Discovery caps at 100 skills and
+detects guide-only updates; these still require source review and applying the
+update, and cannot rewrite existing run or schedule pins. Discovery caps at 100 skills and
 rejects truncated or oversized GitHub trees rather than showing partial results.
 Only fixed GitHub API endpoints are fetched.
 
 ## APIs and acceptance
 
 Add workspace-scoped `/api/admin/workspaces/:id/skills` resources for list/create,
-versions, draft validation, test, publish, assignments and archive. Require expected
-revision on edits, server-side role checks and redacted audit events.
+validated direct saves, imports, tests, enable/disable and archive. Legacy publish
+and rollback actions remain API compatibility paths, without panel controls.
+Require expected revision on edits, server-side role checks and redacted audit events.
 
 Tests cover malformed metadata, duplicate names, cross-tenant reads, imports requesting
 unavailable tools, secret leakage, stale edits, version pinning and rollback. Browser
-tests create a recap skill, test it, publish/enable it, observe its version in a bot
-run, then disable it and confirm a dependent schedule cannot execute.
+tests create a recap skill, test and enable it directly, verify saved snapshots
+in a bot run, then disable it and confirm a dependent schedule cannot execute.
 
 The loader must also pass prompt-injection and no-write tests: a skill asking to
 change membership, send an external message or activate a workflow cannot acquire

@@ -30,12 +30,17 @@ import { logQuery, readRuntimeLogs } from "../observability/logs.ts";
 import { requestDeletion } from "../privacy/service.ts";
 import type { ReviewService } from "../review-bot/service.ts";
 import { searchProviderIdSchema } from "../search/config.ts";
-import { equal, hash, passwordHash } from "../setup/credentials.ts";
+import {
+  equal,
+  fingerprint,
+  hash,
+  passwordHash,
+} from "../setup/credentials.ts";
 import type { SetupService } from "../setup/service.ts";
 import {
   changeSkill,
   isPresetSkill,
-  saveSkill,
+  saveManagedSkill,
   testSkill,
 } from "../skills/catalog.ts";
 import { githubSkillUrl } from "../skills/github-source.ts";
@@ -1593,7 +1598,7 @@ export function adminRoutes(
       .parse(await c.req.json());
     return c.json(
       await change(c, (w, actor) =>
-        saveSkill(w, actor, importMarkdown(input.markdown)),
+        saveManagedSkill(w, actor, importMarkdown(input.markdown)),
       ),
       201,
     );
@@ -1601,7 +1606,7 @@ export function adminRoutes(
   app.post("/api/admin/workspaces/:id/skills", async (c) => {
     const spec = skillSchema.parse(await c.req.json());
     return c.json(
-      await change(c, (w, actor) => saveSkill(w, actor, spec)),
+      await change(c, (w, actor) => saveManagedSkill(w, actor, spec)),
       201,
     );
   });
@@ -1612,7 +1617,13 @@ export function adminRoutes(
       .parse(await c.req.json());
     return c.json(
       await change(c, (w, actor) =>
-        saveSkill(w, actor, input.spec, c.req.param("skill"), input.version),
+        saveManagedSkill(
+          w,
+          actor,
+          input.spec,
+          c.req.param("skill"),
+          input.version,
+        ),
       ),
     );
   });
@@ -1626,16 +1637,22 @@ export function adminRoutes(
       .strict()
       .parse(await c.req.json());
     return c.json(
-      await change(c, (w, actor) =>
-        changeSkill(
-          w,
-          actor,
-          c.req.param("skill"),
-          input.version,
-          input.action,
-          input.pin,
-        ),
-      ),
+      await change(c, (w, actor) => {
+        const id = c.req.param("skill");
+        const skill = w.skills.find((s) => s.id === id);
+        let expected = input.version;
+        // Approve the displayed instructions when enabling legacy catalog entries.
+        if (
+          input.action === "enable" &&
+          skill &&
+          !isPresetSkill(w, skill) &&
+          (!skill.published.length ||
+            fingerprint(skill.draft) !== fingerprint(skill.published.at(-1)))
+        ) {
+          expected = changeSkill(w, actor, id, expected, "publish").version;
+        }
+        return changeSkill(w, actor, id, expected, input.action, input.pin);
+      }),
     );
   });
   app.post("/api/admin/workspaces/:id/skills/:skill/test", async (c) => {

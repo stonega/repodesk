@@ -47,7 +47,7 @@ function importedSkill(): Skill {
     enabled: false,
     archived: false,
     tests: [],
-    published: [],
+    published: [spec("source-recap")],
     githubSource: {
       repository: discovery.repository,
       ref: discovery.ref,
@@ -270,7 +270,7 @@ for (const width of [1280, 375]) {
     });
     await toolsIssue.getByRole("button", { name: "Back", exact: true }).click();
     await dialog
-      .getByRole("button", { name: "Import 4 drafts", exact: true })
+      .getByRole("button", { name: "Import 4 skills", exact: true })
       .click();
     await expect(dialog).toHaveCount(0);
     const card = page
@@ -320,7 +320,10 @@ for (const width of [1280, 375]) {
       .getByRole("button", { name: "Check for updates", exact: true })
       .click();
     const current = update.locator("section").filter({
-      has: page.getByRole("heading", { name: "Current draft", exact: true }),
+      has: page.getByRole("heading", {
+        name: "Saved instructions",
+        exact: true,
+      }),
     });
     const next = update.locator("section").filter({
       has: page.getByRole("heading", { name: "Source update", exact: true }),
@@ -341,7 +344,7 @@ for (const width of [1280, 375]) {
       path: test.info().outputPath("harness-guide-update.png"),
     });
   });
-  test(`unchanged sources and successful updates keep published instructions at ${width}px in dark mode`, async ({
+  test(`unchanged sources and successful updates save instructions directly at ${width}px in dark mode`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -352,7 +355,6 @@ for (const width of [1280, 375]) {
     skill.published = [structuredClone(skill.draft)];
     skill.enabled = true;
     await fixture(page, [skill]);
-    const published = structuredClone(skill.published);
     let changed = false;
     await page.route("**/github/check", async (route) => {
       await route.fulfill({
@@ -372,6 +374,7 @@ for (const width of [1280, 375]) {
       });
       skill.draft.body = "New source instructions.";
       skill.version++;
+      skill.published.push(structuredClone(skill.draft));
       if (skill.githubSource) skill.githubSource.commit = "e".repeat(40);
       await route.fulfill({ json: skill });
     });
@@ -387,7 +390,7 @@ for (const width of [1280, 375]) {
       "This skill is up to date with its source.",
     );
     await expect(
-      dialog.getByRole("button", { name: "Save update draft" }),
+      dialog.getByRole("button", { name: "Apply update" }),
     ).toHaveCount(0);
     changed = true;
     await dialog
@@ -413,23 +416,28 @@ for (const width of [1280, 375]) {
     await page.screenshot({
       path: test.info().outputPath("github-update-dark.png"),
     });
-    await dialog.getByRole("button", { name: "Save update draft" }).click();
+    await dialog.getByRole("button", { name: "Apply update" }).click();
     await expect(dialog).toHaveCount(0);
     const card = page.locator(".skill-card");
-    await expect(card.getByText("Revision 2", { exact: true })).toBeVisible();
     await expect(
-      card.getByText("1 published version", { exact: true }),
+      card.locator(".skill-card-meta, .skill-card-versions"),
+    ).toHaveCount(0);
+    await card.locator(".skill-card-preview > summary").click();
+    await expect(
+      card.getByText("New source instructions.", { exact: true }),
     ).toBeVisible();
-    await expect(card.getByText(/main at eeeeeee/)).toBeVisible();
+    await expect(
+      card.getByRole("link", { name: "Manage on GitHub" }),
+    ).toBeVisible();
     await expect(
       card.getByRole("button", { name: "disable", exact: true }),
     ).toBeVisible();
-    expect(skill.published).toEqual(published);
+    expect(skill.published.at(-1)?.body).toBe("New source instructions.");
     await page.screenshot({
       path: test.info().outputPath("github-updated-summary-dark.png"),
     });
   });
-  test(`private multi-skill discovery selects drafts and keeps saved source display separate at ${width}px`, async ({
+  test(`private multi-skill discovery selects skills and keeps saved source display separate at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -490,7 +498,7 @@ for (const width of [1280, 375]) {
       dialog.getByRole("checkbox", { name: "broken", exact: true }),
     ).toBeDisabled();
     await expect(
-      dialog.getByRole("button", { name: "Import selected drafts" }),
+      dialog.getByRole("button", { name: "Import selected skills" }),
     ).toBeDisabled();
     await dialog
       .getByRole("checkbox", { name: "source-recap", exact: true })
@@ -499,14 +507,14 @@ for (const width of [1280, 375]) {
       .getByRole("checkbox", { name: "source-review", exact: true })
       .check();
     await expect(dialog.locator(".modal-actions button")).toHaveText([
-      "Import 2 drafts",
+      "Import 2 skills",
       "Cancel",
     ]);
     await page.screenshot({
       path: test.info().outputPath("github-discovery.png"),
     });
     await dialog
-      .getByRole("button", { name: "Import 2 drafts", exact: true })
+      .getByRole("button", { name: "Import 2 skills", exact: true })
       .click();
     await expect(
       dialog.getByRole("button", { name: "Importing…" }),
@@ -532,14 +540,16 @@ for (const width of [1280, 375]) {
     expect(saves).toBe(1);
     const card = page.locator(".skill-card");
     await expect(card.getByText(/Source:/)).toBeVisible();
-    await expect(card.getByRole("link")).toHaveAttribute(
+    await expect(
+      card.getByRole("link", { name: "Manage on GitHub" }),
+    ).toHaveAttribute(
       "href",
       /github.com\/example\/private-skills\/blob\/main\/skills\/recap\/SKILL.md/,
     );
     await expect(card.locator("input, select, textarea")).toHaveCount(0);
     await expect(
       card.getByRole("button", { name: "enable", exact: true }),
-    ).toBeDisabled();
+    ).toBeEnabled();
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
     ).toBeLessThanOrEqual(width);
@@ -547,7 +557,7 @@ for (const width of [1280, 375]) {
       path: test.info().outputPath("github-source-summary.png"),
     });
   });
-  test(`update review protects local drafts and retains source errors at ${width}px`, async ({
+  test(`update review protects local edits and retains source errors at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -597,19 +607,19 @@ for (const width of [1280, 375]) {
       dialog.getByText("Updated source instructions.", { exact: true }),
     ).toBeVisible();
     await expect(
-      dialog.getByRole("button", { name: "Save update draft" }),
+      dialog.getByRole("button", { name: "Apply update" }),
     ).toBeDisabled();
     await dialog
-      .getByRole("checkbox", { name: "Replace my local draft edits" })
+      .getByRole("checkbox", { name: "Replace my local edits" })
       .check();
     await expect(dialog.locator(".modal-actions button")).toHaveText([
-      "Save update draft",
+      "Apply update",
       "Cancel",
     ]);
     await page.screenshot({
       path: test.info().outputPath("github-update-review.png"),
     });
-    await dialog.getByRole("button", { name: "Save update draft" }).click();
+    await dialog.getByRole("button", { name: "Apply update" }).click();
     await expect(dialog.getByRole("alert")).toContainText(
       "repository changed since this preview",
     );
@@ -618,9 +628,8 @@ for (const width of [1280, 375]) {
       path: test.info().outputPath("github-update-error.png"),
     });
     expect(updates).toBe(1);
-    await expect(
-      page.locator(".skill-card").getByText("1 published version"),
-    ).toBeVisible();
+    await expect(page.locator(".skill-card-meta")).toHaveCount(0);
+    expect(skill.draft.body).toBe("Local draft changes.");
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(dialog).toHaveCount(0);
     await expect(
@@ -662,7 +671,7 @@ test("empty and failed discovery preserve entered links; changing links invalida
   await dialog.getByRole("button", { name: "Find skills" }).click();
   await expect(dialog.getByText(/No SKILL.md files found/)).toBeVisible();
   await expect(
-    dialog.getByRole("button", { name: "Import selected drafts" }),
+    dialog.getByRole("button", { name: "Import selected skills" }),
   ).toBeDisabled();
   await dialog
     .getByRole("textbox", { name: "GitHub link", exact: true })
@@ -699,7 +708,7 @@ test("Markdown imports remain available through the shared modal", async ({
       "---\nname: local-skill\ndescription: A local skill\n---\nInstructions.",
     );
   await dialog
-    .getByRole("button", { name: "Import draft", exact: true })
+    .getByRole("button", { name: "Import skill", exact: true })
     .click();
   await expect(dialog).toHaveCount(0);
   expect(saved).toBe(true);

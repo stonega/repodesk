@@ -79,7 +79,7 @@ const url = process.env.TEST_DATABASE_URL;
     expect(result.items).toHaveLength(2);
     for (const skill of result.items) {
       expect(skill.enabled).toBe(false);
-      expect(skill.published).toHaveLength(0);
+      expect(skill.published).toEqual([skill.draft]);
       expect(skill.githubSource?.installationId).toBe(501);
       // Pre-compatibility imports stored a schema-ordered JSON hash.
       await store.change(w.id, (current) => {
@@ -309,7 +309,8 @@ const url = process.env.TEST_DATABASE_URL;
     );
     expect(updated.draft.body).toBe("Updated upstream instructions.");
     expect(updated.enabled).toBe(true);
-    expect(updated.published).toEqual(saved.published);
+    expect(updated.published.slice(0, -1)).toEqual(saved.published);
+    expect(updated.published.at(-1)).toEqual(updated.draft);
     expect((await store.read(w.id)).workflows).toEqual(before.workflows);
     await expect(
       service.update(w.id, "101", skill.id, saved.version, state.commit, true),

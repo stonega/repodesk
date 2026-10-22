@@ -37,9 +37,9 @@ const messages: Record<string, string> = {
   github_too_many_skills:
     "This link contains more than 100 skills. Link to a smaller folder.",
   github_skill_local_changes:
-    "The draft has local edits. Review them and confirm replacement before updating.",
+    "The skill has local edits. Review them and confirm replacement before updating.",
   duplicate_slug:
-    "A skill with this name already exists. Rename the existing draft before importing.",
+    "A skill with this name already exists. Rename the existing skill before importing.",
   invalid_markdown: "The file must be valid UTF-8 Markdown, at most 16 KB.",
   unsupported_frontmatter:
     "Supported frontmatter fields: name, description, allowed-tools, license, compatibility, metadata.",
@@ -75,7 +75,7 @@ function importIssue(skill: GitHubSkillCandidate) {
     : skill.alreadyImported
       ? "Already imported. Check for updates on its card."
       : skill.duplicate
-        ? "Duplicate skill name. Rename the existing draft or choose a source with a unique name."
+        ? "Duplicate skill name. Rename the existing skill or choose a source with a unique name."
         : undefined;
 }
 function SkillImportPreview({
@@ -164,7 +164,7 @@ export function SkillImport({
           disabled={busy}
           onChange={(e) => setMode(e.target.value)}
         >
-          <option value="github">GitHub link</option>
+          <option value="github">GitHub link (recommended)</option>
           <option value="markdown">Markdown file</option>
         </Select>
       </label>
@@ -346,8 +346,8 @@ export function SkillImport({
                 else await request(`${base}/import`, "POST", { markdown });
                 notify(
                   mode === "github"
-                    ? `${selected.length} skill drafts imported. Review and publish them before enabling.`
-                    : "Skill draft imported.",
+                    ? `${selected.length} skills imported. Enable them when you’re ready to use them.`
+                    : "Skill imported. Enable it when you’re ready to use it.",
                 );
                 saved();
               })
@@ -356,8 +356,8 @@ export function SkillImport({
             {busy
               ? "Importing…"
               : mode === "github"
-                ? `Import ${selected.length || "selected"} ${selected.length === 1 ? "draft" : "drafts"}`
-                : "Import draft"}
+                ? `Import ${selected.length || "selected"} ${selected.length === 1 ? "skill" : "skills"}`
+                : "Import skill"}
           </button>
         )}
       </ModalActions>
@@ -396,9 +396,10 @@ export function SkillGitHubUpdate({
   return (
     <>
       <p className="muted">
-        Check the tracked {skill.githubSource?.ref} source for changes. Updates
-        replace the draft for review. Published versions and scheduled skills
-        keep their current instructions.
+        Manage changes and version history on GitHub. Review changes from the
+        tracked {skill.githubSource?.ref} source here before applying them.
+        Updates apply to future runs; existing runs and schedules keep their
+        saved instructions.
       </p>
       {result &&
         (!result.changed ? (
@@ -410,7 +411,7 @@ export function SkillGitHubUpdate({
             </p>
             <div className="skill-update-comparison">
               <section>
-                <h3>Current draft</h3>
+                <h3>Saved instructions</h3>
                 <p>{skill.draft.description}</p>
                 <pre>{skill.draft.body}</pre>
                 <SkillSourceDetails spec={skill.draft} />
@@ -446,7 +447,7 @@ export function SkillGitHubUpdate({
             {result.locallyModified && (
               <>
                 <p className="notice">
-                  Your draft has local edits. Saving this update replaces them.
+                  Your skill has local edits. Saving this update replaces them.
                 </p>
                 <label className="check">
                   <input
@@ -455,7 +456,7 @@ export function SkillGitHubUpdate({
                     disabled={busy}
                     onChange={(e) => setReplaceLocal(e.target.checked)}
                   />
-                  Replace my local draft edits
+                  Replace my local edits
                 </label>
               </>
             )}
@@ -495,13 +496,13 @@ export function SkillGitHubUpdate({
                   replaceLocal,
                 });
                 notify(
-                  "Source update saved as a draft. Review and publish it to use the new instructions.",
+                  "Skill updated from GitHub. Future runs will use the saved instructions.",
                 );
                 saved();
               })
             }
           >
-            {busy ? "Saving…" : "Save update draft"}
+            {busy ? "Saving…" : "Apply update"}
           </button>
         ) : (
           <button

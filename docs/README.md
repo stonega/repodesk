@@ -39,7 +39,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Google Search Console](implementation/search-console.md) | Personal Google connections and property selections, read-only search analytics, sitemaps and URL inspection |
 | [Google plugin](implementation/google-workspace.md) | Shared Web application, Telegram account connection and enablement for Docs, Sheets, Drive, Gmail and Search Console |
 | [Cloudflare plugin](implementation/cloudflare.md) | Direct API tokens, account/domain discovery, scoped DNS/Pages queries and approved changes |
-| [Agent skills](design/agent-skills.md) | Web-managed catalog, settings, versioning and Pi integration |
+| [Agent skills](design/agent-skills.md) | Skill catalog, direct saves, GitHub source updates and Pi integration |
 | [Workspace membership and access](design/access-control.md) | Active membership, roles, enforcement and revocation |
 | [Pi + Docker implementation plan](implementation/bot-plan.md) | Concrete engineering tasks, architecture decisions, tests and rollout |
 | [Roadmap](implementation/roadmap.md) | Dependency-ordered milestones and release gates |

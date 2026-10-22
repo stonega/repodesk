@@ -408,7 +408,7 @@ test.describe
       );
       await pool.end();
     });
-    test("settings conflict, skill publication, workflow pause and audit", async ({
+    test("settings conflict, direct skill saves, workflow pause and audit", async ({
       page,
       context,
     }) => {
@@ -637,7 +637,7 @@ test.describe
         .fill("Decisions");
       await editor.getByLabel("Maximum words", { exact: true }).fill("100");
       await page
-        .getByRole("button", { name: "Save draft", exact: true })
+        .getByRole("button", { name: "Save skill", exact: true })
         .click();
       const card = page.locator("section").filter({
         has: page.getByRole("heading", {
@@ -646,46 +646,32 @@ test.describe
         }),
       });
       await expect(card).toBeVisible();
-      await card
-        .getByRole("button", { name: "Publish draft", exact: true })
-        .click();
-      await expect(card.getByText(/1 published version/)).toBeVisible();
+      await expect(
+        card.getByRole("button", { name: "enable", exact: true }),
+      ).toBeEnabled();
       await card.getByRole("button", { name: "enable", exact: true }).click();
       await expect(card.getByText("Enabled", { exact: true })).toBeVisible();
-      await card
-        .getByRole("button", { name: "Publish draft", exact: true })
-        .click();
       await expect(
-        card.getByText("2 published versions", { exact: true }),
-      ).toBeVisible();
-      await expect(
-        card.getByLabel("Rollback source version"),
-      ).not.toBeVisible();
-      await card
-        .getByText("Restore a published version", { exact: true })
-        .click();
-      await chooseOption(card.getByLabel("Rollback source version"), "2");
-      const recap = page.locator(".skill-card").filter({
-        has: page.getByRole("heading", { name: "Team recap", exact: true }),
+        card.locator(".skill-card-meta, .skill-card-versions"),
+      ).toHaveCount(0);
+      await card.getByRole("button", { name: "Edit", exact: true }).click();
+      const editSkill = page.getByRole("dialog", {
+        name: "Edit Browser skill",
       });
-      await expect(recap.getByText("Preset", { exact: true })).toBeVisible();
-      await expect(
-        recap.getByText("Restore a published version", { exact: true }),
-      ).toHaveCount(0);
-      await expect(
-        recap.getByRole("button", { name: "Edit draft", exact: true }),
-      ).toHaveCount(0);
-      await expect(recap.getByRole("button")).toHaveCount(1);
-      await expect(card.getByLabel("Rollback source version")).toHaveAttribute(
-        "value",
-        "2",
-      );
-      await card
-        .getByRole("button", { name: "Publish rollback as new version" })
+      await editSkill
+        .getByLabel("Instructions", { exact: true })
+        .fill("Updated instructions for future runs.");
+      await editSkill
+        .getByRole("button", { name: "Save skill", exact: true })
         .click();
+      await expect(editSkill).toHaveCount(0);
+      await card.locator(".skill-card-preview > summary").click();
       await expect(
-        card.getByText("3 published versions", { exact: true }),
+        card.getByText("Updated instructions for future runs.", {
+          exact: true,
+        }),
       ).toBeVisible();
+      await expect(card.getByText("Enabled", { exact: true })).toBeVisible();
       await page.screenshot({
         path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/skills-desktop.png`,
         fullPage: true,
@@ -698,7 +684,7 @@ test.describe
         path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/skill-card-mobile.png`,
       });
       await page.setViewportSize({ width: 1280, height: 800 });
-      await card.getByRole("button", { name: "Test draft policy" }).click();
+      await card.getByRole("button", { name: "Test skill policy" }).click();
       await expect(
         page.getByText(/Deterministic policy test passed/),
       ).toBeVisible();

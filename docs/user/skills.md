@@ -1,57 +1,92 @@
-# 技能与可复用流程
+# Skills
 
-技能保存可重复使用的说明、步骤和输出格式，例如团队周报或 Issue 整理流程。技能不会自动增加仓库权限、安装外部程序或提供任意 shell 能力。
+Skills are reusable instructions, such as a team recap or issue triage procedure.
+They can request existing tools, but cannot grant repository access, install
+programs or provide arbitrary shell execution. **Skills** manages instructions;
+**Plugins** manages connected services and executable tools.
 
-**Skills** 管理指令；**Plugins** 管理连接服务和可执行工具。导入一份技能，不等于安装它描述的全部工具。
+## Manage skills on GitHub
 
-## 使用预设技能
+We recommend keeping your skill instructions, reviews and version history in
+GitHub. In **Skills**, choose **Import skill**, paste a repository, folder or
+`SKILL.md` link, then choose **Find skills**. GitHub is the default import source.
+Private repositories require the current workspace's GitHub connection and access.
 
-在 **Skills** 查看带 **Preset** 标记的技能，如 **Team recap** 和 **Follow-up draft**。预设可以查看说明、启用或停用，不提供编辑、发布、归档和版本回滚。
+Select the skills to import. Click a skill's name to inspect its instructions,
+source path, metadata, supporting files or any reason it cannot be imported.
+Closing the details keeps your selection. Choose **Import skills**, then enable
+saved skills when you are ready to use them. There is no separate publish step.
 
-需要不同规则时，新建自定义技能。停用技能可能挂起依赖它的定时任务。
+Imported cards include a **Manage on GitHub** link. Make changes in GitHub, then
+choose **Check for updates** in RepoDesk. Review the saved and incoming instructions
+and choose **Apply update**. If the skill has local edits, explicitly confirm their
+replacement. Applying an update preserves whether the skill is enabled.
 
-## 创建自定义技能
+To restore earlier instructions, restore them in GitHub, then review and apply that
+source update here. RepoDesk does not offer version selectors or rollback controls
+in the panel. Updates are manual; changes in GitHub do not sync automatically.
 
-管理员在 **Skills** 创建技能，填写用途、指令、所需工具和设置：
+## Preset and custom skills
 
-1. 清楚描述何时使用、需要什么输入、如何判断完成。
-2. 只选择必要且已可用的工具。
-3. 保存草稿，检查指令和预览。
-4. 使用 **Test draft policy** 检查策略和提示预览。
-5. 点击 **Publish draft** 发布版本，再启用。
+**Team recap** and **Follow-up draft** are read-only presets. Inspect their
+instructions and enable or disable them. Create a separate custom skill if you
+need different rules.
 
-Test 不进行付费模型调用，也不会验证真实模型效果或向 Telegram 发布消息。发布和启用是两个动作，未发布的自定义草稿不能启用。
+For a custom skill, choose **New**, describe its purpose and instructions, select
+only the necessary tools and configure its output settings. Choose **Save skill**.
+The saved instructions are immediately ready to enable. **Edit** opens a dialog;
+saving changes to an enabled skill makes them available to future runs.
 
-## 导入技能
+You can also import a standalone Markdown file. It includes only that file; use
+GitHub import when the skill needs supporting guides. GitHub remains the recommended
+place to maintain shared instructions and their history.
 
-可以导入 Markdown 文件，也可以输入 GitHub 仓库或目录链接，发现并选择其中的 `SKILL.md`。私有来源需要通过当前工作区 GitHub 连接和权限检查。
+**Test skill policy** checks the saved instructions and shows a deterministic
+context preview using the sample input. It makes no paid model request and sends
+no Telegram message. It does not verify a real model's output quality.
 
-发现列表只显示勾选框和技能名称，便于快速选择。点击名称查看说明、来源路径、配套文件，以及无法导入的具体原因；关闭详情后保留已选技能。
+## Files and access
 
-导入后审阅内容、设置和工具依赖，再发布启用。不要把远端技能当作可信权限来源；其中描述的凭据、安装步骤或工具名称不会自动获得执行权限。
+A `SKILL.md` must be UTF-8 Markdown, at most 16 KB. YAML frontmatter supports
+`name`, `description`, `allowed-tools`, `license`, `compatibility` and `metadata`,
+including comments, quotes and multiline descriptions. Names allow 64 characters
+and descriptions allow 1,024 characters. Metadata values must be strings.
+Requested tools must already exist in RepoDesk.
 
-单份 `SKILL.md` 需为 UTF-8 Markdown，最多 16 KB。YAML 开头信息支持 `name`、`description`、`allowed-tools`、`license`、`compatibility` 和 `metadata`，也支持注释、引号和多行描述。名称最多 64 个字符，描述最多 1,024 个字符；`metadata` 的值需为字符串。工具声明可以使用字符串或列表，但只能请求 RepoDesk 已提供的工具。
+GitHub imports include linked `.md` and `.txt` guides inside the skill directory,
+including guides referenced by other included guides. Limits are 32 supporting
+files, 64 KB per file and 256 KB combined. Missing guides, secrets or oversized
+content block import with an explanation. Scripts and archives are not installed
+or executed; external links and paths outside the skill directory are not fetched.
 
-GitHub 导入会同时保存技能目录内以 Markdown 链接引用的 `.md` 和 `.txt` 指南，并递归包含指南引用的其他文本文件。最多 32 份配套文件，每份最多 64 KB，合计最多 256 KB。导入预览、已保存的说明预览和更新对比都能展开查看这些文件及来源信息。配套文件缺失、含秘密或超过限制时会显示原因。
+Supporting files are saved from the same source commit as the instructions. They
+appear in import details, saved previews and update comparisons. The assistant
+reads them only through the existing workspace, actor, run and tool permissions.
+An imported instruction's credentials or tool declarations never grant access.
 
-配套文件固定到同一来源提交和已发布技能版本，助手按需读取。只有指南内容变化时也能检查更新。单独上传 Markdown 文件只包含该文件；需要配套指南时使用 GitHub 导入。导入不会安装或执行脚本、压缩包，也不会获取技能目录以外或外部链接的内容。
+## Conversation-created skills
 
-有来源更新时，先查看变更并生成、审阅新版本。已运行任务和定时任务固定的旧版本不会仅因源文件变化而被改写。
+After a useful conversation, ask the bot to preserve the procedure as a team
+skill and remove private data. The bot proposes sanitized instructions for you
+to review. Your approval shares them with workspace admins as a disabled skill.
+Admins can review and edit the instructions, then enable the skill directly.
 
-## 从对话保存团队流程
+You cannot create a team skill from another person's private chat. Group sources
+remain limited to their topic. Before sharing, check that the proposed instructions
+contain no information that should remain private.
 
-一次有用的对话完成后，可以说：
+Unapproved conversation procedures depend on their retained sources; source removal
+or expiry can make them unavailable. An admin save or enable action approves a
+standalone procedure with its own lifecycle.
 
-> 把刚才整理 PR 报告的步骤保存成团队技能，去掉这次的私有数据。
+## Changes and availability
 
-机器人会从你有权使用的已完成对话生成去敏后的完整草稿，展示给你确认。批准后，它进入管理员可见的目录，初始为未发布、未启用。
+Existing runs and schedules keep their saved instruction snapshots when you edit
+a skill or apply a GitHub update. New interactive runs use the latest saved
+instructions. Disabling a skill can suspend dependent schedules. Archiving a custom
+skill preserves historical references and prevents enabling it again.
 
-这是将流程分享给管理员审阅，确认前检查是否包含不应共享的内容。不能从别人的私聊创建团队技能；群组来源也受原 Topic 范围约束。
-
-## 版本和停用
-
-自定义技能发布不可变版本，运行和定时任务会记录所用版本。新版本不会重写历史执行；回滚选择已有发布版本，仍需核对依赖任务。归档保留历史引用，不继续作为可启用技能。
-
-未发布、由对话生成的草稿依赖原始来源；来源被删除或过期可能使其失效。管理员发布后的通用流程有独立生命周期，需另行编辑或归档。
-
-搜索和状态筛选可以定位技能。保存冲突时重新加载，不要用旧草稿覆盖最新设置。工具不可用时，先配置对应 [集成](README.md)，或缩减技能范围。
+Use search and the state filter to find a skill. If a save conflicts with another
+session, review the latest saved settings before retrying. Failed saves keep your
+input in the dialog. Configure missing tools through the relevant
+[integration](README.md) before using instructions that require them.

@@ -2327,6 +2327,7 @@ function SkillCardHeader({
   onAction: (action: "enable" | "disable" | "archive") => Promise<void>;
 }) {
   const [error, setError] = useState("");
+  const notify = useToast();
   return (
     <>
       <div className="skill-card-header">
@@ -2341,7 +2342,7 @@ function SkillCardHeader({
           {!s.preset && (
             <IconButton
               icon="edit"
-              label="Edit draft"
+              label="Edit"
               type="button"
               onClick={onEdit}
             />
@@ -2360,13 +2361,11 @@ function SkillCardHeader({
               }
               key={action}
               danger={action === "archive"}
-              disabled={
-                s.archived || (action === "enable" && !s.published.length)
-              }
+              disabled={s.archived}
               onError={(message) =>
                 setError(
                   message === "publish_first"
-                    ? "Only published, unarchived skills can be enabled. Reload the page to check this skill’s current status."
+                    ? "Archived skills cannot be enabled. Reload the page to check this skill’s current status."
                     : s.preset && message.includes("version_conflict")
                       ? "This preset changed in another session. Reload the page before trying again."
                       : message,
@@ -2374,6 +2373,9 @@ function SkillCardHeader({
               }
               onClick={async () => {
                 await onAction(action);
+                notify(
+                  `Skill ${action === "enable" ? "enabled" : action === "disable" ? "disabled" : "archived"}.`,
+                );
               }}
             >
               {action}
@@ -2387,19 +2389,15 @@ function SkillCardHeader({
           Archived skills cannot be enabled. Create or import a new skill to
           reuse these instructions.
         </p>
-      ) : !s.enabled && !s.published.length ? (
-        <p className="muted">
-          Review the instructions and choose Publish draft below, then enable
-          this skill.
-        </p>
       ) : null}
-      {error && <Notice error>{error}</Notice>}
+      <ErrorToast message={error} />
     </>
   );
 }
 
 function SkillsPage({ id }: { id: string }) {
-  const { data, error, reload } = useData<{
+  const notify = useToast();
+  const { data, error, reload, loading } = useData<{
     items: (Skill & { dependents: unknown[] })[];
     total: number;
   }>(`/api/admin/workspaces/${id}/skills`);
@@ -2415,9 +2413,6 @@ function SkillsPage({ id }: { id: string }) {
   );
   const [importing, setImporting] = useState(false);
   const [updating, setUpdating] = useState<Skill>();
-  const [rollbackVersions, setRollbackVersions] = useState<
-    Record<string, number>
-  >({});
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const searchInput = useRef<HTMLInputElement>(null);
@@ -2446,7 +2441,7 @@ function SkillsPage({ id }: { id: string }) {
   return (
     <Page
       title="Agent skills"
-      description="Instruction Markdown only. Declared tools request existing capabilities; they cannot grant access or perform external writes."
+      description="Manage skill instructions and version history on GitHub, then import and review updates here. Skills request existing tools; they cannot grant access."
       actions={
         <>
           <IconButton
@@ -2465,7 +2460,11 @@ function SkillsPage({ id }: { id: string }) {
         </>
       }
     >
-      {error && <Notice error>{error}</Notice>}
+      <ErrorToast message={error}>
+        <button type="button" onClick={reload}>
+          Retry skills
+        </button>
+      </ErrorToast>
       <Pager data={data} />
       <div className="skill-catalog-toolbar">
         <span className="muted skill-catalog-count" role="status">
@@ -2511,13 +2510,23 @@ function SkillsPage({ id }: { id: string }) {
           <p className="muted">
             {data.items.length
               ? "Try another search or change the skill state."
-              : "Create or import a skill to get started."}
+              : "Import skills from GitHub to get started, or create a custom skill."}
           </p>
           {(search || filter !== "all") && (
             <button type="button" className="secondary" onClick={resetFilters}>
               Reset filters
             </button>
           )}
+        </section>
+      )}
+      {loading && !data && (
+        <section
+          className="card skill-card"
+          aria-label="Loading skills"
+          aria-busy="true"
+        >
+          <Skeleton width="45%" />
+          <Skeleton width="75%" />
         </section>
       )}
       {visibleSkills?.map((s) => (
@@ -2544,8 +2553,8 @@ function SkillsPage({ id }: { id: string }) {
               Saved from a conversation by {s.origin.actor} on{" "}
               {new Date(s.origin.sharedAt).toLocaleDateString()}.{" "}
               {s.published.length
-                ? "Approved reusable instruction skill."
-                : "Review before publishing. Publication saves this procedure independently of conversation retention; enable it for team use."}
+                ? "Saved reusable instruction skill."
+                : "Review the instructions before enabling this skill for team use."}
             </p>
           )}
           {!s.preset && s.githubSource && (
@@ -2560,43 +2569,31 @@ function SkillsPage({ id }: { id: string }) {
                   {s.githubSource.repository} · {s.githubSource.path}
                 </a>
                 {" · "}
-                {s.githubSource.ref} at {s.githubSource.commit.slice(0, 7)}
+                {s.githubSource.ref}
               </p>
-              <button
-                type="button"
-                className="secondary"
-                disabled={s.archived}
-                onClick={() => setUpdating(s)}
-              >
-                Check for updates
-              </button>
-            </div>
-          )}
-          {!s.preset && (
-            <div className="skill-card-meta">
-              <span>Revision {s.version}</span>
-              <span>
-                {s.published.length} published{" "}
-                {s.published.length === 1 ? "version" : "versions"}
-              </span>
+              <div className="skill-source-actions">
+                <a
+                  href={`https://github.com/${s.githubSource.repository}/blob/${encodeURIComponent(s.githubSource.ref)}/${s.githubSource.path.split("/").map(encodeURIComponent).join("/")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Manage on GitHub
+                </a>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={s.archived}
+                  onClick={() => setUpdating(s)}
+                >
+                  Check for updates
+                </button>
+              </div>
             </div>
           )}
           <SkillPreview spec={s.draft} dependents={s.dependents} />
           {!s.preset && (
             <div className="skill-card-footer">
               <div className="skill-card-actions">
-                <Action
-                  onClick={async () => {
-                    await api(
-                      `/api/admin/workspaces/${id}/skills/${s.id}/action`,
-                      "POST",
-                      { version: s.version, action: "publish" },
-                    );
-                    reload();
-                  }}
-                >
-                  Publish draft
-                </Action>
                 <span className="skill-card-secondary">
                   <Action
                     onClick={async () => {
@@ -2610,57 +2607,10 @@ function SkillsPage({ id }: { id: string }) {
                       reload();
                     }}
                   >
-                    Test draft policy
+                    Test skill policy
                   </Action>
                 </span>
               </div>
-              {s.published.length > 0 && (
-                <details className="skill-card-versions">
-                  <summary>Restore a published version</summary>
-                  <p className="muted">
-                    Copies the selected version into the draft and publishes it
-                    as a new version.
-                  </p>
-                  <div className="skill-card-rollback">
-                    <Field label="Rollback source version">
-                      <Select
-                        value={rollbackVersions[s.id] ?? 1}
-                        onChange={(e) =>
-                          setRollbackVersions((versions) => ({
-                            ...versions,
-                            [s.id]: Number(e.target.value),
-                          }))
-                        }
-                      >
-                        {s.published.map((_, index) => (
-                          // biome-ignore lint/suspicious/noArrayIndexKey: Published versions are immutable and append-only; their position is their version number.
-                          <option key={index + 1} value={index + 1}>
-                            Version {index + 1}
-                          </option>
-                        ))}
-                      </Select>
-                    </Field>
-                    <span className="skill-card-secondary">
-                      <Action
-                        onClick={async () => {
-                          await api(
-                            `/api/admin/workspaces/${id}/skills/${s.id}/action`,
-                            "POST",
-                            {
-                              version: s.version,
-                              action: "rollback",
-                              pin: rollbackVersions[s.id] ?? 1,
-                            },
-                          );
-                          reload();
-                        }}
-                      >
-                        Publish rollback as new version
-                      </Action>
-                    </span>
-                  </div>
-                </details>
-              )}
             </div>
           )}
         </section>
@@ -2675,13 +2625,14 @@ function SkillsPage({ id }: { id: string }) {
             value={
               editing ? { version: editing.version, spec: editing.draft } : spec
             }
-            label="Save draft"
+            label="Save skill"
             save={async (value) => {
               await api(
                 `/api/admin/workspaces/${id}/skills${editing ? `/${editing.id}` : ""}`,
                 editing ? "PUT" : "POST",
                 value,
               );
+              notify("Skill saved.");
               closeEditor();
               reload();
             }}

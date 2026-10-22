@@ -1162,8 +1162,7 @@ button.github-repository-more:hover:not(:disabled) {
 .skill-card-title,
 .skill-card-controls,
 .skill-card-actions,
-.skill-card-meta,
-.skill-card-rollback {
+.skill-source-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -1189,19 +1188,20 @@ button.github-repository-more:hover:not(:disabled) {
   margin-left: auto;
   gap: 2px;
 }
-.skill-card-description {
-  margin: 8px 0;
-  overflow-wrap: anywhere;
+.skill-card {
+  display: grid;
+  gap: 12px;
 }
-.skill-card-meta {
-  gap: 6px 18px;
-  color: var(--ui-muted);
-  font-size: 12px;
+.skill-card > p,
+.skill-source-summary p {
+  margin: 0;
+}
+.skill-card-description {
+  overflow-wrap: anywhere;
 }
 .skill-card-footer {
   border-top: 1px solid var(--ui-border);
-  margin-top: 20px;
-  padding-top: 18px;
+  padding-top: 12px;
 }
 .skill-card-secondary button {
   color: var(--ui-accent);
@@ -1210,20 +1210,6 @@ button.github-repository-more:hover:not(:disabled) {
 }
 .skill-card-secondary button:hover:not(:disabled) {
   background: var(--ui-accent-soft);
-}
-.skill-card-versions {
-  margin-top: 16px;
-}
-.skill-card-versions > .muted {
-  margin: 10px 0 14px;
-}
-.skill-card-rollback {
-  align-items: flex-end;
-  gap: 12px;
-}
-.skill-card-rollback .field {
-  margin: 0;
-  flex: 0 1 190px;
 }
 .skill-card summary:focus-visible {
   outline: 3px solid var(--ui-focus);
@@ -2874,7 +2860,7 @@ input.plugin-toggle-input:disabled {
   gap: 4px;
 }
 .skill-card-preview {
-  margin: 8px 0 0;
+  margin: 0;
 }
 .skill-preview-toggle {
   align-content: center;
@@ -3257,7 +3243,8 @@ input.plugin-toggle-input:disabled {
 
 /* GitHub skill import and update review. */
 .skill-source-summary {
-  margin-block: 12px;
+  display: grid;
+  gap: 8px;
 }
 .skill-source-summary p,
 .skill-source-path {

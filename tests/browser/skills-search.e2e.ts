@@ -158,7 +158,7 @@ async function expectAlignedActions(card: Locator) {
 
 for (const width of [1280, 375]) {
   for (const theme of ["light", "dark"]) {
-    test(`skill publication and archive guidance keeps actions aligned at ${width}px in ${theme}`, async ({
+    test(`direct skill enablement and archive guidance keeps actions aligned at ${width}px in ${theme}`, async ({
       page,
     }) => {
       await page.setViewportSize({ width, height: 900 });
@@ -186,27 +186,13 @@ for (const width of [1280, 375]) {
         await route.fulfill({ json: skill });
       });
       const card = page.locator(".skill-card");
-      await expect(
-        card.getByRole("button", { name: "enable", exact: true }),
-      ).toBeDisabled();
-      await expect(
-        card.getByText(
-          /Review the instructions and choose Publish draft below/,
-        ),
-      ).toBeVisible();
-      await expectAlignedActions(card);
-      expect(actions).toEqual([]);
-      await card
-        .getByRole("button", { name: "Publish draft", exact: true })
-        .click();
       const enable = card.getByRole("button", { name: "enable", exact: true });
       await expect(enable).toBeEnabled();
-      await expect(card.locator(".pill")).toHaveText("Disabled");
       await expect(
-        card.getByText(
-          /Review the instructions and choose Publish draft below/,
-        ),
+        card.getByRole("button", { name: /publish|rollback/i }),
       ).toHaveCount(0);
+      await expectAlignedActions(card);
+      expect(actions).toEqual([]);
       await enable.focus();
       await enable.press("Enter");
       await expect(card.locator(".pill")).toHaveText("Enabled");
@@ -222,7 +208,7 @@ for (const width of [1280, 375]) {
         card.getByRole("button", { name: "archive", exact: true }),
       ).toBeDisabled();
       await expectAlignedActions(card);
-      expect(actions).toEqual(["publish", "enable", "disable", "archive"]);
+      expect(actions).toEqual(["enable", "disable", "archive"]);
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth),
       ).toBeLessThanOrEqual(width);
@@ -233,52 +219,38 @@ for (const width of [1280, 375]) {
     });
   }
 
-  test(`skill action failures stay below aligned controls and clear after publication at ${width}px`, async ({
+  test(`skill action errors use a toast and recover without publication at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
     const skill = reportSkill();
-    skill.published.push(structuredClone(skill.draft));
-    await fixture(page, [skill, ...skills.slice(2)]);
+    await fixture(page, [skill]);
+    let fail = true;
     await page.route("**/skills/*/action", async (route) => {
-      if (route.request().postDataJSON().action === "publish") {
-        skill.version++;
-        skill.published.push(structuredClone(skill.draft));
-        await route.fulfill({ json: skill });
+      if (fail) {
+        await route.fulfill({
+          status: 409,
+          json: { error: "version_conflict" },
+        });
       } else {
-        await route.fulfill({ status: 400, json: { error: "publish_first" } });
+        skill.enabled = true;
+        skill.version++;
+        await route.fulfill({ json: skill });
       }
     });
-    const card = page.locator(".skill-card").first();
+    const card = page.locator(".skill-card");
     await card.getByRole("button", { name: "enable", exact: true }).click();
-    const alert = card.getByRole("alert");
-    await expect(alert).toHaveText(
-      "Only published, unarchived skills can be enabled. Reload the page to check this skill’s current status.",
-    );
-    await expect(card.getByText("publish_first", { exact: true })).toHaveCount(
-      0,
-    );
-    await expect(
-      page.locator(".skill-card").nth(1).getByRole("alert"),
-    ).toHaveCount(0);
+    const alert = page.locator(".toast-error").getByRole("alert");
+    await expect(alert).toContainText("version_conflict");
+    await expect(card.getByRole("alert")).toHaveCount(0);
     await expectAlignedActions(card);
-    const headerBox = await card.locator(".skill-card-header").boundingBox();
-    const errorBox = await alert.boundingBox();
-    if (!headerBox || !errorBox) throw new Error("Missing header or error");
-    expect(errorBox.y).toBeGreaterThanOrEqual(headerBox.y + headerBox.height);
-    expect(
-      await page.evaluate(() => document.documentElement.scrollWidth),
-    ).toBeLessThanOrEqual(width);
     await page.screenshot({
       path: test.info().outputPath("skill-action-error.png"),
       fullPage: true,
     });
-    await card
-      .getByRole("button", { name: "Publish draft", exact: true })
-      .click();
+    fail = false;
+    await card.getByRole("button", { name: "enable", exact: true }).click();
     await expect(alert).toHaveCount(0);
-    await expect(
-      card.getByRole("button", { name: "enable", exact: true }),
-    ).toBeEnabled();
+    await expect(card.getByText("Enabled", { exact: true })).toBeVisible();
   });
 }

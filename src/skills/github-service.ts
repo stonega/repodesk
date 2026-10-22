@@ -9,7 +9,7 @@ import {
 import type { GitHubApps } from "../github/registry.ts";
 import { fingerprint, hash } from "../setup/credentials.ts";
 import { audit, authorize } from "../workspaces/policy.ts";
-import { saveSkill } from "./catalog.ts";
+import { saveManagedSkill } from "./catalog.ts";
 import {
   type GitHubSkillDiscovery,
   GitHubSkillReader,
@@ -188,7 +188,7 @@ export class GitHubSkills {
       return {
         items: candidates.map((candidate) => {
           requireThat(candidate.spec, "invalid_skill_metadata");
-          const skill: Skill = saveSkill(w, actor, candidate.spec);
+          const skill: Skill = saveManagedSkill(w, actor, candidate.spec);
           skill.githubSource = {
             repository: discovery.repository,
             ref: discovery.ref,
@@ -292,7 +292,7 @@ export class GitHubSkills {
       );
       if (!result.changed) return skill;
       requireThat(result.candidate.spec, "invalid_skill_metadata");
-      saveSkill(w, actor, result.candidate.spec, skill.id, version);
+      saveManagedSkill(w, actor, result.candidate.spec, skill.id, version);
       skill.githubSource = {
         ...skill.githubSource,
         commit,

@@ -99,9 +99,7 @@ for (const width of [1280, 375]) {
       await expect(
         page.getByRole("heading", { name: "Test skill policy" }),
       ).toHaveCount(0);
-      await expect(
-        page.getByRole("button", { name: "Edit draft" }),
-      ).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Edit" })).toHaveCount(0);
       await expect(
         page.getByText("Restore a published version", { exact: true }),
       ).toHaveCount(0);
@@ -166,7 +164,7 @@ for (const width of [1280, 375]) {
     });
     const card = page.locator(".skill-card").first();
     await card.getByRole("button", { name: "disable", exact: true }).click();
-    await expect(card.getByRole("alert")).toContainText(
+    await expect(page.locator(".toast-error").getByRole("alert")).toContainText(
       "Reload the page before trying again",
     );
     await expect(card.getByText("Enabled", { exact: true })).toBeVisible();
@@ -232,7 +230,7 @@ for (const width of [1280, 375]) {
       path: test.info().outputPath("custom-preview-long.png"),
       fullPage: true,
     });
-    await card.getByRole("button", { name: "Edit draft", exact: true }).click();
+    await card.getByRole("button", { name: "Edit", exact: true }).click();
     await expect(
       page.getByRole("dialog", { name: "Edit Custom recap" }),
     ).toBeVisible();
@@ -256,7 +254,7 @@ for (const width of [1280, 375]) {
   });
 }
 
-test("custom skill editing and version management remain available alongside presets", async ({
+test("custom skill editing uses direct saves without version management alongside presets", async ({
   page,
 }) => {
   const items = starterSkills();
@@ -274,18 +272,18 @@ test("custom skill editing and version management remain available alongside pre
     has: page.getByRole("heading", { name: "Custom recap", exact: true }),
   });
   await expect(
-    card.getByRole("button", { name: "Edit draft", exact: true }),
+    card.getByRole("button", { name: "Edit", exact: true }),
   ).toBeVisible();
   await expect(
     card.getByRole("button", { name: "Publish draft", exact: true }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(
-    card.getByRole("button", { name: "Test draft policy", exact: true }),
+    card.getByRole("button", { name: "Test skill policy", exact: true }),
   ).toBeVisible();
   await expect(
     card.getByText("Restore a published version", { exact: true }),
-  ).toBeVisible();
-  await card.getByRole("button", { name: "Edit draft", exact: true }).click();
+  ).toHaveCount(0);
+  await card.getByRole("button", { name: "Edit", exact: true }).click();
   await expect(
     page.getByRole("dialog", { name: "Edit Custom recap" }),
   ).toBeVisible();

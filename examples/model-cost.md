@@ -28,8 +28,9 @@ the selected reporting period. Regular members cannot query another user's usage
 Group requests must move to private chat before querying costs.
 
 New workspaces' starter skills include the tool grant. For an existing workspace,
-edit an enabled skill's JSON in **Skills**, add `query_model_cost` to `tools`, and
-publish it before starting a new request. Existing published skills are unchanged.
+open a custom skill's **Edit** dialog in **Skills**, select **Query model cost**
+and choose **Save skill** before starting a new request. Read-only presets can be
+replaced by a separate custom skill when different tools are needed.
 No plugin installation, extra API credentials or migration is required.
 
 These are application accounting estimates based on recorded model usage and
