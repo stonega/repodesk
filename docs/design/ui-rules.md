@@ -1473,8 +1473,20 @@ when implementing or reviewing a change.
 
 - **Preference:** Format the complete `/link TOKEN` command as one inline code span
   so it can be copied together without the surrounding instructions.
-- **Scope:** Telegram group-linking instructions returned by `/linktoken`.
+- **Scope:** Telegram group-linking instructions returned by `/linktoken` and
+  commands generated in the admin panel.
 - **Source:** 2026-09-20 — user requested code formatting for the generated link command.
+- **Source update:** 2026-10-22 — user requested obtaining a group-link token from
+  the admin panel, like member invitations, and using it with `/link` in the group
+  instead of first verifying a personal Telegram identity.
+- **Acceptance:** Group access offers New to open a shared dialog that generates
+  a complete, copyable command. Show its one-use lifetime, pending/error/expired
+  states, copy feedback and recovery. Keep saved groups as readable summaries;
+  verify the handoff and summary on desktop/mobile in both themes. An authorized
+  panel admin can generate the command without a linked Telegram identity; the
+  sender must be an active workspace member and a Telegram group administrator.
+  The dialog detects successful linking, hides the consumed command and returns
+  keyboard focus to the saved group when its New trigger becomes unavailable.
 - **Exceptions:** None recorded.
 
 ### Usage records use a paginated table

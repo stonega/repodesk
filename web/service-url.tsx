@@ -6,10 +6,12 @@ export function ServiceUrl({
   label,
   value,
   loading = false,
+  copyFailureText = "Could not copy. Select the URL to copy it manually.",
 }: {
   label: string;
   value?: string;
   loading?: boolean;
+  copyFailureText?: string;
 }) {
   const [copyStatus, setCopyStatus] = useState<"copied" | "failed" | null>(
     null,
@@ -55,7 +57,7 @@ export function ServiceUrl({
         </div>
         {copyStatus === "failed" && (
           <p className="error" role="alert">
-            Could not copy. Select the URL to copy it manually.
+            {copyFailureText}
           </p>
         )}
       </dd>

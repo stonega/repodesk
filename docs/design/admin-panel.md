@@ -197,6 +197,23 @@ falling back to the ID when the title is unknown. Titles are captured on linking
 subsequent group updates. Recheck bot visibility also refreshes the title for existing
 bindings; inaccessible groups retain their last known name.
 
+Group access is available to the workspace's deployment operator without linking a
+personal Telegram identity. **New** opens a dialog that issues a one-use group-link
+command through `POST /api/admin/workspaces/:id/chats/link-token`. Authorized
+workspace owner/admin panel accounts can also issue commands. The response contains
+`command` and `expiresAt`; only the token hash, bot ID, issuer and ten-minute expiry
+are persisted. Generating another command replaces outstanding group-link tokens.
+Responses are not cached and issuing requires a session, Origin and CSRF.
+
+An active workspace member sends the command in the intended group. Telegram must
+confirm that sender is a group administrator. The token delegates only group
+linking, grants no membership or role, and is rejected after expiry, consumption,
+bot replacement or loss of the issuing administrator's authority. Linking preserves
+one group per workspace and exclusive group ownership, and starts with ordinary
+message collection disabled. Existing actor-bound `/linktoken` commands still work.
+Unlinked deployment operators can also recheck visibility, manage collection and
+unlink their workspace's group using the same scoped panel authority.
+
 These are proposed resource boundaries. Define shared request/response schemas before
 implementing forms; call domain services rather than duplicating Telegram logic.
 

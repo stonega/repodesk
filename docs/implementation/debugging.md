@@ -16,6 +16,15 @@ encryption keys, private messages and database dumps out of debugging reports.
 
 ## Missing Telegram replies
 
+If a group request has no run, check **Group access** first. Adding the bot to
+Telegram does not bind the group to a workspace. Unbound group updates can be
+received successfully with a null `inbox.workspace_id` and are ignored. Use
+**Group access → New** to generate a one-use command, then send it in the intended
+group as an active workspace member who is also a Telegram group administrator.
+This panel flow does not require personal Telegram identity verification.
+Wait for **Group linked** before testing `/ask@your_bot hi`. See
+[the group-link example](../../examples/group-linking.http).
+
 Start with a run ID from **Runs & delivery**. Check run status, `error`, model
 attempts, transcript roles/stop reasons, answer length and delivery state.
 Read only the relevant workspace and runs. Summarize tool names and outcomes;

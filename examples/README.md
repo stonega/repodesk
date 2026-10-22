@@ -32,6 +32,9 @@ to the displayed destination. Source/destination and actor checks run on the ser
 
 See [polling.env](polling.env) for opt-in local Telegram reception without a webhook.
 
+See [group-linking.http](group-linking.http) for a panel-generated, one-use group
+command that does not require personal Telegram identity verification.
+
 See [runtime-logs.http](runtime-logs.http) for operator log filters and cursor pagination.
 
 See [runs.http](runs.http) for workspace run history, a single run's details and

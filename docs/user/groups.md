@@ -2,15 +2,29 @@
 
 将机器人关联到群组后，成员可以在群内提问、总结和安排定时报告。群组加入、消息可见性、收集许可与工作区成员权限分别管理。
 
-## 关联群组
+## Link a group
 
-1. 将机器人加入目标 Telegram 群。
-2. 确认执行者已绑定 Telegram 身份，既是工作区 owner/admin，也是该群 Telegram 管理员。
-3. 在机器人私聊发送 `/linktoken`。
-4. 复制回复里的完整 `/link TOKEN` 命令，在十分钟内发送到目标群。
-5. 在面板 **Group access** 检查绑定和可见性。
+1. Add your bot to the intended Telegram group.
+2. In the admin panel, open **Group access → New** and copy the complete command.
+3. Send `/link@your_bot TOKEN` in that group within ten minutes, using an active
+   workspace member account that is also a Telegram group administrator.
+4. Wait for **Group linked**. The panel updates automatically while the dialog is
+   open, or when you return to the page. Test `/ask@your_bot hi` in the group.
 
-一个工作区当前只能关联一个群。匿名群管理员身份不能执行关联。不要把关联命令发到其他群或交给无关人员。群迁移或机器人被移除后，需要检查并重新关联。
+The workspace's deployment operator can generate the token without verifying a
+personal Telegram identity. Workspace owner/admin panel accounts can also generate
+it. A token links one group once; it does not grant membership or an admin role.
+Invite the person sending it through **Members & access** first if needed.
+
+Generating another command invalidates the previous one. The token also stops
+working after expiry, bot replacement or loss of its issuer's permissions. Share
+it only with the intended group administrator. Anonymous administrators and bot
+senders cannot link groups. Each workspace supports one linked group; unlink it
+in the panel before connecting a different group. Check and relink after a group
+migration or bot removal.
+
+The private `/linktoken` command remains available to verified workspace
+owner/admin members who prefer the Telegram-only flow.
 
 ## 在群里提问
 

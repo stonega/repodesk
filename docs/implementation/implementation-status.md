@@ -1,5 +1,31 @@
 # Implementation evidence
 
+## Panel-generated Telegram group linking (2026-10-22)
+
+**Group access → New** generates a complete, copyable `/link@bot TOKEN` command
+in a shared dialog. The owning deployment operator needs no personal Telegram
+identity verification. An active workspace member who is a Telegram group admin
+redeems the command; the dialog detects the linked group and the page shows its
+saved name, ID and access summary. The operator can manage visibility, collection
+and unlinking through the panel without an identity link.
+
+Commands are bot-bound, single-use and valid for ten minutes. Only their hashes
+are stored; replacement invalidates older group tokens, and redemption rechecks
+the issuer's current authority. Existing membership, Telegram administrator,
+tenant, exclusive group ownership, pause/deletion and collection-consent checks
+remain enforced. Legacy private `/linktoken` commands remain actor-bound. No
+dependency or migration was added. See [the API example](../../examples/group-linking.http)
+and [the group guide](../user/groups.md).
+
+Validation: lint, strict TypeScript, build and **1,139 deterministic tests across
+125 files** passed with isolated PostgreSQL. All 21 focused browser checks passed
+across group linking, shared copy controls and sidebar navigation. The eight group
+checks were rerun after the mobile pending-layout correction and passed, including
+overflow assertions. Desktop/mobile screenshots were inspected in both themes for
+saved displays, command dialogs, loading/empty, pending, error and expired states.
+Live Telegram acceptance and VPS deployment remain outstanding; no live messages,
+group binding, account verification or production configuration was changed.
+
 ## Default-enabled Obsidian organization notes (2026-10-22)
 
 Existing and new workspaces receive an independent managed vault, enabled by

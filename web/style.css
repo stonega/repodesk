@@ -903,6 +903,17 @@ p {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   overflow-wrap: anywhere;
 }
+.group-access-card,
+.group-link-details {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  gap: 16px;
+}
+.group-access-card > *,
+.group-link-details > * {
+  margin: 0;
+}
 .narrow {
   max-width: 500px;
 }
@@ -3106,6 +3117,9 @@ input.plugin-toggle-input:disabled {
   border: 1px solid var(--ui-border);
   border-radius: 10px;
   background: var(--ui-surface-muted);
+}
+.group-link-details > .service-urls {
+  margin: 0;
 }
 .service-url {
   padding: 12px 16px;

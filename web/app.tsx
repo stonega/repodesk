@@ -67,6 +67,7 @@ import {
 } from "./form-fields.ts";
 import { GitHubConnection, GitHubSetup } from "./github.tsx";
 import { GitHubMemberField } from "./github-member-field.tsx";
+import { GroupLinkDialog } from "./group-link.tsx";
 import { type ActionIcon, IconButton } from "./icon-button.tsx";
 import { RuntimeLogs } from "./logs.tsx";
 import { MemberGitHub } from "./member-github.tsx";
@@ -1899,15 +1900,90 @@ function ChatsPage({ id }: { id: string }) {
   const { data, error, reload, loading } = useData<{ items: Chat[] }>(
     `/api/admin/workspaces/${id}/chats`,
   );
+  const [linking, setLinking] = useState<string>();
+  const [actionError, setActionError] = useState("");
+  const linkedGroup = useRef<HTMLElement>(null);
+  const focusLinkedGroup = useRef(false);
+  const notify = useToast();
+  const linked = data?.items.some((chat) => chat.active) ?? false;
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") reload();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    const timer =
+      linking === id && !linked ? setInterval(refresh, 3000) : undefined;
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      clearInterval(timer);
+    };
+  }, [id, linking, linked, reload]);
+  useEffect(() => {
+    void id;
+    setLinking(undefined);
+    setActionError("");
+    focusLinkedGroup.current = false;
+  }, [id]);
+  useEffect(() => {
+    if (loading || linking === id || !focusLinkedGroup.current) return;
+    // The trigger is disabled once linked; wait until the saved group's actions are ready.
+    linkedGroup.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    focusLinkedGroup.current = false;
+  }, [id, linking, loading]);
   return (
     <Page
       title="Group access"
-      description="One explicitly connected group per workspace. Send /linktoken privately to the bot, then /link TOKEN in a group where you are an admin."
+      description="Connect one Telegram group to this workspace. Create a command here, then send it in the group."
+      actions={
+        <IconButton
+          icon="add"
+          label="Link a group"
+          showLabel
+          disabled={!data || linked}
+          onClick={() => setLinking(id)}
+        />
+      }
     >
-      {error && <Notice error>{error}</Notice>}
+      <ErrorToast message={error}>
+        <button
+          type="button"
+          className="toast-retry"
+          disabled={loading}
+          aria-label="Retry loading groups"
+          onClick={reload}
+        >
+          Retry
+        </button>
+      </ErrorToast>
+      <ErrorToast message={actionError} />
+      {!data && (
+        <section className="card" aria-label="Linked group" aria-busy={loading}>
+          <h2>Linked group</h2>
+          {loading ? (
+            <SkeletonRows label="Group details" rows={2} />
+          ) : (
+            <p>Group details are unavailable.</p>
+          )}
+        </section>
+      )}
+      {data?.items.length === 0 && (
+        <section className="card group-access-card" aria-label="Linked group">
+          <h2>No group linked</h2>
+          <p className="muted">
+            Choose New to get a one-use /link command. The person sending it
+            must be an active workspace member and a Telegram group admin.
+          </p>
+        </section>
+      )}
       <Pager data={data} />
       {data?.items.map((chat) => (
-        <section className="card" key={chat.id}>
+        <section
+          className="card group-access-card"
+          key={chat.id}
+          ref={chat.active ? linkedGroup : undefined}
+        >
           <h2>{chat.title || chat.id}</h2>
           {chat.title && <p className="muted">Group ID: {chat.id}</p>}
           <p>
@@ -1925,6 +2001,7 @@ function ChatsPage({ id }: { id: string }) {
           <div className="row">
             <Action
               loading={loading}
+              onError={setActionError}
               onClick={async () => {
                 await api(
                   `/api/admin/workspaces/${id}/chats/${chat.id}/visibility`,
@@ -1932,6 +2009,7 @@ function ChatsPage({ id }: { id: string }) {
                   {},
                 );
                 reload();
+                notify("Bot visibility checked.");
               }}
             >
               Recheck bot visibility
@@ -1940,6 +2018,7 @@ function ChatsPage({ id }: { id: string }) {
               <Action
                 key={action}
                 danger={action === "unlink"}
+                onError={setActionError}
                 onClick={async () => {
                   await api(
                     `/api/admin/workspaces/${id}/chats/${chat.id}/action`,
@@ -1947,6 +2026,13 @@ function ChatsPage({ id }: { id: string }) {
                     { action },
                   );
                   reload();
+                  notify(
+                    action === "unlink"
+                      ? "Group unlinked."
+                      : action === "collect"
+                        ? "Group message collection enabled."
+                        : "Only directed messages will be retained.",
+                  );
                 }}
               >
                 {action === "collect"
@@ -1959,6 +2045,19 @@ function ChatsPage({ id }: { id: string }) {
           </div>
         </section>
       ))}
+      {linking === id && (
+        <GroupLinkDialog
+          key={id}
+          id={id}
+          request={api}
+          linked={linked}
+          onClose={() => {
+            focusLinkedGroup.current = linked;
+            setLinking(undefined);
+            reload();
+          }}
+        />
+      )}
     </Page>
   );
 }
@@ -4002,6 +4101,7 @@ function Shell() {
         [
           "overview",
           "members",
+          "chats",
           "workflows",
           "skills",
           "threads",

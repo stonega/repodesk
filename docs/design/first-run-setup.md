@@ -65,8 +65,10 @@ approval. The displayed link refreshes every 10 seconds with a countdown; copied
 tokens remain valid for 24 hours. The bot denies ordinary use until membership is
 granted through an invite, an approved request or direct enrollment.
 Linking the administrator's personal Telegram account later grants owner actions
-in Telegram. Optional group linking and detailed workspace policies can be
-configured after activation.
+in Telegram. Group linking does not require this step: after activation, use
+**Group access → New**, copy the generated `/link@bot TOKEN` command and send it
+in the intended group as an active workspace member who is a Telegram group
+administrator. Detailed workspace policies remain configurable after activation.
 
 Before activation, process only tightly scoped control interactions; normal model
 requests remain disabled. For local operation, explicitly select

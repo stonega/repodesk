@@ -23,6 +23,7 @@ import {
   workflowAction,
 } from "../workflows/service.ts";
 import { requestAccess } from "../workspaces/access-requests.ts";
+import { groupLinkAuthority } from "../workspaces/group-links.ts";
 import { updateMemberProfile } from "../workspaces/member-profile.ts";
 import {
   audit,
@@ -627,16 +628,32 @@ export class Ingress {
     if (d.paused) return true;
     if (d.bot && selectRepository(w, u, d.bot.id)) return true;
     if (cmd?.name === "link" && actor && msg) {
-      authorize(w, actor, true);
       requireThat(verifiedAdmin, "telegram_admin_required", 403);
       const entry = w.tokens.find(
         (t) =>
           t.kind === "group" &&
           t.hash === hash(cmd.args) &&
-          t.actor === actor &&
+          (t.adminId ? t.botId === d.bot?.id : t.actor === actor) &&
           Date.parse(t.expiresAt) > Date.now(),
       );
       requireThat(entry, "link_expired", 403);
+      if (entry.adminId) {
+        // A panel token delegates only linking, and cannot outlive its issuer's authority.
+        const issuer = (
+          await sql.query(
+            "SELECT id,username,telegram_id,operator FROM admins WHERE id=$1 FOR SHARE",
+            [entry.adminId],
+          )
+        ).rows[0];
+        requireThat(issuer, "access_denied", 403);
+        groupLinkAuthority(w, {
+          id: issuer.id,
+          username: issuer.username,
+          telegramId: issuer.telegram_id ?? undefined,
+          operator: issuer.operator,
+        });
+        authorize(w, actor);
+      } else authorize(w, actor, true);
       const chatId = String(msg.chat.id);
       requireThat(
         !w.chats.some((c) => c.active && c.id !== chatId),
@@ -669,7 +686,7 @@ export class Ingress {
         linkedAt: new Date().toISOString(),
         visibleAll: !!d.bot?.visibleAll,
       });
-      w.tokens = w.tokens.filter((t) => t !== entry);
+      w.tokens = w.tokens.filter((t) => t.kind !== "group");
       audit(w, actor, "chat.linked", chatId);
       deliver(
         w,

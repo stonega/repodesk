@@ -33,6 +33,13 @@ created before linking Telegram. Authorized panel admins can inspect full workfl
 and create, edit, approve and control them across owners without linking their
 personal Telegram identity. Workflow execution retains an active member's identity
 and its data/destination permissions; panel actions audit the manager separately.
+Group access also permits the owning deployment operator to issue group-link
+commands, inspect visibility, manage collection and unlink without a personal
+Telegram identity link. A panel-issued, bot-bound token delegates only group
+linking to an active workspace member who is a Telegram group administrator.
+Redemption rechecks the issuer's current workspace-management authority; it
+does not grant membership or an admin role. Tokens expire after ten minutes and
+are consumed once; generating a replacement invalidates older group commands.
 Operators can inspect retained workspace runs under the existing admin history
 rules; ordinary bot execution and individual run recovery actions still require
 a linked, active Telegram identity. Regular members cannot manage access.

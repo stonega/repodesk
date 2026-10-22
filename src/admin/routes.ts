@@ -55,6 +55,7 @@ import {
   workflowAction,
 } from "../workflows/service.ts";
 import { decideAccessRequest } from "../workspaces/access-requests.ts";
+import { issueGroupLink } from "../workspaces/group-links.ts";
 import { membersWithProfiles } from "../workspaces/member-profile.ts";
 import {
   audit,
@@ -1050,7 +1051,7 @@ export function adminRoutes(
     if (actor === admin.id) {
       const resource = c.req.path.split("/").slice(5).join("/");
       requireThat(
-        /^(overview|settings|members|access-requests|skills|workflows)(\/.*)?$/.test(
+        /^(overview|settings|members|access-requests|chats|skills|workflows)(\/.*)?$/.test(
           resource,
         ) ||
           (resource === "self-check" && c.req.method === "POST") ||
@@ -1399,6 +1400,15 @@ export function adminRoutes(
       }),
     );
   });
+  app.post("/api/admin/workspaces/:id/chats/link-token", async (c) => {
+    const deployment = await store.deployment();
+    requireThat(deployment.bot, "bot_not_configured", 409);
+    const bot = deployment.bot;
+    return c.json(
+      await change(c, (w) => issueGroupLink(w, c.get("session").admin, bot)),
+      201,
+    );
+  });
   app.post("/api/admin/workspaces/:id/chats/:chat/action", async (c) => {
     const input = z
       .object({ action: z.enum(["collect", "directed", "unlink"]) })
@@ -1406,7 +1416,7 @@ export function adminRoutes(
       .parse(await c.req.json());
     const id = c.req.param("chat");
     await store.change(validId(c.req.param("id")), async (w, sql) => {
-      const actor = authorize(w, c.get("session").admin.telegramId, true);
+      const actor = workspaceActor(w, c.get("session").admin);
       const chat = w.chats.find((c) => c.id === id);
       requireThat(chat, "not_found", 404);
       if (input.action === "collect") {
@@ -1417,6 +1427,7 @@ export function adminRoutes(
       } else chat.collection = false;
       if (input.action === "unlink") {
         chat.active = false;
+        w.tokens = w.tokens.filter((entry) => entry.kind !== "group");
         await sql.query("DELETE FROM chat_bindings WHERE workspace_id=$1", [
           w.id,
         ]);
@@ -1851,7 +1862,7 @@ export function adminRoutes(
   });
   app.post("/api/admin/workspaces/:id/chats/:chat/visibility", async (c) => {
     const w = await store.read(validId(c.req.param("id")));
-    authorize(w, c.get("session").admin.telegramId, true);
+    workspaceActor(w, c.get("session").admin);
     const linkedChat = w.chats.find((chat) => chat.id === c.req.param("chat"));
     requireThat(linkedChat, "not_found", 404);
     const client = await setup.client();

@@ -603,6 +603,7 @@ export interface Workspace {
     expiresAt: string;
     kind: "group" | "identity";
     adminId?: string;
+    botId?: string;
   }[];
   deletion?: {
     requestedAt: string;
