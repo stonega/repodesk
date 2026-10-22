@@ -17,6 +17,13 @@ Selecting a skill remains optional and pins its published version. Scheduling
 does not add tools or data sources: live weather requires an authorized live-data
 tool, and access checks, budgets and approval still apply.
 
+Repeat the reminder request in the same chat/topic using different wording. The
+assistant should identify the existing workflow and its status instead of making
+another proposal. Pause it and repeat: paused schedules still count as existing.
+For a similar request with a different time or purpose, expect a clarification
+before a separate proposal. Explicitly confirming a second workflow still requires
+the usual approval before activation. Other private chats and Topics stay separate.
+
 After connecting/selecting a repository, ask in private Telegram chat:
 
 ```text

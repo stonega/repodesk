@@ -34,6 +34,17 @@ private repository report there. Ad-hoc private repository reads stay in private
 chat; group scheduled reads are restricted to their approved repositories.
 Repository access and group publication permission are independent checks.
 
+Before proposing a schedule, the assistant compares the current chat/topic's
+existing workflows by purpose, sources, recurrence/timezone, reporting window
+and output format, including draft, active, paused and suspended records. Private
+context includes only the actor's own workflows; group context includes workflows
+shared with that same Topic. Equivalent requests should identify the existing
+workflow instead of creating a duplicate; similar requests with differences ask
+whether a separate workflow is intended. An intentional duplicate requires an
+explicit current confirmation after the match is explained. This is prompt
+guidance using current scoped records, not a transactional uniqueness constraint.
+Existing approval, ownership and lifecycle authorization checks still apply.
+
 Skill proposals refer to one completed run accessible to the actor. The model drafts
 the procedure, inputs, output format and an example, rather than copying a full
 transcript. The requester reviews the full content and explicitly consents to an
