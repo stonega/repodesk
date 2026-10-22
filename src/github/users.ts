@@ -6,6 +6,7 @@ import { decrypt, encrypt, hash, token } from "../setup/credentials.ts";
 import { audit, authorize, eligible } from "../workspaces/policy.ts";
 import { deliver } from "../workspaces/service.ts";
 import { type GitHubApp, GitHubRateLimitError } from "./app.ts";
+import { githubConnectionRevision } from "./config.ts";
 import { availableGitHubAccount } from "./member-account.ts";
 import type { GitHubApps } from "./registry.ts";
 import { type GitHubUserAccess, invalidateGitHubWork } from "./user-access.ts";
@@ -23,13 +24,20 @@ export class GitHubUsers {
   private scope(w: Workspace, actor: string) {
     return `github-user:${w.id}:${actor}`;
   }
-  private async invalidateWork(sql: Sql, w: Workspace, actor: string) {
+  private async invalidateWork(
+    sql: Sql,
+    w: Workspace,
+    actor: string,
+    repositories?: number[],
+  ) {
     invalidateGitHubWork(w, actor);
     await sql.query(
       `UPDATE coding_tasks SET data=data || '{"cancelRequested":true,"error":"github_user_access_denied"}'::jsonb,updated_at=now()
        WHERE workspace_id=$1 AND data->>'state' NOT IN ('review','failed','cancelled','unknown')
-       AND (data->>'actor'=$2 OR id IN (SELECT task_id FROM coding_task_inputs WHERE workspace_id=$1 AND data->>'actor'=$2))`,
-      [w.id, actor],
+       AND (data->>'actor'=$2 OR id IN (SELECT task_id FROM coding_task_inputs WHERE workspace_id=$1 AND data->>'actor'=$2))
+       AND ($3::text[] IS NULL OR data#>>'{payload,repositoryId}' IS NULL
+            OR data#>>'{payload,repositoryId}'=ANY($3::text[]))`,
+      [w.id, actor, repositories?.map(String) ?? null],
     );
   }
   private async app(w: Workspace) {
@@ -361,22 +369,37 @@ export class GitHubUsers {
       });
     }
     const prior = member.github;
+    const lostRepositories = prior.repositories.filter((r) => {
+      const next = access.repositories.find(
+        (n) => n.id === r.id && n.full_name === r.full_name,
+      );
+      return (
+        !next ||
+        (r.permissions?.push && !next.permissions?.push) ||
+        (r.permissions?.admin && !next.permissions?.admin)
+      );
+    });
     const lost =
       denied ||
       (access.status === "connected" &&
         (prior.id !== access.id ||
           prior.connectionRevision !== access.connectionRevision ||
-          prior.repositories.some((r) => {
-            const next = access.repositories.find(
-              (n) => n.id === r.id && n.full_name === r.full_name,
-            );
-            return (
-              !next ||
-              (r.permissions?.push && !next.permissions?.push) ||
-              (r.permissions?.admin && !next.permissions?.admin)
-            );
-          })));
-    if (lost) await this.invalidateWork(sql, w, actor);
+          lostRepositories.length > 0));
+    if (lost) {
+      // Workspace metadata revisions still fence ordinary reads and approvals.
+      // Coding work is revoked only for its target unless the connection changed.
+      const connectionChanged =
+        !w.github ||
+        prior.connectionRevision < githubConnectionRevision(w.github);
+      await this.invalidateWork(
+        sql,
+        w,
+        actor,
+        denied || prior.id !== access.id || connectionChanged
+          ? undefined
+          : lostRepositories.map((r) => r.id),
+      );
+    }
     member.github = access;
     await sql.query(
       "UPDATE github_user_accounts SET next_sync_at=$3 WHERE workspace_id=$1 AND actor=$2",

@@ -90,6 +90,13 @@ export const codingPayload = z.preprocess(
     repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
     installationId: z.number().int().positive(),
     githubRevision: z.number().int().nonnegative(),
+    githubScope: z
+      .object({
+        connectionRevision: z.number().int().nonnegative(),
+        repositoryRevision: z.number().int().nonnegative(),
+        private: z.boolean().nullable(),
+      })
+      .optional(),
     configRevision: z.number().int().positive(),
     baseBranch: branchName,
     backend: z.literal("podman"),

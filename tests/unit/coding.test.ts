@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
-import { branchName } from "../../src/coding/config.ts";
-import { codingDestination } from "../../src/coding/policy.ts";
+import { branchName, codingPayload } from "../../src/coding/config.ts";
+import {
+  checkCodingPayload,
+  codingDestination,
+} from "../../src/coding/policy.ts";
 import { codingView, saveCoding } from "../../src/coding/service.ts";
 import { decrypt } from "../../src/setup/credentials.ts";
 import { createRun } from "../../src/workspaces/service.ts";
@@ -46,6 +49,99 @@ const input = {
   title: "Fix recap",
   body: "Include the last message. Add regression tests.",
 };
+test("coding scope survives unrelated metadata only after fresh verified access", () => {
+  const { w } = codingFixture();
+  const payload = codingDestination(w, "101", input);
+  const connection = present(w.github);
+  connection.connectionRevision = 1;
+  connection.revision = 2;
+  connection.repositoryRevisions = { "7002": 2 };
+  expect(() => checkCodingPayload(w, "101", payload)).toThrow(
+    "github_user_access_unavailable",
+  );
+  grantGitHubAccess(w, ["101"]);
+  checkCodingPayload(w, "101", payload);
+  expect(payload.githubRevision).toBe(1);
+  expect(codingPayload.parse(payload)).toEqual(payload);
+});
+for (const change of [
+  "visibility",
+  "branch",
+  "rename",
+  "installation",
+  "reconnect",
+  "target-generation",
+  "coding-settings",
+] as const) {
+  test(`coding scope rejects target ${change} changes`, () => {
+    const { w } = codingFixture();
+    const payload = codingDestination(w, "101", input);
+    const connection = present(w.github);
+    const repo = present(connection.repositories[0]);
+    if (change === "visibility") repo.private = true;
+    if (change === "branch") repo.default_branch = "main";
+    if (change === "rename") repo.full_name = "example/renamed";
+    if (change === "installation") connection.installationId = 502;
+    if (change === "reconnect") connection.revision++;
+    if (change === "target-generation") {
+      connection.connectionRevision = 1;
+      connection.revision++;
+      connection.repositoryRevisions = { "7001": 2 };
+    }
+    if (change === "coding-settings") present(w.coding).revision++;
+    grantGitHubAccess(w, ["101"]);
+    expect(() => checkCodingPayload(w, "101", payload)).toThrow(
+      "coding_configuration_changed",
+    );
+  });
+}
+for (const change of [
+  "remove",
+  "archive",
+  "disable",
+  "permission",
+  "actor",
+] as const) {
+  test(`coding scope still denies ${change}`, () => {
+    const { w } = codingFixture();
+    const payload = codingDestination(w, "101", input);
+    const connection = present(w.github);
+    const repo = present(connection.repositories[0]);
+    if (change === "remove") connection.repositories = [];
+    if (change === "archive") repo.archived = true;
+    if (change === "disable") repo.disabled = true;
+    if (change === "permission")
+      present(w.members.find((m) => m.id === "101")?.github).repositories = [];
+    if (change === "actor")
+      present(w.members.find((m) => m.id === "101")).active = false;
+    expect(() => checkCodingPayload(w, "101", payload)).toThrow();
+  });
+}
+test("historical coding grants retain their global revision boundary", () => {
+  const { w } = codingFixture();
+  const payload = codingDestination(w, "101", input);
+  delete payload.githubScope;
+  checkCodingPayload(w, "101", payload);
+  const connection = present(w.github);
+  connection.connectionRevision = 1;
+  connection.revision++;
+  connection.repositoryRevisions = { "7002": 2 };
+  grantGitHubAccess(w, ["101"]);
+  expect(() => checkCodingPayload(w, "101", payload)).toThrow(
+    "coding_configuration_changed",
+  );
+});
+test("a target refresh stops the grant before a pending permission sync", () => {
+  const { w } = codingFixture();
+  const payload = codingDestination(w, "101", input);
+  const connection = present(w.github);
+  connection.connectionRevision = 1;
+  connection.revision++;
+  connection.repositoryRevisions = { "7001": 2 };
+  expect(() => checkCodingPayload(w, "101", payload)).toThrow(
+    "coding_configuration_changed",
+  );
+});
 test("reading and saving Codex settings cannot retain a publication opt-out", () => {
   const { w } = codingFixture();
   const admin = { id: w.operatorId, operator: true, username: "operator" };

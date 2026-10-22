@@ -46,6 +46,8 @@ import {
 } from "../../src/domain.ts";
 import { GitHubApp } from "../../src/github/app.ts";
 import { GitHubApps } from "../../src/github/registry.ts";
+import { RepositorySync } from "../../src/github/repository-sync.ts";
+import { GitHubUsers } from "../../src/github/users.ts";
 import { DeliveryWorker } from "../../src/jobs/delivery.ts";
 import { Executor } from "../../src/jobs/execute.ts";
 import { taskReference } from "../../src/miniapp/auth.ts";
@@ -1358,6 +1360,118 @@ const url = process.env.TEST_DATABASE_URL;
     await f.tick();
     expect(f.publications).toHaveLength(1);
   });
+  test("another repository's visibility refresh and permission sync preserve the attempt and publish once", async () => {
+    const f = await fixture(original, "101", undefined, (w) => {
+      present(w.github).repositories.push({
+        id: 7002,
+        full_name: "example/second",
+        default_branch: "main",
+        private: true,
+      });
+    });
+    await f.tick();
+    await f.tick({ state: "succeeded", result: result() });
+    const running = await f.tick();
+    const repositories = structuredClone(present(f.w.github).repositories);
+    present(repositories[1]).private = false;
+    const fallback = githubTransport();
+    const app = new GitHubApp(githubFixtureConfig, (async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path === "/user")
+        return Response.json({ id: 101, login: "fixture-101" });
+      if (path === "/installation/repositories")
+        return Response.json({ repositories });
+      if (path === "/user/installations/501/repositories")
+        return Response.json({
+          repositories: repositories.map((r) => ({
+            ...r,
+            permissions: { pull: true, push: true, admin: false },
+          })),
+        });
+      return fallback(input, init);
+    }) as typeof fetch);
+    const apps = new GitHubApps(store, "ab".repeat(32), app);
+    const users = new GitHubUsers(
+      store,
+      apps,
+      "ab".repeat(32),
+      "http://localhost:3000",
+    );
+    await store.pool.query(
+      "INSERT INTO github_user_accounts(workspace_id,actor,github_id,app_id,user_token) VALUES($1,'101',101,$2,$3)",
+      [
+        f.w.id,
+        githubFixtureConfig.id,
+        encrypt("ab".repeat(32), `github-user:${f.w.id}:101`, "fixture-token"),
+      ],
+    );
+    const refreshed = await new RepositorySync(store, apps).refresh(
+      { id: operator, username: "dev", operator: true },
+      f.w.id,
+    );
+    expect(refreshed.workspace.github?.revision).toBe(2);
+    expect(refreshed.workspace.github?.repositoryRevisions).toEqual({
+      "7002": 2,
+    });
+    const ready: LocalStatus = {
+      state: "ready",
+      result: result({ status: "completed" }),
+      checkPassed: true,
+    };
+    const held = await f.tick(ready);
+    expect(held.attemptId).toBe(running.attemptId);
+    expect(held.state).toBe("working");
+    expect(held.error).toBe("github_user_access_unavailable");
+    expect(f.publications).toHaveLength(0);
+    for (let i = 0; i < 2; i++)
+      await store.change(f.w.id, (w, sql) => users.sync(sql, w, "101"));
+    expect((await f.read()).cancelRequested).toBe(false);
+    expect((await f.tick(ready)).state).toBe("publishing");
+    expect(f.publications).toEqual([present(running.attemptId)]);
+    await f.tick({
+      state: "succeeded",
+      prUrl: "https://github.com/example/workspace/pull/43",
+      publishedSha: "b".repeat(40),
+    });
+    await f.tick();
+    expect((await f.read()).state).toBe("review");
+    expect(f.starts).toHaveLength(2);
+    expect(f.publications).toHaveLength(1);
+    expect(f.cancels).toHaveLength(0);
+    expect((await f.read()).payload).toEqual(f.task.payload);
+  });
+  for (const change of ["target", "reconnect", "permission"] as const) {
+    test(`${change} changed after verification cannot publish`, async () => {
+      const f = await fixture();
+      await f.tick();
+      await f.tick({ state: "succeeded", result: result() });
+      await f.tick();
+      await store.change(f.w.id, (w) => {
+        const connection = present(w.github);
+        if (change === "target") {
+          connection.connectionRevision = 1;
+          connection.revision++;
+          connection.repositoryRevisions = { "7001": 2 };
+          grantGitHubAccess(w, ["101"]);
+        }
+        if (change === "reconnect") {
+          connection.revision++;
+          grantGitHubAccess(w, ["101"]);
+        }
+        if (change === "permission")
+          present(w.members.find((m) => m.id === "101")?.github).repositories =
+            [];
+      });
+      const stopped = await f.tick({
+        state: "ready",
+        checkPassed: true,
+        result: result({ status: "completed" }),
+      });
+      expect(stopped.state).toBe("cancelled");
+      expect(f.publications).toHaveLength(0);
+      expect(f.cancels).toHaveLength(1);
+    });
+  }
   test("temporary GitHub access loss retains the attempt, blocks publication and recovers once", async () => {
     const f = await fixture();
     await f.tick();
@@ -2415,9 +2529,11 @@ const url = process.env.TEST_DATABASE_URL;
   }
   for (const visibility of ["private", "public"]) {
     test(`account-auth direct tasks use the connected GitHub App for ${visibility} repositories`, async () => {
-      const f = await fixture();
+      const f = await fixture(original, "101", undefined, (w) => {
+        present(present(w.github).repositories[0]).private =
+          visibility === "private";
+      });
       await configureDevice(f);
-      if (visibility === "public") await f.makePublic();
       expect((await f.tick()).state).toBe("working");
       expect(f.starts).toHaveLength(1);
       expect(f.starts[0]?.readToken).toBe("ghs_fixture_installation_secret");
@@ -2689,7 +2805,7 @@ const url = process.env.TEST_DATABASE_URL;
     expect(resumes).toBe(0);
     expect(f.cancels).toHaveLength(1);
   });
-  test("a connected repository made public during auth wait resumes with account credentials", async () => {
+  test("a target repository made public during auth wait stops before resuming", async () => {
     const f = await fixture();
     const device = await configureDevice(f);
     await f.tick();
@@ -2701,9 +2817,11 @@ const url = process.env.TEST_DATABASE_URL;
     device.runner.resumeAuth = async () => {
       resumes++;
     };
-    expect((await f.tick()).state).toBe("working");
-    expect(resumes).toBe(1);
-    expect(f.cancels).toHaveLength(0);
+    const stopped = await f.tick();
+    expect(stopped.state).toBe("cancelled");
+    expect(stopped.error).toBe("coding_configuration_changed");
+    expect(resumes).toBe(0);
+    expect(f.cancels).toHaveLength(1);
     expect(f.starts[0]?.readToken).toBe("ghs_fixture_installation_secret");
   });
   async function telegramProgressFixture() {

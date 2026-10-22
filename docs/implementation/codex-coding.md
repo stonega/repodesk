@@ -40,6 +40,16 @@ permission check reports automatic recovery; a confirmed denial points to
 builds require explicit recovery and are not restarted automatically. See the
 [permission recovery journey](../../examples/github-coding-permission-recovery.md).
 
+New tasks bind a GitHub connection generation and a revision for their selected
+repository. Metadata or permission changes in other repositories do not cancel
+them. A workspace metadata refresh can temporarily hold progression until the
+member's permissions are synced at the current workspace revision; the same
+attempt then continues. Target repository changes (including visibility, name,
+default branch or removal), connection replacement, Codex settings changes and
+confirmed target permission loss still fence execution and publication. Restoring
+target metadata cannot revive an older grant. Historical tasks without the scoped
+snapshot keep the previous global revision check; terminal failures are not replayed.
+
 Checkout failures report a safe cause before Codex starts. When the configured
 base branch is missing, Telegram outcomes, requested status and the admin task
 summary name the repository and branch and point to **GitHub repository settings**

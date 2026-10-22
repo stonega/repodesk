@@ -23,6 +23,16 @@ does not authorize connecting accounts, starting a paid task or publishing a PR.
 6. After confirmed publication, make access unavailable. The saved task keeps
    **PR ready for review** and its PR link. A follow-up must reauthorize current
    access and cannot execute while verification is unavailable.
+7. With a task created by the scoped-validation version, refresh another selected
+   repository's visibility. A stale member snapshot holds progression until sync;
+   successful sync preserves the task, attempt and original grant. Repeated sync
+   and polls must still publish at most once. Removing write access to that other
+   repository must cancel only tasks targeting it, including collaborator tasks.
+8. Separately change the task's own repository visibility/default branch, replace
+   the GitHub connection with the same installation, or revoke its target write
+   permission before publication. Execution/publication must stop. Reverting the
+   target metadata does not restore the old grant. Historical tasks without scoped
+   snapshots retain their original global revision check and are not replayed.
 
 Inspect the tenant-scoped `github_user_sync_failed` runtime event for its safe code:
 `github_unavailable`, `github_rate_limited` or `github_access_denied`. Never include

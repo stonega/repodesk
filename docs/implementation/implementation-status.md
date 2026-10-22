@@ -1,5 +1,32 @@
 # Implementation evidence
 
+## Codex tasks isolate unrelated GitHub repository changes (2026-10-22)
+
+New coding authority snapshots retain the GitHub connection generation and target
+repository revision/visibility. Metadata refresh still advances the workspace
+revision for ordinary reads, approvals and member permission freshness, while
+only changed/removed target IDs advance their repository generations. Unrelated
+changes hold progression for fresh permissions, then continue the same attempt.
+Target changes, connection replacement, current actor permissions, Codex settings
+and publication policy remain enforced. Reverting target metadata cannot revive
+an old grant.
+
+Permission-sync cancellation now targets affected repositories, including tasks
+with collaborator inputs. Account/identity loss and connection replacement retain
+full cancellation. Existing tasks without scoped snapshots retain their global
+revision check; terminal tasks are not replayed. Optional JSON fields require no
+SQL migration or dependency. The user guide, staging recovery example and
+[VPS incident](../../postmortem/2026-10-22-coding-task-global-github-revision.md)
+describe the correction and historical boundary. Production rollout and live
+acceptance remain pending.
+
+Validation: lint, strict TypeScript, production build and **1,098 deterministic
+tests across 121 files** passed with disposable PostgreSQL. Regressions cover the
+original metadata-refresh/permission-sync journey through same-attempt publication,
+duplicate sync/polls, target changes before publication, same-installation
+reconnection, collaborator revocation and historical grants. No deployment,
+task replay, live model call or external message was performed.
+
 ## Personal Google accounts through Telegram (2026-10-22)
 
 The Google panel now configures only the shared Web application client and plugin

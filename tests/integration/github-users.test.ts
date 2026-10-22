@@ -399,6 +399,74 @@ const url = process.env.TEST_DATABASE_URL;
       await store.change(id, (w, sql) => service.users.sync(sql, w, "202"));
       expect(repositoryAccess(await store.read(id), "202", 7001)).toBe(true);
     });
+    test("permission loss on another repository cancels only tasks using that repository, including collaborators", async () => {
+      repoCount = 2;
+      push = true;
+      await store.change(id, (w) => {
+        if (!w.github) throw new Error("Missing GitHub connection");
+        w.github.repositories = [
+          { id: 7001, full_name: "example/workspace" },
+          { id: 7002, full_name: "example/second" },
+        ];
+      });
+      await store.change(id, (w, sql) => service.users.sync(sql, w, "202"));
+      const tasks = [
+        { id: randomUUID(), actor: "202", repositoryId: 7001 },
+        { id: randomUUID(), actor: "202", repositoryId: 7002 },
+        { id: randomUUID(), actor: "101", repositoryId: 7002 },
+      ];
+      for (const task of tasks)
+        await store.pool.query(
+          "INSERT INTO coding_tasks(workspace_id,id,data) VALUES($1,$2,$3)",
+          [
+            id,
+            task.id,
+            JSON.stringify({
+              ...task,
+              state: "working",
+              cancelRequested: false,
+              payload: { repositoryId: task.repositoryId },
+            }),
+          ],
+        );
+      await store.pool.query(
+        "INSERT INTO coding_task_inputs(workspace_id,task_id,revision,source_key,data) VALUES($1,$2,1,'collaborator',$3)",
+        [id, tasks[2]?.id, JSON.stringify({ actor: "202" })],
+      );
+      repoCount = 1;
+      await store.change(id, (w, sql) => service.users.sync(sql, w, "202"));
+      const rows = await store.pool.query(
+        "SELECT id,data FROM coding_tasks WHERE workspace_id=$1 ORDER BY id",
+        [id],
+      );
+      for (const task of tasks) {
+        const saved = rows.rows.find((r) => r.id === task.id)?.data;
+        expect(saved?.cancelRequested).toBe(task.repositoryId === 7002);
+      }
+      // Replacing the connection with the same installation still revokes all work.
+      await store.change(id, (w) => {
+        if (!w.github) throw new Error("Missing GitHub connection");
+        w.github = {
+          ...w.github,
+          revision: w.github.revision + 1,
+          connectionRevision: undefined,
+        };
+      });
+      await store.change(id, (w, sql) => service.users.sync(sql, w, "202"));
+      expect(
+        (
+          await store.pool.query(
+            "SELECT data->'cancelRequested' AS stopped FROM coding_tasks WHERE workspace_id=$1 AND id=$2",
+            [id, tasks[0]?.id],
+          )
+        ).rows[0]?.stopped,
+      ).toBe(true);
+      await store.pool.query(
+        "DELETE FROM coding_tasks WHERE workspace_id=$1 AND id=ANY($2::uuid[])",
+        [id, tasks.map((task) => task.id)],
+      );
+      repoCount = 2;
+    });
     test("expiring credentials rotate once under concurrent sync; refresh failures clear grants", async () => {
       const before = (
         await store.pool.query(

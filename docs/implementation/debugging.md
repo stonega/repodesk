@@ -125,6 +125,16 @@ Interpret the states separately:
   prove that a branch is missing or permission was revoked. Both failures stop
   before Codex starts and return safe repository context to Telegram. Older builds
   preserve only `coding_execution_failed` for these failures.
+- `coding_configuration_changed` checks the saved Codex revision, GitHub connection
+  generation, target repository revision, destination and publication policy.
+  New tasks retain these in `payload.githubScope`; unrelated repository changes
+  can require a fresh permission sync but preserve the attempt. Target visibility,
+  branch/name or connection changes still stop it. Older tasks without this
+  snapshot use the shared GitHub revision, so another repository's metadata change
+  can invalidate them. Compare the saved scope and current metadata, inspect work
+  and publication state before retrying, and do not rewrite historical authority.
+  See the
+  [global revision incident](../../postmortem/2026-10-22-coding-task-global-github-revision.md).
 - `coding_result_invalid` means the final JSON failed application validation.
   The updated runner generates field constraints from the validator and allows
   one read-only result correction before stopping. Inspect `resultIssues` in the

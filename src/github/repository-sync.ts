@@ -1,7 +1,9 @@
 import { operator } from "../admin/auth.ts";
 import type { Store } from "../db/repositories.ts";
 import { type Admin, Fault, requireThat, type Workspace } from "../domain.ts";
+import { fingerprint } from "../setup/credentials.ts";
 import type { GitHubApp, GitHubRepository } from "./app.ts";
+import { githubConnectionRevision } from "./config.ts";
 import type { GitHubApps } from "./registry.ts";
 
 type Refresh = {
@@ -26,7 +28,7 @@ function selectedRepositories(w: Workspace, accessible: GitHubRepository[]) {
 }
 
 function repositoryPolicy(repositories: GitHubRepository[] = []) {
-  return JSON.stringify(
+  return fingerprint(
     repositories.map(({ pushed_at, updated_at, ...policy }) => policy),
   );
 }
@@ -118,8 +120,22 @@ export class RepositorySync {
       if (
         repositoryPolicy(repositories) !==
         repositoryPolicy(snapshot.github?.repositories)
-      )
+      ) {
+        connection.connectionRevision = githubConnectionRevision(connection);
+        const current = new Map(repositories.map((r) => [r.id, r]));
+        for (const previous of snapshot.github?.repositories ?? []) {
+          const next = current.get(previous.id);
+          if (
+            !next ||
+            repositoryPolicy([previous]) !== repositoryPolicy([next])
+          ) {
+            connection.repositoryRevisions ??= {};
+            connection.repositoryRevisions[previous.id] =
+              connection.revision + 1;
+          }
+        }
         connection.revision++;
+      }
       // Existing Code Truth targets follow the same numeric repository identity.
       let targetsChanged = false;
       for (const target of w.plugins?.codeTruth?.repositories ?? []) {

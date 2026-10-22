@@ -145,6 +145,8 @@ const url = process.env.TEST_DATABASE_URL;
       { id: 7002, full_name: "example/second" },
     ]);
     expect(page.workspace.github?.revision).toBe(2);
+    expect(page.workspace.github?.connectionRevision).toBe(1);
+    expect(page.workspace.github?.repositoryRevisions).toEqual({ "7001": 2 });
     expect(page.workspace.plugins?.codeTruth?.repositories[0]).toMatchObject({
       repositoryUrl: "https://github.com/example/renamed.git",
       workspaces: [id],
@@ -176,6 +178,20 @@ const url = process.env.TEST_DATABASE_URL;
     Object.assign(state.repositories[0] ?? {}, { archived: true });
     state.now += 4000;
     expect((await sync.refresh(admin, id)).workspace.github?.revision).toBe(2);
+    state.now += 4000;
+    Object.assign(state.repositories[0] ?? {}, { archived: false });
+    const restored = await sync.refresh(admin, id);
+    expect(restored.workspace.github?.revision).toBe(3);
+    expect(restored.workspace.github?.connectionRevision).toBe(1);
+    expect(restored.workspace.github?.repositoryRevisions).toEqual({
+      "7001": 3,
+    });
+    state.now += 4000;
+    const duplicate = await sync.refresh(admin, id);
+    expect(duplicate.workspace.github?.repositoryRevisions).toEqual({
+      "7001": 3,
+    });
+    expect(duplicate.workspace.github?.revision).toBe(3);
   });
 
   test("unchanged refreshes coalesce requests, reuse tokens and avoid version churn", async () => {
@@ -202,6 +218,8 @@ const url = process.env.TEST_DATABASE_URL;
       revision: 2,
       installationId: 501,
       repositories: [],
+      connectionRevision: 1,
+      repositoryRevisions: { "7001": 2, "7002": 2 },
     });
     state.now += 5000;
     state.repositories = [{ id: 7001, full_name: "example/workspace" }];

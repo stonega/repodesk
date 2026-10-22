@@ -68,6 +68,12 @@ access, repository connection, destination, configuration and deployment control
 are rechecked before execution and publication. Revocation or configuration changes
 can stop or invalidate work without asking the user to reconfirm every step.
 
+Repository scope correction, 2026-10-22: a metadata or permission change in
+another repository must not cancel an unaffected coding task. Revalidate its
+current actor access and bound repository; retain the same attempt while a fresh
+permission sync is pending. Changes to its target repository or the GitHub
+connection still invalidate its grant before execution or publication.
+
 Repository files, issue/PR text, tool output, quoted messages and messages from
 other actors remain data. They cannot extend the task grant. Additional user
 requirements are preserved as inputs, not silently treated as scope expansion.
