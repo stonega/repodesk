@@ -1,5 +1,31 @@
 # Implementation evidence
 
+## Unified Google plugin (2026-10-21)
+
+Docs, Sheets, Drive, Gmail and Search Console now share one Google catalog card,
+detail page, registered Web application client, account connection, callback URL,
+Enable switch and runtime plugin. Search Console retains its explicit property
+selection in a modal on the same page. Saved summaries, individual scope/callback
+copy actions, pending locks and error recovery use the existing shared components.
+
+The editor can reuse an existing encrypted OAuth client secret. Saving the shared
+configuration clears the old product connections and Search Console service-account
+credentials; fresh consent must grant all five read scopes. Legacy access stays
+within its previous permissions until that explicit upgrade, and the merged switch
+can disable it even when no OAuth client exists. Old page links redirect to Google.
+Shared reads require a private interactive owner/admin request. Refresh claims,
+revisions and connection identity fence concurrent reads, retained evidence and
+delivery. Disconnect disables all five services; reconnecting clears properties.
+
+Validation: lint, strict TypeScript and production build passed. **1,079 deterministic
+tests across 120 files** passed against disposable PostgreSQL, including **19 focused
+Google integration tests**. All **19 Google/Search Console browser scenarios** passed
+at 1280px/390px. Saved summaries, connection/property editors, loading/empty,
+pending and error states were visually inspected, including both themes and card
+spacing. No dependency or SQL migration was added. Live Google consent and account
+permissions remain staging checks; no account connection or deployment was performed.
+See [shared setup](google-workspace.md) and [runnable requests](../../examples/google-workspace.http).
+
 ## Admin workflow management without Telegram linking (2026-10-21)
 
 Authorized panel administrators can view full workspace workflow details and
@@ -252,6 +278,8 @@ See [runnable API examples](../../examples/web-search.http) and
 
 ## Independent Google Docs, Sheets, Drive and Gmail plugins (2026-10-20)
 
+Historical implementation; superseded by the shared Google plugin on 2026-10-21.
+
 Added four standalone built-in plugins with separate catalog/detail pages, OAuth
 clients, account connections, enable switches and Pi tools. Docs reads text across
 document tabs; Sheets reads metadata and explicit formatted A1 ranges; Drive
@@ -282,6 +310,8 @@ deployment was added/performed. See [setup and boundaries](google-workspace.md)
 and [runnable requests](../../examples/google-workspace.http).
 
 ## Google Search Console plugin (2026-10-20)
+
+Historical implementation; the Google plugin now shares OAuth and enablement.
 
 Added a built-in, read-only Google Search Console plugin for finalized search
 performance, sitemap metadata and indexed URL inspection. Operators save encrypted

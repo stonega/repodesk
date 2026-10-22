@@ -43,8 +43,8 @@ when implementing or reviewing a change.
 - **Preference:** Put a copy icon beside the callback URL and read scope in Google
   connection editors. Keep the full values readable and selectable, show a brief
   checkmark after copying, and provide manual-copy guidance if clipboard access fails.
-- **Scope:** Google Docs, Google Sheets, Google Drive and Gmail connection editors
-  on desktop and mobile. Reuse the shared URL rows and borderless icon buttons.
+- **Scope:** The shared Google connection editor for Docs, Sheets, Drive, Gmail
+  and Search Console on desktop and mobile. Reuse the shared URL rows and borderless icon buttons.
 - **Source:** 2026-10-21 — user showed the Gmail callback URL and read scope and
   requested copy buttons for these links.
 - **Acceptance:** Each button copies its exact value without submitting the form;
@@ -93,19 +93,23 @@ when implementing or reviewing a change.
   does not change Codex or Review Bot model settings.
   Previously saved DuckDuckGo records remain usable and manageable for compatibility.
 
-### Google integrations have independent plugin pages
+### Google integrations share one plugin and Web application
 
-- **Preference:** Google Docs, Google Sheets, Google Drive and Gmail each appear
-  as a standalone plugin with their own catalog entry, details, connection editor
-  and Enable switch. Connecting or enabling one must not require another.
-- **Scope:** These four Google integrations on desktop and mobile.
-- **Source:** 2026-10-20 — user requested separate plugins for Docs, Sheets, Drive
-  and Gmail.
-- **Acceptance:** Verify four distinct cards/routes, saved summaries separated
-  from modal editors, independent account/enablement changes, and no mandatory
-  suite connection. Apply shared plugin layout, loading, toast and modal rules.
-- **Exceptions:** Shared backend authentication/transport code is appropriate;
-  Google may associate provider authorizations when an operator reuses a client.
+- **Preference:** Show one Google catalog entry and detail page for Docs, Sheets,
+  Drive, Gmail and Search Console. Reuse one registered Web application client,
+  one account connection, one callback URL and one Enable switch. Keep Search
+  Console property selection on that page, in a separate modal editor.
+- **Scope:** All built-in Google integrations on desktop and mobile.
+- **Source:** 2026-10-21 — user requested merging all Google-related plugins into
+  one and using the same registered Web application. This supersedes the
+  2026-10-20 request for four independent product plugins.
+- **Acceptance:** Verify a single catalog card, old links leading to the merged
+  page, shared connection/enablement/disconnect, and existing Web client reuse.
+  Saved summaries contain no forms; use shared modal, action, loading and toast
+  components. Callback and individual scope copy actions remain available.
+  Check desktop/mobile, both themes, pending/error recovery and card spacing.
+- **Exceptions:** Legacy credentials remain a backend upgrade path until the
+  operator saves the shared connection; they do not silently authorize new scopes.
 
 ### Admin self-check lives in a corner chat popup
 

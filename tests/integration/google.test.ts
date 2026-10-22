@@ -13,13 +13,21 @@ import { Store } from "../../src/db/repositories.ts";
 import type { Admin } from "../../src/domain.ts";
 import {
   type GooglePlugin,
+  type GoogleRegistration,
   googleDefinitions,
   googlePlugins,
+  googleScopes,
+  registrationScopes,
 } from "../../src/google/config.ts";
-import { googleExtension } from "../../src/google/extension.ts";
+import {
+  googleExtension,
+  googleWorkspaceExtension,
+} from "../../src/google/extension.ts";
 import { googleReadAllowed } from "../../src/google/policy.ts";
 import { GoogleService } from "../../src/google/service.ts";
 import { sweep } from "../../src/privacy/service.ts";
+import { searchConsoleReadAllowed } from "../../src/search-console/policy.ts";
+import { SearchConsoleService } from "../../src/search-console/service.ts";
 import { decrypt, hash } from "../../src/setup/credentials.ts";
 import { SetupService } from "../../src/setup/service.ts";
 import { runAllowed } from "../../src/workspaces/policy.ts";
@@ -28,7 +36,7 @@ import { retainedSource } from "../../src/workspaces/threads.ts";
 import { workspace } from "../fixtures.ts";
 
 const rootUrl = process.env.TEST_DATABASE_URL;
-(rootUrl ? describe : describe.skip)("independent Google plugins", () => {
+(rootUrl ? describe : describe.skip)("Google integrations", () => {
   const root = database(rootUrl ?? "postgres://unused@localhost/unused");
   const name = `repodesk_google_${randomUUID().replaceAll("-", "")}`;
   const key = "ab".repeat(32);
@@ -41,6 +49,9 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     url.pathname = `/${name}`;
     store = new Store(database(url.toString()));
     await migrate(store.pool);
+    await store.pool.query(
+      "UPDATE deployment SET data=jsonb_set(data,'{active}','true')",
+    );
     auth = await claim(store.pool, "googleoperator", "google fixture password");
     admin = {
       id: (
@@ -76,6 +87,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     const requests: { url: URL; init: RequestInit }[] = [];
     const controls = {
       scopes: true,
+      grantedScopes: undefined as string | undefined,
       refreshToken: true,
       refreshFailure: false,
       beforeRead: undefined as (() => Promise<void>) | undefined,
@@ -91,10 +103,10 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         expect(init.redirect).toBe("error");
         if (url.hostname === "oauth2.googleapis.com") {
           const params = new URLSearchParams(String(init.body));
-          const plugin = googlePlugins.find(
+          const plugin = (["google", ...googlePlugins] as const).find(
             (p) =>
               params.get("client_id") === `${p}.apps.googleusercontent.com`,
-          ) as GooglePlugin;
+          ) as GoogleRegistration;
           expect(plugin).toBeDefined();
           await controls.beforeToken?.();
           if (
@@ -116,7 +128,8 @@ const rootUrl = process.env.TEST_DATABASE_URL;
             expires_in: 3600,
             token_type: "Bearer",
             scope: controls.scopes
-              ? `openid email ${googleDefinitions[plugin].scope}`
+              ? (controls.grantedScopes ??
+                `openid email ${registrationScopes(plugin).join(" ")}`)
               : "openid email",
           });
         }
@@ -264,7 +277,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         throw Error("Unexpected Google URL");
       },
     );
-    async function configure(plugin: GooglePlugin) {
+    async function configure(plugin: GoogleRegistration) {
       const revision = (await store.read(w.id)).plugins?.revision ?? 0;
       await service.save(admin, w.id, plugin, {
         revision,
@@ -273,7 +286,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         clientSecret: "fixture-client-secret",
       });
     }
-    async function connect(plugin: GooglePlugin) {
+    async function connect(plugin: GoogleRegistration) {
       await configure(plugin);
       const revision = (await store.read(w.id)).plugins?.revision ?? 0;
       const consent = new URL(
@@ -305,12 +318,266 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       );
     return { w, run, service, requests, controls, configure, connect, query };
   }
+  test("one Google registration authorizes all five services and shares tokens and disconnect", async () => {
+    const f = await fixture();
+    const consent = await f.connect("google");
+    expect(consent.searchParams.get("scope")).toBe(
+      `openid email ${googleScopes.join(" ")}`,
+    );
+    expect(consent.searchParams.get("redirect_uri")).toBe(
+      "http://localhost:3000/api/admin/google/callback",
+    );
+    expect(consent.searchParams.get("include_granted_scopes")).toBe("true");
+    const current = await store.read(f.w.id);
+    expect(Object.keys(current.plugins?.google ?? {})).toEqual(["google"]);
+    const revision = current.plugins?.revision ?? 0;
+    const searchRequests: string[] = [];
+    const search = new SearchConsoleService(
+      store,
+      key,
+      async (url, init) => {
+        searchRequests.push(url);
+        expect(new Headers(init.headers).get("authorization")).toBe(
+          "Bearer access-google",
+        );
+        if (url.endsWith("/sites"))
+          return Response.json({
+            siteEntry: [
+              {
+                siteUrl: "sc-domain:example.test",
+                permissionLevel: "siteOwner",
+              },
+              {
+                siteUrl: "sc-domain:unverified.test",
+                permissionLevel: "siteUnverifiedUser",
+              },
+            ],
+          });
+        if (url.endsWith("/sitemaps")) return Response.json({ sitemap: [] });
+        return Response.json({
+          siteUrl: "sc-domain:example.test",
+          permissionLevel: "siteOwner",
+        });
+      },
+      f.service,
+    );
+    expect(
+      (await search.properties(admin, f.w.id, hash(auth.raw), { revision }))
+        .items,
+    ).toHaveLength(1);
+    await search.save(
+      admin,
+      f.w.id,
+      {
+        revision,
+        settings: { enabled: true, siteUrls: ["sc-domain:example.test"] },
+      },
+      [],
+      hash(auth.raw),
+    );
+    await f.query("google-docs", { documentId: "doc1" });
+    await f.query("google-sheets", {
+      resource: "spreadsheet",
+      spreadsheetId: "sheet1",
+    });
+    await f.query("google-drive", { resource: "files" });
+    await f.query("gmail", { resource: "messages" });
+    const next = (await store.read(f.w.id)).plugins?.revision ?? 0;
+    await search.query(f.w.id, f.run.id, next, {
+      resource: "sitemaps",
+      siteUrl: "sc-domain:example.test",
+    });
+    expect(searchRequests.some((url) => url.endsWith("/sitemaps"))).toBe(true);
+    expect(
+      f.requests.filter((r) => r.url.hostname === "oauth2.googleapis.com"),
+    ).toHaveLength(1);
+    const combined = googleWorkspaceExtension(f.service, search, f.w.id, next);
+    expect(combined.id).toBe("google");
+    expect(combined.tools.sort()).toEqual(
+      [
+        ...googlePlugins.map((p) => googleDefinitions[p].tool),
+        "query_search_console",
+      ].sort(),
+    );
+    const saved = await store.read(f.w.id);
+    const readRun = saved.runs.find((r) => r.id === f.run.id);
+    if (!readRun) throw Error("missing run");
+    expect(googleReadAllowed(saved, readRun)).toBe(true);
+    expect(searchConsoleReadAllowed(saved, readRun)).toBe(true);
+    await store.change(f.w.id, (w) => {
+      const m = w.members.find((m) => m.id === "101");
+      if (m) m.role = "member";
+    });
+    const before = searchRequests.length;
+    await expect(
+      search.query(f.w.id, f.run.id, next, {
+        resource: "sitemaps",
+        siteUrl: "sc-domain:example.test",
+      }),
+    ).rejects.toThrow("run_revoked");
+    expect(searchRequests).toHaveLength(before);
+    await store.change(f.w.id, (w) => {
+      const m = w.members.find((m) => m.id === "101");
+      if (m) m.role = "owner";
+    });
+    await f.service.disconnect(admin, f.w.id, "google", next);
+    const disconnected = await store.read(f.w.id);
+    expect(googleReadAllowed(disconnected, readRun)).toBe(false);
+    expect(searchConsoleReadAllowed(disconnected, readRun)).toBe(false);
+    for (const plugin of googlePlugins)
+      await expect(
+        f.query(
+          plugin,
+          plugin === "google-docs"
+            ? { documentId: "doc1" }
+            : plugin === "google-sheets"
+              ? { resource: "spreadsheet", spreadsheetId: "sheet1" }
+              : plugin === "google-drive"
+                ? { resource: "files" }
+                : { resource: "messages" },
+        ),
+      ).rejects.toThrow("run_revoked");
+  });
+  test("consolidation reuses the existing Web client without inheriting product tokens or old scopes", async () => {
+    const f = await fixture();
+    await f.connect("gmail");
+    const before = await store.read(f.w.id);
+    const legacy = await f.service.view(admin, f.w.id, "google");
+    expect(legacy.legacy).toBe(true);
+    expect(legacy.clientId).toBe("gmail.apps.googleusercontent.com");
+    expect(legacy.settings.enabled).toBe(true);
+    expect(legacy.status).toBe("not_connected");
+    await f.service.save(admin, f.w.id, "google", {
+      revision: legacy.revision,
+      settings: { enabled: false },
+    });
+    const saved = await store.read(f.w.id);
+    expect(Object.keys(saved.plugins?.google ?? {})).toEqual(["google"]);
+    expect(saved.plugins?.google?.google?.connection).toBeUndefined();
+    expect(saved.plugins?.entries).toEqual(before.plugins?.entries);
+    expect(
+      decrypt(
+        key,
+        `google:${f.w.id}:google:client:gmail.apps.googleusercontent.com`,
+        saved.plugins?.google?.google?.clientSecret ?? "",
+      ),
+    ).toBe("fixture-client-secret");
+    expect(saved.plugins?.searchConsole?.credential).toBeUndefined();
+    expect(saved.plugins?.searchConsole?.settings.siteUrls).toEqual([]);
+    const consent = new URL(
+      (
+        await f.service.begin(
+          admin,
+          f.w.id,
+          "google",
+          saved.plugins?.revision ?? 0,
+          hash(auth.raw),
+        )
+      ).url,
+    );
+    // Fixture returns only the legacy Gmail scope for this reused client.
+    await expect(
+      f.service.callback(
+        admin,
+        "google",
+        hash(auth.raw),
+        consent.searchParams.get("state") ?? "",
+        "code",
+      ),
+    ).rejects.toThrow("google_scope_required");
+    await expect(
+      f.service.save(admin, f.w.id, "gmail", {
+        revision: saved.plugins?.revision,
+        settings: { enabled: false },
+      }),
+    ).rejects.toThrow("google_plugin_merged");
+  });
+  test("the merged switch can disable legacy Search Console without an OAuth client", async () => {
+    const f = await fixture();
+    await store.change(f.w.id, (w) => {
+      w.plugins = {
+        revision: 1,
+        entries: [],
+        searchConsole: {
+          credential: "legacy-encrypted-key",
+          settings: { enabled: true, siteUrls: ["sc-domain:example.test"] },
+        },
+      };
+    });
+    const before = await f.service.view(admin, f.w.id, "google");
+    expect(before.legacy).toBe(true);
+    expect(before.settings.enabled).toBe(true);
+    const after = await f.service.save(admin, f.w.id, "google", {
+      revision: before.revision,
+      settings: { enabled: false },
+    });
+    expect(after.settings.enabled).toBe(false);
+    expect(after.clientSecretConfigured).toBe(false);
+    const saved = await store.read(f.w.id);
+    expect(saved.plugins?.searchConsole?.credential).toBeUndefined();
+    expect(saved.plugins?.google?.google?.connection).toBeUndefined();
+  });
+  test("shared consent rejects a missing Search Console scope and replayed returns", async () => {
+    const f = await fixture();
+    await f.configure("google");
+    const revision = (await store.read(f.w.id)).plugins?.revision ?? 0;
+    f.controls.grantedScopes = `openid email ${googleScopes.slice(0, -1).join(" ")}`;
+    const consent = new URL(
+      (await f.service.begin(admin, f.w.id, "google", revision, hash(auth.raw)))
+        .url,
+    );
+    const state = consent.searchParams.get("state") ?? "";
+    await expect(
+      f.service.callback(admin, "google", hash(auth.raw), state, "code"),
+    ).rejects.toThrow("google_scope_required");
+    expect((await f.service.view(admin, f.w.id, "google")).status).toBe(
+      "not_connected",
+    );
+    const requests = f.requests.length;
+    await expect(
+      f.service.callback(admin, "google", hash(auth.raw), state, "code"),
+    ).rejects.toThrow("google_authorization_expired");
+    expect(f.requests).toHaveLength(requests);
+  });
+  test("shared refresh serializes different Google tools and preserves the plugin revision", async () => {
+    const f = await fixture();
+    await f.connect("google");
+    const revision = (await store.read(f.w.id)).plugins?.revision;
+    await store.change(f.w.id, (w) => {
+      const c = w.plugins?.google?.google?.connection;
+      if (c) c.expiresAt = new Date(0).toISOString();
+    });
+    let release = () => {};
+    let started = () => {};
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    f.controls.beforeToken = async () => {
+      started();
+      await blocked;
+    };
+    const reading = f.query("gmail", { resource: "messages" });
+    await ready;
+    await expect(
+      f.query("google-drive", { resource: "files" }),
+    ).rejects.toThrow("google_refresh_pending");
+    release();
+    await reading;
+    expect((await store.read(f.w.id)).plugins?.revision).toBe(revision);
+    await f.query("google-drive", { resource: "files" });
+    expect(
+      f.requests.filter((r) => r.url.hostname === "oauth2.googleapis.com"),
+    ).toHaveLength(2);
+  });
   test("four standalone connections request separate scopes, encrypt tokens and preserve each other", async () => {
     const f = await fixture();
     for (const plugin of googlePlugins) {
       const url = await f.connect(plugin);
       expect(url.searchParams.get("scope")).toBe(
-        `openid email ${googleDefinitions[plugin].scope}`,
+        `openid email ${registrationScopes(plugin).join(" ")}`,
       );
       expect(url.searchParams.get("access_type")).toBe("offline");
       expect(url.searchParams.get("code_challenge_method")).toBe("S256");
@@ -431,7 +698,10 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     ])
       await expect(f.query("gmail", args)).rejects.toThrow();
     await expect(
-      f.query("google-sheets", { resource: "values", spreadsheetId: "sheet1" }),
+      f.query("google-sheets", {
+        resource: "values",
+        spreadsheetId: "sheet1",
+      }),
     ).rejects.toThrow();
   });
   test("members, group chats, scheduled runs, disabled plugins and stale revisions cannot read", async () => {
@@ -697,7 +967,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       "http://localhost:3000",
       plugins,
     );
-    const endpoint = `/api/admin/workspaces/${f.w.id}/plugins/google/gmail`;
+    const endpoint = `/api/admin/workspaces/${f.w.id}/plugins/google`;
     const headers = {
       cookie: `repodesk_session=${auth.raw}`,
       origin: "http://localhost:3000",
@@ -711,7 +981,10 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     expect(data.clientSecretConfigured).toBe(true);
     expect(data.clientSecret).toBeUndefined();
     expect(JSON.stringify(data)).not.toContain("fixture-client-secret");
-    const body = JSON.stringify({ revision: 1, settings: { enabled: false } });
+    const body = JSON.stringify({
+      revision: 1,
+      settings: { enabled: false },
+    });
     expect(
       (
         await app.request(endpoint, {
@@ -743,9 +1016,9 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       f.service.view({ ...admin, operator: false }, f.w.id, "gmail"),
     ).rejects.toThrow("operator_required");
   });
-  test("Pi registers four independent tools and reuses a duplicate completed read", async () => {
+  test("Pi registers one Google plugin with four account tools and reuses a duplicate completed read", async () => {
     const f = await fixture();
-    for (const plugin of googlePlugins) await f.connect(plugin);
+    await f.connect("google");
     const revision = (await store.read(f.w.id)).plugins?.revision ?? 0;
     const input: AgentInput = {
       workspaceId: f.w.id,
@@ -771,9 +1044,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     );
     const host = await ExtensionCatalog.fromSnapshot(
       [],
-      googlePlugins.map((plugin) =>
-        googleExtension(f.service, f.w.id, revision, plugin),
-      ),
+      [googleWorkspaceExtension(f.service, undefined, f.w.id, revision)],
     ).open(input);
     try {
       expect(host?.tools.map((t) => t.name).sort()).toEqual(
@@ -791,13 +1062,64 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         await tool.execute("read-once", { resource: "messages" }, input.signal),
       ).toEqual(result);
       expect(f.requests).toHaveLength(before + 1);
-      await f.service.disconnect(admin, f.w.id, "gmail", revision);
+      await f.service.disconnect(admin, f.w.id, "google", revision);
       await expect(
         tool.execute("read-once", { resource: "messages" }, input.signal),
       ).rejects.toThrow();
     } finally {
       await host?.close();
     }
+  });
+  test("the shared callback route connects once and returns to the merged page", async () => {
+    const f = await fixture();
+    await f.configure("google");
+    const plugins = new PluginService(
+      store,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      f.service,
+    );
+    const app = createApp(
+      store,
+      new SetupService(store, key, "http://localhost:3000"),
+      "http://localhost:3000",
+      plugins,
+    );
+    const headers = {
+      cookie: `repodesk_session=${auth.raw}`,
+      origin: "http://localhost:3000",
+      "x-csrf-token": auth.csrf,
+      "content-type": "application/json",
+    };
+    const endpoint = `/api/admin/workspaces/${f.w.id}/plugins/google`;
+    const start = await app.request(`${endpoint}/connect`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ revision: 1 }),
+    });
+    expect(start.status).toBe(200);
+    const consent = new URL((await start.json()).url);
+    const callback = new URL(consent.searchParams.get("redirect_uri") ?? "");
+    callback.search = new URLSearchParams({
+      state: consent.searchParams.get("state") ?? "",
+      code: "fixture-code",
+    }).toString();
+    const result = await app.request(callback.toString(), { headers });
+    expect(result.status).toBe(302);
+    expect(result.headers.get("location")).toBe(
+      `/admin/plugins/google?workspace=${f.w.id}&google=connected`,
+    );
+    expect(result.headers.get("referrer-policy")).toBe("no-referrer");
+    const count = f.requests.length;
+    const replay = await app.request(callback.toString(), { headers });
+    expect(replay.headers.get("location")).toContain("google=failed");
+    expect(f.requests).toHaveLength(count);
+    expect(
+      (await f.service.view(admin, f.w.id, "google")).settings.enabled,
+    ).toBe(false);
   });
   test("Google saves preserve legacy file grants and tool collisions are rejected in both directions", async () => {
     const f = await fixture();
@@ -854,9 +1176,9 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     const f = await fixture();
     await f.connect("gmail");
     const current = await store.read(f.w.id);
-    current.deletion = { requestedAt: new Date().toISOString() } as NonNullable<
-      typeof current.deletion
-    >;
+    current.deletion = {
+      requestedAt: new Date().toISOString(),
+    } as NonNullable<typeof current.deletion>;
     sweep(current);
     expect(current.plugins).toBeUndefined();
   });

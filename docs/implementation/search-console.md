@@ -1,40 +1,36 @@
-# Google Search Console plugin
+# Search Console in the Google plugin
 
 Implemented as a built-in Pi extension with one tool, `query_search_console`,
 and a companion skill in `skills/repodesk-search-console/SKILL.md`.
 
 ## Setup and scope
 
-The workspace's deployment operator saves a Google service account JSON key,
-discovers properties using `sites.list`, explicitly selects up to 20 properties,
-and enables the plugin. Property saves and enabling verify current Google access
-with `sites.get`. Disabling an unchanged selection and removing credentials do
-not require a working Google connection. Discovery is available while disabled.
-Unverified properties are excluded. Only chosen properties reach model tools.
+The deployment operator connects **Plugins → Google** with the existing registered
+Web application; see [shared Google setup](google-workspace.md). Search Console
+uses that same account, OAuth token, refresh claim and Enable switch. No separate
+service account is needed. The panel discovers properties using `sites.list` and
+explicitly selects up to 20. Saves verify current access with `sites.get`.
+Discovery works while Google is disabled. Unverified properties are excluded;
+only selected properties reach model tools. Without a selection the other four
+Google tools remain available.
 
-Credentials are AES-GCM encrypted with workspace-specific associated data using
-the existing deployment encryption key. Responses expose email, configuration
-status and selection; they never expose private keys or access tokens. Key
-replacement disables the plugin and clears the selection. Removal clears the
-local credential, but does not revoke Google's key. No database migration or
-dependency addition is required; settings use the existing workspace JSONB record.
+Queries require an active workspace owner/admin, active deployment/workspace and
+a noncancelled private interactive run. Groups and scheduled workflows are denied.
+Runs bind `searchConsoleRead` to the current shared connection and plugin revision;
+retained answers, derived runs, handoffs and delivery recheck that scope. Disconnect,
+credential replacement and account reconnection revoke previous access. Replacement
+and reconnection clear the property selection.
 
-Service account JWTs use Node's RSA-SHA256 implementation and a fixed token
-endpoint, audience and `webmasters.readonly` scope. Credential-supplied URLs and
-delegated users are ignored. Access tokens are short-lived and held only for the
-current operation. Provider calls use fixed Google origins, no redirects/retries,
-15-second timeouts and 1 MiB response limits. Successful provider data is validated
-and projected into supported fields; upstream error bodies are never surfaced.
+Provider calls use fixed Google origins, no redirects/retries, 15-second timeouts
+and 1 MiB response limits. Results are validated and projected; upstream error
+bodies and tokens are never surfaced. Search Console read-only authorization uses
+`https://www.googleapis.com/auth/webmasters.readonly` alongside the other Google
+scopes, under the same Web application registration.
 
-Operator discovery and verification bind to tenant, plugin revision and current
-operator session before and after requests. Model queries require an active member,
-active deployment/workspace and a noncancelled private interactive run. Tool calls
-use the existing durable extension ledger. Plugin revisions are pinned in the
-extension hash and rechecked around every provider call. Runs record
-`searchConsoleRead` before accessing data; retained answers, derived runs,
-handoffs, skill proposals and delivery recheck current configuration and private
-destination through the existing permission paths. Disabling invalidates pending
-work. Other workspace settings remain intact.
+Legacy service-account configurations remain supported in the backend until the
+operator saves the shared Google connection. That explicit upgrade clears their
+credentials and allowlists; old page links lead to Google. Legacy membership
+permissions remain in effect only before the upgrade.
 
 ## Tool operations
 
@@ -56,12 +52,14 @@ implemented. Group queries and schedules are excluded in this version.
 All routes are under `/api/admin/workspaces/:id/plugins/search-console`:
 
 - `GET`: redacted configuration and workspace plugin revision.
-- `PUT`: `{revision, settings: {enabled, siteUrls}, serviceAccount?, removeCredential?}`.
+- `PUT`: `{revision, settings: {enabled, siteUrls}}`; under the shared connection,
+  `enabled` does not change the Google switch. Credentials and enablement live in
+  `/plugins/google`; service-account changes are rejected after upgrading.
 - `POST /properties`: `{revision}`, returning `{items: [{siteUrl, permissionLevel}]}`.
 
 Mutations/discovery retain the admin Origin, CSRF and session guards. The plugin
 registry revision is shared with other plugins in the same workspace; stale edits
-return `version_conflict`. The panel uses saved summary cards and shared modal,
+return `version_conflict`. The Google page uses saved summary cards and shared modal,
 toggle, action, skeleton and toast components. Failed saves retain drafts and
 pending saves block dismissal and repeat submission.
 
@@ -73,10 +71,10 @@ staging checks; no account is connected or deployment performed by this change.
 
 ## Provider references
 
-- [Service account authorization](https://developers.google.com/identity/protocols/oauth2/service-account)
+- [OAuth authorization and scopes](https://developers.google.com/webmaster-tools/v1/how-tos/authorizing)
 - [Sites list](https://developers.google.com/webmaster-tools/v1/sites/list)
 - [Search Analytics query](https://developers.google.com/webmaster-tools/v1/searchanalytics/query)
 - [Sitemaps list](https://developers.google.com/webmaster-tools/v1/sitemaps/list)
 - [URL inspection](https://developers.google.com/webmaster-tools/v1/urlInspection.index/inspect)
 
-Checked 2026-10-20 against official Google documentation and Context7.
+Checked 2026-10-21 against official Google documentation and Context7.

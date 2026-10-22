@@ -7,6 +7,8 @@ export const googlePlugins = [
   "gmail",
 ] as const;
 export type GooglePlugin = (typeof googlePlugins)[number];
+/** Legacy product IDs remain readable for upgrades; new connections use google. */
+export type GoogleRegistration = GooglePlugin | "google";
 export const googlePlugin = z.enum(googlePlugins);
 export const googleDefinitions = {
   "google-docs": {
@@ -34,6 +36,23 @@ export const googleDefinitions = {
     summary: "Search mail and read messages.",
   },
 } as const;
+export const googleScopes = [
+  ...googlePlugins.map((plugin) => googleDefinitions[plugin].scope),
+  "https://www.googleapis.com/auth/webmasters.readonly",
+];
+export function registrationScopes(
+  plugin: GoogleRegistration,
+): readonly string[] {
+  return plugin === "google" ? googleScopes : [googleDefinitions[plugin].scope];
+}
+export function googleConfig(
+  plugins:
+    | { google?: Partial<Record<GoogleRegistration, GoogleConfig>> }
+    | undefined,
+  product: GooglePlugin,
+) {
+  return plugins?.google?.google ?? plugins?.google?.[product];
+}
 export interface GoogleConnection {
   id: string;
   account: string;
@@ -69,6 +88,8 @@ export interface GooglePage {
   scope: string;
   status: "not_connected" | "connected" | "refreshing" | "reconnect_required";
   account?: string;
+  legacy?: boolean;
+  siteUrls?: string[];
 }
 export const googleSave = z
   .object({

@@ -12,13 +12,29 @@ export function searchConsoleReadAllowed(w: Workspace, run: Run) {
     if (!current || seen.has(current.id)) continue;
     seen.add(current.id);
     const scope = current.searchConsoleRead;
+    const suite = w.plugins?.google?.google;
+    const connected = suite
+      ? suite.settings.enabled &&
+        suite.connection &&
+        !suite.connection.reconnectRequired &&
+        suite.connection.id === scope?.connectionId &&
+        w.plugins?.searchConsole?.settings.siteUrls.length &&
+        [run, current].every((r) =>
+          w.members.some(
+            (m) =>
+              m.id === r.actor &&
+              m.active &&
+              ["owner", "admin"].includes(m.role),
+          ),
+        )
+      : w.plugins?.searchConsole?.settings.enabled &&
+        w.plugins.searchConsole.credential;
     if (
       scope &&
       (run.chatId !== run.actor ||
         !!run.workflowId ||
-        !w.plugins?.searchConsole?.settings.enabled ||
-        !w.plugins.searchConsole.credential ||
-        w.plugins.revision !== scope.revision ||
+        !connected ||
+        w.plugins?.revision !== scope.revision ||
         current.chatId !== current.actor ||
         !!current.workflowId)
     )

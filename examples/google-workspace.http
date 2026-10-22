@@ -1,18 +1,16 @@
 # Authenticate first; keep the session cookie and CSRF token from the admin API.
-# Replace workspace, revision and client settings. Repeat independently for:
-# google-docs, google-sheets, google-drive, gmail.
+# Replace workspace, revision and client settings. All five Google services share one client.
 @origin = http://localhost:3000
 @workspace = 00000000-0000-4000-8000-000000000001
-@plugin = google-docs
 @csrf = REPLACE_WITH_SESSION_CSRF
 @session = REPLACE_WITH_SESSION_COOKIE
 
 ### Redacted settings (secret/tokens are never returned)
-GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/google/{{plugin}}
+GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/google
 Cookie: repodesk_session={{session}}
 
 ### Save a Web application OAuth client, disabled until explicitly enabled later
-PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/google/{{plugin}}
+PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/google
 Origin: {{origin}}
 Cookie: repodesk_session={{session}}
 X-CSRF-Token: {{csrf}}
@@ -21,7 +19,7 @@ Content-Type: application/json
 {"revision":0,"settings":{"enabled":false},"clientId":"REPLACE.apps.googleusercontent.com","clientSecret":"REPLACE_WITH_CLIENT_SECRET"}
 
 ### Open the returned Google URL in the SAME signed-in browser session
-POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/google/{{plugin}}/connect
+POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/google/connect
 Origin: {{origin}}
 Cookie: repodesk_session={{session}}
 X-CSRF-Token: {{csrf}}
@@ -30,7 +28,7 @@ Content-Type: application/json
 {"revision":1}
 
 ### After Google callback: GET settings, review account, use its latest revision
-PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/google/{{plugin}}
+PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/google
 Origin: {{origin}}
 Cookie: repodesk_session={{session}}
 X-CSRF-Token: {{csrf}}
@@ -38,8 +36,8 @@ Content-Type: application/json
 
 {"revision":2,"settings":{"enabled":true}}
 
-### Local disconnect; does not revoke other plugins' Google authorizations
-POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/google/{{plugin}}/disconnect
+### Local disconnect; disables the shared connection for all five services
+POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/google/disconnect
 Origin: {{origin}}
 Cookie: repodesk_session={{session}}
 X-CSRF-Token: {{csrf}}
@@ -47,6 +45,8 @@ Content-Type: application/json
 
 {"revision":3}
 
+# Search Console properties use the same connection; see search-console.http.
+# Add /api/admin/google/callback to the existing Web application's redirect URIs.
 # Tool examples for an active owner/admin in a private Telegram conversation:
 # query_google_docs: {"documentId":"DOCUMENT_ID"}
 # query_google_sheets: {"resource":"spreadsheet","spreadsheetId":"SPREADSHEET_ID"}

@@ -3,6 +3,7 @@ import { operator } from "../admin/auth.ts";
 import type { PluginRecord } from "../agent/plugin-config.ts";
 import type { Store } from "../db/repositories.ts";
 import { type Admin, requireThat, type Workspace } from "../domain.ts";
+import { GoogleService } from "../google/service.ts";
 import { decrypt, encrypt } from "../setup/credentials.ts";
 import {
   audit,
@@ -42,7 +43,7 @@ const siteSchema = z.object({
 function scope(w: Workspace, runId: string, revision: number) {
   const run = w.runs.find((r) => r.id === runId);
   requireThat(run && runAllowed(w, run), "run_revoked", 403);
-  authorize(w, run.actor);
+  authorize(w, run.actor, !!w.plugins?.google?.google);
   requireThat(
     run.chatId === run.actor && !run.workflowId,
     "search_console_private_request_required",
@@ -50,7 +51,13 @@ function scope(w: Workspace, runId: string, revision: number) {
   );
   const config = w.plugins?.searchConsole;
   requireThat(
-    config?.settings.enabled && config.credential,
+    config &&
+      (w.plugins?.google?.google
+        ? w.plugins.google.google.settings.enabled &&
+          w.plugins.google.google.connection &&
+          !w.plugins.google.google.connection.reconnectRequired &&
+          config.settings.siteUrls.length
+        : config.settings.enabled && config.credential),
     "search_console_not_configured",
     409,
   );
@@ -67,6 +74,7 @@ export class SearchConsoleService {
     private store: Store,
     private key: string,
     transport?: SearchConsoleTransport,
+    private google = new GoogleService(store, key),
   ) {
     this.client = new SearchConsoleClient(transport);
   }
@@ -75,11 +83,21 @@ export class SearchConsoleService {
     authority(admin, w);
     return {
       revision: w.plugins?.revision ?? 0,
-      settings: structuredClone(
-        w.plugins?.searchConsole?.settings ?? emptySearchConsole,
-      ),
-      credentialConfigured: !!w.plugins?.searchConsole?.credential,
-      email: w.plugins?.searchConsole?.email,
+      settings: {
+        ...structuredClone(
+          w.plugins?.searchConsole?.settings ?? emptySearchConsole,
+        ),
+        ...(w.plugins?.google?.google
+          ? { enabled: w.plugins.google.google.settings.enabled }
+          : {}),
+      },
+      credentialConfigured: w.plugins?.google?.google
+        ? !!w.plugins.google.google.connection &&
+          !w.plugins.google.google.connection.reconnectRequired
+        : !!w.plugins?.searchConsole?.credential,
+      email:
+        w.plugins?.google?.google?.connection?.account ??
+        w.plugins?.searchConsole?.email,
     };
   }
   private async adminAccess(
@@ -103,21 +121,29 @@ export class SearchConsoleService {
         sessionHash ? [admin.id, sessionHash] : [admin.id],
       );
       requireThat(result.rowCount, "access_denied", 403);
+      const suite = w.plugins?.google?.google;
       requireThat(
-        w.plugins?.searchConsole?.credential,
+        suite
+          ? suite.connection && !suite.connection.reconnectRequired
+          : w.plugins?.searchConsole?.credential,
         "search_console_credential_required",
         409,
       );
-      return w.plugins.searchConsole.credential;
+      return suite ? undefined : w.plugins?.searchConsole?.credential;
     };
     const credential = await guard();
-    const account = parseServiceAccount(decrypt(this.key, aad(id), credential));
     const options = {
       guard: async () => {
         await guard();
       },
     };
-    return { token: await this.client.token(account, options), options };
+    const token = credential
+      ? await this.client.token(
+          parseServiceAccount(decrypt(this.key, aad(id), credential)),
+          options,
+        )
+      : await this.google.accountAccess(id, options.guard);
+    return { token, options };
   }
   async properties(
     admin: Admin,
@@ -163,6 +189,12 @@ export class SearchConsoleService {
       409,
     );
     requireThat(this.key, "search_console_credentials_unavailable", 503);
+    const suite = snapshot.plugins?.google?.google;
+    requireThat(
+      !suite || (!input.serviceAccount && !input.removeCredential),
+      "google_plugin_merged",
+      409,
+    );
     const account = input.serviceAccount
       ? parseServiceAccount(input.serviceAccount)
       : undefined;
@@ -214,7 +246,9 @@ export class SearchConsoleService {
           ? { ...emptySearchConsole, siteUrls: [] }
           : input.settings;
       requireThat(
-        !settings.enabled || (credential && settings.siteUrls.length),
+        !!suite ||
+          !settings.enabled ||
+          (credential && settings.siteUrls.length),
         "search_console_not_configured",
         409,
       );
@@ -234,7 +268,7 @@ export class SearchConsoleService {
         entries: w.plugins?.entries ?? fallback,
         revision: input.revision + 1,
         searchConsole: {
-          settings,
+          settings: suite ? { ...settings, enabled: false } : settings,
           credential,
           email: input.removeCredential
             ? undefined
@@ -287,7 +321,12 @@ export class SearchConsoleService {
         403,
       );
     await this.store.change(id, (w) => {
-      scope(w, runId, revision).run.searchConsoleRead = { revision };
+      scope(w, runId, revision).run.searchConsoleRead = {
+        revision,
+        ...(w.plugins?.google?.google
+          ? { connectionId: w.plugins.google.google.connection?.id }
+          : {}),
+      };
     });
     if (input.resource === "properties") {
       await check();
@@ -299,12 +338,14 @@ export class SearchConsoleService {
         await check();
       },
     };
-    const token = await this.client.token(
-      parseServiceAccount(
-        decrypt(this.key, aad(id), config.credential as string),
-      ),
-      options,
-    );
+    const token = (await this.store.read(id)).plugins?.google?.google
+      ? await this.google.accountAccess(id, options.guard, signal)
+      : await this.client.token(
+          parseServiceAccount(
+            decrypt(this.key, aad(id), config.credential as string),
+          ),
+          options,
+        );
     const path = `sites/${encodeURIComponent(input.siteUrl as string)}`;
     let result: unknown;
     if (input.resource === "analytics") {

@@ -1,18 +1,20 @@
 import { expect, type Page, test } from "@playwright/test";
-import type { SearchConsolePage } from "../../src/search-console/config.ts";
+import { type GooglePage, googleScopes } from "../../src/google/config.ts";
 import { expectTopRightAction } from "./card-layout.ts";
 
 const workspace = "d2ce2eab-3b09-4e8e-858e-75c20d832517";
 const endpoint = `/api/admin/workspaces/${workspace}/plugins/search-console`;
 async function fixture(page: Page, connected = false) {
-  const data: SearchConsolePage = {
+  const data: GooglePage = {
     revision: 1,
-    settings: {
-      enabled: connected,
-      siteUrls: connected ? ["sc-domain:example.com"] : [],
-    },
-    credentialConfigured: connected,
-    email: connected ? "repodesk@fixture.iam.gserviceaccount.com" : undefined,
+    settings: { enabled: connected },
+    clientId: "shared.apps.googleusercontent.com",
+    clientSecretConfigured: true,
+    redirectUri: "https://admin.example.test/api/admin/google/callback",
+    scope: googleScopes.join(" "),
+    status: connected ? "connected" : "not_connected",
+    account: connected ? "fixture@example.test" : undefined,
+    siteUrls: connected ? ["sc-domain:example.com"] : [],
   };
   const writes: Record<string, unknown>[] = [];
   const control = {
@@ -44,7 +46,10 @@ async function fixture(page: Page, connected = false) {
       );
       return;
     }
-    if (path === endpoint) {
+    if (
+      path === endpoint ||
+      path === endpoint.replace("search-console", "google")
+    ) {
       if (route.request().method() === "PUT") {
         const body = route.request().postDataJSON();
         writes.push(body);
@@ -57,17 +62,8 @@ async function fixture(page: Page, connected = false) {
           return;
         }
         data.revision++;
-        data.settings = body.settings;
-        if (body.serviceAccount) {
-          data.credentialConfigured = true;
-          data.email = "repodesk@fixture.iam.gserviceaccount.com";
-          data.settings = { enabled: false, siteUrls: [] };
-        }
-        if (body.removeCredential) {
-          data.credentialConfigured = false;
-          delete data.email;
-          data.settings = { enabled: false, siteUrls: [] };
-        }
+        if (path === endpoint) data.siteUrls = body.settings.siteUrls;
+        else data.settings = body.settings;
       } else {
         await control.load;
         if (control.loadError) {
@@ -118,44 +114,41 @@ for (const width of [1280, 390]) {
     page,
   }) => {
     await page.setViewportSize({ width, height: 950 });
-    const f = await fixture(page);
+    const f = await fixture(page, true);
+    f.data.siteUrls = [];
     await f.open();
+    await expect(page).toHaveURL(/\/admin\/plugins\/google\?/);
     const auth = page.getByRole("region", {
-      name: "Search Console authorization",
+      name: "Google connection",
+      exact: true,
     });
     const properties = page.getByRole("region", {
       name: "Search Console properties",
       exact: true,
     });
-    await expect(auth).toContainText("Not configured");
+    await expect(auth).toContainText("fixture@example.test");
     await expect(auth.locator("input, textarea, select")).toHaveCount(0);
     await expect(properties.locator("input, textarea, select")).toHaveCount(0);
     const edit = page.getByRole("button", {
-      name: "Edit Search Console service account",
+      name: "Edit Search Console properties",
     });
-    await expectTopRightAction(auth, edit);
-    await expect(
-      page.getByRole("button", { name: "Edit Search Console properties" }),
-    ).toBeDisabled();
+    await expectTopRightAction(properties, edit);
+    await expect(properties).toContainText("No properties selected");
     await page.screenshot({
       path: test.info().outputPath("empty.png"),
       fullPage: true,
     });
     await edit.click();
-    let dialog = page.getByRole("dialog");
-    await dialog.getByLabel("Service account JSON").fill("fixture-json");
-    await page.screenshot({
-      path: test.info().outputPath("credential.png"),
-      fullPage: true,
+    let dialog = page.getByRole("dialog", {
+      name: "Edit Search Console properties",
     });
+    await expect(dialog.getByRole("checkbox")).toHaveCount(3);
+    await dialog
+      .getByRole("checkbox", { name: "https://blog.example.com/", exact: true })
+      .check();
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(edit).toBeFocused();
     await edit.click();
-    await expect(page.getByLabel("Service account JSON")).toHaveValue("");
-    await page.getByLabel("Service account JSON").fill("fixture-json");
-    await dialog
-      .getByRole("button", { name: "Save service account", exact: true })
-      .click();
     dialog = page.getByRole("dialog", {
       name: "Edit Search Console properties",
     });
@@ -169,19 +162,25 @@ for (const width of [1280, 390]) {
       .getByRole("checkbox", { name: "https://blog.example.com/", exact: true })
       .check();
     await dialog.getByLabel("Search properties").fill("");
-    await page.screenshot({
-      path: test.info().outputPath("properties.png"),
-      fullPage: true,
-    });
+    await dialog
+      .getByRole("checkbox", { name: f.control.items[2], exact: true })
+      .check();
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate((value) => {
+        document.documentElement.dataset.theme = value;
+      }, theme);
+      await page.screenshot({
+        path: test.info().outputPath(`properties-${theme}.png`),
+        fullPage: true,
+      });
+    }
     await dialog
       .getByRole("button", { name: "Save properties", exact: true })
       .click();
     await expect(properties).toContainText("https://blog.example.com/");
     const toggle = page.getByRole("switch", {
-      name: "Enable Google Search Console",
+      name: "Enable Google",
     });
-    await expect(toggle).not.toBeChecked();
-    await toggle.click();
     await expect(toggle).toBeChecked();
     await page.screenshot({
       path: test.info().outputPath("saved.png"),
@@ -195,10 +194,10 @@ for (const width of [1280, 390]) {
     await page.locator(".plugin-back-link").click();
     await expect(
       page.getByRole("link", {
-        name: "Open Google Search Console",
+        name: "Open Google",
       }),
     ).toBeVisible();
-    expect(f.writes).toHaveLength(3);
+    expect(f.writes).toHaveLength(1);
   });
   test(`Search Console retains failed drafts and locks pending saves at ${width}px`, async ({
     page,
@@ -252,7 +251,7 @@ for (const width of [1280, 390]) {
     await expect(dialog).toHaveCount(0);
     expect(f.writes).toHaveLength(2);
   });
-  test(`Search Console loading, failure, discovery recovery and removal at ${width}px`, async ({
+  test(`Search Console loading, failure and discovery recovery at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 950 });
@@ -263,28 +262,27 @@ for (const width of [1280, 390]) {
     });
     await f.open();
     const auth = page.getByRole("region", {
-      name: "Search Console authorization",
+      name: "Google connection",
+      exact: true,
     });
     await expect(auth).toBeVisible();
     await expect(auth).not.toContainText("Not configured");
     await expect(
-      page.getByRole("button", { name: "Edit Search Console service account" }),
+      page.getByRole("button", { name: "Edit Google connection" }),
     ).toBeDisabled();
     await page.screenshot({
       path: test.info().outputPath("loading.png"),
       fullPage: true,
     });
-    f.control.loadError = "search_console_unavailable";
+    f.control.loadError = "google_credentials_unavailable";
     release();
-    await expect(page.getByRole("alert")).toContainText("could not be reached");
+    await expect(page.getByRole("alert")).toContainText("unavailable");
     await page.screenshot({
       path: test.info().outputPath("load-error.png"),
       fullPage: true,
     });
     f.control.loadError = "";
-    await page
-      .getByRole("button", { name: "Reload saved Search Console settings" })
-      .click();
+    await page.getByRole("button", { name: "Reload Google settings" }).click();
     await expect(auth).toContainText("Configured");
     f.control.propertiesError = "search_console_access_denied";
     await page
@@ -300,20 +298,17 @@ for (const width of [1280, 390]) {
       .click();
     await expect(dialog.getByRole("checkbox")).toHaveCount(3);
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    f.control.items = [];
+    f.data.siteUrls = [];
+    await page.reload();
     await page
-      .getByRole("button", { name: "Edit Search Console service account" })
+      .getByRole("button", { name: "Edit Search Console properties" })
       .click();
     dialog = page.getByRole("dialog");
-    await expect(dialog.getByLabel("Service account JSON")).toHaveValue("");
-    await dialog
-      .getByRole("checkbox", {
-        name: "Remove saved credentials and disable Google Search Console",
-      })
-      .check();
-    await dialog
-      .getByRole("button", { name: "Save service account", exact: true })
-      .click();
-    await expect(auth).toContainText("Not configured");
-    await expect(page.getByRole("switch")).not.toBeChecked();
+    await expect(dialog).toContainText("No properties found");
+    await page.screenshot({
+      path: test.info().outputPath("discovery-empty.png"),
+      fullPage: true,
+    });
   });
 }

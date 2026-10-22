@@ -29,11 +29,15 @@ import { GitHubPullRequests } from "../github/pull-requests.ts";
 import { GitHubApps } from "../github/registry.ts";
 import { repositoryAccess } from "../github/user-access.ts";
 import {
-  type GooglePlugin,
+  type GoogleRegistration,
+  googleConfig,
   googleDefinitions,
   googlePlugins,
 } from "../google/config.ts";
-import { googleExtension } from "../google/extension.ts";
+import {
+  googleExtension,
+  googleWorkspaceExtension,
+} from "../google/extension.ts";
 import type { GoogleService } from "../google/service.ts";
 import { searchConsoleTool } from "../search-console/config.ts";
 import { searchConsoleExtension } from "../search-console/extension.ts";
@@ -135,11 +139,14 @@ export class PluginService {
       const builtin = prior?.codeTruth;
       const names = new Set<string>(TOOLS);
       for (const plugin of googlePlugins)
-        if (workspace.plugins?.google?.[plugin]?.settings.enabled)
+        if (googleConfig(workspace.plugins, plugin)?.settings.enabled)
           names.add(googleDefinitions[plugin].tool);
       if (workspace.plugins?.cloudflare?.settings.enabled)
         for (const name of cloudflareTools) names.add(name);
-      if (workspace.plugins?.searchConsole?.settings.enabled)
+      if (
+        workspace.plugins?.google?.google?.settings.enabled ||
+        workspace.plugins?.searchConsole?.settings.enabled
+      )
         names.add(searchConsoleTool);
       names.add("record_discussion");
       names.add("query_discussions");
@@ -205,7 +212,7 @@ export class PluginService {
   async saveGoogle(
     admin: Admin,
     workspaceId: string,
-    plugin: GooglePlugin,
+    plugin: GoogleRegistration,
     value: unknown,
   ) {
     requireThat(this.google, "google_credentials_unavailable", 503);
@@ -380,19 +387,39 @@ export class PluginService {
     const config = workspace.plugins?.codeTruth;
     const targets = config?.enabled ? targetsFor(config, workspaceId) : [];
     const builtins = [];
+    const suite = workspace.plugins?.google?.google;
+    if (suite?.settings.enabled) {
+      requireThat(this.google, "google_credentials_unavailable", 503);
+      const search = workspace.plugins?.searchConsole?.settings.siteUrls.length
+        ? this.searchConsole
+        : undefined;
+      requireThat(
+        !workspace.plugins?.searchConsole?.settings.siteUrls.length || search,
+        "search_console_credentials_unavailable",
+        503,
+      );
+      builtins.push(
+        googleWorkspaceExtension(
+          this.google,
+          search,
+          workspaceId,
+          workspace.plugins?.revision ?? 0,
+        ),
+      );
+    }
     for (const plugin of googlePlugins)
-      if (workspace.plugins?.google?.[plugin]?.settings.enabled) {
+      if (!suite && googleConfig(workspace.plugins, plugin)?.settings.enabled) {
         requireThat(this.google, "google_credentials_unavailable", 503);
         builtins.push(
           googleExtension(
             this.google,
             workspaceId,
-            workspace.plugins.revision,
+            workspace.plugins?.revision ?? 0,
             plugin,
           ),
         );
       }
-    if (workspace.plugins?.searchConsole?.settings.enabled) {
+    if (!suite && workspace.plugins?.searchConsole?.settings.enabled) {
       requireThat(
         this.searchConsole,
         "search_console_credentials_unavailable",

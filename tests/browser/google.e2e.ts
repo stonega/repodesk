@@ -1,32 +1,25 @@
 import { expect, type Page, test } from "@playwright/test";
-import {
-  type GooglePage,
-  type GooglePlugin,
-  googleDefinitions,
-  googlePlugins,
-} from "../../src/google/config.ts";
+import { type GooglePage, googleScopes } from "../../src/google/config.ts";
 import { expectTopRightAction } from "./card-layout.ts";
 
 const workspace = "d2ce2eab-3b09-4e8e-858e-75c20d832517";
 async function fixture(page: Page, connected = true) {
-  const pages = Object.fromEntries(
-    googlePlugins.map((plugin) => [
-      plugin,
-      {
-        revision: 1,
-        settings: { enabled: connected },
-        clientId: connected ? `${plugin}.apps.googleusercontent.com` : "",
-        clientSecretConfigured: connected,
-        redirectUri: `https://admin.example.test/api/admin/google/${plugin}/callback`,
-        scope: googleDefinitions[plugin].scope,
-        status: connected ? "connected" : "not_connected",
-        account: connected
-          ? "fixture-with-a-long-account-name@example.test"
-          : undefined,
-      },
-    ]),
-  ) as Record<GooglePlugin, GooglePage>;
-  const writes: { plugin: GooglePlugin; body: Record<string, unknown> }[] = [];
+  const pages = {
+    google: {
+      revision: 1,
+      settings: { enabled: connected },
+      clientId: connected ? "shared.apps.googleusercontent.com" : "",
+      clientSecretConfigured: connected,
+      redirectUri: "https://admin.example.test/api/admin/google/callback",
+      scope: googleScopes.join(" "),
+      status: connected ? "connected" : "not_connected",
+      account: connected
+        ? "fixture-with-a-long-account-name@example.test"
+        : undefined,
+      siteUrls: connected ? ["sc-domain:example.test"] : [],
+    },
+  } as { google: GooglePage };
+  const writes: { plugin: "google"; body: Record<string, unknown> }[] = [];
   const controls = {
     loading: Promise.resolve(),
     pending: Promise.resolve(),
@@ -36,12 +29,9 @@ async function fixture(page: Page, connected = true) {
   };
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
-    const match =
-      /\/plugins\/google\/(google-docs|google-sheets|google-drive|gmail)(\/(connect|disconnect))?$/.exec(
-        path,
-      );
+    const match = /\/plugins\/(google)(\/(connect|disconnect))?$/.exec(path);
     if (match) {
-      const plugin = match[1] as GooglePlugin;
+      const plugin = match[1] as "google";
       const data = pages[plugin];
       if (match[3] === "connect") {
         await controls.pending;
@@ -73,6 +63,7 @@ async function fixture(page: Page, connected = true) {
           return;
         }
         data.revision++;
+        data.legacy = false;
         data.settings = body.settings;
         if (body.clientId) data.clientId = body.clientId;
         if (body.clientSecret) {
@@ -120,13 +111,13 @@ async function fixture(page: Page, connected = true) {
     pages,
     writes,
     controls,
-    open: (plugin: GooglePlugin) =>
+    open: (plugin: "google") =>
       page.goto(`/admin/plugins/${plugin}?workspace=${workspace}`),
   };
 }
 for (const width of [1280, 390]) {
-  for (const plugin of googlePlugins) {
-    const name = googleDefinitions[plugin].name;
+  for (const plugin of ["google"] as const) {
+    const name = "Google";
     test(`${name} saved display and separate modal at ${width}px`, async ({
       page,
       context,
@@ -175,19 +166,23 @@ for (const width of [1280, 390]) {
       await expect(dialog).toContainText(f.pages[plugin].redirectUri);
       for (const [label, value] of [
         ["Callback URL", f.pages[plugin].redirectUri],
-        ["Read scope", f.pages[plugin].scope],
+        ["Read scope", googleScopes[0]],
       ]) {
-        const copy = dialog.getByRole("button", {
-          name: `Copy ${label}`,
-          exact: true,
-        });
+        const copy = dialog
+          .getByRole("button", {
+            name: `Copy ${label}`,
+            exact: true,
+          })
+          .first();
         const box = await copy.boundingBox();
         expect(box?.width).toBeGreaterThanOrEqual(44);
         expect(box?.height).toBeGreaterThanOrEqual(44);
         await copy.focus();
         await page.keyboard.press("Enter");
         await expect(
-          dialog.getByRole("button", { name: `Copied ${label}`, exact: true }),
+          dialog
+            .getByRole("button", { name: `Copied ${label}`, exact: true })
+            .first(),
         ).toBeDisabled();
         expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
           value,
@@ -259,9 +254,9 @@ for (const width of [1280, 390]) {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.setViewportSize({ width, height: 950 });
     const f = await fixture(page, false);
-    await f.open("gmail");
-    await page.getByRole("button", { name: "Edit Gmail connection" }).click();
-    const dialog = page.getByRole("dialog", { name: "Edit Gmail connection" });
+    await f.open("google");
+    await page.getByRole("button", { name: "Edit Google connection" }).click();
+    const dialog = page.getByRole("dialog", { name: "Edit Google connection" });
     await dialog
       .getByLabel("Client ID", { exact: true })
       .fill("draft.apps.googleusercontent.com");
@@ -281,7 +276,7 @@ for (const width of [1280, 390]) {
       "draft.apps.googleusercontent.com",
     );
     await expect(dialog.locator("code").first()).toHaveText(
-      f.pages.gmail.redirectUri,
+      f.pages.google.redirectUri,
     );
     for (const theme of ["light", "dark"]) {
       await page.evaluate((value) => {
@@ -298,7 +293,7 @@ for (const width of [1280, 390]) {
     await dialog.getByRole("button", { name: "Copy Callback URL" }).click();
     await expect(dialog.getByRole("alert")).toHaveCount(0);
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      f.pages.gmail.redirectUri,
+      f.pages.google.redirectUri,
     );
     expect(f.writes).toHaveLength(0);
   });
@@ -307,9 +302,9 @@ for (const width of [1280, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 950 });
     const f = await fixture(page, false);
-    await f.open("gmail");
+    await f.open("google");
     const card = page.getByRole("region", {
-      name: "Gmail connection",
+      name: "Google connection",
       exact: true,
     });
     await expect(card).toContainText("Not connected");
@@ -317,8 +312,8 @@ for (const width of [1280, 390]) {
       path: test.info().outputPath("empty.png"),
       fullPage: true,
     });
-    await page.getByRole("switch", { name: "Enable Gmail" }).click();
-    const dialog = page.getByRole("dialog", { name: "Edit Gmail connection" });
+    await page.getByRole("switch", { name: "Enable Google" }).click();
+    const dialog = page.getByRole("dialog", { name: "Edit Google connection" });
     await expect(
       dialog.getByRole("button", { name: "Connect Google account" }),
     ).toBeDisabled();
@@ -342,10 +337,10 @@ for (const width of [1280, 390]) {
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(page.getByRole("alert")).toContainText("another session");
     await page
-      .getByRole("button", { name: "Reload Gmail settings", exact: true })
+      .getByRole("button", { name: "Reload Google settings", exact: true })
       .click();
     await page
-      .getByRole("button", { name: "Edit Gmail connection", exact: true })
+      .getByRole("button", { name: "Edit Google connection", exact: true })
       .click();
     await dialog
       .getByLabel("Client ID", { exact: true })
@@ -373,10 +368,10 @@ for (const width of [1280, 390]) {
     release();
     await expect(dialog).toHaveCount(0);
     await expect(
-      page.getByRole("switch", { name: "Enable Gmail" }),
+      page.getByRole("switch", { name: "Enable Google" }),
     ).not.toBeChecked();
     await expect(card).toContainText("Configured");
-    await page.getByRole("button", { name: "Edit Gmail connection" }).click();
+    await page.getByRole("button", { name: "Edit Google connection" }).click();
     f.controls.connectError = "google_reconnect_required";
     await dialog
       .getByRole("button", { name: "Connect Google account" })
@@ -386,7 +381,7 @@ for (const width of [1280, 390]) {
     );
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   });
-  test(`Google initial loading, retry and independent catalog entries at ${width}px`, async ({
+  test(`Google initial loading, retry and single catalog entry at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 950 });
@@ -395,15 +390,15 @@ for (const width of [1280, 390]) {
     f.controls.loading = new Promise<void>((resolve) => {
       release = resolve;
     });
-    await f.open("google-docs");
+    await f.open("google");
     await expect(
-      page.getByRole("heading", { name: "Google Docs", exact: true }),
+      page.getByRole("heading", { name: "Google", exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Edit Google Docs connection" }),
+      page.getByRole("button", { name: "Edit Google connection" }),
     ).toBeDisabled();
     await expect(
-      page.getByRole("region", { name: "Google Docs connection", exact: true }),
+      page.getByRole("region", { name: "Google connection", exact: true }),
     ).not.toContainText("Not connected");
     await page.screenshot({
       path: test.info().outputPath("loading.png"),
@@ -417,39 +412,72 @@ for (const width of [1280, 390]) {
       fullPage: true,
     });
     f.controls.loadError = "";
-    await page
-      .getByRole("button", { name: "Reload Google Docs settings" })
-      .click();
+    await page.getByRole("button", { name: "Reload Google settings" }).click();
     await expect(
-      page.getByRole("region", { name: "Google Docs connection", exact: true }),
+      page.getByRole("region", { name: "Google connection", exact: true }),
     ).toContainText("Connected");
     await page
       .getByRole("link", { name: "Plugins", exact: true })
       .first()
       .click();
-    for (const plugin of googlePlugins)
-      await expect(
-        page
-          .getByRole("link", {
-            name: new RegExp(googleDefinitions[plugin].name),
-          })
-          .last(),
-      ).toBeVisible();
-    await page.getByRole("link", { name: "Open Gmail", exact: true }).click();
-    await page.getByRole("switch", { name: "Enable Gmail" }).click();
     await expect(
-      page.getByRole("switch", { name: "Enable Gmail" }),
+      page.getByRole("link", { name: "Open Google", exact: true }),
+    ).toHaveCount(1);
+    for (const old of [
+      "Google Docs",
+      "Google Sheets",
+      "Google Drive",
+      "Gmail",
+      "Google Search Console",
+    ])
+      await expect(
+        page.getByRole("link", { name: `Open ${old}`, exact: true }),
+      ).toHaveCount(0);
+    await page.getByRole("link", { name: "Open Google", exact: true }).click();
+    await page.getByRole("switch", { name: "Enable Google" }).click();
+    await expect(
+      page.getByRole("switch", { name: "Enable Google" }),
     ).not.toBeChecked();
-    expect(f.pages["google-docs"].settings.enabled).toBe(true);
-    expect(f.pages["google-sheets"].settings.enabled).toBe(true);
+    expect(f.pages.google.settings.enabled).toBe(false);
   });
-  test(`Google disconnect clears only its local connection at ${width}px`, async ({
+  test(`Google reuses the registered client but requires consent after merging at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 950 });
+    const f = await fixture(page, false);
+    Object.assign(f.pages.google, {
+      legacy: true,
+      clientId: "existing.apps.googleusercontent.com",
+      clientSecretConfigured: true,
+    });
+    await f.open("google");
+    await expect(
+      page.getByRole("region", { name: "Google connection", exact: true }),
+    ).toContainText("existing Web application client can be reused");
+    await page.getByRole("button", { name: "Edit Google connection" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByLabel("Client ID", { exact: true })).toHaveValue(
+      "existing.apps.googleusercontent.com",
+    );
+    await expect(
+      dialog.getByRole("button", { name: "Connect Google account" }),
+    ).toBeDisabled();
+    await dialog.getByRole("button", { name: "Save", exact: true }).click();
+    expect(f.writes[0]?.body).not.toHaveProperty("clientSecret");
+    await page.getByRole("button", { name: "Edit Google connection" }).click();
+    await expect(
+      page
+        .getByRole("dialog")
+        .getByRole("button", { name: "Connect Google account" }),
+    ).toBeEnabled();
+  });
+  test(`Google disconnect disables the shared connection at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 950 });
     const f = await fixture(page);
-    await f.open("gmail");
-    await page.getByRole("button", { name: "Edit Gmail connection" }).click();
+    await f.open("google");
+    await page.getByRole("button", { name: "Edit Google connection" }).click();
     await page
       .getByRole("dialog")
       .getByRole("button", { name: "Disconnect", exact: true })
@@ -464,20 +492,20 @@ for (const width of [1280, 390]) {
       .getByRole("button", { name: "Cancel", exact: true })
       .click();
     await expect(
-      page.getByRole("region", { name: "Gmail connection", exact: true }),
+      page.getByRole("region", { name: "Google connection", exact: true }),
     ).toContainText("Not connected");
-    expect(f.pages["google-docs"].status).toBe("connected");
+    expect(f.pages.google.status).toBe("not_connected");
   });
 }
 test("Google connect follows the server's Google consent URL", async ({
   page,
 }) => {
   const f = await fixture(page);
-  await f.open("gmail");
+  await f.open("google");
   await page.route("https://accounts.google.com/**", (route) =>
     route.fulfill({ contentType: "text/html", body: "Fixture consent" }),
   );
-  await page.getByRole("button", { name: "Edit Gmail connection" }).click();
+  await page.getByRole("button", { name: "Edit Google connection" }).click();
   await page.getByRole("button", { name: "Reconnect Google account" }).click();
-  await expect(page).toHaveURL(/accounts\.google\.com.*state=fixture-gmail/);
+  await expect(page).toHaveURL(/accounts\.google\.com.*state=fixture-google/);
 });

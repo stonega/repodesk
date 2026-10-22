@@ -2542,6 +2542,11 @@ input.plugin-toggle-input:disabled {
 .plugin-summary.google-connection-details {
   grid-template-columns: minmax(0, 1fr);
 }
+.google-summary-card > ul {
+  overflow-wrap: anywhere;
+  padding-inline-start: 1.25rem;
+}
+.google-summary-card > ul,
 .google-summary-card > h2,
 .google-summary-card > p,
 .google-summary-card > .plugin-card-heading {

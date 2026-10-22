@@ -22,6 +22,7 @@ const cfg = config();
 const pool = database(cfg.DATABASE_URL);
 const log = new RuntimeLogger(pool, "worker");
 const store = new Store(pool, log);
+const google = new GoogleService(store, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN);
 const githubApps = new GitHubApps(
   store,
   cfg.ENCRYPTION_KEY,
@@ -40,8 +41,8 @@ const plugins = new PluginService(
     undefined,
     cfg.PUBLIC_ORIGIN,
   ),
-  new SearchConsoleService(store, cfg.ENCRYPTION_KEY),
-  new GoogleService(store, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN),
+  new SearchConsoleService(store, cfg.ENCRYPTION_KEY, undefined, google),
+  google,
 );
 const stop = await startWorker(
   store,

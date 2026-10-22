@@ -4,14 +4,8 @@ import type { PluginPage, PluginSpec } from "../src/agent/plugin-config.ts";
 import type { CloudflarePage } from "../src/cloudflare/config.ts";
 import type { CodeTruthPage } from "../src/code-truth/config.ts";
 import type { CodingPage } from "../src/coding/config.ts";
-import {
-  type GooglePage,
-  type GooglePlugin,
-  googleDefinitions,
-  googlePlugins,
-} from "../src/google/config.ts";
+import { type GooglePage, googlePlugins } from "../src/google/config.ts";
 import type { ReviewPage } from "../src/review-bot/config.ts";
-import type { SearchConsolePage } from "../src/search-console/config.ts";
 import { Cloudflare } from "./cloudflare.tsx";
 import { CodeTruth } from "./code-truth.tsx";
 import { Coding } from "./coding.tsx";
@@ -21,7 +15,6 @@ import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
 import { ReviewBot } from "./review-bot.tsx";
-import { SearchConsole } from "./search-console.tsx";
 import { SkeletonRows } from "./skeleton.tsx";
 import { ErrorToast, useToast } from "./toast.tsx";
 
@@ -119,11 +112,19 @@ export function Plugins({
     codex?: boolean;
     reviewBot?: boolean;
     cloudflare?: boolean;
-    google?: Partial<Record<GooglePlugin, boolean>>;
-    searchConsole?: boolean;
+    google?: boolean;
   }>({});
   const path = (suffix = "") =>
     `/admin/plugins${suffix}?workspace=${encodeURIComponent(workspaceId)}`;
+  useEffect(() => {
+    if (
+      view === "installed" &&
+      (googlePlugins.some((id) => id === pluginId) ||
+        pluginId === "search-console")
+    ) {
+      navigate(`/admin/plugins/google?${params.toString()}`, { replace: true });
+    }
+  }, [navigate, params, pluginId, view]);
   const load = useCallback(
     async (resetDraft = false) => {
       setLoading(true);
@@ -144,6 +145,7 @@ export function Plugins({
     if (
       view === "catalog" ||
       (view === "installed" &&
+        pluginId !== "google" &&
         !googlePlugins.some((id) => id === pluginId) &&
         pluginId !== "code-truth" &&
         pluginId !== "cloudflare" &&
@@ -157,34 +159,17 @@ export function Plugins({
     if (view !== "catalog") return;
     let active = true;
     void Promise.allSettled([
-      Promise.allSettled(
-        googlePlugins.map((plugin) =>
-          request<GooglePage>(`${endpoint}/google/${plugin}`),
-        ),
-      ),
+      request<GooglePage>(`${endpoint}/google`),
       request<CodeTruthPage>(`${endpoint}/code-truth`),
       request<CodingPage>(`${endpoint}/coding`),
       request<ReviewPage>(`${endpoint}/review-bot`),
       request<CloudflarePage>(`${endpoint}/cloudflare`),
-      request<SearchConsolePage>(`${endpoint}/search-console`),
-    ]).then(([google, truth, coding, review, cloudflare, searchConsole]) => {
+    ]).then(([google, truth, coding, review, cloudflare]) => {
       if (!active) return;
       setBuiltIns({
-        google: Object.fromEntries(
-          googlePlugins.map((plugin, i) => {
-            const item =
-              google.status === "fulfilled" ? google.value[i] : undefined;
-            return [
-              plugin,
-              item?.status === "fulfilled"
-                ? item.value.settings.enabled
-                : undefined,
-            ];
-          }),
-        ),
-        searchConsole:
-          searchConsole.status === "fulfilled"
-            ? searchConsole.value.settings?.enabled
+        google:
+          google.status === "fulfilled"
+            ? google.value.settings?.enabled
             : undefined,
         cloudflare:
           cloudflare.status === "fulfilled"
@@ -265,7 +250,8 @@ export function Plugins({
             Manage installed extensions and explore the Pi ecosystem.
           </p>
         </header>
-      ) : (!googlePlugins.some((id) => id === pluginId) &&
+      ) : (pluginId !== "google" &&
+          !googlePlugins.some((id) => id === pluginId) &&
           pluginId !== "code-truth" &&
           pluginId !== "cloudflare" &&
           pluginId !== "search-console" &&
@@ -372,18 +358,6 @@ export function Plugins({
                 }
               />
               <PluginCard
-                to={path("/search-console")}
-                name="Google Search Console"
-                summary="Search performance, sitemaps and indexed URL status."
-                status={
-                  builtIns.searchConsole === undefined
-                    ? "Built in"
-                    : builtIns.searchConsole
-                      ? "Enabled"
-                      : "Disabled"
-                }
-              />
-              <PluginCard
                 to={path("/cloudflare")}
                 name="Cloudflare"
                 summary="DNS, Pages queries and approved cache purges"
@@ -395,21 +369,18 @@ export function Plugins({
                       : "Disabled"
                 }
               />
-              {googlePlugins.map((plugin) => (
-                <PluginCard
-                  key={plugin}
-                  to={path(`/${plugin}`)}
-                  name={googleDefinitions[plugin].name}
-                  summary={googleDefinitions[plugin].summary}
-                  status={
-                    builtIns.google?.[plugin] === undefined
-                      ? "Built in"
-                      : builtIns.google[plugin]
-                        ? "Enabled"
-                        : "Disabled"
-                  }
-                />
-              ))}
+              <PluginCard
+                to={path("/google")}
+                name="Google"
+                summary="Docs, Sheets, Drive, Gmail and Search Console."
+                status={
+                  builtIns.google === undefined
+                    ? "Built in"
+                    : builtIns.google
+                      ? "Enabled"
+                      : "Disabled"
+                }
+              />
               {data?.entries.map((entry) => (
                 <PluginCard
                   key={entry.id}
@@ -467,28 +438,16 @@ export function Plugins({
           </section>
         </>
       )}
-      {view === "installed" &&
-        googlePlugins.map((plugin) =>
-          plugin === pluginId ? (
-            <Google
-              key={`${workspaceId}:${plugin}`}
-              request={request}
-              workspaceId={workspaceId}
-              plugin={plugin}
-              backTo={path()}
-            />
-          ) : null,
-        )}
-      {view === "installed" && pluginId === "code-truth" && (
-        <CodeTruth
+      {view === "installed" && pluginId === "google" && (
+        <Google
+          key={workspaceId}
           request={request}
           workspaceId={workspaceId}
           backTo={path()}
         />
       )}
-      {view === "installed" && pluginId === "search-console" && (
-        <SearchConsole
-          key={workspaceId}
+      {view === "installed" && pluginId === "code-truth" && (
+        <CodeTruth
           request={request}
           workspaceId={workspaceId}
           backTo={path()}
@@ -514,6 +473,7 @@ export function Plugins({
         <Coding request={request} workspaceId={workspaceId} backTo={path()} />
       )}
       {view === "installed" &&
+        pluginId !== "google" &&
         !googlePlugins.some((id) => id === pluginId) &&
         pluginId !== "code-truth" &&
         pluginId !== "cloudflare" &&

@@ -364,7 +364,7 @@ export interface Run {
   googleRead?: Partial<
     Record<GooglePlugin, { revision: number; connectionId: string }>
   >;
-  searchConsoleRead?: { revision: number };
+  searchConsoleRead?: { revision: number; connectionId?: string };
   handoffRead?: {
     references: MemoryReferences;
     runIds?: string[];

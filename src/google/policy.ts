@@ -1,5 +1,5 @@
 import type { Run, Workspace } from "../domain.ts";
-import { googlePlugins } from "./config.ts";
+import { googleConfig, googlePlugins } from "./config.ts";
 
 /** Recheck private/admin scope for retained answers, derived evidence and delivery. */
 export function googleReadAllowed(w: Workspace, run: Run): boolean {
@@ -23,7 +23,7 @@ export function googleReadAllowed(w: Workspace, run: Run): boolean {
       for (const plugin of googlePlugins) {
         const grant = current.googleRead[plugin];
         if (!grant) continue;
-        const config = w.plugins?.google?.[plugin];
+        const config = googleConfig(w.plugins, plugin);
         if (
           !config?.settings.enabled ||
           !config.connection ||

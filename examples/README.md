@@ -51,7 +51,7 @@ page manages installed-file registrations and grants; it does not upload or inst
 `github-app.compose.yaml` adds server-side GitHub App credentials to the app and worker.
 Use it after `code-truth.compose.yaml`; follow [GitHub App setup](../docs/implementation/github-app.md).
 
-- [Google Search Console](search-console.http): save a service account, discover/select properties, enable or remove the connection, and try private Telegram queries.
+- [Google Search Console](search-console.http): discover/select properties using the shared Google connection and try private owner/admin Telegram queries.
 
-See [google-workspace.http](google-workspace.http) for the four independent Google
-plugins, OAuth setup, explicit enablement, local disconnect and read-tool inputs.
+See [google-workspace.http](google-workspace.http) for the unified Google
+plugin, OAuth setup, explicit enablement, local disconnect and read-tool inputs.

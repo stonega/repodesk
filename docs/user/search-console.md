@@ -4,22 +4,22 @@
 
 ## 连接
 
-只有工作区所属的部署管理员可以配置插件。
+只有工作区所属的部署管理员可以配置。Search Console 已合并到 **Plugins → Google**，
+与 Docs、Sheets、Drive 和 Gmail 共用一个 Web application 和 Google 账号。先按
+[Google 连接指南](google-workspace.md) 连接账号并授予全部读取权限。
 
-1. 在 Google Cloud 项目中启用 **Google Search Console API**。
-2. 创建服务账号并下载 JSON 密钥。复制其中的 `client_email`。
-3. 在每个 Search Console 资源的 **设置 → 用户和权限** 中，将该邮箱添加为用户。一般性能查询可使用受限用户；需要 URL 检查时授予完整用户权限。Google 会继续检查每个接口的权限。
-4. 打开 **Plugins → Google Search Console → Service account → Edit**，粘贴 JSON 并保存。密钥会加密存储，保存后不会显示。
-5. 在自动打开的 **Properties** 编辑窗口中搜索并选择允许查询的资源，最多 20 个，然后点击 **Save properties**。发现列表不会自动授权任何资源。
-6. 打开页面标题右侧的 **Enable**。
+1. 确认该 Google 账号拥有要查询的 Search Console 资源权限；URL 检查可能需要完整用户权限。
+2. 打开 **Plugins → Google → Search Console properties → Edit**。
+3. 搜索并选择允许查询的资源，最多 20 个，然后点击 **Save properties**。发现列表不会自动授权任何资源。
+4. 打开 Google 页面标题右侧的 **Enable**。五项服务共用此开关。
 
-支持网域资源（例如 `sc-domain:example.com`）和 URL 前缀资源（例如 `https://example.com/`）。各工作区使用独立凭据和资源选择。插件只请求 Google 的 `webmasters.readonly` 权限。
-
-服务账号创建方式见 [Google 官方说明](https://developers.google.com/identity/protocols/oauth2/service-account)。不需要配置浏览器授权回调或 Google OAuth 客户端。
+支持网域资源（如 `sc-domain:example.com`）和 URL 前缀资源（如 `https://example.com/`）。
+未选择资源时，其余 Google 工具仍然可用。Search Console 使用 `webmasters.readonly` 权限。
+不再需要单独创建服务账号或上传 JSON 密钥。
 
 ## 查询示例
 
-所有活跃成员都可以在机器人私聊中查询工作区选定的资源。群组和定时任务不提供此工具。
+只有活跃的工作区 owner/admin 可以在机器人私聊中通过共享账号查询选定资源。群组和定时任务不提供此工具。
 
 - “列出这个工作区可查询的 Search Console 资源。”
 - “查询 example.com 2026 年 9 月的总点击、曝光、CTR 和平均排名。”
@@ -33,8 +33,11 @@ URL 检查只读取 Google 已索引的版本，不能进行实时测试或请�
 
 ## 更新与排障
 
-更换密钥会暂停插件并清空资源选择，需要重新选择并启用。移除本地凭据也会停用插件；要撤销远端密钥，请在 Google Cloud 删除对应服务账号密钥。设置变更后，旧连接的结果不能再用于后续回答或待发送的回复。
+断开 Google 会同时停用五项服务。更换客户端或重新连接账号会清空资源选择，需要重新选择。
+设置变更后，旧连接的结果不能再用于后续回答或待发送的回复。
 
-发现列表为空时，确认已把保存的服务账号邮箱添加到 Search Console 资源；添加后在编辑窗口点击重试。Google 拒绝访问时，检查项目 API 是否启用、资源权限和密钥状态。达到配额时稍后再试。其他会话修改设置产生冲突时，关闭窗口并重新加载，核对后再保存。
+发现列表为空时，确认连接的 Google 账号拥有 Search Console 资源权限，随后在编辑窗口重试。
+Google 拒绝访问时检查项目 API、账号权限与连接状态。达到配额时稍后再试。设置冲突时，关闭
+编辑器并重新加载后再保存。旧的服务账号配置在保存统一 Google 连接时移除，并需要重新授权和选择资源。
 
 不要在 Telegram 粘贴密钥。管理其他集成见 [工作区与成员](administration.md)。

@@ -7,44 +7,38 @@
 GET {{base}}/api/admin/workspaces/{{workspace}}/plugins/search-console
 Cookie: {{cookie}}
 
-### Save a JSON key. Use the latest revision from GET; this clears properties and disables.
-# Paste the real escaped JSON through the panel, not into version-controlled files.
-PUT {{base}}/api/admin/workspaces/{{workspace}}/plugins/search-console
-Cookie: {{cookie}}
-Origin: {{base}}
-X-CSRF-Token: {{csrf}}
-Content-Type: application/json
+# First connect the shared Google Web application using google-workspace.http.
+# Use the current plugin revision from GET; the examples below assume it is 2.
 
-{"revision": 0, "settings": {"enabled": false, "siteUrls": []}, "serviceAccount": "REPLACE_WITH_ESCAPED_SERVICE_ACCOUNT_JSON"}
-
-### Discover properties. Add the service account email as a Search Console user first.
+### Discover properties available to the connected Google account.
 POST {{base}}/api/admin/workspaces/{{workspace}}/plugins/search-console/properties
 Cookie: {{cookie}}
 Origin: {{base}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
-{"revision": 1}
+{"revision": 2}
 
-### Select exact returned property identifiers and enable; Google access is verified.
+### Select exact returned property identifiers; Google access is verified.
+# Enablement is controlled by the Google plugin, not this property helper.
 PUT {{base}}/api/admin/workspaces/{{workspace}}/plugins/search-console
 Cookie: {{cookie}}
 Origin: {{base}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
-{"revision": 1, "settings": {"enabled": true, "siteUrls": ["sc-domain:example.com"]}}
+{"revision": 2, "settings": {"enabled": true, "siteUrls": ["sc-domain:example.com"]}}
 
-### Remove the local credential and disable. Revoke the remote key in Google Cloud separately.
+### Clear the selected properties; Docs, Sheets, Drive and Gmail remain enabled.
 PUT {{base}}/api/admin/workspaces/{{workspace}}/plugins/search-console
 Cookie: {{cookie}}
 Origin: {{base}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
-{"revision": 2, "settings": {"enabled": false, "siteUrls": []}, "removeCredential": true}
+{"revision": 3, "settings": {"enabled": true, "siteUrls": []}}
 
-### Telegram private chat examples (active workspace member)
+### Telegram private chat examples (active workspace owner/admin)
 # List the Search Console properties available to this workspace.
 # Show clicks, impressions, CTR and average position for example.com during September 2026.
 # Show the top search queries for sc-domain:example.com from 2026-09-01 to 2026-09-07.

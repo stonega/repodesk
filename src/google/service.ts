@@ -11,19 +11,26 @@ import {
   type GoogleConfig,
   type GooglePage,
   type GooglePlugin,
+  type GoogleRegistration,
+  googleConfig,
   googleDefinitions,
+  googlePlugins,
   googleQueries,
   googleSave,
+  registrationScopes,
 } from "./config.ts";
 import { readGoogle } from "./queries.ts";
 
-const aad = (id: string, plugin: GooglePlugin, kind: string) =>
+const aad = (id: string, plugin: GoogleRegistration, kind: string) =>
   `google:${id}:${plugin}:${kind}`;
 function authority(admin: Admin, w: Workspace) {
   operator(admin);
   requireThat(!w.deletion && w.operatorId === admin.id, "access_denied", 403);
 }
-export function googleStateWorkspace(state: string, plugin: GooglePlugin) {
+export function googleStateWorkspace(
+  state: string,
+  plugin: GoogleRegistration,
+) {
   const match = /^rdg_([a-f0-9-]{36})_([a-z-]+)_([A-Za-z0-9_-]{43})$/.exec(
     state,
   );
@@ -60,7 +67,7 @@ function scope(
     "google_private_request_required",
     403,
   );
-  const config = w.plugins?.google?.[plugin];
+  const config = googleConfig(w.plugins, plugin);
   requireThat(
     config?.settings.enabled &&
       config.connection &&
@@ -76,7 +83,7 @@ function scope(
   return { run, config, connection: config.connection };
 }
 
-/** Four independent registrations, credentials and grants; only transport/auth mechanics are shared. */
+/** One workspace-owned Google registration; legacy records are read only until replaced. */
 export class GoogleService {
   private client: GoogleClient;
   constructor(
@@ -87,7 +94,7 @@ export class GoogleService {
   ) {
     this.client = new GoogleClient(transport);
   }
-  private async redirectUri(plugin: GooglePlugin) {
+  private async redirectUri(plugin: GoogleRegistration) {
     const origin = new URL(await publicOrigin(this.store, this.origin));
     requireThat(
       origin.protocol === "https:" ||
@@ -95,31 +102,51 @@ export class GoogleService {
       "google_https_required",
       409,
     );
-    return `${origin.origin}/api/admin/google/${plugin}/callback`;
+    return `${origin.origin}/api/admin/google/${plugin === "google" ? "" : `${plugin}/`}callback`;
   }
   async view(
     admin: Admin,
     id: string,
-    plugin: GooglePlugin,
+    plugin: GoogleRegistration,
   ): Promise<GooglePage> {
     const w = await this.store.read(id);
     authority(admin, w);
     const config = w.plugins?.google?.[plugin];
+    const legacy =
+      plugin === "google" && !config
+        ? googlePlugins
+            .map((p) => w.plugins?.google?.[p])
+            .find((c) => c?.clientSecret)
+        : undefined;
     return {
       revision: w.plugins?.revision ?? 0,
-      settings: { enabled: config?.settings.enabled ?? false },
-      clientId: config?.clientId ?? "",
-      clientSecretConfigured: !!config?.clientSecret,
+      settings: {
+        enabled:
+          config?.settings.enabled ??
+          (plugin === "google" &&
+            (googlePlugins.some(
+              (p) => w.plugins?.google?.[p]?.settings.enabled,
+            ) ||
+              !!w.plugins?.searchConsole?.settings.enabled)),
+      },
+      clientId: config?.clientId ?? legacy?.clientId ?? "",
+      clientSecretConfigured: !!(config?.clientSecret || legacy?.clientSecret),
       redirectUri: await this.redirectUri(plugin),
-      scope: googleDefinitions[plugin].scope,
+      scope: registrationScopes(plugin).join(" "),
       status: status(config),
       account: config?.connection?.account,
+      siteUrls: config
+        ? (w.plugins?.searchConsole?.settings.siteUrls ?? [])
+        : [],
+      ...(plugin === "google" && !config && (legacy || w.plugins?.searchConsole)
+        ? { legacy: true }
+        : {}),
     };
   }
   async save(
     admin: Admin,
     id: string,
-    plugin: GooglePlugin,
+    plugin: GoogleRegistration,
     value: unknown,
     fallback: PluginRecord[] = [],
   ) {
@@ -132,15 +159,33 @@ export class GoogleService {
         "version_conflict",
         409,
       );
-      const prior = w.plugins?.google?.[plugin];
-      const clientId = input.clientId ?? prior?.clientId ?? "";
-      requireThat(clientId, "google_client_required");
       requireThat(
-        input.clientSecret ||
+        plugin === "google" || !w.plugins?.google?.google,
+        "google_plugin_merged",
+        409,
+      );
+      const legacyPlugin =
+        plugin === "google" && !w.plugins?.google?.google
+          ? googlePlugins.find((p) => w.plugins?.google?.[p]?.clientSecret)
+          : undefined;
+      const prior =
+        w.plugins?.google?.[plugin] ??
+        (legacyPlugin ? w.plugins?.google?.[legacyPlugin] : undefined);
+      const clientId = input.clientId ?? prior?.clientId ?? "";
+      const emptyDisabled =
+        plugin === "google" &&
+        !clientId &&
+        !input.clientSecret &&
+        !input.settings.enabled;
+      requireThat(clientId || emptyDisabled, "google_client_required");
+      requireThat(
+        emptyDisabled ||
+          input.clientSecret ||
           (prior?.clientSecret && clientId === prior.clientId),
         "google_client_secret_required",
       );
-      const changed = clientId !== prior?.clientId || !!input.clientSecret;
+      const changed =
+        !!legacyPlugin || clientId !== prior?.clientId || !!input.clientSecret;
       const config: GoogleConfig = {
         settings: input.settings,
         clientId,
@@ -150,7 +195,17 @@ export class GoogleService {
               aad(id, plugin, `client:${clientId}`),
               input.clientSecret,
             )
-          : (prior?.clientSecret as string),
+          : legacyPlugin && prior
+            ? encrypt(
+                this.key,
+                aad(id, plugin, `client:${clientId}`),
+                decrypt(
+                  this.key,
+                  aad(id, legacyPlugin, `client:${clientId}`),
+                  prior.clientSecret,
+                ),
+              )
+            : (prior?.clientSecret ?? ""),
         connection: changed ? undefined : prior?.connection,
       };
       if (changed) config.settings.enabled = false;
@@ -164,7 +219,14 @@ export class GoogleService {
         for (const entry of w.plugins?.entries ?? fallback) {
           requireThat(
             !entry.enabled ||
-              !entry.tools.includes(googleDefinitions[plugin].tool),
+              !(
+                plugin === "google"
+                  ? [
+                      ...googlePlugins.map((p) => googleDefinitions[p].tool),
+                      "query_search_console",
+                    ]
+                  : [googleDefinitions[plugin].tool]
+              ).some((tool) => entry.tools.includes(tool)),
             "extension_tool_collision",
             409,
           );
@@ -173,7 +235,13 @@ export class GoogleService {
         ...w.plugins,
         revision: input.revision + 1,
         entries: w.plugins?.entries ?? fallback,
-        google: { ...w.plugins?.google, [plugin]: config },
+        google:
+          plugin === "google"
+            ? { google: config }
+            : { ...w.plugins?.google, [plugin]: config },
+        ...(plugin === "google" && changed
+          ? { searchConsole: { settings: { enabled: false, siteUrls: [] } } }
+          : {}),
       };
       audit(w, admin.id, "plugins.updated", plugin, w.plugins.revision);
     });
@@ -189,7 +257,7 @@ export class GoogleService {
   async begin(
     admin: Admin,
     id: string,
-    plugin: GooglePlugin,
+    plugin: GoogleRegistration,
     revision: number,
     sessionHash: string,
   ) {
@@ -223,10 +291,10 @@ export class GoogleService {
       client_id: clientId,
       redirect_uri: redirectUri,
       response_type: "code",
-      scope: `openid email ${googleDefinitions[plugin].scope}`,
+      scope: `openid email ${registrationScopes(plugin).join(" ")}`,
       access_type: "offline",
       prompt: "consent select_account",
-      include_granted_scopes: "false",
+      include_granted_scopes: plugin === "google" ? "true" : "false",
       state,
       code_challenge_method: "S256",
       code_challenge: createHash("sha256").update(verifier).digest("base64url"),
@@ -235,7 +303,7 @@ export class GoogleService {
   }
   async callback(
     admin: Admin,
-    plugin: GooglePlugin,
+    plugin: GoogleRegistration,
     sessionHash: string,
     state: string,
     code?: string,
@@ -294,7 +362,7 @@ export class GoogleService {
       const granted =
         typeof data.scope === "string" ? data.scope.split(" ") : [];
       requireThat(
-        granted.includes(googleDefinitions[plugin].scope),
+        registrationScopes(plugin).every((scope) => granted.includes(scope)),
         "google_scope_required",
         409,
       );
@@ -346,6 +414,11 @@ export class GoogleService {
         delete config.flow;
         // Connecting never grants runtime access until the operator explicitly enables it.
         config.settings.enabled = false;
+        if (plugin === "google" && w.plugins) {
+          w.plugins.searchConsole = {
+            settings: { enabled: false, siteUrls: [] },
+          };
+        }
         if (w.plugins) {
           w.plugins.revision++;
           audit(w, admin.id, "google.connected", plugin, w.plugins.revision);
@@ -363,7 +436,7 @@ export class GoogleService {
   async disconnect(
     admin: Admin,
     id: string,
-    plugin: GooglePlugin,
+    plugin: GoogleRegistration,
     revision: number,
   ) {
     await this.store.change(id, (w) => {
@@ -379,12 +452,12 @@ export class GoogleService {
         audit(w, admin.id, "google.disconnected", plugin, w.plugins.revision);
       }
     });
-    // Local disconnect avoids revoking other plugins using the same Google OAuth client.
+    // Local disconnect preserves the OAuth client for reconnection.
     return this.view(admin, id, plugin);
   }
   private async access(
     id: string,
-    plugin: GooglePlugin,
+    plugin: GoogleRegistration,
     guard: () => Promise<void>,
     signal?: AbortSignal,
   ) {
@@ -449,7 +522,9 @@ export class GoogleService {
       );
       if (typeof data.scope === "string")
         requireThat(
-          data.scope.split(" ").includes(googleDefinitions[plugin].scope),
+          registrationScopes(plugin).every((scope) =>
+            (data.scope as string).split(" ").includes(scope),
+          ),
           "google_scope_required",
           409,
         );
@@ -489,6 +564,14 @@ export class GoogleService {
       throw cause;
     }
   }
+  /** Shared token access for Search Console; callers supply session or run guards. */
+  async accountAccess(
+    id: string,
+    guard: () => Promise<void>,
+    signal?: AbortSignal,
+  ) {
+    return this.access(id, "google", guard, signal);
+  }
   async query(
     id: string,
     runId: string,
@@ -512,7 +595,10 @@ export class GoogleService {
         [plugin]: { revision, connectionId: connection.id },
       };
     });
-    const accessToken = await this.access(id, plugin, guard, signal);
+    const registration = (await this.store.read(id)).plugins?.google?.google
+      ? "google"
+      : plugin;
+    const accessToken = await this.access(id, registration, guard, signal);
     try {
       const result = await readGoogle(
         this.client,
@@ -532,7 +618,7 @@ export class GoogleService {
     } catch (cause) {
       if (cause instanceof Fault && cause.code === "google_reconnect_required")
         await this.store.change(id, (current) => {
-          const connection = current.plugins?.google?.[plugin]?.connection;
+          const connection = googleConfig(current.plugins, plugin)?.connection;
           if (connection && current.plugins?.revision === revision)
             connection.reconnectRequired = true;
         });
