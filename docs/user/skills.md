@@ -17,7 +17,7 @@ source path, metadata, supporting files or any reason it cannot be imported.
 Closing the details keeps your selection. Choose **Import skills**, then enable
 saved skills when you are ready to use them. There is no separate publish step.
 
-Imported cards include a **Manage on GitHub** link. Make changes in GitHub, then
+Imported cards include a **Source** link. Make changes in GitHub, then
 choose **Check for updates** in RepoDesk. Review the saved and incoming instructions
 and choose **Apply update**. If the skill has local edits, explicitly confirm their
 replacement. Applying an update preserves whether the skill is enabled.

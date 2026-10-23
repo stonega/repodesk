@@ -56,7 +56,7 @@ The skill manager configures instructions and already-registered tools in P0.
 
 | Control | P0 behavior |
 | --- | --- |
-| Catalog | Search/filter skills by name and enabled state; show purpose, required tools and a Preset badge for built-ins. GitHub imports show their repository and source link, with a Manage on GitHub action. |
+| Catalog | Search/filter skills by name and enabled state; show purpose, required tools and a Preset badge for built-ins. GitHub imports show their repository and source link, with a Source action. |
 | Create/import | Create an instruction skill, import a Markdown file, or discover and select multiple `SKILL.md` packages from a GitHub repository/folder link, including connected private repositories and linked Markdown/text guides; validate metadata, size and tool references. |
 | Detail/editor | Preview every skill's instructions. Edit name, description, instructions and settings for custom skills; presets are read-only. |
 | Enable/disable | Enable saved instructions per workspace and optionally narrow availability per group/workflow. |
@@ -99,7 +99,7 @@ validates the saved instructions without a paid model or delivery call.
 
 No revision counts, publication controls, version selectors or rollback UI is
 shown. GitHub is the default recommended import source, and imported cards link
-to **Manage on GitHub**. Legacy unpublished entries, including conversation-created
+to **Source**. Legacy unpublished entries, including conversation-created
 procedures, can be reviewed and enabled directly. Archived cards cannot be enabled.
 Errors use shared toasts on the page and remain inside open dialogs; failed saves
 retain input, and pending saves lock dismissal and repeated submission.

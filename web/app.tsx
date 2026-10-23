@@ -21,7 +21,13 @@ import {
   useParams,
   useSearchParams,
 } from "react-router";
-import { Check, ChevronLeft, Refresh, Search } from "reicon-react";
+import {
+  Check,
+  ChevronLeft,
+  Refresh,
+  Search,
+  SquareTopDown,
+} from "reicon-react";
 import { runMessageEntries } from "../src/admin/run-statistics.ts";
 import type {
   ThreadDetail,
@@ -2685,11 +2691,19 @@ function SkillsPage({ id }: { id: string }) {
               </p>
               <div className="skill-source-actions">
                 <a
+                  className="button-link secondary"
                   href={`https://github.com/${s.githubSource.repository}/blob/${encodeURIComponent(s.githubSource.ref)}/${s.githubSource.path.split("/").map(encodeURIComponent).join("/")}`}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Manage on GitHub
+                  Source
+                  <SquareTopDown
+                    size={18}
+                    weight="Outline"
+                    color="currentColor"
+                    aria-hidden="true"
+                    focusable="false"
+                  />
                 </a>
                 <button
                   type="button"

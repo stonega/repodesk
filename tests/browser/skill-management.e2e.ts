@@ -68,12 +68,39 @@ for (const width of [1280, 375]) {
           /Manage skill instructions and version history on GitHub/,
         ),
       ).toBeVisible();
-      await expect(
-        card.getByRole("link", { name: "Manage on GitHub" }),
-      ).toHaveAttribute(
+      const source = card.getByRole("link", { name: "Source", exact: true });
+      const updates = card.getByRole("button", { name: "Check for updates" });
+      await expect(source).toHaveAttribute(
         "href",
         "https://github.com/example/skills/blob/main/skills/recap/SKILL.md",
       );
+      await expect(source).toHaveAttribute("target", "_blank");
+      await expect(source).toHaveAttribute("rel", "noreferrer");
+      await expect(source.locator("svg[aria-hidden='true']")).toHaveCount(1);
+      const appearance = (element: HTMLElement | SVGElement) => {
+        const style = getComputedStyle(element);
+        return {
+          height: element.getBoundingClientRect().height,
+          font: style.font,
+          color: style.color,
+          background: style.backgroundColor,
+          border: style.border,
+          radius: style.borderRadius,
+          padding: style.padding,
+        };
+      };
+      expect(await source.evaluate(appearance)).toEqual(
+        await updates.evaluate(appearance),
+      );
+      await expect(source).toHaveCSS("text-decoration-line", "none");
+      await source.hover();
+      const sourceHover = await source.evaluate(appearance);
+      await updates.hover();
+      expect(sourceHover).toEqual(await updates.evaluate(appearance));
+      await source.focus();
+      await expect(source).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(updates).toBeFocused();
       await expect(
         card.locator(
           "input, textarea, select, .skill-card-meta, .skill-card-versions, .skill-card-rollback",

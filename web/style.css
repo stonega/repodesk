@@ -145,12 +145,14 @@ a {
   color: var(--ui-accent);
 }
 button,
+a.button-link,
 input,
 textarea,
 select {
   font: inherit;
 }
-button {
+button,
+a.button-link {
   min-height: 42px;
   border: 1px solid var(--ui-accent);
   background: var(--ui-accent);
@@ -161,8 +163,16 @@ button {
   font-size: 14px;
   font-weight: 600;
 }
-button:hover:not(:disabled) {
+button:hover:not(:disabled),
+a.button-link:hover {
   background: var(--ui-accent-hover);
+}
+a.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
 }
 button:disabled {
   opacity: 0.55;
@@ -277,12 +287,14 @@ body:has(dialog[open]) {
   flex-wrap: wrap;
   gap: 10px;
 }
-button.secondary {
+button.secondary,
+a.button-link.secondary {
   color: var(--ui-accent);
   background: var(--ui-accent-soft);
   border-color: transparent;
 }
-button.secondary:hover:not(:disabled) {
+button.secondary:hover:not(:disabled),
+a.button-link.secondary:hover {
   background: var(--ui-accent-soft-hover);
 }
 button.text-button {

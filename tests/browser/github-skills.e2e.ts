@@ -426,9 +426,7 @@ for (const width of [1280, 375]) {
     await expect(
       card.getByText("New source instructions.", { exact: true }),
     ).toBeVisible();
-    await expect(
-      card.getByRole("link", { name: "Manage on GitHub" }),
-    ).toBeVisible();
+    await expect(card.getByRole("link", { name: "Source" })).toBeVisible();
     await expect(
       card.getByRole("button", { name: "disable", exact: true }),
     ).toBeVisible();
@@ -540,9 +538,7 @@ for (const width of [1280, 375]) {
     expect(saves).toBe(1);
     const card = page.locator(".skill-card");
     await expect(card.getByText(/Source:/)).toBeVisible();
-    await expect(
-      card.getByRole("link", { name: "Manage on GitHub" }),
-    ).toHaveAttribute(
+    await expect(card.getByRole("link", { name: "Source" })).toHaveAttribute(
       "href",
       /github.com\/example\/private-skills\/blob\/main\/skills\/recap\/SKILL.md/,
     );

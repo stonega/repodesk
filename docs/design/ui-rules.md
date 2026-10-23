@@ -1993,14 +1993,23 @@ Use this format for each preference:
   skills and let the user choose them. Show saved repository/ref/path on each
   imported card, with update review in a modal and an explicit replacement choice
   when a draft has local edits.
+  Label the saved card's GitHub action **Source**, with an external-link icon and
+  the same secondary button styling as **Check for updates** beside it.
 - **Scope:** GitHub-backed instruction skills in Agent skills, including private
   repositories connected to the workspace. Existing modal, saved-summary and
   pending-action rules apply on desktop and mobile.
 - **Source:** 2026-10-14 — user requested GitHub skill imports, connected private
   repository support, multi-skill detection and updates when the source changes.
   Selection and draft-update review are the implementation interpretation.
+  2026-10-23 — user requested replacing Manage on GitHub with Source, adding an
+  external-link icon and matching the adjacent update button's style.
+- **Acceptance:** Source remains a keyboard-accessible link to the saved GitHub
+  file in a new tab. Both actions share typography, height, padding, colors and
+  hover treatment; keep their spacing and wrapping usable on desktop/mobile in
+  both themes. Preserve the update dialog and archived update restriction.
 - **Exceptions:** Source update checks are deliberate skill operations, so their
   labeled card action is permitted by the rule against routine refresh buttons.
+  Source uses a native link with a Reicon icon to preserve browser navigation.
 
 ### Skill import lists show names only
 
