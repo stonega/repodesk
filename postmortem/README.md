@@ -1,5 +1,6 @@
 # Postmortems
 
+- [2026-10-23: Codex publication stopped by corrupted UTF-8 patch output](2026-10-23-codex-publication-utf8-patch.md)
 - [2026-10-18: Codex landing task interrupted by a VPS reboot](2026-10-18-codex-task-interrupted-by-vps-reboot.md)
 - [2026-10-10: VPS reboot during cleanup rollout](2026-10-10-vps-reboot-during-cleanup-rollout.md)
 - [2026-10-10: In-app update failed on a full VPS disk](2026-10-10-in-app-update-disk-space.md)

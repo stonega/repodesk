@@ -188,6 +188,14 @@ Interpret the states separately:
   writers before replacing the runner; temporary outages and checkpoint cleanup
   acknowledgements remain retryable. See the
   [deployment handoff incident](../../postmortem/2026-10-06-codex-deployment-handoff.md).
+- `coding_publication_unknown` can occur before a remote write when a publication
+  patch cannot be applied. Check retained work and publication intent separately.
+  On 2026-10-23, independent checks passed but chunk-by-chunk UTF-8 decoding
+  corrupted Chinese patch context; the publication checkout stayed clean and
+  GitHub had no task branch or PR. Regenerating the same diff as raw bytes passed
+  a read-only apply check. The local correction uses stream-aware UTF-8 decoding;
+  existing terminal tasks are not automatically restarted. See the
+  [patch incident](../../postmortem/2026-10-23-codex-publication-utf8-patch.md).
 - A pending delivery is queued separately from generation. A failed delivery has
   a Telegram or policy error. An unknown delivery must be inspected before any
   resend, because Telegram might already have accepted it.

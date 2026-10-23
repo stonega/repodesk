@@ -1,5 +1,25 @@
 # Implementation evidence
 
+## Codex patch output preserves UTF-8 across pipe chunks (2026-10-23)
+
+The trusted job command helper now decodes stdout and stderr as UTF-8 streams.
+Multibyte characters split across subprocess output chunks remain intact in
+exported Git patches and diagnostics. Explicit command environments, output
+limits and publication authority checks remain unchanged. No dependency or
+migration was added. The VPS incident reached successful independent checks but
+failed to apply a corrupted patch before any GitHub write; the original work is
+retained. See the [incident and recovery boundaries](../../postmortem/2026-10-23-codex-publication-utf8-patch.md).
+
+Deterministic regressions force one-byte fragments, round-trip a multilingual
+patch through Git's index/worktree and verify diagnostics, line callbacks and a
+real subprocess. Restoring the previous decoder reproduces the failures. The
+correction is local; deployment and recovery of the historical task remain
+outstanding.
+
+Validation: Biome, strict TypeScript, production build, the Node runtime contract
+and **1,163 deterministic tests across 127 files** passed using an isolated
+PostgreSQL container. No production state or GitHub publication was changed.
+
 ## Telegram forwarded reference handoff (2026-10-23)
 
 Telegram ingress retains all four forward-origin variants and marks original

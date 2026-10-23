@@ -1,8 +1,6 @@
 // Fixed entrypoint for disposable containers. Never imported by the bot worker.
-import { spawn } from "node:child_process";
 import { constants } from "node:fs";
 import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
-import { createInterface } from "node:readline";
 import { z } from "zod";
 import {
   developmentPrompt,
@@ -15,6 +13,7 @@ import { runConversation } from "./conversation.ts";
 import { CodexConversationError } from "./conversation-failure.ts";
 import { watchInterruption } from "./interruption.ts";
 import { JobTaskChannel } from "./job-channel.ts";
+import { jobCommand as command } from "./job-command.ts";
 import { prepareOpenCodeReview } from "./open-code-review.ts";
 import { localStart } from "./protocol.ts";
 import { markPullRequestReady, publicationPushArgs } from "./publication.ts";
@@ -43,58 +42,6 @@ const gitEnv = {
   LC_ALL: "C",
 };
 
-async function command(
-  binary: string,
-  args: string[],
-  options: {
-    cwd?: string;
-    stderr?: boolean;
-    env?: NodeJS.ProcessEnv;
-    input?: string;
-    line?: (line: string) => void;
-  } = {},
-) {
-  return new Promise<string>((resolve, reject) => {
-    const child = spawn(binary, args, {
-      cwd: options.cwd,
-      env: options.env ?? gitEnv,
-      stdio: ["pipe", "pipe", options.stderr ? "pipe" : "ignore"],
-    });
-    if (!child.stdout || !child.stdin) {
-      child.kill("SIGKILL");
-      reject(new Error("coding_command_failed"));
-      return;
-    }
-    let output = "";
-    let diagnostics = "";
-    child.stderr?.on("data", (chunk: Buffer) => {
-      diagnostics = (diagnostics + chunk.toString()).slice(-12000);
-    });
-    let overflow = false;
-    if (options.line)
-      createInterface({ input: child.stdout }).on("line", options.line);
-    else
-      child.stdout.on("data", (chunk: Buffer) => {
-        output += chunk.toString();
-        if (output.length > 6 * 1024 * 1024) {
-          overflow = true;
-          child.kill("SIGKILL");
-        }
-      });
-    child.on("error", () => reject(new Error("coding_command_failed")));
-    child.on("close", (code) =>
-      code === 0 && !overflow
-        ? resolve(output)
-        : reject(
-            Object.assign(new Error("coding_command_failed"), {
-              diagnostics: (output.slice(-12000) + diagnostics).slice(-12000),
-            }),
-          ),
-    );
-    child.stdin.on("error", () => {});
-    child.stdin.end(options.input);
-  });
-}
 function git(args: string[], cwd = repo, auth = false) {
   const env: NodeJS.ProcessEnv = { ...gitEnv };
   if (auth) {
