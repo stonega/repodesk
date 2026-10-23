@@ -2360,7 +2360,7 @@ input.plugin-toggle-input:disabled {
   border-radius: 4px;
 }
 .plugin-catalog-section {
-  margin: 0 0 36px;
+  margin: 0;
 }
 .plugin-section-heading {
   display: flex;
@@ -2437,9 +2437,6 @@ input.plugin-toggle-input:disabled {
   color: var(--ui-accent);
   font-size: 18px;
   line-height: 1;
-}
-.plugin-catalog-source {
-  margin-top: 12px;
 }
 .plugin-details {
   margin: 20px 0;

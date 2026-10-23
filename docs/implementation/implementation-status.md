@@ -1,5 +1,19 @@
 # Implementation evidence
 
+## Plugins hides Markets (2026-10-23)
+
+The Plugins landing page omits the Markets heading, discovery cards, catalog links
+and source footnote. Its description now focuses on installed extensions, and the
+obsolete section spacing is removed. Installed cards, registration and existing
+direct market detail routes remain available. This supersedes the 2026-09-29
+catalog layout below. No dependency or migration was added.
+
+Focused browser checks cover desktop/mobile loading, empty, saved and failed-load
+states, retry recovery, absence of market links and trailing section margins.
+Screenshots were inspected at both widths in light and dark themes.
+Validation: lint, strict TypeScript, production build, **1,163 deterministic tests**
+with isolated PostgreSQL and **19 browser checks** passed. No deployment was made.
+
 ## Codex patch output preserves UTF-8 across pipe chunks (2026-10-23)
 
 The trusted job command helper now decodes stdout and stderr as UTF-8 streams.

@@ -743,7 +743,8 @@ when implementing or reviewing a change.
 ### Plugin cards are a compact catalog with separate details
 
 - **Preference:** Show an Installed section with Code Truth, Codex and registered
-  local extensions, followed by a Markets section featuring popular Pi packages.
+  local extensions. Keep the Markets discovery section hidden, including its
+  heading, package cards, catalog links and source footnote.
   Keep each card to a name, short purpose and status. Open a dedicated detail
   page from the whole card for settings, actions, file information and source
   links.
@@ -752,6 +753,9 @@ when implementing or reviewing a change.
 - **Source:** 2026-09-29 — user requested Installed cards for Code Truth and
   Codex, a market featuring popular Pi extensions, and simple cards that open
   plugin detail pages.
+  2026-10-23 — user requested hiding the Markets section shown on Plugins.
+  This supersedes the earlier request to display market cards; existing direct
+  market detail routes remain available.
 - **Exceptions:** New remains a labeled action in the Installed heading.
   The Installed grid has no trailing skeleton after the built-in cards while
   registered extensions load. Source: 2026-10-07 — user requested “remove this

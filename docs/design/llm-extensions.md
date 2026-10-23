@@ -43,10 +43,9 @@ continue to return `extension_tool_failed`.
 The Plugins landing page shows compact Installed cards for built-in Code Truth,
 built-in Codex, built-in Review Bot, built-in Cloudflare and workspace-registered file extensions. Clicking a card opens
 its detail route, where the existing configuration and controls live. The
-Markets section links to a small, dated selection of popular packages from
-[Pi's package catalog](https://pi.dev/packages?type=extension). These are
-external discovery entries, not installed plugins or compatibility endorsements.
-Market detail pages link to the upstream package. RepoDesk still requires
+Markets discovery section is hidden from the landing page. Existing direct
+market detail routes still link to upstream packages as external discovery
+entries, not installed plugins or compatibility endorsements. RepoDesk still requires
 operator review and a local entry file registered through the panel.
 
 The application registry also includes the built-in `query_model_cost` tool.

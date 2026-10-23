@@ -950,9 +950,9 @@ test.describe
       await expect(
         page.getByRole("heading", { name: "Installed" }),
       ).toBeVisible();
-      await expect(
-        page.getByRole("heading", { name: "Markets" }),
-      ).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Markets" })).toHaveCount(
+        0,
+      );
       await expect(
         page.getByRole("link", { name: "Open Code Truth" }),
       ).toBeVisible();
@@ -961,7 +961,7 @@ test.describe
       ).toBeVisible();
       await expect(
         page.getByRole("link", { name: "Open pi-mcp-adapter" }),
-      ).toBeVisible();
+      ).toHaveCount(0);
       await page.screenshot({
         path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/plugins-catalog-desktop.png`,
         fullPage: true,
@@ -973,7 +973,9 @@ test.describe
         fullPage: true,
       });
       await page.setViewportSize({ width: 1280, height: 900 });
-      await page.getByRole("link", { name: "Open pi-web-access" }).click();
+      await page.goto(
+        `/admin/plugins/market/pi-web-access${new URL(page.url()).search}`,
+      );
       await expect(page).toHaveURL(/\/admin\/plugins\/market\/pi-web-access/);
       await expect(page.locator(".plugin-back-link svg")).toBeVisible();
       await expect(

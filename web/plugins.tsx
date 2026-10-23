@@ -256,7 +256,7 @@ export function Plugins({
           <p className="eyebrow">REPODESK / WORKSPACE</p>
           <h1>{heading}</h1>
           <p className="muted">
-            Manage installed extensions and explore the Pi ecosystem.
+            Manage installed extensions for this workspace.
           </p>
         </header>
       ) : (pluginId !== "obsidian" &&
@@ -288,177 +288,130 @@ export function Plugins({
       ) : null}
       <GitHubConnection request={request} workspaceId={workspaceId} />
       {view === "catalog" && (
-        <>
-          <section
-            className="plugin-catalog-section"
-            aria-labelledby="installed-heading"
-          >
-            <div className="plugin-section-heading">
-              <div>
-                <h2 id="installed-heading">Installed</h2>
-                <p className="muted">
-                  Available in this deployment and registered for this
-                  workspace.
-                </p>
-              </div>
-              <IconButton
-                icon="add"
-                label="Add plugin"
-                showLabel
-                type="button"
-                disabled={!data || loading || busy}
-                onClick={() => {
-                  setEditing("__new");
-                  setError("");
-                }}
-              />
-            </div>
-            {error && editing === undefined && (
-              <ErrorToast message={error}>
-                <button
-                  type="button"
-                  aria-label="Retry loading saved plugins"
-                  disabled={busy || loading}
-                  onClick={() => void load(true)}
-                >
-                  Retry
-                </button>
-              </ErrorToast>
-            )}
-            {data?.notice && (
-              <p className="notice" role="status">
-                {data.notice}
+        <section
+          className="plugin-catalog-section"
+          aria-labelledby="installed-heading"
+        >
+          <div className="plugin-section-heading">
+            <div>
+              <h2 id="installed-heading">Installed</h2>
+              <p className="muted">
+                Available in this deployment and registered for this workspace.
               </p>
-            )}
-            <div className="plugin-catalog-grid">
-              <PluginCard
-                to={path("/obsidian")}
-                name="Obsidian"
-                summary="Shared organization notes, links, tasks and native vault files."
-                status={
-                  builtIns.obsidian === undefined
-                    ? "Built in"
-                    : builtIns.obsidian
-                      ? "Enabled"
-                      : "Disabled"
-                }
-              />
-              <PluginCard
-                to={path("/code-truth")}
-                name="Code Truth"
-                summary="Ask questions about indexed source code."
-                status={
-                  builtIns.codeTruth === undefined
-                    ? "Built in"
-                    : builtIns.codeTruth
-                      ? "Enabled"
-                      : "Disabled"
-                }
-              />
-              <PluginCard
-                to={path("/codex")}
-                name="Codex"
-                summary="Isolated coding tasks and PRs ready for review."
-                status={
-                  builtIns.codex === undefined
-                    ? "Built in"
-                    : builtIns.codex
-                      ? "Enabled"
-                      : "Disabled"
-                }
-              />
-              <PluginCard
-                to={path("/review-bot")}
-                name="Review Bot"
-                summary="Automatic PR reviews and tagged fixes."
-                status={
-                  builtIns.reviewBot === undefined
-                    ? "Built in"
-                    : builtIns.reviewBot
-                      ? "Enabled"
-                      : "Disabled"
-                }
-              />
-              <PluginCard
-                to={path("/cloudflare")}
-                name="Cloudflare"
-                summary="DNS, Pages queries and approved cache purges"
-                status={
-                  builtIns.cloudflare === undefined
-                    ? "Built in"
-                    : builtIns.cloudflare
-                      ? "Enabled"
-                      : "Disabled"
-                }
-              />
-              <PluginCard
-                to={path("/google")}
-                name="Google"
-                summary="Docs, Sheets, Drive, Gmail and Search Console."
-                status={
-                  builtIns.google === undefined
-                    ? "Built in"
-                    : builtIns.google
-                      ? "Enabled"
-                      : "Disabled"
-                }
-              />
-              {data?.entries.map((entry) => (
-                <PluginCard
-                  key={entry.id}
-                  to={path(`/file/${encodeURIComponent(entry.id)}`)}
-                  name={entry.id}
-                  summary="Local Pi extension"
-                  status={entry.enabled ? "Enabled" : "Disabled"}
-                />
-              ))}
             </div>
-          </section>
-          <section
-            className="plugin-catalog-section"
-            aria-labelledby="market-heading"
-          >
-            <div className="plugin-section-heading">
-              <div>
-                <h2 id="market-heading">Markets</h2>
-                <p className="muted">
-                  Popular extensions from Pi’s package catalog. Review each
-                  package before using it here.
-                </p>
-              </div>
-              <a
-                href="https://pi.dev/packages?type=extension"
-                target="_blank"
-                rel="noopener noreferrer"
+            <IconButton
+              icon="add"
+              label="Add plugin"
+              showLabel
+              type="button"
+              disabled={!data || loading || busy}
+              onClick={() => {
+                setEditing("__new");
+                setError("");
+              }}
+            />
+          </div>
+          {error && editing === undefined && (
+            <ErrorToast message={error}>
+              <button
+                type="button"
+                aria-label="Retry loading saved plugins"
+                disabled={busy || loading}
+                onClick={() => void load(true)}
               >
-                Browse Pi catalog ↗
-              </a>
-            </div>
-            <div className="plugin-catalog-grid">
-              {market.map((entry) => (
-                <PluginCard
-                  key={entry.id}
-                  to={path(`/market/${entry.id}`)}
-                  name={entry.name}
-                  summary={entry.summary}
-                  status="Pi package"
-                />
-              ))}
-            </div>
-            <p className="plugin-catalog-source muted">
-              Selection based on the{" "}
-              <a
-                href="https://pi.dev/packages?type=extension"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Pi package catalog
-              </a>
-              , 29 September 2026. Catalog popularity does not establish
-              RepoDesk compatibility.
+                Retry
+              </button>
+            </ErrorToast>
+          )}
+          {data?.notice && (
+            <p className="notice" role="status">
+              {data.notice}
             </p>
-          </section>
-        </>
+          )}
+          <div className="plugin-catalog-grid">
+            <PluginCard
+              to={path("/obsidian")}
+              name="Obsidian"
+              summary="Shared organization notes, links, tasks and native vault files."
+              status={
+                builtIns.obsidian === undefined
+                  ? "Built in"
+                  : builtIns.obsidian
+                    ? "Enabled"
+                    : "Disabled"
+              }
+            />
+            <PluginCard
+              to={path("/code-truth")}
+              name="Code Truth"
+              summary="Ask questions about indexed source code."
+              status={
+                builtIns.codeTruth === undefined
+                  ? "Built in"
+                  : builtIns.codeTruth
+                    ? "Enabled"
+                    : "Disabled"
+              }
+            />
+            <PluginCard
+              to={path("/codex")}
+              name="Codex"
+              summary="Isolated coding tasks and PRs ready for review."
+              status={
+                builtIns.codex === undefined
+                  ? "Built in"
+                  : builtIns.codex
+                    ? "Enabled"
+                    : "Disabled"
+              }
+            />
+            <PluginCard
+              to={path("/review-bot")}
+              name="Review Bot"
+              summary="Automatic PR reviews and tagged fixes."
+              status={
+                builtIns.reviewBot === undefined
+                  ? "Built in"
+                  : builtIns.reviewBot
+                    ? "Enabled"
+                    : "Disabled"
+              }
+            />
+            <PluginCard
+              to={path("/cloudflare")}
+              name="Cloudflare"
+              summary="DNS, Pages queries and approved cache purges"
+              status={
+                builtIns.cloudflare === undefined
+                  ? "Built in"
+                  : builtIns.cloudflare
+                    ? "Enabled"
+                    : "Disabled"
+              }
+            />
+            <PluginCard
+              to={path("/google")}
+              name="Google"
+              summary="Docs, Sheets, Drive, Gmail and Search Console."
+              status={
+                builtIns.google === undefined
+                  ? "Built in"
+                  : builtIns.google
+                    ? "Enabled"
+                    : "Disabled"
+              }
+            />
+            {data?.entries.map((entry) => (
+              <PluginCard
+                key={entry.id}
+                to={path(`/file/${encodeURIComponent(entry.id)}`)}
+                name={entry.id}
+                summary="Local Pi extension"
+                status={entry.enabled ? "Enabled" : "Disabled"}
+              />
+            ))}
+          </div>
+        </section>
       )}
       {view === "installed" && pluginId === "google" && (
         <Google
