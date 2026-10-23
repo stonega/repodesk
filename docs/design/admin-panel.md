@@ -197,6 +197,11 @@ falling back to the ID when the title is unknown. Titles are captured on linking
 subsequent group updates. Recheck bot visibility also refreshes the title for existing
 bindings; inaccessible groups retain their last known name.
 
+One collection action follows the saved state: **Enable message collection** when
+collection is off, **Disable message collection** when on. The saved access summary
+remains visible separately. The action is disabled while saving or refreshing;
+failed requests preserve the saved state and offer the same action for retry.
+
 Group access is available to the workspace's deployment operator without linking a
 personal Telegram identity. **New** opens a dialog that issues a one-use group-link
 command through `POST /api/admin/workspaces/:id/chats/link-token`. Authorized

@@ -1,5 +1,21 @@
 # Implementation evidence
 
+## One group message collection action (2026-10-23)
+
+Group access shows one collection button: **Enable message collection** when off,
+**Disable message collection** when on. Saved status remains visible separately;
+pending requests and refreshes disable the action, and failed writes keep the
+saved state available for retry. Existing visibility, consent, authorization and
+retention behavior is unchanged. No dependency or migration was added.
+
+Validation: lint, strict TypeScript, build and **1,139 deterministic tests across
+125 files** passed with isolated PostgreSQL. All 12 focused group browser checks
+passed, including both toggle directions, duplicate submission prevention,
+refresh locks, failed-write recovery, reload persistence and keyboard access.
+Desktop/mobile screenshots were inspected in both themes for saved, pending and
+error states, with card spacing and overflow checks. No deployment or live
+Telegram action was performed.
+
 ## Panel-generated Telegram group linking (2026-10-22)
 
 **Group access → New** generates a complete, copyable `/link@bot TOKEN` command

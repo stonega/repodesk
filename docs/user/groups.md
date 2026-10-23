@@ -51,7 +51,9 @@ owner/admin members who prefer the Telegram-only flow.
 1. 按团队需要配置 Telegram 可见性，例如授予机器人管理员身份或关闭 BotFather 隐私模式。
 2. 在 **Group access** 检查实际可见性。
 3. 告知群成员收集范围、用途和保留期限。
-4. 管理员在群里发送 `/capture on`，或在面板明确启用。
+4. Have an administrator send `/capture on` in the group, or choose **Enable
+   message collection** in **Group access**. Once enabled, the same button becomes
+   **Disable message collection** to stop collecting ordinary group messages.
 
 只有机器人收到且获准保留的消息能用于总结，包括非工作区成员的发言。Telegram 可见性与 RepoDesk 收集许可两者都需满足；仅关闭隐私模式不会自动开启收集。无法获取机器人加入前的旧历史。
 

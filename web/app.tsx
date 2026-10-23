@@ -2014,10 +2014,13 @@ function ChatsPage({ id }: { id: string }) {
             >
               Recheck bot visibility
             </Action>
-            {(["collect", "directed", "unlink"] as const).map((action) => (
+            {(
+              [chat.collection ? "directed" : "collect", "unlink"] as const
+            ).map((action) => (
               <Action
-                key={action}
+                key={action === "unlink" ? "unlink" : "collection"}
                 danger={action === "unlink"}
+                loading={loading}
                 onError={setActionError}
                 onClick={async () => {
                   await api(
@@ -2036,9 +2039,9 @@ function ChatsPage({ id }: { id: string }) {
                 }}
               >
                 {action === "collect"
-                  ? "Consent to collection"
+                  ? "Enable message collection"
                   : action === "directed"
-                    ? "Directed messages only"
+                    ? "Disable message collection"
                     : "Unlink group"}
               </Action>
             ))}

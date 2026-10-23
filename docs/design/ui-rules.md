@@ -19,7 +19,7 @@ when implementing or reviewing a change.
 | Code Truth setup | [URL and description](#code-truth-repositories-use-a-url-and-description) |
 | Card spacing after content changes | [Content layout owns card spacing](#content-layout-owns-card-spacing) |
 | Repository display | [Shared repository cards](#repository-cards-share-one-style), [member GitHub details](#member-github-columns-show-only-a-view-button), [connected repositories](#connected-github-repositories-stay-compact-and-directly-accessible) |
-| Action labels and controls | [Card action placement](#card-actions-stay-at-the-top-right), [Edit/New labels](#edit-and-add-buttons-use-short-labels), [shared icons](#common-action-buttons-use-reicon), [dropdown styling](#dropdown-inputs-share-the-workspace-selector-style), [checkbox styling](#admin-checkboxes-share-a-clear-comfortable-style) |
+| Action labels and controls | [One action for opposite settings](#opposite-setting-actions-share-one-button), [card action placement](#card-actions-stay-at-the-top-right), [Edit/New labels](#edit-and-add-buttons-use-short-labels), [shared icons](#common-action-buttons-use-reicon), [dropdown styling](#dropdown-inputs-share-the-workspace-selector-style), [checkbox styling](#admin-checkboxes-share-a-clear-comfortable-style) |
 | Dialog actions | [Cancel order](#modal-cancel-follows-the-primary-action), [close controls](#modal-close-controls-use-a-plain-x), [secondary actions](#dialog-support-actions-use-secondary-buttons) |
 | Feedback and loading | [Toasts and error placement](#routine-action-confirmations-and-request-errors-use-toasts), [visible loading layout](#loading-keeps-the-layout-visible) |
 | Log pagination and density | [Shared pagination and compact log text](#logs-reuse-run-pagination-with-compact-text), [refresh menu](#logs-use-an-auto-refresh-menu) |
@@ -37,6 +37,25 @@ when implementing or reviewing a change.
 - Keep illustrative examples separate from established preferences.
 
 ## Recorded preferences
+
+### Opposite setting actions share one button
+
+- **Preference:** Combine opposite actions for a single setting into one button
+  whose label describes the available action from the saved state. For group
+  message collection, show **Enable message collection** when off and **Disable
+  message collection** when on. Keep the saved status readable separately.
+- **Scope:** Group access message collection and comparable future binary settings
+  presented as action buttons. Existing switches remain switches.
+- **Source:** 2026-10-23 — user requested combining Consent to collection and
+  Directed messages only because they control the same setting.
+- **Acceptance:** Show one collection button; update its action only from saved
+  data, block duplicate requests while saving or refreshing, keep the updated
+  action keyboard-accessible, and retain the saved state and retry action after
+  failure. Verify both states, pending/error recovery, card spacing and
+  desktop/mobile in both themes.
+- **Exceptions:** Independent actions such as rechecking visibility and unlinking
+  remain separate. Group collection controls stay with their scope explanation;
+  this is an immediate action rather than a record editor.
 
 ### Skills use direct saves and GitHub history
 

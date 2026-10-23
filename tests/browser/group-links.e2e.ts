@@ -8,15 +8,27 @@ const dialog = (page: Page) =>
 async function fixture(page: Page) {
   const state = {
     linked: false,
+    collection: false,
+    visibleAll: false,
     deferList: false,
     failList: false,
     expiresAt: new Date(Date.now() + 600000).toISOString(),
     pending: [] as Route[],
     lists: [] as Route[],
     issued: [] as string[],
+    actions: [] as string[],
+    pendingActions: [] as Route[],
   };
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/chats/-100100/action")) {
+      expect(path).toBe(`/api/admin/workspaces/${first}/chats/-100100/action`);
+      expect(route.request().method()).toBe("POST");
+      expect(route.request().headers()["x-csrf-token"]).toBe("fixture-csrf");
+      state.actions.push(route.request().postDataJSON().action);
+      state.pendingActions.push(route);
+      return;
+    }
     if (path.endsWith("/chats/link-token")) {
       expect(route.request().method()).toBe("POST");
       expect(route.request().headers()["x-csrf-token"]).toBe("fixture-csrf");
@@ -44,8 +56,8 @@ async function fixture(page: Page) {
                   id: "-100100",
                   title: "Fixture group",
                   active: true,
-                  visibleAll: false,
-                  collection: false,
+                  visibleAll: state.visibleAll,
+                  collection: state.collection,
                 },
               ]
             : [],
@@ -87,7 +99,9 @@ async function complete(
 }
 async function shot(page: Page, name: string) {
   const overflow = await page
-    .locator(".group-link-details, .group-link-details > *, .modal-fields")
+    .locator(
+      ".group-link-details, .group-link-details > *, .modal-fields, .group-access-card, .group-access-card > *",
+    )
     .evaluateAll((elements) =>
       elements
         .filter((element) => element.scrollWidth > element.clientWidth + 1)
@@ -109,6 +123,126 @@ async function shot(page: Page, name: string) {
 }
 for (const width of [1280, 390]) {
   for (const theme of ["light", "dark"]) {
+    test(`one collection action follows saved state, pending refresh and retry at ${width}px in ${theme}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 850 });
+      await page.addInitScript(
+        (value) => localStorage.setItem("repodesk.theme", value),
+        theme,
+      );
+      const state = await fixture(page);
+      state.linked = true;
+      state.visibleAll = true;
+      await page.goto(`/admin/chats?workspace=${first}`);
+      const card = page.locator(".group-access-card");
+      const collection = card.getByRole("button").nth(1);
+      await expect(card.getByRole("button")).toHaveCount(3);
+      await expect(
+        card.getByRole("button", {
+          name: /Consent to collection|Directed messages only/,
+        }),
+      ).toHaveCount(0);
+      await expect(card.locator("input, select, textarea")).toHaveCount(0);
+      for (const enabled of [false, true]) {
+        const label = enabled
+          ? "Disable message collection"
+          : "Enable message collection";
+        const status = `Collection: ${enabled ? "enabled" : "directed only"}`;
+        const action = enabled ? "directed" : "collect";
+        await expect(collection).toHaveText(label);
+        await expect(card).toContainText(status);
+        await shot(
+          page,
+          enabled ? "collection-enabled" : "collection-disabled",
+        );
+        await collection.focus();
+        await page.keyboard.press("Enter");
+        await expect.poll(() => state.pendingActions.length).toBe(1);
+        expect(state.actions.at(-1)).toBe(action);
+        await expect(collection).toHaveText("Working…");
+        await expect(collection).toBeDisabled();
+        await page.keyboard.press("Enter");
+        expect(state.pendingActions).toHaveLength(1);
+        await expect(card).toContainText(status);
+        await shot(page, `collection-${action}-pending`);
+        await state.pendingActions.shift()?.fulfill({
+          status: 503,
+          json: { error: "Collection update failed" },
+        });
+        await expect(page.getByRole("alert")).toContainText(
+          "Collection update failed",
+        );
+        await expect(collection).toHaveText(label);
+        await expect(collection).toBeEnabled();
+        await expect(card).toContainText(status);
+        await shot(page, `collection-${action}-error`);
+        await collection.click();
+        await expect.poll(() => state.pendingActions.length).toBe(1);
+        state.collection = !enabled;
+        state.deferList = true;
+        await state.pendingActions.shift()?.fulfill({ json: { ok: true } });
+        await expect.poll(() => state.lists.length).toBe(1);
+        await expect(collection).toBeDisabled();
+        await expect(card).toContainText(status);
+        await shot(page, `collection-${action}-refresh`);
+        state.deferList = false;
+        await state.lists.shift()?.fulfill({
+          json: {
+            items: [
+              {
+                id: "-100100",
+                title: "Fixture group",
+                active: true,
+                visibleAll: true,
+                collection: state.collection,
+              },
+            ],
+            total: 1,
+            offset: 0,
+          },
+        });
+        await expect(collection).toHaveText(
+          enabled ? "Enable message collection" : "Disable message collection",
+        );
+        await expect(collection).toBeEnabled();
+        await card
+          .getByRole("button", { name: "Recheck bot visibility" })
+          .focus();
+        await page.keyboard.press("Tab");
+        await expect(collection).toBeFocused();
+        await expect(card.getByRole("button")).toHaveCount(3);
+        await expect(page.getByRole("alert")).toHaveCount(0);
+        await page.reload();
+        await expect(collection).toHaveText(
+          enabled ? "Enable message collection" : "Disable message collection",
+        );
+      }
+      expect(state.actions).toEqual([
+        "collect",
+        "collect",
+        "directed",
+        "directed",
+      ]);
+      const spacing = await card.evaluate((element) => {
+        const style = getComputedStyle(element);
+        const bounds = element.getBoundingClientRect();
+        const first = element.firstElementChild;
+        const last = element.lastElementChild;
+        if (!first || !last) throw new Error("Saved group content is missing");
+        return {
+          top: first.getBoundingClientRect().top - bounds.top,
+          bottom: bounds.bottom - last.getBoundingClientRect().bottom,
+          expectedTop:
+            parseFloat(style.paddingTop) + parseFloat(style.borderTopWidth),
+          expectedBottom:
+            parseFloat(style.paddingBottom) +
+            parseFloat(style.borderBottomWidth),
+        };
+      });
+      expect(spacing.top).toBeCloseTo(spacing.expectedTop);
+      expect(spacing.bottom).toBeCloseTo(spacing.expectedBottom);
+    });
     test(`panel group command, pending locks, copying and saved summary at ${width}px in ${theme}`, async ({
       page,
     }) => {
