@@ -110,10 +110,10 @@ async function fixture(page: Page, noSkill = false, unlinked = false) {
       path.endsWith("/skills/conversation-draft/action")
     ) {
       const input = req.postDataJSON();
-      if (input.action === "publish") {
-        draft.published.push(structuredClone(draft.draft));
-        draft.version++;
-      }
+      expect(input).toEqual({ version: draft.version, action: "enable" });
+      draft.published.push(structuredClone(draft.draft));
+      draft.enabled = true;
+      draft.version++;
       await route.fulfill({ json: draft });
       return;
     }
@@ -324,7 +324,7 @@ for (const width of [1280, 390]) {
   });
 }
 
-test("conversation skill provenance and explicit publication remain usable on desktop and mobile", async ({
+test("conversation skill provenance and direct enablement remain usable on desktop and mobile", async ({
   page,
 }) => {
   const f = await fixture(page);
@@ -336,16 +336,20 @@ test("conversation skill provenance and explicit publication remain usable on de
     card.getByText(/Saved from a conversation by 101/),
   ).toBeVisible();
   await expect(
-    card.getByText(/Publication saves this procedure independently/),
+    card.getByText(/Review the instructions before enabling this skill/),
   ).toBeVisible();
+  await expect(
+    card.getByRole("button", { name: /publish|draft|rollback/i }),
+  ).toHaveCount(0);
+  await expect(card.locator("input, textarea, select")).toHaveCount(0);
   await page.screenshot({
     path: "/tmp/repodesk-team-workflows-desktop.png",
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(
-    card.getByRole("button", { name: "Publish draft" }),
-  ).toBeVisible();
+    card.getByRole("button", { name: "enable", exact: true }),
+  ).toBeEnabled();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -355,10 +359,19 @@ test("conversation skill provenance and explicit publication remain usable on de
     path: "/tmp/repodesk-team-workflows-mobile.png",
     fullPage: true,
   });
-  await card.getByRole("button", { name: "Publish draft" }).click();
+  await card.getByRole("button", { name: "enable", exact: true }).click();
   await expect(
-    card.getByText("Approved reusable instruction skill.", { exact: false }),
+    card.getByText("Saved reusable instruction skill.", { exact: false }),
   ).toBeVisible();
+  expect(f.draft.published).toHaveLength(1);
+  expect(f.draft.enabled).toBe(true);
+  await page.reload();
+  await expect(
+    card.getByText(/Saved from a conversation by 101/),
+  ).toBeVisible();
+  await expect(
+    card.getByRole("button", { name: "disable", exact: true }),
+  ).toBeEnabled();
   expect(f.draft.published).toHaveLength(1);
 });
 

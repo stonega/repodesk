@@ -511,18 +511,18 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       expect((await store.read(w.id)).runs.at(-1)?.attempts).toHaveLength(2);
     });
 
-    test("gate failures, revoked access, changed sources, exhausted limits and unknown charges are silent", async () => {
-      for (const mode of [
-        "provider",
-        "unknown",
-        "revoke",
-        "redirect",
-        "cancel",
-        "remove",
-        "edit",
-        "budget",
-        "expire",
-      ]) {
+    for (const mode of [
+      "provider",
+      "unknown",
+      "revoke",
+      "redirect",
+      "cancel",
+      "remove",
+      "edit",
+      "budget",
+      "expire",
+    ]) {
+      test(`follow-up gate stays silent for ${mode}`, async () => {
         const { w, run } = await candidate();
         let gates = 0;
         let answers = 0;
@@ -582,9 +582,10 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         expect(r?.followup?.transcript).toEqual([]);
         expect(r?.task).not.toContain("再详细点");
         if (mode === "unknown") expect(r?.attempts[0]?.status).toBe("unknown");
-      }
-    });
+      });
+    }
 
+    // Multiple persisted compaction batches need time on shared CI runners.
     test("group follow-up classification, threshold compaction and answer share budget and checkpoints", async () => {
       const w = await seed();
       await store.change(w.id, (w) => {
@@ -640,7 +641,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       expect(saved?.status).toBe("succeeded");
       expect(saved?.contextSummary?.text).toBe("备份决定和待办");
       expect(saved?.attempts.map((a) => a.purpose)).toEqual(purposes);
-    });
+    }, 15_000);
 
     test("real Pi loop separates the classifier and ordinary answer with no gate tools", async () => {
       const { w, run } = await candidate();
