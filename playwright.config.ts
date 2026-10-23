@@ -4,6 +4,8 @@ export default defineConfig({
   testMatch: "*.e2e.ts",
   fullyParallel: false,
   workers: 1,
+  // Multi-step journeys take longer on the shared VPS; keep action/assertion budgets.
+  timeout: process.env.CI ? 60_000 : 30_000,
   use: {
     baseURL: "http://127.0.0.1:3107",
     headless: true,

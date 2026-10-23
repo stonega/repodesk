@@ -40,8 +40,8 @@ jobs:
   browser:
     name: Browser
     runs-on: [self-hosted, linux, x64]
-    # The complete suite now runs in one job instead of four shards.
-    timeout-minutes: 30
+    # The complete serial suite needs headroom on the shared VPS runners.
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:17-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0

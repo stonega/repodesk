@@ -31,10 +31,13 @@ Release installation runs on the host updater. Its deployment SSH secrets are
 unused; the optional Codex diagnostics workflow can still use SSH credentials.
 
 Verify runs quality/database checks, one browser job for the complete suite, and
-application container checks. The browser job allows 30 minutes; quality and
-application container jobs allow ten minutes each. Code Truth service checks and
-the separate Codex image/lifecycle job are excluded from Verify. The host updater
-builds app/Codex release images locally before its protected cutover.
+application/Code Truth container checks. The browser job allows 45 minutes; quality
+and application container jobs allow ten minutes each. Multi-step browser tests
+allow 60 seconds on CI and retain the 30-second local limit; assertion and action
+timeouts are unchanged. The full serial suite exceeded the previous 30-minute job
+budget on 2026-10-23, so the longer CI budgets leave room for shared VPS contention.
+The separate Codex image/lifecycle smoke remains outside Verify. The host updater
+builds app/Codex/Code Truth release images locally before its protected cutover.
 
 ## Install
 
