@@ -63,7 +63,7 @@ export interface TaskExchange extends TaskMessage {
   attemptId?: string;
   route?: "active" | "readonly";
   cleanup?: boolean;
-  start?: Omit<LocalStart, "readToken" | "providerApiKey">;
+  start?: Omit<LocalStart, "readToken" | "referenceToken" | "providerApiKey">;
   createdAt: string;
   lease?: string;
   leaseUntil?: string;

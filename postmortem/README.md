@@ -1,5 +1,6 @@
 # Postmortems
 
+- [2026-10-23: Missing reference source repeatedly presented as a user question](2026-10-23-codex-reference-source-question-loop.md)
 - [2026-10-23: Codex publication stopped by corrupted UTF-8 patch output](2026-10-23-codex-publication-utf8-patch.md)
 - [2026-10-18: Codex landing task interrupted by a VPS reboot](2026-10-18-codex-task-interrupted-by-vps-reboot.md)
 - [2026-10-10: VPS reboot during cleanup rollout](2026-10-10-vps-reboot-during-cleanup-rollout.md)

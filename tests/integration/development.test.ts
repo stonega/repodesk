@@ -26,6 +26,7 @@ import { taskGet, taskInputs, taskSave } from "../../src/coding/task-store.ts";
 import {
   appendDevelopment,
   cancelDevelopment,
+  checkDevelopment,
   correctDevelopmentRepository,
   notifyDevelopment,
   pruneDevelopment,
@@ -193,6 +194,11 @@ const url = process.env.TEST_DATABASE_URL;
     };
     const fallback = githubTransport();
     let onToken: (() => Promise<void>) | undefined;
+    let onReference: (() => Promise<void>) | undefined;
+    const tokenRequests: {
+      repository_ids: number[];
+      permissions: Record<string, string>;
+    }[] = [];
     let onDownload: (() => Promise<void>) | undefined;
     const downloads: string[] = [];
     let downloadError: string | undefined;
@@ -201,7 +207,14 @@ const url = process.env.TEST_DATABASE_URL;
     let remoteHead = "b".repeat(40),
       closed = false;
     const app = new GitHubApp(githubFixtureConfig, (async (input, init) => {
-      if (String(input).endsWith("/access_tokens")) await onToken?.();
+      if (String(input).endsWith("/access_tokens")) {
+        tokenRequests.push(JSON.parse(String(init?.body)));
+        await onToken?.();
+      }
+      if (/\/repos\/[^/]+\/[^/]+\/commits\//.test(String(input))) {
+        await onReference?.();
+        return Response.json({ sha: "c".repeat(40) });
+      }
       if (String(input).includes("/pulls?"))
         return Response.json(
           confirmUnknown
@@ -312,6 +325,10 @@ const url = process.env.TEST_DATABASE_URL;
           );
         }),
       downloads,
+      tokenRequests,
+      onReference: (fn: () => Promise<void>) => {
+        onReference = fn;
+      },
       onDownload: (fn: () => Promise<void>) => {
         onDownload = fn;
       },
@@ -708,6 +725,357 @@ const url = process.env.TEST_DATABASE_URL;
     present(w.messages.find((s) => s.id === f.source.id)).expiresAt =
       "2000-01-01T00:00:00Z";
     expect(await codingTaskContext(store.pool, w, run, "999")).toEqual([]);
+  });
+
+  test("named readable reference sources are pinned before intake and retained for work without changing the publication target", async () => {
+    const text = "Copy docs/user from example/source into example/workspace";
+    const f = await fixture(text, "-100100", undefined, (w) => {
+      w.github?.repositories.push({
+        id: 7002,
+        full_name: "example/source",
+        default_branch: "main",
+        private: true,
+      });
+    });
+    await store.change(f.w.id, (w) => {
+      for (const member of w.members) {
+        const source = member.github?.repositories.find((r) => r.id === 7002);
+        if (source)
+          source.permissions = { pull: true, push: false, admin: false };
+      }
+    });
+    await f.tick();
+    const sources = f.starts[0]?.development.referenceSources;
+    expect(sources).toMatchObject([
+      {
+        repositoryId: 7002,
+        repository: "example/source",
+        ref: "main",
+        sha: "c".repeat(40),
+      },
+    ]);
+    expect(f.starts[0]?.referenceToken).toBeTruthy();
+    expect(
+      f.tokenRequests
+        .filter((r) => r.repository_ids.includes(7002))
+        .every(
+          (r) =>
+            r.repository_ids.length === 1 &&
+            r.permissions.contents === "read" &&
+            !r.permissions.pull_requests,
+        ),
+    ).toBe(true);
+    await f.tick({
+      state: "succeeded",
+      tokens: 10,
+      hasChanges: false,
+      result: result({ evidence: text }),
+    });
+    expect((await f.read()).state).toBe("queued");
+    await f.tick({ state: "running" });
+    expect(f.starts[1]?.development.referenceSources).toEqual(sources);
+    expect(f.starts[1]?.payload.repository).toBe("example/workspace");
+    await f.tick();
+    expect(f.starts).toHaveLength(2);
+    const w = await store.read(f.w.id);
+    expect(
+      w.deliveries.some((d) =>
+        d.id.startsWith(`development:${f.task.id}:question:`),
+      ),
+    ).toBe(false);
+    expect(
+      JSON.stringify(
+        (
+          await store.pool.query(
+            "SELECT data FROM coding_task_attempts WHERE workspace_id=$1 AND task_id=$2",
+            [f.w.id, f.task.id],
+          )
+        ).rows,
+      ),
+    ).not.toContain("ghs_");
+    await store.change(f.w.id, (current) => {
+      const source = current.members
+        .find((member) => member.id === "101")
+        ?.github?.repositories.find((repository) => repository.id === 7002);
+      if (source)
+        source.permissions = { pull: false, push: false, admin: false };
+    });
+    const changed = await store.read(f.w.id);
+    const taskWithSources = await f.read();
+    expect(() => checkDevelopment(changed, taskWithSources, "202")).toThrow(
+      "github_user_access_denied",
+    );
+  });
+
+  test("source access revoked during commit resolution prevents dispatch", async () => {
+    const f = await fixture(
+      "Copy example/source docs into example/workspace",
+      "101",
+      undefined,
+      (w) => {
+        w.github?.repositories.push({
+          id: 7002,
+          full_name: "example/source",
+          default_branch: "main",
+          private: true,
+        });
+      },
+    );
+    f.onReference(() =>
+      store.change(f.w.id, (w) => {
+        const source = w.members
+          .find((m) => m.id === "101")
+          ?.github?.repositories.find((r) => r.id === 7002);
+        if (source)
+          source.permissions = { pull: false, push: false, admin: false };
+      }),
+    );
+    await f.tick();
+    expect(f.starts).toHaveLength(0);
+    expect((await f.read()).error).toBe("github_user_access_denied");
+  });
+
+  test("a product answer can add a named reference while retaining earlier work snapshots", async () => {
+    const text = "Copy example/source docs into example/workspace";
+    const f = await fixture(text, "101", undefined, (w) => {
+      w.github?.repositories.push(
+        {
+          id: 7002,
+          full_name: "example/source",
+          default_branch: "main",
+          private: true,
+        },
+        {
+          id: 7003,
+          full_name: "example/extra",
+          default_branch: "main",
+          private: true,
+        },
+      );
+    });
+    let resolutions = 0;
+    f.onReference(async () => {
+      resolutions++;
+    });
+    await f.tick();
+    await f.tick({
+      state: "succeeded",
+      hasChanges: false,
+      result: result({ evidence: text }),
+    });
+    await f.tick({ state: "running" });
+    await f.tick({
+      state: "succeeded",
+      hasChanges: false,
+      result: result({
+        evidence: text,
+        status: "needs_input",
+        question: "Which other documentation should be included?",
+      }),
+    });
+    await f.append("Also include example/extra as a reference source");
+    await f.tick({ state: "running" });
+    expect(f.starts.at(-1)?.development.referenceSources).toMatchObject([
+      { repositoryId: 7002, revision: 1 },
+      { repositoryId: 7003, revision: 2 },
+    ]);
+    expect(resolutions).toBe(2);
+  });
+
+  test("an authorized continuation of a historical source question prepares the missing snapshot before repeating intake", async () => {
+    const text = "Copy docs/user from source into workspace";
+    const f = await fixture(text, "101", undefined, (w) => {
+      w.github?.repositories.push({
+        id: 7002,
+        full_name: "example/source",
+        default_branch: "main",
+        private: true,
+      });
+    });
+    await store.change(f.w.id, async (_w, sql) => {
+      const task = await taskGet(sql, f.w.id, f.task.id);
+      task.state = "waiting";
+      task.question = {
+        id: randomUUID(),
+        text: "Can the application prepare the source?",
+        revision: 1,
+      };
+      task.result = result({
+        evidence: text,
+        status: "needs_input",
+        question: task.question.text,
+      });
+      task.hasChanges = false;
+      await taskSave(sql, task);
+    });
+    await f.append("continue");
+    await f.tick();
+    expect(f.starts[0]?.development.inputs.at(-1)?.text).toBe("continue");
+    expect(f.starts[0]?.development.referenceSources?.[0]?.repository).toBe(
+      "example/source",
+    );
+    await f.tick({
+      state: "succeeded",
+      hasChanges: false,
+      result: result({ evidence: "continue", evidenceRevision: 2 }),
+    });
+    expect((await f.read()).phase).toBe("work");
+    expect((await f.read()).question).toBeUndefined();
+  });
+
+  test("reference lookup failures stop before Codex starts and do not produce user questions", async () => {
+    const f = await fixture(
+      "Copy example/source docs into example/workspace",
+      "101",
+      undefined,
+      (w) => {
+        w.github?.repositories.push({
+          id: 7002,
+          full_name: "example/source",
+          default_branch: "main",
+          private: true,
+        });
+      },
+    );
+    f.onReference(async () => {
+      throw new Fault("github_access_denied", 403);
+    });
+    await f.tick();
+    await f.tick();
+    expect(f.starts).toHaveLength(0);
+    expect((await f.read()).state).toBe("failed");
+    expect((await f.read()).error).toBe("coding_reference_source_unavailable");
+    expect(
+      (await store.read(f.w.id)).deliveries.some((d) =>
+        d.text.includes("Reply here to continue"),
+      ),
+    ).toBe(false);
+    const retry = await fixture(
+      "Copy example/source docs into example/workspace",
+      "101",
+      undefined,
+      (w) => {
+        w.github?.repositories.push({
+          id: 7002,
+          full_name: "example/source",
+          default_branch: "main",
+          private: true,
+        });
+      },
+    );
+    retry.onReference(async () => {
+      throw new Fault("github_unavailable", 503);
+    });
+    await retry.tick();
+    expect((await retry.read()).state).toBe("queued");
+    expect((await retry.read()).error).toBe("github_user_access_unavailable");
+    expect(retry.starts).toHaveLength(0);
+    retry.onReference(async () => {});
+    await retry.tick();
+    expect(retry.starts).toHaveLength(1);
+    expect((await retry.read()).attempts).toBe(1);
+  });
+
+  test("read-only task conversations retain pinned references without persisting their credentials", async () => {
+    const text = "Copy example/source docs into example/workspace";
+    const f = await fixture(text, "101", undefined, (w) => {
+      w.github?.repositories.push({
+        id: 7002,
+        full_name: "example/source",
+        default_branch: "main",
+        private: true,
+      });
+    });
+    await f.tick();
+    await f.tick({
+      state: "succeeded",
+      hasChanges: false,
+      result: result({
+        status: "needs_input",
+        evidence: text,
+        question: "Should obsolete guides be removed?",
+      }),
+    });
+    const pending = (await f.read()).question;
+    const message = await f.ask("Which reference commit is prepared?");
+    await f.tick();
+    const input = f.starts.at(-1);
+    expect(input?.development.mode).toBe("analysis");
+    expect(input?.development.referenceSources?.[0]?.sha).toBe("c".repeat(40));
+    expect(input?.referenceToken).toBeTruthy();
+    const exchange = (await taskExchanges(store.pool, f.task)).find(
+      (m) => m.id === message.id,
+    );
+    expect(exchange?.start).not.toHaveProperty("referenceToken");
+    expect((await f.read()).question).toEqual(pending);
+  });
+
+  test("source access is rechecked before verification results can publish", async () => {
+    const text = "Copy example/source docs into example/workspace";
+    const f = await fixture(text, "101", undefined, (w) => {
+      w.github?.repositories.push({
+        id: 7002,
+        full_name: "example/source",
+        default_branch: "main",
+        private: true,
+      });
+    });
+    await f.tick();
+    await f.tick({
+      state: "succeeded",
+      hasChanges: false,
+      result: result({ evidence: text }),
+    });
+    await f.tick({ state: "running" });
+    await store.change(f.w.id, (w) => {
+      w.github?.repositories.splice(1, 1);
+    });
+    await f.tick({
+      state: "ready",
+      checkPassed: true,
+      result: result({ status: "completed", evidence: text }),
+    });
+    expect(f.publications).toHaveLength(0);
+    expect((await f.read()).error).toBe("coding_reference_source_changed");
+  });
+
+  test("application prerequisites stop with a recorded blocker and never ask for another user confirmation", async () => {
+    for (const blocker of ["reference_source", "environment"] as const) {
+      const f = await fixture();
+      await f.tick();
+      await f.tick({
+        state: "succeeded",
+        hasChanges: false,
+        tokens: 5,
+        result: result({
+          status: "needs_input",
+          blocker,
+          question: null,
+          summary: "The required source or environment is unavailable.",
+        }),
+      });
+      await f.tick();
+      const task = await f.read();
+      expect(task.state).toBe("failed");
+      expect(task.question).toBeUndefined();
+      expect(task.canImplement).toBe(false);
+      expect(f.starts).toHaveLength(1);
+      const notices = (await store.read(f.w.id)).deliveries.filter((d) =>
+        d.id.startsWith(`development:${task.id}:`),
+      );
+      expect(notices.some((d) => d.id.includes(":blocked:"))).toBe(true);
+      expect(
+        notices.some((d) => d.text.includes("Reply here to continue")),
+      ).toBe(false);
+      expect(
+        (
+          await store.pool.query(
+            "SELECT count(*)::int AS n FROM coding_task_events WHERE workspace_id=$1 AND task_id=$2 AND id LIKE 'question:%'",
+            [f.w.id, task.id],
+          )
+        ).rows[0].n,
+      ).toBe(0);
+    }
   });
 
   test("task questions are durable, idempotent and never revise implementation or publication grants", async () => {

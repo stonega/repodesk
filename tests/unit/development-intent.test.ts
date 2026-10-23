@@ -63,7 +63,7 @@ test("coding handoff explains authenticated pinned preparation despite repositor
       "not a guarantee that the remote is still at the same commit",
     );
     expect(prompt).toContain(
-      "as an application-side requirement and return needs_input",
+      "return needs_input with blocker=reference_source, question=null",
     );
     expect(prompt).toContain(
       "revalidate and authenticate publication separately",

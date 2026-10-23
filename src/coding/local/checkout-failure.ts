@@ -1,6 +1,7 @@
 export const checkoutFailureCodes = [
   "coding_base_branch_missing",
   "coding_checkout_failed",
+  "coding_reference_source_unavailable",
 ] as const;
 
 /** Only classify a known Git diagnostic; never persist repository output. */

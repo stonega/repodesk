@@ -69,7 +69,10 @@ interface Record extends LocalStatus {
   runtime?: RunnerSettings["CODEX_CONTAINER_ENGINE"];
   key: string;
   // Erasure removes task content after all execution phases have stopped.
-  input: Omit<LocalStart, "readToken" | "providerApiKey" | "development"> & {
+  input: Omit<
+    LocalStart,
+    "readToken" | "referenceToken" | "providerApiKey" | "development"
+  > & {
     development?: LocalStart["development"];
   };
   providerApiKey?: string; // Encrypted task credential; never copied into job input.
@@ -447,7 +450,13 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
   }
   async start(input: LocalStart) {
     return this.serial(async () => {
-      const { readToken, providerApiKey, ...safe } = localStart.parse(input);
+      const { readToken, referenceToken, providerApiKey, ...safe } =
+        localStart.parse(input);
+      requireThat(
+        !safe.development.referenceSources?.length || referenceToken,
+        "coding_job_invalid",
+        409,
+      );
       requireThat(safe.payload.backend === "podman", "coding_job_invalid");
       const key = taskKey(safe.workspaceId, safe.taskId);
       requireThat(!this.erased.has(key), "coding_task_stopped", 409);
@@ -524,7 +533,10 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
       }
       await this.save(r); // Reserve before invoking the engine.
       try {
-        await this.launch(r, "prepare", { GITHUB_TOKEN: readToken });
+        await this.launch(r, "prepare", {
+          GITHUB_TOKEN: readToken,
+          ...(referenceToken ? { GITHUB_REFERENCE_TOKEN: referenceToken } : {}),
+        });
       } catch {
         r.state = "unknown";
         r.error = "coding_container_failed";
@@ -1110,6 +1122,13 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
         "coding_job_invalid",
         409,
       );
+      requireThat(
+        r.phase !== "prepare" ||
+          !r.input.development?.referenceSources?.length ||
+          request.referenceToken,
+        "coding_job_invalid",
+        409,
+      );
       if (r.input.payload.authMode === "device_code") {
         await this.device.read(workspaceId);
       } else {
@@ -1142,7 +1161,12 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
           r,
           r.phase,
           r.phase === "prepare"
-            ? { GITHUB_TOKEN: request.readToken ?? "" }
+            ? {
+                GITHUB_TOKEN: request.readToken ?? "",
+                ...(request.referenceToken
+                  ? { GITHUB_REFERENCE_TOKEN: request.referenceToken }
+                  : {}),
+              }
             : r.phase === "implement" &&
                 r.input.payload.authMode === "provider_key"
               ? { CODEX_TASK_TOKEN: r.proxyToken }

@@ -21,12 +21,42 @@ const valid = {
   evidence: "Fix the card",
   publishRequested: false,
   summary: "Updated the card",
+  blocker: null,
   question: null,
   title: "Improve card UI",
   body: "Updated hierarchy and spacing",
   verificationCommands: ["bun test"],
 } satisfies DevelopmentResult;
 const dirs: string[] = [];
+test("application blockers are distinct from user product questions", () => {
+  for (const blocker of ["reference_source", "environment"] as const) {
+    expect(
+      developmentResult.safeParse({ ...valid, status: "needs_input", blocker })
+        .success,
+    ).toBe(true);
+    expect(developmentResult.safeParse({ ...valid, blocker }).success).toBe(
+      false,
+    );
+    expect(
+      developmentResult.safeParse({
+        ...valid,
+        status: "needs_input",
+        blocker,
+        question: "Continue?",
+      }).success,
+    ).toBe(false);
+  }
+  expect(
+    developmentResult.safeParse({ ...valid, status: "needs_input" }).success,
+  ).toBe(false);
+  expect(
+    developmentResult.safeParse({
+      ...valid,
+      status: "needs_input",
+      question: "Which product behavior do you want?",
+    }).success,
+  ).toBe(true);
+});
 afterEach(async () => {
   for (const dir of dirs.splice(0))
     await rm(dir, { recursive: true, force: true });
@@ -95,7 +125,7 @@ rl.on('line',line=>{
  if(m.method==='initialize')send({id:m.id,result:{}});
  if(m.method==='thread/start')send({id:m.id,result:{thread:{id:'correction-thread'}}});
  if(m.method==='turn/start'){
-  requests.push(m.params);fs.writeFileSync(process.env.REQUESTS,JSON.stringify(requests));
+  requests.push(m.params);fs.writeFileSync(process.env.REQUESTS+'.tmp',JSON.stringify(requests));fs.renameSync(process.env.REQUESTS+'.tmp',process.env.REQUESTS);
   const count=requests.length,turnId='turn-'+count,scenario=process.env.SCENARIO;
   // Keep the reply and all notifications in one write to exercise event ordering.
   const batch=[];const push=v=>batch.push(JSON.stringify(v)+'\\n');

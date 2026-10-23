@@ -93,6 +93,12 @@ export async function codingTaskContext(
       taskId: task.id,
       repository: task.payload.repository,
       baseBranch: task.payload.baseBranch,
+      referenceSources: task.referenceSources?.map((source) => ({
+        repository: source.repository,
+        sha: source.sha,
+        ref: source.ref,
+      })),
+      applicationBlocker: task.result?.blocker,
       state: task.state,
       cancelRequested: task.cancelRequested,
       question: task.question?.text,

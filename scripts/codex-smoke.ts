@@ -53,6 +53,7 @@ const developmentIds = [
   randomUUID(),
   randomUUID(),
   randomUUID(),
+  randomUUID(),
 ] as const;
 const developmentKeys = developmentIds.map((id) => taskKey(workspaceId, id));
 const phases = ["prepare", "setup", "implement", "check", "export", "publish"];
@@ -173,6 +174,15 @@ const args=process.argv.slice(2);
 if(args.includes('clone')) {
  const git=a=>execFileSync('/usr/bin/git',a,{cwd:'/task',stdio:'ignore',env:{...process.env,GIT_AUTHOR_DATE:'2026-10-05T00:00:00Z',GIT_COMMITTER_DATE:'2026-10-05T00:00:00Z'}});
  const job=JSON.parse(readFileSync('/input/job.json','utf8'));
+ if(args.at(-1).startsWith('/task/references/')) {
+   if(process.env.GIT_CONFIG_VALUE_0!=='AUTHORIZATION: basic '+Buffer.from('x-access-token:reference-only-smoke-token').toString('base64'))process.exit(19);
+   git(['init','--initial-branch=develop','/task/reference-origin']);
+   writeFileSync('/task/reference-origin/README.md','old\\n');
+   git(['-C','/task/reference-origin','add','README.md']);
+   git(['-C','/task/reference-origin','-c','user.name=Smoke','-c','user.email=smoke@example.invalid','commit','-m','fixture']);
+   execFileSync('/usr/bin/git',args.map(a=>a.startsWith('https://github.com/')?'/task/reference-origin':a),{stdio:'inherit',env:process.env});
+   process.exit(0);
+ }
  if(job.payload.body==='Missing base branch fixture') {
    git(['init','--initial-branch=main','/task/source']);
    git(['-C','/task/source','-c','user.name=Smoke','-c','user.email=smoke@example.invalid','commit','--allow-empty','-m','fixture']);
@@ -204,7 +214,7 @@ if(process.argv[2]==='login') {
  setTimeout(()=>process.exit(0),300);
  return;
 }
-if(process.env.GITHUB_TOKEN||process.env.CODEX_PROVIDER_API_KEY) process.exit(2);
+if(process.env.GITHUB_TOKEN||process.env.GITHUB_REFERENCE_TOKEN||process.env.CODEX_PROVIDER_API_KEY) process.exit(2);
 try {fs.accessSync('/input/job.json',fs.constants.W_OK);process.exit(8);} catch {}
 if(fs.existsSync('/run/podman/podman.sock')||fs.existsSync('/var/run/docker.sock')) process.exit(3);
 if(process.env.CODEX_HOME==='/auth') {
@@ -229,6 +239,11 @@ if(process.argv[2]==='app-server') {
    const media=JSON.parse(fs.readFileSync('/input/job.json','utf8')).development?.media;
    if(media && (r.params.input.filter(i=>i.type==='image').length!==media.images.length || !r.params.input[0].text.includes(media.prompt) || r.params.input.filter(i=>i.type==='image').some((i,n)=>i.url!=='data:'+media.images[n].mimeType+';base64,'+media.images[n].data)))process.exit(9);
    const text=r.params.input[0].text; const intake=text.includes('Mode: intake.'); const answer=text.includes('"kind":"answer"');
+   for(const source of JSON.parse(fs.readFileSync('/input/job.json','utf8')).development?.referenceSources??[]) {
+    const path='/task/references/'+source.repositoryId;
+    if(fs.readFileSync(path+'/README.md','utf8')!=='old\\n'||!text.includes('"path":"'+path+'"')||!text.includes(source.sha))process.exit(20);
+    if(require('node:child_process').execFileSync('/usr/bin/git',['-C',path,'rev-parse','HEAD']).toString().trim()!==source.sha)process.exit(21);
+   }
    const question=!intake&&text.includes('Question fixture')&&!answer;
    if(text.includes('Interruption fixture')) {
     if(!fs.existsSync('/task/interrupted-once')) {
@@ -847,6 +862,31 @@ process.exit(16);
     development,
   });
   const waiting = await waitFor(developmentIds[0], "succeeded");
+  if (!waiting.baseSha)
+    throw Error("Reference fixture requires a pinned source commit");
+  await request("/tasks", {
+    ...input,
+    taskId: developmentIds[11],
+    referenceToken: "reference-only-smoke-token",
+    development: {
+      ...input.development,
+      taskId: randomUUID(),
+      referenceSources: [
+        {
+          repositoryId: 2,
+          repository: "example/reference",
+          installationId: 1,
+          connectionRevision: 1,
+          repositoryRevision: 0,
+          ref: "develop",
+          sha: waiting.baseSha,
+          revision: 1,
+        },
+      ],
+    },
+  });
+  await waitFor(developmentIds[11], "ready");
+  await request(`/tasks/${workspaceId}/${developmentIds[11]}/cancel`, {});
   if (waiting.result?.status !== "needs_input")
     throw Error("Question checkpoint missing");
   await request("/tasks", {

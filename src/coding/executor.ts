@@ -7,6 +7,7 @@ import {
   requireThat,
   type Workspace,
 } from "../domain.ts";
+import type { GitHubApp } from "../github/app.ts";
 import { GitHubRateLimitError } from "../github/app.ts";
 import type { GitHubApps } from "../github/registry.ts";
 import { githubAccessPending } from "../github/user-access.ts";
@@ -35,6 +36,10 @@ import type {
   LocalRunner,
   LocalStatus,
 } from "./local/protocol.ts";
+import {
+  checkReferenceSources,
+  pinReferenceSources,
+} from "./reference-sources.ts";
 import {
   finishAttempt,
   taskEvent,
@@ -145,6 +150,51 @@ export class DevelopmentExecutor {
       this.key,
     ).advance(workspaceId, id);
     await this.advanceTask(workspaceId, id);
+  }
+  private async referenceToken(task: DevelopmentTask, app: GitHubApp) {
+    if (!task.referenceSources?.length) return undefined;
+    return (
+      await app.installationToken(
+        task.payload.installationId,
+        task.referenceSources.map((source) => source.repositoryId),
+        "contents",
+      )
+    ).token;
+  }
+  private async prepareReferences(
+    task: DevelopmentTask,
+    lease: string,
+    app: GitHubApp,
+  ) {
+    const w = await this.store.read(task.workspaceId);
+    const inputs = await taskInputs(this.store.pool, task);
+    const sources = await pinReferenceSources(w, task, inputs, app);
+    const accepted = await this.update(
+      task,
+      lease,
+      async (current, sql, t) => {
+        await this.allowed(current, sql, t);
+        if (t.revision !== task.revision) return false;
+        const next = { ...t, referenceSources: sources };
+        checkReferenceSources(current, next, [
+          ...new Set(inputs.map((input) => input.actor)),
+        ]);
+        t.referenceSources = sources.length ? sources : undefined;
+        if (sources.length)
+          await taskEvent(sql, t, `reference-sources:${t.revision}`, {
+            sources,
+            operations: ["read"],
+          });
+        return true;
+      },
+      false,
+    );
+    if (!accepted) {
+      await this.update(task, lease, async () => {});
+      return false;
+    }
+    task.referenceSources = sources.length ? sources : undefined;
+    return true;
   }
   private async advanceTask(workspaceId: string, id: string) {
     const lease = randomUUID();
@@ -315,6 +365,8 @@ export class DevelopmentExecutor {
           );
         }
         const { token, app } = await this.token(task, "contents");
+        if (!(await this.prepareReferences(task, lease, app))) return;
+        const referenceToken = await this.referenceToken(task, app);
         const pr = task.pr
           ? await app.codingPull(token, task.payload.repository, task.pr.number)
           : undefined;
@@ -370,6 +422,9 @@ export class DevelopmentExecutor {
               revision: t.revision,
               mode: t.phase,
               inputs,
+              ...(t.referenceSources?.length
+                ? { referenceSources: t.referenceSources }
+                : {}),
               context: JSON.stringify({
                 references: events?.sources ?? [],
                 decisions,
@@ -481,6 +536,7 @@ export class DevelopmentExecutor {
           taskId: reserved.attemptId,
           payload: task.payload,
           readToken: token,
+          ...(referenceToken ? { referenceToken } : {}),
           providerApiKey,
           ...sharedProvider,
           development: reserved.run,
@@ -674,6 +730,27 @@ export class DevelopmentExecutor {
             t.state = "queued";
             t.phase = "intake";
           } else if (status.result.status === "needs_input") {
+            if (status.result.blocker) {
+              t.state = "failed";
+              t.question = undefined;
+              t.error =
+                status.result.blocker === "reference_source"
+                  ? "coding_reference_source_unavailable"
+                  : "coding_environment_blocked";
+              await taskEvent(sql, t, `blocker:${t.fence}`, {
+                kind: status.result.blocker,
+                summary: status.result.summary,
+                revision: t.consumedRevision,
+              });
+              await this.notice(
+                w,
+                t,
+                `${codingFailureMessage(t.error)}\n${status.result.summary}`,
+                `blocked:${t.fence}`,
+              );
+              t.attemptId = undefined;
+              return;
+            }
             t.state = "waiting";
             t.question = {
               id: randomUUID(),
@@ -983,7 +1060,7 @@ export class DevelopmentExecutor {
       "coding_recovery_conflict",
       409,
     );
-    const { token } = await this.token(task, "contents");
+    const { token, app } = await this.token(task, "contents");
     const snapshot = await this.store.read(task.workspaceId);
     const provider =
       task.payload.authMode === "provider_key"
@@ -1009,6 +1086,10 @@ export class DevelopmentExecutor {
         409,
       );
     const recoveryId = status.recoveryId;
+    const referenceToken =
+      status.phase === "prepare"
+        ? await this.referenceToken(task, app)
+        : undefined;
     const authorized = await this.update(
       task,
       lease,
@@ -1047,6 +1128,7 @@ export class DevelopmentExecutor {
       providerApiKey:
         task.payload.authMode === "provider_key" ? providerApiKey : undefined,
       readToken: status.phase === "prepare" ? token : undefined,
+      ...(referenceToken ? { referenceToken } : {}),
     });
     await this.update(task, lease, async (w, sql, t) => {
       await this.allowed(w, sql, t);

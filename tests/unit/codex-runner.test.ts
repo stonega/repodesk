@@ -211,6 +211,54 @@ async function fixture(
   };
 }
 
+test("reference credentials are confined to preparation and absent from durable state and model job inputs", async () => {
+  const f = await fixture();
+  f.input.development.referenceSources = [
+    {
+      repositoryId: 2,
+      repository: "example/source",
+      installationId: 1,
+      connectionRevision: 1,
+      repositoryRevision: 0,
+      ref: "main",
+      sha: "c".repeat(40),
+      revision: 1,
+    },
+  ];
+  await expect(f.supervisor.start(f.input)).rejects.toThrow(
+    "coding_job_invalid",
+  );
+  f.input.referenceToken = "reference-only-secret";
+  await f.supervisor.start(f.input);
+  await f.supervisor.start({
+    ...f.input,
+    referenceToken: "fresh-reference-only-secret",
+  });
+  const key = taskKey(f.input.workspaceId, f.input.taskId);
+  const prepares = f.calls.filter(
+    (c) => c.args[0] === "create" && c.args.includes(`${key}-prepare`),
+  );
+  expect(prepares).toHaveLength(1);
+  expect(prepares[0]?.env?.GITHUB_REFERENCE_TOKEN).toBe(f.input.referenceToken);
+  const state = await readFile(
+    join(f.settings.CODEX_RUNNER_STATE, `${key}.json`),
+    "utf8",
+  );
+  expect(state).not.toContain(f.input.referenceToken);
+  expect(f.jobInputs.join("\n")).not.toContain(f.input.referenceToken);
+  expect(
+    JSON.parse(f.jobInputs[0] ?? "{}").development.referenceSources[0].sha,
+  ).toBe("c".repeat(40));
+  await f.supervisor.sweep();
+  await f.supervisor.sweep();
+  const implement = f.calls.find(
+    (c) => c.args[0] === "create" && c.args.includes(`${key}-implement`),
+  );
+  expect(implement).toBeDefined();
+  expect(implement?.env).not.toHaveProperty("GITHUB_REFERENCE_TOKEN");
+  expect(f.jobInputs.join("\n")).not.toContain(f.input.referenceToken);
+});
+
 async function interruptedFixture(
   phase = "implement",
   options: {

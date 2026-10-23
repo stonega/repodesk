@@ -1,5 +1,43 @@
 # Implementation evidence
 
+## Codex reference snapshots and application blockers (2026-10-23)
+
+The worker prepares other workspace-selected repositories explicitly named in
+authenticated task inputs as commit-pinned references before intake. Full names,
+GitHub repository links and unique short names resolve separately from the
+modification target. Every contributor needs verified source read access. Source
+snapshots retain connection/repository generations and provenance; preparation
+uses a separate Contents-read token that never enters durable job/state data or
+Codex. Work and repair retain their pins; product answers can add sources, while
+new intake revisions resolve their default branches again. Publication remains
+scoped to the original target. No dependency or database migration was added.
+
+The result protocol distinguishes missing reference/environment prerequisites
+from product questions. Application blockers record an explicit failure without
+creating another user question. Actual product questions retain the durable
+waiting/answer flow. Pi sees source/blocker state and is told that task conversation
+cannot replace preparation with an unpinned fallback. Historical waiting tasks
+require an authorized continuation after upgrading all runner components; they
+are not automatically replayed. See the [incident](../../postmortem/2026-10-23-codex-reference-source-question-loop.md)
+and [runnable journey](../../examples/codex-reference-sources.md).
+
+Local validation passed Biome, strict TypeScript, the production build, Node runtime
+contract, **1,177 deterministic tests across 128 files**, and **168 final focused
+collaboration/runner tests**. Coverage includes the reported short source name and
+historical continuation, source read-only grants, revocation during preparation
+and before publication, transient lookup recovery, immutable commit pins,
+duplicate dispatch, real Git checkout despite a newer branch tip, reference
+integrity and credential erasure. The cancellation fixture now publishes its
+request trace atomically to prevent readers observing partial JSON.
+
+The task and supervisor images built successfully and passed the real Docker
+smoke, including prepared reference paths/commits and credential isolation, real
+pinned Codex sandbox restrictions, OCR source proof, continuation, restart and
+publication fences with fake external services. Merged Compose configuration
+validated. Both incident repositories are selected on the VPS and the requesting
+member has read access. No deployment, live task continuation, Telegram message,
+model call or GitHub write was performed; deployed behavior remains unchanged.
+
 ## Plugins hides Markets (2026-10-23)
 
 The Plugins landing page omits the Markets heading, discovery cards, catalog links

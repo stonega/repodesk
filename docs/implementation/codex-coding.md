@@ -73,6 +73,15 @@ the same recovery steps. `/github connect` remains a supported alias.
 
 ## Continuous collaboration
 
+Documentation and example repositories named in authenticated task inputs can be
+prepared as reference snapshots when they are selected in the same workspace and
+every contributing member has verified read access. Use full repository names when
+short names are ambiguous. The worker pins the source default branches before
+intake; only the original target receives implementation and PR publication grants.
+Missing source/environment prerequisites produce a blocker notice instead of a
+request for repeated human confirmation. Product questions still wait for an answer.
+See the [reference-source example](../../examples/codex-reference-sources.md).
+
 New coding attempts can recover confirmed infrastructure interruptions in
 preparation, setup, implementation and checks. The application revalidates
 authorization and supplies fresh credentials before resuming the same attempt

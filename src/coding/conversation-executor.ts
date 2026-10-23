@@ -403,6 +403,15 @@ export class TaskConversationExecutor {
         "coding_read",
       )
     ).token;
+    const referenceToken = task.referenceSources?.length
+      ? (
+          await app.installationToken(
+            task.payload.installationId,
+            task.referenceSources.map((source) => source.repositoryId),
+            "contents",
+          )
+        ).token
+      : undefined;
     await this.allowed(
       await this.store.read(task.workspaceId),
       await taskGet(this.store.pool, task.workspaceId, task.id),
@@ -442,6 +451,7 @@ export class TaskConversationExecutor {
           taskId: t.conversationAttemptId,
           payload: t.payload,
           readToken: token,
+          ...(referenceToken ? { referenceToken } : {}),
           ...shared,
           providerApiKey:
             shared.providerApiKey ??
@@ -458,6 +468,9 @@ export class TaskConversationExecutor {
             revision: t.revision,
             mode: "analysis",
             inputs: await taskInputs(sql, t),
+            ...(t.referenceSources?.length
+              ? { referenceSources: t.referenceSources }
+              : {}),
             pr,
             previousAttemptId: t.previousAttemptId,
             context: JSON.stringify({
@@ -478,6 +491,7 @@ export class TaskConversationExecutor {
         m.state = "received";
         const {
           readToken: _readToken,
+          referenceToken: _referenceToken,
           providerApiKey: _providerApiKey,
           ...safe
         } = start;
@@ -539,6 +553,17 @@ export class TaskConversationExecutor {
       "coding_configuration_changed",
       409,
     );
+    const referenceToken = message.start.development.referenceSources?.length
+      ? (
+          await app.installationToken(
+            task.payload.installationId,
+            message.start.development.referenceSources.map(
+              (source) => source.repositoryId,
+            ),
+            "contents",
+          )
+        ).token
+      : undefined;
     await this.allowed(
       await this.store.read(task.workspaceId),
       await taskGet(this.store.pool, task.workspaceId, task.id),
@@ -547,6 +572,7 @@ export class TaskConversationExecutor {
     await this.runner.start({
       ...message.start,
       readToken: token,
+      ...(referenceToken ? { referenceToken } : {}),
       providerApiKey:
         shared.providerApiKey ??
         (w.coding?.providerApiKey

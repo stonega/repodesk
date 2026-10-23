@@ -23,6 +23,7 @@ import {
   developmentStopped,
 } from "./development.ts";
 import { checkCodingPayload, codingDestination } from "./policy.ts";
+import { checkReferenceSources } from "./reference-sources.ts";
 import { requireRepositoryTarget } from "./repository-target.ts";
 import {
   taskEvent,
@@ -45,6 +46,11 @@ export function checkDevelopment(
   if (stopping && actor === task.actor) return;
   checkCodingPayload(w, task.actor, task.payload);
   if (actor !== task.actor) checkCodingPayload(w, actor, task.payload);
+  checkReferenceSources(
+    w,
+    task,
+    actor === task.actor ? [actor] : [task.actor, actor],
+  );
   requireThat(
     fingerprint(
       developmentPolicy.parse(w.coding?.settings.development ?? {}),
@@ -655,6 +661,7 @@ export async function pruneDevelopment(sql: Sql, w: Workspace) {
     task.payload.title = "[removed]";
     task.payload.body = "[removed]";
     task.result = undefined;
+    task.referenceSources = undefined;
     task.question = undefined;
     task.sourceId = "[removed]";
     task.state = "queued";

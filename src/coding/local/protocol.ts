@@ -20,6 +20,7 @@ export const localStart = z
     modelProvider: runtimeProviderSchema.optional(),
     providerApiKey: z.string().trim().min(1).max(8192).optional(),
     readToken: z.string().min(1).max(8192),
+    referenceToken: z.string().min(1).max(8192).optional(),
     recoverOnInterruption: z.literal(true).optional(),
   })
   .strict();
@@ -29,6 +30,7 @@ export const localRecovery = z
     recoveryId: z.uuid(),
     providerApiKey: z.string().trim().min(1).max(8192).optional(),
     readToken: z.string().min(1).max(8192).optional(),
+    referenceToken: z.string().min(1).max(8192).optional(),
   })
   .strict();
 export type LocalRecovery = z.infer<typeof localRecovery>;

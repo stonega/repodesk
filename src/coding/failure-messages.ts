@@ -2,6 +2,14 @@ import { attachmentErrors } from "../telegram/attachments.ts";
 import type { CodingPayload } from "./config.ts";
 
 const messages: Record<string, string> = {
+  coding_reference_source_unavailable:
+    "A required reference repository snapshot is unavailable. Ask the workspace administrator to check the selected source repository and its read permissions before a new request. Repeating your confirmation cannot prepare the missing source.",
+  coding_reference_source_changed:
+    "A reference repository connection or permission changed. Ask the workspace administrator to check source access before a new request.",
+  coding_reference_source_limit:
+    "This task names more than four reference repositories. State a narrower source scope in a new request.",
+  coding_environment_blocked:
+    "A required execution environment prerequisite is unavailable. Ask the workspace administrator to resolve the recorded blocker before a new request. Repeating your confirmation cannot repair the environment.",
   github_user_access_unavailable:
     "GitHub access could not be verified. RepoDesk will retry automatically; new execution and PR publication wait until access is verified.",
   github_user_connection_required:

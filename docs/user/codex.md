@@ -65,6 +65,20 @@ docker compose ps
 
 机器人把原始要求交给 Codex；明确的修改请求授权对应持续任务，通过检查后自动发布 PR，无需先创建 Issue 或再次批准开发。分析请求不会授权实现或发布。
 
+## Reference repositories
+
+To refresh documentation from another repository, name both the source and the
+modification target in your request. For example: “Copy `docs/user` from
+`example/product` into `example/product-site`; keep `product-site` as the only
+modification target.” Both repositories must be selected in the workspace. Every
+contributor needs verified read access to the source and write access to the target.
+
+RepoDesk prepares the named source's default branch at a recorded commit before
+Codex starts. Full repository names avoid ambiguity. Reference repositories do not
+receive code changes or PRs. If source access or another required environment
+condition is unavailable, the task reports the blocker for an administrator to
+resolve. Repeating “continue” does not repair a missing environment prerequisite.
+
 ## 补充需求与提问
 
 回复任务消息、必要问题，或在同一 Topic 继续讨论：

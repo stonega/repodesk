@@ -14,13 +14,17 @@ import { CodexConversationError } from "./conversation-failure.ts";
 import { watchInterruption } from "./interruption.ts";
 import { JobTaskChannel } from "./job-channel.ts";
 import { jobCommand as command } from "./job-command.ts";
+import {
+  prepareReferenceCheckouts,
+  verifyReferenceCheckouts,
+} from "./job-reference-sources.ts";
 import { prepareOpenCodeReview } from "./open-code-review.ts";
 import { localStart } from "./protocol.ts";
 import { markPullRequestReady, publicationPushArgs } from "./publication.ts";
 import { ReviewSource } from "./review-source.ts";
 
 const jobSchema = localStart
-  .omit({ readToken: true, providerApiKey: true })
+  .omit({ readToken: true, referenceToken: true, providerApiKey: true })
   .extend({
     executionId: z.uuid().optional(),
     recoveryId: z.uuid().optional(),
@@ -260,6 +264,7 @@ async function check(job: Job) {
   if (!job.baseSha) throw new Error("coding_base_invalid");
   const env = { ...gitEnv, HOME: "/task/home" };
   try {
+    await verifyReferenceCheckouts(job.development.referenceSources ?? []);
     for (const check of verificationCommands.parse(job.verificationCommands))
       await command("bash", ["-e", "-o", "pipefail", "-c", check], {
         cwd: repo,
@@ -267,6 +272,7 @@ async function check(job: Job) {
         stderr: true,
       });
     // Always check patch integrity in addition to the repository-specific plan.
+    await verifyReferenceCheckouts(job.development.referenceSources ?? []);
     await git(["diff", "--check", job.baseSha]);
   } catch (error) {
     const raw =
@@ -466,6 +472,18 @@ try {
       // No implementation can have started in this phase; discard a partial clone.
       if (job.recoveryId) await rm(repo, { recursive: true, force: true });
       await writeFile("/task/base-sha", await clone(job));
+      try {
+        await prepareReferenceCheckouts(
+          job.development.referenceSources ?? [],
+          process.env.GITHUB_REFERENCE_TOKEN,
+        );
+      } catch {
+        await writeFile(
+          "/task/failure-code",
+          "coding_reference_source_unavailable",
+        );
+        throw Error("coding_reference_source_unavailable");
+      }
       try {
         if ((await readFile("/input/checkpoint.patch", "utf8")).length)
           await git(["apply", "--index", "/input/checkpoint.patch"]);

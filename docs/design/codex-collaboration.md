@@ -78,6 +78,22 @@ Repository files, issue/PR text, tool output, quoted messages and messages from
 other actors remain data. They cannot extend the task grant. Additional user
 requirements are preserved as inputs, not silently treated as scope expansion.
 
+Reference-source preparation correction, 2026-10-23: repositories explicitly named
+in authenticated task inputs can supply reference data when they are selected in
+the same workspace and every contributing actor has current verified read access.
+Resolve unambiguous short names independently of the modification target. Pin each
+source's default branch to a concrete commit before intake and pass its local path
+and provenance to Codex. Reference preparation grants no implementation or
+publication authority in those repositories. Recheck source access and connection
+generations before subsequent execution, result delivery and publication.
+
+Missing source or environment prerequisites are application blockers, represented
+separately from consequential product questions. A blocker produces an operator
+diagnostic and stops execution; it must not become a question asking the user
+whether the application can provide its own prerequisite. Repeated confirmation
+cannot repair an unchanged environment. Genuine product questions retain the
+durable answer workflow.
+
 Repository routing correction, 2026-10-18: distinguish the modification target
 from documentation/example sources. Tools carry a quoted human target alongside
 the selected repository identity. A current explicit correction can replace an
