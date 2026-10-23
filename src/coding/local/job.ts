@@ -244,6 +244,7 @@ async function implement(job: Job) {
           job.development,
           diagnostics,
           job.verificationCommands,
+          { repository: job.payload.repository, baseSha: job.baseSha },
         ) +
         (job.development.media?.prompt ?? ""),
       images: job.development.media?.images,

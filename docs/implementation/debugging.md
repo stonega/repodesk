@@ -83,6 +83,15 @@ Interpret the states separately:
   alone can read the checkout while a Direct token (also requesting Pull requests
   read) or publication token still fails. Older builds report this as
   `github_unavailable`. Changing execution policy does not add GitHub permissions.
+- A Codex progress message saying upstream synchronization needs authentication
+  can come from a redundant `git pull` inside the implementation container. A
+  successful preparation does not install GitHub credentials for Codex; the
+  application authenticates checkout and publication separately. Check the saved
+  activity for `could not read Username` and the command that produced it before
+  advising account reconnection. The corrected handoff names the pinned repository
+  and commit and explains this boundary. A goal explicitly requiring newer remote
+  source remains an application-side requirement, not proof of expired credentials.
+  See the [redundant-pull incident](../../postmortem/2026-10-23-codex-redundant-git-pull.md).
 - `coding_intent_unverified` means the completed intake result did not quote the
   consumed authenticated input at its recorded revision. This occurs after
   repository preparation and Codex execution; it is not a GitHub reachability

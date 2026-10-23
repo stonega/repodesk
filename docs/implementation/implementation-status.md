@@ -1,5 +1,23 @@
 # Implementation evidence
 
+## Codex authenticated checkout handoff (2026-10-23)
+
+The coding handoff now names the application-authenticated repository and pinned
+base commit, explains the intentional detached checkout and retains checkpoint
+work. It tells Codex to use that snapshot when repository instructions request a
+pull, instead of attempting network Git without credentials and reporting an
+account connection failure. New remote-source requirements remain explicit
+application-side blockers; arbitrary authenticated in-turn fetch/pull is not added.
+Preparation and publication keep their separate scoped GitHub tokens. See the
+[confirmed cause and limits](../../postmortem/2026-10-23-codex-redundant-git-pull.md).
+
+Validation: Biome, strict TypeScript, production build and **1,144 deterministic
+tests across 126 files** passed with isolated PostgreSQL. Regression coverage
+checks all ordinary prompt modes, pinned metadata, retained work, repair-plan
+preservation and missing-metadata fallback. No dependency, migration or deployment
+was added. Live model adherence after deployment remains unverified; production
+inspection was read-only.
+
 ## One group message collection action (2026-10-23)
 
 Group access shows one collection button: **Enable message collection** when off,

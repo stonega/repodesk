@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   type DevelopmentRun,
   developmentMedia,
+  developmentPrompt,
   developmentSchema,
 } from "../../src/coding/development.ts";
 import { runConversation } from "../../src/coding/local/conversation.ts";
@@ -34,6 +35,53 @@ function retry(text = "Try again"): DevelopmentRun {
     context: "Reference context may describe the previous request.",
   };
 }
+
+test("coding handoff explains authenticated pinned preparation despite repository pull instructions", () => {
+  const checkout = {
+    repository: "owner/private-repo",
+    baseSha: "a".repeat(40),
+  };
+  for (const mode of ["intake", "analysis", "work"] as const) {
+    const prompt = developmentPrompt(
+      {
+        ...retry(),
+        mode,
+        context: "AGENTS.md: pull the latest upstream before editing.",
+      },
+      mode === "work" ? "Repair the failed check." : undefined,
+      mode === "work" ? ["bun test"] : undefined,
+      checkout,
+    );
+    expect(prompt).toContain(
+      `authenticated to GitHub for "${checkout.repository}"`,
+    );
+    expect(prompt).toContain(`pinned base commit ${checkout.baseSha}`);
+    expect(prompt).toContain("a detached HEAD is intentional");
+    expect(prompt).toContain("preserve any checkpoint or interrupted work");
+    expect(prompt).toContain("Do not run network Git commands");
+    expect(prompt).toContain(
+      "not a guarantee that the remote is still at the same commit",
+    );
+    expect(prompt).toContain(
+      "as an application-side requirement and return needs_input",
+    );
+    expect(prompt).toContain(
+      "revalidate and authenticate publication separately",
+    );
+    expect(prompt).toContain(
+      "AGENTS.md: pull the latest upstream before editing.",
+    );
+    if (mode === "work") {
+      expect(prompt).toContain(
+        'Fixed verification plan for this attempt: ["bun test"]',
+      );
+      expect(prompt).toContain("Repair the failed check.");
+    }
+  }
+  const legacy = developmentPrompt(retry());
+  expect(legacy).toContain("GitHub credentials are intentionally absent");
+  expect(legacy).not.toContain("the runner authenticated to GitHub for");
+});
 
 test("intake binds evidence to the consumed authenticated input, including short retries and literal Unicode", () => {
   for (const text of ["Try again", 'Keep “draft” PRs.\nDo not merge "main".']) {

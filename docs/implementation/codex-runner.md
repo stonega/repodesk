@@ -278,6 +278,15 @@ copies the latest saved credentials. This follows OpenAI's
 An initial preparation container receives only a
 repository-scoped read token and pins the base commit. The implementation
 container lets Codex prepare the environment and implement without a GitHub token.
+The handoff identifies the authenticated repository and pinned base commit, explains
+the detached checkout and preserves retained work. Repository instructions to pull
+are handled by application preparation; Codex must use that snapshot instead of
+attempting another credential-free network Git command. A pinned commit is not a
+claim that the remote has remained unchanged. Explicit requirements for newer or
+additional remote source are reported as an application-side requirement; arbitrary
+in-turn authenticated fetch/pull is not available. This avoids misreporting an
+intentional credential boundary as a disconnected GitHub account. See the
+[upstream-authentication incident](../../postmortem/2026-10-23-codex-redundant-git-pull.md).
 A separate container replays the captured verification plan without model or GitHub credentials.
 The workspace survives container exit in the task volume. Custom provider Codex
 sessions survive there too; device-code auth and sessions in the temporary auth
