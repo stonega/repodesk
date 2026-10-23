@@ -35,8 +35,18 @@ smoke, including prepared reference paths/commits and credential isolation, real
 pinned Codex sandbox restrictions, OCR source proof, continuation, restart and
 publication fences with fake external services. Merged Compose configuration
 validated. Both incident repositories are selected on the VPS and the requesting
-member has read access. No deployment, live task continuation, Telegram message,
-model call or GitHub write was performed; deployed behavior remains unchanged.
+member has read access. The initial implementation checks did not deploy or
+continue the live task.
+
+Operator-authorized VPS deployment completed later on 2026-10-23 from commit
+`b4bac2e15e7083f7800cc0a36813a11ed8187483` (package v0.1.44), bundle
+`1792747504017-26715920`. The exact four deployment images passed Node 24 runtime,
+Code Truth real-index/MCP and Docker Codex lifecycle/reference smoke checks.
+Archive/source checksums, the protected database backup and deployed artifact
+hashes verified. App, worker, runner and Code Truth are healthy; public health,
+readiness and admin endpoints return HTTP 200. The original task remains waiting
+at revision 4 with no live attempt; deployment did not replay it. Live model
+interpretation after an authorized continuation remains unverified.
 
 ## Plugins hides Markets (2026-10-23)
 

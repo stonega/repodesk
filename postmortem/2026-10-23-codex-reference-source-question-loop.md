@@ -1,7 +1,7 @@
 # Missing reference source repeatedly presented as a user question
 
-Incident and read-only VPS investigation: 2026-10-23. Status: **correction
-implemented and verified locally; deployment and live task recovery pending**.
+Incident and read-only VPS investigation: 2026-10-23. Status: **correction deployed;
+the original task awaits an authorized continuation**.
 
 ## Impact
 
@@ -117,13 +117,20 @@ plus the existing pinned sandbox/OCR proof and lifecycle checks. Compose configu
 validated. No dependency or migration was added.
 
 Read-only VPS verification confirmed both incident repositories are selected and
-the requesting actor has source read access. After deploying matching app/worker,
-supervisor and task images, an authorized continuation of the waiting task prepares
-the named source from its retained original inputs. Upgrading alone does not replay
-the task. Preserve `repodesk-landing` as the only modification/publication target;
-do not mark implementation authorized merely to bypass intake. Live model
-interpretation and the deployed continuation remain unverified.
+the requesting actor has source read access. At the operator's request, commit
+`b4bac2e15e7083f7800cc0a36813a11ed8187483` was deployed in bundle
+`1792747504017-26715920`, using the protected archive cutover. The exact deployment
+images passed Node 24, Code Truth and Docker Codex smoke checks. Source/archive
+checksums, the database backup and deployed artifact hashes verified. All four
+services are healthy and public health/readiness/admin endpoints return HTTP 200.
 
-This investigation did not change production data, restart or deploy services,
-resume tasks, send Telegram messages, or perform GitHub writes. The subsequent
-correction remains local; no live recovery was performed.
+The task remains waiting in intake at revision 4, with four attempts and no changes;
+no live attempt was replayed by deployment. An authorized continuation now prepares
+the named source from its retained original inputs. Preserve `repodesk-landing` as
+the only modification/publication target; do not mark implementation authorized
+merely to bypass intake. Live model interpretation and the deployed continuation
+remain unverified.
+
+The investigation itself did not change production data, restart services, resume
+tasks, send Telegram messages, or perform GitHub writes. The subsequent deployment
+was explicitly operator-authorized; no live task recovery was performed.

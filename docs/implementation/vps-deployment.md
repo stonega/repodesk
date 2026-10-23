@@ -180,6 +180,34 @@ No migration was added. Source, CI and post-deployment receipts remain in the
 bundle. This is another manual archive deployment, separate from the published
 release updater gate.
 
+## Reference-source blocker fix deployment (2026-10-23)
+
+The operator-authorized manual archive cutover deployed commit
+`b4bac2e15e7083f7800cc0a36813a11ed8187483` (package v0.1.44) in bundle
+`1792747504017-26715920`, replacing bundle `1792737476277-54958102` from `1261479`.
+The snapshot includes the Codex reference-source/blocker correction and the
+previously committed Plugins page changes. No database migration was added.
+
+All four images were built from an isolated checkout of that exact commit. Node 24
+runtime, Code Truth offline real-index/MCP, full Docker Codex lifecycle/reference
+smoke and merged Compose checks passed. The host verified the image and source
+archives, acquired the storage/deployment locks, waited for safe checkpoints,
+stopped writers, verified its restrictive database backup and completed migrations
+and readiness checks through the existing script. Secrets, database, runner state,
+PostgreSQL and the separate Actions runners were preserved.
+
+Post-cutover checks confirmed the pinned image identities and exact server, worker,
+frontend, supervisor and task artifact hashes. App, worker, runner and Code Truth
+are healthy; public `/healthz`, `/readyz` and `/admin` return HTTP 200. Source,
+image metadata, verification logs and `deployment-receipt.json` remain in the
+bundle; the imported image archive was removed after success. The protected backup
+is `backups/pre-release-1792747504017-26715920.dump` and its archive listing verified.
+
+The incident task remains waiting at revision 4 with no live attempt. Deployment
+did not continue or publish it; its next authorized input uses the new source
+preparation. This manual source snapshot deployment is separate from publishing
+a stable GitHub release or exercising the hosted updater's release-selection gate.
+
 ## Operator-requested fresh installation (2026-10-18)
 
 At the operator's explicit request to clear the deployment **including data**, the
