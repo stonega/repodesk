@@ -35,8 +35,9 @@ personal Telegram identity. Workflow execution retains an active member's identi
 and its data/destination permissions; panel actions audit the manager separately.
 Group access also permits the owning deployment operator to issue group-link
 commands, inspect visibility, manage collection and unlink without a personal
-Telegram identity link. A panel-issued, bot-bound token delegates only group
-linking to an active workspace member who is a Telegram group administrator.
+Telegram identity link. A panel-issued, bot-bound token delegates group linking
+and default received-message collection to an active workspace member who is a
+Telegram group administrator. The command dialog explains this before redemption.
 Redemption rechecks the issuer's current workspace-management authority; it
 does not grant membership or an admin role. Tokens expire after ten minutes and
 are consumed once; generating a replacement invalidates older group commands.
@@ -74,8 +75,11 @@ task details. Denied requests make no model/tool calls and create no workflow.
 Unauthenticated admin requests receive 401; authenticated unauthorized requests
 receive 403 or a non-disclosing 404. Authentication alone grants no workspace access.
 
-Group collection remains a separate opt-in policy and can include received messages
-from people who are not workspace members. Bot replies in a group are visible to
+Group collection remains separate from message visibility and workspace membership.
+New and relinked groups enable it by default, recording the verified linking
+administrator and time. Administrators can disable it; saved choices are not
+overridden by visibility checks or updates. It can include received messages from
+people who are not workspace members. Bot replies in a group are visible to
 all participants. Membership does not authorize a new chat, expand retention,
 import old history or allow private sources in group output.
 

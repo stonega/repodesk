@@ -34,6 +34,29 @@ owner/admin members who prefer the Telegram-only flow.
 
 将 `your_bot` 替换为实际用户名。Telegram 隐私模式可能导致普通 @提及无法送达；优先使用带机器人用户名的命令或 Reply。
 
+### Enable direct @mentions without making the bot an administrator
+
+The **Group @mentions** guide on **Group access** is available before
+and after linking. The bot can remain a regular group member:
+
+1. Open **@BotFather** and send `/setprivacy`.
+2. Select your bot and choose **Disable**.
+3. Remove the bot from the group, then add it again.
+4. Use **Group access → New** and send the new `/link` command in the group. Wait
+   for **Group linked**, then choose **Recheck bot visibility** and test
+   `@your_bot hi` with your actual bot username.
+
+Removing the bot marks the saved RepoDesk group link inactive. Re-adding it in
+Telegram does not restore that link; relinking is required even if privacy mode
+is already disabled. Inactive group cards show this reminder.
+
+Making the bot a group administrator is an alternative. Message collection is
+not required for direct mentions. While privacy mode is enabled, use
+`/ask@your_bot hi` or reply to a bot message. See
+[Telegram's privacy-mode guide](https://core.telegram.org/bots/features#privacy-mode).
+The person sending the group-link command must still be a Telegram group
+administrator and an active workspace member.
+
 机器人不会回应其他机器人的命令、机器人作者的消息、匿名发送者或无关群消息。能看到群内机器人回复，不代表已经成为工作区成员。
 
 ## Topic 与自然追问
@@ -44,20 +67,25 @@ owner/admin members who prefer the Telegram-only flow.
 
 答案还在生成时、`/recap` 之后、超过窗口或机器人无法判断对象时，重新显式提问或 Reply。群组回答只发送最终结果，不显示私聊式实时预览。
 
-## 开启群消息收集
+## Manage group message collection
 
-默认仅以明确发给机器人的消息为上下文。完整群聊总结还需要：
+Linking or relinking a group enables received-message collection by default.
+The link dialog explains this before you send the command, and RepoDesk records
+the verified group administrator and time. Collected messages can include people
+who are not workspace members and can be used for group context and recaps.
+Let group members know the purpose and retention period.
 
-1. 按团队需要配置 Telegram 可见性，例如授予机器人管理员身份或关闭 BotFather 隐私模式。
-2. 在 **Group access** 检查实际可见性。
-3. 告知群成员收集范围、用途和保留期限。
-4. Have an administrator send `/capture on` in the group, or choose **Enable
-   message collection** in **Group access**. Once enabled, the same button becomes
-   **Disable message collection** to stop collecting ordinary group messages.
+Telegram must deliver the messages first. Disable privacy mode and re-add the bot,
+or make it a group administrator, then relink and choose **Recheck bot visibility**.
+This refreshes visibility without changing your collection choice. RepoDesk cannot
+read messages from before the bot joined or messages Telegram never delivered.
 
-只有机器人收到且获准保留的消息能用于总结，包括非工作区成员的发言。Telegram 可见性与 RepoDesk 收集许可两者都需满足；仅关闭隐私模式不会自动开启收集。无法获取机器人加入前的旧历史。
-
-发送 `/capture off` 停止后续普通消息收集，已有留存数据继续按保留策略管理；关闭不等于删除。
+Choose **Disable message collection** in **Group access**, or send `/capture off`
+as a workspace administrator, to stop collecting future ordinary messages.
+Directed requests still work. Existing retained data follows the retention policy;
+turning collection off does not delete it. Choose **Enable message collection** or
+use `/capture on` to turn it back on. Existing groups keep their saved collection
+choice until you change it or relink; the new default does not override an opt-out.
 
 ## 总结与权限边界
 

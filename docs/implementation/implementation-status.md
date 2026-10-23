@@ -18,6 +18,36 @@ preservation and missing-metadata fallback. No dependency, migration or deployme
 was added. Live model adherence after deployment remains unverified; production
 inspection was read-only.
 
+## Default group collection and mention setup (2026-10-23)
+
+New and relinked Telegram groups enable received-message collection and record
+the verified linking administrator and time. The panel command dialog and legacy
+private link-token response explain the default before redemption. The link
+confirmation no longer instructs administrators to run `/capture on`. Existing
+saved collection choices stay unchanged until explicitly edited or relinked;
+administrators can still disable collection, and directed requests continue.
+
+Visibility checks use current Telegram privacy and group-administrator status.
+They no longer change the saved collection setting. Enabling collection is separate
+from Telegram delivery: only received messages can be retained, and old history
+remains unavailable. Actor, tenant, group ownership, token lifetime, issuer
+revocation, duplicate-update and collection opt-out boundaries remain enforced.
+
+Group access includes a persistent **Group @mentions** guide covering the
+regular-member BotFather setup, removal/re-addition, mandatory relinking and
+visibility recheck. Inactive saved groups show the New → fresh `/link` recovery
+instruction. The guide explains the administrator alternative, fallback
+commands/replies and collection setting, with Telegram's official reference.
+
+Validation: lint, strict TypeScript, production build and **1,143 deterministic
+tests across 126 files** passed with isolated PostgreSQL. All **16 group browser
+checks** passed, including inactive-to-linked recovery, default-collection dialog
+copy, opt-out controls, pending/error recovery, keyboard navigation and card
+spacing. Desktop/mobile layouts at 1280px/390px were inspected in both themes.
+No dependency, migration or deployment was added. Live diagnostics confirmed
+privacy disabled, regular-member bot status and a restored active group link;
+no production setting or Telegram message was written by this task.
+
 ## One group message collection action (2026-10-23)
 
 Group access shows one collection button: **Enable message collection** when off,

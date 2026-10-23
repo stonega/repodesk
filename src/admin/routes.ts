@@ -47,6 +47,7 @@ import {
 import { githubSkillUrl } from "../skills/github-source.ts";
 import { importMarkdown } from "../skills/import.ts";
 import { TelegramError } from "../telegram/client.ts";
+import { groupVisibility } from "../telegram/visibility.ts";
 import { nextOccurrences } from "../workflows/schedule.ts";
 import {
   decide,
@@ -1420,7 +1421,7 @@ export function adminRoutes(
       const chat = w.chats.find((c) => c.id === id);
       requireThat(chat, "not_found", 404);
       if (input.action === "collect") {
-        requireThat(chat.active && chat.visibleAll, "bot_visibility_required");
+        requireThat(chat.active, "bot_visibility_required");
         chat.collection = true;
         chat.consentAt = new Date().toISOString();
         chat.consentBy = actor;
@@ -1865,10 +1866,14 @@ export function adminRoutes(
     workspaceActor(w, c.get("session").admin);
     const linkedChat = w.chats.find((chat) => chat.id === c.req.param("chat"));
     requireThat(linkedChat, "not_found", 404);
-    const client = await setup.client();
-    const me = await client.call<{
-      can_read_all_group_messages?: boolean;
-    }>("getMe");
+    const deployment = await store.deployment();
+    requireThat(deployment.bot, "bot_not_configured", 409);
+    const client = await setup.client(deployment);
+    const visibleAll = await groupVisibility(
+      client,
+      linkedChat.id,
+      deployment.bot.id,
+    );
     const details = await client
       .call<{ title?: string }>("getChat", { chat_id: linkedChat.id })
       .catch((error: unknown) => {
@@ -1881,8 +1886,7 @@ export function adminRoutes(
         const chat = w.chats.find((chat) => chat.id === c.req.param("chat"));
         requireThat(chat, "not_found", 404);
         if (details?.title?.trim()) chat.title = details.title.trim();
-        chat.visibleAll = !!me.can_read_all_group_messages;
-        if (!chat.visibleAll) chat.collection = false;
+        chat.visibleAll = visibleAll;
         audit(w, actor, "chat.visibility_checked", chat.id);
         return chat;
       }),

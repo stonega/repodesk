@@ -68,6 +68,7 @@ import {
 import { GitHubConnection, GitHubSetup } from "./github.tsx";
 import { GitHubMemberField } from "./github-member-field.tsx";
 import { GroupLinkDialog } from "./group-link.tsx";
+import { GroupMentionGuide } from "./group-mention-guide.tsx";
 import { type ActionIcon, IconButton } from "./icon-button.tsx";
 import { RuntimeLogs } from "./logs.tsx";
 import { MemberGitHub } from "./member-github.tsx";
@@ -1993,10 +1994,18 @@ function ChatsPage({ id }: { id: string }) {
               : "Directed visibility"}{" "}
             · Collection: {chat.collection ? "enabled" : "directed only"}
           </p>
+          {!chat.active && (
+            <p>
+              This group is inactive. Choose New and send the new /link command
+              in the group to relink it. Re-adding the bot in Telegram does not
+              restore the RepoDesk link.
+            </p>
+          )}
           <p>
-            Opt-in collection may include received messages from people who are
-            not workspace members. Group replies are visible to everyone in the
-            group. Old history is unavailable.
+            Message collection starts enabled when you link a group. Collected
+            messages may include people who are not workspace members. Group
+            replies are visible to everyone in the group. Old history is
+            unavailable.
           </p>
           <div className="row">
             <Action
@@ -2048,6 +2057,7 @@ function ChatsPage({ id }: { id: string }) {
           </div>
         </section>
       ))}
+      <GroupMentionGuide />
       {linking === id && (
         <GroupLinkDialog
           key={id}

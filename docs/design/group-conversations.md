@@ -87,7 +87,10 @@ metadata. Their original message is removed unless ordinary group collection is
 enabled; collected originals stay unthreaded and are not marked directed. Expired
 or cancelled candidates are also cleared by maintenance. Accepted follow-ups become
 directed conversation messages. Unrelated group traffic is not persistently collected
-without the existing admin consent. Workspace deletion removes all derived state.
+without the collection setting. Linking or relinking enables collection by default
+and records the verified group administrator and time; an explicit opt-out stops
+ordinary collection while directed requests continue. Telegram visibility remains
+independent. Workspace deletion removes all derived state.
 
 The existing discussion tools, fixed summaries, threshold compaction, source retention
 and stable hashed workspace/thread cache key apply to group threads, including topic

@@ -8,6 +8,7 @@ const dialog = (page: Page) =>
 async function fixture(page: Page) {
   const state = {
     linked: false,
+    active: true,
     collection: false,
     visibleAll: false,
     deferList: false,
@@ -55,7 +56,7 @@ async function fixture(page: Page) {
                 {
                   id: "-100100",
                   title: "Fixture group",
-                  active: true,
+                  active: state.active,
                   visibleAll: state.visibleAll,
                   collection: state.collection,
                 },
@@ -98,9 +99,23 @@ async function complete(
   });
 }
 async function shot(page: Page, name: string) {
+  const guide = page.getByRole("region", {
+    name: "Group @mentions",
+  });
+  await expect(guide).toBeVisible();
+  await expect(guide).toContainText("Administrator access is optional.");
+  await expect(guide).toContainText(
+    "Message collection is not required for @mentions.",
+  );
+  await expect(
+    guide.getByRole("link", { name: "Telegram privacy-mode guide" }),
+  ).toHaveAttribute(
+    "href",
+    "https://core.telegram.org/bots/features#privacy-mode",
+  );
   const overflow = await page
     .locator(
-      ".group-link-details, .group-link-details > *, .modal-fields, .group-access-card, .group-access-card > *",
+      ".group-link-details, .group-link-details > *, .modal-fields, .group-access-card, .group-access-card > *, .group-mention-guide, .group-mention-guide > *, .group-mention-guide li",
     )
     .evaluateAll((elements) =>
       elements
@@ -224,24 +239,26 @@ for (const width of [1280, 390]) {
         "directed",
         "directed",
       ]);
-      const spacing = await card.evaluate((element) => {
-        const style = getComputedStyle(element);
-        const bounds = element.getBoundingClientRect();
-        const first = element.firstElementChild;
-        const last = element.lastElementChild;
-        if (!first || !last) throw new Error("Saved group content is missing");
-        return {
-          top: first.getBoundingClientRect().top - bounds.top,
-          bottom: bounds.bottom - last.getBoundingClientRect().bottom,
-          expectedTop:
-            parseFloat(style.paddingTop) + parseFloat(style.borderTopWidth),
-          expectedBottom:
-            parseFloat(style.paddingBottom) +
-            parseFloat(style.borderBottomWidth),
-        };
-      });
-      expect(spacing.top).toBeCloseTo(spacing.expectedTop);
-      expect(spacing.bottom).toBeCloseTo(spacing.expectedBottom);
+      for (const section of [card, page.locator(".group-mention-guide")]) {
+        const spacing = await section.evaluate((element) => {
+          const style = getComputedStyle(element);
+          const bounds = element.getBoundingClientRect();
+          const first = element.firstElementChild;
+          const last = element.lastElementChild;
+          if (!first || !last) throw new Error("Group card content is missing");
+          return {
+            top: first.getBoundingClientRect().top - bounds.top,
+            bottom: bounds.bottom - last.getBoundingClientRect().bottom,
+            expectedTop:
+              parseFloat(style.paddingTop) + parseFloat(style.borderTopWidth),
+            expectedBottom:
+              parseFloat(style.paddingBottom) +
+              parseFloat(style.borderBottomWidth),
+          };
+        });
+        expect(spacing.top).toBeCloseTo(spacing.expectedTop);
+        expect(spacing.bottom).toBeCloseTo(spacing.expectedBottom);
+      }
     });
     test(`panel group command, pending locks, copying and saved summary at ${width}px in ${theme}`, async ({
       page,
@@ -284,6 +301,9 @@ for (const width of [1280, 390]) {
       expect(state.issued).toHaveLength(1);
       await complete(state);
       await expect(dialog(page).locator("code")).toHaveText(command);
+      await expect(dialog(page)).toContainText(
+        "Linking enables message collection by default.",
+      );
       await expect(dialog(page).locator(".service-urls")).toHaveCSS(
         "margin",
         "0px",
@@ -313,6 +333,7 @@ for (const width of [1280, 390]) {
         dialog(page).getByRole("button", { name: "Close Link a group" }),
       ).toBeFocused();
       state.linked = true;
+      state.collection = true;
       await expect(dialog(page)).toContainText("Group linked.");
       await expect(dialog(page).locator("code")).toHaveCount(0);
       await page.keyboard.press("Escape");
@@ -328,6 +349,40 @@ for (const width of [1280, 390]) {
         page.locator("main input, main select, main textarea"),
       ).toHaveCount(0);
       await shot(page, "linked");
+    });
+    test(`inactive groups guide users through relinking at ${width}px in ${theme}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 850 });
+      await page.addInitScript(
+        (value) => localStorage.setItem("repodesk.theme", value),
+        theme,
+      );
+      const state = await fixture(page);
+      state.linked = true;
+      state.active = false;
+      state.visibleAll = true;
+      await page.goto(`/admin/chats?workspace=${first}`);
+      const card = page.locator(".group-access-card");
+      await expect(card).toContainText("Inactive");
+      await expect(card).toContainText(
+        "Re-adding the bot in Telegram does not restore the RepoDesk link.",
+      );
+      await shot(page, "inactive");
+      await page
+        .getByRole("button", { name: "Link a group", exact: true })
+        .click();
+      await complete(state);
+      await expect(dialog(page).locator("code")).toHaveText(command);
+      state.active = true;
+      state.collection = true;
+      await expect(dialog(page)).toContainText("Group linked.");
+      await page.keyboard.press("Escape");
+      await expect(card).not.toContainText("This group is inactive.");
+      await expect(
+        page.getByRole("button", { name: "Link a group", exact: true }),
+      ).toBeDisabled();
+      await shot(page, "relinked");
     });
   }
   test(`group token errors, clipboard failure, expiry and workspace isolation at ${width}px`, async ({
@@ -396,7 +451,9 @@ for (const width of [1280, 390]) {
       page.getByRole("heading", { name: "No group linked" }),
     ).toBeVisible();
     expect(state.issued).toHaveLength(issued);
-    await expect(page.locator("code")).toHaveCount(0);
+    await expect(
+      page.locator("code").filter({ hasText: /^\/link@/ }),
+    ).toHaveCount(0);
     await page
       .getByRole("button", { name: "Link a group", exact: true })
       .click();

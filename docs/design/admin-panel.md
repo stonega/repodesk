@@ -27,7 +27,7 @@ Public static assets can load before login, but contain no workspace data or sec
 | Workspace settings | Workspace activity status and Pause/Resume action; Settings follows Plugins in the sidebar | Confirmation dialog explains the consequences; Cancel makes no change; versioned saves preserve other configuration and show conflicts. Pause is absent from the Overview team editor. |
 | Bot settings | Display label, timezone, base instructions, response style, directed-response mode, pause switch | Validated form, versioned save, audit entry, saved/effective version shown. |
 | Model settings | Operator-configured model/search providers and bot chat model, search selection, thinking level, optional capacity and token prices; saved summaries and modal editors | Successful model setup activates automatically when prerequisites are ready, without a separate activation card. Invalid settings rejected locally; provider capabilities require evaluation. Runs pin provider/selection versions and endpoint/thinking/prices at first execution; configuration changes stop old runs. |
-| Groups and access | Connected group/topic, owner, bot visibility, history coverage, opt-in collection, unlink | Linking verifies authority; no arbitrary chat ID can be used to obtain access. |
+| Groups and access | Connected group/topic, owner, bot visibility, history coverage, message collection, unlink | Linking verifies authority and enables collection; no arbitrary chat ID can be used to obtain access. |
 | Workflows | All authorized panel admins, including unlinked deployment operators, can inspect full details, create/edit drafts, preview, approve, pause/resume, run now and delete | Panel authority permits management across workflow owners. Preserve execution ownership, approval, versions, destination/repository checks and team budgets. |
 | Plugins | Compact Installed and Market catalog; dedicated detail pages for Code Truth, Codex and registered file extensions; operator-managed version/path/tool editing, enable/disable/remove, file status and revision conflicts | Database-backed settings reach workers without restart; settings and revisions isolated per workspace; external market packages are discovery links and no code executes on API reads/saves. |
 | GitHub | Manage GitHub modal for guided App creation, workspace OAuth, installation/repository selection and connected repository links, opened on Overview without navigation; GitHub callbacks return to Plugins; disconnect API | Manifest state bound to operator/session/workspace; encrypted operator App credentials; one-use PKCE OAuth; verify user installation/repository access; installation tokens limited to selected repositories and Contents read. |
@@ -197,10 +197,25 @@ falling back to the ID when the title is unknown. Titles are captured on linking
 subsequent group updates. Recheck bot visibility also refreshes the title for existing
 bindings; inaccessible groups retain their last known name.
 
+An always-visible **Group @mentions** guide explains that bot admin
+rights are optional. It covers BotFather `/setprivacy` → Disable, removing and
+re-adding the bot, relinking and rechecking visibility. Administrator access is
+an alternative; message collection is not required. Commands and replies remain
+the fallback while privacy mode is enabled. The guide links to Telegram's official
+privacy documentation and remains available before group data loads or after a
+load failure. Inactive saved groups explicitly direct the user to New and a fresh
+`/link` command: removing the bot deactivates its binding, and re-adding it in
+Telegram does not restore the RepoDesk link automatically.
+
 One collection action follows the saved state: **Enable message collection** when
 collection is off, **Disable message collection** when on. The saved access summary
 remains visible separately. The action is disabled while saving or refreshing;
 failed requests preserve the saved state and offer the same action for retry.
+Newly linked and relinked groups start with collection enabled. The command dialog
+explains this before redemption; the verified group administrator's Telegram ID
+and link time record the consent. Existing saved collection choices are preserved
+until explicitly changed or the group is relinked. Visibility checks recognize
+both privacy-disabled bots and group administrators and never change collection.
 
 Group access is available to the workspace's deployment operator without linking a
 personal Telegram identity. **New** opens a dialog that issues a one-use group-link
@@ -215,7 +230,8 @@ confirm that sender is a group administrator. The token delegates only group
 linking, grants no membership or role, and is rejected after expiry, consumption,
 bot replacement or loss of the issuing administrator's authority. Linking preserves
 one group per workspace and exclusive group ownership, and starts with ordinary
-message collection disabled. Existing actor-bound `/linktoken` commands still work.
+message collection enabled. Existing actor-bound `/linktoken` commands still work
+and explain the same default before the command is sent.
 Unlinked deployment operators can also recheck visibility, manage collection and
 unlink their workspace's group using the same scoped panel authority.
 

@@ -89,6 +89,13 @@ export function GroupLinkDialog({
               administrator. Personal Telegram identity verification is not
               required.
             </p>
+            <p>
+              Linking enables message collection by default. Received group
+              messages, including those from people outside the workspace, can
+              be used for group context and recaps. You can disable collection
+              in Group access. Telegram privacy settings still control which
+              messages reach the bot; old history is unavailable.
+            </p>
             <dl className="service-urls">
               <ServiceUrl
                 key={data?.command ?? "pending"}

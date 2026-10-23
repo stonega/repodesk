@@ -25,6 +25,14 @@ This panel flow does not require personal Telegram identity verification.
 Wait for **Group linked** before testing `/ask@your_bot hi`. See
 [the group-link example](../../examples/group-linking.http).
 
+If `/ask@your_bot hi` works but plain `@your_bot hi` does not, check Telegram
+privacy mode and the saved group's active state separately. Disabling privacy
+requires removing and re-adding the bot. Removal marks the RepoDesk group inactive;
+re-adding it in Telegram does not reactivate that link. Generate and send a fresh
+**Group access → New** command, wait for **Group linked**, then recheck visibility
+and retry the mention. Bot administrator access and message collection are not
+required for this regular-member setup. See [the group guide](../user/groups.md).
+
 Start with a run ID from **Runs & delivery**. Check run status, `error`, model
 attempts, transcript roles/stop reasons, answer length and delivery state.
 Read only the relevant workspace and runs. Summarize tool names and outcomes;

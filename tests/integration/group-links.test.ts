@@ -36,6 +36,8 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     let setup: SetupService;
     let sequence = 1000;
     let membership = "administrator";
+    let privacyDisabled = true;
+    let botMembership = "member";
     let credentials: Awaited<ReturnType<typeof login>>;
     let adminCredentials: typeof credentials;
     let memberCredentials: typeof credentials;
@@ -72,13 +74,15 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         "group linking test password",
       );
       setup = new SetupService(store, key, origin, () => ({
-        async call<T>(method: string, params = {}) {
+        async call<T>(method: string, params: Record<string, unknown> = {}) {
           if (method === "getChatMember") checks.push(params);
           return (
             method === "getChatMember"
-              ? { status: membership }
+              ? {
+                  status: params.user_id === "999" ? botMembership : membership,
+                }
               : method === "getMe"
-                ? { can_read_all_group_messages: true }
+                ? { can_read_all_group_messages: privacyDisabled }
                 : { title: "Linked fixture group" }
           ) as T;
         },
@@ -88,6 +92,8 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     });
     beforeEach(async () => {
       membership = "administrator";
+      privacyDisabled = true;
+      botMembership = "member";
       checks.length = 0;
       await store.pool.query("DELETE FROM chat_bindings");
       const deployment = await store.deployment();
@@ -179,11 +185,22 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       await ingress.accept(update(command.command));
       const saved = await store.read(w.id);
       expect(saved.chats).toMatchObject([
-        { id: "-100200", active: true, collection: false },
+        {
+          id: "-100200",
+          active: true,
+          collection: true,
+          visibleAll: true,
+          consentBy: "202",
+        },
       ]);
+      expect(saved.chats[0]?.consentAt).toBe(saved.chats[0]?.linkedAt);
       expect(saved.tokens).toHaveLength(0);
       expect(saved.members.find((m) => m.id === "202")?.role).toBe("member");
       expect(saved.deliveries.at(-1)?.text).toContain("Group linked.");
+      expect(saved.deliveries.at(-1)?.text).toContain(
+        "Received group messages are collected for context.",
+      );
+      expect(saved.deliveries.at(-1)?.text).not.toContain("/capture on");
       expect(checks).toEqual([{ chat_id: -100200, user_id: 202 }]);
       expect(
         (
@@ -194,6 +211,71 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       ).toBeNull();
       await ingress.accept(update("/ask@fixture_bot hi"));
       expect((await store.read(w.id)).runs).toHaveLength(1);
+    });
+    test("linking collects received non-member messages by default; duplicate updates and explicit opt-out remain respected", async () => {
+      const w = await seed();
+      await ingress.accept(update((await issue(w)).command));
+      const ordinary = update("Team discussion", -100200, 404);
+      if (ordinary.message) ordinary.message.entities = undefined;
+      await ingress.accept(ordinary);
+      await ingress.accept(ordinary);
+      const collected = (await store.read(w.id)).messages.filter(
+        (message) => message.author === "404",
+      );
+      expect(collected).toHaveLength(1);
+      expect(collected[0]?.directed).toBe(false);
+      expect((await store.read(w.id)).runs).toHaveLength(0);
+      const response = await request(
+        `/api/admin/workspaces/${w.id}/chats/-100200/action`,
+        credentials,
+        {},
+        { action: "directed" },
+      );
+      expect(response.status).toBe(200);
+      const later = update("Later discussion", -100200, 404);
+      if (later.message) later.message.entities = undefined;
+      await ingress.accept(later);
+      expect(
+        (await store.read(w.id)).messages.filter(
+          (message) => message.author === "404",
+        ),
+      ).toHaveLength(1);
+      expect((await store.read(w.id)).chats[0]?.collection).toBe(false);
+    });
+    test("visibility recognizes group admins and never changes the saved collection choice", async () => {
+      const w = await seed();
+      privacyDisabled = false;
+      botMembership = "administrator";
+      await ingress.accept(update((await issue(w)).command));
+      const base = `/api/admin/workspaces/${w.id}/chats/-100200`;
+      expect((await store.read(w.id)).chats[0]?.visibleAll).toBe(true);
+      expect(
+        (
+          await request(
+            `${base}/action`,
+            credentials,
+            {},
+            { action: "directed" },
+          )
+        ).status,
+      ).toBe(200);
+      expect((await request(`${base}/visibility`)).status).toBe(200);
+      expect((await store.read(w.id)).chats[0]?.collection).toBe(false);
+      botMembership = "member";
+      expect((await request(`${base}/visibility`)).status).toBe(200);
+      expect((await store.read(w.id)).chats[0]?.visibleAll).toBe(false);
+      expect(
+        (
+          await request(
+            `${base}/action`,
+            credentials,
+            {},
+            { action: "collect" },
+          )
+        ).status,
+      ).toBe(200);
+      expect((await request(`${base}/visibility`)).status).toBe(200);
+      expect((await store.read(w.id)).chats[0]?.collection).toBe(true);
     });
     test("issuance enforces sessions, CSRF, origin and workspace management authority", async () => {
       const w = await seed();

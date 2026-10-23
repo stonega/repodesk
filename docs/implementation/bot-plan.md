@@ -21,7 +21,7 @@ First load provides admin creation and a resumable bot-setup wizard. Agent skill
 can be created/imported, configured, tested and enabled from the panel.
 
 Demonstration: first web visit → claim setup and create admin → configure bot, model,
-members and skills → activate → start bot → link group → authorize the desired context collection →
+members and skills → activate → start bot → link group with collection enabled → adjust collection if needed →
 request recap → correct its format → approve Friday schedule → restart containers →
 receive one scheduled recap using the corrected format → inspect it in the admin
 panel → pause it from the panel successfully.
@@ -197,8 +197,9 @@ the update does not create another run; removed/blocked destinations stop retryi
   for bot requests, callbacks, admin APIs, queued jobs and schedules. Implement effective
   revocation and last-admin recovery as defined in [access control](../design/access-control.md).
 - [x] Store chat/topic boundaries and available history coverage.
-- [x] Default to directed-message context. Add opt-in collection of received group
-  messages for recaps after verifying bot visibility and recording admin consent.
+- [x] Enable received-message collection when linking groups, with recorded
+  group-admin consent and an opt-out. Recheck Telegram visibility independently;
+  only messages actually delivered can contribute to context and recaps.
 - [x] Apply basic retention from the first stored message; process membership changes,
   bot removal and group migration. Revalidate access for sensitive/queued operations.
 

@@ -11,8 +11,10 @@ Content-Type: application/json
 ### Response: { "command": "/link@your_bot TOKEN", "expiresAt": "..." }
 ### Send the returned command in the intended group within ten minutes.
 ### The sender must be an active workspace member and a Telegram group admin.
-### A new command replaces previous tokens. Linking does not grant membership,
-### an admin role or consent to collect ordinary group messages.
+### A new command replaces previous tokens. Linking enables collection of received
+### group messages and records the group administrator and time. The dialog explains
+### the default before redemption. Linking does not grant membership or an admin role.
+### Collection can be disabled in Group access; Telegram controls message visibility.
 
 ### Inspect the saved group after the bot confirms "Group linked".
 GET {{origin}}/api/admin/workspaces/{{workspaceId}}/chats

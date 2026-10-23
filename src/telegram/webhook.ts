@@ -45,6 +45,7 @@ import { stopGeneration } from "./generation.ts";
 import { repositoryMenu, selectRepository } from "./repositories.ts";
 import { command, type Update } from "./router.ts";
 import { selectTaskControl, taskControl } from "./task-controls.ts";
+import { groupVisibility } from "./visibility.ts";
 
 export class Ingress {
   constructor(
@@ -61,16 +62,20 @@ export class Ingress {
     const msg = update.message;
     const cmd = msg ? command(msg, d.bot) : undefined;
     let verifiedAdmin = false;
+    let visibleAll: boolean | undefined;
     if (
       cmd?.name === "link" &&
       msg?.from &&
       !msg.sender_chat &&
       ["group", "supergroup"].includes(msg.chat.type)
     ) {
-      const membership = await (await this.setup.client()).call<{
+      const client = await this.setup.client(d);
+      const membership = await client.call<{
         status: string;
       }>("getChatMember", { chat_id: msg.chat.id, user_id: msg.from.id });
       verifiedAdmin = ["creator", "administrator"].includes(membership.status);
+      if (verifiedAdmin)
+        visibleAll = await groupVisibility(client, String(msg.chat.id), botId);
     }
     const result = await transaction(this.store.pool, async (sql) => {
       const accepted = await sql.query(
@@ -238,6 +243,7 @@ export class Ingress {
           update,
           d,
           verifiedAdmin,
+          visibleAll,
         );
         if (!handled && d.active && !d.paused)
           await this.handleMessage(sql, workspace, update, d);
@@ -496,6 +502,7 @@ export class Ingress {
     u: Update,
     d: Deployment,
     verifiedAdmin: boolean,
+    visibleAll?: boolean,
   ) {
     if (d.bot && (await selectDevelopment(sql, w, u, d.bot.id))) return true;
     if (d.bot && (await selectTaskControl(sql, w, u, d.bot.id))) return true;
@@ -638,7 +645,7 @@ export class Ingress {
       );
       requireThat(entry, "link_expired", 403);
       if (entry.adminId) {
-        // A panel token delegates only linking, and cannot outlive its issuer's authority.
+        // Group setup, including default collection, cannot outlive the issuer's authority.
         const issuer = (
           await sql.query(
             "SELECT id,username,telegram_id,operator FROM admins WHERE id=$1 FOR SHARE",
@@ -677,14 +684,17 @@ export class Ingress {
           409,
         );
       }
+      const linkedAt = new Date().toISOString();
       w.chats = w.chats.filter((c) => c.id !== chatId);
       w.chats.push({
         id: chatId,
         title: msg.chat.title?.trim() || undefined,
         active: true,
-        collection: false,
-        linkedAt: new Date().toISOString(),
-        visibleAll: !!d.bot?.visibleAll,
+        collection: true,
+        consentBy: actor,
+        consentAt: linkedAt,
+        linkedAt,
+        visibleAll: visibleAll ?? !!d.bot?.visibleAll,
       });
       w.tokens = w.tokens.filter((t) => t.kind !== "group");
       audit(w, actor, "chat.linked", chatId);
@@ -692,7 +702,7 @@ export class Ingress {
         w,
         actor,
         chatId,
-        "Group linked. Only directed messages are retained. An admin can explicitly enable received-message collection with /capture on.",
+        "Group linked. Received group messages are collected for context. You can disable message collection in Group access. Old history is unavailable.",
         { topicId: msg.message_thread_id },
       );
       return true;
@@ -860,7 +870,7 @@ export class Ingress {
           expiresAt: new Date(Date.now() + 600000).toISOString(),
         });
         reply(
-          `As a Telegram group admin, send \`/link ${raw}\` in the intended group within 10 minutes.`,
+          `As a Telegram group admin, send \`/link ${raw}\` in the intended group within 10 minutes. Linking enables collection of received group messages; you can disable it in Group access.`,
           undefined,
           "markdown",
         );
@@ -871,10 +881,6 @@ export class Ingress {
         requireThat(
           chat && ["on", "off"].includes(cmd.args),
           "use_in_linked_group_with_on_or_off",
-        );
-        requireThat(
-          cmd.args !== "on" || chat.visibleAll,
-          "disable_bot_privacy_and_revalidate_visibility_first",
         );
         chat.collection = cmd.args === "on";
         chat.consentBy = actor;

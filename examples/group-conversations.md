@@ -13,7 +13,15 @@ NO_PROXY=localhost,127.0.0.1 TEST_DATABASE_URL="$TEST_DATABASE_URL" \
 For manual acceptance, use a linked group with two authorized members and a bot that
 receives ordinary group messages. In BotFather this requires disabling Group Privacy
 and re-adding the bot, unless the bot already receives them as an administrator.
-Use the configured bot's actual username.
+The **Group @mentions** guide on **Group access** walks through
+`/setprivacy` → Disable, re-adding the bot, relinking with New and rechecking
+visibility. Removing the bot makes the saved group inactive; send the new `/link`
+command and wait for Group linked after re-adding it. Bot administrator access and
+message collection are not required for direct mentions. Use the configured bot's
+actual username and first verify that `@your_bot hi` receives a reply. Linking
+enables collection by default. Disable it in Group access and repeat the mention
+to verify that directed questions work independently, then re-enable collection
+for recap coverage.
 
 1. A sends `/ask@your_bot 帮我写部署方案` and waits for the answer.
 2. B sends `/ask@your_bot 帮我写招聘文案` and waits for the answer.

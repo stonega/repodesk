@@ -38,6 +38,31 @@ when implementing or reviewing a change.
 
 ## Recorded preferences
 
+### Group access explains Telegram mention setup
+
+- **Preference:** Keep the setup guide for direct @mentions on Group access.
+  Explain that the bot can remain a regular member: disable privacy mode through
+  BotFather, remove and re-add the bot, relink the group and recheck visibility.
+  Describe administrator access as an alternative and distinguish message
+  visibility from the message collection setting.
+- **Scope:** Group access setup guidance before and after linking a group.
+- **Source:** 2026-10-23 — after asking whether the bot must be an administrator,
+  the user requested adding the regular-member setup guide to Group access.
+- **Acceptance:** Keep the instructions readable during loading, empty, linked
+  and error states. Show the fallback command/reply path and official Telegram
+  reference. Check desktop/mobile, both themes, list wrapping and card spacing.
+- **Source update:** 2026-10-23 — disabling privacy and re-adding the bot still
+  left the user's group inactive. Explain that re-adding in Telegram does not
+  restore the RepoDesk link; show a New → fresh /link command reminder on inactive
+  saved groups and verify relinking removes it.
+- **Source update:** 2026-10-23 — the user requested receiving group messages by
+  default and removing the `/capture on` instruction from the link confirmation.
+  New and relinked groups enable received-message collection. Explain the default
+  in the command dialog, retain the Disable action and existing explicit opt-outs,
+  and keep Telegram visibility checks separate from that saved choice.
+- **Exceptions:** This guidance does not replace the requirement for the person
+  redeeming a group-link command to be a Telegram group administrator.
+
 ### Opposite setting actions share one button
 
 - **Preference:** Combine opposite actions for a single setting into one button
