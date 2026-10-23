@@ -15,6 +15,7 @@ import {
   commitDiscussions,
   memoryReferences,
 } from "../../src/workspaces/conversation-memory.ts";
+import { runAllowed } from "../../src/workspaces/policy.ts";
 import { createRun, deliver } from "../../src/workspaces/service.ts";
 import {
   recordThreadAnswer,
@@ -220,6 +221,74 @@ test("natural follow-up requires this actor's recent confirmed answer in this bo
   const d = w.deliveries[0];
   if (d) d.state = "delivery_unknown";
   expect(followupCandidate(w, message(), "999")).toBeUndefined();
+});
+
+test("a recent forward can supply reference content while the same actor's explicit request is pending", () => {
+  for (const status of ["queued", "running", "succeeded"] as const) {
+    const w = workspace();
+    const prior = ask(w, "101", "save this");
+    prior.status = status;
+    const msg = message();
+    msg.text = "/capture on @teammate";
+    msg.forward_origin = {
+      type: "hidden_user",
+      date: 1,
+      sender_user_name: "Joey Lu",
+    };
+    msg.entities = [
+      { type: "bot_command", offset: 0, length: 8 },
+      { type: "mention", offset: 12, length: 9 },
+    ];
+    const followup = followupCandidate(w, msg, "999");
+    expect(followup).toMatchObject({ kind: "forward", anchorRunId: prior.id });
+    expect(prior.followupClosed).toBeUndefined();
+    const run = createRun(
+      w,
+      "101",
+      "forwarded reference",
+      "-100100",
+      0,
+      "gpt-4.1-mini",
+      { botId: "999", followup },
+    );
+    expect(runAllowed(w, run)).toBe(true);
+    prior.cancelled = true;
+    expect(runAllowed(w, run)).toBe(false);
+  }
+});
+
+test("forward candidates require a fresh retained directed ask and preserve sender, topic and bot boundaries", () => {
+  const w = workspace();
+  const prior = ask(w, "101", "save this");
+  const msg = message();
+  msg.forward_origin = {
+    type: "user",
+    date: 1,
+    sender_user: { id: 101, is_bot: false },
+  };
+  for (const invalid of [
+    { ...msg, from: { id: 202, is_bot: false } },
+    { ...msg, from: { id: 9999, is_bot: false } },
+    { ...msg, from: { id: 101, is_bot: true } },
+    { ...msg, sender_chat: msg.chat },
+    { ...msg, message_thread_id: 20 },
+    { ...msg, is_automatic_forward: true },
+    { ...msg, date: Math.floor(Date.now() / 1000) - 120 },
+    { ...msg, date: Math.floor(Date.now() / 1000) + 120 },
+  ])
+    expect(followupCandidate(w, invalid, "999")).toBeUndefined();
+  expect(followupCandidate(w, msg, "888")).toBeUndefined();
+  expect(followupCandidate(w, msg, "999", Date.now() + 61000)).toBeUndefined();
+  prior.followupClosed = true;
+  expect(followupCandidate(w, msg, "999")).toBeUndefined();
+  prior.followupClosed = false;
+  prior.status = "failed";
+  expect(followupCandidate(w, msg, "999")).toBeUndefined();
+  prior.status = "queued";
+  const source = w.messages[0];
+  if (!source) throw Error("source");
+  source.expiresAt = new Date(0).toISOString();
+  expect(followupCandidate(w, msg, "999")).toBeUndefined();
 });
 
 test("other addressees close attention and anonymous, untrusted, edited or stale identities do not trigger", () => {

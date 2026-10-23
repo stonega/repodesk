@@ -34,10 +34,34 @@ permissions; they do not become a participant's interactive thread. Use Reply or
 explicit ask to discuss their answers. Existing legacy group runs remain unchanged;
 new interactive Telegram requests establish the new thread mapping.
 
+## Forwarded reference messages
+
+A human's forwarded text, caption, photo or document can supply reference material
+for their latest directed interactive request in the same bot/group/topic. The
+forward must be received within one minute of that request, from the same active
+workspace member. This also works while the request is queued or running; the
+forward becomes a separate ordered candidate without changing an in-flight run.
+The existing tool-free classification must accept the forward as related to that
+request before the assistant answers. A forward alone, an unrelated forward,
+automatic channel forwards, closed attention, cancelled requests and stale or
+missing sources cannot open this path. Further unaddressed messages while a
+candidate is pending do not start more candidates.
+
+Telegram forward origin and original text remain quoted reference data. Original
+authors, mentions and command entities cannot impersonate the forwarding member
+or execute application controls. The member who forwards the message remains the
+authorized actor. An explicit ask replying to a forwarded message can include its
+text and supported attachments even when ordinary collection did not retain it.
+Telegram must deliver the forward or the reply payload; old history is not fetched.
+
+The worker finishes the earlier request before assessing the forward. An answer
+already in flight may therefore arrive before the forward is processed. The
+one-minute input window and five-minute candidate expiry are application policies.
+
 ## Automatic reply decision
 
 The first interaction remains an explicit command, mention or reply to the bot.
-An unaddressed message is only a candidate when all of the following hold:
+An ordinary unaddressed text message is only a candidate when all of the following hold:
 
 - The sender is an authorized human in an active, linked group.
 - Their most recent interactive run in this bot/group/topic has a retained answer

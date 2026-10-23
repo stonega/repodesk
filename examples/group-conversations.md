@@ -37,6 +37,25 @@ for recap coverage.
 7. Ask `/recap@your_bot`. It should use available group coverage, preserving the
    existing collection rules. Reply explicitly to discuss the recap.
 
+### Forwarded references
+
+1. With collection disabled, A sends `@your_bot save this`, then forwards a text
+   message within one minute while the first answer is still being generated.
+   Include mentions of teammates in the original forwarded text. The forward
+   should become a separate ordered follow-up in A's conversation, retaining its
+   original attribution and content. An in-progress answer can arrive first; the
+   follow-up should then use the forward to continue the save request, subject to
+   the configured note/memory permissions and required approvals.
+2. Repeat with a forwarded photo or text document and with a hidden original
+   author. Existing media limits apply. Repeat after the initial answer has
+   completed, still within one minute of the request.
+3. Forward `/capture on` or `/cancel` without a recent request. No application
+   control should execute. Repeat from another member, in another Topic, and
+   after one minute: these must not borrow A's pending request.
+4. Reply to an otherwise uncollected forward with `/ask@your_bot summarize this`.
+   The quoted text and supported attachment should reach the assistant without
+   enabling ordinary collection or accessing the original chat's history.
+
 Inspect the run in the admin panel for a separate `followup` usage attempt and a
 normal answer attempt. A rejected candidate has no group delivery and retains only
 sanitized run/accounting metadata unless ordinary collection was enabled. Long group

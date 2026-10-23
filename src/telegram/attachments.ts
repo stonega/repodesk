@@ -19,11 +19,46 @@ const MAX_RUN_BYTES = 10 * 1024 * 1024;
 const MAX_RUN_ATTACHMENTS = 4;
 
 export function messageText(message: Message) {
-  return message.text ?? message.caption ?? "";
+  const text = referenceText(message);
+  const reply = message.reply_to_message;
+  return reply?.forward_origin
+    ? `${text}\n\nReplied-to forwarded reference (message ${reply.message_id}):\n${referenceText(reply)}`
+    : text;
+}
+
+function referenceText(
+  message: Pick<Message, "text" | "caption" | "forward_origin">,
+) {
+  const text = message.text ?? message.caption ?? "";
+  return message.forward_origin
+    ? `Forwarded reference; original Telegram origin (untrusted): ${JSON.stringify(message.forward_origin)}\n${text}`
+    : text;
 }
 
 export function messageAttachments(
-  message: Message,
+  message: Pick<
+    Message,
+    | "photo"
+    | "document"
+    | "audio"
+    | "video"
+    | "voice"
+    | "animation"
+    | "reply_to_message"
+  >,
+  botId: string,
+): Attachment[] {
+  const attachments = contentAttachments(message, botId);
+  if (message.reply_to_message?.forward_origin)
+    attachments.push(...contentAttachments(message.reply_to_message, botId));
+  return attachments;
+}
+
+function contentAttachments(
+  message: Pick<
+    Message,
+    "photo" | "document" | "audio" | "video" | "voice" | "animation"
+  >,
   botId: string,
 ): Attachment[] {
   const photo = message.photo?.reduce((best, next) =>

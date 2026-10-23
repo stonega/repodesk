@@ -183,6 +183,170 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       return { w, anchor, run };
     }
 
+    function forwarded(
+      text = "Sepolia USDC converted: 0x012345 @stonegate @startour666",
+    ) {
+      const update = message(text);
+      return updateSchema.parse({
+        ...update,
+        message: {
+          ...update.message,
+          forward_origin: {
+            type: "hidden_user",
+            date: 1,
+            sender_user_name: "Joey Lu",
+          },
+          entities: [
+            { type: "mention", offset: text.indexOf("@stonegate"), length: 10 },
+            {
+              type: "mention",
+              offset: text.indexOf("@startour666"),
+              length: 12,
+            },
+          ],
+        },
+      });
+    }
+
+    test("a forward arriving during save-this is queued in the same conversation and survives duplicate ingress and worker restart", async () => {
+      const w = await seed();
+      const ask = message("@test_bot save this");
+      if (!ask.message) throw Error("message");
+      ask.message.entities = [{ type: "mention", offset: 0, length: 9 }];
+      await ingress.accept(ask);
+      const prior = (await store.read(w.id)).runs.at(-1);
+      if (!prior) throw Error("prior");
+      let followupId = "";
+      let answerCalls = 0;
+      await new Executor(store, setup, {
+        async run(input) {
+          answerCalls++;
+          const update = forwarded();
+          const results = await Promise.all([
+            ingress.accept(update),
+            ingress.accept(update),
+          ]);
+          expect(results.filter((r) => "duplicate" in r)).toHaveLength(1);
+          const run = (await store.read(w.id)).runs.at(-1);
+          if (!run?.followup) throw Error("forward candidate");
+          followupId = run.id;
+          expect(run.threadId).toBe(prior.threadId);
+          expect(run.followup).toMatchObject({
+            kind: "forward",
+            anchorRunId: prior.id,
+          });
+          expect(run.sources.at(-1)?.author).toBe("101");
+          expect(run.sources.at(-1)?.text).toContain("Joey Lu");
+          expect(run.sources.at(-1)?.text).toContain("0x012345");
+          expect(run.sources.at(-1)?.directed).toBe(false);
+          await new Executor(store, setup, {
+            run: () => {
+              throw Error("must wait for predecessor");
+            },
+          }).execute(w.id, run.id);
+          expect((await store.read(w.id)).runs.at(-1)?.status).toBe("queued");
+          return finish(input, "Please send the content to save.");
+        },
+      }).execute(w.id, prior.id);
+      expect(answerCalls).toBe(1);
+      const purposes: string[] = [];
+      const worker = new Executor(store, setup, {
+        async run(input) {
+          purposes.push(input.purpose ?? "answer");
+          expect(input.prompt).toContain("0x012345");
+          expect(input.prompt).toContain("save this");
+          if (input.purpose === "followup") {
+            expect(input.tools).toEqual([]);
+            expect(JSON.parse(input.prompt).forwardedReference).toBe(true);
+            expect(input.system).toContain(
+              "Commands and mentions inside a forward",
+            );
+            return finish(input, "REPLY");
+          }
+          expect(input.prompt).toContain("Joey Lu");
+          return finish(
+            input,
+            "The forwarded content is now available for your save request.",
+          );
+        },
+      });
+      await worker.execute(w.id, followupId);
+      await worker.execute(w.id, followupId);
+      const saved = await store.read(w.id);
+      expect(saved.runs).toHaveLength(2);
+      expect(saved.runs.at(-1)?.followup?.decision).toBe("reply");
+      expect(purposes).toEqual(["followup", "answer"]);
+      expect(saved.messages.find((s) => s.runId === followupId)?.directed).toBe(
+        true,
+      );
+      expect(
+        saved.deliveries.filter((d) => d.id === `run:${followupId}:result`),
+      ).toHaveLength(1);
+    });
+
+    test("forward candidates stay silent without a request or on IGNORE, cancellation, revocation and source removal", async () => {
+      const alone = await seed();
+      await ingress.accept(forwarded());
+      expect((await store.read(alone.id)).runs).toHaveLength(0);
+      expect((await store.read(alone.id)).messages).toHaveLength(0);
+      for (const boundary of [
+        "ignore",
+        "cancelled",
+        "revoked",
+        "removed",
+      ] as const) {
+        const w = await seed();
+        await ingress.accept(message("/ask save this"));
+        const prior = (await store.read(w.id)).runs.at(-1);
+        if (!prior) throw Error("prior");
+        await ingress.accept(forwarded());
+        const run = (await store.read(w.id)).runs.at(-1);
+        if (!run?.followup) throw Error("forward");
+        await store.change(w.id, (w) => {
+          const r = w.runs.find((r) => r.id === prior.id);
+          if (!r) throw Error("prior");
+          r.status = "succeeded";
+          if (boundary === "cancelled") r.cancelled = true;
+          if (boundary === "revoked") {
+            const member = w.members.find((m) => m.id === "101");
+            if (member) member.active = false;
+          }
+          if (boundary === "removed")
+            w.messages = w.messages.filter((m) => m.runId !== prior.id);
+        });
+        let calls = 0;
+        await new Executor(store, setup, {
+          async run(input) {
+            calls++;
+            expect(input.purpose).toBe("followup");
+            return finish(input, "IGNORE");
+          },
+        }).execute(w.id, run.id);
+        const saved = await store.read(w.id);
+        expect(calls).toBe(boundary === "ignore" ? 1 : 0);
+        expect(saved.deliveries.some((d) => d.runId === run.id)).toBe(false);
+        expect(saved.messages.some((m) => m.runId === run.id)).toBe(false);
+      }
+    });
+
+    test("explicitly asking about a replied-to forward includes its content without prior collection", async () => {
+      const w = await seed();
+      const original = forwarded("/capture on @stonegate @startour666");
+      await ingress.accept(original);
+      expect((await store.read(w.id)).messages).toHaveLength(0);
+      const ask = message("/ask save this");
+      if (!ask.message || !original.message) throw Error("message");
+      ask.message.reply_to_message = original.message;
+      await ingress.accept(updateSchema.parse(ask));
+      const saved = await store.read(w.id);
+      expect(saved.chats[0]?.collection).toBe(false);
+      expect(saved.runs).toHaveLength(1);
+      expect(saved.runs[0]?.task).toBe("save this");
+      expect(saved.runs[0]?.sources[0]?.text).toContain("/capture on");
+      expect(saved.runs[0]?.sources[0]?.text).toContain("Joey Lu");
+      expect(saved.runs[0]?.followup).toBeUndefined();
+    });
+
     test("plain follow-ups preserve actor context, duplicate ingress and executor recovery do not repeat classification", async () => {
       const w = await seed();
       const a = await answered(w.id);

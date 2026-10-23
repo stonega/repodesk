@@ -23,13 +23,24 @@ Files are never silently truncated. Scanned PDFs, oversized files, unsupported
 formats and download failures get readable feedback. Send scanned pages as images.
 Album messages are independent Telegram updates; album aggregation is not implemented.
 
+Forwarded messages retain Telegram's user, hidden-user, chat or channel origin
+alongside their text/caption as quoted reference data. Commands and mentions in
+the original message do not execute bot controls or grant the original author
+workspace access. An explicit request replying to a forward includes its quoted
+text and supported media from Telegram's reply payload, even if it was not
+previously collected. Forwarded photos/documents use the same decoder and limits.
+
 ## Routing and authorization
 
 Private images/files start a request with their caption, or a brief default request
 when no caption exists. Native Topics and reply anchors retain their existing
 conversation behavior. In linked groups, use a caption command/mention or reply to
 the bot. Caption entities use Telegram's UTF-16 offsets. Unaddressed media does not
-open a follow-up window; group collection consent may retain its metadata.
+open a follow-up window; group collection consent may retain its metadata. A human
+forward received within one minute of the same member's directed request can
+instead enter the tool-free follow-up classifier, including while that request
+is pending. It remains scoped to the same bot/group/topic, with ordered execution
+and quiet rejection of unrelated content. See [group conversations](../design/group-conversations.md).
 
 Authenticated, deduplicated ingress retains caption and file metadata on the tenant's
 source record. It performs no file download. The worker checks current run policy,

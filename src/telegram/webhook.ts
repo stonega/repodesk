@@ -43,7 +43,7 @@ import { requestFailureMessage } from "./feedback.ts";
 import { closeGroupAttention, followupCandidate } from "./followup.ts";
 import { stopGeneration } from "./generation.ts";
 import { repositoryMenu, selectRepository } from "./repositories.ts";
-import { command, type Update } from "./router.ts";
+import { command, forwardedRequest, type Update } from "./router.ts";
 import { selectTaskControl, taskControl } from "./task-controls.ts";
 import { groupVisibility } from "./visibility.ts";
 
@@ -795,7 +795,14 @@ export class Ingress {
     )
       closeGroupAttention(w, msg, d.bot.id);
     const followup = !cmd ? followupCandidate(w, msg, d.bot.id) : undefined;
-    if (followup) cmd = { name: "ask", args: msg.text?.trim() ?? "" };
+    if (followup)
+      cmd = {
+        name: "ask",
+        args:
+          followup.kind === "forward"
+            ? forwardedRequest
+            : (msg.text?.trim() ?? ""),
+      };
     if (
       (eligible(w, actor) && cmd) ||
       (chat?.collection && (text || attachments.length))

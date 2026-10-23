@@ -118,7 +118,14 @@ function allowedRun(
       run.followup.decision === "reply" ||
       (Date.parse(run.followup.expiresAt) > Date.now() &&
         w.runs.some(
-          (r) => r.id === run.followup?.anchorRunId && !r.followupClosed,
+          (r) =>
+            r.id === run.followup?.anchorRunId &&
+            !r.followupClosed &&
+            (run.followup.kind !== "forward" ||
+              (!r.cancelled &&
+                ["queued", "running", "succeeded", "partial"].includes(
+                  r.status,
+                ))),
         ))) &&
     (!run.followup?.references ||
       validMemory(run.followup.references, w.messages)) &&

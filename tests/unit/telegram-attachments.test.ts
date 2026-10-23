@@ -6,6 +6,7 @@ import {
   loadAttachments,
   MAX_ATTACHMENT_BYTES,
   messageAttachments,
+  messageText,
 } from "../../src/telegram/attachments.ts";
 import { TelegramClient } from "../../src/telegram/client.ts";
 import { command, updateSchema } from "../../src/telegram/router.ts";
@@ -32,6 +33,47 @@ const message = {
   from: { id: 101, is_bot: false },
   chat: { id: 101, type: "private" as const },
 };
+
+test("forwards and explicitly replied-to forwards preserve reference text, origin and media", () => {
+  const forwarded = {
+    ...message,
+    message_id: 42,
+    forward_origin: {
+      type: "hidden_user" as const,
+      date: 1,
+      sender_user_name: "Joey Lu",
+    },
+    caption: "Sepolia USDC converted: 0x012345 @someone_else",
+    document: { file_id: "forwarded-file", file_name: "receipt.txt" },
+  };
+  const forward = updateSchema.parse({
+    update_id: 1,
+    message: forwarded,
+  }).message;
+  if (!forward) throw Error("forward");
+  expect(messageText(forward)).toContain("Forwarded reference");
+  expect(messageText(forward)).toContain("Joey Lu");
+  expect(messageText(forward)).toContain(forwarded.caption);
+  const reply = updateSchema.parse({
+    update_id: 2,
+    message: { ...message, text: "save this", reply_to_message: forwarded },
+  }).message;
+  if (!reply) throw Error("reply");
+  expect(messageText(reply)).toStartWith(
+    "save this\n\nReplied-to forwarded reference (message 42):",
+  );
+  expect(messageText(reply)).toContain(forwarded.caption);
+  expect(messageAttachments(reply, bot.id)).toEqual(
+    messageAttachments(forward, bot.id),
+  );
+  reply.reply_to_message = {
+    message_id: 42,
+    text: "unforwarded reply reference",
+    document: forwarded.document,
+  };
+  expect(messageText(reply)).toBe("save this");
+  expect(messageAttachments(reply, bot.id)).toEqual([]);
+});
 
 // A local, selectable-text PDF; no downloads or parser mocks.
 function pdf(text: string) {

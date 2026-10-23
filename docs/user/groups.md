@@ -67,6 +67,21 @@ administrator and an active workspace member.
 
 答案还在生成时、`/recap` 之后、超过窗口或机器人无法判断对象时，重新显式提问或 Reply。群组回答只发送最终结果，不显示私聊式实时预览。
 
+## Use forwarded messages as references
+
+Send `@your_bot save this` (or another clear request), then forward the text,
+photo or document within one minute from the same account in the same group and
+Topic. When Telegram delivers the forward, the assistant checks whether it supplies
+the reference for your request, including while the earlier answer is still being
+generated. An answer already in progress may arrive first. Unrelated forwards stay
+silent; a forward alone does not start a group conversation.
+
+You can also reply to the forwarded message with `@your_bot save this` or
+`/ask@your_bot summarize this`. The reply includes the forwarded content even if
+ordinary message collection was disabled. Mentions and commands inside the original
+forward are quoted content. The original sender receives no workspace permissions.
+Saving still follows your workspace permissions and any required approvals.
+
 ## Manage group message collection
 
 Linking or relinking a group enables received-message collection by default.

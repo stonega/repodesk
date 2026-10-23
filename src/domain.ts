@@ -390,6 +390,7 @@ export interface Run {
   replyAnchor?: number;
   followupClosed?: boolean;
   followup?: {
+    kind?: "forward";
     anchorRunId: string;
     expiresAt: string;
     decision?: "reply" | "ignore";

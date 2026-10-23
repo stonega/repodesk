@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   command,
+  forwardedRequest,
   type Message,
   updateSchema,
 } from "../../src/telegram/router.ts";
@@ -35,6 +36,25 @@ test("native Stop schema accepts chat/topic/draft without a sender and rejects i
 
 const bot = { id: "999", username: "agent_bub_bot" };
 const mention = "@agent_bub_bot";
+const origins: NonNullable<Message["forward_origin"]>[] = [
+  {
+    type: "user",
+    date: 1,
+    sender_user: { id: 202, is_bot: false, first_name: "Original sender" },
+  },
+  { type: "hidden_user", date: 1, sender_user_name: "Hidden sender" },
+  {
+    type: "chat",
+    date: 1,
+    sender_chat: { id: -200, type: "supergroup", title: "Source group" },
+  },
+  {
+    type: "channel",
+    date: 1,
+    chat: { id: -300, type: "channel", title: "Source channel" },
+    message_id: 42,
+  },
+];
 function message(text = `${mention} hi`): Message {
   return {
     message_id: 1,
@@ -47,6 +67,29 @@ function message(text = `${mention} hi`): Message {
 }
 
 describe("group mentions", () => {
+  test("preserves every forward origin and never executes commands or mentions from forwarded content", () => {
+    for (const origin of origins) {
+      const m = updateSchema.parse({
+        update_id: 1,
+        message: {
+          ...message("/capture on"),
+          entities: [{ type: "bot_command", offset: 0, length: 8 }],
+          forward_origin: origin,
+        },
+      }).message;
+      if (!m) throw Error("message");
+      expect(m.forward_origin).toEqual(origin);
+      expect(command(m, bot)).toBeUndefined();
+      m.text = `${mention} save this`;
+      m.entities = [{ type: "mention", offset: 0, length: mention.length }];
+      expect(command(m, bot)).toBeUndefined();
+      m.reply_to_message = { message_id: 2, from: { id: 999, is_bot: true } };
+      expect(command(m, bot)).toEqual({ name: "ask", args: forwardedRequest });
+      m.reply_to_message = undefined;
+      m.chat = { id: 101, type: "private" };
+      expect(command(m, bot)).toEqual({ name: "ask", args: forwardedRequest });
+    }
+  });
   test("routes the reported mention and matches usernames case-insensitively", () => {
     for (const type of ["group", "supergroup"] as const) {
       const m = message("@Agent_Bub_Bot hi");

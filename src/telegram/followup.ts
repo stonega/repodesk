@@ -4,8 +4,9 @@ import { retainedSource } from "../workspaces/threads.ts";
 import type { Message } from "./router.ts";
 
 export const FOLLOWUP_WINDOW_MS = 5 * 60 * 1000;
+export const FORWARD_INPUT_WINDOW_MS = 60 * 1000;
 
-// Only actual received text from an authorized human can become a candidate.
+// Only received text or forwarded reference content from an authorized human qualifies.
 // This function never calls a model or treats message contents as authorization.
 export function followupCandidate(
   w: Workspace,
@@ -25,6 +26,44 @@ export function followupCandidate(
   )
     return;
   const prior = latestGroupRun(w, msg, botId);
+  if (msg.forward_origin) {
+    const sentAt = msg.date * 1000;
+    const startedAt = Date.parse(prior?.at ?? "");
+    // A received forward can supply the missing reference while the explicit ask
+    // is still queued/running. It never changes an in-flight execution snapshot.
+    if (
+      msg.is_automatic_forward ||
+      msg.reply_to_message ||
+      (!msg.text?.trim() &&
+        !msg.caption?.trim() &&
+        !msg.photo?.length &&
+        !msg.document) ||
+      !prior ||
+      prior.followupClosed ||
+      prior.cancelled ||
+      (prior.followup && prior.followup.decision !== "reply") ||
+      !["queued", "running", "succeeded", "partial"].includes(prior.status) ||
+      !Number.isFinite(startedAt) ||
+      sentAt < startedAt - 1000 ||
+      sentAt > now + 1000 ||
+      now - startedAt > FORWARD_INPUT_WINDOW_MS ||
+      now - sentAt > FORWARD_INPUT_WINDOW_MS ||
+      !w.messages.some(
+        (m) =>
+          m.runId === prior.id &&
+          m.role === "user" &&
+          m.directed &&
+          retainedSource(w, m, now),
+      )
+    )
+      return;
+    return {
+      kind: "forward",
+      anchorRunId: prior.id,
+      expiresAt: new Date(startedAt + FOLLOWUP_WINDOW_MS).toISOString(),
+      transcript: [],
+    };
+  }
   const text = msg.text?.trim();
   if (
     !text ||

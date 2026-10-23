@@ -1,5 +1,29 @@
 # Implementation evidence
 
+## Telegram forwarded reference handoff (2026-10-23)
+
+Telegram ingress retains all four forward-origin variants and marks original
+text/captions as quoted reference content. Original commands and mentions cannot
+execute bot controls or act as the forwarding member. Explicit requests replying
+to a forward receive its text and supported media from the reply payload, including
+when ordinary collection did not previously retain the message.
+
+A human forward received within one minute of the same member's latest directed
+request can enter the existing tool-free follow-up classifier in the same
+bot/group/topic, even while the request is queued or running. Ordered execution
+keeps in-flight snapshots intact; an earlier answer can arrive before the forward
+is processed. Accepted candidates continue the request; unrelated forwards remain
+silent. Duplicate updates, source retention, closed attention, cancellation and
+current membership boundaries are enforced. No dependency or migration was added.
+
+Validation: lint, strict TypeScript, production build, the Node runtime contract
+and **1,151 deterministic tests across 126 files** passed with isolated PostgreSQL.
+Regressions cover the reported mention → forward-during-answer sequence, duplicate
+ingress, worker reconstruction, classifier isolation and quiet rejection,
+replied-to content/media, original command suppression and sender/topic/bot/access
+boundaries. Live Telegram/model acceptance and deployment remain outstanding.
+See [group examples](../../examples/group-conversations.md).
+
 ## Codex authenticated checkout handoff (2026-10-23)
 
 The coding handoff now names the application-authenticated repository and pinned
