@@ -3602,3 +3602,39 @@ button.skill-source-name {
     flex-wrap: nowrap;
   }
 }
+
+.transcription-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.card.transcription-card > * {
+  margin: 0;
+}
+.transcription-summary {
+  display: grid;
+  gap: 0.75rem;
+}
+.card .transcription-summary > div {
+  display: grid;
+  grid-template-columns: minmax(5rem, 7rem) minmax(0, 1fr);
+  gap: 1rem;
+}
+.transcription-summary dt {
+  color: var(--muted);
+}
+.transcription-summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.transcription-card .plugin-card-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.75rem;
+}
+
+.transcription-page {
+  padding-bottom: 4rem;
+}

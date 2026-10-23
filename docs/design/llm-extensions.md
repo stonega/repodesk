@@ -48,6 +48,10 @@ market detail routes still link to upstream packages as external discovery
 entries, not installed plugins or compatibility endorsements. RepoDesk still requires
 operator review and a local entry file registered through the panel.
 
+The built-in Qwen3-ASR plugin provides optional local audio preprocessing rather
+than an agent-callable tool. Enabling it downloads its pinned model; see
+[voice transcription](../implementation/transcription.md).
+
 The application registry also includes the built-in `query_model_cost` tool.
 It uses the current run's published skill grant and retained workspace accounting;
 no file plugin or external billing API is involved. It defaults to the actor's own

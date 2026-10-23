@@ -13,9 +13,13 @@ import type { GitHubApps } from "../github/registry.ts";
 import { githubAccessPending } from "../github/user-access.ts";
 import { ModelProviders } from "../models/service.ts";
 import { decrypt, fingerprint } from "../setup/credentials.ts";
-import { loadSourceAttachments } from "../telegram/attachments.ts";
+import {
+  isAudioAttachment,
+  loadSourceAttachments,
+} from "../telegram/attachments.ts";
 import { type Telegram, TelegramClient } from "../telegram/client.ts";
 import { clearProgress, recordProgress } from "../telegram/feedback.ts";
+import { TranscriptionService } from "../transcription/service.ts";
 import { TaskConversationExecutor } from "./conversation-executor.ts";
 import {
   type DevelopmentRun,
@@ -61,6 +65,7 @@ export class DevelopmentExecutor {
     private runner?: LocalRunner,
     private key?: string,
     private telegram?: (deployment: Deployment) => Promise<Telegram>,
+    private transcription = new TranscriptionService(store),
   ) {}
   async tick(workspaceId: string) {
     for (const task of await taskList(this.store.pool, workspaceId)) {
@@ -465,6 +470,10 @@ export class DevelopmentExecutor {
           false,
         );
         if (!reserved) return;
+        const hasAudio = reserved.sources.some((source) =>
+          source.attachments?.some(isAudioAttachment),
+        );
+        const audioGeneration = snapshot.plugins?.transcription?.generation;
         const guard = async () => {
           const checked = await this.update(
             task,
@@ -478,6 +487,13 @@ export class DevelopmentExecutor {
                 409,
               );
               const deployment = await this.allowed(w, sql, t);
+              if (hasAudio)
+                requireThat(
+                  w.plugins?.transcription?.enabled &&
+                    w.plugins.transcription.generation === audioGeneration,
+                  "audio_plugin_disabled",
+                  409,
+                );
               requireThat(
                 deployment.bot?.id === reserved.deployment.bot?.id &&
                   deployment.credentials.bot ===
@@ -498,6 +514,8 @@ export class DevelopmentExecutor {
                 "coding_source_changed",
                 409,
               );
+              if (hasAudio)
+                t.leaseUntil = new Date(Date.now() + 120000).toISOString();
               return true;
             },
             false,
@@ -508,26 +526,54 @@ export class DevelopmentExecutor {
           const currentId = reserved.run.inputs.find(
             (input) => input.revision === reserved.run.revision,
           )?.sourceId;
-          reserved.run.media = developmentMedia.parse(
-            await loadSourceAttachments(
-              reserved.sources,
-              (source) => source.id === currentId,
-              task.botId,
-              async () => {
-                if (this.telegram) return this.telegram(reserved.deployment);
-                requireThat(
-                  this.key && reserved.deployment.credentials.bot,
-                  "bot_not_configured",
-                  409,
-                );
-                return new TelegramClient(
-                  decrypt(this.key, "bot", reserved.deployment.credentials.bot),
-                );
-              },
-              guard,
-              AbortSignal.timeout(60000),
-            ),
-          );
+          const controller = new AbortController();
+          let checking = false;
+          const poll = hasAudio
+            ? setInterval(() => {
+                if (checking) return;
+                checking = true;
+                void guard()
+                  .catch((error) => controller.abort(error))
+                  .finally(() => {
+                    checking = false;
+                  });
+              }, 2000)
+            : undefined;
+          try {
+            reserved.run.media = developmentMedia.parse(
+              await loadSourceAttachments(
+                reserved.sources,
+                (source) => source.id === currentId,
+                task.botId,
+                async () => {
+                  if (this.telegram) return this.telegram(reserved.deployment);
+                  requireThat(
+                    this.key && reserved.deployment.credentials.bot,
+                    "bot_not_configured",
+                    409,
+                  );
+                  return new TelegramClient(
+                    decrypt(
+                      this.key,
+                      "bot",
+                      reserved.deployment.credentials.bot,
+                    ),
+                  );
+                },
+                guard,
+                AbortSignal.any([
+                  AbortSignal.timeout(hasAudio ? 180000 : 60000),
+                  controller.signal,
+                ]),
+                snapshot.plugins?.transcription?.enabled
+                  ? (bytes, signal) =>
+                      this.transcription.transcribe(workspaceId, bytes, signal)
+                  : undefined,
+              ),
+            );
+          } finally {
+            if (poll) clearInterval(poll);
+          }
         }
         await guard();
         dispatched = true;

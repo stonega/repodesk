@@ -867,6 +867,32 @@ export function adminRoutes(
       ),
     );
   });
+  app.get("/api/admin/workspaces/:id/plugins/transcription", async (c) =>
+    c.json(
+      await plugins.transcription.view(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+      ),
+    ),
+  );
+  app.put("/api/admin/workspaces/:id/plugins/transcription", async (c) =>
+    c.json(
+      await plugins.configureTranscription(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+        await c.req.json(),
+      ),
+    ),
+  );
+  app.post("/api/admin/workspaces/:id/plugins/transcription/retry", async (c) =>
+    c.json(
+      await plugins.transcription.retry(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+        await c.req.json(),
+      ),
+    ),
+  );
   const obsidian = new ObsidianService(store);
   app.get("/api/admin/workspaces/:id/plugins/obsidian", async (c) => {
     const query = c.req.query();

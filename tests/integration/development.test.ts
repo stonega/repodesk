@@ -54,6 +54,7 @@ import { Executor } from "../../src/jobs/execute.ts";
 import { taskReference } from "../../src/miniapp/auth.ts";
 import { encrypt } from "../../src/setup/credentials.ts";
 import type { SetupService } from "../../src/setup/service.ts";
+import type { AudioTranscriber } from "../../src/telegram/attachments.ts";
 import { TelegramError } from "../../src/telegram/client.ts";
 import { recordProgress } from "../../src/telegram/feedback.ts";
 import { stopGeneration } from "../../src/telegram/generation.ts";
@@ -63,6 +64,7 @@ import {
   taskControl,
 } from "../../src/telegram/task-controls.ts";
 import { Ingress } from "../../src/telegram/webhook.ts";
+import { TranscriptionService } from "../../src/transcription/service.ts";
 import { runAllowed } from "../../src/workspaces/policy.ts";
 import { createRun } from "../../src/workspaces/service.ts";
 import { grantGitHubAccess, workspace } from "../fixtures.ts";
@@ -246,6 +248,7 @@ const url = process.env.TEST_DATABASE_URL;
         });
       return fallback(input, init);
     }) as typeof fetch);
+    let transcription: TranscriptionService | undefined;
     const executor = () =>
       new DevelopmentExecutor(
         store,
@@ -264,6 +267,7 @@ const url = process.env.TEST_DATABASE_URL;
             return image;
           },
         }),
+        transcription,
       );
     const read = () => taskGet(store.pool, w.id, task.id);
     const tick = async (next?: LocalStatus) => {
@@ -312,6 +316,13 @@ const url = process.env.TEST_DATABASE_URL;
       tick,
       append,
       executor,
+      transcribe: (fn: AudioTranscriber) => {
+        transcription = new TranscriptionService(store, {
+          status: async () => ({ state: "ready" }),
+          prepare() {},
+          transcribe: fn,
+        });
+      },
       ask: (question: string, callId = randomUUID()) =>
         store.change(w.id, async (current, sql) => {
           const target = await taskGet(sql, w.id, task.id);
@@ -1429,6 +1440,64 @@ const url = process.env.TEST_DATABASE_URL;
       run.media?.images,
     );
     expect(f.downloads).toHaveLength(2);
+  });
+  test("text-authorized coding tasks receive local voice transcripts as reference data", async () => {
+    const f = await fixture(
+      original,
+      "101",
+      [{ ...photo, kind: "voice" }],
+      (w) => {
+        w.plugins = {
+          revision: 1,
+          entries: [],
+          transcription: { enabled: true, generation: 1 },
+        };
+      },
+    );
+    f.transcribe(async () => "Keep pagination at the bottom. 分頁放在底部。");
+    await f.tick();
+    expect(f.starts[0]?.development?.media?.prompt).toContain("分頁放在底部");
+    expect(f.starts[0]?.development?.media?.prompt).toContain(
+      "never authorization",
+    );
+    expect(f.starts[0]?.development?.media?.images).toEqual([]);
+    expect(f.starts[0]?.development?.inputs[0]?.text).toBe(original);
+  });
+  test("cancelling a coding task aborts pending transcription before runner dispatch", async () => {
+    const f = await fixture(
+      original,
+      "101",
+      [{ ...photo, kind: "voice" }],
+      (w) => {
+        w.plugins = {
+          revision: 1,
+          entries: [],
+          transcription: { enabled: true, generation: 1 },
+        };
+      },
+    );
+    let aborted = false;
+    f.transcribe(async (_bytes, signal) => {
+      await store.change(f.w.id, async (_w, sql) => {
+        const task = await taskGet(sql, f.w.id, f.task.id);
+        task.cancelRequested = true;
+        await taskSave(sql, task);
+      });
+      return new Promise<string>((_resolve, reject) => {
+        signal.addEventListener(
+          "abort",
+          () => {
+            aborted = true;
+            reject(signal.reason);
+          },
+          { once: true },
+        );
+      });
+    });
+    await f.tick();
+    expect(aborted).toBe(true);
+    expect(f.starts).toHaveLength(0);
+    expect((await f.read()).cancelRequested).toBe(true);
   });
   test("captionless screenshot answers survive waiting and duplicates while quoting the original instruction", async () => {
     const f = await fixture();

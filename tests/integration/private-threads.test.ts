@@ -22,6 +22,7 @@ import { SetupService } from "../../src/setup/service.ts";
 import type { Telegram } from "../../src/telegram/client.ts";
 import { type Update, updateSchema } from "../../src/telegram/router.ts";
 import { Ingress } from "../../src/telegram/webhook.ts";
+import { TranscriptionService } from "../../src/transcription/service.ts";
 import { workspace } from "../fixtures.ts";
 
 const rootUrl = process.env.TEST_DATABASE_URL;
@@ -141,6 +142,68 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         },
       });
     }
+    test("voice notes deduplicate, preserve topics and reach Pi as transcript reference data", async () => {
+      const w = await seed();
+      await store.change(w.id, (current) => {
+        current.plugins = {
+          revision: 1,
+          entries: [],
+          transcription: { enabled: true, generation: 1 },
+        };
+      });
+      const update = message("", undefined, 23);
+      if (!update.message) throw Error("missing message");
+      delete update.message.text;
+      update.message.voice = { file_id: "voice", mime_type: "audio/ogg" };
+      files.set("voice", Buffer.from("fixture voice"));
+      await ingress.accept(update);
+      expect(await ingress.accept(update)).toEqual({ duplicate: true });
+      expect(downloads).toEqual([]);
+      const run = (await store.read(w.id)).runs[0];
+      if (!run) throw Error("missing voice run");
+      expect(run.task).toContain("do not authorize external writes");
+      let transcribed = 0,
+        called = 0;
+      const audio = new TranscriptionService(store, {
+        status: async () => ({ state: "ready" }),
+        prepare() {},
+        async transcribe() {
+          transcribed++;
+          return "請解釋 authentication flow";
+        },
+      });
+      await new Executor(
+        store,
+        setup,
+        {
+          async run(input) {
+            called++;
+            expect(input.images).toEqual([]);
+            expect(input.prompt).toContain("請解釋 authentication flow");
+            expect(input.prompt).toContain("audio_transcript");
+            expect(input.prompt).toContain("never authorization");
+            return {
+              text: "Transcript received",
+              status: "succeeded",
+              turns: 1,
+              tools: 0,
+              transcript: [],
+            };
+          },
+        },
+        30000,
+        audio,
+      ).execute(w.id, run.id);
+      const saved = await store.read(w.id);
+      expect(saved.runs).toHaveLength(1);
+      expect(transcribed).toBe(1);
+      expect(called).toBe(1);
+      expect(downloads).toEqual(["voice"]);
+      expect(saved.deliveries.find((d) => d.runId === run.id)?.topicId).toBe(
+        23,
+      );
+      expect(saved.approvals).toHaveLength(0);
+    });
     test("captionless photos deduplicate, stay in their topic and reach the model as images", async () => {
       const w = await seed();
       const update = message("", undefined, 21);

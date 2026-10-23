@@ -196,7 +196,7 @@ test("rejects binary, oversized, unsupported and corrupt files without truncatio
     [
       { ...attachment, kind: "voice" },
       Buffer.from("OggS"),
-      "attachment_unsupported",
+      "audio_plugin_disabled",
     ],
     [
       { ...attachment, name: "archive.zip", mimeType: "application/zip" },

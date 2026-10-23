@@ -1,5 +1,36 @@
 # Implementation evidence
 
+## Local Qwen3-ASR voice transcription plugin (2026-10-23)
+
+Added a disabled-by-default workspace plugin for Telegram voice notes, audio
+messages and audio documents. The owning deployment operator enables it from
+Plugins → Qwen3-ASR; enablement starts the pinned Qwen3-ASR-0.6B download in the
+background. Status, bounded polling and explicit download retry are available in
+the shared plugin layout. Cached public weights persist in the shared Compose
+volume and are reused after restarts or disable/re-enable. No SQL migration or
+Node dependency was added; the app image includes an isolated CPU Python runtime.
+
+The guarded attachment path supplies source-labeled transcripts to Pi and
+text-authorized Codex requirements. It preserves actor/destination/bot/retention
+checks, duplicate ingress handling, cancellation and existing write authorization.
+Audio is limited to two minutes and 5 MiB per file. Decoding and inference use
+process pipes and memory; inference is offline and serialized across the shared
+cache. Downloads are fixed to a public model/revision. Credentials are excluded
+from the child environment, and no raw audio is stored in the model cache or logs.
+
+Validation: Biome, strict TypeScript, production build, Node runtime contract,
+**1,189 deterministic tests across 130 files**, **111 focused development/plugin
+tests**, and **four desktop/mobile browser journeys** passed. Saved, loading,
+pending, downloading, ready and failed states were inspected in light/dark themes;
+card actions and mobile clearance have regression assertions. The app Docker image
+built, Compose validated, and Node 24 plus the installed Qwen/PyAV runtime passed.
+The real pinned model downloaded, survived container recreation and reused cached
+weights without network access. A public upstream WAV sample and its OGG/Opus
+conversion transcribed successfully with networking disabled, including through the
+Node subprocess bridge. Live Telegram acceptance and production deployment remain
+outstanding. See [implementation and setup](transcription.md),
+[user guide](../user/audio.md) and [runnable journey](../../examples/telegram-audio.md).
+
 ## Codex reference snapshots and application blockers (2026-10-23)
 
 The worker prepares other workspace-selected repositories explicitly named in

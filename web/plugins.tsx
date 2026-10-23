@@ -7,6 +7,7 @@ import type { CodingPage } from "../src/coding/config.ts";
 import { type GooglePage, googlePlugins } from "../src/google/config.ts";
 import type { ObsidianPage } from "../src/obsidian/config.ts";
 import type { ReviewPage } from "../src/review-bot/config.ts";
+import type { TranscriptionPage } from "../src/transcription/config.ts";
 import { Cloudflare } from "./cloudflare.tsx";
 import { CodeTruth } from "./code-truth.tsx";
 import { Coding } from "./coding.tsx";
@@ -19,6 +20,7 @@ import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
 import { ReviewBot } from "./review-bot.tsx";
 import { SkeletonRows } from "./skeleton.tsx";
 import { ErrorToast, useToast } from "./toast.tsx";
+import { Transcription } from "./transcription.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 type View = "catalog" | "installed" | "market";
@@ -116,6 +118,7 @@ export function Plugins({
     cloudflare?: boolean;
     google?: boolean;
     obsidian?: boolean;
+    transcription?: boolean;
   }>({});
   const path = (suffix = "") =>
     `/admin/plugins${suffix}?workspace=${encodeURIComponent(workspaceId)}`;
@@ -148,6 +151,7 @@ export function Plugins({
     if (
       view === "catalog" ||
       (view === "installed" &&
+        pluginId !== "transcription" &&
         pluginId !== "obsidian" &&
         pluginId !== "google" &&
         !googlePlugins.some((id) => id === pluginId) &&
@@ -163,41 +167,56 @@ export function Plugins({
     if (view !== "catalog") return;
     let active = true;
     void Promise.allSettled([
+      request<TranscriptionPage>(`${endpoint}/transcription`),
       request<GooglePage>(`${endpoint}/google`),
       request<CodeTruthPage>(`${endpoint}/code-truth`),
       request<CodingPage>(`${endpoint}/coding`),
       request<ReviewPage>(`${endpoint}/review-bot`),
       request<CloudflarePage>(`${endpoint}/cloudflare`),
       request<ObsidianPage>(`${endpoint}/obsidian`),
-    ]).then(([google, truth, coding, review, cloudflare, obsidian]) => {
-      if (!active) return;
-      setBuiltIns({
-        obsidian:
-          obsidian.status === "fulfilled"
-            ? obsidian.value.settings?.enabled
-            : undefined,
-        google:
-          google.status === "fulfilled"
-            ? google.value.settings?.enabled
-            : undefined,
-        cloudflare:
-          cloudflare.status === "fulfilled"
-            ? cloudflare.value.settings?.enabled
-            : undefined,
-        reviewBot:
-          review.status === "fulfilled"
-            ? review.value.settings?.enabled
-            : undefined,
-        codeTruth:
-          truth.status === "fulfilled"
-            ? truth.value.settings.enabled
-            : undefined,
-        codex:
-          coding.status === "fulfilled"
-            ? coding.value.settings.enabled
-            : undefined,
-      });
-    });
+    ]).then(
+      ([
+        transcription,
+        google,
+        truth,
+        coding,
+        review,
+        cloudflare,
+        obsidian,
+      ]) => {
+        if (!active) return;
+        setBuiltIns({
+          transcription:
+            transcription.status === "fulfilled"
+              ? transcription.value.settings?.enabled
+              : undefined,
+          obsidian:
+            obsidian.status === "fulfilled"
+              ? obsidian.value.settings?.enabled
+              : undefined,
+          google:
+            google.status === "fulfilled"
+              ? google.value.settings?.enabled
+              : undefined,
+          cloudflare:
+            cloudflare.status === "fulfilled"
+              ? cloudflare.value.settings?.enabled
+              : undefined,
+          reviewBot:
+            review.status === "fulfilled"
+              ? review.value.settings?.enabled
+              : undefined,
+          codeTruth:
+            truth.status === "fulfilled"
+              ? truth.value.settings.enabled
+              : undefined,
+          codex:
+            coding.status === "fulfilled"
+              ? coding.value.settings.enabled
+              : undefined,
+        });
+      },
+    );
     return () => {
       active = false;
     };
@@ -259,7 +278,8 @@ export function Plugins({
             Manage installed extensions for this workspace.
           </p>
         </header>
-      ) : (pluginId !== "obsidian" &&
+      ) : (pluginId !== "transcription" &&
+          pluginId !== "obsidian" &&
           pluginId !== "google" &&
           !googlePlugins.some((id) => id === pluginId) &&
           pluginId !== "code-truth" &&
@@ -329,6 +349,18 @@ export function Plugins({
             </p>
           )}
           <div className="plugin-catalog-grid">
+            <PluginCard
+              to={path("/transcription")}
+              name="Qwen3-ASR"
+              summary="Local transcription for Telegram voice notes and audio recordings."
+              status={
+                builtIns.transcription === undefined
+                  ? "Built in"
+                  : builtIns.transcription
+                    ? "Enabled"
+                    : "Disabled"
+              }
+            />
             <PluginCard
               to={path("/obsidian")}
               name="Obsidian"
@@ -421,6 +453,14 @@ export function Plugins({
           backTo={path()}
         />
       )}
+      {view === "installed" && pluginId === "transcription" && (
+        <Transcription
+          key={workspaceId}
+          request={request}
+          workspaceId={workspaceId}
+          backTo={path()}
+        />
+      )}
       {view === "installed" && pluginId === "obsidian" && (
         <Obsidian
           key={workspaceId}
@@ -456,6 +496,7 @@ export function Plugins({
         <Coding request={request} workspaceId={workspaceId} backTo={path()} />
       )}
       {view === "installed" &&
+        pluginId !== "transcription" &&
         pluginId !== "obsidian" &&
         pluginId !== "google" &&
         !googlePlugins.some((id) => id === pluginId) &&

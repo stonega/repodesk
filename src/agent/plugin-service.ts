@@ -41,6 +41,7 @@ import { ObsidianService } from "../obsidian/service.ts";
 import { obsidianEnabled, obsidianGeneration } from "../obsidian/vault.ts";
 import { searchConsoleTool } from "../search-console/config.ts";
 import type { SearchConsoleService } from "../search-console/service.ts";
+import { TranscriptionService } from "../transcription/service.ts";
 import { audit } from "../workspaces/policy.ts";
 import { ExtensionCatalog } from "./extensions.ts";
 import {
@@ -68,6 +69,7 @@ export class PluginService {
     readonly cloudflare?: CloudflareService,
     readonly searchConsole?: SearchConsoleService,
     readonly google?: GoogleService,
+    readonly transcription = new TranscriptionService(store),
   ) {}
   private legacy?: Promise<PluginRecord[]>;
   private fallback(): Promise<PluginRecord[]> {
@@ -443,6 +445,20 @@ export class PluginService {
       scoped.length || builtins.length
         ? ExtensionCatalog.fromSnapshot(scoped, builtins)
         : undefined,
+    );
+  }
+  async configureTranscription(
+    admin: Admin,
+    workspaceId: string,
+    value: unknown,
+  ) {
+    const workspace = await this.store.read(workspaceId);
+    authorizePlugins(admin, workspace);
+    return this.transcription.configure(
+      admin,
+      workspaceId,
+      value,
+      await this.entries(workspace),
     );
   }
   async configureObsidian(admin: Admin, workspaceId: string, value: unknown) {

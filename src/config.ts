@@ -25,6 +25,8 @@ const schema = z.object({
   CODEX_RUNNER_TOKEN: z.string().min(32).optional(),
   CODE_TRUTH_URL: z.string().url().optional(),
   CODE_TRUTH_TOKEN: z.string().min(32).optional(),
+  QWEN_ASR_PYTHON: z.string().min(1).optional(),
+  QWEN_ASR_DIRECTORY: z.string().startsWith("/").optional(),
   PI_EXTENSIONS_FILE: z.string().trim().min(1).optional(),
   UPDATES_GITHUB_REPOSITORY: z
     .string()

@@ -17,3 +17,7 @@ backups/
 /updates/
 
 services/code-truth/data/
+
+/data/qwen-asr/
+
+__pycache__/

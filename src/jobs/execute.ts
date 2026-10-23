@@ -32,6 +32,7 @@ import {
   requestFailureMessage,
 } from "../telegram/feedback.ts";
 import { discardFollowup } from "../telegram/followup.ts";
+import { TranscriptionService } from "../transcription/service.ts";
 import { webReaderTool } from "../web-reader/tool.ts";
 import { commitDiscussions } from "../workspaces/conversation-memory.ts";
 import { audit, runAllowed } from "../workspaces/policy.ts";
@@ -40,12 +41,14 @@ import {
   recordThreadAnswer,
   refreshThreadContext,
 } from "../workspaces/threads.ts";
+
 export class Executor {
   constructor(
     private store: Store,
     private setup: SetupService,
     private runner: AgentRunner | RunnerProvider = new PiRunner(),
     private timeoutMs = DEFAULT_RUN_TIMEOUT_SECONDS * 1000,
+    private transcription = new TranscriptionService(store),
   ) {}
   async execute(workspaceId: string, runId: string, shutdown?: AbortSignal) {
     const deployment = await this.store.deployment();
@@ -509,6 +512,10 @@ export class Executor {
             );
           },
           signal,
+          extensionWorkspace.plugins?.transcription?.enabled
+            ? (bytes, signal) =>
+                this.transcription.transcribe(workspaceId, bytes, signal)
+            : undefined,
         );
         if (attachments.images.length)
           requireThat(

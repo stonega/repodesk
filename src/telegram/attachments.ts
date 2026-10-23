@@ -97,7 +97,34 @@ function contentAttachments(
   return [];
 }
 
+export type AudioTranscriber = (
+  bytes: Uint8Array,
+  signal: AbortSignal,
+) => Promise<string>;
+export function isAudioAttachment(attachment: Attachment) {
+  return (
+    attachment.kind === "voice" ||
+    attachment.kind === "audio" ||
+    (attachment.kind === "document" &&
+      (/^audio\//i.test(attachment.mimeType ?? "") ||
+        /\.(ogg|opus|mp3|m4a|wav|flac|webm|aac)$/i.test(attachment.name ?? "")))
+  );
+}
+
 export const attachmentErrors: Record<string, string> = {
+  audio_plugin_disabled:
+    "Voice transcription is disabled. Ask your workspace operator to enable Qwen3-ASR in Plugins, or send text.",
+  audio_model_not_ready:
+    "The voice model is not ready. Check Qwen3-ASR in Plugins for download progress or retry, then send your message again.",
+  audio_runtime_unavailable:
+    "The local transcription runtime is unavailable. Ask your operator to check Qwen3-ASR in Plugins.",
+  audio_transcription_failed:
+    "I couldn't transcribe this recording. Please retry or send your request as text.",
+  audio_invalid:
+    "I couldn't read this audio file. Send a voice note or a valid audio recording.",
+  audio_too_long: "This recording is too long. Send audio up to two minutes.",
+  audio_no_speech:
+    "I couldn't detect speech in this recording. Please retry or send text.",
   attachment_too_large:
     "This attachment is too large. Send images or PDFs up to 5 MiB, or text/code files up to 256 KiB.",
   attachment_context_limit:
@@ -137,10 +164,15 @@ export async function decodeAttachment(
   attachment: Attachment,
   bytes: Uint8Array,
   signal: AbortSignal,
+  transcribe?: AudioTranscriber,
 ): Promise<{ image?: ImageContent; text?: string }> {
   signal.throwIfAborted();
   requireThat(bytes.length > 0, "attachment_invalid");
   requireThat(bytes.length <= MAX_ATTACHMENT_BYTES, "attachment_too_large");
+  if (isAudioAttachment(attachment)) {
+    requireThat(transcribe, "audio_plugin_disabled");
+    return { text: await transcribe(bytes, signal) };
+  }
   const mimeType = imageMime(bytes);
   if (mimeType)
     return {
@@ -218,6 +250,7 @@ export async function loadAttachments(
   client: () => Promise<Telegram>,
   guard: () => Promise<void>,
   signal: AbortSignal,
+  transcribe?: AudioTranscriber,
 ) {
   return loadSourceAttachments(
     contextSources(run),
@@ -227,6 +260,7 @@ export async function loadAttachments(
     client,
     guard,
     signal,
+    transcribe,
   );
 }
 
@@ -237,6 +271,7 @@ export async function loadSourceAttachments(
   client: () => Promise<Telegram>,
   guard: () => Promise<void>,
   signal: AbortSignal,
+  transcribe?: AudioTranscriber,
 ) {
   const images: ImageContent[] = [];
   const content: {
@@ -269,9 +304,12 @@ export async function loadSourceAttachments(
           "attachment_too_large",
         );
         requireThat(
-          ["photo", "document"].includes(attachment.kind),
+          ["photo", "document"].includes(attachment.kind) ||
+            isAudioAttachment(attachment),
           "attachment_unsupported",
         );
+        if (isAudioAttachment(attachment))
+          requireThat(transcribe, "audio_plugin_disabled");
         requireThat(totalBytes < MAX_RUN_BYTES, "attachment_context_limit");
         telegram ??= await client();
         requireThat(telegram.downloadFile, "attachment_download_failed");
@@ -282,13 +320,21 @@ export async function loadSourceAttachments(
         );
         totalBytes += bytes.length;
         requireThat(totalBytes <= MAX_RUN_BYTES, "attachment_context_limit");
-        const decoded = await decodeAttachment(attachment, bytes, signal);
+        const decoded = await decodeAttachment(
+          attachment,
+          bytes,
+          signal,
+          transcribe,
+        );
         await guard();
         if (decoded.image) images.push(decoded.image);
         content.push({
           sourceId: source.id,
           name: attachment.name,
           text: decoded.text,
+          ...(isAudioAttachment(attachment)
+            ? { kind: "audio_transcript" }
+            : {}),
           imageIndex: decoded.image ? images.length : undefined,
         });
       } catch (error) {

@@ -9,10 +9,14 @@ Implemented locally, 2026-10-06. Live Telegram/provider behavior still needs the
   is selected. Images sent as documents are supported too.
 - JPEG, PNG, GIF and WebP images, identified from bytes. Images reach Pi as base64
   image content blocks, paired with their source ID in the text prompt.
+- Voice notes, audio messages and audio documents when the optional Qwen3-ASR plugin
+  is enabled and its model is ready. See [local transcription](transcription.md)
+  for automatic model download, the two-minute limit and authorization boundaries.
 - UTF-8 text/code files, including Markdown, JSON, CSV and ordinary source files.
 - Unencrypted PDFs with selectable text, extracted with pinned `unpdf` 1.8.1
   (its serverless PDF.js distribution). No PDF scripts, rendering, remote font
-  retrieval, OCR, audio transcription, archive extraction or Office-file parsing.
+  retrieval, OCR, archive extraction or Office-file parsing. Audio transcription is
+  handled separately by the optional plugin.
 
 Limits are application policies: 5 MiB per image/PDF, 256 KiB per text/code file,
 32,000 extracted text characters per file, and 40 PDF pages. A request uses at most

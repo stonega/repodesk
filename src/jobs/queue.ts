@@ -20,6 +20,7 @@ import type { SetupService } from "../setup/service.ts";
 import { TelegramCommandMenu } from "../telegram/commands.ts";
 import { queuedRunFeedback } from "../telegram/feedback.ts";
 import { TelegramPoller } from "../telegram/polling.ts";
+import { TranscriptionService } from "../transcription/service.ts";
 import { tick } from "../workflows/service.ts";
 import { deliverAccessHelp } from "./control.ts";
 import { DeliveryWorker } from "./delivery.ts";
@@ -69,6 +70,7 @@ export async function dispatch(
     return rows.rowCount;
   });
 }
+
 export async function startWorker(
   store: Store,
   setup: SetupService,
@@ -83,10 +85,17 @@ export async function startWorker(
   cloudflare?: CloudflareService,
   google?: GoogleService,
   searchConsole?: SearchConsoleService,
+  transcription = new TranscriptionService(store),
 ) {
   const boss = queue(url, store.log);
   await boss.start();
-  const executor = new Executor(store, setup, runner, runTimeoutSeconds * 1000);
+  const executor = new Executor(
+    store,
+    setup,
+    runner,
+    runTimeoutSeconds * 1000,
+    transcription,
+  );
   const delivery = new DeliveryWorker(store, setup);
   const shutdown = new AbortController();
   const id = randomUUID();
@@ -165,6 +174,7 @@ export async function startWorker(
         });
         // Durable rate-limit retries and ambiguous-send detection do not rely on queue retry timing.
         const current = await store.read(workspaceId);
+        await transcription.reconcile(current);
         if (
           coding &&
           current.deletion &&

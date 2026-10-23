@@ -48,6 +48,7 @@ services:
       CODE_TRUTH_URL: http://code-truth:3010
       CODE_TRUTH_TOKEN_FILE: /run/code-truth/token
     volumes:
+      - transcription_models:/var/lib/repodesk-models
       - ./updates:/var/lib/repodesk-updates
       - code_truth_auth:/run/code-truth:ro
     healthcheck:
@@ -71,6 +72,7 @@ services:
       CODE_TRUTH_URL: http://code-truth:3010
       CODE_TRUTH_TOKEN_FILE: /run/code-truth/token
     volumes:
+      - transcription_models:/var/lib/repodesk-models
       - code_truth_auth:/run/code-truth:ro
     healthcheck:
       test: [CMD, node, -e, "const {Client}=require('pg');const c=new Client({connectionString:process.env.DATABASE_URL});c.connect().then(()=>c.query(\"SELECT 1 FROM worker_heartbeats WHERE at>now()-interval '30 seconds' LIMIT 1\")).then(r=>{if(!r.rowCount)process.exitCode=1}).catch(()=>{process.exitCode=1}).finally(()=>c.end())"]
@@ -123,6 +125,7 @@ services:
       timeout: 5s
       retries: 3
 volumes:
+  transcription_models:
   postgres_data:
   code_truth_auth:
   code_truth_data:

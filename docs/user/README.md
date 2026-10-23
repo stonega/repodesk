@@ -19,6 +19,7 @@ RepoDesk 是一个自托管的 Telegram AI 助手，让你在聊天中查询 Git
 
 | 文档 | 你可以完成什么 |
 | --- | --- |
+| [Voice notes and audio](audio.md) | Enable local Qwen3-ASR transcription and send recordings |
 | [Telegram 使用指南](telegram-experience.md) | 开始对话，使用 Topic、附件、状态和停止操作 |
 | [命令参考](commands.md) | 查询命令格式、用途和使用条件 |
 | [群组与话题](groups.md) | 关联群组，控制消息收集，在群内协作 |

@@ -23,6 +23,7 @@ const backend = await Bun.build({
 if (!backend.success)
   throw new AggregateError(backend.logs, "Backend build failed");
 await cp("src/agent/SOUL.md", "dist/SOUL.md");
+await cp("src/transcription/qwen-asr.py", "dist/qwen-asr.py");
 const frontend = await Bun.build({
   entrypoints: ["web/app.tsx", "web/theme-init.ts", "web/mini.tsx"],
   outdir: "dist/web/assets",

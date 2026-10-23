@@ -78,6 +78,7 @@ const stop = await startWorker(
   plugins.cloudflare,
   plugins.google,
   plugins.searchConsole,
+  plugins.transcription,
 );
 log.write("worker_started");
 let stopping = false;

@@ -13,7 +13,19 @@ RUN bun run build
 FROM node:24-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS runtime-base
 ENV NODE_ENV=production PORT=3000
 WORKDIR /app
-FROM runtime-base AS runtime
+# Speech dependencies are installed at build time; weights are downloaded only on enable.
+FROM runtime-base AS transcription-runtime
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv libsndfile1 ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m venv /opt/repodesk-asr
+COPY src/transcription/requirements.txt /tmp/transcription-requirements.txt
+RUN /opt/repodesk-asr/bin/pip install --no-cache-dir pip==25.3 \
+    && /opt/repodesk-asr/bin/pip install --no-cache-dir torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu \
+    && /opt/repodesk-asr/bin/pip install --no-cache-dir -r /tmp/transcription-requirements.txt \
+    && rm /tmp/transcription-requirements.txt \
+    && mkdir -p /var/lib/repodesk-models && chown node:node /var/lib/repodesk-models
+ENV QWEN_ASR_PYTHON=/opt/repodesk-asr/bin/python QWEN_ASR_DIRECTORY=/var/lib/repodesk-models
+FROM transcription-runtime AS runtime
 COPY --from=dependencies --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --chown=node:node migrations ./migrations
