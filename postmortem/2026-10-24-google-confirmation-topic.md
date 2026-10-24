@@ -45,7 +45,23 @@ passed. The full suite completed 1,190 cases with 1,189 passes and one unrelated
 coding-reference timeout at five seconds; its focused rerun passed in 405 ms
 with a 20-second timeout. See [implementation evidence](../docs/implementation/implementation-status.md).
 
-The correction is local and has not been deployed. Production state, credentials
-and deliveries were not modified. Existing consent still requires the member to
-verify and confirm the displayed account in Telegram; inspection does not replace
-that authorization step.
+## Deployment and recovery
+
+The operator subsequently authorized commit, push and VPS deployment. Fix commit
+`5f222bfe13034287d068040a08f64f1f55e7d6e8` was pushed to `main`. Bundle
+`1792842855984-15165143` installed source tree
+`45dbf03ccdf3f1c943eeab23215448571d5986d3`, preserving the previously deployed
+UI and changing only the three Google runtime files. The isolated release run
+passed all 1,190 deterministic cases with the CI-standard 15-second timeout,
+44 focused browser cases and the exact-image container/Compose checks.
+
+The protected database backup verified. All four application services are healthy;
+45 deployed artifacts match the tested images, and public and loopback readiness
+return HTTP 200. Configuration, credentials and persistent volumes were preserved.
+See the [deployment record](../docs/implementation/vps-deployment.md#google-confirmation-topic-deployment-2026-10-24).
+
+Inspection did not connect an account or send messages, and deployment did not
+confirm or rewrite existing consent. Members start `/google connect` again after
+expiry, complete browser consent and verify the account in the confirmation now
+delivered to the initiating private topic. Live member confirmation after rollout
+remains an acceptance check; operator access does not replace that authorization.

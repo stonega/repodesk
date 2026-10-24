@@ -180,6 +180,42 @@ No migration was added. Source, CI and post-deployment receipts remain in the
 bundle. This is another manual archive deployment, separate from the published
 release updater gate.
 
+## Google confirmation topic deployment (2026-10-24)
+
+The operator-authorized manual archive cutover installed source tree
+`45dbf03ccdf3f1c943eeab23215448571d5986d3`, based on pushed fix commit
+`5f222bfe13034287d068040a08f64f1f55e7d6e8`, in bundle
+`1792842855984-15165143` (package v0.1.44). It replaces bundle
+`1792808351773-02844639`. The snapshot retains the previous deployment's group
+dialog and other runtime sources; only `src/google/config.ts`,
+`src/google/service.ts` and `src/google/telegram.ts` change application behavior.
+No dependency or database migration was added.
+
+All four images were built from the isolated retained snapshot. Lint, strict
+TypeScript, build, all **1,190 deterministic tests across 130 files** with the
+CI-standard 15-second timeout and **44 focused browser checks** passed. Browser
+checks covered Google, group dialogs, the catalog, service URLs and updates, using
+a separate test port and disposable database filename. The bundle retains the
+test isolation patch; no full browser-suite result is claimed for this cutover.
+Exact-image Node 24 runtime, CPU transcription imports, offline Code Truth,
+Docker Codex lifecycle, merged Compose, readiness, migration rerun and disposable
+backup/restore checks passed. All nine frontend artifacts match the prior image.
+
+The guarded cutover verified archive/source checksums, waited for durable coding
+checkpoints, stopped writers and verified
+`backups/pre-release-1792842855984-15165143.dump` before migrations. App, worker,
+runner and Code Truth are healthy. All 45 deployed artifacts match the tested
+images; public and loopback health, readiness, admin and versioned asset requests
+return HTTP 200. Configuration, credentials, persistent volumes, PostgreSQL and
+all three Actions runners were preserved. The verified receipt and source remain
+in the bundle; the imported image archive was removed after success.
+
+No account was connected, consent confirmed, webhook registered or manual Telegram
+message sent by deployment. Existing flows without a saved topic keep their old
+destination; members start `/google connect` again to receive confirmation in the
+initiating topic. Live consent/confirmation after this rollout remains a member
+acceptance check. See the [incident](../../postmortem/2026-10-24-google-confirmation-topic.md).
+
 ## Group management dialog deployment (2026-10-24)
 
 The operator-authorized manual archive cutover installed source tree

@@ -35,8 +35,8 @@ topic retain their previous destination. No dependency or migration was added.
 The deterministic consent/confirmation journey covers both ordinary private chats
 and native topics, checks the outgoing Telegram topic, and retains wrong-member,
 workspace-switch and replay checks. The topic case reproduced the defect before
-the fix; all 18 Google integration checks pass afterward. The correction is local;
-VPS inspection was read-only and did not confirm an account or send messages.
+the fix; all 18 Google integration checks pass afterward. These initial checks
+were local; VPS inspection was read-only and did not confirm an account or send messages.
 See the [incident record](../../postmortem/2026-10-24-google-confirmation-topic.md).
 
 Validation: lint, strict TypeScript, production build and the host Node runtime
@@ -44,6 +44,22 @@ contract passed. The full deterministic run with isolated PostgreSQL completed
 1,190 cases: 1,189 passed and one unrelated coding-reference test exceeded its
 five-second timeout. That case passed in 405 ms on a focused rerun with a
 20-second timeout. No live Google or Telegram actions were used for verification.
+
+Operator-authorized VPS deployment subsequently installed source tree
+`45dbf03ccdf3f1c943eeab23215448571d5986d3`, based on fix commit `5f222bf`, in
+bundle `1792842855984-15165143` (package v0.1.44). The snapshot preserves the
+previously deployed UI; only the three Google runtime files changed. All **1,190
+deterministic tests** passed with the CI-standard 15-second timeout, along with
+**44 focused browser checks**, exact-image Node 24, transcription, Code Truth,
+Docker Codex lifecycle, Compose readiness, migration and backup/restore checks.
+
+App, worker, runner and Code Truth are healthy. All 45 packaged artifacts match
+the tested images; nine frontend artifacts match the prior deployment. Public
+and loopback health, readiness, admin and versioned assets return HTTP 200.
+Configuration, credentials, persistent volumes, PostgreSQL and the separate
+Actions runners were preserved, and the protected pre-release backup verified.
+New Google consent and Telegram confirmation remain a member action. See the
+[deployment record](vps-deployment.md#google-confirmation-topic-deployment-2026-10-24).
 
 ## Group management in an Edit dialog (2026-10-24)
 
