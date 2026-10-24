@@ -79,6 +79,7 @@ export interface GoogleUser {
   siteRevision: number;
   flow?: {
     stateHash: string;
+    topicId?: number;
     revision: number;
     redirectUri: string;
     verifier: string;

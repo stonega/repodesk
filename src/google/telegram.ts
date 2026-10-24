@@ -103,7 +103,12 @@ export async function googleControl(
       } else if (cmd.args === "status")
         text = `No Google account connected in ${w.settings.name}. Send /google to connect.`;
       else {
-        const url = await google.begin(w, actor, d.bot.id);
+        const url = await google.begin(
+          w,
+          actor,
+          d.bot.id,
+          msg?.message_thread_id,
+        );
         text = `Connect your Google account to ${w.settings.name} within 10 minutes, then return here and confirm the account. Your Google data is available only to you in private conversations.`;
         buttons = [[{ text: "Connect Google account", url }]];
       }

@@ -39,6 +39,9 @@ Google account and grant all five read scopes. The callback requires no admin-pa
 login. Return to Telegram and press **Connect account** only if the displayed account
 is yours, or **Reject**. Browser consent alone grants no runtime access. Confirmation
 binds the encrypted tokens to the initiating Telegram member, workspace and bot.
+When consent starts in a private Telegram topic, the browser callback sends the
+confirmation to that same topic. Older pending flows without a saved topic keep
+their General-topic destination; start `/google connect` again to use the current topic.
 Reconnect replaces only that member's connection and clears their Search Console
 selection. Disconnect does not disable the shared plugin or other members' accounts.
 Revoke provider authorization separately from Google's account connections page.

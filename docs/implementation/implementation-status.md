@@ -1,5 +1,26 @@
 # Implementation evidence
 
+## Google account confirmation retains its private topic (2026-10-24)
+
+Google consent started in a private Telegram topic now persists that topic in
+the personal OAuth flow. The browser callback queues account confirmation in the
+same topic; it previously defaulted to General, leaving a successful browser
+sign-in awaiting an easily missed confirmation. Existing flows without a saved
+topic retain their previous destination. No dependency or migration was added.
+
+The deterministic consent/confirmation journey covers both ordinary private chats
+and native topics, checks the outgoing Telegram topic, and retains wrong-member,
+workspace-switch and replay checks. The topic case reproduced the defect before
+the fix; all 18 Google integration checks pass afterward. The correction is local;
+VPS inspection was read-only and did not confirm an account or send messages.
+See the [incident record](../../postmortem/2026-10-24-google-confirmation-topic.md).
+
+Validation: lint, strict TypeScript, production build and the host Node runtime
+contract passed. The full deterministic run with isolated PostgreSQL completed
+1,190 cases: 1,189 passed and one unrelated coding-reference test exceeded its
+five-second timeout. That case passed in 405 ms on a focused rerun with a
+20-second timeout. No live Google or Telegram actions were used for verification.
+
 ## Local Qwen3-ASR voice transcription plugin (2026-10-23)
 
 Added a disabled-by-default workspace plugin for Telegram voice notes, audio

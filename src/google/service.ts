@@ -214,7 +214,7 @@ export class GoogleService {
       409,
     );
   }
-  async begin(w: Workspace, actor: string, botId: string) {
+  async begin(w: Workspace, actor: string, botId: string, topicId?: number) {
     authorize(w, actor);
     requireThat(!w.settings.paused, "workspace_paused", 409);
     await this.assertBot(botId);
@@ -235,6 +235,7 @@ export class GoogleService {
         : { botId, siteUrls: [], siteRevision: 0 };
     user.flow = {
       stateHash: hash(state),
+      topicId,
       revision: w.plugins?.revision ?? 0,
       redirectUri,
       verifier: encrypt(this.key, userAad(w.id, actor, "verifier"), verifier),
@@ -390,6 +391,7 @@ export class GoogleService {
           `Connect Google account ${identity.email} to your Telegram identity in ${w.settings.name}? Confirm only if this is your account.`,
           {
             id: `google:${digest}:confirm`,
+            topicId: flow.topicId,
             buttons: [
               [
                 {

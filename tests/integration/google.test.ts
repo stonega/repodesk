@@ -72,11 +72,12 @@ const rootUrl = process.env.TEST_DATABASE_URL;
   }
   const fixture = (actor = "101", chat = actor) =>
     googleFixture(store, admin, key, actor, chat);
-  function message(text: string, actor = 202, chat = actor) {
+  function message(text: string, actor = 202, chat = actor, topicId?: number) {
     return {
       update_id: ++update,
       message: {
         message_id: update,
+        message_thread_id: topicId,
         date: 1,
         from: { id: actor, is_bot: false, first_name: "Fixture" },
         chat: {
@@ -94,7 +95,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       },
     };
   }
-  function callback(data: string, actor = 202) {
+  function callback(data: string, actor = 202, topicId?: number) {
     return {
       update_id: ++update,
       callback_query: {
@@ -102,6 +103,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         from: { id: actor, is_bot: false, first_name: "Fixture" },
         message: {
           message_id: update,
+          message_thread_id: topicId,
           date: 1,
           chat: { id: actor, type: "private" as const },
         },
@@ -149,86 +151,106 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       ),
     ).toBe(true);
   });
-  test("Telegram starts consent once, browser return needs no panel session, and Telegram confirms the actual account", async () => {
-    const f = await fixture("202");
-    await f.configure();
-    const notices: string[] = [];
-    const setup = new SetupService(store, key, origin, () => ({
-      async call<T>(method: string, body: Record<string, unknown> = {}) {
-        if (method === "answerCallbackQuery") notices.push(String(body.text));
-        return {} as T;
-      },
-    }));
-    const ingress = new Ingress(store, setup, undefined, f.service);
-    await store.pool.query(
-      "INSERT INTO telegram_selections(actor,workspace_id) VALUES('202',$1) ON CONFLICT(actor) DO UPDATE SET workspace_id=$1",
-      [f.w.id],
-    );
-    const event = message("/google");
-    await ingress.accept(event);
-    const w = await store.read(f.w.id);
-    const url = new URL(w.deliveries.at(-1)?.buttons?.[0]?.[0]?.url ?? "");
-    const state = url.searchParams.get("state") as string;
-    expect(await ingress.accept(event)).toEqual({ duplicate: true });
-    expect((await store.read(w.id)).googleUsers?.["202"]?.flow?.stateHash).toBe(
-      hash(state),
-    );
-    const plugins = new PluginService(
-      store,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      f.service,
-    );
-    const app = createApp(store, setup, origin, plugins);
-    const response = await app.request(
-      `/api/admin/google/callback?state=${state}&code=202`,
-    );
-    expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.text()).toContain("confirm your Google account");
-    expect(
-      (await store.read(w.id)).googleUsers?.["202"]?.connection,
-    ).toBeUndefined();
-    await expect(f.query("gmail", { resource: "messages" })).rejects.toThrow(
-      "google_not_connected",
-    );
-    const data = (await store.read(w.id)).deliveries.at(-1)?.buttons?.[0]?.[0]
-      ?.callback_data as string;
-    expect(Buffer.byteLength(data)).toBeLessThanOrEqual(64);
-    await ingress.accept(callback(data, 101));
-    expect(
-      (await store.read(w.id)).googleUsers?.["202"]?.connection,
-    ).toBeUndefined();
-    const other = await fixture("202");
-    await store.pool.query(
-      "UPDATE telegram_selections SET workspace_id=$1 WHERE actor='202'",
-      [other.w.id],
-    );
-    const confirmation = callback(data);
-    await ingress.accept(confirmation);
-    expect(
-      (await store.read(w.id)).googleUsers?.["202"]?.connection?.account,
-    ).toBe("202@example.test");
-    expect((await store.read(other.w.id)).googleUsers).toBeUndefined();
-    await ingress.accept(confirmation);
-    expect(notices.at(-1)).toContain("expired or is unavailable");
-    expect(
-      (await store.read(w.id)).audit.filter(
-        (a) => a.action === "google.connected",
-      ),
-    ).toHaveLength(1);
-    expect(
-      (await app.request(`/api/admin/google/callback?state=${state}&code=202`))
-        .status,
-    ).toBe(409);
-    await f.query("gmail", { resource: "messages" });
-    const before = f.requests.length;
-    await ingress.accept(message("/google connect", 202, -100100));
-    expect(f.requests.length).toBe(before);
-  });
+  test.each([undefined, 1995559])(
+    "Telegram consent and confirmation stay in topic %s, need no panel session and bind the actual account once",
+    async (topicId) => {
+      const f = await fixture("202");
+      await f.configure();
+      const notices: string[] = [];
+      const sent: Record<string, unknown>[] = [];
+      const setup = new SetupService(store, key, origin, () => ({
+        async call<T>(method: string, body: Record<string, unknown> = {}) {
+          if (method === "answerCallbackQuery") notices.push(String(body.text));
+          if (method === "sendMessage") {
+            sent.push(body);
+            return { message_id: sent.length } as T;
+          }
+          return {} as T;
+        },
+      }));
+      const ingress = new Ingress(store, setup, undefined, f.service);
+      await store.pool.query(
+        "INSERT INTO telegram_selections(actor,workspace_id) VALUES('202',$1) ON CONFLICT(actor) DO UPDATE SET workspace_id=$1",
+        [f.w.id],
+      );
+      const event = message("/google", 202, 202, topicId);
+      await ingress.accept(event);
+      const w = await store.read(f.w.id);
+      const url = new URL(w.deliveries.at(-1)?.buttons?.[0]?.[0]?.url ?? "");
+      const state = url.searchParams.get("state") as string;
+      expect(w.deliveries.at(-1)?.topicId).toBe(topicId ?? 0);
+      expect(await ingress.accept(event)).toEqual({ duplicate: true });
+      expect(
+        (await store.read(w.id)).googleUsers?.["202"]?.flow?.stateHash,
+      ).toBe(hash(state));
+      const plugins = new PluginService(
+        store,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        f.service,
+      );
+      const app = createApp(store, setup, origin, plugins);
+      const response = await app.request(
+        `/api/admin/google/callback?state=${state}&code=202`,
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(await response.text()).toContain("confirm your Google account");
+      expect(
+        (await store.read(w.id)).googleUsers?.["202"]?.connection,
+      ).toBeUndefined();
+      await expect(f.query("gmail", { resource: "messages" })).rejects.toThrow(
+        "google_not_connected",
+      );
+      const prompt = must((await store.read(w.id)).deliveries.at(-1));
+      expect(prompt.topicId).toBe(topicId ?? 0);
+      await new DeliveryWorker(store, setup).send(w.id, prompt.id);
+      expect(sent).toHaveLength(1);
+      expect(sent[0]?.message_thread_id).toBe(topicId);
+      expect(sent[0]?.chat_id).toBe("202");
+      const data = prompt.buttons?.[0]?.[0]?.callback_data as string;
+      expect(Buffer.byteLength(data)).toBeLessThanOrEqual(64);
+      await ingress.accept(callback(data, 101));
+      expect(
+        (await store.read(w.id)).googleUsers?.["202"]?.connection,
+      ).toBeUndefined();
+      const other = await fixture("202");
+      await store.pool.query(
+        "UPDATE telegram_selections SET workspace_id=$1 WHERE actor='202'",
+        [other.w.id],
+      );
+      const confirmation = callback(data, 202, topicId);
+      await ingress.accept(confirmation);
+      expect(
+        (await store.read(w.id)).googleUsers?.["202"]?.connection?.account,
+      ).toBe("202@example.test");
+      expect((await store.read(other.w.id)).googleUsers).toBeUndefined();
+      expect((await store.read(w.id)).deliveries.at(-1)?.topicId).toBe(
+        topicId ?? 0,
+      );
+      await ingress.accept(confirmation);
+      expect(notices.at(-1)).toContain("expired or is unavailable");
+      expect(
+        (await store.read(w.id)).audit.filter(
+          (a) => a.action === "google.connected",
+        ),
+      ).toHaveLength(1);
+      expect(
+        (
+          await app.request(
+            `/api/admin/google/callback?state=${state}&code=202`,
+          )
+        ).status,
+      ).toBe(409);
+      await f.query("gmail", { resource: "messages" });
+      const before = f.requests.length;
+      await ingress.accept(message("/google connect", 202, -100100));
+      expect(f.requests.length).toBe(before);
+    },
+  );
   test("polling passes Google services to the same Telegram account controls", async () => {
     const f = await fixture("202");
     await f.configure();

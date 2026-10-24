@@ -26,6 +26,10 @@ connections in the workspace; members must authorize again.
 Connection links and property selections expire after ten minutes. Browser sign-in
 still requires confirmation in Telegram; no admin-panel login is needed. Google's
 app verification, Workspace policies and test-user restrictions still apply.
+When you start in a private Telegram topic, return to that topic for confirmation.
+If an older installation sends the confirmation to General, open that topic and
+choose **Connect account** there. If the attempt expired, send `/google connect`
+and complete both browser sign-in and Telegram confirmation again.
 
 - `/google` or `/google status`: show your account and status in the current workspace.
 - `/google connect`: connect or reconnect; select Search Console properties again afterward.

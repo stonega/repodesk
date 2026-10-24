@@ -29,6 +29,7 @@ Content-Type: application/json
 
 # In the bot's private Telegram chat:
 # /google -- open consent, then confirm the displayed account in Telegram
+# Starting /google in a private topic keeps the browser-return confirmation there.
 # /google status
 # /google connect -- reconnect your own account
 # /google properties -- select up to 20 personal Search Console properties, then Save
