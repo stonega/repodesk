@@ -40,12 +40,12 @@ when implementing or reviewing a change.
 
 ### Group access explains Telegram mention setup
 
-- **Preference:** Keep the setup guide for direct @mentions on Group access.
+- **Preference:** Keep the setup guide for direct @mentions on Groups & Members.
   Explain that the bot can remain a regular member: disable privacy mode through
   BotFather, remove and re-add the bot, relink the group and recheck visibility.
   Describe administrator access as an alternative and distinguish message
   visibility from the message collection setting.
-- **Scope:** Group access setup guidance before and after linking a group.
+- **Scope:** Groups & Members setup guidance before and after linking a group.
 - **Source:** 2026-10-23 — after asking whether the bot must be an administrator,
   the user requested adding the regular-member setup guide to Group access.
 - **Acceptance:** Keep the instructions readable during loading, empty, linked
@@ -69,7 +69,7 @@ when implementing or reviewing a change.
   whose label describes the available action from the saved state. For group
   message collection, show **Enable message collection** when off and **Disable
   message collection** when on. Keep the saved status readable separately.
-- **Scope:** Group access message collection and comparable future binary settings
+- **Scope:** Group message collection on Groups & Members and comparable future binary settings
   presented as action buttons. Existing switches remain switches.
 - **Source:** 2026-10-23 — user requested combining Consent to collection and
   Directed messages only because they control the same setting.
@@ -79,8 +79,24 @@ when implementing or reviewing a change.
   failure. Verify both states, pending/error recovery, card spacing and
   desktop/mobile in both themes.
 - **Exceptions:** Independent actions such as rechecking visibility and unlinking
-  remain separate. Group collection controls stay with their scope explanation;
-  this is an immediate action rather than a record editor.
+  remain separate. Group collection controls stay with their scope explanation
+  inside the group's Edit dialog; these actions take effect immediately.
+
+### Group management actions open from the card's Edit icon
+
+- **Preference:** Show a borderless pencil icon at the top right of each saved
+  group card. Open an Edit dialog for visibility rechecks, the collection action
+  and unlinking. Keep the group name, ID, saved status and inactive-link recovery
+  guidance on the card; keep the collection scope explanation with its controls.
+- **Scope:** Saved group cards on Groups & Members and their management dialogs.
+- **Source:** 2026-10-24 — user requested moving the card's actions into an Edit
+  dialog and placing an Edit icon at the card's top-right corner.
+- **Acceptance:** The saved card has one Edit icon and no inline management
+  controls. Preserve current action semantics, saved-state refresh, pending locks,
+  in-dialog error recovery, focus trapping/return and mobile wrapping. Inspect
+  card and dialog spacing at desktop/mobile widths in both themes.
+- **Exceptions:** New group linking continues to use the Groups section’s New action and
+  its separate command dialog.
 
 ### Skills use direct saves and GitHub history
 
@@ -454,7 +470,7 @@ when implementing or reviewing a change.
   GitHub links and management actions. Share its muted surface, border, rounded
   corners, typography and spacing throughout the app. Compact lists use the
   same card frame; managed records add their saved details below the heading.
-- **Scope:** Members & access GitHub detail dialogs, Manage GitHub,
+- **Scope:** Groups & Members GitHub detail dialogs, Manage GitHub,
   Codex, Review Bot and Code Truth repository summaries, on desktop and mobile
   in both themes. Long names wrap inside the card; link and action controls keep
   accessible names, focus styling and comfortable touch targets.
@@ -474,7 +490,7 @@ when implementing or reviewing a change.
   and the complete saved repository list with permission labels in a read-only,
   scrollable modal. Keep account details and repository previews out of the table
   so repository counts and long names do not expand its rows.
-- **Scope:** The Members & access table and its GitHub details, on desktop and
+- **Scope:** The Groups & Members table and its GitHub details, on desktop and
   mobile in both themes. Reuse shared repository cards and the modal's close,
   Escape, focus and scrolling behavior. Unlinked accounts still have View and show
   Not linked in the dialog; unknown/loading data must not imply that status.
@@ -493,7 +509,7 @@ when implementing or reviewing a change.
   fetch available accounts from the workspace's connected GitHub installation.
   Show the saved account and a profile link in the form and member GitHub detail
   dialog, opened from View in the member table.
-- **Scope:** Add/Edit member dialogs and the Members & access table. Organization
+- **Scope:** Add/Edit member dialogs and the Groups & Members table. Organization
   installations supply organization members; personal installations supply their
   owner directly. Do not derive member choices from repository metadata. Allow
   entering a custom GitHub username alongside fetched choices, including when
@@ -1366,22 +1382,31 @@ when implementing or reviewing a change.
 
 - **Preference:** Use the Telegram group name as the card heading and show its
   numeric ID as secondary information.
-- **Scope:** Group access cards; IDs remain the binding and permission identity.
+- **Scope:** Group cards on Groups & Members; IDs remain the binding and permission identity.
 - **Source:** 2026-09-21 — user requested group names on the group cards.
 - **Exceptions:** Groups with no known title use their ID as the heading.
 
-### Members and access share one page
+### Groups, members and access share one page
 
-- **Preference:** Combine member management and access requests in one page. Show
+- **Preference:** Combine Telegram group management, members and access requests on one
+  **Groups & Members** page with one sidebar entry. Put each New action beside
+  its Groups or Members section heading and retain separate modal editors. Show
   Telegram names/usernames alongside numeric IDs, with role, membership and effective-access
   states in a searchable table. All active members can use the bot; omit whitelist
   controls, access modes and policy preview/apply actions.
-- **Scope:** Workspace member and access management. Keep numeric IDs as the
+- **Scope:** Workspace group, member and access management. Keep numeric IDs as the
   permission identity; display names come from Telegram interactions.
 - **Source:** 2026-09-21 — user requested merging Allowed users and Members and
   adding Telegram usernames to members currently shown only as IDs.
   Updated 2026-10-07 — user requested removing the whitelist feature because all
   active workspace members can use the bot.
+- **Source update:** 2026-10-24 — user requested merging Members & access and
+  Group access into one page named Groups & Members. Existing links continue to
+  open the combined page; member pagination must not hide the linked group.
+- **Acceptance:** Verify one sidebar link and page title, both saved sections and
+  their separate dialogs, preserved workspace/query parameters on old links,
+  independent member pagination and group loading/retry, and desktop/mobile
+  spacing in both themes.
 - **Exceptions:** Members with no known Telegram profile retain an ID fallback.
 
 ### Member switches sit beside their labels
@@ -1398,9 +1423,10 @@ when implementing or reviewing a change.
 
 ### Member creation has a labeled header action
 
-- **Preference:** Show the plus icon together with the visible “Add member” label
-  in the page heading, so the creation action is clear at a glance.
-- **Scope:** The Members & access page header.
+- **Preference:** Show the plus icon together with the visible “New” label beside
+  the Members heading, so the creation action is clear within its section. The
+  accessible name remains “Add member”.
+- **Scope:** The Members section heading on Groups & Members.
 - **Source:** 2026-09-27 — user asked to change the plus-only header control to a
   button with an icon and label.
 - **Exceptions:** None recorded.
@@ -1419,7 +1445,7 @@ when implementing or reviewing a change.
   account. Keep the current link visible during refresh and offer Retry on failure.
   Keep the card's vertical padding balanced, with no extra bottom margin after
   its final guidance paragraph.
-- **Scope:** The shareable invite link in Members & access → Access requests.
+- **Scope:** The shareable invite link in Groups & Members → Access requests.
 - **Source:** 2026-09-27 — user requested a common card and copy icon button for
   the link shown in the access-request section. 2026-09-28 — user requested a
   one-second done icon in place of the “Link copied.” message.
@@ -1527,7 +1553,7 @@ when implementing or reviewing a change.
 - **Source update:** 2026-10-22 — user requested obtaining a group-link token from
   the admin panel, like member invitations, and using it with `/link` in the group
   instead of first verifying a personal Telegram identity.
-- **Acceptance:** Group access offers New to open a shared dialog that generates
+- **Acceptance:** The Groups section offers New to open a shared dialog that generates
   a complete, copyable command. Show its one-use lifetime, pending/error/expired
   states, copy feedback and recovery. Keep saved groups as readable summaries;
   verify the handoff and summary on desktop/mobile in both themes. An authorized

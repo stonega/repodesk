@@ -10,7 +10,7 @@
 GET {{origin}}/api/admin/workspaces/{{workspace}}/members/github
 
 ### Fetch the membership version before editing.
-# In Members & access, GitHub column View opens saved account/status and full
+# In Groups & Members, GitHub column View opens saved account/status and full
 # repository access details. Edit member opens the account selector separately.
 GET {{origin}}/api/admin/workspaces/{{workspace}}/members
 

@@ -277,6 +277,10 @@ async function fixture(
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
+    if (path.endsWith("/chats")) {
+      await route.fulfill({ json: { items: [], total: 0, offset: 0 } });
+      return;
+    }
     if (path.endsWith("/members/github")) {
       directoryCalls++;
       await beforeDirectory?.(directoryCalls);

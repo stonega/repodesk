@@ -180,6 +180,38 @@ No migration was added. Source, CI and post-deployment receipts remain in the
 bundle. This is another manual archive deployment, separate from the published
 release updater gate.
 
+## Group management dialog deployment (2026-10-24)
+
+The operator-authorized manual archive cutover installed source tree
+`435eb33600b278edf3dba13ebee3e9e80f260230`, based on commit
+`7ddfd760057269dfe7cba31b2633a45b6279383a`, in bundle
+`1792808351773-02844639` (package v0.1.44). It replaces bundle
+`1792800488147-74185335` and moves group management actions into an Edit dialog
+opened by the card's top-right pencil icon. No migration was added.
+
+All four release images built from the retained source snapshot. Exact-image
+Node runtime, CPU transcription imports, offline Code Truth, merged Compose,
+readiness, migration rerun and disposable backup/restore checks passed. The full
+browser run passed 382 scenarios. Two stale plugin-catalog expectations were
+corrected for the seventh built-in plugin and passed on rerun; the bundle retains
+that test-only change as `validation-test-correction.patch` separately from the
+application build snapshot.
+
+The protected cutover verified archive checksums and durable coding checkpoints,
+then created and validated
+`backups/pre-release-1792808351773-02844639.dump`. App, worker, runner and Code
+Truth are healthy. All 45 packaged artifacts match the tested images; public and
+loopback `/healthz`, `/readyz`, `/admin` and versioned assets return HTTP 200 with
+matching JavaScript/CSS hashes. Configuration, credentials, persistent volumes,
+PostgreSQL and all three Actions runner containers were preserved.
+
+The initial post-deployment helper missed versioned asset URLs, and the default
+Python HTTP client received an edge HTTP 403. Correcting the URL matcher and
+identifying the deployment client completed verification without further service
+changes. The original logs and final `deployment-receipt.json` remain in the
+bundle. The imported image archive was removed after success. No manual Telegram
+message, account connection or webhook registration was performed.
+
 ## Reference-source blocker fix deployment (2026-10-23)
 
 The operator-authorized manual archive cutover deployed commit

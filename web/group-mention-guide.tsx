@@ -23,10 +23,11 @@ export function GroupMentionGuide() {
           not restore it.
         </li>
         <li>
-          Choose <strong>New</strong> on this page and send the new{" "}
+          Choose <strong>New</strong> in Groups and send the new{" "}
           <code>/link</code> command in the group as an active workspace member
           who is also a Telegram group administrator. Wait for{" "}
-          <strong>Group linked</strong>, then choose{" "}
+          <strong>Group linked</strong>, then open the group card’s pencil icon
+          (<strong>Edit</strong>), choose{" "}
           <strong>Recheck bot visibility</strong> and try{" "}
           <code>@your_bot hi</code>, replacing <code>your_bot</code> with your
           bot’s username.
@@ -39,9 +40,9 @@ export function GroupMentionGuide() {
       </p>
       <p className="muted">
         Linking enables message collection by default; you can turn it off in
-        Group access. Message collection is not required for @mentions. While
-        privacy mode is enabled, use <code>/ask@your_bot hi</code> or reply to a
-        bot message.{" "}
+        the group’s Edit dialog. Message collection is not required for
+        @mentions. While privacy mode is enabled, use{" "}
+        <code>/ask@your_bot hi</code> or reply to a bot message.{" "}
         <a href="https://core.telegram.org/bots/features#privacy-mode">
           Telegram privacy-mode guide
         </a>

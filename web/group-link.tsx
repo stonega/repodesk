@@ -93,8 +93,8 @@ export function GroupLinkDialog({
               Linking enables message collection by default. Received group
               messages, including those from people outside the workspace, can
               be used for group context and recaps. You can disable collection
-              in Group access. Telegram privacy settings still control which
-              messages reach the bot; old history is unavailable.
+              in the group’s Edit dialog. Telegram privacy settings still
+              control which messages reach the bot; old history is unavailable.
             </p>
             <dl className="service-urls">
               <ServiceUrl

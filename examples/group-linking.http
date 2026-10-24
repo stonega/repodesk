@@ -14,7 +14,7 @@ Content-Type: application/json
 ### A new command replaces previous tokens. Linking enables collection of received
 ### group messages and records the group administrator and time. The dialog explains
 ### the default before redemption. Linking does not grant membership or an admin role.
-### Collection can be disabled in Group access; Telegram controls message visibility.
+### Collection can be disabled in Groups & Members; Telegram controls message visibility.
 
 ### Inspect the saved group after the bot confirms "Group linked".
 GET {{origin}}/api/admin/workspaces/{{workspaceId}}/chats

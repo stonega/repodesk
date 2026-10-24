@@ -42,6 +42,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
+const ErrorToastTarget = createContext<HTMLDivElement | null>(null);
+
+/** Keep independent section failures readable together on a combined page. */
+export function ErrorToastGroup({ children }: { children: ReactNode }) {
+  const [target, setTarget] = useState<HTMLDivElement | null>(null);
+  return (
+    <ErrorToastTarget.Provider value={target}>
+      {children}
+      {createPortal(
+        <div className="error-toast-group" ref={setTarget} />,
+        document.body,
+      )}
+    </ErrorToastTarget.Provider>
+  );
+}
+
 /** Page errors float above the layout; retry controls remain part of the toast. */
 export function ErrorToast({
   message,
@@ -52,6 +68,7 @@ export function ErrorToast({
 }) {
   const context = useContext(ToastContext);
   if (!context) throw new Error("ToastProvider is required");
+  const target = useContext(ErrorToastTarget);
   const [dismissedMessage, setDismissedMessage] = useState<string>();
   const dismiss = useCallback(() => setDismissedMessage(message), [message]);
   const dismissConfirmation = context.dismiss;
@@ -66,7 +83,7 @@ export function ErrorToast({
         <Toast key={message} message={message} dismiss={dismiss} error>
           {children}
         </Toast>,
-        document.body,
+        target ?? document.body,
       );
 }
 

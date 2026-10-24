@@ -2,6 +2,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
   useCallback,
   useContext,
   useEffect,
@@ -92,7 +93,12 @@ import { Sidebar } from "./sidebar.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 import { TelegramUserInfo, ThreadIdentity } from "./telegram-identity.tsx";
 import { ThemeSwitch } from "./theme-switch.tsx";
-import { ErrorToast, ToastProvider, useToast } from "./toast.tsx";
+import {
+  ErrorToast,
+  ErrorToastGroup,
+  ToastProvider,
+  useToast,
+} from "./toast.tsx";
 import { Usage } from "./usage.tsx";
 import { WorkflowSummary } from "./workflow-summary.tsx";
 import "./style.css";
@@ -980,8 +986,7 @@ function WorkspacePage({
   if (resource === "workflows") return <WorkflowsPage id={id} />;
   if (resource === "instructions") return <InstructionsPage id={id} />;
   if (resource === "threads") return <ThreadsPage key={id} id={id} />;
-  if (resource === "members") return <MembersPage id={id} />;
-  if (resource === "chats") return <ChatsPage id={id} />;
+  if (resource === "members") return <GroupsAndMembersPage id={id} />;
   if (resource === "deletion") return <PrivacyPage id={id} />;
   return (
     <ReadPage
@@ -1640,7 +1645,21 @@ interface MemberDraft {
   githubChanged: boolean;
   githubRevision?: number;
 }
-function MembersPage({ id }: { id: string }) {
+function GroupsAndMembersPage({ id }: { id: string }) {
+  return (
+    <Page
+      title="Groups & Members"
+      description="Connect your Telegram group and manage workspace members, roles and access requests."
+    >
+      <ErrorToastGroup>
+        <GroupsSection id={id} />
+        <MembersSection id={id} />
+        <GroupMentionGuide />
+      </ErrorToastGroup>
+    </Page>
+  );
+}
+function MembersSection({ id }: { id: string }) {
   const [search, setSearch] = useState("");
   const [params, setParams] = useSearchParams();
   const offset = Math.max(0, Number(params.get("offset")) || 0);
@@ -1659,30 +1678,7 @@ function MembersPage({ id }: { id: string }) {
   const [editingMember, setEditingMember] = useState(false);
   const [memberError, setMemberError] = useState("");
   return (
-    <Page
-      title="Members & access"
-      description="All active workspace members can use the bot. Manage membership, roles and access requests here."
-      actions={
-        <IconButton
-          icon="add"
-          label="Add member"
-          showLabel
-          disabled={!data || loading}
-          onClick={() => {
-            setMember({
-              id: "",
-              role: "member",
-              active: true,
-              githubId: "",
-              githubChanged: false,
-            });
-            setEditingMember(false);
-            setMemberError("");
-            setOpen(true);
-          }}
-        />
-      }
-    >
+    <>
       <ErrorToast message={error}>
         <button
           type="button"
@@ -1694,8 +1690,33 @@ function MembersPage({ id }: { id: string }) {
           Retry
         </button>
       </ErrorToast>
-      <section className="card" aria-label="Workspace members">
-        <h2>Members</h2>
+      <section
+        className="card members-card"
+        aria-label="Workspace members"
+        aria-busy={loading}
+      >
+        <div className="card-heading">
+          <h2>Members</h2>
+          <IconButton
+            icon="add"
+            label="Add member"
+            showLabel
+            disabled={!data || loading}
+            onClick={() => {
+              setMember({
+                id: "",
+                role: "member",
+                active: true,
+                githubId: "",
+                githubChanged: false,
+              });
+              setEditingMember(false);
+              setMemberError("");
+              setOpen(true);
+            }}
+          />
+        </div>
+        <p className="muted">All active workspace members can use the bot.</p>
         <Field label="Search members by name, username or ID">
           <input
             value={search}
@@ -1730,6 +1751,17 @@ function MembersPage({ id }: { id: string }) {
               </tr>
             </thead>
             <tbody>
+              {!data && (
+                <tr>
+                  <td colSpan={6}>
+                    {loading ? (
+                      <SkeletonRows label="Member details" rows={2} />
+                    ) : (
+                      "Member details are unavailable."
+                    )}
+                  </td>
+                </tr>
+              )}
               {rows.map((m) => {
                 const access = m.active ? "Allowed" : "Inactive";
                 return (
@@ -1900,18 +1932,17 @@ function MembersPage({ id }: { id: string }) {
           </ModalActions>
         </Modal>
       )}
-    </Page>
+    </>
   );
 }
-function ChatsPage({ id }: { id: string }) {
+function GroupsSection({ id }: { id: string }) {
   const { data, error, reload, loading } = useData<{ items: Chat[] }>(
-    `/api/admin/workspaces/${id}/chats`,
+    `/api/admin/workspaces/${id}/chats?offset=0`,
   );
   const [linking, setLinking] = useState<string>();
-  const [actionError, setActionError] = useState("");
+  const groupSection = useRef<HTMLElement>(null);
   const linkedGroup = useRef<HTMLElement>(null);
-  const focusLinkedGroup = useRef(false);
-  const notify = useToast();
+  const focusAfterLinkDialog = useRef(false);
   const linked = data?.items.some((chat) => chat.active) ?? false;
   useEffect(() => {
     const refresh = () => {
@@ -1930,29 +1961,31 @@ function ChatsPage({ id }: { id: string }) {
   useEffect(() => {
     void id;
     setLinking(undefined);
-    setActionError("");
-    focusLinkedGroup.current = false;
+    focusAfterLinkDialog.current = false;
   }, [id]);
   useEffect(() => {
-    if (loading || linking === id || !focusLinkedGroup.current) return;
-    // The trigger is disabled once linked; wait until the saved group's actions are ready.
-    linkedGroup.current?.querySelector<HTMLButtonElement>("button")?.focus();
-    focusLinkedGroup.current = false;
-  }, [id, linking, loading]);
+    if (loading || linking === id || !focusAfterLinkDialog.current) return;
+    // Wait for refresh before restoring focus to New or the newly linked group's Edit action.
+    const target = linked ? linkedGroup.current : groupSection.current;
+    target?.querySelector<HTMLButtonElement>("button")?.focus();
+    focusAfterLinkDialog.current = false;
+  }, [id, linking, linked, loading]);
   return (
-    <Page
-      title="Group access"
-      description="Connect one Telegram group to this workspace. Create a command here, then send it in the group."
-      actions={
+    <section aria-label="Groups" ref={groupSection}>
+      <div className="card-heading">
+        <h2>Groups</h2>
         <IconButton
           icon="add"
           label="Link a group"
           showLabel
-          disabled={!data || linked}
+          disabled={!data || loading || linked}
           onClick={() => setLinking(id)}
         />
-      }
-    >
+      </div>
+      <p className="muted">
+        Connect one Telegram group to this workspace. Create a command here,
+        then send it in the group.
+      </p>
       <ErrorToast message={error}>
         <button
           type="button"
@@ -1964,9 +1997,12 @@ function ChatsPage({ id }: { id: string }) {
           Retry
         </button>
       </ErrorToast>
-      <ErrorToast message={actionError} />
       {!data && (
-        <section className="card" aria-label="Linked group" aria-busy={loading}>
+        <section
+          className="card group-access-card"
+          aria-label="Linked group"
+          aria-busy={loading}
+        >
           <h2>Linked group</h2>
           {loading ? (
             <SkeletonRows label="Group details" rows={2} />
@@ -1979,91 +2015,23 @@ function ChatsPage({ id }: { id: string }) {
         <section className="card group-access-card" aria-label="Linked group">
           <h2>No group linked</h2>
           <p className="muted">
-            Choose New to get a one-use /link command. The person sending it
-            must be an active workspace member and a Telegram group admin.
+            Choose New in Groups to get a one-use /link command. The person
+            sending it must be an active workspace member and a Telegram group
+            admin.
           </p>
         </section>
       )}
-      <Pager data={data} />
       {data?.items.map((chat) => (
-        <section
-          className="card group-access-card"
-          key={chat.id}
-          ref={chat.active ? linkedGroup : undefined}
-        >
-          <h2>{chat.title || chat.id}</h2>
-          {chat.title && <p className="muted">Group ID: {chat.id}</p>}
-          <p>
-            {chat.active ? "Linked" : "Inactive"} ·{" "}
-            {chat.visibleAll
-              ? "Receives group messages"
-              : "Directed visibility"}{" "}
-            · Collection: {chat.collection ? "enabled" : "directed only"}
-          </p>
-          {!chat.active && (
-            <p>
-              This group is inactive. Choose New and send the new /link command
-              in the group to relink it. Re-adding the bot in Telegram does not
-              restore the RepoDesk link.
-            </p>
-          )}
-          <p>
-            Message collection starts enabled when you link a group. Collected
-            messages may include people who are not workspace members. Group
-            replies are visible to everyone in the group. Old history is
-            unavailable.
-          </p>
-          <div className="row">
-            <Action
-              loading={loading}
-              onError={setActionError}
-              onClick={async () => {
-                await api(
-                  `/api/admin/workspaces/${id}/chats/${chat.id}/visibility`,
-                  "POST",
-                  {},
-                );
-                reload();
-                notify("Bot visibility checked.");
-              }}
-            >
-              Recheck bot visibility
-            </Action>
-            {(
-              [chat.collection ? "directed" : "collect", "unlink"] as const
-            ).map((action) => (
-              <Action
-                key={action === "unlink" ? "unlink" : "collection"}
-                danger={action === "unlink"}
-                loading={loading}
-                onError={setActionError}
-                onClick={async () => {
-                  await api(
-                    `/api/admin/workspaces/${id}/chats/${chat.id}/action`,
-                    "POST",
-                    { action },
-                  );
-                  reload();
-                  notify(
-                    action === "unlink"
-                      ? "Group unlinked."
-                      : action === "collect"
-                        ? "Group message collection enabled."
-                        : "Only directed messages will be retained.",
-                  );
-                }}
-              >
-                {action === "collect"
-                  ? "Enable message collection"
-                  : action === "directed"
-                    ? "Disable message collection"
-                    : "Unlink group"}
-              </Action>
-            ))}
-          </div>
-        </section>
+        <GroupAccessCard
+          key={`${id}:${chat.id}`}
+          id={id}
+          chat={chat}
+          loading={loading}
+          loadError={error}
+          reload={reload}
+          groupRef={chat.active ? linkedGroup : undefined}
+        />
       ))}
-      <GroupMentionGuide />
       {linking === id && (
         <GroupLinkDialog
           key={id}
@@ -2071,13 +2039,145 @@ function ChatsPage({ id }: { id: string }) {
           request={api}
           linked={linked}
           onClose={() => {
-            focusLinkedGroup.current = linked;
+            focusAfterLinkDialog.current = true;
             setLinking(undefined);
             reload();
           }}
         />
       )}
-    </Page>
+    </section>
+  );
+}
+function GroupAccessCard({
+  id,
+  chat,
+  loading,
+  loadError,
+  reload,
+  groupRef,
+}: {
+  id: string;
+  chat: Chat;
+  loading: boolean;
+  loadError: string;
+  reload: () => void;
+  groupRef?: RefObject<HTMLElement | null>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [error, setError] = useState("");
+  const notify = useToast();
+  const status = `${chat.active ? "Linked" : "Inactive"} · ${chat.visibleAll ? "Receives group messages" : "Directed visibility"} · Collection: ${chat.collection ? "enabled" : "directed only"}`;
+  return (
+    <>
+      <section className="card group-access-card" ref={groupRef}>
+        <div className="card-heading">
+          <h2>{chat.title || chat.id}</h2>
+          <IconButton
+            icon="edit"
+            label={`Edit ${chat.title || chat.id}`}
+            disabled={loading}
+            onClick={() => {
+              setError("");
+              setEditing(true);
+            }}
+          />
+        </div>
+        {chat.title && <p className="muted">Group ID: {chat.id}</p>}
+        <p>{status}</p>
+        {!chat.active && (
+          <p>
+            This group is inactive. Choose New in Groups and send the new /link
+            command in the group to relink it. Re-adding the bot in Telegram
+            does not restore the RepoDesk link.
+          </p>
+        )}
+      </section>
+      {editing && (
+        <Modal
+          title="Edit group"
+          busy={loading}
+          onClose={() => setEditing(false)}
+        >
+          <div className="group-link-details">
+            <h3>{chat.title || chat.id}</h3>
+            {chat.title && <p className="muted">Group ID: {chat.id}</p>}
+            <p>{status}</p>
+            <p>
+              Message collection starts enabled when you link a group. Collected
+              messages may include people who are not workspace members. Group
+              replies are visible to everyone in the group. Old history is
+              unavailable. Changes take effect immediately.
+            </p>
+            {(error || loadError) && (
+              <p className="error" role="alert">
+                {error || loadError}
+              </p>
+            )}
+            {loadError && (
+              <button type="button" className="secondary" onClick={reload}>
+                Retry loading groups
+              </button>
+            )}
+            <div className="row">
+              <Action
+                loading={loading}
+                onError={setError}
+                onClick={async () => {
+                  await api(
+                    `/api/admin/workspaces/${id}/chats/${chat.id}/visibility`,
+                    "POST",
+                    {},
+                  );
+                  reload();
+                  notify("Bot visibility checked.");
+                }}
+              >
+                Recheck bot visibility
+              </Action>
+              <Action
+                danger
+                loading={loading}
+                onError={setError}
+                onClick={async () => {
+                  await api(
+                    `/api/admin/workspaces/${id}/chats/${chat.id}/action`,
+                    "POST",
+                    { action: "unlink" },
+                  );
+                  reload();
+                  notify("Group unlinked.");
+                }}
+              >
+                Unlink group
+              </Action>
+            </div>
+            <ModalActions>
+              <Action
+                loading={loading}
+                onError={setError}
+                onClick={async () => {
+                  await api(
+                    `/api/admin/workspaces/${id}/chats/${chat.id}/action`,
+                    "POST",
+                    { action: chat.collection ? "directed" : "collect" },
+                  );
+                  reload();
+                  notify(
+                    chat.collection
+                      ? "Only directed messages will be retained."
+                      : "Group message collection enabled.",
+                  );
+                }}
+              >
+                {chat.collection
+                  ? "Disable message collection"
+                  : "Enable message collection"}
+              </Action>
+            </ModalActions>
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }
 function ApprovalList({
@@ -4111,8 +4211,7 @@ function Shell() {
   const setupLayout = !!current && location.pathname === "/setup";
   const navigation: [string, string][] = [
     ["overview", "Overview"],
-    ["members", "Members & access"],
-    ["chats", "Group access"],
+    ["members", "Groups & Members"],
     ["workflows", "Workflows"],
     ["skills", "Skills"],
     ["instructions", "Instructions"],
@@ -4128,7 +4227,6 @@ function Shell() {
         [
           "overview",
           "members",
-          "chats",
           "workflows",
           "skills",
           "threads",
@@ -4433,6 +4531,15 @@ function Shell() {
                     <p>Runtime logs are available to deployment operators.</p>
                   </Page>
                 )
+              }
+            />
+            <Route
+              path="/admin/chats"
+              element={
+                <Navigate
+                  to={`/admin/members?${locationParams.toString()}`}
+                  replace
+                />
               }
             />
             <Route

@@ -1,5 +1,29 @@
 # Implementation evidence
 
+## Unified Groups & Members page (2026-10-24)
+
+The sidebar has one **Groups & Members** destination at `/admin/members`. It
+combines Telegram group management, the searchable member table and access requests,
+with a New action beside each management section and separate existing dialogs.
+The group mention setup guide follows these sections. Old `/admin/chats` and
+`/admin/access-policy` links redirect here while preserving workspace and query
+parameters. Member pagination never pages the workspace's single linked group.
+
+Group and member loads, errors and retries remain independent. Simultaneous
+section errors stack without covering each other's recovery controls. Known
+sections remain visible during loading; saved summaries stay separate from editors.
+Closing the group-link dialog restores keyboard focus after its refresh, to New
+or the saved group's Edit action. Documentation, examples and the UI preference
+record use the combined page name. No dependency, API or migration was added.
+
+Validation: `bun run check`, `bun run typecheck`, `bun run build` and **1,190
+deterministic tests across 130 files** passed with isolated PostgreSQL. All **53
+final browser scenarios** passed across admin, group, combined-page and navigation
+suites; member GitHub, invite-link and repository suites also passed. Checks cover combined navigation, legacy links, workspace/query preservation,
+independent loading/retry, saved summaries, modal editing, focus and card spacing
+at 1280px and 390px in both themes. Rendered saved, editor, loading, empty, pending
+and error states were inspected. No deployment was performed.
+
 ## Google account confirmation retains its private topic (2026-10-24)
 
 Google consent started in a private Telegram topic now persists that topic in
@@ -20,6 +44,40 @@ contract passed. The full deterministic run with isolated PostgreSQL completed
 1,190 cases: 1,189 passed and one unrelated coding-reference test exceeded its
 five-second timeout. That case passed in 405 ms on a focused rerun with a
 20-second timeout. No live Google or Telegram actions were used for verification.
+
+## Group management in an Edit dialog (2026-10-24)
+
+Saved Group access cards show the group name, ID and current status with a
+borderless pencil icon at the top right. **Edit group** contains the visibility
+recheck, collection toggle and unlink actions alongside their scope explanation.
+Actions take effect immediately; saved status refreshes in both places. Pending
+requests and refreshes lock dismissal and other controls. Request errors and a
+failed-refresh retry stay inside the dialog; keyboard focus returns to Edit on
+close. Inactive cards retain their relinking guidance, and long names wrap while
+the Edit icon remains aligned. The setup guide and user documentation point to
+the new dialog. No dependency or migration was added.
+
+Validation: lint, strict TypeScript, build and **1,189 deterministic tests across
+130 files** passed with isolated PostgreSQL. All **22 group browser checks**
+passed, covering action recovery, pending locks, keyboard navigation, saved
+summaries, loading/empty states, long names and unknown titles. Card/dialog
+screenshots were inspected at 1280px and 390px in both themes, including pending
+and error states. These initial local checks used no live Telegram actions.
+
+VPS follow-up: the user-authorized deployment installed source tree
+`435eb33600b278edf3dba13ebee3e9e80f260230`, based on `7ddfd76`, in bundle
+`1792808351773-02844639` (package v0.1.44). Exact-image Node, CPU transcription,
+offline Code Truth, Compose readiness, migration rerun and backup/restore checks
+passed. The full browser run passed 382 scenarios; two stale catalog assertions
+were updated for the seventh built-in plugin and passed on rerun. The test-only
+correction is retained separately with the build snapshot.
+
+App, worker, runner and Code Truth are healthy. Public and loopback health,
+readiness, admin and versioned assets return HTTP 200; all 45 packaged artifacts
+and served JavaScript/CSS hashes match the tested images. Configuration, secrets,
+persistent volumes, PostgreSQL and the separate Actions runners were preserved.
+The protected pre-release backup verified successfully. See the
+[deployment record](vps-deployment.md#group-management-dialog-deployment-2026-10-24).
 
 ## Local Qwen3-ASR voice transcription plugin (2026-10-23)
 

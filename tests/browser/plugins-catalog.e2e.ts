@@ -84,7 +84,10 @@ for (const width of [1280, 390]) {
     await expect(
       page.getByRole("button", { name: "Add plugin" }),
     ).toBeEnabled();
-    await expect(catalog.getByRole("link")).toHaveCount(6);
+    await expect(catalog.getByRole("link")).toHaveCount(7);
+    await expect(
+      catalog.getByRole("link", { name: "Open Qwen3-ASR" }),
+    ).toBeVisible();
     await expectCatalog("empty");
     await page.reload();
     await expect.poll(() => held.length).toBe(1);

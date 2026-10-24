@@ -12,13 +12,13 @@ An active member can use the bot immediately; regular membership grants no admin
 role or additional source, destination or repository permissions. Non-members and
 inactive members cannot run bot work.
 
-The **Members & access** page offers a searchable, paginated member table with
+The **Groups & Members** page offers a searchable, paginated member table with
 Telegram profiles, IDs, roles, membership, GitHub detail actions and effective access.
 Add/edit dialogs manage role and active membership. Access requests and their
 shareable Telegram invite link remain on this page. The access policy card, whitelist
 column, whitelist toggle and bulk ID editor have been removed.
-Old `/admin/access-policy` browser links redirect to `/admin/members` while
-preserving query parameters. The retired access-policy API and preview routes
+Old `/admin/chats` and `/admin/access-policy` browser links redirect to
+`/admin/members` while preserving query parameters. The retired access-policy API and preview routes
 are unavailable.
 
 Member profiles come from actual Telegram senders in the resolved workspace and
@@ -33,7 +33,7 @@ created before linking Telegram. Authorized panel admins can inspect full workfl
 and create, edit, approve and control them across owners without linking their
 personal Telegram identity. Workflow execution retains an active member's identity
 and its data/destination permissions; panel actions audit the manager separately.
-Group access also permits the owning deployment operator to issue group-link
+Group management also permits the owning deployment operator to issue group-link
 commands, inspect visibility, manage collection and unlink without a personal
 Telegram identity link. A panel-issued, bot-bound token delegates group linking
 and default received-message collection to an active workspace member who is a
@@ -115,7 +115,7 @@ An unauthorized user can press **Request access** after messaging the bot privat
 or directing a command/reply to it in a linked group. Private routing uses an
 existing workspace selection or membership; exactly one configured workspace with
 a verified owner may be inferred. With multiple possible workspaces, use the
-workspace-specific invite link from **Members & access → Access requests**.
+workspace-specific invite link from **Groups & Members → Access requests**.
 Ordinary requests and legacy workspace-ID request links still require approval.
 They never expose workspace/member lists. Requests also work before activation
 once Telegram updates are being received.
@@ -192,7 +192,7 @@ See [account selection and App permissions](../implementation/github-app.md#fetc
 
 Active members can link GitHub through `/github connect` in private Telegram,
 then confirm the account in Telegram. Stable GitHub numeric IDs and repository
-permission snapshots are stored per member and shown in Members & access. Each
+permission snapshots are stored per member and shown in Groups & Members. Each
 GitHub column contains only a View button, opening account details, connection
 status, sync time and the complete saved repository list with permission labels
 in a read-only modal. Pending and unlinked accounts use the same View action.

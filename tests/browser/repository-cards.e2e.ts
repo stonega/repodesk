@@ -60,6 +60,10 @@ async function fixture(page: Page, theme: "light" | "dark") {
   };
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/chats")) {
+      await route.fulfill({ json: { items: [], total: 0, offset: 0 } });
+      return;
+    }
     expect(route.request().method()).toBe("GET");
     const json =
       path === "/api/setup/status"

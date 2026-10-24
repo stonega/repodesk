@@ -19,6 +19,13 @@ Public static assets can load before login, but contain no workspace data or sec
 
 ## Pages and scope
 
+**Groups & Members** at `/admin/members` combines group management, members and
+access requests in one sidebar destination. Groups and Members each have a
+section-level **New** action; saved records retain their separate modal editors.
+The mention setup guide remains on this page. `/admin/chats` and the retired
+`/admin/access-policy` link redirect here while preserving query parameters.
+Member pagination and search do not paginate the workspace's single linked group.
+
 | Page | P0 controls and information | Acceptance criteria |
 | --- | --- | --- |
 | First-run setup | Claim deployment, create local admin, configure workspace and bot, set up a GitHub App, enter the panel | Resumable; one initial admin; no public reinitialization. Successful model setup activates the bot automatically once Telegram reception and an enabled published skill are ready. |
@@ -27,7 +34,6 @@ Public static assets can load before login, but contain no workspace data or sec
 | Workspace settings | Workspace activity status and Pause/Resume action; Settings follows Plugins in the sidebar | Confirmation dialog explains the consequences; Cancel makes no change; versioned saves preserve other configuration and show conflicts. Pause is absent from the Overview team editor. |
 | Bot settings | Display label, timezone, base instructions, response style, directed-response mode, pause switch | Validated form, versioned save, audit entry, saved/effective version shown. |
 | Model settings | Operator-configured model/search providers and bot chat model, search selection, thinking level, optional capacity and token prices; saved summaries and modal editors | Successful model setup activates automatically when prerequisites are ready, without a separate activation card. Invalid settings rejected locally; provider capabilities require evaluation. Runs pin provider/selection versions and endpoint/thinking/prices at first execution; configuration changes stop old runs. |
-| Groups and access | Connected group/topic, owner, bot visibility, history coverage, message collection, unlink | Linking verifies authority and enables collection; no arbitrary chat ID can be used to obtain access. |
 | Workflows | All authorized panel admins, including unlinked deployment operators, can inspect full details, create/edit drafts, preview, approve, pause/resume, run now and delete | Panel authority permits management across workflow owners. Preserve execution ownership, approval, versions, destination/repository checks and team budgets. |
 | Plugins | Compact Installed catalog with Markets hidden; dedicated detail pages for Code Truth, Codex and registered file extensions; operator-managed version/path/tool editing, enable/disable/remove, file status and revision conflicts | Database-backed settings reach workers without restart; settings and revisions isolated per workspace; existing direct market detail routes remain discovery links and no code executes on API reads/saves. |
 | GitHub | Manage GitHub modal for guided App creation, workspace OAuth, installation/repository selection and connected repository links, opened on Overview without navigation; GitHub callbacks return to Plugins; disconnect API | Manifest state bound to operator/session/workspace; encrypted operator App credentials; one-use PKCE OAuth; verify user installation/repository access; installation tokens limited to selected repositories and Contents read. |
@@ -35,7 +41,7 @@ Public static assets can load before login, but contain no workspace data or sec
 | Shared instructions | List, edit, scope, provenance, versions, forget | Never lists other users' personal memories by virtue of admin role. |
 | Threads | Compact conversation summaries with Telegram user/group identity, latest activity and request counts; dedicated chronological conversations with aggregate statistics and links to individual run diagnostics | Paginate threads after grouping by saved identity; preserve workspace, list and request offsets. Names/usernames are display metadata; IDs and existing workspace authorization govern access. Unlinked deployment administrators can inspect retained messages. Existing cancel/retry/recovery controls remain on individual runs. |
 | Usage and limits | Recorded/estimated usage, daily/monthly caps, reservations and blocked jobs | Changes apply atomically; concurrent workers cannot overspend the displayed cap. |
-| Members & access | Search Telegram names/usernames/IDs and GitHub logins; manage active membership, roles and requests; fetch GitHub account choices in member forms; GitHub column contains only View, opening account/profile, status and repository access details | All active members can use the bot; roles determine available actions. GitHub associations require explicit selection and separate member verification. Preserve last-admin protection, tenant boundaries and revocation checks. |
+| Groups & Members | Connect one Telegram group, inspect visibility, manage collection/unlinking and view mention setup guidance; search Telegram names/usernames/IDs and GitHub logins; manage active membership, roles and requests; fetch GitHub account choices in member forms; GitHub column contains only View, opening account/profile, status and repository access details | Group linking verifies authority and enables collection without granting membership or arbitrary-chat access. All active members can use the bot; roles determine available actions. GitHub associations require explicit selection and separate member verification. Preserve last-admin protection, tenant boundaries and revocation checks. |
 | Privacy and audit | Retention settings, deletion request/status, configuration/action audit | Destructive changes show scope; logs omit credentials and raw private chat text. |
 | Runtime logs | Operator-only API/worker/polling/run/delivery events; severity/service/search filters, cursor pagination, auto-refresh | Static messages and allowed error codes; no secrets/private text; workspace metadata scoped to its operator; seven-day/10,000-entry retention. |
 | Operator settings | Readiness of global bot/provider credentials, webhook state, allowed models, maintenance controls | Deployment-operator-only; workspace admins cannot modify global bot identity or webhook. |
@@ -108,7 +114,7 @@ Escape output content; do not render generated HTML as trusted UI.
 
 ## Configuration behavior
 
-Repository summaries use the same shared card frame in Members & access, Manage
+Repository summaries use the same shared card frame in Groups & Members, Manage
 GitHub, Codex, Review Bot and Code Truth: a muted surface, subtle border, rounded
 corners, wrapping names, compact badges and a common action area. Compact lists
 and cards with saved policy details share that styling. External repository links
@@ -192,10 +198,17 @@ and encryption key stay operator-level deployment settings.
 | `/api/admin/updates` | Authenticated latest stable release, changelog and installation status |
 | `/api/admin/operator/updates` | Operator-only approved update/retry queued to the host daemon; session/origin/CSRF and release fingerprint required |
 
-Group access cards display the last known Telegram group title with the ID below it,
+Group cards on Groups & Members display the last known Telegram group title with
+the ID below it,
 falling back to the ID when the title is unknown. Titles are captured on linking and
 subsequent group updates. Recheck bot visibility also refreshes the title for existing
 bindings; inaccessible groups retain their last known name.
+
+Each saved card has a top-right pencil icon that opens **Edit group**. Visibility
+rechecks, collection controls, unlinking and their scope explanation live in this
+dialog. The card retains its saved status and inactive-link recovery guidance.
+Actions take effect immediately; pending actions and refreshes lock the dialog,
+and failed requests remain inside it for retry.
 
 An always-visible **Group @mentions** guide explains that bot admin
 rights are optional. It covers BotFather `/setprivacy` → Disable, removing and
@@ -217,8 +230,8 @@ and link time record the consent. Existing saved collection choices are preserve
 until explicitly changed or the group is relinked. Visibility checks recognize
 both privacy-disabled bots and group administrators and never change collection.
 
-Group access is available to the workspace's deployment operator without linking a
-personal Telegram identity. **New** opens a dialog that issues a one-use group-link
+Group management is available to the workspace's deployment operator without linking
+a personal Telegram identity. **New** in Groups opens a dialog that issues a one-use group-link
 command through `POST /api/admin/workspaces/:id/chats/link-token`. Authorized
 workspace owner/admin panel accounts can also issue commands. The response contains
 `command` and `expiresAt`; only the token hash, bot ID, issuer and ten-minute expiry
@@ -450,7 +463,7 @@ See [workflow API examples](../../examples/workflows.http).
 
 ### Access request review (implemented)
 
-The **Members & access** page includes **Access requests** and a shareable
+The **Groups & Members** page includes **Access requests** and a shareable
 Telegram invite link that refreshes every 10 seconds with a countdown. Each token
 immediately adds one Telegram account as a regular member; copied links expire
 after 24 hours. Requests sent without an invite still need review.

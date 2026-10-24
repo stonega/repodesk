@@ -2119,7 +2119,7 @@ test.describe
           .getByRole("button", { name: "Sign in", exact: true })
           .click();
         await page
-          .getByRole("link", { name: "Members & access", exact: true })
+          .getByRole("link", { name: "Groups & Members", exact: true })
           .click();
         await chooseWorkspace(page, workspaceId);
         await page.goto(`/admin/members?workspace=${workspaceId}`);
@@ -2262,7 +2262,7 @@ test.describe
           .getByRole("button", { name: "Sign in", exact: true })
           .click();
         await expect(
-          page.getByRole("link", { name: "Members & access", exact: true }),
+          page.getByRole("link", { name: "Groups & Members", exact: true }),
         ).toBeVisible();
         await expect(
           page.getByRole("link", { name: "Allowed users", exact: true }),
@@ -2272,7 +2272,7 @@ test.describe
           new RegExp(`/admin/members\\?workspace=${workspaceId}`),
         );
         await expect(
-          page.getByRole("heading", { name: "Members & access", exact: true }),
+          page.getByRole("heading", { name: "Groups & Members", exact: true }),
         ).toBeVisible();
         const table = page.getByRole("region", { name: "Member access table" });
         const row = (id: string) =>
@@ -2552,7 +2552,7 @@ test.describe
       for (const [path, heading] of [
         ["overview", "Your team, in view"],
         ["settings", "Workspace settings"],
-        ["members", "Members & access"],
+        ["members", "Groups & Members"],
         ["workflows", "Scheduled workflows"],
         ["threads", "Threads"],
         ["usage", "Usage & budget"],

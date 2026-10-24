@@ -15,7 +15,7 @@
 
 ## 邀请成员
 
-1. 打开 **Members & access**，复制当前邀请链接。
+1. 打开 **Groups & Members**，复制当前邀请链接。
 2. 私下交给预定成员，对方用自己的 Telegram 账号打开并发送 Start。
 3. 确认成员列表出现其身份，再使用新链接邀请下一人。
 
@@ -23,7 +23,7 @@
 
 ### 处理访问申请
 
-未获准用户可以发消息并点击 **Request access**。在 **Members & access → Access requests** 审核：
+未获准用户可以发消息并点击 **Request access**。在 **Groups & Members → Access requests** 审核：
 
 - **Approve access**：加入或恢复普通成员身份。
 - **Reject request**：不授予访问；对方可在 24 小时后重新申请。
@@ -44,8 +44,7 @@ Add/Edit 对话框管理角色和活跃状态。身份以 Telegram 数字用户 
 | --- | --- |
 | Overview | 工作区摘要、时区、预算和保留期限 |
 | Settings | 活动状态和暂停/恢复 |
-| Members & access | 成员、GitHub 关联和访问申请 |
-| Group access | 群组绑定、可见性和消息收集 |
+| Groups & Members | Workspace members, GitHub accounts, access requests and Telegram group management |
 | Plugins / Skills / Workflows / Instructions | 集成、技能、定时工作和持久指令 |
 | Runs & delivery / Usage / Audit / Privacy | 运行、交付、费用、审计和删除 |
 

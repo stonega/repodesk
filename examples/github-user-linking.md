@@ -11,7 +11,7 @@ repositories. See [setup and permission boundaries](../docs/implementation/githu
 
 Open the bot's authorization link, authorize your account on GitHub, then return
 to Telegram and press **Connect account** after checking the displayed GitHub login.
-Members & access will show your GitHub identity and selected-repository permissions.
+Groups & Members will show your GitHub identity and selected-repository permissions.
 GitHub rights do not grant a RepoDesk administrator role. Coding also needs the
 operator's existing maintainer grant.
 

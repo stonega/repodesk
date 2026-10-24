@@ -60,14 +60,14 @@ cancel before creating the workspace or finish GitHub connection later in the
 admin panel.
 After activation, the web administrator can share a single-account invite link,
 approve ordinary access requests, directly allow a numeric Telegram ID, or revoke
-a member in Members & access. Invites add regular members automatically without
+a member in Groups & Members. Invites add regular members automatically without
 approval. The displayed link refreshes every 10 seconds with a countdown; copied
 tokens remain valid for 24 hours. The bot denies ordinary use until membership is
 granted through an invite, an approved request or direct enrollment.
 Linking the administrator's personal Telegram account later grants owner actions
 in Telegram. Group linking does not require this step: after activation, use
-**Group access → New**, copy the generated `/link@bot TOKEN` command and send it
-in the intended group as an active workspace member who is a Telegram group
+**Groups & Members → Groups → New**, copy the generated `/link@bot TOKEN` command
+and send it in the intended group as an active workspace member who is a Telegram group
 administrator. Detailed workspace policies remain configurable after activation.
 
 Before activation, process only tightly scoped control interactions; normal model
@@ -123,7 +123,7 @@ Successful model setup activates the bot immediately when prerequisites are read
 When Telegram setup or skills complete later, receiver/worker recovery activates
 the saved configuration automatically, including after a restart. The deployment
 pause setting is preserved. Model settings has no activation step or access form;
-use Members & access for enrollment and Operations for account verification.
+use Groups & Members for enrollment and Operations for account verification.
 Webhook registration remains an explicit action in Site domain.
 
 An empty membership is valid at activation and denies all ordinary bot use until

@@ -30,7 +30,7 @@ const sectionNames: Record<string, string> = {
   "/admin/settings": "Settings",
   "/admin/model": "Model settings",
   "/admin/operations": "Operations",
-  "/admin/members": "Members & access",
+  "/admin/members": "Groups & Members",
   "/admin/skills": "Skills",
   "/admin/threads": "Threads",
 };

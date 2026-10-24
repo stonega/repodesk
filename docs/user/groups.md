@@ -5,7 +5,7 @@
 ## Link a group
 
 1. Add your bot to the intended Telegram group.
-2. In the admin panel, open **Group access → New** and copy the complete command.
+2. In the admin panel, open **Groups & Members → Groups → New** and copy the complete command.
 3. Send `/link@your_bot TOKEN` in that group within ten minutes, using an active
    workspace member account that is also a Telegram group administrator.
 4. Wait for **Group linked**. The panel updates automatically while the dialog is
@@ -14,7 +14,7 @@
 The workspace's deployment operator can generate the token without verifying a
 personal Telegram identity. Workspace owner/admin panel accounts can also generate
 it. A token links one group once; it does not grant membership or an admin role.
-Invite the person sending it through **Members & access** first if needed.
+Invite the person sending it through **Groups & Members** first if needed.
 
 Generating another command invalidates the previous one. The token also stops
 working after expiry, bot replacement or loss of its issuer's permissions. Share
@@ -36,14 +36,15 @@ owner/admin members who prefer the Telegram-only flow.
 
 ### Enable direct @mentions without making the bot an administrator
 
-The **Group @mentions** guide on **Group access** is available before
+The **Group @mentions** guide on **Groups & Members** is available before
 and after linking. The bot can remain a regular group member:
 
 1. Open **@BotFather** and send `/setprivacy`.
 2. Select your bot and choose **Disable**.
 3. Remove the bot from the group, then add it again.
-4. Use **Group access → New** and send the new `/link` command in the group. Wait
-   for **Group linked**, then choose **Recheck bot visibility** and test
+4. Use **Groups & Members → Groups → New** and send the new `/link` command in the group. Wait
+   for **Group linked**, then open the group card's pencil icon (**Edit**), choose
+   **Recheck bot visibility** and test
    `@your_bot hi` with your actual bot username.
 
 Removing the bot marks the saved RepoDesk group link inactive. Re-adding it in
@@ -91,11 +92,13 @@ who are not workspace members and can be used for group context and recaps.
 Let group members know the purpose and retention period.
 
 Telegram must deliver the messages first. Disable privacy mode and re-add the bot,
-or make it a group administrator, then relink and choose **Recheck bot visibility**.
+or make it a group administrator, then relink and open the group card's **Edit**
+dialog to choose **Recheck bot visibility**.
 This refreshes visibility without changing your collection choice. RepoDesk cannot
 read messages from before the bot joined or messages Telegram never delivered.
 
-Choose **Disable message collection** in **Group access**, or send `/capture off`
+In **Groups & Members**, open the group card's pencil icon (**Edit**) and choose
+**Disable message collection**, or send `/capture off`
 as a workspace administrator, to stop collecting future ordinary messages.
 Directed requests still work. Existing retained data follows the retention policy;
 turning collection off does not delete it. Choose **Enable message collection** or

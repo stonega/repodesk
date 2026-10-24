@@ -49,6 +49,10 @@ async function fixture(page: Page) {
   await page.clock.pauseAt(new Date(startTime.getTime() + 1000));
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/chats")) {
+      await route.fulfill({ json: { items: [], total: 0, offset: 0 } });
+      return;
+    }
     if (path.endsWith("/access-requests")) {
       calls++;
       await gate;
