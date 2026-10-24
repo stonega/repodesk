@@ -11,7 +11,8 @@ jobs:
   quality:
     name: Quality and database tests
     runs-on: [self-hosted, linux, x64]
-    timeout-minutes: 10
+    # Database fixtures share the VPS with browser tests and image builds.
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:17-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
@@ -30,10 +31,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Install Python bridge test prerequisite
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3
       - run: bun install --frozen-lockfile
       - run: bun run check
       - run: bun run typecheck
-      - run: bun test ./tests
+      - run: bun test --timeout 15000 ./tests
       - run: bun run build
       - run: bun run test:runtime
 
@@ -68,7 +73,8 @@ jobs:
   containers:
     name: Application containers
     runs-on: [self-hosted, linux, x64]
-    timeout-minutes: 10
+    # The first CPU speech runtime build includes PyTorch and a larger export.
+    timeout-minutes: 30
     env:
       POSTGRES_PASSWORD: ci-only
       COMPOSE_PROJECT_NAME: deepx-ci

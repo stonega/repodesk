@@ -89,6 +89,9 @@ tenant, CSRF and revision boundaries; enable/disable/retry; restart reconciliati
 attachment routing, cancellation, revocation and UTF-8 subprocess output. Browser
 fixtures cover the catalog and plugin page, unknown/loading settings, pending saves,
 download polling and recovery at desktop/mobile widths in both themes.
+The bridge fixtures require Python 3.11+ with its standard library; the quality CI
+job installs Python explicitly. Model packages and weights are not required for
+these deterministic tests.
 
 Build and smoke-test the Docker runtime before release. Real model download and
 speech quality are separate acceptance checks from deterministic application tests.
