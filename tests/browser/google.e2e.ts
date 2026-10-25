@@ -3,6 +3,39 @@ import { type GooglePage, googleScopes } from "../../src/google/config.ts";
 import { expectTopRightAction } from "./card-layout.ts";
 
 const workspace = "d2ce2eab-3b09-4e8e-858e-75c20d832517";
+async function expectApiGuide(page: Page) {
+  const guide = page.getByRole("region", {
+    name: "Google API setup",
+    exact: true,
+  });
+  await expect(guide).toBeVisible();
+  await expect(guide).toContainText(
+    "project that owns the Web application OAuth",
+  );
+  await expect(guide).toContainText("Google sign-in and consent do not enable");
+  await expect(guide).toContainText("SERVICE_DISABLED");
+  await expect(guide).toContainText("accessNotConfigured");
+  await expect(guide).toContainText("wait a few minutes");
+  await expect(guide).toContainText("/google properties");
+  await expect(guide).toContainText("Reconnecting alone will not fix");
+  await expect(guide.locator("input,textarea,select,button")).toHaveCount(0);
+  for (const [name, service] of [
+    ["Google Docs API", "docs.googleapis.com"],
+    ["Google Sheets API", "sheets.googleapis.com"],
+    ["Google Drive API", "drive.googleapis.com"],
+    ["Gmail API", "gmail.googleapis.com"],
+    ["Google Search Console API", "searchconsole.googleapis.com"],
+  ]) {
+    const link = guide.getByRole("link", { name: `${name} ↗`, exact: true });
+    await expect(link).toHaveAttribute(
+      "href",
+      `https://console.cloud.google.com/apis/library/${service}`,
+    );
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  }
+  return guide;
+}
 async function fixture(page: Page, connected = true) {
   const pages = {
     google: {
@@ -100,6 +133,7 @@ for (const width of [1280, 390]) {
     const edit = page.getByRole("button", { name: "Edit Google application" });
     await expect(card).toContainText("shared.apps.googleusercontent.com");
     await expect(card).toContainText("Each member connects their own account");
+    await expectApiGuide(page);
     await expect(card.locator("input,textarea,select")).toHaveCount(0);
     await expectTopRightAction(card, edit);
     await expect(
@@ -114,6 +148,9 @@ for (const width of [1280, 390]) {
       await page.screenshot({
         path: test.info().outputPath(`summary-${theme}.png`),
         fullPage: true,
+      });
+      await (await expectApiGuide(page)).screenshot({
+        path: test.info().outputPath(`api-guide-${theme}.png`),
       });
       await edit.click();
       const dialog = page.getByRole("dialog", {
@@ -241,6 +278,7 @@ for (const width of [1280, 390]) {
       exact: true,
     });
     await expect(card).toContainText("Not configured");
+    await expectApiGuide(page);
     await page.screenshot({
       path: test.info().outputPath("empty.png"),
       fullPage: true,
@@ -321,6 +359,7 @@ for (const width of [1280, 390]) {
     await expect(
       page.getByRole("region", { name: "Google application", exact: true }),
     ).not.toContainText("Not configured");
+    await expectApiGuide(page);
     await page.screenshot({
       path: test.info().outputPath("loading.png"),
       fullPage: true,
@@ -328,6 +367,7 @@ for (const width of [1280, 390]) {
     f.controls.loadError = "google_credentials_unavailable";
     release();
     await expect(page.getByRole("alert")).toContainText("unavailable");
+    await expectApiGuide(page);
     await page.screenshot({
       path: test.info().outputPath("load-error.png"),
       fullPage: true,

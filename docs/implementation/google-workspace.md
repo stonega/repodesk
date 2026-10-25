@@ -19,6 +19,14 @@ Save the client ID and secret, then enable Google. The application can be enable
 before any member connects. The panel shows saved application settings; personal
 accounts and property selection are managed in Telegram.
 
+The detail page's **Enable Google APIs** guide links to all five API pages in
+Google Cloud. Select the project that owns the saved OAuth client and choose
+**Enable** for each API. Successful sign-in and consent do not enable APIs. A
+`403` with `SERVICE_DISABLED` or `accessNotConfigured` means the affected API is
+disabled for that project: enable it, allow a few minutes for propagation, then
+retry the Gmail request or `/google properties`. Reconnecting alone does not
+resolve a disabled API.
+
 Saving a blank secret preserves the existing secret for the same client ID.
 Changing the client ID or supplying a replacement secret clears all personal account
 connections and pending authorization flows in that workspace. Disabling the plugin

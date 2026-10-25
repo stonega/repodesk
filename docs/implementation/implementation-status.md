@@ -1,5 +1,26 @@
 # Implementation evidence
 
+## Google API enablement guide (2026-10-25)
+
+**Plugins → Google** now shows an **Enable Google APIs** guide between the saved
+Web application summary and Access card. It links to Docs, Sheets, Drive, Gmail
+and Search Console setup pages and explains selecting the Cloud project that
+owns the saved OAuth client. Sign-in and consent do not enable APIs. Recovery
+guidance covers `403` with `SERVICE_DISABLED`/`accessNotConfigured`, propagation
+time and retrying Gmail or `/google properties`; reconnecting alone cannot fix
+a disabled API. The guide stays available during first setup, loading and errors.
+Credential editing remains in its existing modal. User/setup documentation and
+the scoped UI preference record were updated.
+
+Validation: lint, strict TypeScript, production build and the Node runtime
+contract passed. All **1,160 app tests across 126 files** passed against disposable
+PostgreSQL on the final run. The first run encountered an unrelated multilingual
+Git patch fixture failure; both its focused rerun and the full rerun passed.
+All **10 Google browser scenarios** passed at 1280px and 390px, including guide
+destinations, saved/loading/empty/error visibility, existing editor recovery and
+card padding. Rendered page, guide and editor states were inspected, with saved
+guides checked in both themes. No dependency, migration or deployment was added.
+
 ## Team currency in Workspace settings (2026-10-25)
 
 `/admin/settings` shows the saved team currency in a card with a focused Edit

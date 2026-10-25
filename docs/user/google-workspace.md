@@ -16,6 +16,16 @@ All members and five services share it. Update the callback in Google when the
 admin domain changes. Replacing the client ID or secret clears all member
 connections in the workspace; members must authorize again.
 
+The **Enable Google APIs** guide on the plugin page links to all five API setup
+pages. Check that Google Cloud has the project that owns your OAuth client selected,
+then choose **Enable** for each API. Successful Google sign-in and consent do not
+enable APIs.
+
+If Gmail or `/google properties` fails with `403` and `SERVICE_DISABLED` or
+`accessNotConfigured`, enable the affected API in that project, wait a few minutes
+for the change to take effect, then retry the request. Reconnecting alone does not
+fix a disabled API.
+
 ## Connect your account in Telegram
 
 1. Select the workspace in the bot's private chat, send `/google` and choose **Connect Google account**.

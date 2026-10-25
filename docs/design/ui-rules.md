@@ -205,6 +205,15 @@ when implementing or reviewing a change.
   Telegram offers connection/status/reconnect/disconnect and personal property
   selection. Browser consent requires confirmation by its initiating Telegram user.
   One user's account, selections and disconnect never grant or remove another's access.
+- **Source update:** 2026-10-25 — after Gmail and Search Console failed because
+  their APIs were disabled in the OAuth client's Cloud project, the user requested
+  adding the enablement guide to the Google plugin page.
+- **Acceptance update:** Keep a read-only guide on the detail page during
+  loading, first setup, saved and error states. Link to all five API setup pages,
+  explain selecting the OAuth client's project, and distinguish API enablement
+  from sign-in/consent. Explain `SERVICE_DISABLED`/`accessNotConfigured`, propagation
+  time and retrying Gmail or `/google properties`; reconnecting alone cannot
+  enable an API. Check wrapping and card padding at desktop/mobile widths in both themes.
 - **Exceptions:** Existing registered clients can be reused. Old workspace tokens
   and service-account credentials are retired and never become personal grants.
 

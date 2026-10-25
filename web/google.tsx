@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GooglePage } from "../src/google/config.ts";
+import { GoogleApiGuide } from "./google-api-guide.tsx";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
@@ -183,6 +184,7 @@ export function Google({
           </p>
         )}
       </section>
+      <GoogleApiGuide />
       <section
         className="card google-summary-card"
         aria-label={`${def.name} capabilities`}
