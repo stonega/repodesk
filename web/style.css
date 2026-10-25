@@ -863,6 +863,13 @@ p {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+.team-currency-card {
+  display: grid;
+  gap: 12px;
+}
+.team-currency-card > p {
+  margin: 0;
+}
 .access-link-card {
   display: flex;
   align-items: flex-start;

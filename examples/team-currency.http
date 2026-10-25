@@ -1,0 +1,33 @@
+@baseUrl = http://localhost:3000
+@workspaceId = REPLACE_WORKSPACE_UUID
+@session = REPLACE_SESSION_COOKIE
+@csrf = REPLACE_CSRF_TOKEN
+
+### Read the latest version and settings. Currency defaults to USD.
+GET {{baseUrl}}/api/admin/workspaces/{{workspaceId}}/settings
+Cookie: repodesk_session={{session}}
+
+### Copy the complete settings and version from the GET, changing currency only.
+### These example values must be replaced with the workspace's saved values.
+### Supported: USD, CNY, TWD, HKD, EUR, GBP, JPY, SGD.
+### Budgets/usage stay in USD; currency is the assistant's preferred currency.
+### A stale version returns 409; unsupported currency returns 400 with settings.currency.
+PUT {{baseUrl}}/api/admin/workspaces/{{workspaceId}}/settings
+Origin: {{baseUrl}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "version": 1,
+  "settings": {
+    "name": "Example team",
+    "timezone": "Asia/Taipei",
+    "currency": "TWD",
+    "retentionDays": 30,
+    "monthlyBudgetUsd": null,
+    "runBudgetUsd": null,
+    "missedRunMinutes": 5,
+    "paused": false
+  }
+}

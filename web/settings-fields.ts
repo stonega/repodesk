@@ -1,13 +1,24 @@
+import { currencies } from "../src/currency.ts";
 import type { Settings } from "../src/domain.ts";
 
-export const workspaceFields: {
+interface WorkspaceField {
   key: keyof Settings;
   label: string;
   help: string;
   min?: number;
   max?: number;
   step?: number | "any";
-}[] = [
+  options?: readonly string[];
+}
+
+export const currencyField: WorkspaceField = {
+  key: "currency",
+  label: "Team currency",
+  help: "Choose the default currency for assistant responses. Budgets and usage accounting use USD; amounts are not automatically converted.",
+  options: currencies,
+};
+
+export const workspaceFields: WorkspaceField[] = [
   { key: "name", label: "Workspace name", help: "1–80 characters." },
   {
     key: "timezone",

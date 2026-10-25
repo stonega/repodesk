@@ -1306,6 +1306,72 @@ suite("PostgreSQL integration (isolated database)", () => {
       );
     }
   });
+  test("team currency defaults legacy records, persists per workspace and protects versioned saves", async () => {
+    const w = await seed();
+    const path = `/api/admin/workspaces/${w.id}/settings`;
+    await store.pool.query(
+      "UPDATE workspaces SET data=data #- '{settings,currency}' WHERE id=$1",
+      [w.id],
+    );
+    expect((await (await request(path)).json()).settings.currency).toBe("USD");
+    expect(
+      (await store.all()).find((value) => value.id === w.id)?.settings.currency,
+    ).toBe("USD");
+    const invalid = await request(path, "PUT", {
+      version: w.version,
+      settings: { ...w.settings, currency: "XYZ" },
+    });
+    expect(invalid.status).toBe(400);
+    expect((await invalid.json()).issues[0].path).toBe("settings.currency");
+    expect((await store.read(w.id)).version).toBe(w.version);
+    const input = {
+      version: w.version,
+      settings: { ...w.settings, currency: "TWD" as const },
+    };
+    const saved = await request(path, "PUT", input);
+    expect(saved.status).toBe(200);
+    expect((await saved.json()).settings.currency).toBe("TWD");
+    expect((await store.read(w.id)).settings).toEqual(input.settings);
+    expect((await (await request(path)).json()).settings.currency).toBe("TWD");
+    expect((await request(path, "PUT", input)).status).toBe(409);
+    expect(
+      (await store.read(w.id)).audit.filter(
+        (a) => a.action === "settings.updated",
+      ),
+    ).toHaveLength(1);
+    const other = await seed();
+    expect((await store.read(other.id)).settings.currency).toBe("USD");
+    const foreign = await foreignWorkspace();
+    expect(
+      (
+        await request(`/api/admin/workspaces/${foreign.id}/settings`, "PUT", {
+          version: foreign.version,
+          settings: input.settings,
+        })
+      ).status,
+    ).toBe(403);
+    expect((await store.read(foreign.id)).settings.currency).toBe("USD");
+    const memberName = `currency-member-${randomUUID()}`;
+    await store.pool.query(
+      "INSERT INTO admins(id,username,password_hash,telegram_id) VALUES($1,$2,$3,'202')",
+      [randomUUID(), memberName, await passwordHash("a long test password")],
+    );
+    const member = await login(store.pool, memberName, "a long test password");
+    expect(
+      (
+        await request(
+          path,
+          "PUT",
+          { ...input, version: w.version + 1 },
+          {
+            cookie: `repodesk_session=${member.raw}`,
+            "x-csrf-token": member.csrf,
+          },
+        )
+      ).status,
+    ).toBe(403);
+    expect((await store.read(w.id)).settings.currency).toBe("TWD");
+  });
   test("settings expose capabilities and reject field errors without altering saved state", async () => {
     const w = await seed();
     const path = `/api/admin/workspaces/${w.id}/settings`;

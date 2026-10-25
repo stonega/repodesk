@@ -102,6 +102,7 @@ export function buildContext(
     chatId: run.chatId,
     topicId: run.topicId,
     timezone: run.settings.timezone,
+    currency: run.settings.currency ?? "USD",
     runBudgetUsd: run.settings.runBudgetUsd,
     existingWorkflows,
   });
@@ -120,6 +121,7 @@ export function buildContext(
   return {
     system:
       system +
+      "\nDefault unspecified monetary amounts to the team's currency; label currency codes, preserve explicit currencies and never invent exchange rates. Model costs and budget/usage accounting remain USD." +
       (existingWorkflows.length
         ? "\nBefore proposing a workflow, compare existingWorkflows by purpose, sources, schedule and format. Identify matches; ask before creating a similar or duplicate workflow."
         : "") +

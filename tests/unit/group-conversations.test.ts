@@ -186,6 +186,8 @@ test("group history compacts and source edits invalidate frozen memory", () => {
   const thread = w.threads?.[0];
   if (!thread) throw Error("thread");
   thread.summary = { ...plan.summary, text: "frozen group summary" };
+  // Match completed compaction so prompt growth uses the runtime's headroom.
+  r.compaction = { ...plan, state: "done", summary: thread.summary };
   refreshThreadContext(w, r);
   expect(r.contextSummary?.text).toBe("frozen group summary");
   expect(

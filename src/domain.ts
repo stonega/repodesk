@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ModelOptions } from "./agent/model-settings.ts";
 import type { PluginSettings } from "./agent/plugin-config.ts";
 import type { CodingConfig } from "./coding/config.ts";
+import { currencies } from "./currency.ts";
 import type { GitHubConnection } from "./github/config.ts";
 import type { GitHubUserAccess } from "./github/user-access.ts";
 import type { GooglePlugin, GoogleUser } from "./google/config.ts";
@@ -54,6 +55,7 @@ export const settingsSchema = z.preprocess(
     .object({
       name: z.string().trim().min(1).max(80),
       timezone,
+      currency: z.enum(currencies).default("USD"),
       retentionDays: z.number().int().min(1).max(90).default(30),
       monthlyBudgetUsd: z.number().finite().min(0).nullable().default(null),
       runBudgetUsd: z.number().finite().min(0).nullable().default(null),

@@ -3,6 +3,12 @@ import type { Pool } from "pg";
 import { type Deployment, Fault, type Workspace } from "../domain.ts";
 import { RuntimeLogger } from "../observability/logs.ts";
 import { type Sql, transaction } from "./pool.ts";
+
+function workspaceDefaults(workspace: Workspace): Workspace {
+  workspace.settings.currency ??= "USD";
+  return workspace;
+}
+
 export class Store {
   constructor(
     public pool: Pool,
@@ -35,7 +41,7 @@ export class Store {
       )
     ).rows[0];
     if (!row) throw new Fault("not_found", 404);
-    return row.data;
+    return workspaceDefaults(row.data);
   }
   async save(sql: Sql, workspace: Workspace) {
     await sql.query(
@@ -67,7 +73,7 @@ export class Store {
   async all(): Promise<Workspace[]> {
     return (
       await this.pool.query("SELECT data FROM workspaces ORDER BY id")
-    ).rows.map((r) => r.data);
+    ).rows.map((r) => workspaceDefaults(r.data));
   }
   async ids(): Promise<string[]> {
     return (

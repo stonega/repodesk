@@ -187,6 +187,7 @@ export function createApp(
         "settings",
         "name",
         "timezone",
+        "currency",
         "language",
         "retentionDays",
         "monthlyBudgetUsd",

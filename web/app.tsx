@@ -88,7 +88,7 @@ import { RunAttempts } from "./run-attempts.tsx";
 import { RunStatistics } from "./run-statistics.tsx";
 import { Select } from "./select.tsx";
 import { SelfCheck } from "./self-check.tsx";
-import { workspaceFields } from "./settings-fields.ts";
+import { currencyField, workspaceFields } from "./settings-fields.ts";
 import { Sidebar } from "./sidebar.tsx";
 import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 import { TelegramUserInfo, ThreadIdentity } from "./telegram-identity.tsx";
@@ -1395,6 +1395,7 @@ function SettingsPage({ id }: { id: string }) {
   }>(`/api/admin/workspaces/${id}/settings`);
   const [current, setCurrent] = useState<typeof data>();
   const [confirming, setConfirming] = useState(false);
+  const [editingCurrency, setEditingCurrency] = useState(false);
   const notify = useToast();
   useEffect(() => {
     if (data) setCurrent(data);
@@ -1404,16 +1405,60 @@ function SettingsPage({ id }: { id: string }) {
   return (
     <Page
       title="Workspace settings"
-      description="Pause or resume work in this workspace."
-      actions={
-        error && (
-          <Action loading={loading} onClick={async () => reload()}>
-            Try again
-          </Action>
-        )
-      }
+      description="Set your team's preferred currency and manage workspace activity."
     >
-      {error && <Notice error>{error}</Notice>}
+      <ErrorToast message={error}>
+        <button type="button" disabled={loading} onClick={reload}>
+          Retry
+        </button>
+      </ErrorToast>
+      <section
+        className="card team-currency-card"
+        aria-label="Team currency"
+        aria-busy={loading}
+      >
+        <div className="card-heading">
+          <h2>Team currency</h2>
+          <IconButton
+            icon="edit"
+            label="Edit team currency"
+            disabled={!current || loading || !!error}
+            onClick={() => setEditingCurrency(true)}
+          />
+        </div>
+        <p className="settings-item-value">
+          {current ? (
+            (current.settings.currency ?? "USD")
+          ) : loading ? (
+            <Skeleton width="4em" />
+          ) : (
+            "Unavailable"
+          )}
+        </p>
+        <p className="muted">
+          Default currency for assistant responses when no currency is
+          specified. Budgets and usage accounting use USD.
+        </p>
+      </section>
+      {editingCurrency && current && (
+        <WorkspaceSettingsEditor
+          id={id}
+          current={current}
+          title="Edit team currency"
+          fields={[currencyField]}
+          onClose={() => setEditingCurrency(false)}
+          onConflict={() => {
+            setEditingCurrency(false);
+            reload();
+          }}
+          onSaved={(updated) => {
+            setCurrent(updated);
+            setEditingCurrency(false);
+            notify("Team currency saved.");
+            reload();
+          }}
+        />
+      )}
       <section
         className="card"
         aria-label="Workspace activity"
@@ -1493,20 +1538,24 @@ function WorkspaceSettingsEditor({
   onClose,
   onConflict,
   onSaved,
+  title = "Edit team configuration",
+  fields = workspaceFields,
 }: {
   id: string;
   current: { version: number; settings: Settings };
   onClose: () => void;
   onConflict: () => void;
   onSaved: (updated: { version: number; settings: Settings }) => void;
+  title?: string;
+  fields?: typeof workspaceFields;
 }) {
   const [draft, setDraft] = useState<Settings>(current.settings);
   const [issues, setIssues] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState("");
   return (
-    <Modal title="Edit team configuration" onClose={onClose}>
+    <Modal title={title} onClose={onClose}>
       <form onSubmit={(event) => event.preventDefault()}>
-        {workspaceFields.map((field) => {
+        {fields.map((field) => {
           const fieldId = `settings-${field.key}`;
           const value = draft[field.key];
           const issue = issues[field.key];
@@ -1523,45 +1572,65 @@ function WorkspaceSettingsEditor({
           return (
             <div className="field" key={field.key}>
               <label htmlFor={fieldId}>{field.label}</label>
-              <input
-                id={fieldId}
-                type={
-                  typeof value === "boolean"
-                    ? "checkbox"
-                    : budget || typeof value === "number"
-                      ? "number"
-                      : "text"
-                }
-                min={field.min}
-                max={field.max}
-                step={field.step}
-                placeholder={budget ? "None" : undefined}
-                checked={typeof value === "boolean" ? value : undefined}
-                value={
-                  typeof value === "boolean"
-                    ? undefined
-                    : value === null || Number.isNaN(value)
-                      ? ""
-                      : String(value)
-                }
-                aria-invalid={!!issue}
-                aria-describedby={`${fieldId}-help${issue ? ` ${fieldId}-error` : ""}`}
-                onChange={(event) => {
-                  const next =
+              {field.options ? (
+                <Select
+                  id={fieldId}
+                  value={String(value ?? "USD")}
+                  aria-invalid={!!issue}
+                  aria-describedby={`${fieldId}-help${issue ? ` ${fieldId}-error` : ""}`}
+                  onChange={(event) => {
+                    setDraft({ ...draft, [field.key]: event.target.value });
+                    setIssues((previous) => ({ ...previous, [field.key]: "" }));
+                    setFormError("");
+                  }}
+                >
+                  {field.options.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <input
+                  id={fieldId}
+                  type={
                     typeof value === "boolean"
-                      ? event.target.checked
+                      ? "checkbox"
                       : budget || typeof value === "number"
-                        ? event.target.value === ""
-                          ? budget
-                            ? null
-                            : Number.NaN
-                          : Number(event.target.value)
-                        : event.target.value;
-                  setDraft({ ...draft, [field.key]: next });
-                  setIssues((previous) => ({ ...previous, [field.key]: "" }));
-                  setFormError("");
-                }}
-              />
+                        ? "number"
+                        : "text"
+                  }
+                  min={field.min}
+                  max={field.max}
+                  step={field.step}
+                  placeholder={budget ? "None" : undefined}
+                  checked={typeof value === "boolean" ? value : undefined}
+                  value={
+                    typeof value === "boolean"
+                      ? undefined
+                      : value === null || Number.isNaN(value)
+                        ? ""
+                        : String(value)
+                  }
+                  aria-invalid={!!issue}
+                  aria-describedby={`${fieldId}-help${issue ? ` ${fieldId}-error` : ""}`}
+                  onChange={(event) => {
+                    const next =
+                      typeof value === "boolean"
+                        ? event.target.checked
+                        : budget || typeof value === "number"
+                          ? event.target.value === ""
+                            ? budget
+                              ? null
+                              : Number.NaN
+                            : Number(event.target.value)
+                          : event.target.value;
+                    setDraft({ ...draft, [field.key]: next });
+                    setIssues((previous) => ({ ...previous, [field.key]: "" }));
+                    setFormError("");
+                  }}
+                />
+              )}
               <small id={`${fieldId}-help`}>{field.help}</small>
               {issue && (
                 <small id={`${fieldId}-error`} role="alert">

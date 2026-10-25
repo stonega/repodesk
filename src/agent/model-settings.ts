@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { currencies } from "../currency.ts";
 import type { ModelMetadata } from "../model-metadata/types.ts";
 
 export const DEFAULT_MODEL_BASE_URL = "https://api.openai.com/v1";
@@ -45,16 +46,7 @@ export type ModelCapabilities = {
   limits: { contextWindow?: number; maxOutputTokens: number };
   source: "api" | "catalog" | "operator" | "default";
 };
-export const modelCurrencies = [
-  "USD",
-  "CNY",
-  "TWD",
-  "HKD",
-  "EUR",
-  "GBP",
-  "JPY",
-  "SGD",
-] as const;
+export const modelCurrencies = currencies;
 export type ModelCurrency = (typeof modelCurrencies)[number];
 export const modelPricingSchema = z
   .object({

@@ -1,5 +1,32 @@
 # Implementation evidence
 
+## Team currency in Workspace settings (2026-10-25)
+
+`/admin/settings` shows the saved team currency in a card with a focused Edit
+dialog. USD, CNY, TWD, HKD, EUR, GBP, JPY and SGD share the existing model-price
+currency list. New and legacy workspaces default to USD without a migration.
+Versioned settings saves retain the existing workspace authorization, audit and
+conflict behavior; Overview edits and pause/resume preserve the saved currency.
+
+New runs snapshot team currency and supply it to the assistant as the default
+for unspecified monetary amounts. Explicit source currencies stay explicit;
+model costs, budgets and usage accounting stay in USD. No amounts are converted
+and no exchange-rate lookup is performed. Historical runs without a currency
+use USD. See [the user guide](../user/administration.md#team-currency) and
+[runnable API requests](../../examples/team-currency.http).
+
+Validation: lint, strict TypeScript, build, the Node runtime contract and all
+**1,193 deterministic tests across 131 files** passed against disposable
+PostgreSQL. All **21 admin/currency browser scenarios** passed; the four currency
+scenarios also passed after the final spacing changes. Coverage includes legacy
+defaults, persistence, tenant/member boundaries, duplicate/stale saves, pinned
+run context, Cancel, retained failed drafts, pending locks and conflict recovery.
+Saved, editor, loading, pending and error screenshots were inspected at 1280px
+and 390px in both themes, with assertions for card padding and action placement.
+The group compaction fixture now models the runtime's completed-compaction state
+so added prompt context uses its existing headroom. No dependency, migration,
+deployment or live model/Telegram call was added or performed.
+
 ## Unified Groups & Members page (2026-10-24)
 
 The sidebar has one **Groups & Members** destination at `/admin/members`. It

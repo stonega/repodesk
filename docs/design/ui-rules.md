@@ -1194,6 +1194,23 @@ when implementing or reviewing a change.
   and requested a horizontal timeline.
 - **Exceptions:** Other record lists keep their existing layouts.
 
+### Team currency is managed in Settings
+
+- **Preference:** Let administrators set the team's preferred currency on
+  `/admin/settings`. Show the saved currency and explanation in a card, with one
+  Edit action opening a focused modal using the shared dropdown.
+- **Scope:** Team currency in Workspace settings. This is the assistant's default
+  when a request and its sources leave currency unspecified. Preserve explicit
+  source currencies; budget and usage accounting continue to use USD.
+- **Source:** 2026-10-25 — user requested support for setting team currency in
+  `/admin/settings`.
+- **Acceptance:** Existing teams show USD. Cancel discards changes, failed saves
+  retain the draft, pending saves lock dismissal and duplicate submission, and
+  conflicts offer current-settings recovery. Check saved display, editor,
+  loading, pending and error states at desktop/mobile widths in both themes.
+- **Exceptions:** Model-price currency remains an independent price override.
+  Changing team currency does not convert monetary amounts or fetch exchange rates.
+
 ### Team configuration uses one overview editor
 
 - **Preference:** Show saved workspace configuration in the Overview team card.
@@ -1206,7 +1223,8 @@ when implementing or reviewing a change.
   to show its values in the Overview team card, with one edit button and one form.
   The user then asked to make that card more compact, suggesting a grid layout.
 - **Exceptions:** Pause is managed separately on Workspace settings with
-  confirmation. Model capacity is available in deployment Model settings.
+  confirmation. Team currency has its own Settings card and focused editor.
+  Model capacity is available in deployment Model settings.
 
 ### Model configuration uses a summary card and one editor
 

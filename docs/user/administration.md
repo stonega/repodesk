@@ -43,12 +43,24 @@ Add/Edit 对话框管理角色和活跃状态。身份以 Telegram 数字用户 
 | 页面 | 主要用途 |
 | --- | --- |
 | Overview | 工作区摘要、时区、预算和保留期限 |
-| Settings | 活动状态和暂停/恢复 |
+| Settings | Team currency, activity status and pause/resume |
 | Groups & Members | Workspace members, GitHub accounts, access requests and Telegram group management |
 | Plugins / Skills / Workflows / Instructions | 集成、技能、定时工作和持久指令 |
 | Runs & delivery / Usage / Audit / Privacy | 运行、交付、费用、审计和删除 |
 
 可见入口取决于权限。多人同时修改时，旧页面保存可能失败；重新加载并核对新值后再保存。
+
+## Team currency
+
+Open **Settings → Team currency → Edit**, choose USD, CNY, TWD, HKD, EUR,
+GBP, JPY or SGD, then save. New and existing workspaces default to USD.
+The assistant uses this as its preferred currency when the request and sources
+do not specify one. Explicit source currencies remain unchanged. Budgets, model
+costs and usage accounting use USD; this setting does not convert amounts or
+fetch exchange rates. Model-price override currency is configured separately.
+
+Cancel discards changes. A failed save retains your selection; if someone else
+changed settings, reload the current version and review it before saving again.
 
 ## 管理员自检助手
 
