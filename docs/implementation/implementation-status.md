@@ -1,5 +1,30 @@
 # Implementation evidence
 
+## Multiple Telegram groups per workspace (2026-10-26)
+
+Workspaces can now link multiple Telegram groups. Migration
+`021_multiple_groups.sql` preserves existing bindings, removes the unique workspace
+constraint and retains exclusive ownership of each Telegram group. Panel-issued
+and legacy actor-bound commands keep their existing authority, expiry and one-use
+checks. Unlinking or migrating one group removes only its binding; other groups'
+settings, routing and eligible queued work remain intact.
+
+Groups keeps New available beside its heading and lists saved groups with separate
+Edit dialogs. Linking waits for a new or renewed link rather than treating an
+existing active group as success, and closing restores focus to New. All API pages
+are loaded independently of member pagination, including groups past the first
+100 records. User guidance, API examples, architecture and scoped UI rules were updated.
+
+Validation: `bun run check`, `bun run typecheck`, `bun test` (**1,196 tests across
+131 files**), `bun run build` and the Node runtime contract passed with disposable
+PostgreSQL. All **52 focused browser scenarios** passed across group linking,
+Groups & Members and admin flows. Coverage includes concurrent token redemption,
+existing-binding migration/replay, exclusive group ownership, isolated conversations,
+per-group settings and revocation, migration/bot removal, second-group linking,
+relinking, pending/error recovery, keyboard focus and a 101-group fixture. Saved,
+editor, pending, error, loading and empty layouts were inspected at 1280px and
+390px across both themes. No live Telegram call or deployment was performed.
+
 ## Groups and Members share the same card layout (2026-10-26)
 
 Groups now uses the same section card surface, padding, heading and top-right

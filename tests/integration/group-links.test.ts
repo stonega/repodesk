@@ -7,6 +7,7 @@ import {
   test,
 } from "bun:test";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { login } from "../../src/admin/auth.ts";
 import { createApp } from "../../src/app.ts";
 import { migrate } from "../../src/db/migrate.ts";
@@ -372,7 +373,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       await ingress.accept(update(command.command));
       expect((await store.read(w.id)).chats).toHaveLength(0);
     });
-    test("duplicates and concurrent different-group redemptions bind only one group and confirm once", async () => {
+    test("one command binds only one group under concurrent redemption; fresh commands add more groups", async () => {
       const w = await seed();
       const command = await issue(w);
       const first = update(command.command);
@@ -394,7 +395,184 @@ const rootUrl = process.env.TEST_DATABASE_URL;
           )
         ).rowCount,
       ).toBe(1);
-      expect((await request(endpoint(w))).status).toBe(409);
+      const next = await issue(w);
+      await ingress.accept(update(next.command, -100202));
+      await ingress.accept(update(next.command, -100203));
+      const after = await store.read(w.id);
+      expect(after.chats).toHaveLength(2);
+      expect(after.chats.every((chat) => chat.active)).toBe(true);
+      expect(after.chats.some((chat) => chat.id === "-100203")).toBe(false);
+      expect(
+        after.deliveries.filter((d) => d.text.startsWith("Group linked.")),
+      ).toHaveLength(2);
+      expect(
+        (
+          await store.pool.query(
+            "SELECT * FROM chat_bindings WHERE workspace_id=$1",
+            [w.id],
+          )
+        ).rowCount,
+      ).toBe(2);
+    });
+    test("the migration preserves existing bindings, permits multiple groups and keeps group ownership exclusive", async () => {
+      const client = await store.pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(
+          "CREATE TEMP TABLE chat_bindings(chat_id text PRIMARY KEY, workspace_id uuid NOT NULL UNIQUE)",
+        );
+        const id = randomUUID();
+        await client.query("INSERT INTO chat_bindings VALUES('-1001',$1)", [
+          id,
+        ]);
+        const migration = await readFile(
+          "migrations/021_multiple_groups.sql",
+          "utf8",
+        );
+        await client.query(migration);
+        await client.query(migration);
+        await client.query("INSERT INTO chat_bindings VALUES('-1002',$1)", [
+          id,
+        ]);
+        expect(
+          (await client.query("SELECT * FROM chat_bindings ORDER BY chat_id"))
+            .rows,
+        ).toEqual([
+          { chat_id: "-1001", workspace_id: id },
+          { chat_id: "-1002", workspace_id: id },
+        ]);
+        await expect(
+          client.query("INSERT INTO chat_bindings VALUES('-1001',$1)", [
+            randomUUID(),
+          ]),
+        ).rejects.toMatchObject({ code: "23505" });
+      } finally {
+        await client.query("ROLLBACK");
+        client.release();
+      }
+    });
+    test("group settings, conversations and unlinking stay scoped to the selected group", async () => {
+      const w = await seed();
+      for (const chatId of [-100700, -100701])
+        await ingress.accept(update((await issue(w)).command, chatId));
+      const first = `/api/admin/workspaces/${w.id}/chats/-100700`;
+      expect(
+        (
+          await request(
+            `${first}/action`,
+            credentials,
+            {},
+            { action: "directed" },
+          )
+        ).status,
+      ).toBe(200);
+      privacyDisabled = false;
+      expect((await request(`${first}/visibility`)).status).toBe(200);
+      const before = await store.read(w.id);
+      expect(before.chats.find((chat) => chat.id === "-100700")).toMatchObject({
+        collection: false,
+        visibleAll: false,
+      });
+      const other = before.chats.find((chat) => chat.id === "-100701");
+      expect(other).toMatchObject({
+        active: true,
+        collection: true,
+        visibleAll: true,
+      });
+      await ingress.accept(
+        update("/ask@fixture_bot First group question", -100700),
+      );
+      await ingress.accept(
+        update("/ask@fixture_bot Second group question", -100701),
+      );
+      const conversations = (await store.read(w.id)).runs;
+      expect(conversations).toHaveLength(2);
+      expect(new Set(conversations.map((run) => run.threadId)).size).toBe(2);
+      for (const run of conversations)
+        expect(
+          run.sources.every((source) => source.chatId === run.chatId),
+        ).toBe(true);
+      expect(
+        (
+          await request(
+            `${first}/action`,
+            credentials,
+            {},
+            { action: "unlink" },
+          )
+        ).status,
+      ).toBe(200);
+      const saved = await store.read(w.id);
+      expect(saved.chats.find((chat) => chat.id === "-100700")?.active).toBe(
+        false,
+      );
+      expect(saved.chats.find((chat) => chat.id === "-100701")).toEqual(other);
+      expect(saved.runs.find((run) => run.chatId === "-100700")?.status).toBe(
+        "cancelled",
+      );
+      expect(saved.runs.find((run) => run.chatId === "-100701")?.status).toBe(
+        "queued",
+      );
+      expect(
+        (
+          await store.pool.query(
+            "SELECT chat_id FROM chat_bindings WHERE workspace_id=$1",
+            [w.id],
+          )
+        ).rows,
+      ).toEqual([{ chat_id: "-100701" }]);
+      await ingress.accept(update("/ask@fixture_bot Still connected", -100701));
+      expect((await store.read(w.id)).runs).toHaveLength(3);
+      await ingress.accept(update((await issue(w)).command, -100700));
+      const relinked = await store.read(w.id);
+      expect(relinked.chats).toHaveLength(2);
+      expect(relinked.chats.every((chat) => chat.active)).toBe(true);
+      expect(relinked.chats.find((chat) => chat.id === "-100701")).toEqual(
+        other,
+      );
+    });
+    test("group migration and bot removal leave other group bindings usable", async () => {
+      const w = await seed();
+      for (const chatId of [-100800, -100801, -100802])
+        await ingress.accept(update((await issue(w)).command, chatId));
+      const migration = update("", -100800);
+      if (migration.message) migration.message.migrate_to_chat_id = -100900;
+      await ingress.accept(migration);
+      await ingress.accept(
+        updateSchema.parse({
+          update_id: ++sequence,
+          my_chat_member: {
+            chat: { id: -100801, type: "supergroup" },
+            from: { id: 202, is_bot: false },
+            date: Math.floor(Date.now() / 1000),
+            old_chat_member: {
+              user: { id: 999, is_bot: true },
+              status: "member",
+            },
+            new_chat_member: {
+              user: { id: 999, is_bot: true },
+              status: "left",
+            },
+          },
+        }),
+      );
+      const saved = await store.read(w.id);
+      expect(
+        saved.chats.filter((chat) => chat.active).map((chat) => chat.id),
+      ).toEqual(["-100802"]);
+      expect(
+        (
+          await store.pool.query(
+            "SELECT workspace_id FROM chat_bindings WHERE chat_id='-100802'",
+          )
+        ).rows[0]?.workspace_id,
+      ).toBe(w.id);
+      await ingress.accept(update("/ask@fixture_bot Still connected", -100802));
+      expect((await store.read(w.id)).runs.at(-1)?.chatId).toBe("-100802");
+      await ingress.accept(update((await issue(w)).command, -100900));
+      expect(
+        (await store.read(w.id)).chats.filter((chat) => chat.active),
+      ).toHaveLength(2);
     });
     test("an unverified panel operator can inspect visibility and unlink before issuing a fresh command", async () => {
       const w = await seed();
@@ -424,9 +602,12 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       const firstCommand = await issue(first);
       await ingress.accept(update(firstCommand.command, -100500));
       const second = await seed();
+      await ingress.accept(update((await issue(second)).command, -100502));
       const secondCommand = await issue(second);
       await ingress.accept(update(secondCommand.command, -100500));
-      expect((await store.read(second.id)).chats).toHaveLength(0);
+      expect(
+        (await store.read(second.id)).chats.map((chat) => chat.id),
+      ).toEqual(["-100502"]);
       expect(
         (
           await store.pool.query(
@@ -435,7 +616,9 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         ).rows[0]?.workspace_id,
       ).toBe(first.id);
       await ingress.accept(update(secondCommand.command, -100501));
-      expect((await store.read(second.id)).chats[0]?.id).toBe("-100501");
+      expect(
+        (await store.read(second.id)).chats.map((chat) => chat.id),
+      ).toEqual(["-100502", "-100501"]);
     });
     test("paused deployments and deleted workspaces cannot redeem commands", async () => {
       const w = await seed();
@@ -461,6 +644,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     });
     test("legacy private /linktoken commands remain actor-bound and require workspace admin authority", async () => {
       const w = await seed();
+      await ingress.accept(update((await issue(w)).command, -100399));
       await store.change(w.id, (saved) => {
         saved.tokens.push({
           kind: "group",
@@ -470,9 +654,9 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         });
       });
       await ingress.accept(update("/link legacy", -100400, 202));
-      expect((await store.read(w.id)).chats).toHaveLength(0);
-      await ingress.accept(update("/link legacy", -100400, 303));
       expect((await store.read(w.id)).chats).toHaveLength(1);
+      await ingress.accept(update("/link legacy", -100400, 303));
+      expect((await store.read(w.id)).chats).toHaveLength(2);
     });
   },
 );

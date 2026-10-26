@@ -662,11 +662,6 @@ export class Ingress {
         authorize(w, actor);
       } else authorize(w, actor, true);
       const chatId = String(msg.chat.id);
-      requireThat(
-        !w.chats.some((c) => c.active && c.id !== chatId),
-        "one_group_per_workspace",
-        409,
-      );
       const inserted = await sql.query(
         "INSERT INTO chat_bindings(chat_id,workspace_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING chat_id",
         [chatId, w.id],
@@ -744,9 +739,10 @@ export class Ingress {
       // Migration suspends delivery until a workspace admin verifies and links the new destination.
       const old = w.chats.find((c) => c.id === String(msg.chat.id));
       if (old) old.active = false;
-      await sql.query("DELETE FROM chat_bindings WHERE workspace_id=$1", [
-        w.id,
-      ]);
+      await sql.query(
+        "DELETE FROM chat_bindings WHERE workspace_id=$1 AND chat_id=$2",
+        [w.id, String(msg.chat.id)],
+      );
       revokeWork(w);
       audit(
         w,

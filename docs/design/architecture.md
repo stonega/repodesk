@@ -114,7 +114,11 @@ Relational tables cover deployment/configuration, local admins/sessions, first-r
 claim state, chat bindings, Telegram workspace selections, inbox, outbox, authentication
 limits, worker heartbeats, fixed access-help deliveries and operator audit.
 Database primary/unique constraints enforce one deployment, one account identity,
-one active group binding per workspace/chat and one `(bot_id, update_id)` receipt.
+one owning workspace per Telegram group and one `(bot_id, update_id)` receipt.
+Migration `021_multiple_groups.sql` removes the unique workspace constraint from
+chat bindings while retaining the chat primary key and existing bindings. A
+workspace can link multiple groups; unlinking or migrating a group removes only
+that group's binding.
 Workflow occurrence uniqueness and conversation leases are enforced while holding
 the exclusive tenant row lock. The fencing counter prevents expired executors from
 writing after a new claim.

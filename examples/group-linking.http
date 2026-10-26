@@ -15,7 +15,19 @@ Content-Type: application/json
 ### group messages and records the group administrator and time. The dialog explains
 ### the default before redemption. Linking does not grant membership or an admin role.
 ### Collection can be disabled in Groups & Members; Telegram controls message visibility.
+### Repeat this request for each additional group in the same workspace. Redeem each
+### command before generating the next. Existing groups keep their saved settings.
+### Every Telegram group belongs to only one workspace.
 
 ### Inspect the saved group after the bot confirms "Group linked".
 GET {{origin}}/api/admin/workspaces/{{workspaceId}}/chats
 Cookie: repodesk_session={{session}}
+
+### Unlink only the selected group; other groups in this workspace stay connected.
+POST {{origin}}/api/admin/workspaces/{{workspaceId}}/chats/{{groupId}}/action
+Cookie: repodesk_session={{session}}
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{ "action": "unlink" }

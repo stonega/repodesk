@@ -22,10 +22,10 @@ Public static assets can load before login, but contain no workspace data or sec
 **Groups & Members** at `/admin/members` combines group management, members and
 access requests in one sidebar destination. Groups and Members use matching
 section cards, with their heading and **New** action inside the same padding.
-The group summary is unboxed within its card; saved records retain their separate modal editors.
+Group summaries are unboxed within their card; saved records retain separate modal editors.
 The mention setup guide remains on this page. `/admin/chats` and the retired
 `/admin/access-policy` link redirect here while preserving query parameters.
-Member pagination and search do not paginate the workspace's single linked group.
+Member pagination and search do not paginate or hide the workspace's linked groups.
 
 | Page | P0 controls and information | Acceptance criteria |
 | --- | --- | --- |
@@ -42,7 +42,7 @@ Member pagination and search do not paginate the workspace's single linked group
 | Shared instructions | List, edit, scope, provenance, versions, forget | Never lists other users' personal memories by virtue of admin role. |
 | Threads | Compact conversation summaries with Telegram user/group identity, latest activity and request counts; dedicated chronological conversations with aggregate statistics and links to individual run diagnostics | Paginate threads after grouping by saved identity; preserve workspace, list and request offsets. Names/usernames are display metadata; IDs and existing workspace authorization govern access. Unlinked deployment administrators can inspect retained messages. Existing cancel/retry/recovery controls remain on individual runs. |
 | Usage and limits | Recorded/estimated usage, daily/monthly caps, reservations and blocked jobs | Changes apply atomically; concurrent workers cannot overspend the displayed cap. |
-| Groups & Members | Connect one Telegram group, inspect visibility, manage collection/unlinking and view mention setup guidance; search Telegram names/usernames/IDs and GitHub logins; manage active membership, roles and requests; fetch GitHub account choices in member forms; GitHub column contains only View, opening account/profile, status and repository access details | Group linking verifies authority and enables collection without granting membership or arbitrary-chat access. All active members can use the bot; roles determine available actions. GitHub associations require explicit selection and separate member verification. Preserve last-admin protection, tenant boundaries and revocation checks. |
+| Groups & Members | Connect multiple Telegram groups, inspect visibility, manage collection/unlinking per group and view mention setup guidance; search Telegram names/usernames/IDs and GitHub logins; manage active membership, roles and requests; fetch GitHub account choices in member forms; GitHub column contains only View, opening account/profile, status and repository access details | Group linking verifies authority and enables collection without granting membership or arbitrary-chat access. All active members can use the bot; roles determine available actions. GitHub associations require explicit selection and separate member verification. Preserve last-admin protection, tenant boundaries and revocation checks. |
 | Privacy and audit | Retention settings, deletion request/status, configuration/action audit | Destructive changes show scope; logs omit credentials and raw private chat text. |
 | Runtime logs | Operator-only API/worker/polling/run/delivery events; severity/service/search filters, cursor pagination, auto-refresh | Static messages and allowed error codes; no secrets/private text; workspace metadata scoped to its operator; seven-day/10,000-entry retention. |
 | Operator settings | Readiness of global bot/provider credentials, webhook state, allowed models, maintenance controls | Deployment-operator-only; workspace admins cannot modify global bot identity or webhook. |
@@ -243,11 +243,16 @@ An active workspace member sends the command in the intended group. Telegram mus
 confirm that sender is a group administrator. The token delegates only group
 linking, grants no membership or role, and is rejected after expiry, consumption,
 bot replacement or loss of the issuing administrator's authority. Linking preserves
-one group per workspace and exclusive group ownership, and starts with ordinary
-message collection enabled. Existing actor-bound `/linktoken` commands still work
+exclusive group ownership while allowing multiple groups per workspace, and starts
+with ordinary message collection enabled. Existing actor-bound `/linktoken` commands still work
 and explain the same default before the command is sent.
 Unlinked deployment operators can also recheck visibility, manage collection and
-unlink their workspace's group using the same scoped panel authority.
+unlink their workspace's groups using the same scoped panel authority. Unlinking or
+migrating one group removes only that group's binding. Other groups retain their
+settings, incoming routing and eligible queued work. The Groups section loads every
+API page independently of member pagination. **New** remains available after linking;
+the command dialog detects a new or renewed group link rather than treating an
+existing active group as success, and closing restores focus to **New**.
 
 These are proposed resource boundaries. Define shared request/response schemas before
 implementing forms; call domain services rather than duplicating Telegram logic.

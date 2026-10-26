@@ -21,11 +21,6 @@ export function issueGroupLink(
   now = new Date(),
 ) {
   groupLinkAuthority(w, admin);
-  requireThat(
-    !w.chats.some((chat) => chat.active),
-    "one_group_per_workspace",
-    409,
-  );
   const raw = token();
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
   w.tokens = w.tokens.filter((entry) => entry.kind !== "group");

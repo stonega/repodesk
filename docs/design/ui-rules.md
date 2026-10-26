@@ -1446,12 +1446,21 @@ when implementing or reviewing a change.
   Members. Keep the section heading, top-right New action, guidance and saved
   group summary inside one card with the same surface, padding and spacing as
   Members. The saved group uses an unboxed subsection with its own Edit action.
+- **Source update:** 2026-10-26 — user requested multiple Telegram groups per
+  workspace. Keep New available when groups are already linked and show each
+  saved group as an unboxed summary with its own Edit dialog. Linking another
+  group or relinking an inactive group must wait for that new link; existing
+  active groups and unrelated settings refreshes must not mark it successful.
 - **Acceptance:** Verify one sidebar link and page title, both saved sections and
   their separate dialogs, preserved workspace/query parameters on old links,
   independent member pagination and group loading/retry, and desktop/mobile
   spacing in both themes. Match Groups and Members card edges and header/action
   insets in saved, loading, empty and error states; retain that layout during
   linking and editing without introducing a nested card or inline editor.
+  Verify adding a second group, relinking alongside active groups, independently
+  targeted actions and full-list loading beyond the first API page. Keep group
+  names, IDs, settings and inactive guidance distinct, and return focus to New
+  after closing its link dialog.
 - **Exceptions:** Members with no known Telegram profile retain an ID fallback.
 
 ### Member switches sit beside their labels
@@ -1604,8 +1613,8 @@ when implementing or reviewing a change.
   verify the handoff and summary on desktop/mobile in both themes. An authorized
   panel admin can generate the command without a linked Telegram identity; the
   sender must be an active workspace member and a Telegram group administrator.
-  The dialog detects successful linking, hides the consumed command and returns
-  keyboard focus to the saved group when its New trigger becomes unavailable.
+  The dialog detects a new or renewed link, hides the consumed command and returns
+  keyboard focus to New, which remains available for additional groups.
 - **Exceptions:** None recorded.
 
 ### Usage records use a paginated table

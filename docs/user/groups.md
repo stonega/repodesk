@@ -4,6 +4,10 @@
 
 ## Link a group
 
+A workspace can connect multiple Telegram groups. Each group can belong to only
+one workspace. Repeat these steps for each group; **New** remains available after
+linking. Generate a fresh command for every additional group.
+
 1. Add your bot to the intended Telegram group.
 2. In the admin panel, open **Groups & Members → Groups → New** and copy the complete command.
 3. Send `/link@your_bot TOKEN` in that group within ten minutes, using an active
@@ -19,9 +23,9 @@ Invite the person sending it through **Groups & Members** first if needed.
 Generating another command invalidates the previous one. The token also stops
 working after expiry, bot replacement or loss of its issuer's permissions. Share
 it only with the intended group administrator. Anonymous administrators and bot
-senders cannot link groups. Each workspace supports one linked group; unlink it
-in the panel before connecting a different group. Check and relink after a group
-migration or bot removal.
+senders cannot link groups. Collection and visibility are managed separately for
+each group through its Edit dialog. Unlinking one group leaves the other groups
+connected. Check and relink after a group migration or bot removal.
 
 The private `/linktoken` command remains available to verified workspace
 owner/admin members who prefer the Telegram-only flow.

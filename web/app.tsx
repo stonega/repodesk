@@ -2,7 +2,6 @@ import {
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
-  type RefObject,
   useCallback,
   useContext,
   useEffect,
@@ -179,7 +178,7 @@ async function api<T>(
     );
   return data;
 }
-function useData<T>(path: string) {
+function useData<T>(path: string, load: (path: string) => Promise<T> = api) {
   const [params] = useSearchParams();
   const offset = params.get("offset") ?? "0";
   const resourcePath =
@@ -201,7 +200,7 @@ function useData<T>(path: string) {
     let live = true;
     setLoading(true);
     setError("");
-    api<T>(resourcePath)
+    load(resourcePath)
       .then((value) => {
         if (live) setData(value);
       })
@@ -214,7 +213,7 @@ function useData<T>(path: string) {
     return () => {
       live = false;
     };
-  }, [resourcePath, revision]);
+  }, [resourcePath, revision, load]);
   return { data, error, reload, loading };
 }
 function Pager({
@@ -1718,7 +1717,7 @@ function GroupsAndMembersPage({ id }: { id: string }) {
   return (
     <Page
       title="Groups & Members"
-      description="Connect your Telegram group and manage workspace members, roles and access requests."
+      description="Connect your Telegram groups and manage workspace members, roles and access requests."
     >
       <ErrorToastGroup>
         <GroupsSection id={id} />
@@ -2004,41 +2003,65 @@ function MembersSection({ id }: { id: string }) {
     </>
   );
 }
+async function loadGroups(path: string) {
+  const groups = await api<{ items: Chat[]; total?: number }>(path);
+  while (groups.items.length < (groups.total ?? 0)) {
+    const page = await api<{ items: Chat[] }>(
+      path.replace("offset=0", `offset=${groups.items.length}`),
+    );
+    if (!page.items.length) break;
+    groups.items.push(...page.items);
+  }
+  return groups;
+}
 function GroupsSection({ id }: { id: string }) {
   const { data, error, reload, loading } = useData<{ items: Chat[] }>(
     `/api/admin/workspaces/${id}/chats?offset=0`,
+    loadGroups,
   );
-  const [linking, setLinking] = useState<string>();
+  const [linking, setLinking] = useState<{
+    workspaceId: string;
+    groups: Chat[];
+  }>();
   const groupSection = useRef<HTMLElement>(null);
-  const linkedGroup = useRef<HTMLElement>(null);
   const focusAfterLinkDialog = useRef(false);
-  const linked = data?.items.some((chat) => chat.active) ?? false;
+  const linkOpen = linking?.workspaceId === id;
+  const linked = linkOpen
+    ? (data?.items.some(
+        (chat) =>
+          chat.active &&
+          !linking.groups.some(
+            (before) =>
+              before.id === chat.id &&
+              before.active &&
+              before.linkedAt === chat.linkedAt,
+          ),
+      ) ?? false)
+    : false;
   useEffect(() => {
     const refresh = () => {
       if (document.visibilityState === "visible") reload();
     };
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
-    const timer =
-      linking === id && !linked ? setInterval(refresh, 3000) : undefined;
+    const timer = linkOpen && !linked ? setInterval(refresh, 3000) : undefined;
     return () => {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
       clearInterval(timer);
     };
-  }, [id, linking, linked, reload]);
+  }, [linkOpen, linked, reload]);
   useEffect(() => {
     void id;
     setLinking(undefined);
     focusAfterLinkDialog.current = false;
   }, [id]);
   useEffect(() => {
-    if (loading || linking === id || !focusAfterLinkDialog.current) return;
-    // Wait for refresh before restoring focus to New or the newly linked group's Edit action.
-    const target = linked ? linkedGroup.current : groupSection.current;
-    target?.querySelector<HTMLButtonElement>("button")?.focus();
+    if (loading || linkOpen || !focusAfterLinkDialog.current) return;
+    // New stays available after linking; restore its focus after the list refresh.
+    groupSection.current?.querySelector<HTMLButtonElement>("button")?.focus();
     focusAfterLinkDialog.current = false;
-  }, [id, linking, linked, loading]);
+  }, [linkOpen, loading]);
   return (
     <section
       className="card groups-card"
@@ -2052,13 +2075,15 @@ function GroupsSection({ id }: { id: string }) {
           icon="add"
           label="Link a group"
           showLabel
-          disabled={!data || loading || linked}
-          onClick={() => setLinking(id)}
+          disabled={!data || loading || !!error}
+          onClick={() =>
+            setLinking({ workspaceId: id, groups: data?.items ?? [] })
+          }
         />
       </div>
       <p className="muted">
-        Connect one Telegram group to this workspace. Create a command here,
-        then send it in the group.
+        Connect Telegram groups to this workspace. Create a command for each
+        group, then send it there.
       </p>
       <ErrorToast message={error}>
         <button
@@ -2103,10 +2128,9 @@ function GroupsSection({ id }: { id: string }) {
           loading={loading}
           loadError={error}
           reload={reload}
-          groupRef={chat.active ? linkedGroup : undefined}
         />
       ))}
-      {linking === id && (
+      {linkOpen && (
         <GroupLinkDialog
           key={id}
           id={id}
@@ -2128,14 +2152,12 @@ function GroupAccessCard({
   loading,
   loadError,
   reload,
-  groupRef,
 }: {
   id: string;
   chat: Chat;
   loading: boolean;
   loadError: string;
   reload: () => void;
-  groupRef?: RefObject<HTMLElement | null>;
 }) {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
@@ -2143,7 +2165,7 @@ function GroupAccessCard({
   const status = `${chat.active ? "Linked" : "Inactive"} · ${chat.visibleAll ? "Receives group messages" : "Directed visibility"} · Collection: ${chat.collection ? "enabled" : "directed only"}`;
   return (
     <>
-      <section className="group-access-card" ref={groupRef}>
+      <section className="group-access-card">
         <div className="card-heading">
           <h3>{chat.title || chat.id}</h3>
           <IconButton

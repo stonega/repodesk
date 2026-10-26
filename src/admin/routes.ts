@@ -1455,9 +1455,10 @@ export function adminRoutes(
       if (input.action === "unlink") {
         chat.active = false;
         w.tokens = w.tokens.filter((entry) => entry.kind !== "group");
-        await sql.query("DELETE FROM chat_bindings WHERE workspace_id=$1", [
-          w.id,
-        ]);
+        await sql.query(
+          "DELETE FROM chat_bindings WHERE workspace_id=$1 AND chat_id=$2",
+          [w.id, id],
+        );
       }
       revokeWork(w);
       audit(w, actor, `chat.${input.action}`, id);

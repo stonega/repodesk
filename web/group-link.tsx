@@ -14,9 +14,8 @@ function explanation(error: unknown) {
   const code = error instanceof Error ? error.message : String(error);
   const messages: Record<string, string> = {
     bot_not_configured: "Connect your Telegram bot before linking a group.",
-    one_group_per_workspace: "Unlink the current group before linking another.",
     access_denied:
-      "You no longer have permission to link this workspace's group.",
+      "You no longer have permission to link groups to this workspace.",
   };
   return messages[code] ?? "Could not create a group-link command. Try again.";
 }

@@ -1,4 +1,5 @@
 import { expect, type Page, type Route, test } from "@playwright/test";
+import type { Chat } from "../../src/domain.ts";
 import { expectTopRightAction } from "./card-layout.ts";
 
 const first = "b6e6d846-06b0-46ee-ac0c-47b617d17dcc";
@@ -15,6 +16,9 @@ async function fixture(page: Page) {
     active: true,
     collection: false,
     visibleAll: false,
+    linkedAt: "2026-10-25T00:00:00.000Z",
+    extraGroups: [] as Chat[],
+    listOffsets: [] as number[],
     deferList: false,
     failList: false,
     expiresAt: new Date(Date.now() + 600000).toISOString(),
@@ -22,31 +26,30 @@ async function fixture(page: Page) {
     lists: [] as Route[],
     issued: [] as string[],
     actions: [] as string[],
+    actionTargets: [] as string[],
     pendingActions: [] as Route[],
     visibility: [] as Route[],
   };
   await page.route("**/api/**", async (route) => {
-    const path = new URL(route.request().url()).pathname;
+    const url = new URL(route.request().url());
+    const path = url.pathname;
     if (path.endsWith("/members") || path.endsWith("/access-requests")) {
       await route.fulfill({
         json: { version: 1, items: [], total: 0, offset: 0, requestUrl: null },
       });
       return;
     }
-    if (path.endsWith("/chats/-100100/visibility")) {
-      expect(path).toBe(
-        `/api/admin/workspaces/${first}/chats/-100100/visibility`,
-      );
+    if (/\/chats\/-\d+\/visibility$/.test(path)) {
       expect(route.request().method()).toBe("POST");
       expect(route.request().headers()["x-csrf-token"]).toBe("fixture-csrf");
       state.visibility.push(route);
       return;
     }
-    if (path.endsWith("/chats/-100100/action")) {
-      expect(path).toBe(`/api/admin/workspaces/${first}/chats/-100100/action`);
+    if (/\/chats\/-\d+\/action$/.test(path)) {
       expect(route.request().method()).toBe("POST");
       expect(route.request().headers()["x-csrf-token"]).toBe("fixture-csrf");
       state.actions.push(route.request().postDataJSON().action);
+      state.actionTargets.push(path);
       state.pendingActions.push(route);
       return;
     }
@@ -58,6 +61,8 @@ async function fixture(page: Page) {
       return;
     }
     if (path.endsWith("/chats")) {
+      const offset = Number(url.searchParams.get("offset") ?? 0);
+      state.listOffsets.push(offset);
       if (state.deferList) {
         state.lists.push(route);
         return;
@@ -69,21 +74,28 @@ async function fixture(page: Page) {
         });
         return;
       }
+      const groups = path.includes(first)
+        ? [
+            ...(state.linked
+              ? [
+                  {
+                    id: "-100100",
+                    title: state.title,
+                    active: state.active,
+                    visibleAll: state.visibleAll,
+                    collection: state.collection,
+                    linkedAt: state.linkedAt,
+                  },
+                ]
+              : []),
+            ...state.extraGroups,
+          ]
+        : [];
       await route.fulfill({
         json: {
-          items: state.linked
-            ? [
-                {
-                  id: "-100100",
-                  title: state.title,
-                  active: state.active,
-                  visibleAll: state.visibleAll,
-                  collection: state.collection,
-                },
-              ]
-            : [],
-          total: state.linked ? 1 : 0,
-          offset: 0,
+          items: groups.slice(offset, offset + 100),
+          total: groups.length,
+          offset,
         },
       });
       return;
@@ -468,13 +480,11 @@ for (const width of [1280, 390]) {
       await expect(dialog(page).locator("code")).toHaveCount(0);
       await page.keyboard.press("Escape");
       await expect(dialog(page)).toHaveCount(0);
-      await expect(start).toBeDisabled();
+      await expect(start).toBeEnabled();
       await expect(
         page.getByRole("heading", { name: "Fixture group" }),
       ).toBeVisible();
-      await expect(
-        page.getByRole("button", { name: "Edit Fixture group" }),
-      ).toBeFocused();
+      await expect(start).toBeFocused();
       await expect(
         page
           .getByRole("region", { name: "Groups", exact: true })
@@ -513,8 +523,127 @@ for (const width of [1280, 390]) {
       await expect(card).not.toContainText("This group is inactive.");
       await expect(
         page.getByRole("button", { name: "Link a group", exact: true }),
-      ).toBeDisabled();
+      ).toBeEnabled();
       await shot(page, "relinked");
+    });
+    test(`multiple groups link and edit independently at ${width}px in ${theme}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 850 });
+      await page.addInitScript(
+        (value) => localStorage.setItem("repodesk.theme", value),
+        theme,
+      );
+      const state = await fixture(page);
+      state.linked = true;
+      await page.goto(`/admin/members?workspace=${first}`);
+      const groups = page.getByRole("region", { name: "Groups", exact: true });
+      const start = groups.getByRole("button", { name: "Link a group" });
+      const original = groups
+        .locator(".group-access-card")
+        .filter({ hasText: "Fixture group" });
+      await expect(start).toBeEnabled();
+      await start.click();
+      await expect(dialog(page)).toContainText("Generating command");
+      await expect(dialog(page)).not.toContainText("Group linked.");
+      await shot(page, "second-group-pending");
+      await expect.poll(() => state.pending.length).toBe(1);
+      await state.pending
+        .shift()
+        ?.fulfill({ status: 503, json: { error: "unavailable" } });
+      await expect(dialog(page).getByRole("alert")).toContainText(
+        "Could not create",
+      );
+      await shot(page, "second-group-error");
+      await dialog(page)
+        .getByRole("button", { name: "Retry", exact: true })
+        .click();
+      await complete(state);
+      await expect(dialog(page).locator("code")).toHaveText(command);
+      const requests = state.listOffsets.length;
+      // An unrelated refresh or collection change on the existing group is not a new link.
+      state.collection = true;
+      await expect
+        .poll(() => state.listOffsets.length)
+        .toBeGreaterThan(requests);
+      await expect(original).toContainText("Collection: enabled");
+      await expect(dialog(page).locator("code")).toHaveText(command);
+      const added: Chat = {
+        id: "-100200",
+        title: "Engineering group",
+        active: true,
+        collection: true,
+        visibleAll: true,
+        linkedAt: "2026-10-26T00:00:00.000Z",
+      };
+      state.extraGroups.push(added);
+      await expect(dialog(page)).toContainText("Group linked.");
+      await expect(dialog(page).locator("code")).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(start).toBeFocused();
+      await expect(start).toBeEnabled();
+      await expect(groups.locator(".group-access-card")).toHaveCount(2);
+      await expect(
+        groups.locator("input, textarea, select, .card"),
+      ).toHaveCount(0);
+      const addedCard = groups
+        .locator(".group-access-card")
+        .filter({ hasText: "Engineering group" });
+      await expectTopRightAction(
+        addedCard,
+        addedCard.getByRole("button", { name: "Edit Engineering group" }),
+      );
+      const spacing = await groups.evaluate((card) => {
+        const bounds = card.getBoundingClientRect();
+        const style = getComputedStyle(card);
+        return {
+          bottom:
+            bounds.bottom -
+            (card.lastElementChild?.getBoundingClientRect().bottom ?? 0),
+          expected:
+            parseFloat(style.paddingBottom) +
+            parseFloat(style.borderBottomWidth),
+        };
+      });
+      expect(spacing.bottom).toBeCloseTo(spacing.expected, 0);
+      await shot(page, "multiple-groups-saved");
+      await addedCard
+        .getByRole("button", { name: "Edit Engineering group" })
+        .click();
+      await expect(editor(page)).toContainText("Group ID: -100200");
+      await editor(page)
+        .getByRole("button", { name: "Disable message collection" })
+        .click();
+      await expect.poll(() => state.pendingActions.length).toBe(1);
+      expect(state.actionTargets.at(-1)).toBe(
+        `/api/admin/workspaces/${first}/chats/-100200/action`,
+      );
+      added.collection = false;
+      await state.pendingActions.shift()?.fulfill({ json: { ok: true } });
+      await expect(
+        editor(page).getByRole("button", { name: "Enable message collection" }),
+      ).toBeEnabled();
+      await expect(original).toContainText("Collection: enabled");
+      await shot(page, "multiple-groups-editor");
+      await editor(page).getByRole("button", { name: "Unlink group" }).click();
+      await expect.poll(() => state.pendingActions.length).toBe(1);
+      added.active = false;
+      await state.pendingActions.shift()?.fulfill({ json: { ok: true } });
+      await expect(editor(page)).toContainText("Inactive");
+      await page.keyboard.press("Escape");
+      await expect(original).toContainText("Linked");
+      await expect(addedCard).toContainText("This group is inactive.");
+      await shot(page, "multiple-groups-inactive");
+      await start.click();
+      await complete(state);
+      await expect(dialog(page).locator("code")).toHaveText(command);
+      added.active = true;
+      added.linkedAt = "2026-10-26T01:00:00.000Z";
+      await expect(dialog(page)).toContainText("Group linked.");
+      await page.keyboard.press("Escape");
+      await expect(start).toBeFocused();
+      await expect(addedCard).not.toContainText("This group is inactive.");
+      expect(state.actions).toEqual(["directed", "unlink"]);
     });
   }
   test(`group names wrap and unnamed groups retain their Edit action at ${width}px`, async ({
@@ -662,3 +791,30 @@ for (const width of [1280, 390]) {
     ).toBeEnabled();
   });
 }
+
+test("groups beyond the first API page remain visible and can be relinked", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  state.linked = true;
+  state.extraGroups = Array.from({ length: 100 }, (_, index) => ({
+    id: String(-100200 - index),
+    title: `Group ${index + 2}`,
+    active: true,
+    collection: false,
+    visibleAll: false,
+    linkedAt: state.linkedAt,
+  }));
+  await page.goto(`/admin/members?workspace=${first}`);
+  await expect(page.locator(".group-access-card")).toHaveCount(101);
+  expect(state.listOffsets).toEqual([0, 100]);
+  await page.getByRole("button", { name: "Link a group", exact: true }).click();
+  await complete(state);
+  await expect(dialog(page).locator("code")).toHaveText(command);
+  const last = state.extraGroups.at(-1);
+  if (!last) throw new Error("Missing last group");
+  last.linkedAt = "2026-10-26T01:00:00.000Z";
+  await expect(dialog(page)).toContainText("Group linked.");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".group-access-card")).toHaveCount(101);
+});

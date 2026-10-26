@@ -41,6 +41,11 @@ Telegram group administrator. The command dialog explains this before redemption
 Redemption rechecks the issuer's current workspace-management authority; it
 does not grant membership or an admin role. Tokens expire after ten minutes and
 are consumed once; generating a replacement invalidates older group commands.
+Workspaces may link multiple groups; each Telegram group belongs to only one
+workspace. Linking another group grants no additional membership or source access.
+Visibility and collection are saved per group, and unlinking or migrating one group
+does not remove other groups' bindings. Conversation context remains scoped to its
+group and Topic; workspace membership and roles remain shared across linked groups.
 Operators can inspect retained workspace runs under the existing admin history
 rules; ordinary bot execution and individual run recovery actions still require
 a linked, active Telegram identity. Regular members cannot manage access.

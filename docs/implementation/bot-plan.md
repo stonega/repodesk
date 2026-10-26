@@ -12,7 +12,7 @@ product focus and next release validation are in the
 
 ## 1. First release and definition of done
 
-Ship a bot that can join one explicitly connected group per workspace, answer
+Ship a bot that can join explicitly connected groups in each workspace, answer
 directed requests, produce a sourced team recap, save it as an approved recurring
 workflow, and apply an approved correction to future runs. Support private onboarding,
 shared instructions, status/cancellation, usage limits and data removal. A web admin
