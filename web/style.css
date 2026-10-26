@@ -923,6 +923,7 @@ p {
   overflow-wrap: anywhere;
 }
 .members-card,
+.groups-card,
 .group-access-card,
 .group-mention-guide,
 .group-link-details {
@@ -932,6 +933,7 @@ p {
   gap: 16px;
 }
 .members-card > *,
+.groups-card > *,
 .group-access-card > *,
 .group-mention-guide > *,
 .group-link-details > * {

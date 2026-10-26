@@ -20,8 +20,9 @@ Public static assets can load before login, but contain no workspace data or sec
 ## Pages and scope
 
 **Groups & Members** at `/admin/members` combines group management, members and
-access requests in one sidebar destination. Groups and Members each have a
-section-level **New** action; saved records retain their separate modal editors.
+access requests in one sidebar destination. Groups and Members use matching
+section cards, with their heading and **New** action inside the same padding.
+The group summary is unboxed within its card; saved records retain their separate modal editors.
 The mention setup guide remains on this page. `/admin/chats` and the retired
 `/admin/access-policy` link redirect here while preserving query parameters.
 Member pagination and search do not paginate the workspace's single linked group.
@@ -198,13 +199,13 @@ and encryption key stay operator-level deployment settings.
 | `/api/admin/updates` | Authenticated latest stable release, changelog and installation status |
 | `/api/admin/operator/updates` | Operator-only approved update/retry queued to the host daemon; session/origin/CSRF and release fingerprint required |
 
-Group cards on Groups & Members display the last known Telegram group title with
+Group summaries on Groups & Members display the last known Telegram group title with
 the ID below it,
 falling back to the ID when the title is unknown. Titles are captured on linking and
 subsequent group updates. Recheck bot visibility also refreshes the title for existing
 bindings; inaccessible groups retain their last known name.
 
-Each saved card has a top-right pencil icon that opens **Edit group**. Visibility
+Each saved summary has a top-right pencil icon that opens **Edit group**. Visibility
 rechecks, collection controls, unlinking and their scope explanation live in this
 dialog. The card retains its saved status and inactive-link recovery guidance.
 Actions take effect immediately; pending actions and refreshes lock the dialog,

@@ -1,5 +1,38 @@
 # Implementation evidence
 
+## Groups and Members share the same card layout (2026-10-26)
+
+Groups now uses the same section card surface, padding, heading and top-right
+New action as Members. The saved group title, ID, status and Edit action form
+an unboxed subsection inside that card. Loading, empty and unavailable states
+retain the same frame, and linking/editing continue through the existing dialogs.
+The scoped UI preference and admin design contract were updated.
+
+Validation: lint, strict TypeScript, production build, the Node runtime contract
+and all **1,193 deterministic tests across 131 files** passed with disposable
+PostgreSQL. All **47 browser scenarios** passed across admin, group linking and
+the combined page. The card regression first failed against the old built UI.
+Coverage checks matching surfaces, header/action placement, first/last content
+padding, absence of nested cards, independent loading/error recovery and modal
+focus/pending behavior. Saved, loading, empty, error and dialog screenshots were
+inspected at 1280px and 390px across both themes. This UI change is verified locally.
+
+## VPS deployment of the workspace and Google updates (2026-10-26)
+
+The operator-authorized deployment installed commit `f38b66a`, package v0.1.44,
+in bundle `1792979946288-50707140`. It includes unified Groups & Members,
+team currency and the Google API enablement guide. The later Skills UI change
+`824abaa` has its separate local evidence below.
+
+All **1,193 deterministic tests**, **394 browser checks**, four image builds,
+exact-image Node 24/transcription/Code Truth checks and the local Compose
+cutover, migration rerun and backup/restore rehearsal passed. The VPS cutover
+verified its protected backup and durable coding checkpoints. All services are
+healthy; 48 application artifacts, the task artifact and seven public frontend
+assets match the tested build. Runtime configuration, persistent volumes,
+PostgreSQL and CI runner identities were preserved. See the
+[deployment record](vps-deployment.md#workspace-and-google-guide-deployment-2026-10-26).
+
 ## Skills catalog removes the policy-test UI (2026-10-26)
 
 The Skills page no longer shows **Test skill policy** buttons or the persistent

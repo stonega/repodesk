@@ -7,6 +7,38 @@ release makes it available in the panel's version indicator. A deployment
 administrator reviews its notes and starts installation explicitly.
 See [host updater installation](updates.md) for the service and panel contract.
 
+## Workspace and Google guide deployment (2026-10-26)
+
+The operator-authorized manual archive cutover deployed clean commit
+`f38b66a2c8e0a073e030b47d7038e798096ea2d2`, source tree
+`22899e233b9a0b201488ae73d843f4ea159d1c89`, in bundle
+`1792979946288-50707140` (package v0.1.44). It replaces bundle
+`1792842855984-15165143` and includes unified Groups & Members administration,
+team currency settings and the Google API enablement guide. The bundle remains
+pinned to this tested snapshot; the later Skills UI commit `824abaa` is a
+separate source change. No dependency or database migration was added.
+
+Lint, strict TypeScript, application and Code Truth type checks, production build,
+all **1,193 deterministic tests across 131 files** and all **394 browser checks**
+passed. Four images were rebuilt from the retained source archive. Exact-image
+Node 24 runtime, CPU transcription imports, offline Code Truth real-index/MCP,
+runner health, task CLI, merged Compose, guarded local cutover, migration rerun
+and disposable backup/restore checks passed. All 48 application artifacts match
+the isolated source build and the deployed app, worker and supervisor; the task
+image's job artifact also matches.
+
+The host verified archive and source checksums, passed both durable coding
+checkpoint checks and verified the protected
+`backups/pre-release-1792979946288-50707140.dump` before migrations. App, worker,
+runner and Code Truth are healthy. Public and loopback health, readiness, admin
+and all seven frontend assets return HTTP 200, with matching asset hashes.
+Configuration, secrets, named volumes, PostgreSQL and the three Actions runner
+identities were preserved; the updater service and cleanup timer remain active.
+Source, verification logs and the deployment receipt remain in the bundle; the
+imported image archive was removed after success. The initial SSH failure was
+isolated to the selected local proxy route and resolved by saving a verified
+working node in the active profile.
+
 ## Provision the host once
 
 Use a dedicated Linux x86_64 Docker stack with Docker Engine, Compose v2

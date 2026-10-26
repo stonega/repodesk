@@ -75,6 +75,52 @@ async function fixture(page: Page) {
   return state;
 }
 
+async function expectMatchingGroupCard(page: Page) {
+  const groups = page.getByRole("region", { name: "Groups", exact: true });
+  const members = page.getByRole("region", {
+    name: "Workspace members",
+    exact: true,
+  });
+  const surfaces = await Promise.all(
+    [groups, members].map((card) =>
+      card.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          background: style.backgroundColor,
+          border: style.borderTopWidth,
+          borderColor: style.borderTopColor,
+          radius: style.borderTopLeftRadius,
+          padding: style.padding,
+          gap: style.rowGap,
+        };
+      }),
+    ),
+  );
+  expect(surfaces[0]).toEqual(surfaces[1]);
+  expect(Number.parseFloat(surfaces[0]?.border ?? "0")).toBeGreaterThan(0);
+  await expect(groups.locator(".card")).toHaveCount(0);
+  const spacing = await groups.evaluate((card) => {
+    const bounds = card.getBoundingClientRect();
+    const style = getComputedStyle(card);
+    const first = card.firstElementChild?.getBoundingClientRect();
+    const last = card.lastElementChild?.getBoundingClientRect();
+    return {
+      top: (first?.top ?? 0) - bounds.top,
+      bottom: bounds.bottom - (last?.bottom ?? 0),
+      expectedTop:
+        parseFloat(style.paddingTop) + parseFloat(style.borderTopWidth),
+      expectedBottom:
+        parseFloat(style.paddingBottom) + parseFloat(style.borderBottomWidth),
+    };
+  });
+  expect(spacing.top).toBeCloseTo(spacing.expectedTop, 0);
+  expect(spacing.bottom).toBeCloseTo(spacing.expectedBottom, 0);
+  await expectTopRightAction(
+    groups,
+    groups.getByRole("button", { name: "Link a group" }),
+  );
+}
+
 for (const width of [1280, 390]) {
   for (const theme of ["light", "dark"]) {
     test(`combined navigation, summaries and separate editors at ${width}px in ${theme}`, async ({
@@ -121,6 +167,10 @@ for (const width of [1280, 390]) {
       ).toContainText("access_fixture");
       await expect(groups.locator("input, select, textarea")).toHaveCount(0);
       await expect(members.getByLabel("Telegram user ID")).toHaveCount(0);
+      await expectMatchingGroupCard(page);
+      await expect(
+        groups.getByRole("heading", { name: "Design team", level: 3 }),
+      ).toBeVisible();
       const spacing = await members.evaluate((card) => {
         const bounds = card.getBoundingClientRect();
         const style = getComputedStyle(card);
@@ -208,80 +258,91 @@ for (const width of [1280, 390]) {
       await expect(groups).toContainText("No group linked");
       await expect(groups).not.toContainText("Design team");
       await expect(members).toContainText("Team member");
+      await expectMatchingGroupCard(page);
+      await page.screenshot({
+        path: test.info().outputPath("empty.png"),
+        fullPage: true,
+      });
       expect(errors).toEqual([]);
     });
-  }
-  test(`group and member requests load and recover independently at ${width}px`, async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width, height: 900 });
-    const state = await fixture(page);
-    state.defer = true;
-    await page.goto(`/admin/members?workspace=${workspace}`);
-    const groups = page.getByRole("region", { name: "Groups", exact: true });
-    const members = page.getByRole("region", {
-      name: "Workspace members",
-      exact: true,
-    });
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Groups & Members",
-    );
-    await expect(
-      groups.getByRole("button", { name: "Link a group" }),
-    ).toBeDisabled();
-    await expect(
-      members.getByRole("button", { name: "Add member" }),
-    ).toBeDisabled();
-    await expect(
-      page.getByRole("region", { name: "Group @mentions", exact: true }),
-    ).toBeVisible();
-    await expect(page.getByText("No members match your search.")).toHaveCount(
-      0,
-    );
-    await expect(
-      page.getByRole("heading", { name: "No group linked" }),
-    ).toHaveCount(0);
-    await page.screenshot({
-      path: test.info().outputPath("loading.png"),
-      fullPage: true,
-    });
-    await expect.poll(() => state.pending.length).toBe(2);
-    for (const route of state.pending.splice(0))
-      await route.fulfill({
-        status: 503,
-        json: {
-          error: route.request().url().includes("/chats")
-            ? "Groups unavailable"
-            : "Members unavailable",
-        },
+    test(`group and member requests load and recover independently at ${width}px in ${theme}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.addInitScript(
+        (value) => localStorage.setItem("repodesk.theme", value),
+        theme,
+      );
+      const state = await fixture(page);
+      state.defer = true;
+      await page.goto(`/admin/members?workspace=${workspace}`);
+      const groups = page.getByRole("region", { name: "Groups", exact: true });
+      const members = page.getByRole("region", {
+        name: "Workspace members",
+        exact: true,
       });
-    await expect(
-      page.getByRole("alert").filter({ hasText: "Groups unavailable" }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("alert").filter({ hasText: "Members unavailable" }),
-    ).toBeVisible();
-    const alerts = await page.locator(".toast-error").evaluateAll((toasts) =>
-      toasts.map((toast) => {
-        const bounds = toast.getBoundingClientRect();
-        return { top: bounds.top, bottom: bounds.bottom };
-      }),
-    );
-    expect(alerts).toHaveLength(2);
-    expect(alerts[1]?.top).toBeGreaterThan(alerts[0]?.bottom ?? 0);
-    await page.screenshot({
-      path: test.info().outputPath("load-errors.png"),
-      fullPage: true,
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+        "Groups & Members",
+      );
+      await expect(
+        groups.getByRole("button", { name: "Link a group" }),
+      ).toBeDisabled();
+      await expect(
+        members.getByRole("button", { name: "Add member" }),
+      ).toBeDisabled();
+      await expect(
+        page.getByRole("region", { name: "Group @mentions", exact: true }),
+      ).toBeVisible();
+      await expect(page.getByText("No members match your search.")).toHaveCount(
+        0,
+      );
+      await expect(
+        page.getByRole("heading", { name: "No group linked" }),
+      ).toHaveCount(0);
+      await expectMatchingGroupCard(page);
+      await page.screenshot({
+        path: test.info().outputPath("loading.png"),
+        fullPage: true,
+      });
+      await expect.poll(() => state.pending.length).toBe(2);
+      for (const route of state.pending.splice(0))
+        await route.fulfill({
+          status: 503,
+          json: {
+            error: route.request().url().includes("/chats")
+              ? "Groups unavailable"
+              : "Members unavailable",
+          },
+        });
+      await expect(
+        page.getByRole("alert").filter({ hasText: "Groups unavailable" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("alert").filter({ hasText: "Members unavailable" }),
+      ).toBeVisible();
+      const alerts = await page.locator(".toast-error").evaluateAll((toasts) =>
+        toasts.map((toast) => {
+          const bounds = toast.getBoundingClientRect();
+          return { top: bounds.top, bottom: bounds.bottom };
+        }),
+      );
+      expect(alerts).toHaveLength(2);
+      expect(alerts[1]?.top).toBeGreaterThan(alerts[0]?.bottom ?? 0);
+      await expectMatchingGroupCard(page);
+      await page.screenshot({
+        path: test.info().outputPath("load-errors.png"),
+        fullPage: true,
+      });
+      state.defer = false;
+      await page.getByRole("button", { name: "Retry loading groups" }).click();
+      await expect(groups).toContainText("Design team");
+      await expect(
+        members.getByRole("button", { name: "Add member" }),
+      ).toBeDisabled();
+      await page.getByRole("button", { name: "Retry loading members" }).click();
+      await expect(members).toContainText("Team member");
+      await expect(page.getByRole("alert")).toHaveCount(0);
+      await expect(page.locator("body")).toHaveJSProperty("scrollWidth", width);
     });
-    state.defer = false;
-    await page.getByRole("button", { name: "Retry loading groups" }).click();
-    await expect(groups).toContainText("Design team");
-    await expect(
-      members.getByRole("button", { name: "Add member" }),
-    ).toBeDisabled();
-    await page.getByRole("button", { name: "Retry loading members" }).click();
-    await expect(members).toContainText("Team member");
-    await expect(page.getByRole("alert")).toHaveCount(0);
-    await expect(page.locator("body")).toHaveJSProperty("scrollWidth", width);
-  });
+  }
 }

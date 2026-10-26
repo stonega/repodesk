@@ -2040,7 +2040,12 @@ function GroupsSection({ id }: { id: string }) {
     focusAfterLinkDialog.current = false;
   }, [id, linking, linked, loading]);
   return (
-    <section aria-label="Groups" ref={groupSection}>
+    <section
+      className="card groups-card"
+      aria-label="Groups"
+      aria-busy={loading}
+      ref={groupSection}
+    >
       <div className="card-heading">
         <h2>Groups</h2>
         <IconButton
@@ -2068,11 +2073,11 @@ function GroupsSection({ id }: { id: string }) {
       </ErrorToast>
       {!data && (
         <section
-          className="card group-access-card"
+          className="group-access-card"
           aria-label="Linked group"
           aria-busy={loading}
         >
-          <h2>Linked group</h2>
+          <h3>Linked group</h3>
           {loading ? (
             <SkeletonRows label="Group details" rows={2} />
           ) : (
@@ -2081,8 +2086,8 @@ function GroupsSection({ id }: { id: string }) {
         </section>
       )}
       {data?.items.length === 0 && (
-        <section className="card group-access-card" aria-label="Linked group">
-          <h2>No group linked</h2>
+        <section className="group-access-card" aria-label="Linked group">
+          <h3>No group linked</h3>
           <p className="muted">
             Choose New in Groups to get a one-use /link command. The person
             sending it must be an active workspace member and a Telegram group
@@ -2138,9 +2143,9 @@ function GroupAccessCard({
   const status = `${chat.active ? "Linked" : "Inactive"} · ${chat.visibleAll ? "Receives group messages" : "Directed visibility"} · Collection: ${chat.collection ? "enabled" : "directed only"}`;
   return (
     <>
-      <section className="card group-access-card" ref={groupRef}>
+      <section className="group-access-card" ref={groupRef}>
         <div className="card-heading">
-          <h2>{chat.title || chat.id}</h2>
+          <h3>{chat.title || chat.id}</h3>
           <IconButton
             icon="edit"
             label={`Edit ${chat.title || chat.id}`}

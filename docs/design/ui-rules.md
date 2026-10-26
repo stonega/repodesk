@@ -85,13 +85,16 @@ when implementing or reviewing a change.
 ### Group management actions open from the card's Edit icon
 
 - **Preference:** Show a borderless pencil icon at the top right of each saved
-  group card. Open an Edit dialog for visibility rechecks, the collection action
+  group summary. Open an Edit dialog for visibility rechecks, the collection action
   and unlinking. Keep the group name, ID, saved status and inactive-link recovery
   guidance on the card; keep the collection scope explanation with its controls.
-- **Scope:** Saved group cards on Groups & Members and their management dialogs.
+- **Scope:** Saved group summaries on Groups & Members and their management dialogs.
 - **Source:** 2026-10-24 — user requested moving the card's actions into an Edit
   dialog and placing an Edit icon at the card's top-right corner.
-- **Acceptance:** The saved card has one Edit icon and no inline management
+- **Source update:** 2026-10-26 — the Groups section now shares the Members card
+  layout. Keep the summary unboxed inside that card, with Edit beside the group
+  name and New beside the section heading.
+- **Acceptance:** The saved summary has one Edit icon and no inline management
   controls. Preserve current action semantics, saved-state refresh, pending locks,
   in-dialog error recovery, focus trapping/return and mobile wrapping. Inspect
   card and dialog spacing at desktop/mobile widths in both themes.
@@ -1439,10 +1442,16 @@ when implementing or reviewing a change.
 - **Source update:** 2026-10-24 — user requested merging Members & access and
   Group access into one page named Groups & Members. Existing links continue to
   open the combined page; member pagination must not hide the linked group.
+- **Source update:** 2026-10-26 — user requested making the Groups card match
+  Members. Keep the section heading, top-right New action, guidance and saved
+  group summary inside one card with the same surface, padding and spacing as
+  Members. The saved group uses an unboxed subsection with its own Edit action.
 - **Acceptance:** Verify one sidebar link and page title, both saved sections and
   their separate dialogs, preserved workspace/query parameters on old links,
   independent member pagination and group loading/retry, and desktop/mobile
-  spacing in both themes.
+  spacing in both themes. Match Groups and Members card edges and header/action
+  insets in saved, loading, empty and error states; retain that layout during
+  linking and editing without introducing a nested card or inline editor.
 - **Exceptions:** Members with no known Telegram profile retain an ID fallback.
 
 ### Member switches sit beside their labels
