@@ -1206,7 +1206,6 @@ button.github-repository-more:hover:not(:disabled) {
 .skill-card-header,
 .skill-card-title,
 .skill-card-controls,
-.skill-card-actions,
 .skill-source-actions {
   display: flex;
   align-items: center;
@@ -1243,18 +1242,6 @@ button.github-repository-more:hover:not(:disabled) {
 }
 .skill-card-description {
   overflow-wrap: anywhere;
-}
-.skill-card-footer {
-  border-top: 1px solid var(--ui-border);
-  padding-top: 12px;
-}
-.skill-card-secondary button {
-  color: var(--ui-accent);
-  background: var(--ui-accent-soft);
-  border-color: transparent;
-}
-.skill-card-secondary button:hover:not(:disabled) {
-  background: var(--ui-accent-soft);
 }
 .skill-card summary:focus-visible {
   outline: 3px solid var(--ui-focus);

@@ -684,10 +684,12 @@ test.describe
         path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/skill-card-mobile.png`,
       });
       await page.setViewportSize({ width: 1280, height: 800 });
-      await card.getByRole("button", { name: "Test skill policy" }).click();
       await expect(
-        page.getByText(/Deterministic policy test passed/),
-      ).toBeVisible();
+        page.getByRole("button", { name: "Test skill policy" }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByLabel("Sample input for deterministic test"),
+      ).toHaveCount(0);
       const fixture = JSON.parse(await readFile(browserDbPath, "utf8"));
       const pool = database(fixture.url);
       const store = new Store(pool);

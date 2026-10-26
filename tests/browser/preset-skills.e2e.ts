@@ -279,7 +279,7 @@ test("custom skill editing uses direct saves without version management alongsid
   ).toHaveCount(0);
   await expect(
     card.getByRole("button", { name: "Test skill policy", exact: true }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(
     card.getByText("Restore a published version", { exact: true }),
   ).toHaveCount(0);

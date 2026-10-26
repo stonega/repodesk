@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { Skill } from "../../src/domain.ts";
 import { starterSkills } from "../../src/skills/catalog.ts";
 
@@ -50,6 +50,37 @@ async function fixture(page: Page, items: Skill[], load?: () => Promise<void>) {
   await page.goto(`/admin/skills?workspace=${workspaceId}`);
 }
 
+async function expectNoPolicyTest(page: Page) {
+  await expect(
+    page.getByRole("button", { name: "Test skill policy", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Test skill policy", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByLabel("Sample input for deterministic test", { exact: true }),
+  ).toHaveCount(0);
+}
+
+async function expectCardPadding(card: Locator) {
+  const spacing = await card.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const first = element.firstElementChild?.getBoundingClientRect();
+    const last = element.lastElementChild?.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return {
+      top: (first?.top ?? 0) - box.top,
+      bottom: box.bottom - (last?.bottom ?? 0),
+      paddingTop: parseFloat(style.paddingTop),
+      paddingBottom: parseFloat(style.paddingBottom),
+    };
+  });
+  expect(Math.abs(spacing.top - spacing.paddingTop)).toBeLessThanOrEqual(1);
+  expect(Math.abs(spacing.bottom - spacing.paddingBottom)).toBeLessThanOrEqual(
+    1,
+  );
+}
+
 for (const width of [1280, 375]) {
   for (const theme of ["light", "dark"]) {
     test(`skills save directly with recoverable dialogs and GitHub history at ${width}px in ${theme}`, async ({
@@ -63,6 +94,9 @@ for (const width of [1280, 375]) {
       const skill = customSkill();
       await fixture(page, [skill]);
       const card = page.locator(".skill-card");
+      await expect(card).toBeVisible();
+      await expectNoPolicyTest(page);
+      await expectCardPadding(card);
       await expect(
         page.getByText(
           /Manage skill instructions and version history on GitHub/,
@@ -205,22 +239,8 @@ for (const width of [1280, 375]) {
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth),
       ).toBeLessThanOrEqual(width);
-      const spacing = await card.evaluate((element) => {
-        const box = element.getBoundingClientRect();
-        const first = element.firstElementChild?.getBoundingClientRect();
-        const last = element.lastElementChild?.getBoundingClientRect();
-        const style = getComputedStyle(element);
-        return {
-          top: (first?.top ?? 0) - box.top,
-          bottom: box.bottom - (last?.bottom ?? 0),
-          paddingTop: parseFloat(style.paddingTop),
-          paddingBottom: parseFloat(style.paddingBottom),
-        };
-      });
-      expect(Math.abs(spacing.top - spacing.paddingTop)).toBeLessThanOrEqual(1);
-      expect(
-        Math.abs(spacing.bottom - spacing.paddingBottom),
-      ).toBeLessThanOrEqual(1);
+      await expectNoPolicyTest(page);
+      await expectCardPadding(card);
       await page.screenshot({
         path: test.info().outputPath("skill-saved.png"),
         fullPage: true,
@@ -242,6 +262,7 @@ for (const width of [1280, 375]) {
     await expect(
       page.getByRole("region", { name: "Loading skills" }),
     ).toHaveAttribute("aria-busy", "true");
+    await expectNoPolicyTest(page);
     await page.screenshot({
       path: test.info().outputPath("skill-loading.png"),
     });
@@ -249,6 +270,7 @@ for (const width of [1280, 375]) {
     await expect(
       page.getByRole("heading", { name: "No skills yet" }),
     ).toBeVisible();
+    await expectNoPolicyTest(page);
     await expect(
       page.getByText(
         "Import skills from GitHub to get started, or create a custom skill.",
@@ -268,6 +290,7 @@ for (const width of [1280, 375]) {
     await expect(
       page.getByRole("button", { name: "Retry skills" }),
     ).toBeVisible();
+    await expectNoPolicyTest(page);
     await expect(
       page.getByText(/Manage skill instructions and version history on GitHub/),
     ).toBeVisible();

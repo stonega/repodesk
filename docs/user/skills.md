@@ -41,10 +41,6 @@ You can also import a standalone Markdown file. It includes only that file; use
 GitHub import when the skill needs supporting guides. GitHub remains the recommended
 place to maintain shared instructions and their history.
 
-**Test skill policy** checks the saved instructions and shows a deterministic
-context preview using the sample input. It makes no paid model request and sends
-no Telegram message. It does not verify a real model's output quality.
-
 ## Files and access
 
 A `SKILL.md` must be UTF-8 Markdown, at most 16 KB. YAML frontmatter supports

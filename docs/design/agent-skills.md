@@ -3,8 +3,8 @@
 Status: **P0 design contract with local implementation**. Admins manage Markdown
 skills and settings through the web panel. GitHub is the recommended place to edit
 skills and manage their history; the panel uses direct saves, imports and reviewed
-source updates, without draft/publication or rollback controls. The Test control
-validates policy and previews context without paid calls. See [implementation evidence](../implementation/implementation-status.md).
+source updates, without draft/publication, rollback or policy-test controls.
+See [implementation evidence](../implementation/implementation-status.md).
 
 Executable **plugins** are [Pi extensions](llm-extensions.md), a separate capability
 from instruction skills. Operators install reviewed extension tools and hooks and
@@ -62,7 +62,6 @@ The skill manager configures instructions and already-registered tools in P0.
 | Enable/disable | Enable saved instructions per workspace and optionally narrow availability per group/workflow. |
 | Tool permissions | Show required tools and effective allowed subset; unavailable tools block activation or require an explicit reduced capability variant. |
 | Settings | Configure skill-specific values such as recap sections, date window and response length; secrets remain credential references. |
-| Test | Test saved custom instructions with explicit sample input and fake/read-only tools; no message publishing or schedule activation. |
 | Save/history | Save custom instructions or apply a reviewed GitHub update in one action. Manage version history and rollbacks on GitHub, then review and apply the source change here. |
 | Usage | Show authorized runs/workflows using the skill and pinned version; respect run-level visibility. |
 | Archive | Archive custom skills while retaining referenced versions for history. Presets use enable/disable only. |
@@ -70,9 +69,9 @@ The skill manager configures instructions and already-registered tools in P0.
 Preset **Team recap** and **Follow-up draft** cards show a Preset badge, saved
 instructions and one enable/disable action. They expose no editor, publication,
 policy test, archive, revision counts or rollback controls. The server enforces
-the same restriction. The policy sample form is hidden when the catalog page
-contains only presets. Custom and GitHub-imported skills retain their management
-controls.
+the same restriction. No policy-test action or sample-input form appears in the
+catalog, including for custom and GitHub-imported skills; their other management
+controls remain available.
 
 Expanded previews show settings in a compact responsive grid and required tools
 as wrapping tags. Instructions remain complete, and an empty dependency list uses
@@ -94,8 +93,7 @@ with Edit, enable/disable and Archive actions at the top right. New/Edit use the
 shared modal and **Save skill**; imports use **Import skills**, and reviewed source
 updates use **Apply update**. These operations approve the saved instructions
 atomically. Imports and new skills stay disabled until explicitly enabled; saves
-and updates preserve current enablement. The optional **Test skill policy** action
-validates the saved instructions without a paid model or delivery call.
+and updates preserve current enablement.
 
 No revision counts, publication controls, version selectors or rollback UI is
 shown. GitHub is the default recommended import source, and imported cards link

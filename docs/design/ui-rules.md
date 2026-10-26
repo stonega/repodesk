@@ -117,6 +117,15 @@ when implementing or reviewing a change.
   support execution history and schedule pins. Telegram's consent flow may still
   propose an unapproved procedure; admins can review and enable it directly.
   Presets retain their read-only instructions and enable/disable actions.
+- **Source update:** 2026-10-26 — after reviewing the limited value of the
+  deterministic **Test skill policy** check, the user considered it unnecessary.
+  Remove its catalog actions and persistent sample-input/result section.
+- **Acceptance update:** Custom, imported and preset catalogs expose no policy-test
+  action or sample-input form. Keep instruction previews and existing management
+  dialogs usable, with no leftover footer, divider or card-edge spacing. Check
+  saved, expanded, loading, empty and error states at desktop/mobile widths in
+  both themes. This preference applies to the Skills UI; internal policy validation
+  and diagnostic APIs remain available.
 
 ### Google OAuth setup links have copy actions
 

@@ -2694,10 +2694,6 @@ function SkillsPage({ id }: { id: string }) {
     setCreating(false);
     setEditing(undefined);
   };
-  const [result, setResult] = useState<unknown>();
-  const [sample, setSample] = useState(
-    "Alice: release is ready. Bob: docs are blocked on review.",
-  );
   const [importing, setImporting] = useState(false);
   const [updating, setUpdating] = useState<Skill>();
   const [search, setSearch] = useState("");
@@ -2886,28 +2882,6 @@ function SkillsPage({ id }: { id: string }) {
             </div>
           )}
           <SkillPreview spec={s.draft} dependents={s.dependents} />
-          {!s.preset && (
-            <div className="skill-card-footer">
-              <div className="skill-card-actions">
-                <span className="skill-card-secondary">
-                  <Action
-                    onClick={async () => {
-                      setResult(
-                        await api(
-                          `/api/admin/workspaces/${id}/skills/${s.id}/test`,
-                          "POST",
-                          { sample },
-                        ),
-                      );
-                      reload();
-                    }}
-                  >
-                    Test skill policy
-                  </Action>
-                </span>
-              </div>
-            </div>
-          )}
         </section>
       ))}
       {(creating || editing) && (
@@ -2933,22 +2907,6 @@ function SkillsPage({ id }: { id: string }) {
             }}
           />
         </Modal>
-      )}
-      {data?.items.some((skill) => !skill.preset) && (
-        <section className="card">
-          <h2>Test skill policy</h2>
-          <Field label="Sample input for deterministic test">
-            <textarea
-              value={sample}
-              onChange={(e) => setSample(e.target.value)}
-            />
-          </Field>
-          <p>
-            Tests validate policy and show model-visible content. They make no
-            paid model request and publish no message.
-          </p>
-          {result !== undefined && <DataDetails value={result} />}
-        </section>
       )}
       {importing && (
         <Modal title="Import SKILL.md" onClose={() => setImporting(false)}>

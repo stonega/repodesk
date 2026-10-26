@@ -1,5 +1,23 @@
 # Implementation evidence
 
+## Skills catalog removes the policy-test UI (2026-10-26)
+
+The Skills page no longer shows **Test skill policy** buttons or the persistent
+sample-input/result card. Its local state, request handler, footer wrappers and
+unused footer styles were removed. Saved instruction previews, source links,
+imports, reviewed updates, modal editing and enable/disable remain available.
+The scoped UI preference and current user/design documentation were updated.
+Internal policy validation and the diagnostic API remain available.
+
+Validation: `bun run check`, `bun run typecheck`, `bun test` and `bun run build`
+passed, including **1,193 deterministic tests across 131 files** with disposable
+PostgreSQL. All **52 browser scenarios** passed across admin, preset skills,
+skill management, search and GitHub imports/updates. Regression checks cover
+absent test controls, collapsed/expanded card padding, saved summaries, modal
+editing and loading/empty/error recovery. Saved cards were inspected at 1280px
+and 375px in both themes; editor, pending, loading, empty and error screenshots
+were also inspected. No dependency, migration or deployment was added or performed.
+
 ## Google API enablement guide (2026-10-25)
 
 **Plugins → Google** now shows an **Enable Google APIs** guide between the saved
