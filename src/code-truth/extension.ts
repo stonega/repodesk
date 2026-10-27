@@ -3,9 +3,21 @@ import { readFile } from "node:fs/promises";
 import type { TSchema } from "typebox";
 import type { BuiltinExtension } from "../agent/extensions.ts";
 import { inputByteLimit } from "../agent/limits.ts";
-import { requireThat } from "../domain.ts";
+import { Fault, requireThat } from "../domain.ts";
 import type { CodeTruthClient } from "./client.ts";
 import { type CodeTarget, codeTruthTools } from "./config.ts";
+
+const unavailableCodes = [
+  "code_truth_unavailable",
+  "github_user_access_denied",
+  "github_user_access_unavailable",
+  "github_app_not_configured",
+  "github_repository_not_connected",
+  "github_app_permissions_missing",
+  "github_access_denied",
+  "github_rate_limited",
+  "github_unavailable",
+] as const;
 
 /** Named Pi factory; authority and credentials live in a per-run closure. */
 export async function codeTruthExtension(
@@ -20,7 +32,7 @@ export async function codeTruthExtension(
   const skill = await readFile("skills/repodesk-code-truth/SKILL.md", "utf8");
   return {
     id: "code-truth",
-    version: "1",
+    version: "2",
     path: "<inline:code-truth>",
     tools: [...codeTruthTools],
     execution: "read-only",
@@ -28,20 +40,42 @@ export async function codeTruthExtension(
     workspaces: [workspaceId],
     hash: createHash("sha256")
       .update(
-        JSON.stringify({ targets, skill, version: 1, connectionRevision }),
+        JSON.stringify({ targets, skill, version: 2, connectionRevision }),
       )
       .digest("hex"),
+    toolErrorCodes: unavailableCodes,
     factory: (input) => async (pi) => {
       const signal = input.signal;
-      const scope = resolveScope
-        ? await resolveScope(input.actor)
-        : { client, targets };
-      const available = await scope.client.use(
-        workspaceId,
-        scope.targets,
-        signal,
-        (mcp) => mcp.listTools({}, { signal, timeout: 10000 }),
-      );
+      const load = async () => {
+        const scope = resolveScope
+          ? await resolveScope(input.actor)
+          : { client, targets };
+        const available = await scope.client.use(
+          workspaceId,
+          scope.targets,
+          signal,
+          (mcp) => mcp.listTools({}, { signal, timeout: 10000 }),
+        );
+        return { scope, available };
+      };
+      let resources: Awaited<ReturnType<typeof load>>;
+      try {
+        resources = await load();
+      } catch (error) {
+        signal.throwIfAborted();
+        if (
+          !(error instanceof Fault) ||
+          !unavailableCodes.some((code) => code === error.code)
+        )
+          throw error;
+        // A repository dependency must not prevent unrelated chat. Register no
+        // source tools or source skill, and expose only the fixed fault code.
+        pi.on("before_agent_start", (event) => ({
+          systemPrompt: `${event.systemPrompt}\n\nCode Truth repository tools are unavailable for this run (${error.code}). Do not claim to have inspected repository source. Continue unrelated requests normally. If source is needed, explain that repository access is unavailable and suggest retrying after GitHub access or the Code Truth service recovers.`,
+        }));
+        return;
+      }
+      const { scope, available } = resources;
       requireThat(
         available.tools.length === codeTruthTools.length &&
           codeTruthTools.every((name) =>

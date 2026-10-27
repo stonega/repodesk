@@ -111,6 +111,14 @@ are deduplicated and triggered on use at most every five minutes. A failed refre
 retains the last usable snapshot; inspect its commit/timestamp. Restarting the local
 service re-resolves configured branches and reuses matching snapshots on disk.
 
+Known GitHub access failures and Code Truth connection failures during tool loading
+disable only Code Truth for that run. Ordinary chat and unrelated plugins remain
+available. The assistant receives a fixed failure code and instructions to disclose
+missing source access; it receives no repository tools, source skill or raw exception.
+The next run retries setup. Permission checks still apply before every source call;
+revoked access never falls back to an older authorization snapshot. Unexpected
+factory errors and an incompatible MCP tool catalog still stop loading.
+
 Supported repositories match the upstream service: HTTPS `github.com` only, no SSH,
 GitLab, arbitrary local directories, credentials in URLs, or runtime package installs.
 Up to 12 distinct repositories can be configured per workspace.

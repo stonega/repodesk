@@ -13,8 +13,11 @@ import {
   selectedModel,
 } from "../src/agent/runtime.ts";
 import { assistantSoul } from "../src/agent/soul.ts";
+import { CodeTruthClient } from "../src/code-truth/client.ts";
+import { codeTruthExtension } from "../src/code-truth/extension.ts";
 import { database } from "../src/db/pool.ts";
 import { Store } from "../src/db/repositories.ts";
+import { Fault } from "../src/domain.ts";
 import { GitHubApp } from "../src/github/app.ts";
 import { githubExtension } from "../src/github/extension.ts";
 import { GitHubMetadata } from "../src/github/metadata.ts";
@@ -325,6 +328,36 @@ try {
 } finally {
   await githubStore.pool.end();
 }
+// An unavailable repository service must not turn a greeting into a load failure.
+const unavailableCodeClient = new CodeTruthClient(
+  "http://unused.invalid",
+  "fake",
+);
+unavailableCodeClient.use = async () => {
+  const error = new Fault("code_truth_unavailable", 503);
+  error.message += ": private diagnostic";
+  throw error;
+};
+const degradedRunner = new PiRunner(
+  (_model, context) => {
+    assert.ok(context.systemPrompt?.includes("code_truth_unavailable"));
+    assert.ok(!context.systemPrompt?.includes("private diagnostic"));
+    assert.ok(!context.tools?.some((tool) => tool.name === "get_code_context"));
+    return emit(
+      [{ type: "text", text: "hello without source access" }],
+      "stop",
+    );
+  },
+  ExtensionCatalog.fromSnapshot(
+    [],
+    [await codeTruthExtension(unavailableCodeClient, "runtime-workspace", [])],
+  ),
+);
+assert.equal(
+  (await degradedRunner.run({ ...input, workspaceId: "runtime-workspace" }))
+    .text,
+  "hello without source access",
+);
 process.stdout.write(
   `${JSON.stringify({
     node: process.version,
@@ -337,6 +370,7 @@ process.stdout.write(
     piExtensions: true,
     githubDefaults: true,
     obsidianDefaults: true,
+    codeTruthUnavailable: true,
     webReader: true,
   })}\n`,
 );

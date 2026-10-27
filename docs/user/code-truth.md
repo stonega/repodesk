@@ -74,6 +74,16 @@ Compose 会把该文件提供给 app/worker 和 Code Truth；这套手动配置�
 
 使用时会触发索引检查，刷新间隔至少约五分钟；首次启用时索引可能还在准备。需要实时 PR/Issue 元数据时，让机器人使用 GitHub 查询。
 
+## Temporary access failures
+
+If GitHub permissions cannot be verified or Code Truth cannot be reached, repository
+tools are unavailable for that request. Ordinary chat and unrelated tools continue
+working. A source question should report the missing access instead of claiming to
+have inspected code. Retry after access or the service recovers; connected members
+can use `/github sync` to refresh their GitHub permissions. Each new request retries
+repository tool setup. An operator can use **Sync & check indexes** to check the
+workspace's service and indexing separately.
+
 ## 关闭与删除
 
 在插件页面停用会停止相关工具访问，但磁盘上的旧索引不会自动全部删除。工作区数据删除与源码副本清理分开处理；需要擦除时，先停止 Code Truth，再由管理员清理数据卷中对应的过期索引目录。

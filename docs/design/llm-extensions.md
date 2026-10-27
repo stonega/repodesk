@@ -38,6 +38,13 @@ model-visible policy feedback. The host reconstructs the fault from its code;
 exception messages remain private. File extensions and unlisted built-in faults
 continue to return `extension_tool_failed`.
 
+The built-in Code Truth factory handles its known GitHub access and service
+availability failures without registering source tools or its source skill. It
+adds a fixed-code unavailability notice to the assistant's context, allowing
+unrelated chat to continue. Each run retries setup and each source call rechecks
+access. Unknown exceptions and MCP catalog mismatches remain load failures; file
+extensions retain the strict loading contract above.
+
 ## Installation and grants
 
 The Plugins landing page shows compact Installed cards for built-in Code Truth,

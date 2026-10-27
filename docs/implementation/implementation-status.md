@@ -1,5 +1,26 @@
 # Implementation evidence
 
+## Code Truth setup failures no longer block unrelated chat (2026-10-27)
+
+Known GitHub authorization/availability and Code Truth connection failures during
+factory setup now leave ordinary chat and unrelated tools available. Code Truth
+registers no source tools or source skill for that run and supplies only a fixed
+failure code and missing-source guidance to the assistant. A new run retries setup;
+every source call still rechecks actor access. Cancellation, unknown exceptions
+and MCP catalog mismatches retain their failure boundaries. Runtime tool failures
+expose only explicitly allowlisted codes, without private exception text.
+
+Validation: `bun run check`, `bun run typecheck`, `bun test` (**1,208 tests across
+132 files**) and `bun run build` passed with disposable PostgreSQL. The packaged
+runtime contract passed locally and under the deployed image's Node 24.21.0 with
+network disabled and the rebuilt artifacts copied into a disposable container.
+An isolated VPS probe reproduced the original outward error with a stale GitHub
+snapshot in memory; the corrected probe loaded unrelated tools and excluded all
+eight Code Truth tools under the same denial. Current saved configuration also
+loaded successfully. No production configuration, database state, running service,
+model call or Telegram message was changed. Production rollout remains pending.
+See the [incident and evidence limits](../../postmortem/2026-10-27-code-truth-blocks-chat-startup.md).
+
 ## Multiple Telegram groups per workspace (2026-10-26)
 
 Workspaces can now link multiple Telegram groups. Migration
