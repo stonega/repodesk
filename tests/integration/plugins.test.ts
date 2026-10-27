@@ -331,7 +331,8 @@ const url = process.env.TEST_DATABASE_URL;
         const stopped = (await store.read(workspaceId)).runs.find(
           (r) => r.id === next.id,
         );
-        expect(stopped?.status).toBe("failed");
+        // The polling guard can abort before the inline guard rejects the change.
+        expect(["failed", "cancelled"]).toContain(stopped?.status);
         expect(stopped?.error).toBe("extension_configuration_changed");
         expect(Object.keys(stopped?.tools ?? {})).toHaveLength(0);
         expect(calls).toBe(3);
