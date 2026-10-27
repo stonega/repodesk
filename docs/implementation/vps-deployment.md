@@ -7,6 +7,39 @@ release makes it available in the panel's version indicator. A deployment
 administrator reviews its notes and starts installation explicitly.
 See [host updater installation](updates.md) for the service and panel contract.
 
+## Code Truth startup isolation deployment (2026-10-27)
+
+The authorized manual archive cutover deployed commit
+`df4dab5b445b7abd9ecbde812c3c34fe70adc1b3`, source tree
+`a1b83d2c59c39be0c8023b7394104afcc2c5b885`, in bundle
+`1793066669306-68318929` (package v0.1.45). It replaces
+`1793065829494-2218607`, the host-updater v0.1.45 deployment completed while
+this fix was being prepared. The fix isolates known Code Truth setup failures
+from unrelated chat while retaining repository authorization.
+
+Lint, strict types, the production build, **1,208 deterministic tests across
+132 files** and **52 admin/group browser scenarios** passed. Four images were
+built from the clean committed archive. The exact app image passed its Node 24
+runtime contract, including unavailable Code Truth setup, and CPU transcription
+imports. Code Truth's offline real-index/MCP smoke, supervisor CA/task CLI checks,
+Compose configuration/startup, migration rerun and disposable backup/restore
+checks passed. All 22 application artifacts match the isolated source build.
+
+The VPS verified source/bundle checksums and both coding checkpoint checks before
+cutover. The protected backup is
+`backups/pre-release-1793066669306-68318929.dump` (1,879,274 bytes), with its archive
+listing verified. App, worker, runner and Code Truth are healthy. All 45 deployed
+application/supervisor/task artifacts match the tested images. Loopback and public
+health, readiness and admin return HTTP 200, and every JS/CSS asset referenced by
+admin HTML matches its tested hash. Configuration, credentials, persistent mounts,
+PostgreSQL and all three CI runner identities were preserved.
+
+Source, verification logs and the deployment receipt remain in the bundle; the
+image archive was removed after success. A transient SSH drop interrupted the
+upload, which resumed and passed the complete checksum check before import.
+No manual Telegram message, model call, run replay or account connection was
+performed. No dependency or migration was added by this fix.
+
 ## Workspace and Google guide deployment (2026-10-26)
 
 The operator-authorized manual archive cutover deployed clean commit

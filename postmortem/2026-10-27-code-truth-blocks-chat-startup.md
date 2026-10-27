@@ -60,8 +60,7 @@ and all repository authorization boundaries are unchanged.
 The corrected diagnostic bundle passed the same stale-snapshot probe inside the
 existing VPS worker: all six factories loaded, unrelated tools remained available,
 and all eight Code Truth tools were absent. Diagnostic files were removed. This
-was an isolated process, not a replacement of the running worker code. Production
-rollout remains pending.
+was an isolated process, not a replacement of the running worker code.
 
 Validation passed `bun run check`, `bun run typecheck`, `bun test` (1,208 tests
 across 132 files with disposable PostgreSQL), `bun run build` and the Node runtime
@@ -71,3 +70,14 @@ Focused regressions cover unrelated chat, unavailable services, stale/denied sco
 per-run recovery, revocation before tool execution, private-error suppression,
 cancellation and incompatible/unknown factory failures. Real local MCP tools and
 source retrieval continue to pass the service integration tests.
+
+## Authorized rollout
+
+The fix was committed and pushed as `df4dab5`, then deployed in bundle
+`1793066669306-68318929` on 2026-10-27. It replaced the host-updater v0.1.45 build
+`1793065829494-2218607`, which completed during fix preparation. The guarded
+cutover verified both coding checkpoints and a protected PostgreSQL backup.
+All four services are healthy; all 45 deployed artifacts and the public admin
+assets match the tested build. Configuration, credentials, persistent mounts,
+PostgreSQL and all three CI runner identities were preserved. See the
+[deployment record](../docs/implementation/vps-deployment.md#code-truth-startup-isolation-deployment-2026-10-27).

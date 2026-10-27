@@ -17,9 +17,16 @@ network disabled and the rebuilt artifacts copied into a disposable container.
 An isolated VPS probe reproduced the original outward error with a stale GitHub
 snapshot in memory; the corrected probe loaded unrelated tools and excluded all
 eight Code Truth tools under the same denial. Current saved configuration also
-loaded successfully. No production configuration, database state, running service,
-model call or Telegram message was changed. Production rollout remains pending.
-See the [incident and evidence limits](../../postmortem/2026-10-27-code-truth-blocks-chat-startup.md).
+loaded successfully. These initial probes made no production configuration or
+database changes and issued no model call or Telegram message.
+
+The authorized VPS rollout subsequently deployed `df4dab5` in bundle
+`1793066669306-68318929`, replacing the host-updater v0.1.45 bundle
+`1793065829494-2218607`. All four services are healthy; 45 deployed artifacts and
+the public admin assets match the tested build. The protected backup verified,
+and configuration, credentials, persistent mounts, PostgreSQL and CI runner
+identities were preserved. See the [deployment record](vps-deployment.md#code-truth-startup-isolation-deployment-2026-10-27)
+and [incident evidence limits](../../postmortem/2026-10-27-code-truth-blocks-chat-startup.md).
 
 ## Multiple Telegram groups per workspace (2026-10-26)
 
