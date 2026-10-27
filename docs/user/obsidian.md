@@ -6,7 +6,7 @@ It starts with a home note, meeting and daily templates, an organization Base an
 a Canvas. No account, API key, desktop session or additional service is required.
 
 Notes are shared organization knowledge. Every active member can read them from
-the bot, including in authorized linked groups. Owners and admins can create and
+the bot, including in authorized linked groups. All active members can create and
 change notes through interactive bot requests. Scheduled workflows may read notes
 but cannot change them. The deployment operator manages the vault in the panel.
 Keep personal notes and private conversation history out of the shared vault.

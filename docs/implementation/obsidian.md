@@ -26,8 +26,8 @@ extraction without shell commands, temporary server files or a desktop API.
 
 Panel requests require the workspace's deployment operator and existing session,
 Origin and CSRF checks. Bot calls bind workspace, persisted run, actor, plugin
-generation and execution fence. All active members read shared notes; owners/admins
-write only in interactive runs. Current membership, cancellation, workspace pause,
+generation and execution fence. All active members can read shared notes and
+write in interactive runs. Current membership, cancellation, workspace pause,
 destination and deletion are checked under the workspace lock. Scheduled writes
 are denied. The extension adapter retains its existing `read-only` execution mode;
 trusted application services own these internal mutations, with no shell or

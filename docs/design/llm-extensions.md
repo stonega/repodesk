@@ -237,7 +237,7 @@ not broaden the executable file-extension API or expose an arbitrary GitHub writ
 The [managed Obsidian vault](../implementation/obsidian.md) is enabled by default
 for existing and new workspaces, without a manifest, account or desktop process.
 It registers `obsidian_query`, `obsidian_read` and `obsidian_write` plus a bundled
-skill. All active members may read shared organization notes; owners/admins may
+skill. All active members may read shared organization notes and
 make requested internal note changes in interactive runs. The workspace's deployment
 operator manages files, import/export and enablement in the panel. These trusted
 application mutations do not grant external write, shell or desktop capabilities.

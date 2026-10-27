@@ -135,6 +135,9 @@ for (const width of [1280, 390]) {
       page.getByRole("switch", { name: "Enable Obsidian" }),
     ).toBeChecked();
     await expect(vault).toContainText("Enabled by default");
+    await expect(vault).toContainText(
+      "All active members can read and manage notes through interactive bot requests.",
+    );
     await expect(vault.locator("input,textarea,select")).toHaveCount(0);
     await expect(
       page.getByRole("textbox", { name: "Content", exact: true }),

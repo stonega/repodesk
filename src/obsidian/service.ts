@@ -306,11 +306,7 @@ export class ObsidianService {
         403,
       );
       if (action === "write")
-        requireThat(
-          !run.workflowId && eligible(w, actor, true),
-          "access_denied",
-          403,
-        );
+        requireThat(!run.workflowId, "access_denied", 403);
       run.obsidianRead = { generation };
       if (action === "write")
         return mutateVault(w, actor, value, `${runId}:${callId}`);

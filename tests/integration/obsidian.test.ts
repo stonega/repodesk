@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { unzipSync } from "fflate";
 import { claim } from "../../src/admin/auth.ts";
 import { ExtensionCatalog } from "../../src/agent/extensions.ts";
@@ -192,7 +194,7 @@ const url = process.env.TEST_DATABASE_URL;
       ).toBe(0);
       expect((await service.view(admin, w.id)).vaultRevision).toBe(1);
     });
-    test("members read, owner/admin manage; spoofed actors, tenants and execution fences fail", async () => {
+    test("all active members can manage notes; spoofed actors, tenants and execution fences fail", async () => {
       const w = await fresh();
       const sibling = await fresh();
       const run = await running(w.id, "202");
@@ -202,36 +204,81 @@ const url = process.env.TEST_DATABASE_URL;
       const write = {
         action: "save",
         revision: 0,
-        path: "Denied.md",
-        content: "Denied",
+        path: "Shared.md",
+        content: "Shared",
       };
       for (const [id, actor, fence] of [
-        [w.id, "202", 1],
         [w.id, "101", 1],
+        [w.id, "404", 1],
         [sibling.id, "202", 1],
         [w.id, "202", 0],
       ] as const)
         await expect(
           service.tool(id, run.id, actor, 0, fence, "write", write, "denied"),
         ).rejects.toMatchObject({ code: "access_denied" });
-      const adminRun = await running(w.id, "303");
-      await service.tool(
-        w.id,
-        adminRun.id,
-        "303",
-        0,
-        1,
-        "write",
-        write,
-        "saved",
-      );
+      for (const [revision, actor] of ["202", "303", "101"].entries()) {
+        const writer = actor === "202" ? run : await running(w.id, actor);
+        await service.tool(
+          w.id,
+          writer.id,
+          actor,
+          0,
+          1,
+          "write",
+          { ...write, revision, content: `Saved by ${actor}` },
+          "saved",
+        );
+      }
       expect(
-        (await service.view(admin, w.id, { query: "Denied.md" })).total,
+        (await service.view(admin, w.id, { query: "Shared.md" })).total,
       ).toBe(1);
+      expect((await service.read(admin, w.id, "Shared.md")).content).toBe(
+        "Saved by 101",
+      );
+    });
+    test("regular members can rename, trash, restore and create notes from templates", async () => {
+      const w = await fresh();
+      const run = await running(w.id, "202");
+      const changes = [
+        { action: "save", path: "Projects/Launch.md", content: "# Launch" },
+        {
+          action: "rename",
+          path: "Projects/Launch.md",
+          destination: "Projects/Release.md",
+        },
+        { action: "trash", path: "Projects/Release.md" },
+        { action: "restore", path: "Projects/Release.md" },
+        {
+          action: "template",
+          path: "Meetings/Planning.md",
+          template: "Templates/Meeting.md",
+          date: "2026-10-27",
+        },
+      ];
+      for (const [revision, change] of changes.entries())
+        await service.tool(
+          w.id,
+          run.id,
+          "202",
+          0,
+          1,
+          "write",
+          { ...change, revision },
+          `change-${revision}`,
+        );
+      expect(
+        await service.read(admin, w.id, "Projects/Release.md"),
+      ).toMatchObject({
+        content: "# Launch",
+        trashed: false,
+      });
+      expect(
+        (await service.read(admin, w.id, "Meetings/Planning.md")).content,
+      ).toContain("Planning");
     });
     test("duplicate tool delivery doesn't append twice, even across service instances", async () => {
       const w = await fresh();
-      const run = await running(w.id);
+      const run = await running(w.id, "202");
       const input = {
         action: "daily",
         date: "2026-10-22",
@@ -241,7 +288,7 @@ const url = process.env.TEST_DATABASE_URL;
       const result = await service.tool(
         w.id,
         run.id,
-        "101",
+        "202",
         0,
         1,
         "write",
@@ -252,7 +299,7 @@ const url = process.env.TEST_DATABASE_URL;
         await new ObsidianService(store).tool(
           w.id,
           run.id,
-          "101",
+          "202",
           0,
           1,
           "write",
@@ -266,50 +313,55 @@ const url = process.env.TEST_DATABASE_URL;
         ),
       ).toHaveLength(1);
     });
-    test("active scheduled workflows can read shared knowledge but cannot write notes", async () => {
-      const w = await fresh();
-      const run = await store.change(w.id, (current) => {
-        current.workflows.push({
-          id: "scheduled",
-          version: 1,
-          owner: "101",
-          status: "active",
-          spec: spec(current),
-          skillVersion: 1,
-          versions: [],
+    test.each(["101", "202", "303"])(
+      "scheduled workflows owned by %s can read notes but cannot write",
+      async (actor) => {
+        const w = await fresh();
+        const run = await store.change(w.id, (current) => {
+          current.workflows.push({
+            id: "scheduled",
+            version: 1,
+            owner: actor,
+            status: "active",
+            spec: spec(current),
+            skillVersion: 1,
+            versions: [],
+          });
+          const result = createRun(
+            current,
+            actor,
+            "Summarize organization notes",
+            "-100100",
+            0,
+            "gpt-4.1-mini",
+            { workflowId: "scheduled" },
+          );
+          result.status = "running";
+          result.fence = 1;
+          return result;
         });
-        const result = createRun(
-          current,
-          "101",
-          "Summarize organization notes",
-          "-100100",
-          0,
-          "gpt-4.1-mini",
-          { workflowId: "scheduled" },
-        );
-        result.status = "running";
-        result.fence = 1;
-        return result;
-      });
-      expect(
-        await service.tool(w.id, run.id, "101", 0, 1, "query", {}, "read"),
-      ).toMatchObject({ total: 5 });
-      await expect(
-        service.tool(
-          w.id,
-          run.id,
-          "101",
-          0,
-          1,
-          "write",
-          { action: "daily", date: "2026-10-22", revision: 0 },
-          "write",
-        ),
-      ).rejects.toMatchObject({ code: "access_denied" });
-    });
+        expect(
+          await service.tool(w.id, run.id, actor, 0, 1, "query", {}, "read"),
+        ).toMatchObject({ total: 5 });
+        await expect(
+          service.tool(
+            w.id,
+            run.id,
+            actor,
+            0,
+            1,
+            "write",
+            { action: "daily", date: "2026-10-22", revision: 0 },
+            "write",
+          ),
+        ).rejects.toMatchObject({ code: "access_denied" });
+      },
+    );
     test("deactivation, cancellation, scheduled writes and plugin disable/re-enable deny stale tools", async () => {
       for (const change of [
         "member",
+        "removed",
+        "pause",
         "cancel",
         "schedule",
         "disable",
@@ -317,14 +369,24 @@ const url = process.env.TEST_DATABASE_URL;
         "delete",
       ]) {
         const w = await fresh();
-        const run = await running(w.id);
+        const run = await running(w.id, "202");
+        const input = {
+          action: "save",
+          path: "Saved.md",
+          content: "Shared note",
+          revision: 0,
+        };
+        await service.tool(w.id, run.id, "202", 0, 1, "write", input, "write");
         await store.change(w.id, (current) => {
           const saved = current.runs.find((r) => r.id === run.id);
           if (!saved) throw Error("missing run");
           if (change === "member") {
-            const member = current.members.find((m) => m.id === "101");
+            const member = current.members.find((m) => m.id === "202");
             if (member) member.active = false;
           }
+          if (change === "removed")
+            current.members = current.members.filter((m) => m.id !== "202");
+          if (change === "pause") current.settings.paused = true;
           if (change === "cancel") saved.cancelled = true;
           if (change === "schedule") saved.workflowId = "schedule";
           if (change === "reclaim") saved.fence++;
@@ -339,18 +401,94 @@ const url = process.env.TEST_DATABASE_URL;
           await service.configure(admin, w.id, { revision: 1, enabled: true });
         }
         await expect(
-          service.tool(
-            w.id,
-            run.id,
-            "101",
-            0,
-            1,
-            "write",
-            { action: "save", path: "Denied.md", content: "No", revision: 0 },
-            "write",
-          ),
+          service.tool(w.id, run.id, "202", 0, 1, "write", input, "write"),
         ).rejects.toMatchObject({ code: "access_denied" });
       }
+    });
+    test("production plugin runner saves a regular member's requested note", async () => {
+      const w = await fresh();
+      const run = await running(w.id, "202");
+      const input: AgentInput = {
+        workspaceId: w.id,
+        actor: "202",
+        runId: run.id,
+        model: selectedModel("gpt-4.1-mini"),
+        apiKey: "fake",
+        system: "Policy",
+        prompt: "Save this shared note at Projects/Launch.md",
+        transcript: [],
+        tools: [],
+        maxTurns: 2,
+        signal: new AbortController().signal,
+        guard: async () => {},
+        reserve: async () => "unused",
+        checkpoint: async () => {},
+      };
+      let calls = 0;
+      const runner = await plugins.runner(
+        await store.deployment(),
+        w.id,
+        (model, context) => {
+          expect(context.systemPrompt).toContain(
+            "All active members can manage notes in interactive requests",
+          );
+          expect(
+            context.tools?.find((t) => t.name === "obsidian_write")
+              ?.description,
+          ).toContain("All active members");
+          const stopReason = calls++ === 0 ? "toolUse" : "stop";
+          const message: AssistantMessage = {
+            role: "assistant",
+            content:
+              stopReason === "toolUse"
+                ? [
+                    {
+                      type: "toolCall",
+                      id: "member-save",
+                      name: "obsidian_write",
+                      arguments: {
+                        action: "save",
+                        revision: 0,
+                        path: "Projects/Launch.md",
+                        content: "# Launch",
+                      },
+                    },
+                  ]
+                : [{ type: "text", text: "Saved Projects/Launch.md" }],
+            api: model.api,
+            provider: model.provider,
+            model: model.id,
+            stopReason,
+            timestamp: 1,
+            usage: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 0,
+              cost: {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                total: 0,
+              },
+            },
+          };
+          const stream = new AssistantMessageEventStream();
+          stream.push({ type: "done", reason: stopReason, message });
+          stream.end(message);
+          return stream;
+        },
+      );
+      const result = await runner.run(input);
+      expect(result).toMatchObject({ status: "succeeded", tools: 1, turns: 2 });
+      expect(
+        result.transcript.find((m) => m.role === "toolResult"),
+      ).toMatchObject({ isError: false });
+      expect(
+        (await service.read(admin, w.id, "Projects/Launch.md")).content,
+      ).toBe("# Launch");
     });
     test("real Pi extension loader exposes native tools/instructions and applies revocation", async () => {
       const w = await fresh();

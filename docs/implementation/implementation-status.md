@@ -1,5 +1,25 @@
 # Implementation evidence
 
+## Obsidian writes for every active member (2026-10-27)
+
+All active workspace members can now save, edit, rename, trash/restore, create
+notes from templates and append daily notes through explicit interactive bot
+requests. The write tool, bundled skill, panel guidance and access documentation
+share this policy. Current membership, tenant/run/actor binding, execution fences,
+plugin generations, revision conflicts and call deduplication remain enforced.
+Scheduled writes remain denied for every role; panel management still requires
+the workspace's deployment operator.
+
+Validation: lint, strict types, production build, the Node runtime contract,
+**1,229 tests across 135 files** with disposable PostgreSQL and four Obsidian browser
+journeys passed. A regular member saves through the production plugin runner;
+regressions cover every role, native note actions, duplicate appends and revocation
+before receipt replay. Desktop/mobile summaries in both themes, modal editors,
+loading/empty, pending and error states were visually inspected at 1280px/390px.
+The first full run hit an unrelated Git patch fixture failure; its isolated rerun
+and the complete rerun passed. No migration or dependency was added. This change
+has not been deployed; live Telegram/model acceptance remains a staging check.
+
 ## Integration startup release checks (2026-10-27)
 
 Built-in Code Truth registration now uses a bundled catalog with no upstream HTTP,
@@ -543,8 +563,8 @@ maps/views; live synchronization, Publish and community-plugin execution remain
 outside the implementation. See [behavior and limits](obsidian.md),
 [user guide](../user/obsidian.md) and [runnable examples](../../examples/obsidian.http).
 
-All active members can read shared notes; owner/admin mutations require an
-interactive run. Tenant, run, actor, execution-fence and current permission checks
+All active members can read shared notes and, since 2026-10-27, mutate them in
+interactive runs. Tenant, run, actor, execution-fence and current permission checks
 run inside the workspace transaction. Revisions protect concurrent edits, native
 validation makes imports atomic, and durable call receipts prevent duplicate
 daily-note appends. Disable/re-enable invalidates retained history, derived

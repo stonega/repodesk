@@ -12,6 +12,10 @@ An active member can use the bot immediately; regular membership grants no admin
 role or additional source, destination or repository permissions. Non-members and
 inactive members cannot run bot work.
 
+All active members can read and manage the shared Obsidian vault through explicit
+interactive bot requests. Scheduled workflows can read notes but cannot change
+them. Panel vault management remains restricted to the workspace's deployment operator.
+
 The **Groups & Members** page offers a searchable, paginated member table with
 Telegram profiles, IDs, roles, membership, GitHub detail actions and effective access.
 Add/edit dialogs manage role and active membership. Access requests and their

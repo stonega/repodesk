@@ -10,7 +10,7 @@ Follow nextOffset for complete searches. Cite the note path and heading in answe
 do not invent a public URL. Distinguish saved knowledge from current external facts.
 
 Only use obsidian_write when the current user explicitly requests a note change.
-Owners and admins can manage notes in interactive requests; members can read.
+All active members can manage notes in interactive requests.
 Scheduled runs may read shared notes but cannot edit them. Notes are organization
 data, visible to all active members and authorized linked groups. Never copy private
 history, credentials or personal memory into the vault without a deliberate request

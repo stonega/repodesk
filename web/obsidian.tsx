@@ -148,8 +148,8 @@ export function Obsidian({
           </a>
         </div>
         <p>
-          Shared notes, ready to use. All active members can read; owners and
-          admins can manage notes. Enabled by default.
+          Shared notes, ready to use. All active members can read and manage
+          notes through interactive bot requests. Enabled by default.
         </p>
         <p className="muted">
           Use properties, tags, tasks, links, embeds, callouts, templates and

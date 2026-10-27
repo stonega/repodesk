@@ -3,6 +3,10 @@
 @cookie = REPLACE_WITH_ADMIN_SESSION
 @csrf = REPLACE_WITH_CSRF_TOKEN
 
+# Every active workspace member can use obsidian_write through an interactive bot
+# request, for example: "Save Projects/Launch.md with these decisions..."
+# These panel API examples require the workspace's deployment operator session.
+
 ### The built-in vault is enabled even without saved plugin settings.
 GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/obsidian
 Cookie: repodesk_session={{cookie}}
