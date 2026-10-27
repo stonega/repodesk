@@ -81,3 +81,33 @@ All four services are healthy; all 45 deployed artifacts and the public admin
 assets match the tested build. Configuration, credentials, persistent mounts,
 PostgreSQL and all three CI runner identities were preserved. See the
 [deployment record](../docs/implementation/vps-deployment.md#code-truth-startup-isolation-deployment-2026-10-27).
+
+## Preventive follow-up
+
+The initial correction handled known factory errors, but still performed optional
+service discovery during startup. One initial GitHub App/configuration lookup also
+remained outside that handler. The follow-up removes that failure dependency:
+Code Truth registers bundled schemas and resolves access, credentials and remote
+compatibility only when a source tool is invoked. Unknown remote failures therefore
+cannot affect an unrelated greeting. Current authorization remains required for
+all source calls, including retries within the same host.
+
+The generated catalog is compared against the real MCP server in service tests
+and the offline image smoke, preventing silent schema drift. A combined fixture
+uses the production plugin assembly with every standard agent integration enabled
+for owners and ordinary members in 16 configurations. It blocks all external
+transports and optional credential lookups and requires a completed greeting.
+Unit tests and the packaged Node contract share this fixture; CI and the host
+updater already run the contract against the exact app image before cutover.
+Source failures now emit a sanitized `code_truth_tool_failed` event with fixed
+cause code and tenant/run IDs. The repository reliability rules and release
+runbook require future integrations and incident fixes to extend these checks.
+
+Follow-up validation passed lint, application/service types, build, all 1,225 tests
+across 135 files, and the packaged Node contract with all 16 startup configurations.
+All four images built, and the exact Node 24 app image and Code Truth image passed
+their offline contracts. Compose startup, migration rerun, CPU speech imports,
+supervisor/task CLI and disposable backup/restore passed. Restoring the old eager
+App lookup made the new startup regression fail; changing a bundled catalog title
+made the service contract fail. This follow-up is prepared for the next VPS rollout;
+the earlier authorized hotfix deployment above remains the live deployment evidence.

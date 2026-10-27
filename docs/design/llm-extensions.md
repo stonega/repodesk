@@ -38,12 +38,21 @@ model-visible policy feedback. The host reconstructs the fault from its code;
 exception messages remain private. File extensions and unlisted built-in faults
 continue to return `extension_tool_failed`.
 
-The built-in Code Truth factory handles its known GitHub access and service
-availability failures without registering source tools or its source skill. It
-adds a fixed-code unavailability notice to the assistant's context, allowing
-unrelated chat to continue. Each run retries setup and each source call rechecks
-access. Unknown exceptions and MCP catalog mismatches remain load failures; file
-extensions retain the strict loading contract above.
+Built-in registration uses bundled tool definitions and local application state.
+Optional upstream HTTP requests, credential lookup and permission verification belong
+inside tool execution. Code Truth registers its bundled schemas without contacting
+GitHub or MCP, so stale access and unavailable services cannot block a greeting.
+Each source call resolves current actor scope and credentials and checks the remote
+catalog before executing. Failures expose only allowlisted codes; no old permission
+snapshot is restored. File-extension loading retains the strict contract above.
+
+The combined production-factory startup fixture runs for owners and ordinary members
+with all standard integrations enabled, including stale/denied permissions, missing
+service/App configuration and upstream failures. Both unit tests and the packaged
+Node runtime contract require a successful greeting with zero external startup
+calls. CI and the host updater run that exact-image contract before cutover.
+New built-ins must extend this fixture. Code Truth's service smoke also compares
+its advertised schemas with the generated bundled catalog before deployment.
 
 ## Installation and grants
 

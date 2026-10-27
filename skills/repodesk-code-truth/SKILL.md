@@ -8,6 +8,13 @@ description: Query indexed repository source through the RepoDesk Code Truth MCP
 Use the MCP server as the source of truth for configured repository questions. Its results
 identify the configured branch and immutable commit that support the answer.
 
+Tool definitions are bundled locally; their presence does not prove current access
+or service availability. Greetings and unrelated questions do not need source tools.
+If a source call fails because access, configuration or the service is unavailable,
+explain that the requested source could not be inspected. Never invent evidence,
+restore an older permission grant or repeatedly retry the same failing call.
+Continue unrelated work normally; retry source access after the problem is resolved.
+
 ## Configured repositories
 
 Use only targets returned by `list_code_targets` for this workspace. Operators

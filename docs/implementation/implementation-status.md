@@ -1,5 +1,34 @@
 # Implementation evidence
 
+## Integration startup release checks (2026-10-27)
+
+Built-in Code Truth registration now uses a bundled catalog with no upstream HTTP,
+credential lookup or actor-scope resolution. Those checks run only when source is
+requested, including the GitHub App lookup that previously occurred outside the
+fallback handler. Every source call rechecks current scope and remote tool names
+and input schemas before execution. Missing configuration, stale permissions and
+unknown upstream errors cannot prevent a greeting. Source failures retain safe
+codes and tenant/run context in `code_truth_tool_failed` runtime events.
+
+The production-factory fixture covers all six agent plugin factories together in
+16 owner/member configurations, including stale/denied/revoked GitHub access,
+missing service/App setup and failed transports. It requires a fake-model greeting
+with zero external startup calls, and is shared by unit tests and the packaged
+Node contract already run by CI and the host updater before cutover. The real
+Code Truth image smoke and service tests also reject catalog/schema drift. The
+catalog is generated from the MCP server without repository access. Reliability
+requirements and release instructions now require these checks for new built-ins.
+
+Validation: lint, application/service types, build, **1,225 tests across 135 files**
+and the Node runtime contract passed in an isolated snapshot. All four Docker
+images built; the exact Node 24 image passed all 16 startup cases and the safe
+source-failure probe. Offline Code Truth indexing/MCP/catalog checks, CPU speech
+imports, supervisor/task CLI checks, Compose startup, migration rerun and disposable
+backup/restore passed. Regressions were also run against the old eager App lookup
+and a deliberately stale catalog; both failed as required. No dependency or
+migration was added. This follow-up is ready for the next VPS rollout; the deployed
+`df4dab5` hotfix remains documented below.
+
 ## Optional native Telegram reactions (2026-10-27)
 
 Interactive private/group conversations can now use `react_to_message` for an

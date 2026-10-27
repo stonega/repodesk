@@ -28,8 +28,9 @@ Content-Type: application/json
 
 ### Start or check the workspace's managed index (requires local service)
 # An indexing/access failure here does not grant fallback source access.
-# Known Code Truth setup failures leave ordinary bot chat available without
-# repository tools. Restore access/service availability, then send a new request.
+# Ordinary bot chat makes no Code Truth/GitHub startup calls. Source tools check
+# current permissions and service compatibility only when invoked. Restore access
+# or service availability, then retry the source question.
 POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/code-truth/status
 Cookie: repodesk_session={{session}}
 Origin: {{origin}}

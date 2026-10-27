@@ -42,6 +42,26 @@ and runnable examples when workflows or interfaces change.
 For deployment changes, also build and smoke-test the Docker image and validate
 `docker compose config`. Bun manages dependencies/builds/tests; Node runs the service.
 
+### Integration reliability
+
+Built-in tool registration must use bundled definitions and local application state.
+Defer optional service HTTP requests, credential lookup and upstream permission
+verification until a tool is invoked. A missing or unavailable optional integration
+must not prevent an unrelated greeting. Source/tool calls still require current
+authorization; never restore an old grant or fabricate unavailable evidence.
+
+Add every new built-in integration to `scripts/fixtures/plugin-startup.ts`. Keep
+the combined production-factory check covering ordinary members, stale/denied
+permissions, missing configuration and failed dependencies, with zero external
+startup calls. It runs in deterministic tests and `dist/runtime-contract.js`;
+the exact image must pass that contract before production cutover. Process health
+and an empty/default workspace are insufficient integration release checks.
+
+After an incident, add a regression for the underlying failure family through the
+production composition path. Retain a fixed diagnostic code and tenant/run context;
+never log raw upstream exceptions, credentials or private messages. Protocol changes
+must regenerate the bundled Code Truth catalog and pass its service smoke check.
+
 ## UI design preferences
 
 Before designing or modifying UI, read [UI rules](docs/design/ui-rules.md) and apply

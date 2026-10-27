@@ -24,6 +24,26 @@ secret/backup storage and a responsible operator. Set explicit retention and bud
 Run migrations once before API/worker startup; Compose enforces this dependency.
 Roll forward migrations rather than reverting an image against an incompatible schema.
 
+## Integration startup release gate
+
+`bun run test:runtime` includes the same combined built-in factory path used by the
+worker, with synthetic tenant state and a fake model stream. It checks owners and
+ordinary members with every standard integration enabled, stale/denied GitHub
+permissions, missing App/service configuration and failed upstream transports.
+A greeting must complete with zero external startup calls. A separate source-tool
+probe must fail safely with its fixed diagnostic code, without private error text.
+No live model call, Telegram send or production account is needed.
+
+Run this contract against the exact app image with `--network none`, as CI and the
+host updater already do before cutover. A healthy process or a fresh workspace
+without enabled integrations does not satisfy this gate. Extend
+`scripts/fixtures/plugin-startup.ts` whenever adding a built-in integration.
+
+Code Truth's exact service image must also pass `bun scripts/smoke.ts`. It compares
+the advertised MCP catalog with the generated bundled definitions and performs a
+real offline index/query. Regenerate the catalog with
+`bun run --cwd services/code-truth catalog:update` when changing tool definitions.
+
 ## Staging demonstration
 
 Use only your dedicated staging bot/group and explicit model spend cap.

@@ -2,7 +2,9 @@ import { expect, test } from "bun:test";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { Type } from "typebox";
+import { codeTruthToolCatalog } from "../../services/code-truth/src/tool-catalog.ts";
 import { ExtensionCatalog } from "../../src/agent/extensions.ts";
 import {
   type AgentInput,
@@ -79,10 +81,8 @@ function reply() {
 class RepositoryClient extends CodeTruthClient {
   calls = 0;
   error?: Error;
-  tools = codeTruthTools.map((name) => ({
-    name,
-    inputSchema: { type: "object", properties: {} },
-  }));
+  toolCalls = 0;
+  tools = structuredClone(codeTruthToolCatalog) as unknown as Tool[];
   constructor() {
     super("http://unused.invalid", "unused");
   }
@@ -94,7 +94,13 @@ class RepositoryClient extends CodeTruthClient {
   ): Promise<T> {
     this.calls++;
     if (this.error) throw this.error;
-    return action({ listTools: async () => ({ tools: this.tools }) } as Client);
+    return action({
+      listTools: async () => ({ tools: this.tools }),
+      callTool: async () => {
+        this.toolCalls++;
+        return { content: [{ type: "text", text: "source" }] };
+      },
+    } as unknown as Client);
   }
 }
 
@@ -109,10 +115,12 @@ for (const code of [
   "github_unavailable",
   "code_truth_unavailable",
 ]) {
-  test(`${code} leaves unrelated chat working without exposing source tools or private errors`, async () => {
+  test(`${code} cannot affect greetings and is enforced when source is requested`, async () => {
     const client = new RepositoryClient();
     const error = new Fault(code, 503);
     error.message += ": private diagnostic secret";
+    let resolutions = 0;
+    const reported: unknown[] = [];
     const extension = await codeTruthExtension(
       client,
       workspaceId,
@@ -121,38 +129,38 @@ for (const code of [
       code === "code_truth_unavailable"
         ? undefined
         : async () => {
+            resolutions++;
             throw error;
           },
+      (runId, failure) => reported.push({ runId, failure }),
     );
     if (code === "code_truth_unavailable") client.error = error;
-    let dispatched = 0;
-    const runner = new PiRunner(
-      (_model, context) => {
-        dispatched++;
-        expect(context.tools?.map((tool) => tool.name)).toEqual([
-          "unrelated_tool",
-        ]);
-        expect(context.systemPrompt).toContain(
-          `unavailable for this run (${code})`,
-        );
-        expect(context.systemPrompt).toContain(
-          "Do not claim to have inspected",
-        );
-        expect(context.systemPrompt).not.toContain("private diagnostic secret");
-        expect(context.systemPrompt).not.toContain(
-          "## Configured repositories",
-        );
-        return reply();
-      },
-      ExtensionCatalog.fromSnapshot([], [extension]),
-    );
+    const catalog = ExtensionCatalog.fromSnapshot([], [extension]);
+    const runner = new PiRunner((_model, context) => {
+      expect(context.tools?.map((tool) => tool.name)).toEqual([
+        "unrelated_tool",
+        ...codeTruthTools,
+      ]);
+      expect(context.systemPrompt).not.toContain("private diagnostic secret");
+      return reply();
+    }, catalog);
     expect((await runner.run(input())).text).toBe("Hello");
-    expect(dispatched).toBe(1);
-    expect(client.calls).toBe(code === "code_truth_unavailable" ? 1 : 0);
+    expect(client.calls).toBe(0);
+    expect(resolutions).toBe(0);
+    const host = await catalog.open(input());
+    try {
+      await expect(
+        host?.tools[0]?.execute("source-1", {}, input().signal),
+      ).rejects.toMatchObject({ code, message: code });
+      expect(client.toolCalls).toBe(0);
+      expect(reported).toEqual([{ runId: "test-run", failure: error }]);
+    } finally {
+      await host?.close();
+    }
   });
 }
 
-test("recovery is retried per run, and repository permission is rechecked before every source call", async () => {
+test("source permissions are rechecked on every call and recover without a new chat host", async () => {
   const client = new RepositoryClient();
   let allowed = false;
   let resolutions = 0;
@@ -164,93 +172,120 @@ test("recovery is retried per run, and repository permission is rechecked before
     async (actor) => {
       expect(actor).toBe("101");
       resolutions++;
-      if (!allowed) {
-        const error = new Fault("github_user_access_denied", 403);
-        error.message += ": private secret";
-        throw error;
-      }
+      if (!allowed) throw new Fault("github_user_access_denied", 403);
       return { client, targets };
     },
   );
-  const catalog = ExtensionCatalog.fromSnapshot([], [extension]);
-  const denied = await catalog.open(input());
+  const host = await ExtensionCatalog.fromSnapshot([], [extension]).open(
+    input(),
+  );
   try {
-    expect(denied?.tools).toEqual([]);
-  } finally {
-    await denied?.close();
-  }
-  allowed = true;
-  const recovered = await catalog.open(input());
-  try {
-    expect(recovered?.tools.map((tool) => tool.name)).toEqual([
-      ...codeTruthTools,
-    ]);
-    allowed = false;
-    const error = await recovered?.tools[0]
-      ?.execute("read-1", {}, input().signal)
-      .catch((error: unknown) => error);
-    expect(error).toMatchObject({ code: "github_user_access_denied" });
-    expect(error).toHaveProperty("message", "github_user_access_denied");
-    expect(client.calls).toBe(1);
-    expect(resolutions).toBe(3);
+    const tool = host?.tools[0];
+    expect(host?.tools.map((tool) => tool.name)).toEqual([...codeTruthTools]);
+    expect(resolutions).toBe(0);
+    await expect(tool?.execute("denied", {}, input().signal)).rejects.toThrow(
+      "github_user_access_denied",
+    );
     allowed = true;
-    client.error = new Fault("code_truth_unavailable", 503);
-    client.error.message += ": private secret";
+    expect(
+      (await tool?.execute("allowed", {}, input().signal))?.content,
+    ).toEqual([{ type: "text", text: '[{"type":"text","text":"source"}]' }]);
+    allowed = false;
+    await expect(tool?.execute("revoked", {}, input().signal)).rejects.toThrow(
+      "github_user_access_denied",
+    );
+    expect(resolutions).toBe(3);
+    expect(client.toolCalls).toBe(1);
+    expect(client.calls).toBe(1);
+  } finally {
+    await host?.close();
+  }
+});
+
+test("unknown upstream errors never enter startup and stay private on source calls", async () => {
+  const client = new RepositoryClient();
+  client.error = new Error("private upstream secret");
+  const extension = await codeTruthExtension(client, workspaceId, targets);
+  const host = await ExtensionCatalog.fromSnapshot([], [extension]).open(
+    input(),
+  );
+  try {
+    expect(client.calls).toBe(0);
     await expect(
-      recovered?.tools[0]?.execute("read-2", {}, input().signal),
+      host?.tools[0]?.execute("source", {}, input().signal),
     ).rejects.toMatchObject({
-      code: "code_truth_unavailable",
-      message: "code_truth_unavailable",
+      code: "extension_tool_failed",
+      message: "extension_tool_failed",
     });
   } finally {
-    await recovered?.close();
+    await host?.close();
   }
 });
 
-test("unexpected faults and tool contract changes still fail before model dispatch", async () => {
-  const client = new RepositoryClient();
-  for (const error of [
-    new Error("private secret"),
-    new Fault("unlisted", 409),
-  ]) {
-    client.error = error;
-    const extension = await codeTruthExtension(client, workspaceId, targets);
+test("missing Code Truth configuration is reported only when source is requested", async () => {
+  const extension = await codeTruthExtension(undefined, workspaceId, targets);
+  const host = await ExtensionCatalog.fromSnapshot([], [extension]).open(
+    input(),
+  );
+  try {
     await expect(
-      ExtensionCatalog.fromSnapshot([], [extension]).open(input()),
-    ).rejects.toThrow("extension_load_failed");
+      host?.tools[0]?.execute("source", {}, input().signal),
+    ).rejects.toThrow("code_truth_unavailable");
+  } finally {
+    await host?.close();
   }
-  client.error = undefined;
-  client.tools.pop();
-  const extension = await codeTruthExtension(client, workspaceId, targets);
-  await expect(
-    ExtensionCatalog.fromSnapshot([], [extension]).open(input()),
-  ).rejects.toThrow("extension_load_failed");
 });
 
-test("aborting repository setup cannot turn cancellation into a degraded model turn", async () => {
+test("remote catalog and schema mismatches deny source execution before calling any tool", async () => {
+  for (const mismatch of ["missing", "duplicate", "schema"]) {
+    const client = new RepositoryClient();
+    if (mismatch === "missing") client.tools.pop();
+    if (mismatch === "duplicate") client.tools[1] = client.tools[0] as Tool;
+    if (mismatch === "schema")
+      client.tools[0] = {
+        ...(client.tools[0] as Tool),
+        inputSchema: { type: "object", required: ["unexpected"] },
+      };
+    const extension = await codeTruthExtension(client, workspaceId, targets);
+    const host = await ExtensionCatalog.fromSnapshot([], [extension]).open(
+      input(),
+    );
+    try {
+      await expect(
+        host?.tools[0]?.execute("source", {}, input().signal),
+      ).rejects.toThrow("code_truth_tools_changed");
+      expect(client.toolCalls).toBe(0);
+    } finally {
+      await host?.close();
+    }
+  }
+});
+
+test("cancelled source calls cannot contact repositories or permissions services", async () => {
   const controller = new AbortController();
   const client = new RepositoryClient();
+  let resolutions = 0;
   const extension = await codeTruthExtension(
     client,
     workspaceId,
     targets,
     1,
     async () => {
-      controller.abort();
-      throw new Fault("code_truth_unavailable", 503);
+      resolutions++;
+      return { client, targets };
     },
   );
-  let dispatched = 0;
-  const runner = new PiRunner(
-    () => {
-      dispatched++;
-      return reply();
-    },
-    ExtensionCatalog.fromSnapshot([], [extension]),
+  const host = await ExtensionCatalog.fromSnapshot([], [extension]).open(
+    input({ signal: controller.signal }),
   );
-  await expect(
-    runner.run(input({ signal: controller.signal })),
-  ).rejects.toThrow();
-  expect(dispatched).toBe(0);
-  expect(client.calls).toBe(0);
+  try {
+    controller.abort();
+    await expect(
+      host?.tools[0]?.execute("source", {}, controller.signal),
+    ).rejects.toThrow();
+    expect(client.calls).toBe(0);
+    expect(resolutions).toBe(0);
+  } finally {
+    await host?.close();
+  }
 });

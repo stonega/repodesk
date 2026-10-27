@@ -28,6 +28,7 @@ import { importArchive } from "../src/obsidian/import.ts";
 import { ObsidianService } from "../src/obsidian/service.ts";
 import { initialVault } from "../src/obsidian/vault.ts";
 import { extractWebPage, requestPage } from "../src/web-reader/service.ts";
+import { verifyPluginStartup } from "./fixtures/plugin-startup.ts";
 
 assert.ok(assistantSoul.includes("小伙伴"));
 assert.ok(assistantSoul.includes("Friendliness never grants access"));
@@ -328,23 +329,44 @@ try {
 } finally {
   await githubStore.pool.end();
 }
-// An unavailable repository service must not turn a greeting into a load failure.
+// Exercise the same combined plugin path in CI and every image's pre-cutover gate.
+const startupCases = await verifyPluginStartup();
+let sourceCalls = 0,
+  sourceTurns = 0;
 const unavailableCodeClient = new CodeTruthClient(
   "http://unused.invalid",
   "fake",
 );
 unavailableCodeClient.use = async () => {
+  sourceCalls++;
   const error = new Fault("code_truth_unavailable", 503);
   error.message += ": private diagnostic";
   throw error;
 };
 const degradedRunner = new PiRunner(
   (_model, context) => {
-    assert.ok(context.systemPrompt?.includes("code_truth_unavailable"));
-    assert.ok(!context.systemPrompt?.includes("private diagnostic"));
-    assert.ok(!context.tools?.some((tool) => tool.name === "get_code_context"));
+    sourceTurns++;
+    if (sourceTurns === 1) {
+      assert.equal(sourceCalls, 0);
+      return emit(
+        [
+          {
+            type: "toolCall",
+            id: "source-1",
+            name: "list_code_targets",
+            arguments: {},
+          },
+        ],
+        "toolUse",
+      );
+    }
+    const results = context.messages.filter(
+      (message) => message.role === "toolResult",
+    );
+    assert.ok(JSON.stringify(results).includes("code_truth_unavailable"));
+    assert.ok(!JSON.stringify(results).includes("private diagnostic"));
     return emit(
-      [{ type: "text", text: "hello without source access" }],
+      [{ type: "text", text: "source unavailable; chat working" }],
       "stop",
     );
   },
@@ -354,10 +376,17 @@ const degradedRunner = new PiRunner(
   ),
 );
 assert.equal(
-  (await degradedRunner.run({ ...input, workspaceId: "runtime-workspace" }))
-    .text,
-  "hello without source access",
+  (
+    await degradedRunner.run({
+      ...input,
+      workspaceId: "runtime-workspace",
+      tools: [],
+      maxTurns: 2,
+    })
+  ).text,
+  "source unavailable; chat working",
 );
+assert.equal(sourceCalls, 1);
 process.stdout.write(
   `${JSON.stringify({
     node: process.version,
@@ -371,6 +400,8 @@ process.stdout.write(
     githubDefaults: true,
     obsidianDefaults: true,
     codeTruthUnavailable: true,
+    pluginStartupCases: startupCases,
+    externalStartupCalls: 0,
     webReader: true,
   })}\n`,
 );

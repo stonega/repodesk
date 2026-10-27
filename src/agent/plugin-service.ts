@@ -1,4 +1,5 @@
 import { isAbsolute } from "node:path";
+import type { StreamFn } from "@earendil-works/pi-agent-core";
 import { operator } from "../admin/auth.ts";
 import { cloudflareTools } from "../cloudflare/config.ts";
 import { cloudflareExtension } from "../cloudflare/extension.ts";
@@ -349,7 +350,11 @@ export class PluginService {
     );
     return status;
   }
-  async runner(_deployment: Deployment, workspaceId: string) {
+  async runner(
+    _deployment: Deployment,
+    workspaceId: string,
+    stream?: StreamFn,
+  ) {
     const workspace = await this.store.read(workspaceId);
     requireThat(!workspace.deletion, "access_denied", 403);
     const scoped = (await this.entries(workspace)).filter(
@@ -410,10 +415,9 @@ export class PluginService {
         ),
       );
     if (targets.length) {
-      requireThat(this.codeTruth, "code_truth_unavailable", 503);
       builtins.push(
         await codeTruthExtension(
-          await this.codeClient(workspace, targets),
+          this.codeTruth,
           workspaceId,
           targets,
           workspace.github?.revision,
@@ -437,11 +441,17 @@ export class PluginService {
               targets: allowed,
             };
           },
+          (runId, error) =>
+            this.store.log.write("code_truth_tool_failed", {
+              error,
+              workspaceId,
+              runId,
+            }),
         ),
       );
     }
     return new PiRunner(
-      undefined,
+      stream,
       scoped.length || builtins.length
         ? ExtensionCatalog.fromSnapshot(scoped, builtins)
         : undefined,

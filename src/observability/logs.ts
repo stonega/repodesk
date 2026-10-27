@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { codeTruthFailureCodes } from "../code-truth/failure-codes.ts";
 import type { Sql } from "../db/pool.ts";
 import { Fault } from "../domain.ts";
 
@@ -40,6 +41,10 @@ export const logEvents = {
     "error",
     "An assistant run failed. Inspect the run for its status.",
   ],
+  code_truth_tool_failed: [
+    "warn",
+    "A Code Truth query failed. Inspect its safe code; unrelated chat remains available.",
+  ],
   delivery_sent: ["info", "Telegram delivery completed."],
   delivery_failed: [
     "warn",
@@ -57,11 +62,7 @@ export const logEvents = {
 export type LogEvent = keyof typeof logEvents;
 export type LogService = "app" | "worker";
 const codes = new Set([
-  "github_access_denied",
-  "github_rate_limited",
-  "github_unavailable",
-  "code_truth_unavailable",
-  "code_truth_tools_changed",
+  ...codeTruthFailureCodes,
   "code_truth_disabled",
   "code_truth_no_repositories",
   "extension_configuration_invalid",

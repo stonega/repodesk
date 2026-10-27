@@ -76,13 +76,14 @@ Compose 会把该文件提供给 app/worker 和 Code Truth；这套手动配置�
 
 ## Temporary access failures
 
-If GitHub permissions cannot be verified or Code Truth cannot be reached, repository
-tools are unavailable for that request. Ordinary chat and unrelated tools continue
-working. A source question should report the missing access instead of claiming to
-have inspected code. Retry after access or the service recovers; connected members
-can use `/github sync` to refresh their GitHub permissions. Each new request retries
-repository tool setup. An operator can use **Sync & check indexes** to check the
-workspace's service and indexing separately.
+Ordinary chat starts without contacting GitHub or Code Truth. When source is
+requested, RepoDesk verifies current GitHub permissions and connects to Code Truth.
+If either is unavailable, that source request reports missing access; unrelated chat
+and tools remain available. It does not reuse an old permission grant or claim to
+have inspected unavailable code. Retry after access or the service recovers;
+connected members can use `/github sync` to refresh their GitHub permissions.
+Each source call checks current access again. An operator can use **Sync & check
+indexes** to check the workspace's service and indexing separately.
 
 ## 关闭与删除
 

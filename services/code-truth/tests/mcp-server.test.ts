@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { codeTruthToolCatalog } from "../src/tool-catalog.ts";
 import type {
   RepositoryManager,
   Snapshot,
@@ -27,6 +29,16 @@ describe("Code Truth MCP query contract", () => {
   test("advertises the context-first and exact-evidence tools", async () => {
     const { client } = await connectedClient(recordingCodeGraph());
     const tools = await client.listTools();
+
+    assert.deepEqual(
+      tools.tools.map(({ name, title, description, inputSchema }) => ({
+        name,
+        title: title ?? name,
+        description: description ?? name,
+        inputSchema,
+      })),
+      codeTruthToolCatalog,
+    );
 
     expect(tools.tools.map((tool) => tool.name)).toEqual([
       "list_code_targets",

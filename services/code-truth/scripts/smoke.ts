@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -8,6 +9,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { create } from "tar";
 import { createLocalService } from "../src/service.ts";
+import { codeTruthToolCatalog } from "../src/tool-catalog.ts";
 import { CodeGraphRunner } from "../src/upstream/codegraph/runner.ts";
 import { BunProcessRunner } from "../src/upstream/lib/process.ts";
 
@@ -90,6 +92,17 @@ try {
     new StreamableHTTPClientTransport(new URL(`${url}/mcp/${namespace}`), {
       requestInit: { headers },
     }),
+  );
+  const advertised = (await client.listTools()).tools;
+  assert.deepEqual(
+    advertised.map(({ name, title, description, inputSchema }) => ({
+      name,
+      title: title ?? name,
+      description: description ?? name,
+      inputSchema,
+    })),
+    codeTruthToolCatalog,
+    "Regenerate tool-catalog.ts before shipping changed MCP definitions",
   );
   const result = await client.callTool({
     name: "search_code",

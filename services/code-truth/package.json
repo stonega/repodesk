@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "catalog:update": "bun scripts/update-tool-catalog.ts && biome format --write src/tool-catalog.ts",
     "start": "bun src/index.ts",
     "check": "biome check src tests",
     "typecheck": "tsc --noEmit",

@@ -18,7 +18,7 @@ The initializer receives no database, model, GitHub or encryption credentials.
 
 The service has no published host port. Indexes remain in `code_truth_data`,
 including across upgrades from the former optional overlay. An idle service
-does not fetch repositories; enabled workspace use or an explicit index check
+does not fetch repositories; a source-tool call or an explicit index check
 configures/indexes the authorized repositories. Disabling a workspace plugin
 does not stop the shared service or delete another workspace's snapshots.
 
@@ -105,19 +105,40 @@ changes apply without a process restart.
    check indexes**. Check again after indexing finishes. Each ready repository shows
    its branch, immutable commit SHA and indexing timestamp.
 
-The service also initializes a workspace's index on its first enabled assistant run.
+The service initializes a workspace's index on its first source-tool call or
+explicit index check.
 Until a target is ready, code tools report that it is unavailable. Index refreshes
 are deduplicated and triggered on use at most every five minutes. A failed refresh
-retains the last usable snapshot; inspect its commit/timestamp. Restarting the local
-service re-resolves configured branches and reuses matching snapshots on disk.
+retains the last usable snapshot; inspect its commit/timestamp. After a restart,
+the next source call or explicit check reconfigures the service and reuses matching
+snapshots on disk.
 
-Known GitHub access failures and Code Truth connection failures during tool loading
-disable only Code Truth for that run. Ordinary chat and unrelated plugins remain
-available. The assistant receives a fixed failure code and instructions to disclose
-missing source access; it receives no repository tools, source skill or raw exception.
-The next run retries setup. Permission checks still apply before every source call;
-revoked access never falls back to an older authorization snapshot. Unexpected
-factory errors and an incompatible MCP tool catalog still stop loading.
+Tool registration uses the bundled catalog and performs no upstream calls or
+credential lookup. A greeting therefore does not wait for GitHub or MCP, including
+when the service is unconfigured, permissions are stale or the upstream returns an
+unexpected error. When the assistant actually requests source, the tool resolves
+current actor access and credentials, configures its scoped service namespace and
+validates the advertised tool names and input schemas before executing. Denial,
+connection failure or a catalog mismatch returns a fixed safe code; no unauthorized
+source is retrieved. The next tool call retries using current state, without needing
+to rebuild the chat host.
+
+Failures emit `code_truth_tool_failed` with a fixed code and tenant/run IDs in
+Runtime logs. Raw exception text, source content and credentials are excluded.
+The assistant must disclose missing source access and continue unrelated work.
+
+The bundled definitions are generated from the real MCP server, without reading
+repositories or contacting an upstream API:
+
+```sh
+bun install --cwd services/code-truth --frozen-lockfile
+bun run --cwd services/code-truth catalog:update
+```
+
+Commit `services/code-truth/src/tool-catalog.ts` with protocol changes. The service
+unit tests and offline image smoke reject a stale catalog. The application image's
+Node runtime contract also runs the combined production-factory startup fixture
+with failed optional integrations before release cutover.
 
 Supported repositories match the upstream service: HTTPS `github.com` only, no SSH,
 GitLab, arbitrary local directories, credentials in URLs, or runtime package installs.

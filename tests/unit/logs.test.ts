@@ -97,3 +97,36 @@ test("log filters reject invalid enums, oversized queries and bigint overflow", 
   ])
     expect(() => logQuery.parse(invalid)).toThrow();
 });
+
+test("Code Truth failures retain their cause and run IDs without exception text", async () => {
+  const { codeTruthFailureCodes } = await import(
+    "../../src/code-truth/failure-codes.ts"
+  );
+  const output: string[] = [];
+  const log = new RuntimeLogger(undefined, "worker", (line) =>
+    output.push(line),
+  );
+  const workspaceId = randomUUID(),
+    runId = randomUUID();
+  for (const code of codeTruthFailureCodes) {
+    const error = new Fault(code);
+    error.message += ": private upstream body and credential";
+    log.write("code_truth_tool_failed", { error, workspaceId, runId });
+  }
+  log.write("code_truth_tool_failed", {
+    error: new Error("private upstream body and credential"),
+    workspaceId,
+    runId,
+  });
+  expect(output.join("")).not.toContain("private upstream body and credential");
+  expect(output.map((line) => JSON.parse(line).code)).toEqual([
+    ...codeTruthFailureCodes,
+    "unexpected_error",
+  ]);
+  for (const line of output)
+    expect(JSON.parse(line)).toMatchObject({
+      event: "code_truth_tool_failed",
+      workspace_id: workspaceId,
+      run_id: runId,
+    });
+});
