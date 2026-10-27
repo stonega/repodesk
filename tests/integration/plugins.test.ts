@@ -332,7 +332,7 @@ const url = process.env.TEST_DATABASE_URL;
           (r) => r.id === next.id,
         );
         // The polling guard can abort before the inline guard rejects the change.
-        expect(["failed", "cancelled"]).toContain(stopped?.status);
+        expect(["failed", "cancelled"]).toContain(stopped?.status ?? "");
         expect(stopped?.error).toBe("extension_configuration_changed");
         expect(Object.keys(stopped?.tools ?? {})).toHaveLength(0);
         expect(calls).toBe(3);
