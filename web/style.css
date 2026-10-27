@@ -924,7 +924,6 @@ p {
 }
 .members-card,
 .groups-card,
-.group-access-card,
 .group-mention-guide,
 .group-link-details {
   display: grid;
@@ -934,7 +933,7 @@ p {
 }
 .members-card > *,
 .groups-card > *,
-.group-access-card > *,
+.group-table-message > *,
 .group-mention-guide > *,
 .group-link-details > * {
   margin: 0;
@@ -3110,26 +3109,39 @@ input.plugin-toggle-input:disabled {
   }
 }
 
-.data-table-scroll .member-table {
+.data-table-scroll .member-table,
+.data-table-scroll .group-table {
   width: 100%;
   min-width: 680px;
   border-collapse: collapse;
   font-size: 13px;
 }
 .member-table th,
-.member-table td {
+.member-table td,
+.group-table th,
+.group-table td {
   padding: 12px;
   text-align: left;
   border-bottom: 1px solid var(--ui-border);
 }
-.member-table td:first-child {
+.member-table td:first-child,
+.group-table td:first-child {
   overflow-wrap: anywhere;
   min-width: 160px;
   max-width: 280px;
 }
 .member-table th,
-.member-table td:not(:first-child) {
+.member-table td:not(:first-child),
+.group-table th,
+.group-table td:not(:first-child) {
   white-space: nowrap;
+}
+.group-relink-guidance {
+  margin: 8px 0 0;
+}
+.group-table-message {
+  display: grid;
+  gap: 8px;
 }
 
 .site-domain-details dd,

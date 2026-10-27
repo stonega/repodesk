@@ -82,18 +82,20 @@ when implementing or reviewing a change.
   remain separate. Group collection controls stay with their scope explanation
   inside the group's Edit dialog; these actions take effect immediately.
 
-### Group management actions open from the card's Edit icon
+### Group management actions open from each row's Edit icon
 
-- **Preference:** Show a borderless pencil icon at the top right of each saved
-  group summary. Open an Edit dialog for visibility rechecks, the collection action
+- **Preference:** Show a borderless pencil icon in each saved group's Actions
+  column. Open an Edit dialog for visibility rechecks, the collection action
   and unlinking. Keep the group name, ID, saved status and inactive-link recovery
-  guidance on the card; keep the collection scope explanation with its controls.
+  guidance in its row; keep the collection scope explanation with its controls.
 - **Scope:** Saved group summaries on Groups & Members and their management dialogs.
 - **Source:** 2026-10-24 — user requested moving the card's actions into an Edit
   dialog and placing an Edit icon at the card's top-right corner.
 - **Source update:** 2026-10-26 — the Groups section now shares the Members card
   layout. Keep the summary unboxed inside that card, with Edit beside the group
   name and New beside the section heading.
+- **Source update:** 2026-10-27 — user requested a group item table like the
+  member item table. Move each saved group's Edit icon into its Actions cell.
 - **Acceptance:** The saved summary has one Edit icon and no inline management
   controls. Preserve current action semantics, saved-state refresh, pending locks,
   in-dialog error recovery, focus trapping/return and mobile wrapping. Inspect
@@ -1417,13 +1419,15 @@ when implementing or reviewing a change.
   and label button.
 - **Exceptions:** None recorded.
 
-### Group cards show names alongside IDs
+### Group rows show names alongside IDs
 
-- **Preference:** Use the Telegram group name as the card heading and show its
+- **Preference:** Use the Telegram group name as the row's primary text and show its
   numeric ID as secondary information.
-- **Scope:** Group cards on Groups & Members; IDs remain the binding and permission identity.
+- **Scope:** Group rows on Groups & Members; IDs remain the binding and permission identity.
 - **Source:** 2026-09-21 — user requested group names on the group cards.
-- **Exceptions:** Groups with no known title use their ID as the heading.
+- **Source update:** 2026-10-27 — user requested replacing saved group summaries
+  with a table like Members; retain the name and secondary ID in the Group cell.
+- **Exceptions:** Groups with no known title use their ID as the primary text.
 
 ### Groups, members and access share one page
 
@@ -1451,6 +1455,11 @@ when implementing or reviewing a change.
   saved group as an unboxed summary with its own Edit dialog. Linking another
   group or relinking an inactive group must wait for that new link; existing
   active groups and unrelated settings refreshes must not mark it successful.
+- **Source update:** 2026-10-27 — user requested showing group items in a table
+  like member items. Reuse Members' table typography, cell padding, dividers and
+  horizontal scrolling. Show Group (name and ID), Status, Visibility, Collection
+  and Actions columns, with an Edit dialog per row and New beside the section
+  heading. This supersedes the unboxed saved-group subsection layout above.
 - **Acceptance:** Verify one sidebar link and page title, both saved sections and
   their separate dialogs, preserved workspace/query parameters on old links,
   independent member pagination and group loading/retry, and desktop/mobile
@@ -1461,6 +1470,12 @@ when implementing or reviewing a change.
   targeted actions and full-list loading beyond the first API page. Keep group
   names, IDs, settings and inactive guidance distinct, and return focus to New
   after closing its link dialog.
+- **Acceptance update:** Keep table headers visible during loading, empty and
+  failed loads; show skeletons or unavailable text inside the table and empty
+  guidance below it so instructions remain readable without horizontal scrolling.
+  Verify long names and inactive guidance wrap, keyboard scrolling reaches
+  Edit on mobile, saved values remain separate from controls, and per-row actions
+  preserve focus return, pending locks and error recovery in both themes.
 - **Exceptions:** Members with no known Telegram profile retain an ID fallback.
 
 ### Member switches sit beside their labels

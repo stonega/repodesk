@@ -2096,40 +2096,57 @@ function GroupsSection({ id }: { id: string }) {
           Retry
         </button>
       </ErrorToast>
-      {!data && (
-        <section
-          className="group-access-card"
-          aria-label="Linked group"
-          aria-busy={loading}
-        >
-          <h3>Linked group</h3>
-          {loading ? (
-            <SkeletonRows label="Group details" rows={2} />
-          ) : (
-            <p>Group details are unavailable.</p>
-          )}
-        </section>
-      )}
+      <section
+        className="data-table-scroll"
+        aria-label="Group access table"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users must be able to scroll the wide group table.
+        tabIndex={0}
+      >
+        <table className="group-table">
+          <thead>
+            <tr>
+              <th scope="col">Group</th>
+              <th scope="col">Status</th>
+              <th scope="col">Visibility</th>
+              <th scope="col">Collection</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {!data && (
+              <tr>
+                <td colSpan={5}>
+                  {loading ? (
+                    <SkeletonRows label="Group details" rows={2} />
+                  ) : (
+                    "Group details are unavailable."
+                  )}
+                </td>
+              </tr>
+            )}
+            {data?.items.map((chat) => (
+              <GroupAccessRow
+                key={`${id}:${chat.id}`}
+                id={id}
+                chat={chat}
+                loading={loading}
+                loadError={error}
+                reload={reload}
+              />
+            ))}
+          </tbody>
+        </table>
+      </section>
       {data?.items.length === 0 && (
-        <section className="group-access-card" aria-label="Linked group">
+        <div className="group-table-message">
           <h3>No group linked</h3>
           <p className="muted">
             Choose New in Groups to get a one-use /link command. The person
             sending it must be an active workspace member and a Telegram group
             admin.
           </p>
-        </section>
+        </div>
       )}
-      {data?.items.map((chat) => (
-        <GroupAccessCard
-          key={`${id}:${chat.id}`}
-          id={id}
-          chat={chat}
-          loading={loading}
-          loadError={error}
-          reload={reload}
-        />
-      ))}
       {linkOpen && (
         <GroupLinkDialog
           key={id}
@@ -2146,7 +2163,7 @@ function GroupsSection({ id }: { id: string }) {
     </section>
   );
 }
-function GroupAccessCard({
+function GroupAccessRow({
   id,
   chat,
   loading,
@@ -2165,9 +2182,28 @@ function GroupAccessCard({
   const status = `${chat.active ? "Linked" : "Inactive"} · ${chat.visibleAll ? "Receives group messages" : "Directed visibility"} · Collection: ${chat.collection ? "enabled" : "directed only"}`;
   return (
     <>
-      <section className="group-access-card">
-        <div className="card-heading">
-          <h3>{chat.title || chat.id}</h3>
+      <tr className="group-row">
+        <td>
+          <strong>{chat.title || chat.id}</strong>
+          {chat.title && <div className="muted">Group ID: {chat.id}</div>}
+          {!chat.active && (
+            <p className="group-relink-guidance">
+              This group is inactive. Choose New in Groups and send the new
+              /link command in the group to relink it. Re-adding the bot in
+              Telegram does not restore the RepoDesk link.
+            </p>
+          )}
+        </td>
+        <td>
+          <span className={`pill ${chat.active ? "good" : ""}`}>
+            {chat.active ? "Linked" : "Inactive"}
+          </span>
+        </td>
+        <td>
+          {chat.visibleAll ? "Receives group messages" : "Directed visibility"}
+        </td>
+        <td>{chat.collection ? "Enabled" : "Directed only"}</td>
+        <td>
           <IconButton
             icon="edit"
             label={`Edit ${chat.title || chat.id}`}
@@ -2177,17 +2213,8 @@ function GroupAccessCard({
               setEditing(true);
             }}
           />
-        </div>
-        {chat.title && <p className="muted">Group ID: {chat.id}</p>}
-        <p>{status}</p>
-        {!chat.active && (
-          <p>
-            This group is inactive. Choose New in Groups and send the new /link
-            command in the group to relink it. Re-adding the bot in Telegram
-            does not restore the RepoDesk link.
-          </p>
-        )}
-      </section>
+        </td>
+      </tr>
       {editing && (
         <Modal
           title="Edit group"

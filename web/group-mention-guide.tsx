@@ -26,11 +26,10 @@ export function GroupMentionGuide() {
           Choose <strong>New</strong> in Groups and send the new{" "}
           <code>/link</code> command in the group as an active workspace member
           who is also a Telegram group administrator. Wait for{" "}
-          <strong>Group linked</strong>, then open the group card’s pencil icon
-          (<strong>Edit</strong>), choose{" "}
-          <strong>Recheck bot visibility</strong> and try{" "}
-          <code>@your_bot hi</code>, replacing <code>your_bot</code> with your
-          bot’s username.
+          <strong>Group linked</strong>, then open the group row’s pencil icon (
+          <strong>Edit</strong>), choose <strong>Recheck bot visibility</strong>{" "}
+          and try <code>@your_bot hi</code>, replacing <code>your_bot</code>{" "}
+          with your bot’s username.
         </li>
       </ol>
       <p>

@@ -22,7 +22,8 @@ Public static assets can load before login, but contain no workspace data or sec
 **Groups & Members** at `/admin/members` combines group management, members and
 access requests in one sidebar destination. Groups and Members use matching
 section cards, with their heading and **New** action inside the same padding.
-Group summaries are unboxed within their card; saved records retain separate modal editors.
+Groups uses a table matching Members, with Group, Status, Visibility, Collection
+and Actions columns; saved records retain separate modal editors.
 The mention setup guide remains on this page. `/admin/chats` and the retired
 `/admin/access-policy` link redirect here while preserving query parameters.
 Member pagination and search do not paginate or hide the workspace's linked groups.
@@ -199,15 +200,15 @@ and encryption key stay operator-level deployment settings.
 | `/api/admin/updates` | Authenticated latest stable release, changelog and installation status |
 | `/api/admin/operator/updates` | Operator-only approved update/retry queued to the host daemon; session/origin/CSRF and release fingerprint required |
 
-Group summaries on Groups & Members display the last known Telegram group title with
+Group rows on Groups & Members display the last known Telegram group title with
 the ID below it,
 falling back to the ID when the title is unknown. Titles are captured on linking and
 subsequent group updates. Recheck bot visibility also refreshes the title for existing
 bindings; inaccessible groups retain their last known name.
 
-Each saved summary has a top-right pencil icon that opens **Edit group**. Visibility
+Each saved row has a pencil icon in its Actions column that opens **Edit group**. Visibility
 rechecks, collection controls, unlinking and their scope explanation live in this
-dialog. The card retains its saved status and inactive-link recovery guidance.
+dialog. The row retains its saved status and inactive-link recovery guidance.
 Actions take effect immediately; pending actions and refreshes lock the dialog,
 and failed requests remain inside it for retry.
 

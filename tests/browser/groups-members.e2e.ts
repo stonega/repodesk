@@ -121,6 +121,40 @@ async function expectMatchingGroupCard(page: Page) {
   );
 }
 
+async function expectMatchingTables(page: Page) {
+  const groupTable = page.getByRole("region", { name: "Group access table" });
+  const memberTable = page.getByRole("region", { name: "Member access table" });
+  await expect(groupTable.getByRole("columnheader")).toHaveText([
+    "Group",
+    "Status",
+    "Visibility",
+    "Collection",
+    "Actions",
+  ]);
+  const styles = await Promise.all(
+    [groupTable, memberTable].map((region) =>
+      region.getByRole("table").evaluate((table) => {
+        const style = getComputedStyle(table);
+        const cell = table.querySelector("th");
+        if (!cell) throw new Error("Table header missing");
+        const cellStyle = getComputedStyle(cell);
+        return {
+          fontSize: style.fontSize,
+          minWidth: style.minWidth,
+          borderCollapse: style.borderCollapse,
+          padding: cellStyle.padding,
+          border: cellStyle.borderBottom,
+          color: cellStyle.color,
+          overflow: getComputedStyle(table.parentElement as HTMLElement)
+            .overflowX,
+        };
+      }),
+    ),
+  );
+  expect(styles[0]).toEqual(styles[1]);
+  await expect(groupTable).toHaveAttribute("tabindex", "0");
+}
+
 for (const width of [1280, 390]) {
   for (const theme of ["light", "dark"]) {
     test(`combined navigation, summaries and separate editors at ${width}px in ${theme}`, async ({
@@ -168,9 +202,34 @@ for (const width of [1280, 390]) {
       await expect(groups.locator("input, select, textarea")).toHaveCount(0);
       await expect(members.getByLabel("Telegram user ID")).toHaveCount(0);
       await expectMatchingGroupCard(page);
+      await expectMatchingTables(page);
+      const row = groups.getByRole("row").filter({ hasText: "Design team" });
+      await expect(row.getByRole("cell")).toHaveText([
+        "Design teamGroup ID: -100100",
+        "Linked",
+        "Receives group messages",
+        "Directed only",
+        "",
+      ]);
+      await expect(row.getByRole("button")).toHaveCount(1);
       await expect(
-        groups.getByRole("heading", { name: "Design team", level: 3 }),
-      ).toBeVisible();
+        row.getByRole("cell").last().getByRole("button"),
+      ).toHaveAttribute("aria-label", "Edit Design team");
+      await groups.screenshot({
+        path: test.info().outputPath("group-table.png"),
+      });
+      if (width === 390) {
+        const scroll = groups.getByRole("region", {
+          name: "Group access table",
+        });
+        await scroll.focus();
+        await page.keyboard.press("ArrowRight");
+        await expect
+          .poll(() => scroll.evaluate((el) => el.scrollLeft))
+          .toBeGreaterThan(0);
+        await page.keyboard.press("Tab");
+        await expect(row.getByRole("button")).toBeFocused();
+      }
       const spacing = await members.evaluate((card) => {
         const bounds = card.getBoundingClientRect();
         const style = getComputedStyle(card);
@@ -259,6 +318,28 @@ for (const width of [1280, 390]) {
       await expect(groups).not.toContainText("Design team");
       await expect(members).toContainText("Team member");
       await expectMatchingGroupCard(page);
+      await expectMatchingTables(page);
+      await expect(groups.getByRole("row")).toHaveCount(1);
+      const emptyGuidance = groups.locator(".group-table-message");
+      await expect(emptyGuidance).toContainText("Telegram group admin.");
+      const emptyBounds = await emptyGuidance.evaluate((element) => {
+        const container = element.closest(".groups-card");
+        const paragraph = element.querySelector("p");
+        if (!container || !paragraph) throw new Error("Empty guidance missing");
+        return {
+          left: paragraph.getBoundingClientRect().left,
+          right: paragraph.getBoundingClientRect().right,
+          cardLeft: container.getBoundingClientRect().left,
+          cardRight: container.getBoundingClientRect().right,
+          overflow: paragraph.scrollWidth - paragraph.clientWidth,
+        };
+      });
+      expect(emptyBounds.left).toBeGreaterThan(emptyBounds.cardLeft);
+      expect(emptyBounds.right).toBeLessThan(emptyBounds.cardRight);
+      expect(emptyBounds.overflow).toBeLessThanOrEqual(1);
+      await groups.screenshot({
+        path: test.info().outputPath("empty-group-table.png"),
+      });
       await page.screenshot({
         path: test.info().outputPath("empty.png"),
         fullPage: true,
@@ -300,6 +381,14 @@ for (const width of [1280, 390]) {
         page.getByRole("heading", { name: "No group linked" }),
       ).toHaveCount(0);
       await expectMatchingGroupCard(page);
+      await expectMatchingTables(page);
+      await expect(groups.getByRole("cell")).toHaveAttribute("colspan", "5");
+      await expect(
+        groups.getByRole("status", { name: "Group details" }),
+      ).toBeVisible();
+      await groups.screenshot({
+        path: test.info().outputPath("loading-group-table.png"),
+      });
       await page.screenshot({
         path: test.info().outputPath("loading.png"),
         fullPage: true,
@@ -329,6 +418,13 @@ for (const width of [1280, 390]) {
       expect(alerts).toHaveLength(2);
       expect(alerts[1]?.top).toBeGreaterThan(alerts[0]?.bottom ?? 0);
       await expectMatchingGroupCard(page);
+      await expectMatchingTables(page);
+      await expect(groups.getByRole("cell")).toHaveText(
+        "Group details are unavailable.",
+      );
+      await groups.screenshot({
+        path: test.info().outputPath("unavailable-group-table.png"),
+      });
       await page.screenshot({
         path: test.info().outputPath("load-errors.png"),
         fullPage: true,

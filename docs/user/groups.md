@@ -27,6 +27,11 @@ senders cannot link groups. Collection and visibility are managed separately for
 each group through its Edit dialog. Unlinking one group leaves the other groups
 connected. Check and relink after a group migration or bot removal.
 
+The Groups table shows each group's name and ID, link status, Telegram visibility
+and message collection setting. Open the pencil icon in its **Actions** column
+to manage that group. On narrow screens, scroll the table horizontally to reach
+the remaining columns.
+
 The private `/linktoken` command remains available to verified workspace
 owner/admin members who prefer the Telegram-only flow.
 
@@ -47,13 +52,13 @@ and after linking. The bot can remain a regular group member:
 2. Select your bot and choose **Disable**.
 3. Remove the bot from the group, then add it again.
 4. Use **Groups & Members → Groups → New** and send the new `/link` command in the group. Wait
-   for **Group linked**, then open the group card's pencil icon (**Edit**), choose
+   for **Group linked**, then open the group row's pencil icon (**Edit**), choose
    **Recheck bot visibility** and test
    `@your_bot hi` with your actual bot username.
 
 Removing the bot marks the saved RepoDesk group link inactive. Re-adding it in
 Telegram does not restore that link; relinking is required even if privacy mode
-is already disabled. Inactive group cards show this reminder.
+is already disabled. Inactive group rows show this reminder.
 
 Making the bot a group administrator is an alternative. Message collection is
 not required for direct mentions. While privacy mode is enabled, use
@@ -96,12 +101,12 @@ who are not workspace members and can be used for group context and recaps.
 Let group members know the purpose and retention period.
 
 Telegram must deliver the messages first. Disable privacy mode and re-add the bot,
-or make it a group administrator, then relink and open the group card's **Edit**
+or make it a group administrator, then relink and open the group row's **Edit**
 dialog to choose **Recheck bot visibility**.
 This refreshes visibility without changing your collection choice. RepoDesk cannot
 read messages from before the bot joined or messages Telegram never delivered.
 
-In **Groups & Members**, open the group card's pencil icon (**Edit**) and choose
+In **Groups & Members**, open the group row's pencil icon (**Edit**) and choose
 **Disable message collection**, or send `/capture off`
 as a workspace administrator, to stop collecting future ordinary messages.
 Directed requests still work. Existing retained data follows the retention policy;

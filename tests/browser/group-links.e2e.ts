@@ -1,6 +1,37 @@
-import { expect, type Page, type Route, test } from "@playwright/test";
+import {
+  expect,
+  type Locator,
+  type Page,
+  type Route,
+  test,
+} from "@playwright/test";
 import type { Chat } from "../../src/domain.ts";
-import { expectTopRightAction } from "./card-layout.ts";
+
+async function expectRowAction(row: Locator, action: Locator) {
+  const cell = row.getByRole("cell").last();
+  await expect(cell.getByRole("button")).toHaveCount(1);
+  await expect(action).toBeVisible();
+  const placement = await action.evaluate((button) => {
+    const cell = button.closest("td");
+    if (!cell) throw new Error("Group action must be in a table cell");
+    const bounds = button.getBoundingClientRect();
+    const parent = cell.getBoundingClientRect();
+    return {
+      top: bounds.top,
+      bottom: bounds.bottom,
+      left: bounds.left,
+      right: bounds.right,
+      cellTop: parent.top,
+      cellBottom: parent.bottom,
+      cellLeft: parent.left,
+      cellRight: parent.right,
+    };
+  });
+  expect(placement.top).toBeGreaterThanOrEqual(placement.cellTop);
+  expect(placement.bottom).toBeLessThanOrEqual(placement.cellBottom);
+  expect(placement.left).toBeGreaterThanOrEqual(placement.cellLeft);
+  expect(placement.right).toBeLessThanOrEqual(placement.cellRight);
+}
 
 const first = "b6e6d846-06b0-46ee-ac0c-47b617d17dcc";
 const second = "48cfa12b-ae0b-4eb0-a8ee-b5cc10eb89ae";
@@ -147,7 +178,7 @@ async function shot(page: Page, name: string) {
   );
   const overflow = await page
     .locator(
-      ".group-link-details, .group-link-details > *, .modal-fields, .group-access-card, .group-access-card > *, .group-mention-guide, .group-mention-guide > *, .group-mention-guide li",
+      ".group-link-details, .group-link-details > *, .modal-fields, .group-table td:first-child, .group-table td:first-child > *, .group-mention-guide, .group-mention-guide > *, .group-mention-guide li",
     )
     .evaluateAll((elements) =>
       elements
@@ -182,13 +213,13 @@ for (const width of [1280, 390]) {
       state.linked = true;
       state.visibleAll = true;
       await page.goto(`/admin/chats?workspace=${first}`);
-      const card = page.locator(".group-access-card");
+      const card = page.locator(".group-row");
       const edit = card.getByRole("button", { name: "Edit Fixture group" });
       await expect(card.getByRole("button")).toHaveCount(1);
       await expect(edit).toHaveAttribute("title", "Edit");
       await expect(edit.locator("svg")).toHaveCount(1);
       await expect(edit).toHaveCSS("border-width", "0px");
-      await expectTopRightAction(card, edit);
+      await expectRowAction(card, edit);
       const bounds = await edit.boundingBox();
       expect(bounds?.width).toBeGreaterThanOrEqual(44);
       expect(bounds?.height).toBeGreaterThanOrEqual(44);
@@ -198,9 +229,9 @@ for (const width of [1280, 390]) {
         const label = enabled
           ? "Disable message collection"
           : "Enable message collection";
-        const status = `Collection: ${enabled ? "enabled" : "directed only"}`;
+        const status = enabled ? "Enabled" : "Directed only";
         const action = enabled ? "directed" : "collect";
-        await expect(card).toContainText(status);
+        await expect(card.getByRole("cell").nth(3)).toHaveText(status);
         await shot(
           page,
           enabled ? "collection-enabled-card" : "collection-disabled-card",
@@ -235,7 +266,7 @@ for (const width of [1280, 390]) {
         await page.keyboard.press("Escape");
         await expect(editor(page)).toBeVisible();
         expect(state.pendingActions).toHaveLength(1);
-        await expect(card).toContainText(status);
+        await expect(card.getByRole("cell").nth(3)).toHaveText(status);
         await shot(page, `collection-${action}-pending`);
         await state.pendingActions.shift()?.fulfill({
           status: 503,
@@ -246,7 +277,7 @@ for (const width of [1280, 390]) {
         );
         await expect(collection).toHaveText(label);
         await expect(collection).toBeEnabled();
-        await expect(card).toContainText(status);
+        await expect(card.getByRole("cell").nth(3)).toHaveText(status);
         await shot(page, `collection-${action}-error`);
         await collection.click();
         await expect.poll(() => state.pendingActions.length).toBe(1);
@@ -258,7 +289,7 @@ for (const width of [1280, 390]) {
         await expect(
           editor(page).getByRole("button", { name: "Cancel", exact: true }),
         ).toBeDisabled();
-        await expect(card).toContainText(status);
+        await expect(card.getByRole("cell").nth(3)).toHaveText(status);
         await shot(page, `collection-${action}-refresh`);
         state.deferList = false;
         await state.lists.shift()?.fulfill({
@@ -299,8 +330,8 @@ for (const width of [1280, 390]) {
         await expect(editor(page)).toHaveCount(0);
         await expect(edit).toBeFocused();
         await page.reload();
-        await expect(card).toContainText(
-          `Collection: ${enabled ? "directed only" : "enabled"}`,
+        await expect(card.getByRole("cell").nth(3)).toHaveText(
+          enabled ? "Directed only" : "Enabled",
         );
         await expect(card.getByRole("button")).toHaveCount(1);
       }
@@ -310,7 +341,10 @@ for (const width of [1280, 390]) {
         "directed",
         "directed",
       ]);
-      for (const section of [card, page.locator(".group-mention-guide")]) {
+      for (const section of [
+        page.locator(".groups-card"),
+        page.locator(".group-mention-guide"),
+      ]) {
         const spacing = await section.evaluate((element) => {
           const style = getComputedStyle(element);
           const bounds = element.getBoundingClientRect();
@@ -342,7 +376,7 @@ for (const width of [1280, 390]) {
       const state = await fixture(page);
       state.linked = true;
       await page.goto(`/admin/chats?workspace=${first}`);
-      const card = page.locator(".group-access-card");
+      const card = page.locator(".group-row");
       const edit = card.getByRole("button", { name: "Edit Fixture group" });
       await edit.click();
       const recheck = editor(page).getByRole("button", {
@@ -482,7 +516,7 @@ for (const width of [1280, 390]) {
       await expect(dialog(page)).toHaveCount(0);
       await expect(start).toBeEnabled();
       await expect(
-        page.getByRole("heading", { name: "Fixture group" }),
+        page.getByRole("cell").filter({ hasText: "Fixture group" }),
       ).toBeVisible();
       await expect(start).toBeFocused();
       await expect(
@@ -505,7 +539,7 @@ for (const width of [1280, 390]) {
       state.active = false;
       state.visibleAll = true;
       await page.goto(`/admin/chats?workspace=${first}`);
-      const card = page.locator(".group-access-card");
+      const card = page.locator(".group-row");
       await expect(card).toContainText("Inactive");
       await expect(card).toContainText(
         "Re-adding the bot in Telegram does not restore the RepoDesk link.",
@@ -540,7 +574,7 @@ for (const width of [1280, 390]) {
       const groups = page.getByRole("region", { name: "Groups", exact: true });
       const start = groups.getByRole("button", { name: "Link a group" });
       const original = groups
-        .locator(".group-access-card")
+        .locator(".group-row")
         .filter({ hasText: "Fixture group" });
       await expect(start).toBeEnabled();
       await start.click();
@@ -566,7 +600,7 @@ for (const width of [1280, 390]) {
       await expect
         .poll(() => state.listOffsets.length)
         .toBeGreaterThan(requests);
-      await expect(original).toContainText("Collection: enabled");
+      await expect(original.getByRole("cell").nth(3)).toHaveText("Enabled");
       await expect(dialog(page).locator("code")).toHaveText(command);
       const added: Chat = {
         id: "-100200",
@@ -582,14 +616,14 @@ for (const width of [1280, 390]) {
       await page.keyboard.press("Escape");
       await expect(start).toBeFocused();
       await expect(start).toBeEnabled();
-      await expect(groups.locator(".group-access-card")).toHaveCount(2);
+      await expect(groups.locator(".group-row")).toHaveCount(2);
       await expect(
         groups.locator("input, textarea, select, .card"),
       ).toHaveCount(0);
       const addedCard = groups
-        .locator(".group-access-card")
+        .locator(".group-row")
         .filter({ hasText: "Engineering group" });
-      await expectTopRightAction(
+      await expectRowAction(
         addedCard,
         addedCard.getByRole("button", { name: "Edit Engineering group" }),
       );
@@ -623,7 +657,7 @@ for (const width of [1280, 390]) {
       await expect(
         editor(page).getByRole("button", { name: "Enable message collection" }),
       ).toBeEnabled();
-      await expect(original).toContainText("Collection: enabled");
+      await expect(original.getByRole("cell").nth(3)).toHaveText("Enabled");
       await shot(page, "multiple-groups-editor");
       await editor(page).getByRole("button", { name: "Unlink group" }).click();
       await expect.poll(() => state.pendingActions.length).toBe(1);
@@ -654,9 +688,9 @@ for (const width of [1280, 390]) {
     state.linked = true;
     state.title = "LongTelegramGroupName".repeat(6);
     await page.goto(`/admin/chats?workspace=${first}`);
-    const card = page.locator(".group-access-card");
+    const card = page.locator(".group-row");
     let edit = card.getByRole("button", { name: `Edit ${state.title}` });
-    await expectTopRightAction(card, edit);
+    await expectRowAction(card, edit);
     await shot(page, "long-group-name-card");
     await edit.click();
     await expect(
@@ -667,9 +701,11 @@ for (const width of [1280, 390]) {
     await expect(edit).toBeFocused();
     state.title = "";
     await page.reload();
-    await expect(card.getByRole("heading", { name: "-100100" })).toBeVisible();
+    await expect(
+      card.getByRole("cell", { name: "-100100", exact: true }),
+    ).toBeVisible();
     edit = card.getByRole("button", { name: "Edit -100100" });
-    await expectTopRightAction(card, edit);
+    await expectRowAction(card, edit);
     await edit.click();
     await expect(
       editor(page).getByRole("heading", { name: "-100100" }),
@@ -806,7 +842,7 @@ test("groups beyond the first API page remain visible and can be relinked", asyn
     linkedAt: state.linkedAt,
   }));
   await page.goto(`/admin/members?workspace=${first}`);
-  await expect(page.locator(".group-access-card")).toHaveCount(101);
+  await expect(page.locator(".group-row")).toHaveCount(101);
   expect(state.listOffsets).toEqual([0, 100]);
   await page.getByRole("button", { name: "Link a group", exact: true }).click();
   await complete(state);
@@ -816,5 +852,5 @@ test("groups beyond the first API page remain visible and can be relinked", asyn
   last.linkedAt = "2026-10-26T01:00:00.000Z";
   await expect(dialog(page)).toContainText("Group linked.");
   await page.keyboard.press("Escape");
-  await expect(page.locator(".group-access-card")).toHaveCount(101);
+  await expect(page.locator(".group-row")).toHaveCount(101);
 });

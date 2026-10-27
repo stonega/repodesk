@@ -1,5 +1,23 @@
 # Implementation evidence
 
+## Groups uses the Members table layout (2026-10-27)
+
+Saved groups now appear in a table with Group (name and ID), Status, Visibility,
+Collection and Actions columns. It shares Members' table styling and horizontal
+scrolling, with a separate Edit dialog for each group and New beside the heading.
+Loading and unavailable states retain the headers. Empty-state instructions sit
+below the table so they wrap within the card on mobile. The mention guide, user
+guide and scoped UI preferences now describe rows instead of saved group cards.
+
+Validation: lint, strict types, production build, the Node runtime contract and
+**1,229 tests across 135 files** passed with disposable PostgreSQL. All **52 browser
+scenarios** passed across admin, group linking and Groups & Members; 14 affected
+scenarios passed again after the mobile empty-state correction. Saved, editor,
+loading, empty, pending and error screenshots were inspected at 1280px and 390px
+in both themes. Coverage includes keyboard scrolling, row actions, focus return,
+long/unnamed groups and full-list loading beyond 100 groups. No dependency,
+migration, live Telegram call or deployment was added.
+
 ## Obsidian writes for every active member (2026-10-27)
 
 All active workspace members can now save, edit, rename, trash/restore, create
