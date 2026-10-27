@@ -475,6 +475,8 @@ export interface Run {
   error?: string;
 }
 export interface Delivery {
+  /** Sets the bot's reaction on a retained user message; creates no message. */
+  reaction?: { sourceId: string; messageId: number; emoji: string };
   googleControl?: {
     botId: string;
     connectionId?: string;

@@ -32,6 +32,21 @@ LaTeX, inline rich buttons, ephemeral group messages and Communities remain outs
 this change. Live Telegram behavior still requires staging verification.
 See [manual example](../../examples/telegram-streaming.md).
 
+## Native emoji reactions
+
+Checked 2026-10-27: [`setMessageReaction`](https://core.telegram.org/bots/api#setmessagereaction)
+lets a bot set one chosen reaction on a message. Bots currently have a maximum of
+one reaction per message and cannot use paid reactions. A custom emoji is allowed
+only when already present or explicitly allowed by chat administrators. Some
+service messages cannot be reacted to; available reactions and chat permissions
+still apply. The method returns `True`, not a new message object.
+
+Implemented: an optional standard-emoji tool for the current interactive
+requester's message, delivered through the existing durable queue. It creates no
+new message or reply anchor. Scheduled runs and other chats/history cannot be
+targeted. Receiving and interpreting user reaction events remains outside this
+feature. See [implementation](../implementation/telegram-reactions.md).
+
 ## Verified platform facts
 
 Privacy-enabled group bots receive a limited subset of interaction; admin bots or

@@ -10,6 +10,7 @@ import { searchConsoleReadAllowed } from "../search-console/policy.ts";
 import type { SetupService } from "../setup/service.ts";
 import { TelegramError } from "../telegram/client.ts";
 import { telegramMarkdown, telegramRichMessage } from "../telegram/format.ts";
+import { reactionDeliveryAllowed } from "../telegram/reactions.ts";
 import {
   cleanupTaskButtons,
   confirmTaskMessage,
@@ -47,6 +48,15 @@ export class DeliveryWorker {
     d: Delivery,
     sql: Sql = this.store.pool,
   ) {
+    if (d.reaction) {
+      const deployment = await this.store.deployment(sql);
+      if (
+        !deployment.active ||
+        deployment.paused ||
+        !reactionDeliveryAllowed(w, d, deployment.bot?.id)
+      )
+        return false;
+    }
     if (
       d.googleControl &&
       !googleDeliveryAllowed(w, d, (await this.store.deployment(sql)).bot?.id)
@@ -103,10 +113,15 @@ export class DeliveryWorker {
       const d = w.deliveries.find((d) => d.id === id);
       if (!d || !["pending", "sending"].includes(d.state)) return;
       if (d.state === "sending") {
-        if (Date.parse(d.startedAt ?? "") + 30000 < Date.now())
-          // Editing a known message can be replayed safely after a worker crash.
-          d.state =
-            d.editOf || d.taskControlsCleanup ? "pending" : "delivery_unknown";
+        if (Date.parse(d.startedAt ?? "") + 30000 < Date.now()) {
+          // Edits and setting the same reaction can be replayed after a worker crash.
+          if (d.reaction) d.state = d.attempts >= 5 ? "failed" : "pending";
+          else
+            d.state =
+              d.editOf || d.taskControlsCleanup
+                ? "pending"
+                : "delivery_unknown";
+        }
         return;
       }
       if (!(await this.feedbackAllowed(w, d, sql))) {
@@ -236,6 +251,25 @@ export class DeliveryWorker {
         "delivery_revoked",
         403,
       );
+      if (intent.reaction) {
+        await (await this.setup.client(deployment)).call<boolean>(
+          "setMessageReaction",
+          {
+            chat_id: intent.chatId,
+            message_id: intent.reaction.messageId,
+            reaction: [{ type: "emoji", emoji: intent.reaction.emoji }],
+            is_big: false,
+          },
+        );
+        await this.finish(workspaceId, intent, (d) => {
+          d.state = "sent";
+        });
+        this.store.log.write("delivery_sent", {
+          workspaceId,
+          runId: intent.runId,
+        });
+        return;
+      }
       const taskId = developmentMessageTask(intent);
       if (taskId) {
         const task = await taskGet(this.store.pool, workspaceId, taskId);
@@ -401,7 +435,7 @@ export class DeliveryWorker {
         } else if (
           error instanceof TelegramError &&
           (error.disposition === "retry" ||
-            ((intent.editOf || intent.taskControlsCleanup) &&
+            ((intent.editOf || intent.taskControlsCleanup || intent.reaction) &&
               error.disposition === "unknown")) &&
           d.attempts < 5
         ) {
@@ -414,7 +448,7 @@ export class DeliveryWorker {
           error.disposition === "permanent"
         )
           d.state = "failed";
-        else d.state = "delivery_unknown";
+        else d.state = intent.reaction ? "failed" : "delivery_unknown";
       });
     }
   }

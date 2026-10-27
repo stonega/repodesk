@@ -66,6 +66,14 @@ cannot be undone. Drafts expire after 30 seconds; partial responses are not save
 automatically. `/cancel` remains available. The optional run metadata needs no SQL
 migration; pre-upgrade drafts without a persisted binding cannot be matched.
 
+Interactive private/group runs can optionally queue one native emoji reaction to
+their requester's current retained message. The model chooses only the emoji;
+the application binds the actor, chat/Topic, message and bot. The delivery worker
+rechecks permission, retention and bot identity, then calls `setMessageReaction`.
+The optional effect creates no message/reply anchor, retries the same choice on
+transient or uncertain outcomes, and leaves normal answers independent of reaction
+failures. Schedules cannot react. See [native reactions](../implementation/telegram-reactions.md).
+
 `TELEGRAM_TRANSPORT` defaults to `webhook`. In opt-in `polling` mode the worker uses
 Telegram `getUpdates` and passes validated updates to the same `Ingress` service.
 The HTTP webhook endpoint and registration action are disabled in polling mode.

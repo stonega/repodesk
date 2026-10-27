@@ -19,6 +19,18 @@ Topic 之外，单独发消息开始新对话；使用 Telegram **Reply** 回复
 
 你可以问“我们之前讨论的登录方案是什么？”来查询自己在当前工作区保留的私聊历史。群组请求无法读取这些私聊。长对话会整理和压缩上下文；需要准确原文时，可明确要求查找原始讨论。
 
+## Emoji reactions
+
+The bot can occasionally react to your current message with a native emoji such
+as 👍, ❤️ or 🎉, in private chats and linked groups/Topics. It chooses reactions
+to suit the conversation and still sends its normal reply. You can ask it to skip
+reactions or to use a particular supported emoji for the current message.
+
+Reactions depend on Telegram's chat permissions and available emoji. If a reaction
+cannot be applied, the ordinary reply can still arrive. A reaction does not approve
+an action or indicate task progress or completion. Scheduled reports do not react
+to previous messages.
+
 ## 选择仓库
 
 发送 `/repos`，点击仓库按钮；超过前十项时用 `/repos 仓库名` 搜索。选中项有标记，**Clear selection** 清除默认仓库。

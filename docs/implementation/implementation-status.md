@@ -1,5 +1,33 @@
 # Implementation evidence
 
+## Optional native Telegram reactions (2026-10-27)
+
+Interactive private/group conversations can now use `react_to_message` for an
+occasional standard emoji on the requester's current message. Personality and tool
+guidance keep reactions sparse, preserve the ordinary reply, respect requests to
+skip reactions, and distinguish warmth from approvals or task-status evidence.
+The model supplies only an emoji; the application binds the retained source,
+actor, chat/Topic, thread and bot. Schedules cannot react to old messages.
+
+One durable intent per turn deduplicates calls and prevents changing the choice.
+The delivery worker rechecks policy, retention and bot identity before sending,
+retries the same reaction for transient/unknown outcomes with a five-attempt limit,
+and leaves final answers independent of rejection. Reactions create no message,
+reply anchor or assistant-history entry. No dependency, migration or configuration
+change was added.
+
+Validation: `bun run check`, `bun run typecheck`, `bun test` (**1,225 tests across
+135 files**), `bun run build` and the Node runtime contract passed with disposable
+PostgreSQL. The 13 focused reaction tests cover private/group ingress and execution,
+duplicate updates/calls, concurrent sends, restart/crash recovery, audience and
+source boundaries, bot rotation, group unlinking, revocation, bounded retries and
+independent final replies. Existing compaction tests passed after consolidating
+duplicate prompt guidance. All transports were deterministic fakes; no live model
+call, Telegram message or deployment was performed. Native desktop/mobile rendering
+and real-model reaction frequency remain staging checks. See
+[implementation](telegram-reactions.md) and the
+[manual scenario](../../examples/telegram-reactions.md).
+
 ## Code Truth setup failures no longer block unrelated chat (2026-10-27)
 
 Known GitHub authorization/availability and Code Truth connection failures during

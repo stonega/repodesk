@@ -1,5 +1,8 @@
 # Runnable examples
 
+See [telegram-reactions.md](telegram-reactions.md) for native emoji reactions in
+private/group conversations and the manual staging acceptance scenario.
+
 See [github-members.http](github-members.http) for automatically fetched GitHub
 account choices and versioned member profile associations.
 
