@@ -32,8 +32,30 @@ In a staging bot with native private Topics already enabled through BotFather:
 8. Switch to another enrolled workspace and ask in the same topic. The original
    workspace's context is unavailable. Switch back to resume its retained context.
 
-Outside Topics, the compatibility behavior is unchanged: standalone messages start
-separate threads, and replies to retained answers or your own requests continue them.
+Outside Topics, standalone messages start separate threads, and replies to retained
+answers or your own requests continue them. Forwarded messages and their accompanying
+notes received within one minute also share a thread:
+
+1. Forward a text message or supported attachment and add `save this` in the
+   forwarding dialog, or send that note immediately afterward. The save request
+   must receive the original text, origin and supported attachment content.
+2. Send the note before the forward. The received forward continues the note's
+   request, including if the note is already being answered. An earlier answer can
+   arrive before the forward is processed; an in-flight prompt is never rewritten.
+3. Repeat inside a native Topic. Both messages remain in that Topic. Try another
+   Topic or workspace and verify that unrelated content is absent.
+4. Wait more than a minute, or send `/help` between the forward and note outside
+   Topics. They should start separate conversations; Reply explicitly to the
+   forward to supply its reference content.
+
+The one-minute association applies only to received private messages. It does not
+move Telegram messages or merge native Topics. Deterministic regression checks:
+
+```sh
+bun test tests/unit/telegram-private-forward.test.ts
+TEST_DATABASE_URL=postgres://postgres:test@localhost:5432/postgres bun test --timeout 30000 tests/integration/private-threads.test.ts
+```
+
 Ask about another topic explicitly to exercise history retrieval, for example:
 `What did we discuss about Kyoto earlier?` in `Server`.
 

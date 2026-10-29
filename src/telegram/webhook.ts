@@ -42,6 +42,7 @@ import { messageAttachments, messageText } from "./attachments.ts";
 import { requestFailureMessage } from "./feedback.ts";
 import { closeGroupAttention, followupCandidate } from "./followup.ts";
 import { stopGeneration } from "./generation.ts";
+import { privateForwardAnchor } from "./private-forward.ts";
 import { repositoryMenu, selectRepository } from "./repositories.ts";
 import { command, forwardedRequest, type Update } from "./router.ts";
 import { selectTaskControl, taskControl } from "./task-controls.ts";
@@ -780,6 +781,7 @@ export class Ingress {
       if (previous) {
         previous.text = text.slice(0, 12000);
         previous.attachments = attachments.length ? attachments : undefined;
+        previous.forwarded = msg.forward_origin ? true : undefined;
       }
       return;
     }
@@ -799,6 +801,8 @@ export class Ingress {
             ? forwardedRequest
             : (msg.text?.trim() ?? ""),
       };
+    const forwardAnchor =
+      cmd?.name === "ask" ? privateForwardAnchor(w, msg, d.bot.id) : undefined;
     if (
       (eligible(w, actor) && cmd) ||
       (chat?.collection && (text || attachments.length))
@@ -814,6 +818,7 @@ export class Ingress {
           author: actor,
           text: text.slice(0, 12000),
           attachments: attachments.length ? attachments : undefined,
+          forwarded: msg.forward_origin ? true : undefined,
           at: new Date(msg.date * 1000).toISOString(),
           expiresAt: new Date(
             Date.now() + w.settings.retentionDays * 86400000,
@@ -1114,7 +1119,7 @@ export class Ingress {
           d.model,
           {
             replyTo: msg.message_id,
-            continueFrom: msg.reply_to_message?.message_id,
+            continueFrom: msg.reply_to_message?.message_id ?? forwardAnchor,
             botId: d.bot.id,
             workflowId: msg.chat.type === "private" ? undefined : workflow?.id,
             groupRecap: msg.chat.type !== "private" && cmd.name === "recap",

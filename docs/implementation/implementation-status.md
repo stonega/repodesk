@@ -1,5 +1,33 @@
 # Implementation evidence
 
+## Private forwarded messages retain their accompanying notes (2026-10-29)
+
+Outside native Topics, an adjacent forwarded message and its note now share a
+private conversation when received within one minute. Ingress retains a forwarded
+source flag and resolves the existing bot/user/chat/workspace-scoped request
+anchor before creating the next run. Both arrival orders are supported, including
+a forward delivered after its later comment while that comment is being answered.
+Worker refresh preserves text, original attribution and supported media without
+changing an in-flight prompt. Forwarded commands remain reference data.
+
+Explicit replies and native Topics preserve their existing routing. Retention,
+membership, bot/workspace isolation, intervening retained controls and cancelled/
+failed predecessors restrict implicit pairing. The next ordinary message after
+the paired note starts a separate conversation. No dependency or migration was
+added. Native Telegram message placement is controlled by Telegram; this change
+does not move messages or merge Topics.
+
+Production ingress/executor regressions cover both arrival orders, duplicate
+updates, process reconstruction, original media/text, immutable active prompts
+and topic-preserving final delivery. Lint, strict types, the production build,
+the Node runtime contract (16 integration-startup cases, zero external startup
+calls), and **1,264 tests across 136 files** passed for the forwarding-only
+snapshot with disposable PostgreSQL. The seven-test Stop suite passed on an
+isolated rerun after an initial PostgreSQL setup timeout. Live acceptance of the
+reported forwarding dialog and its actual incoming topic IDs remains pending. See the
+[incident analysis](../../postmortem/2026-10-29-private-forward-note.md) and
+[repeatable examples](../../examples/private-threads.md).
+
 ## Groups uses the Members table layout (2026-10-27)
 
 Saved groups now appear in a table with Group (name and ID), Status, Visibility,

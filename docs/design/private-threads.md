@@ -21,6 +21,14 @@ renaming a topic does not change its conversation identity.
 Outside Topics (no `message_thread_id`), the existing compatibility routing remains:
 a standalone private text request starts a new thread; replying to a retained
 assistant answer or the user's own request continues that message's thread.
+An adjacent forwarded message and its accompanying note within one minute share
+that thread without requiring Reply. The pair can arrive in either order,
+including when a forwarding update reaches ingress after its later comment.
+Forwarded text, origin and supported attachments remain reference data; the
+member's note supplies the request. This bounded association uses received records
+in the same workspace, user, bot and private chat. Explicit replies, native Topics,
+intervening retained commands, expired sources and cancelled/failed requests prevent implicit
+pairing. An additional ordinary message after the note starts a new thread as usual.
 Replying to an older message uses the latest retained conversation, without
 branching. Unknown, expired, pre-upgrade or different-workspace reply anchors start
 a new thread with a brief explanation. Native-topic threads cannot be selected

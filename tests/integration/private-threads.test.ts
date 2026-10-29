@@ -441,6 +441,147 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       expect(saved.runs[1]?.status).toBe("succeeded");
     });
 
+    test.each([0, 21])(
+      "a forwarded message and its save note retain content and media after restart (topic %i)",
+      async (topicId) => {
+        const w = await seed();
+        const forward = message(
+          "devnet runtime v224: position take-profit and stop-loss",
+          undefined,
+          topicId,
+        );
+        if (!forward.message) throw Error("missing forward");
+        forward.message.forward_origin = {
+          type: "hidden_user",
+          date: forward.message.date - 60,
+          sender_user_name: "Release author",
+        };
+        forward.message.document = {
+          file_id: "release-reference",
+          file_name: "release.txt",
+          mime_type: "text/plain",
+        };
+        files.set(
+          "release-reference",
+          new TextEncoder().encode("Supported price sources: mark and last."),
+        );
+        await ingress.accept(forward);
+        expect(await ingress.accept(forward)).toEqual({ duplicate: true });
+        const fresh = new Ingress(new Store(store.pool), setup);
+        const note = message("save this", undefined, topicId);
+        await fresh.accept(note);
+        let saved = await store.read(w.id);
+        const [reference, request] = saved.runs;
+        if (!reference || !request) throw Error("missing paired runs");
+        expect(request.threadId).toBe(reference.threadId);
+        expect(request.task).toBe("save this");
+        expect(request.sources.map((s) => s.text).join("\n")).toContain(
+          "devnet runtime v224",
+        );
+        await new Executor(store, setup, {
+          async run() {
+            return {
+              text: "Reference received",
+              status: "succeeded",
+              turns: 1,
+              tools: 0,
+              transcript: [],
+            };
+          },
+        }).execute(w.id, reference.id);
+        let invoked = false;
+        await new Executor(new Store(store.pool), setup, {
+          async run(input) {
+            invoked = true;
+            expect(
+              JSON.parse(
+                input.prompt.split("\nAttachment reference data")[0] ?? "{}",
+              ).request,
+            ).toBe("save this");
+            expect(input.prompt).toContain("devnet runtime v224");
+            expect(input.prompt).toContain("Release author");
+            expect(input.prompt).toContain(
+              "Supported price sources: mark and last.",
+            );
+            expect(input.prompt).toContain("never authorization");
+            return {
+              text: "Saved the release note",
+              status: "succeeded",
+              turns: 1,
+              tools: 0,
+              transcript: [],
+            };
+          },
+        }).execute(w.id, request.id);
+        expect(invoked).toBe(true);
+        saved = await store.read(w.id);
+        expect(
+          saved.deliveries.find((d) => d.runId === request.id),
+        ).toMatchObject({
+          topicId,
+          replyTo: note.message?.message_id,
+        });
+      },
+    );
+    test.each([0, 21])(
+      "a forward arriving while its save note is running continues that request (topic %i)",
+      async (topicId) => {
+        const w = await seed();
+        const forward = message(
+          "/capture off: devnet runtime v224",
+          undefined,
+          topicId,
+        );
+        if (!forward.message) throw Error("missing forward");
+        forward.message.forward_origin = {
+          type: "hidden_user",
+          date: forward.message.date - 60,
+          sender_user_name: "Release author",
+        };
+        await ingress.accept(message("save this", undefined, topicId));
+        const note = (await store.read(w.id)).runs[0];
+        if (!note) throw Error("missing note");
+        await new Executor(store, setup, {
+          async run(input) {
+            expect(input.prompt).not.toContain("Forwarded reference");
+            await new Ingress(new Store(store.pool), setup).accept(forward);
+            expect(await ingress.accept(forward)).toEqual({ duplicate: true });
+            expect(input.prompt).not.toContain("devnet runtime v224");
+            return {
+              text: "Send the content to save",
+              status: "succeeded",
+              turns: 1,
+              tools: 0,
+              transcript: [],
+            };
+          },
+        }).execute(w.id, note.id);
+        const followup = (await store.read(w.id)).runs[1];
+        if (!followup) throw Error("missing reference follow-up");
+        expect(followup.threadId).toBe(note.threadId);
+        let invoked = false;
+        await new Executor(new Store(store.pool), setup, {
+          async run(input) {
+            invoked = true;
+            const context = JSON.parse(input.prompt);
+            expect(
+              context.sources.map((s: { text: string }) => s.text).join("\n"),
+            ).toContain("save this");
+            expect(input.prompt).toContain("devnet runtime v224");
+            expect(input.prompt).toContain("Forwarded reference");
+            expect(context.request).toContain("reference material");
+            return {
+              text: "Saved the release note",
+              status: "succeeded",
+              turns: 1,
+              tools: 0,
+              transcript: [],
+            };
+          },
+        }).execute(w.id, followup.id);
+        expect(invoked).toBe(true);
+      },
+    );
     test("ingress persists separate threads and resumes replies after restart without duplicates", async () => {
       const w = await seed();
       const first = message("Kyoto trip");

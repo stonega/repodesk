@@ -254,6 +254,7 @@ export interface Attachment {
 }
 export interface Source {
   attachments?: Attachment[];
+  forwarded?: boolean;
   threadId?: string;
   runId?: string;
   role?: "user" | "assistant";
