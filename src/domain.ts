@@ -391,6 +391,8 @@ export interface Run {
   threadId?: string;
   threadNotice?: string;
   replyAnchor?: number;
+  /** Received during generation; removed atomically with its user checkpoint. */
+  pendingInputs?: { sourceId: string; task: string; messageId: number }[];
   followupClosed?: boolean;
   followup?: {
     kind?: "forward";

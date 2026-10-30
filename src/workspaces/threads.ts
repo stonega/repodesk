@@ -81,13 +81,27 @@ export function privateThread(
         );
   const prior =
     replyTo === undefined
-      ? undefined
+      ? ownedRuns.findLast(
+          (r) =>
+            r.status === "running" &&
+            !r.cancelled &&
+            !r.workflowId &&
+            Date.parse(r.leaseUntil ?? "") > now.getTime(),
+        )
       : ownedRuns.find(
           (r) =>
             r.actor === actor &&
             r.chatId === actor &&
             r.threadId &&
-            (delivery ? r.id === delivery.runId : r.replyTo === replyTo),
+            (delivery
+              ? r.id === delivery.runId
+              : r.replyTo === replyTo ||
+                w.messages.some(
+                  (m) =>
+                    m.runId === r.id &&
+                    m.role === "user" &&
+                    m.id === `${botId}:${actor}:${replyTo}`,
+                )),
         );
   const existing = w.threads?.find(
     (t) =>
@@ -139,6 +153,7 @@ export function threadSources(w: Workspace, run: Run, now = Date.now()) {
         m.chatId === run.chatId &&
         m.topicId === run.topicId &&
         !!m.runId &&
+        !run.pendingInputs?.some((input) => input.sourceId === m.id) &&
         order.has(m.runId) &&
         retainedSource(w, m, now),
     )

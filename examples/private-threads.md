@@ -3,7 +3,7 @@
 Run deterministic tests locally; no Telegram or model credentials are used:
 
 ```sh
-bun test tests/unit/private-threads.test.ts
+bun test tests/unit/private-threads.test.ts tests/unit/live-input.test.ts
 # Set TEST_DATABASE_URL to a disposable PostgreSQL server with CREATEDB privileges.
 bun test tests/integration/private-threads.test.ts
 ```
@@ -17,7 +17,10 @@ In a staging bot with native private Topics already enabled through BotFather:
 1. Create/open a Telegram topic named `Kyoto` and send `Plan a Kyoto trip`.
 2. Send `Add vegetarian restaurants` in the same topic without Reply. The answer
    continues the trip discussion. Send another detail while it is generating;
-   the follow-up executes after the preceding request.
+   the additional input joins the active Pi run at the next model-turn boundary,
+   and one final answer incorporates both requests. Ordinary answers do not quote
+   the triggering message; ask it to emphasize a particular message to exercise
+   selective native replies.
 3. Create/open a different topic named `Server` and send `Help debug my server`.
    Its default context contains no Kyoto discussion.
 4. Return to `Kyoto` and send `Make it three days` without Reply. The retained
@@ -32,20 +35,22 @@ In a staging bot with native private Topics already enabled through BotFather:
 8. Switch to another enrolled workspace and ask in the same topic. The original
    workspace's context is unavailable. Switch back to resume its retained context.
 
-Outside Topics, standalone messages start separate threads, and replies to retained
-answers or your own requests continue them. Forwarded messages and their accompanying
+Outside Topics, messages sent while an answer is running join the active
+conversation. Once it finishes, standalone messages start separate threads, and
+replies to retained answers or your own requests continue them. Forwarded messages and their accompanying
 notes received within one minute also share a thread:
 
 1. Forward a text message or supported attachment and add `save this` in the
    forwarding dialog, or send that note immediately afterward. The save request
    must receive the original text, origin and supported attachment content.
 2. Send the note before the forward. The received forward continues the note's
-   request, including if the note is already being answered. An earlier answer can
-   arrive before the forward is processed; an in-flight prompt is never rewritten.
+   request, including if the note is already being answered. The forward is inserted as reference input at a model-turn boundary,
+   without rewriting an in-flight provider prompt. Only the combined final answer
+   is published.
 3. Repeat inside a native Topic. Both messages remain in that Topic. Try another
    Topic or workspace and verify that unrelated content is absent.
-4. Wait more than a minute, or send `/help` between the forward and note outside
-   Topics. They should start separate conversations; Reply explicitly to the
+4. After the earlier answer finishes, wait more than a minute, or send `/help`
+   between the forward and note outside Topics. They should start separate conversations; Reply explicitly to the
    forward to supply its reference content.
 
 The one-minute association applies only to received private messages. It does not

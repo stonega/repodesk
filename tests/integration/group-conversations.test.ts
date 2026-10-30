@@ -393,10 +393,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         saved?.transcript.some((m) => JSON.stringify(m).includes('"REPLY"')),
       ).toBe(false);
       await new DeliveryWorker(store, setup).send(w.id, `run:${r.id}:result`);
-      expect(calls.at(-1)?.params.reply_parameters).toEqual({
-        message_id: msg.message?.message_id,
-        allow_sending_without_reply: true,
-      });
+      expect(calls.at(-1)?.params.reply_parameters).toBeUndefined();
     });
 
     test("IGNORE or malformed classification stays silent and erases unaddressed message content", async () => {

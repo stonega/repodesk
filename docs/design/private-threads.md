@@ -1,6 +1,6 @@
 # Private conversation threads
 
-Implemented locally, updated 2026-09-22. Live Telegram acceptance remains a deployment check.
+Implemented locally, updated 2026-10-30. Live Telegram acceptance remains a deployment check.
 
 ## Interaction
 
@@ -18,9 +18,12 @@ content is still excluded; an empty thread may be pruned and recreated on the ne
 message without restoring erased history. Topic names are presentation only;
 renaming a topic does not change its conversation identity.
 
-Outside Topics (no `message_thread_id`), the existing compatibility routing remains:
-a standalone private text request starts a new thread; replying to a retained
-assistant answer or the user's own request continues that message's thread.
+Outside Topics (no `message_thread_id`), private routing works as follows:
+a standalone private request starts a new thread when no answer is running. While
+an answer is running, unanchored messages continue that active conversation for
+the same user/bot/chat/workspace; explicit replies keep their selected thread.
+Replying to a retained assistant answer or the user's own request continues that
+message's thread.
 An adjacent forwarded message and its accompanying note within one minute share
 that thread without requiring Reply. The pair can arrive in either order,
 including when a forwarding update reaches ingress after its later comment.
@@ -28,16 +31,19 @@ Forwarded text, origin and supported attachments remain reference data; the
 member's note supplies the request. This bounded association uses received records
 in the same workspace, user, bot and private chat. Explicit replies, native Topics,
 intervening retained commands, expired sources and cancelled/failed requests prevent implicit
-pairing. An additional ordinary message after the note starts a new thread as usual.
+pairing. After the answer finishes, an additional standalone message starts a new thread.
 Replying to an older message uses the latest retained conversation, without
 branching. Unknown, expired, pre-upgrade or different-workspace reply anchors start
 a new thread with a brief explanation. Native-topic threads cannot be selected
 from outside Topics through reply fallback. Control commands such as `/help`,
 `/status` and `/workspace` do not create threads.
 
-Every final answer replies to the triggering user message in its original topic.
-Thinking drafts, streamed previews and native Stop retain that topic ID. Outside
-Topics, only bot replies with confirmed remote message IDs can select a thread;
+Ordinary final answers stay in their original Topic without automatically quoting
+the triggering message. When the model explicitly cites a retained human message
+to emphasize its wording or attribution, that same-bot/chat/Topic message can be
+the native reply target. Thinking drafts, streamed previews and native Stop retain
+the original Topic ID. Among outgoing bot messages outside Topics, only replies
+with confirmed remote message IDs can select a thread;
 ephemeral drafts and uncertain sends have no confirmed mapping.
 
 Threads belong to a Telegram user within one workspace. `/workspace` determines
@@ -56,20 +62,34 @@ private message IDs include bot and chat IDs; confirmed delivery records map
 outgoing Telegram IDs back to their runs. Existing locked workspace JSONB and
 atomic inbox/outbox transactions persist all of this without a SQL migration.
 
-Standalone private runs outside Topics receive only their own request as source
-context. Native-topic messages and reply continuations assemble retained messages
+New standalone private runs outside Topics initially receive only their own request
+as source context. Native-topic messages and reply continuations assemble retained messages
 and visible assistant answers in run insertion order, refreshed when the worker
 claims the run. Later queued messages
 are excluded. The model receives role-labeled conversation sources in its prompt;
-each request keeps a separate Pi execution transcript for recovery. Historical tool
+each execution keeps a separate Pi transcript for recovery. Historical tool
 calls and reasoning are not replayed. Approved instructions and pinned skills still
 apply. Native Topics use the context management described below; non-topic private
 threads and recap/workflow requests retain their existing context behavior. Interactive
 group threads reuse discussion memory and compaction; see [group conversations](group-conversations.md).
 
-Runs in the same thread execute in persisted insertion order, including messages
-with identical timestamps. A waiting run remains queued and its queue job completes
-without spending retries; normal outbox recovery redispatches it. Other threads can
+Messages received while Pi is generating can join its active run. Pending inputs
+are saved with their original source IDs and consumed in arrival order at model
+turn boundaries; their user checkpoints acknowledge consumption atomically. New
+input blocks stale tool preflight. Supported media is downloaded only when needed,
+under current access and bot checks. Forwarded material stays reference data. The
+in-flight provider response and completed tool effects are preserved, while the
+final answer incorporates the additional requests. No intermediate answer is
+published as a separate final message. Final publication and ingress share the
+workspace lock, so input received after Pi's last poll still continues before
+completion. All turns share the run's existing deadline and dollar budgets.
+
+Already queued runs in the same thread execute in persisted insertion order,
+including messages with identical timestamps. New messages do not bypass a queued
+turn by joining an earlier active run. Pending approvals and Codex handoffs use
+separate requests with their existing lifecycles. A waiting run remains queued and
+its queue job completes without spending retries; normal outbox recovery
+redispatches it. Other threads can
 execute concurrently. Failed/cancelled runs release the next turn; awaiting approval
 also releases execution so the user can discuss a proposal. Approval rights and
 external-write guards are unchanged. Partial visible answers can be retained;

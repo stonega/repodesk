@@ -182,6 +182,8 @@ test("threshold compaction keeps recent turns and freezes its summary across sub
     ...plan.summary,
     text: "Deployment decisions and backup todo",
   };
+  // Match a completed production batch, including its retrigger headroom.
+  current.compaction = { ...plan, state: "done", summary: thread.summary };
   refreshThreadContext(w, current);
   const before = buildContext(w, current);
   expect(JSON.parse(before.prompt).sources.length).toBeLessThan(

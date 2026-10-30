@@ -169,6 +169,7 @@ export interface AgentInput {
   signal: AbortSignal;
   guard: () => Promise<void>;
   shouldPause?: () => Promise<boolean>;
+  nextInput?: () => Promise<AgentMessage | undefined>;
   reserve: (amount: number) => Promise<string>;
   checkpoint: (message: AgentMessage, attemptId?: string) => Promise<void>;
   events?: (type: string) => void;
@@ -419,6 +420,14 @@ export class PiRunner implements AgentRunner {
         return failedStream(model, blocked, input.signal.aborted);
       }
     };
+    const queueInput = async () => {
+      if (input.purpose) return false;
+      if (agent.hasQueuedMessages()) return true;
+      const message = await input.nextInput?.();
+      if (!message) return false;
+      agent.steer(message);
+      return true;
+    };
     const agent = new Agent({
       initialState: {
         model: input.model,
@@ -439,6 +448,12 @@ export class PiRunner implements AgentRunner {
               block: true,
               reason: "awaiting_approval",
               terminate: true,
+            };
+          if (await queueInput())
+            return {
+              block: true,
+              reason:
+                "A newer user message arrived. Read it before using tools.",
             };
           toolCount++;
           requireThat(
@@ -507,11 +522,17 @@ export class PiRunner implements AgentRunner {
           };
         }
       },
-      shouldStopAfterTurn: async () =>
-        (input.maxTurns !== undefined && turns >= input.maxTurns) ||
-        !!blocked ||
-        input.signal.aborted ||
-        !!(await input.shouldPause?.()),
+      shouldStopAfterTurn: async () => {
+        if (
+          (input.maxTurns !== undefined && turns >= input.maxTurns) ||
+          blocked ||
+          input.signal.aborted ||
+          (await input.shouldPause?.())
+        )
+          return true;
+        await queueInput();
+        return false;
+      },
     });
     agent.subscribe(async (event) => {
       input.events?.(event.type);
@@ -547,6 +568,7 @@ export class PiRunner implements AgentRunner {
     input.signal.addEventListener("abort", abort, { once: true });
     try {
       input.signal.throwIfAborted();
+      await queueInput();
       if (input.transcript.length) await agent.continue();
       else
         await agent.prompt(

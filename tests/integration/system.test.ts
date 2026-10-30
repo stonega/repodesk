@@ -2257,10 +2257,10 @@ suite("PostgreSQL integration (isolated database)", () => {
       actor: "101",
       chatId: "-100100",
       topicId: 7,
-      replyTo: 42,
       runId: r.id,
       state: "pending",
     });
+    expect(intent?.replyTo).toBeUndefined();
     expect(intent?.text).toContain("Investigation complete.");
     expect(intent?.text).not.toContain(r.id);
     const before = calls.length;

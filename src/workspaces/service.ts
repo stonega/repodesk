@@ -8,7 +8,7 @@ import {
 } from "../domain.ts";
 import { selectedRepository } from "../github/repository-context.ts";
 import { starterSkills } from "../skills/catalog.ts";
-import { audience, audit, authorize } from "./policy.ts";
+import { audience, audit, authorize, runAllowed } from "./policy.ts";
 import { groupThread, privateThread, refreshThreadContext } from "./threads.ts";
 export function newWorkspace(
   operatorId: string,
@@ -94,19 +94,14 @@ export function createRun(
     continueFrom?: number;
     groupRecap?: boolean;
     followup?: Run["followup"];
+    liveInput?: boolean;
     now?: Date;
     id?: string;
   } = {},
 ) {
   audience(w, actor, chatId);
-  requireThat(w.runs.length < 1000, "retained_run_capacity_reached", 429);
   requireThat(!w.settings.paused, "workspace_paused", 409);
   requireThat(task.trim() && task.length <= 4000, "invalid_task");
-  requireThat(
-    w.runs.filter((r) => ["queued", "running"].includes(r.status)).length < 20,
-    "queue_full",
-    429,
-  );
   const workflow = options.workflowId
     ? w.workflows.find((f) => f.id === options.workflowId)
     : undefined;
@@ -148,6 +143,53 @@ export function createRun(
           now,
         )
       : undefined;
+  // Keep received input durable in the active execution. The Pi worker consumes
+  // it at a turn boundary, rather than starting an independent queued answer.
+  const active =
+    options.liveInput && selected && options.replyTo
+      ? w.runs.findLast(
+          (r) =>
+            r.threadId === selected.thread.id &&
+            r.actor === actor &&
+            r.chatId === chatId &&
+            r.topicId === topicId &&
+            r.status === "running" &&
+            Date.parse(r.leaseUntil ?? "") > now.getTime() &&
+            !r.workflowId &&
+            !r.codingTaskId &&
+            !r.followup &&
+            !w.runs.some(
+              (other) =>
+                other.id !== r.id &&
+                other.conversation === r.conversation &&
+                ["queued", "running"].includes(other.status),
+            ) &&
+            !w.approvals.some((a) => a.runId === r.id && !a.decision) &&
+            runAllowed(w, r),
+        )
+      : undefined;
+  if (active && options.replyTo) {
+    const sourceId = `${privateChat && options.botId ? `${options.botId}:` : ""}${chatId}:${options.replyTo}`;
+    const source = w.messages.find(
+      (s) => s.id === sourceId && s.author === actor,
+    );
+    requireThat(source, "live_input_source_missing", 409);
+    requireThat((active.pendingInputs?.length ?? 0) < 20, "queue_full", 429);
+    source.threadId = active.threadId;
+    source.runId = active.id;
+    source.role = "user";
+    active.pendingInputs ??= [];
+    if (!active.pendingInputs.some((i) => i.sourceId === sourceId))
+      active.pendingInputs.push({ sourceId, task, messageId: options.replyTo });
+    audit(w, actor, "run.input_received", active.id);
+    return active;
+  }
+  requireThat(w.runs.length < 1000, "retained_run_capacity_reached", 429);
+  requireThat(
+    w.runs.filter((r) => ["queued", "running"].includes(r.status)).length < 20,
+    "queue_full",
+    429,
+  );
   const since = now.getTime() - (workflow?.spec.windowDays ?? 7) * 86400000;
   const candidates = w.messages
     .filter(

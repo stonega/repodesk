@@ -13,6 +13,25 @@ preview and Stop control. Longer coding tasks need a small number of factual sta
 updates. Application state determines these notices; a model's claim alone cannot
 establish that execution started, checks passed, or a PR was published.
 
+## Active conversation input and selective replies (2026-10-30)
+
+New same-actor interactive input can join a running Pi request without a separate
+queue acknowledgement or final answer for each message. Ingress saves pending
+inputs under the workspace lock; the worker injects them at turn boundaries and
+acknowledges each together with its user-message checkpoint. A pending message
+blocks stale tool preflight, and publication checks the queue again under the same
+lock. Text, supported attachments, speech and private forwarded references retain
+their source and authorization boundaries. Internal classification/summary passes
+cannot consume conversational input. The existing deadline and dollar budgets
+cover all turns. No dependency or SQL migration is added.
+
+Plain final answers no longer set a native reply target. An explicit authorized
+source citation can select a human message in the same bot/chat/Topic. Controls,
+task lifecycles, scheduled workflows and unaddressed-group gates keep their existing
+behavior. Local regressions cover restart boundaries, duplicate ingress, ordered
+inputs, media, permission revocation and the final-publication race. Live Telegram
+desktop/mobile behavior and model judgment about when to quote remain unverified.
+
 ## Baseline before implementation
 
 | Area | Present in the working tree | Work for this milestone |

@@ -34,6 +34,13 @@ permissions; they do not become a participant's interactive thread. Use Reply or
 explicit ask to discuss their answers. Existing legacy group runs remain unchanged;
 new interactive Telegram requests establish the new thread mapping.
 
+Explicitly addressed messages from the same actor can join their active Pi run at
+the next turn boundary, with one final answer incorporating the new input. They
+do not absorb another participant's request. Already queued turns retain their
+ordering, and unaddressed messages still follow the candidate rules below. Ordinary
+answers omit native reply quotations; explicit citations can emphasize a retained
+message from this bot/group/Topic.
+
 ## Forwarded reference messages
 
 A human's forwarded text, caption, photo or document can supply reference material

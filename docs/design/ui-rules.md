@@ -1831,6 +1831,29 @@ Use this format for each preference:
   incomplete responses still need a short, readable explanation. Source citations
   remain supported.
 
+### New Telegram input joins the active conversation
+
+- **Preference:** Incorporate messages received while answering into the current
+  conversation. Ordinary answers should not automatically quote the triggering
+  message; attach a native reply only when a specific message needs emphasis.
+- **Scope:** Interactive Telegram assistant conversations. Same-actor input can
+  join a running request in its workspace, bot, chat and Topic. Outside private
+  Topics, an unanchored message can continue that person's active conversation.
+- **Source:** 2026-10-30 — the user requested direct insertion of new messages
+  during generation and selective quotation of original messages.
+- **Acceptance:** Persist input in arrival order and consume it at Pi turn
+  boundaries. Do not publish an obsolete final answer when new input is already
+  received. Preserve completed tool effects, native Stop, source attribution,
+  deduplication, restart recovery and current permission checks. Plain answers omit
+  native reply parameters; explicit same-chat/Topic source citations may select a
+  native reply. Pending attachment failures must not publish an earlier draft as
+  the answer. Native desktop/mobile rendering requires live acceptance.
+- **Exceptions:** An in-flight provider response or external operation cannot be
+  rewritten or retracted. Already queued turns keep their order; pending approvals,
+  Codex handoffs, scheduled workflows and control commands keep their existing
+  lifecycles. Unaddressed group traffic still needs its existing follow-up gate.
+  Explicit reply anchors and native Topics retain their routing authority.
+
 ### Telegram feels like a warm work buddy
 
 - **Preference:** RepoDesk speaks as a dependable, approachable work partner,

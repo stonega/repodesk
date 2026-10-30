@@ -5,6 +5,12 @@ import { buildContext, validateSources } from "../agent/context.ts";
 import { extensionToolExecution } from "../agent/extension-execution.ts";
 import { classifyFollowup } from "../agent/followup.ts";
 import { remainingBudgets } from "../agent/limits.ts";
+import {
+  answerReference,
+  checkpointLiveInput,
+  liveMessage,
+  liveSource,
+} from "../agent/live-input.ts";
 import { DEFAULT_MODEL_BASE_URL } from "../agent/model-settings.ts";
 import {
   type AgentInput,
@@ -265,7 +271,13 @@ export class Executor {
         if (!w.deletion && runAllowed(w, r)) {
           if (classifying) r.followup?.transcript.push(message);
           else if (compacting) r.compaction?.transcript.push(message);
-          else r.transcript.push(message);
+          else {
+            checkpointLiveInput(w, r, message);
+            claimed.sources = structuredClone(r.sources);
+            claimed.task = r.task;
+            claimed.replyTo = r.replyTo;
+            r.transcript.push(message);
+          }
         }
       });
     };
@@ -344,7 +356,9 @@ export class Executor {
           }
       }
       const completed =
-        tail?.role === "assistant" && tail.stopReason === "stop";
+        tail?.role === "assistant" &&
+        tail.stopReason === "stop" &&
+        !claimed.pendingInputs?.length;
       if (!completed) await draft?.start();
       const input: AgentInput = {
         cacheKey: claimed.threadId
@@ -450,6 +464,50 @@ export class Executor {
             (a) => a.runId === runId && !a.decision,
           ),
         checkpoint,
+        nextInput: async () => {
+          await guard();
+          const current = await this.store.read(workspaceId);
+          const run = current.runs.find((r) => r.id === runId);
+          requireThat(
+            run && run.fence === fence && runAllowed(current, run),
+            "run_revoked",
+            409,
+          );
+          const next = liveSource(current, run);
+          if (!next) return;
+          const attachments = await loadAttachments(
+            {
+              ...run,
+              task: next.pending.task,
+              replyTo: next.pending.messageId,
+              sources: [next.source],
+              contextSummary: undefined,
+            },
+            deployment.bot?.id,
+            () => this.setup.client(deployment),
+            async () => {
+              await guard();
+              const current = await this.store.deployment();
+              requireThat(
+                current.bot?.id === deployment.bot?.id &&
+                  current.credentials.bot === deployment.credentials.bot,
+                "run_revoked",
+                409,
+              );
+            },
+            signal,
+            extensionWorkspace.plugins?.transcription?.enabled
+              ? (bytes, signal) =>
+                  this.transcription.transcribe(workspaceId, bytes, signal)
+              : undefined,
+          );
+          if (attachments.images.length)
+            requireThat(
+              input.model.input.includes("image"),
+              "model_images_unsupported",
+            );
+          return liveMessage(run, next.source, next.pending.task, attachments);
+        },
         preview: draft
           ? async (text) => {
               if (handedOff) return;
@@ -525,7 +583,7 @@ export class Executor {
         input.images = attachments.images;
         input.prompt += attachments.prompt;
       }
-      const result = completed
+      let result = completed
         ? {
             text: tail.content
               .filter((c) => c.type === "text")
@@ -534,75 +592,91 @@ export class Executor {
             status: "succeeded" as const,
           }
         : await runner.run(input);
-      await guard();
-
-      await this.store.change(workspaceId, async (w, sql) => {
-        const r = w.runs.find((r) => r.id === runId);
-        requireThat(
-          r && r.fence === fence && runAllowed(w, r),
-          "run_revoked",
-          409,
-        );
-        if (result.text) validateSources(result.text, r);
-        const proposals = w.approvals.some(
-          (a) =>
-            !a.decision &&
-            a.runId === r.id &&
-            Date.parse(a.expiresAt) > Date.now(),
-        );
-        const handoff = !!r.codingTaskId;
-        const task = r.codingTaskId
-          ? await taskGet(sql, w.id, r.codingTaskId)
-          : undefined;
-        const text = handoff
-          ? task?.state === "queued" && !task.cancelRequested && !task.error
-            ? `Your coding request for ${task.payload.repository} has been queued for Codex. Task updates will appear in this conversation.`
-            : task
-              ? developmentStatus(task)
-              : "Task status is unavailable."
-          : result.text.trim()
-            ? result.text
-            : "";
-        r.status = proposals
-          ? "awaiting_approval"
-          : handoff
-            ? "succeeded"
-            : text
-              ? result.status
-              : "partial";
-        r.error =
-          proposals || handoff
-            ? undefined
-            : "reason" in result
-              ? result.reason
+      while (true) {
+        await guard();
+        const finished = await this.store.change(
+          workspaceId,
+          async (w, sql) => {
+            const r = w.runs.find((r) => r.id === runId);
+            requireThat(
+              r && r.fence === fence && runAllowed(w, r),
+              "run_revoked",
+              409,
+            );
+            // Ingress and final publication share this lock. Input received after
+            // Pi's last steering poll must be answered before committing the result.
+            if (r.pendingInputs?.length) return false;
+            if (result.text) validateSources(result.text, r);
+            const proposals = w.approvals.some(
+              (a) =>
+                !a.decision &&
+                a.runId === r.id &&
+                Date.parse(a.expiresAt) > Date.now(),
+            );
+            const handoff = !!r.codingTaskId;
+            const task = r.codingTaskId
+              ? await taskGet(sql, w.id, r.codingTaskId)
               : undefined;
-        if (!proposals && !text) r.error ??= "empty_response";
-        r.result = text;
-        r.finishedAt = new Date().toISOString();
-        r.leaseUntil = undefined;
-        recordThreadAnswer(w, r);
-        if (text) commitDiscussions(w, r);
-        else delete r.discussionUpdates;
-        if (!handoff && (text || !proposals)) {
-          const response = text
-            ? `${text.slice(0, 2700)}${result.status === "partial" ? `\n\n${requestFailureMessage(r.error ?? "incomplete_response")}` : ""}`
-            : requestFailureMessage(r.error ?? "empty_response");
-          deliver(
-            w,
-            r.actor,
-            r.chatId,
-            `${r.threadNotice ? `${r.threadNotice}\n\n` : ""}${response}`,
-            {
-              topicId: r.topicId,
-              replyTo: r.replyTo,
-              runId: r.id,
-              id: `run:${r.id}:result`,
-              format: "rich",
-            },
-          );
-        }
-        audit(w, r.actor, `run.${r.status}`, r.id);
-      });
+            const text = handoff
+              ? task?.state === "queued" && !task.cancelRequested && !task.error
+                ? `Your coding request for ${task.payload.repository} has been queued for Codex. Task updates will appear in this conversation.`
+                : task
+                  ? developmentStatus(task)
+                  : "Task status is unavailable."
+              : result.text.trim()
+                ? result.text
+                : "";
+            r.status = proposals
+              ? "awaiting_approval"
+              : handoff
+                ? "succeeded"
+                : text
+                  ? result.status
+                  : "partial";
+            r.error =
+              proposals || handoff
+                ? undefined
+                : "reason" in result
+                  ? result.reason
+                  : undefined;
+            if (!proposals && !text) r.error ??= "empty_response";
+            r.result = text;
+            r.finishedAt = new Date().toISOString();
+            r.leaseUntil = undefined;
+            recordThreadAnswer(w, r);
+            if (text) commitDiscussions(w, r);
+            else delete r.discussionUpdates;
+            if (!handoff && (text || !proposals)) {
+              const response = text
+                ? `${text.slice(0, 2700)}${result.status === "partial" ? `\n\n${requestFailureMessage(r.error ?? "incomplete_response")}` : ""}`
+                : requestFailureMessage(r.error ?? "empty_response");
+              deliver(
+                w,
+                r.actor,
+                r.chatId,
+                `${r.threadNotice ? `${r.threadNotice}\n\n` : ""}${response}`,
+                {
+                  topicId: r.topicId,
+                  replyTo: answerReference(r, text, deployment.bot?.id),
+                  runId: r.id,
+                  id: `run:${r.id}:result`,
+                  format: "rich",
+                },
+              );
+            }
+            audit(w, r.actor, `run.${r.status}`, r.id);
+            return true;
+          },
+        );
+        if (finished) break;
+        const next = await input.nextInput?.();
+        requireThat(next, "live_input_source_changed", 409);
+        await checkpoint(next);
+        const current = await this.store.read(workspaceId);
+        input.transcript = current.runs.find((r) => r.id === runId)
+          ?.transcript as AgentMessage[];
+        result = await runner.run(input);
+      }
       this.store.log.write("run_completed", { workspaceId, runId });
     } catch (error) {
       // AbortSignal.any preserves the first reason, even if another source aborts later.

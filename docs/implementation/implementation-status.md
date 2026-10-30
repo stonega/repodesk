@@ -1,5 +1,35 @@
 # Implementation evidence
 
+## Active Telegram input and selective reply quotations (2026-10-30)
+
+Interactive messages received during generation can now join the same actor's
+active Pi run in the same workspace, bot, chat and Topic. Outside native private
+Topics, unanchored input reuses that person's running conversation. Inputs persist
+in arrival order and are acknowledged atomically with user-message checkpoints;
+reconstruction handles both pending and already checkpointed input without replay.
+Stale tool preflight is blocked until new input is read. Final publication checks
+pending input under the ingress lock, including arrivals after Pi's last steering
+poll. One final answer incorporates the additional requests. Supported attachments,
+speech and private forwarded references retain their authorization and attribution.
+
+Ordinary final answers no longer automatically quote the triggering message.
+Explicit source citations can select a retained human message from the same
+bot/chat/Topic for emphasis. Existing queued turns, approval and Codex lifecycles,
+scheduled workflows, control commands and unaddressed-group gates remain scoped
+to their existing contracts. No dependency or SQL migration was added.
+
+Validation passed `bun run check`, `bun run typecheck`, `bun test` (**1,278 tests
+across 137 files** in an isolated staged snapshot with disposable PostgreSQL),
+`bun run build`, and the Node runtime contract (16 integration-startup cases,
+zero external startup calls). The shared workspace's **1,335 tests across 144
+files** also passed before separating unrelated changes from this commit.
+Regressions cover ordered input, duplicates, restart checkpoints, final-publication
+races, stale tool suppression, supported media, revocation and selective reply
+targets. No deployment or live Telegram/model calls were performed. Native
+desktop/mobile rendering and model judgment about quotation remain live acceptance
+checks. See [the behavior contract](../design/private-threads.md) and
+[repeatable examples](../../examples/private-threads.md).
+
 ## Private forwarded messages retain their accompanying notes (2026-10-29)
 
 Outside native Topics, an adjacent forwarded message and its note now share a

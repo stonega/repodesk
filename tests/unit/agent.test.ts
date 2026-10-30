@@ -67,6 +67,73 @@ function input(patch: Partial<AgentInput> = {}): AgentInput {
     ...patch,
   };
 }
+test("Pi incorporates steering input before a stale tool and finishes with one updated answer", async () => {
+  let pending = false;
+  let calls = 0;
+  let executed = 0;
+  const checkpoints: AgentMessage[] = [];
+  const followup: AgentMessage = {
+    role: "user",
+    content: "Use the new constraints",
+    timestamp: Date.now(),
+  };
+  const runner = new PiRunner((_model, context) => {
+    calls++;
+    if (calls === 1) {
+      pending = true;
+      return stream(
+        message(
+          [{ type: "toolCall", id: "stale", name: "work", arguments: {} }],
+          "toolUse",
+        ),
+      );
+    }
+    expect(context.messages.at(-1)).toEqual(followup);
+    return stream(message([{ type: "text", text: "Updated answer" }]));
+  });
+  const result = await runner.run(
+    input({
+      nextInput: async () => (pending ? followup : undefined),
+      checkpoint: async (m) => {
+        checkpoints.push(m);
+        if (
+          m === followup ||
+          (m.role === "user" && m.content === followup.content)
+        )
+          pending = false;
+      },
+      tools: [
+        {
+          name: "work",
+          label: "Work",
+          description: "Work",
+          parameters: Type.Object({}),
+          execute: async () => {
+            executed++;
+            return { content: [{ type: "text", text: "done" }], details: {} };
+          },
+        },
+      ],
+    }),
+  );
+  expect(result.text).toBe("Updated answer");
+  expect(executed).toBe(0);
+  expect(checkpoints.filter((m) => m.role === "user")).toHaveLength(2);
+});
+
+test("internal tool-free passes never drain conversational input", async () => {
+  const runner = new PiRunner(() =>
+    stream(message([{ type: "text", text: "summary" }])),
+  );
+  await runner.run(
+    input({
+      purpose: "compaction",
+      nextInput: async () => {
+        throw Error("must not drain");
+      },
+    }),
+  );
+});
 test("Pi sends image blocks, reserves vision input and restores images from checkpoints", async () => {
   const images = [
     {

@@ -15,7 +15,20 @@
 
 使用 Telegram 原生 Topic 整理不同讨论。同一 Topic 内直接发消息即可继续，无需每次 Reply；不同 Topic 有独立的默认上下文，回复和预览保留在原 Topic。
 
-Topic 之外，单独发消息开始新对话；使用 Telegram **Reply** 回复保留的用户消息或机器人回答来继续。回复旧消息会继续该对话的最新状态，不会回滚到当时。来源已过期或不可用时，会开始新对话并说明。
+While the bot is answering, send additional details directly. Messages from you
+in the same conversation join the active response at the next generation boundary;
+the final answer incorporates them. Supported files, recordings and private
+forwarded references can also supply additional input. An already running external
+operation may finish before a correction is read. Stop remains available.
+
+Outside Topics, standalone messages start new conversations once the answer has
+finished. Use Telegram **Reply** to continue a retained user message or bot answer.
+Replying to an older message continues its latest conversation state. An unavailable
+anchor starts a new conversation with a brief explanation.
+
+Ordinary answers appear without quoting your message. The bot can attach a native
+reply when emphasizing a specific message or its wording. Commands, approvals and
+Codex task messages retain their own controls and reply behavior.
 
 你可以问“我们之前讨论的登录方案是什么？”来查询自己在当前工作区保留的私聊历史。群组请求无法读取这些私聊。长对话会整理和压缩上下文；需要准确原文时，可明确要求查找原始讨论。
 

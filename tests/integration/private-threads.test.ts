@@ -10,6 +10,11 @@ import { randomUUID } from "node:crypto";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import type { PgBoss } from "pg-boss";
+import {
+  checkpointLiveInput,
+  liveMessage,
+  liveSource,
+} from "../../src/agent/live-input.ts";
 import { type AgentRunner, PiRunner } from "../../src/agent/runtime.ts";
 import { migrate } from "../../src/db/migrate.ts";
 import { database } from "../../src/db/pool.ts";
@@ -142,6 +147,290 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         },
       });
     }
+    function response(text: string) {
+      const result: AssistantMessage = {
+        role: "assistant",
+        content: [{ type: "text", text }],
+        api: "openai-completions",
+        provider: "openai",
+        model: "gpt-4.1-mini",
+        stopReason: "stop",
+        timestamp: Date.now(),
+        usage: {
+          input: 10,
+          output: 10,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 20,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+      };
+      const stream = new AssistantMessageEventStream();
+      stream.push({ type: "done", reason: "stop", message: result });
+      stream.end(result);
+      return stream;
+    }
+    test.each([false, true])(
+      "worker reconstruction resumes received input without replay (checkpointed %s)",
+      async (checkpointed) => {
+        const w = await seed();
+        await ingress.accept(message("Original request", undefined, 23));
+        const run = (await store.read(w.id)).runs[0];
+        if (!run) throw Error("missing run");
+        await store.change(w.id, (w) => {
+          const current = w.runs[0];
+          if (!current) throw Error("missing run");
+          current.status = "running";
+          current.leaseUntil = new Date(Date.now() + 60000).toISOString();
+        });
+        const followup = message("Make it three days", undefined, 23);
+        await ingress.accept(followup);
+        const earlier = await response("Earlier draft").result();
+        await store.change(w.id, (w) => {
+          const current = w.runs[0];
+          if (!current) throw Error("missing run");
+          current.transcript = [
+            {
+              role: "user",
+              content: "Original request",
+              timestamp: Date.now(),
+            },
+            earlier,
+          ];
+          if (checkpointed) {
+            const next = liveSource(w, current);
+            if (!next) throw Error("missing input");
+            const message = liveMessage(
+              current,
+              next.source,
+              next.pending.task,
+              { prompt: "", images: [] },
+            );
+            checkpointLiveInput(w, current, message);
+            current.transcript.push(message);
+          }
+          current.leaseUntil = new Date(0).toISOString();
+        });
+        let count = 0;
+        const sourceId = `999:101:${followup.message?.message_id}`;
+        const runner = new PiRunner((_model, context) => {
+          count++;
+          expect(JSON.stringify(context.messages.at(-1))).toContain(
+            "Make it three days",
+          );
+          return response(`You requested three days [source:${sourceId}]`);
+        });
+        await new Executor(new Store(store.pool), setup, runner).execute(
+          w.id,
+          run.id,
+        );
+        const saved = await store.read(w.id);
+        expect(count).toBe(1);
+        expect(saved.runs[0]?.status).toBe("succeeded");
+        expect(saved.runs[0]?.pendingInputs).toEqual([]);
+        expect(
+          saved.runs[0]?.sources.filter((s) => s.id === sourceId),
+        ).toHaveLength(1);
+        expect(saved.deliveries).toHaveLength(1);
+        const delivery = saved.deliveries[0];
+        if (!delivery) throw Error("missing result");
+        await new DeliveryWorker(store, setup).send(w.id, delivery.id);
+        expect(calls.at(-1)?.params.reply_parameters).toEqual({
+          message_id: followup.message?.message_id,
+          allow_sending_without_reply: true,
+        });
+      },
+    );
+    test.each([0, 23])(
+      "new messages join the active Pi run in order and deliver one unquoted answer (topic %i)",
+      async (topicId) => {
+        const w = await seed();
+        await ingress.accept(message("Plan a trip", undefined, topicId));
+        const run = (await store.read(w.id)).runs[0];
+        if (!run) throw Error("missing run");
+        let providerCalls = 0;
+        const second = message("Make it three days", undefined, topicId);
+        const third = message(
+          "Include vegetarian restaurants",
+          undefined,
+          topicId,
+        );
+        const runner = new PiRunner(async (_model, context) => {
+          providerCalls++;
+          if (providerCalls === 1) {
+            const original = JSON.stringify(context);
+            await new Ingress(new Store(store.pool), setup).accept(second);
+            await ingress.accept(third);
+            expect(await ingress.accept(second)).toEqual({ duplicate: true });
+            expect(JSON.stringify(context)).toBe(original);
+            const current = await store.read(w.id);
+            expect(current.runs).toHaveLength(1);
+            expect(current.runs[0]?.pendingInputs).toHaveLength(2);
+            return response("Obsolete draft");
+          }
+          const serialized = JSON.stringify(context.messages);
+          expect(serialized).toContain("Make it three days");
+          if (providerCalls === 2) {
+            expect(serialized).not.toContain("Include vegetarian restaurants");
+            return response("Intermediate draft");
+          }
+          expect(serialized).toContain("Include vegetarian restaurants");
+          return response("Three days with vegetarian restaurants");
+        });
+        await new Executor(store, setup, runner).execute(w.id, run.id);
+        const saved = await store.read(w.id);
+        expect(providerCalls).toBe(3);
+        expect(saved.runs).toHaveLength(1);
+        expect(saved.runs[0]?.status).toBe("succeeded");
+        expect(saved.runs[0]?.pendingInputs).toEqual([]);
+        expect(
+          saved.runs[0]?.attempts.filter((a) => a.status === "settled"),
+        ).toHaveLength(3);
+        expect(saved.runs[0]?.sources.map((s) => s.text)).toEqual([
+          "Plan a trip",
+          "Make it three days",
+          "Include vegetarian restaurants",
+        ]);
+        expect(saved.deliveries).toHaveLength(1);
+        const delivery = saved.deliveries[0];
+        if (!delivery) throw Error("missing result");
+        expect(delivery.text).toBe("Three days with vegetarian restaurants");
+        expect(delivery.replyTo).toBeUndefined();
+        await new DeliveryWorker(store, setup).send(w.id, delivery.id);
+        expect(calls.at(-1)?.params.reply_parameters).toBeUndefined();
+        expect(calls.at(-1)?.params.message_thread_id).toBe(
+          topicId || undefined,
+        );
+      },
+    );
+
+    test("a late input after Pi settles is answered before final publication", async () => {
+      const w = await seed();
+      await ingress.accept(message("Initial request", undefined, 23));
+      const run = (await store.read(w.id)).runs[0];
+      if (!run) throw Error("missing run");
+      let calls = 0;
+      const runner: AgentRunner = {
+        async run(input) {
+          calls++;
+          if (calls === 1)
+            await ingress.accept(message("Late correction", undefined, 23));
+          else
+            expect(JSON.stringify(input.transcript)).toContain(
+              "Late correction",
+            );
+          return {
+            text: calls === 1 ? "Stale answer" : "Corrected answer",
+            status: "succeeded",
+            turns: 1,
+            tools: 0,
+            transcript: [],
+          };
+        },
+      };
+      await new Executor(store, setup, runner).execute(w.id, run.id);
+      const saved = await store.read(w.id);
+      expect(calls).toBe(2);
+      expect(saved.runs).toHaveLength(1);
+      expect(saved.deliveries.map((d) => d.text)).toEqual(["Corrected answer"]);
+    });
+
+    test.each(["document", "voice"] as const)(
+      "a %s sent while answering is loaded as current input",
+      async (kind) => {
+        const w = await seed();
+        await store.change(w.id, (w) => {
+          w.plugins = {
+            revision: 1,
+            entries: [],
+            transcription: { enabled: true, generation: 1 },
+          };
+        });
+        await ingress.accept(message("Read the next message", undefined, 23));
+        const run = (await store.read(w.id)).runs[0];
+        if (!run) throw Error("missing run");
+        const next = message(
+          kind === "document" ? "Use this constraint" : "",
+          undefined,
+          23,
+        );
+        if (!next.message) throw Error("missing message");
+        if (kind === "document")
+          next.message.document = {
+            file_id: "live-file",
+            file_name: "notes.txt",
+            mime_type: "text/plain",
+          };
+        else {
+          delete next.message.text;
+          next.message.voice = { file_id: "live-file", mime_type: "audio/ogg" };
+        }
+        files.set("live-file", Buffer.from("No overnight travel"));
+        let count = 0;
+        const runner = new PiRunner(async (_model, context) => {
+          count++;
+          if (count === 1) {
+            await ingress.accept(next);
+            expect(downloads).toEqual([]);
+            return response("Draft");
+          }
+          const last = context.messages.at(-1);
+          expect(JSON.stringify(last)).toContain("No overnight travel");
+          if (
+            last?.role !== "user" ||
+            typeof last.content === "string" ||
+            last.content[0]?.type !== "text"
+          )
+            throw Error("missing current input");
+          const parsed = JSON.parse(last.content[0].text);
+          expect(parsed.liveInput.sourceId).toBe(
+            `999:101:${next.message?.message_id}`,
+          );
+          return response("An itinerary without overnight travel");
+        });
+        const audio = new TranscriptionService(store, {
+          status: async () => ({ state: "ready" }),
+          prepare() {},
+          transcribe: async () => "No overnight travel",
+        });
+        await new Executor(store, setup, runner, 30000, audio).execute(
+          w.id,
+          run.id,
+        );
+        const saved = await store.read(w.id);
+        expect(saved.runs[0]?.status).toBe("succeeded");
+        expect(saved.deliveries.map((d) => d.text)).toEqual([
+          "An itinerary without overnight travel",
+        ]);
+        expect(downloads).toEqual(["live-file"]);
+      },
+    );
+
+    test("revocation after receipt blocks pending attachment loading and delivery", async () => {
+      const w = await seed();
+      await ingress.accept(message("Initial request", undefined, 23));
+      const run = (await store.read(w.id)).runs[0];
+      if (!run) throw Error("missing run");
+      const runner = new PiRunner(async () => {
+        const next = message("Read this", undefined, 23);
+        if (!next.message) throw Error("missing message");
+        next.message.document = { file_id: "denied", file_name: "notes.txt" };
+        await ingress.accept(next);
+        await store.change(w.id, (w) => {
+          const member = w.members.find((m) => m.id === "101");
+          if (member) member.active = false;
+        });
+        return response("Must not deliver");
+      });
+      await new Executor(store, setup, runner).execute(w.id, run.id);
+      const saved = await store.read(w.id);
+      expect(saved.runs[0]?.status).toBe("failed");
+      expect(saved.runs[0]?.pendingInputs).toHaveLength(1);
+      expect(downloads).toEqual([]);
+      expect(saved.deliveries.filter((d) => d.state !== "cancelled")).toEqual(
+        [],
+      );
+    });
     test("voice notes deduplicate, preserve topics and reach Pi as transcript reference data", async () => {
       const w = await seed();
       await store.change(w.id, (current) => {
@@ -519,12 +808,14 @@ const rootUrl = process.env.TEST_DATABASE_URL;
           saved.deliveries.find((d) => d.runId === request.id),
         ).toMatchObject({
           topicId,
-          replyTo: note.message?.message_id,
         });
+        expect(
+          saved.deliveries.find((d) => d.runId === request.id)?.replyTo,
+        ).toBeUndefined();
       },
     );
     test.each([0, 21])(
-      "a forward arriving while its save note is running continues that request (topic %i)",
+      "a forward arriving during generation becomes reference input in the same run (topic %i)",
       async (topicId) => {
         const w = await seed();
         const forward = message(
@@ -541,45 +832,30 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         await ingress.accept(message("save this", undefined, topicId));
         const note = (await store.read(w.id)).runs[0];
         if (!note) throw Error("missing note");
-        await new Executor(store, setup, {
-          async run(input) {
-            expect(input.prompt).not.toContain("Forwarded reference");
+        let invoked = 0;
+        const runner = new PiRunner(async (_model, context) => {
+          invoked++;
+          if (invoked === 1) {
+            const original = JSON.stringify(context);
             await new Ingress(new Store(store.pool), setup).accept(forward);
             expect(await ingress.accept(forward)).toEqual({ duplicate: true });
-            expect(input.prompt).not.toContain("devnet runtime v224");
-            return {
-              text: "Send the content to save",
-              status: "succeeded",
-              turns: 1,
-              tools: 0,
-              transcript: [],
-            };
-          },
-        }).execute(w.id, note.id);
-        const followup = (await store.read(w.id)).runs[1];
-        if (!followup) throw Error("missing reference follow-up");
-        expect(followup.threadId).toBe(note.threadId);
-        let invoked = false;
-        await new Executor(new Store(store.pool), setup, {
-          async run(input) {
-            invoked = true;
-            const context = JSON.parse(input.prompt);
-            expect(
-              context.sources.map((s: { text: string }) => s.text).join("\n"),
-            ).toContain("save this");
-            expect(input.prompt).toContain("devnet runtime v224");
-            expect(input.prompt).toContain("Forwarded reference");
-            expect(context.request).toContain("reference material");
-            return {
-              text: "Saved the release note",
-              status: "succeeded",
-              turns: 1,
-              tools: 0,
-              transcript: [],
-            };
-          },
-        }).execute(w.id, followup.id);
-        expect(invoked).toBe(true);
+            expect(JSON.stringify(context)).toBe(original);
+            return response("Waiting for the reference");
+          }
+          const text = JSON.stringify(context.messages);
+          expect(text).toContain("save this");
+          expect(text).toContain("devnet runtime v224");
+          expect(text).toContain("Forwarded reference");
+          expect(text).toContain("reference material");
+          return response("The supplied release note is available");
+        });
+        await new Executor(store, setup, runner).execute(w.id, note.id);
+        const saved = await store.read(w.id);
+        expect(invoked).toBe(2);
+        expect(saved.runs).toHaveLength(1);
+        expect(saved.runs[0]?.status).toBe("succeeded");
+        expect(saved.runs[0]?.sources.at(-1)?.forwarded).toBe(true);
+        expect(saved.deliveries).toHaveLength(1);
       },
     );
     test("ingress persists separate threads and resumes replies after restart without duplicates", async () => {
@@ -608,10 +884,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       );
       if (!intent) throw Error("missing delivery");
       await new DeliveryWorker(store, setup).send(w.id, intent.id);
-      expect(calls.at(-1)?.params.reply_parameters).toEqual({
-        message_id: first.message?.message_id,
-        allow_sending_without_reply: true,
-      });
+      expect(calls.at(-1)?.params.reply_parameters).toBeUndefined();
       const sent = (await store.read(w.id)).deliveries.find(
         (d) => d.id === intent.id,
       );
@@ -668,9 +941,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         "sendRichMessage",
       ]);
       expect(calls.every((c) => c.params.message_thread_id === 10)).toBe(true);
-      expect(calls.at(-1)?.params.reply_parameters).toMatchObject({
-        message_id: first.message?.message_id,
-      });
+      expect(calls.at(-1)?.params.reply_parameters).toBeUndefined();
       const fresh = new Ingress(new Store(store.pool), setup);
       await fresh.accept(next);
       await fresh.accept(
