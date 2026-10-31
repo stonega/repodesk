@@ -11,7 +11,7 @@ on:
         required: false
       log:
         type: choice
-        options: [none, restart, probe, entry, trace, system, resume-native-package-build.log, resume-nft-build.log, resume-native-install.log, resume-nft-verification.json, resume-driver.log, resume-firewall-check.log, resume-module-nf_tables.log, resume-module-nft_reject_inet.log, build-app.log, build-job.log, build-supervisor.log, container-checks.log, host-install.log, chrome-install.log, native-host-verification.json, cutover.log, production-verification.log, driver.log]
+        options: [none, recover, restart, probe, entry, trace, system, resume-native-package-build.log, resume-nft-build.log, resume-native-install.log, resume-nft-verification.json, resume-driver.log, resume-firewall-check.log, resume-module-nf_tables.log, resume-module-nft_reject_inet.log, build-app.log, build-job.log, build-supervisor.log, container-checks.log, host-install.log, chrome-install.log, native-host-verification.json, cutover.log, production-verification.log, driver.log]
         default: none
 permissions:
   contents: read
@@ -61,6 +61,8 @@ jobs:
           ssh_vps "set -eu; cd /opt/repodesk/releases/$STATUS_RELEASE; for f in stage deploy.exit failure.json; do if test -f \"\$f\"; then printf '%s: ' \"\$f\"; cat \"\$f\"; fi; done; printf 'current-release: '; cat /opt/repodesk/.current-release; systemctl is-active repodesk-browser || true; docker ps --format '{{.Names}} {{.Image}} {{.Status}}'"
           case "$DIAGNOSTIC_LOG" in
             none|'') ;;
+            recover)
+              ssh_vps "bash -s -- /opt/repodesk/releases/$STATUS_RELEASE" < deploy/browser-operator/recover.sh ;;
             restart)
               ssh_vps "bash -s -- /opt/repodesk/releases/$STATUS_RELEASE" < deploy/browser-operator/restart-proof.sh ;;
             probe)
