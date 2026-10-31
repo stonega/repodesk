@@ -46,7 +46,11 @@ case "$*" in
   *"codex-release-config.mjs "*)
     CODEX_SUPERVISOR_IMAGE="sha256:${"d".repeat(64)}" CODEX_RUNNER_IMAGE="sha256:${"e".repeat(64)}" \
       node "$DEPLOY_TEST_ROOT/releases/123-1/codex-release-config.mjs" "$DEPLOY_TEST_ROOT" "$DEPLOY_TEST_ROOT/releases/123-1" fixture ;;
-  *"--entrypoint node "*) [[ "$DEPLOY_TEST_FAILURE" != secret ]] || exit 42 ;;
+  *"--entrypoint node "*)
+    [[ "$DEPLOY_TEST_FAILURE" != secret ]] || exit 42
+    for service in app worker; do
+      if [[ "$DEPLOY_TEST_FAILURE" = "secret-$service" && "$*" = *"--entrypoint node $service "* ]]; then exit 42; fi
+    done ;;
   *"pg_dump "*)
     [[ "$DEPLOY_TEST_FAILURE" != backup ]] || exit 42
     echo fake-custom-dump ;;
@@ -201,6 +205,18 @@ function deploy(
 }
 
 describe("VPS release cutover", () => {
+  for (const service of ["app", "worker"]) {
+    test(`missing ${service} encryption mount fails before stopping production`, () => {
+      const result = deploy(`secret-${service}`, "x86_64", false, true, true);
+      expect(result.exitCode).toBe(42);
+      expect(result.current).toBe("previous\n");
+      expect(result.calls).toContain(`--entrypoint node ${service} -e`);
+      expect(result.calls).not.toContain("stop app worker");
+      expect(result.calls).not.toContain("pg_dump");
+      expect(result.calls).not.toContain("up -d");
+    });
+  }
+
   test("local verified images deploy without saving, loading or requiring an archive", () => {
     const result = deploy("", "x86_64", false, true, true);
     expect(result.exitCode).toBe(0);
