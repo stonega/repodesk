@@ -24,7 +24,7 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > "$ssh_dir/key"
           printf '%s\n' '169.58.58.71 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICEDUy/5JHbjzCdnECyCEun1u7LWbFz3oM0KIvlVirfK' > "$ssh_dir/known_hosts"
           chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
-          docker create --name "$client" --network host --cap-drop ALL --security-opt no-new-privileges:true \
+          docker create --name "$client" --network host --cap-drop ALL --cap-add DAC_OVERRIDE --security-opt no-new-privileges:true \
             --entrypoint ssh docker:29-cli@sha256:b1805116a6a86cc591b5d5f60a910a0715cdcc9d18d866ad68b1457ead25c35c \
             -T -i /tmp/key -p 22 -o BatchMode=yes -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts -o ConnectTimeout=15 \
