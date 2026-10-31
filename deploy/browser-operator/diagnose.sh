@@ -4,6 +4,13 @@ umask 077
 release_dir="${1:?Missing release directory}"
 [[ "$release_dir" =~ ^/opt/repodesk/releases/[0-9]+-[0-9]+$ ]]
 DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get -o DPkg::Lock::Timeout=180 install -y --no-install-recommends strace > "$release_dir/trace-install.log" 2>&1
+printf 'add table inet rdb_browser_diagnostics\ndelete table inet rdb_browser_diagnostics\n' > "$release_dir/nft-diagnostic.rules"
+printf 'Hardened unit nft dry run:\n'
+systemd-run --quiet --wait --pipe --collect --unit "rdb-nft-diagnostic-$(date +%s)" \
+ --property=PrivateTmp=yes --property=ProtectHome=yes --property=ProtectKernelTunables=yes \
+ --property=ProtectKernelModules=yes --property=ProtectControlGroups=yes \
+ /opt/repodesk-browser/runtime/bin/node --input-type=commonjs -e \
+ 'const {spawnSync}=require("node:child_process"); const r=spawnSync("nft",["--check","-f","-"],{env:{PATH:"/usr/sbin:/usr/bin:/sbin:/bin",LANG:"C.UTF-8"},input:"add table inet rdb_browser_diagnostics\ndelete table inet rdb_browser_diagnostics\n",encoding:"utf8"}); console.log(JSON.stringify({status:r.status,error:r.error?.code,stderr:r.stderr}));' || true
 dropin=/etc/systemd/system/repodesk-browser.service.d/trace.conf
 cleanup() {
  systemctl stop repodesk-browser || true
