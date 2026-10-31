@@ -27,6 +27,13 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > "$ssh_dir/key"
           printf '%s\n' "$VPS_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
           chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
-          ssh -T -i "$ssh_dir/key" -p "$VPS_PORT" -o BatchMode=yes -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$ssh_dir/known_hosts" -o ConnectTimeout=15 \
+          client="repodesk-browser-ssh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker rm -f "$client" >/dev/null 2>&1 || true; rm -rf "$ssh_dir"' EXIT
+          docker create --name "$client" --network host --cap-drop ALL --security-opt no-new-privileges:true \
+            --entrypoint ssh docker:29-cli@sha256:b1805116a6a86cc591b5d5f60a910a0715cdcc9d18d866ad68b1457ead25c35c \
+            -T -i /tmp/key -p "$VPS_PORT" -o BatchMode=yes -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts -o ConnectTimeout=15 \
             "$VPS_USER@$VPS_HOST" 'hostname; id; cat /etc/os-release; uname -m; for cmd in node chromium chromium-browser google-chrome Xvfb xauth nft dnf apt-get; do command -v "$cmd" || true; done; df -h /opt; free -h; cat /opt/repodesk/.current-release; systemctl is-active repodesk-browser 2>/dev/null || true; docker ps --format "{{.Names}} {{.Image}} {{.Status}}"'
+          docker cp "$ssh_dir/key" "$client:/tmp/key"
+          docker cp "$ssh_dir/known_hosts" "$client:/tmp/known_hosts"
+          docker start -a "$client"
