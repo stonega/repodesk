@@ -11,7 +11,7 @@ on:
         required: false
       log:
         type: choice
-        options: [none, system, resume-driver.log, resume-firewall-check.log, resume-module-nf_tables.log, resume-module-nft_reject_inet.log, build-app.log, build-job.log, build-supervisor.log, container-checks.log, host-install.log, chrome-install.log, native-host-verification.json, cutover.log, production-verification.log, driver.log]
+        options: [none, trace, system, resume-driver.log, resume-firewall-check.log, resume-module-nf_tables.log, resume-module-nft_reject_inet.log, build-app.log, build-job.log, build-supervisor.log, container-checks.log, host-install.log, chrome-install.log, native-host-verification.json, cutover.log, production-verification.log, driver.log]
         default: none
 permissions:
   contents: read
@@ -49,7 +49,7 @@ jobs:
           docker cp "$ssh_dir/known_hosts" "$client:/tmp/known_hosts"
           docker start "$client"
           printf 'DEPLOY_CLIENT=%s\nRELEASE_ID=%s-%s\n' "$client" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
-      - name: Read deployment progress without changing the VPS
+      - name: Inspect deployment progress and scoped diagnostics
         if: ${{ inputs.mode == 'status' }}
         env:
           STATUS_RELEASE: ${{ inputs.release }}
@@ -61,6 +61,8 @@ jobs:
           ssh_vps "set -eu; cd /opt/repodesk/releases/$STATUS_RELEASE; for f in stage deploy.exit failure.json; do if test -f \"\$f\"; then printf '%s: ' \"\$f\"; cat \"\$f\"; fi; done; printf 'current-release: '; cat /opt/repodesk/.current-release; systemctl is-active repodesk-browser || true; docker ps --format '{{.Names}} {{.Image}} {{.Status}}'"
           case "$DIAGNOSTIC_LOG" in
             none|'') ;;
+            trace)
+              ssh_vps "bash -s -- /opt/repodesk/releases/$STATUS_RELEASE" < deploy/browser-operator/diagnose.sh ;;
             system)
               ssh_vps "set -eu; systemctl show repodesk-browser -p MainPID -p User -p Group -p CapabilityBoundingSet -p NoNewPrivileges -p ProtectKernelModules -p ProtectKernelTunables; journalctl -u repodesk-browser --no-pager -n 20; getent passwd | grep '^rdb_' || true; nft list table inet repodesk_browser || true; command -v xdpyinfo || true; lsmod | grep -E 'nft|nf_tables' || true" ;;
             resume-driver.log|resume-firewall-check.log|resume-module-nf_tables.log|resume-module-nft_reject_inet.log|build-app.log|build-job.log|build-supervisor.log|container-checks.log|host-install.log|chrome-install.log|native-host-verification.json|cutover.log|production-verification.log|driver.log)
