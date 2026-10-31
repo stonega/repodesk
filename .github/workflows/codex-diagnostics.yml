@@ -104,6 +104,15 @@ jobs:
           set -euo pipefail
           [[ "$STATUS_RELEASE" =~ ^[0-9]+-[0-9]+$ ]]
           source deploy/browser-operator/client.sh
+          native_archive="native-source-$GITHUB_SHA.tar.gz"
+          git archive --format=tar.gz "$GITHUB_SHA" > "$RUNNER_TEMP/$native_archive"
+          sha256sum "$RUNNER_TEMP/$native_archive" | cut -d' ' -f1 > "$RUNNER_TEMP/native-source-$GITHUB_SHA.sha256"
+          cp deploy/browser-operator/expected-host-manifest.json "$RUNNER_TEMP/native-manifest-$GITHUB_SHA.json"
+          for file in "$native_archive" "native-source-$GITHUB_SHA.sha256" "native-manifest-$GITHUB_SHA.json"; do
+            docker cp "$RUNNER_TEMP/$file" "$DEPLOY_CLIENT:/tmp/$file"
+            docker exec "$DEPLOY_CLIENT" scp -i /tmp/key -P 22 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts \
+              "/tmp/$file" "root@169.58.58.71:/opt/repodesk/releases/$STATUS_RELEASE/$file"
+          done
           docker cp deploy/browser-operator/resume.py "$DEPLOY_CLIENT:/tmp/resume.py"
           docker cp deploy/browser-operator/run-resume.sh "$DEPLOY_CLIENT:/tmp/run-resume.sh"
           for file in resume.py run-resume.sh; do

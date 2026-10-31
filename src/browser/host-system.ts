@@ -136,15 +136,16 @@ export class BrowserFirewall {
       throw error;
     }
   }
+  private apply(commands: string) {
+    // Node pipes can be Unix sockets; some nft versions reject them as input files.
+    // One argv command batch preserves atomic updates without a shell or input file.
+    return hostCommand("nft", [commands]);
+  }
   private async setup() {
     try {
       await hostCommand("nft", ["list", "table", "inet", "repodesk_browser"]);
     } catch {
-      await hostCommand(
-        "nft",
-        ["-f", "-"],
-        "add table inet repodesk_browser\n",
-      );
+      await this.apply("add table inet repodesk_browser\n");
     }
     try {
       await hostCommand("nft", [
@@ -155,9 +156,7 @@ export class BrowserFirewall {
         "output",
       ]);
     } catch {
-      await hostCommand(
-        "nft",
-        ["-f", "-"],
+      await this.apply(
         "add chain inet repodesk_browser output { type filter hook output priority -10; policy accept; }\n",
       );
     }
@@ -184,17 +183,13 @@ export class BrowserFirewall {
           chain,
         ]);
       } catch {
-        await hostCommand(
-          "nft",
-          ["-f", "-"],
+        await this.apply(
           `add chain inet repodesk_browser ${chain}\nadd rule inet repodesk_browser output meta skuid ${uid} jump ${chain}\n`,
         );
       }
       this.users.add(uid);
     }
-    await hostCommand(
-      "nft",
-      ["-f", "-"],
+    await this.apply(
       `flush chain inet repodesk_browser ${chain}\n${proxyPort ? `add rule inet repodesk_browser ${chain} ip daddr 127.0.0.1 tcp dport ${proxyPort} accept\n` : ""}add rule inet repodesk_browser ${chain} reject\n`,
     );
   }

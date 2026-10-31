@@ -197,3 +197,11 @@ installer explicitly grants locked profile UIDs read/execute access to public
 service code after its restrictive umask. Its disposable installer proof imports
 Playwright as an unprivileged account while confirming the root host key remains
 unreadable. These corrections were identified before production cutover.
+
+The first VPS pre-cutover probe exposed a Node/Ubuntu 24.04 compatibility issue:
+`nft -f -` rejects Node's socket-backed stdin as a non-regular input file. The
+firewall now passes each bounded command batch as one argument, preserving atomic
+rule updates without a shell or temporary rule files. The `nft-compatibility`
+Docker target runs the production firewall under Node and Ubuntu 24.04, checking
+default denial, the selected proxy exception, validation and restart revocation.
+This is separate from the Debian headed-browser and installer checks.

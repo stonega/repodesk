@@ -100,3 +100,14 @@ The service reports unavailability instead of falling back to headless mode or
 disabling the sandbox. Systemd shutdown revokes proxy access first and terminates
 the whole service process group. See [maintenance](maintenance.md) for the rest of
 the application backup and upgrade workflow.
+
+For a disposable Node/Ubuntu firewall compatibility check, build and run the
+isolated fixture without host networking:
+
+```sh
+docker build --target nft-compatibility -f deploy/browser/smoke.Dockerfile -t repodesk-browser-nft-smoke .
+docker run --rm --network none --cap-add NET_ADMIN repodesk-browser-nft-smoke
+```
+
+The fixture checks default denial, the selected proxy exception and restart
+revocation. Never run this fixture with `--network host`.
