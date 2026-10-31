@@ -367,6 +367,7 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
         ...env,
         CODEX_TASK_CHANNEL_URL: this.settings.CODEX_RUNNER_PROXY_URL,
         CODEX_TASK_CHANNEL_TOKEN: r.channelToken,
+        ...(r.input.browser ? { CODEX_TASK_BROWSER_ENABLED: "true" } : {}),
       };
     }
     const name = `${r.key}-${mode}`;
@@ -399,10 +400,11 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
     }
     if (mode !== "export") {
       const file = this.path(r, "input");
+      const { browser: _browser, ...jobInput } = r.input;
       await writeFile(
         file,
         JSON.stringify({
-          ...r.input,
+          ...jobInput,
           ...(r.input.development
             ? {
                 development: {
@@ -605,6 +607,33 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
         .messages.filter((m) => m.state === "queued")
         .map(({ id, question }) => ({ id, question }));
     });
+  }
+  async browserCall(
+    token: string,
+    value: unknown,
+    transport: typeof fetch,
+    signal?: AbortSignal,
+  ) {
+    // Resolve the attempt on each call; neither the child nor repository chooses a target URL or owner.
+    const r = this.channelRecord(token),
+      bridge = r.input.browser;
+    requireThat(bridge, "browser_consumer_unavailable", 403);
+    const response = await transport(bridge.url, {
+      method: "POST",
+      redirect: "error",
+      headers: {
+        authorization: `Bearer ${bridge.token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(value),
+      signal: AbortSignal.any([
+        AbortSignal.timeout(45000),
+        ...(signal ? [signal] : []),
+      ]),
+    });
+    this.channelRecord(token);
+    requireThat(response.ok, "browser_service_unavailable", 503);
+    return response.json();
   }
   async channelEvent(token: string, value: unknown) {
     return this.serial(async () => {

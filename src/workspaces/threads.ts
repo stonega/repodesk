@@ -1,4 +1,9 @@
 import { randomUUID } from "node:crypto";
+import {
+  browserPrivateGrants,
+  browserReadAllowed,
+  browserStampAllowed,
+} from "../browser/privacy.ts";
 import { cloudflareReadAllowed } from "../cloudflare/policy.ts";
 import {
   type ConversationThread,
@@ -19,8 +24,12 @@ export function retainedSource(w: Workspace, source: Source, now = Date.now()) {
       ? w.runs.find((r) => r.id === source.runId)
       : undefined;
   return (
+    (!source.browserRead ||
+      (source.chatId === source.browserRead.owner &&
+        browserStampAllowed(w, source.browserRead))) &&
     (!origin ||
-      (cloudflareReadAllowed(w, origin) &&
+      (browserReadAllowed(w, origin) &&
+        cloudflareReadAllowed(w, origin) &&
         obsidianReadAllowed(w, origin) &&
         googleReadAllowed(w, origin) &&
         searchConsoleReadAllowed(w, origin))) &&
@@ -169,11 +178,22 @@ export function refreshThreadContext(w: Workspace, run: Run) {
   if (!run.threadId || run.transcript.length) return;
   run.sources = threadSources(w, run);
   const thread = w.threads?.find((t) => t.id === run.threadId);
+  if (
+    thread?.browserRead &&
+    !browserStampAllowed(w, thread.browserRead, thread.botId)
+  ) {
+    delete thread.summary;
+    delete thread.discussions;
+    delete thread.activeDiscussionId;
+    delete thread.browserRead;
+  }
   const summary = thread?.summary;
   run.contextSummary =
     summary && validMemory(summary, run.sources)
       ? structuredClone(summary)
       : undefined;
+  if (thread?.browserRead)
+    run.browserRead ??= structuredClone(thread.browserRead);
   run.coverage = `${run.sources.length} retained messages in this conversation. Other conversations are searched only when needed. Earlier messages may have expired.`;
   attachMemoryContext(w, run);
 }
@@ -183,11 +203,15 @@ export function recordThreadAnswer(w: Workspace, run: Run) {
   const id = `answer:${run.id}`;
   if (w.messages.some((m) => m.id === id)) return;
   const dependencies = [...run.sources, ...memoryDependencies(w, run)];
+  run.browserRead ??= browserPrivateGrants(w, run)[0];
   w.messages.push({
     id,
     threadId: run.threadId,
     runId: run.id,
     role: "assistant",
+    ...(run.browserRead
+      ? { browserRead: structuredClone(run.browserRead) }
+      : {}),
     chatId: run.chatId,
     topicId: run.topicId,
     author: "assistant",

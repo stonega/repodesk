@@ -211,6 +211,77 @@ async function fixture(
   };
 }
 
+test("Browser forwarding stays in the supervisor and is fenced by the current implementation token", async () => {
+  const f = await fixture();
+  holdImplementations(f);
+  f.input.browser = {
+    url: "http://app.test/browser-api/codex",
+    token: "application-capability-fixture",
+  };
+  await f.supervisor.start(f.input);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  const implementation = f.calls.find(
+    (c) => c.args[0] === "create" && c.args.at(-1) === "implement",
+  );
+  const token = implementation?.env?.CODEX_TASK_CHANNEL_TOKEN;
+  if (!token) throw Error("Missing implementation channel");
+  expect(implementation?.env?.CODEX_TASK_BROWSER_ENABLED).toBe("true");
+  expect(
+    f.jobInputs.every(
+      (input) =>
+        !input.includes("application-capability-fixture") &&
+        !input.includes("app.test"),
+    ),
+  ).toBe(true);
+  expect(JSON.stringify(f.calls)).not.toContain(
+    "application-capability-fixture",
+  );
+  expect(
+    f.calls
+      .filter((c) => c.args[0] === "create" && c.args.at(-1) !== "implement")
+      .every((c) => !c.env?.CODEX_TASK_BROWSER_ENABLED),
+  ).toBe(true);
+  const requests: { url: string; options?: RequestInit }[] = [];
+  const transport = (async (url, options) => {
+    requests.push({ url: String(url), options });
+    return Response.json({ status: "completed" });
+  }) as typeof fetch;
+  const app = runnerApp(f.supervisor, transport);
+  const request = (bearer: string) =>
+    app.request("/conversation/browser", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${bearer}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        command: "invoke",
+        callId: "current-call",
+        name: "browser_action",
+        input: { action: "read" },
+        url: "http://other-user.invalid",
+        actor: "another-user",
+      }),
+    });
+  expect((await request(f.settings.CODEX_RUNNER_TOKEN)).status).toBe(401);
+  expect(requests).toHaveLength(0);
+  expect((await request(token)).status).toBe(200);
+  expect(requests[0]?.url).toBe(f.input.browser.url);
+  expect(new Headers(requests[0]?.options?.headers).get("authorization")).toBe(
+    `Bearer ${f.input.browser.token}`,
+  );
+  expect(requests[0]?.options?.redirect).toBe("error");
+  await expect(
+    f.supervisor.browserCall(token, {}, (async (_url, _options) => {
+      await f.supervisor.cancel(f.input.workspaceId, f.input.taskId);
+      return Response.json({ text: "must not return a revoked result" });
+    }) as typeof fetch),
+  ).rejects.toThrow("coding_channel_denied");
+  expect((await request(token)).status).toBe(401);
+  expect(requests).toHaveLength(1);
+});
+
 test("reference credentials are confined to preparation and absent from durable state and model job inputs", async () => {
   const f = await fixture();
   f.input.development.referenceSources = [

@@ -1,15 +1,20 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Fault, type Source } from "../../src/domain.ts";
 import {
+  audioMessageRequest,
   decodeAttachment,
   isAudioAttachment,
+  loadAttachments,
   loadSourceAttachments,
 } from "../../src/telegram/attachments.ts";
 import { qwenRevision } from "../../src/transcription/config.ts";
 import { QwenRuntime } from "../../src/transcription/runtime.ts";
+import { createRun } from "../../src/workspaces/service.ts";
+import { workspace } from "../fixtures.ts";
 
 let root: string;
 beforeAll(async () => {
@@ -31,6 +36,14 @@ const source = (): Source => ({
   attachments: [voice],
 });
 const signal = new AbortController().signal;
+
+test("production Python framing and incomplete decoding regressions", () => {
+  const result = spawnSync("python3", ["tests/fixtures/qwen-bridge.py"], {
+    encoding: "utf8",
+  });
+  expect(result.stderr).toContain("OK");
+  expect(result.status).toBe(0);
+});
 
 test("voice, audio and audio documents use transcription without enabling arbitrary video", async () => {
   let calls = 0;
@@ -95,6 +108,49 @@ test("disabled transcription rejects before Telegram download; transcripts stay 
   expect(loaded.images).toEqual([]);
 });
 
+test("audio documents supply only the current speech as the request and preserve typed captions", async () => {
+  const run = createRun(
+    workspace(),
+    "101",
+    audioMessageRequest,
+    "101",
+    0,
+    "gpt-4.1-mini",
+    { replyTo: 1 },
+  );
+  const current = source(),
+    previous = source();
+  previous.id = "voice:2";
+  previous.attachments = [{ ...voice, fileId: "previous" }];
+  current.attachments = [
+    { ...voice, fileId: "current", kind: "document", name: "recording.ogg" },
+  ];
+  run.sources = [previous, current];
+  const client = async () => ({
+    async call<T>() {
+      return {} as T;
+    },
+    async downloadFile(id: string) {
+      return Buffer.from(id);
+    },
+  });
+  const load = () =>
+    loadAttachments(
+      run,
+      "999",
+      client,
+      async () => {},
+      signal,
+      async (bytes) => `${Buffer.from(bytes).toString()} speech`,
+    );
+  expect((await load()).requestText).toBe("current speech");
+  expect((await load()).prompt).toContain('"current":false');
+  run.task = "Translate the recording into English.";
+  expect((await load()).requestText).toBeUndefined();
+  run.task = "Forwarded reference; original Telegram origin (untrusted): {}";
+  expect((await load()).requestText).toBeUndefined();
+});
+
 test("revocation during transcription never becomes reference content; cancellation propagates", async () => {
   let revoked = false;
   const client = async () => ({
@@ -137,7 +193,30 @@ test("model bridge preserves UTF-8, rejects malformed results and erases ambient
   const script = join(root, "bridge.py");
   await writeFile(
     script,
-    `import json,os,sys,time\naction,root=sys.argv[1:]\nif action=='status':\n print(json.dumps({'state':'error','error':'download_failed'}))\nelse:\n raw=sys.stdin.buffer.read().decode()\n assert 'DATABASE_URL' not in os.environ and 'TELEGRAM_BOT_TOKEN' not in os.environ\n if raw=='wait': time.sleep(60)\n elif raw=='bad': print('not json')\n elif raw=='empty': print(json.dumps({'text':''}))\n elif raw=='error': print(json.dumps({'error':'audio_too_long'})); sys.exit(1)\n else:\n  for b in json.dumps({'text':'你好 GitHub'},ensure_ascii=False).encode():\n   os.write(1,bytes([b]))\n`,
+    `import json,os,sys,time
+from pathlib import Path
+action,root=sys.argv[1:]
+if action=='status':
+ print(json.dumps({'state':'error','error':'download_failed'}))
+else:
+ assert action=='serve'
+ assert 'DATABASE_URL' not in os.environ and 'TELEGRAM_BOT_TOKEN' not in os.environ
+ while True:
+  header=sys.stdin.buffer.readline()
+  if not header: break
+  raw=sys.stdin.buffer.read(int(header)).decode()
+  with (Path(root)/'requests').open('a') as log: log.write(raw+'\\n')
+  if raw=='wait': time.sleep(60)
+  if raw=='slow': time.sleep(.15)
+  if raw=='crash': sys.exit(1)
+  if raw=='bad': print('not json',flush=True)
+  elif raw=='empty': print(json.dumps({'text':''}),flush=True)
+  elif raw=='error': print(json.dumps({'error':'audio_too_long'}),flush=True)
+  else:
+   value={'text':str(os.getpid()) if raw=='pid' else '你好 GitHub'}
+   for b in (json.dumps(value,ensure_ascii=False)+'\\n').encode():
+    os.write(1,bytes([b]))
+`,
   );
   const runtime = new QwenRuntime("python3", root, script);
   expect(await runtime.status()).toEqual({
@@ -160,6 +239,28 @@ test("model bridge preserves UTF-8, rejects malformed results and erases ambient
   const pending = runtime.transcribe(Buffer.from("wait"), stop.signal);
   setTimeout(() => stop.abort(new Fault("cancelled")), 60);
   await expect(pending).rejects.toThrow("cancelled");
+  const firstPid = await runtime.transcribe(Buffer.from("pid"), signal);
+  for (let i = 0; i < 12; i++)
+    expect(await runtime.transcribe(Buffer.from("pid"), signal)).toBe(firstPid);
+  await expect(
+    runtime.transcribe(Buffer.from("crash"), signal),
+  ).rejects.toThrow("audio_transcription_failed");
+  expect(await runtime.transcribe(Buffer.from("pid"), signal)).not.toBe(
+    firstPid,
+  );
+  const active = runtime.transcribe(Buffer.from("slow"), signal);
+  const waiter = new AbortController();
+  const cancelled = runtime.transcribe(
+    Buffer.from("never-submit"),
+    waiter.signal,
+  );
+  waiter.abort(new Fault("cancelled_waiter"));
+  await expect(cancelled).rejects.toThrow("cancelled_waiter");
+  expect(await active).toBe("你好 GitHub");
+  expect(await readFile(join(root, "requests"), "utf8")).not.toContain(
+    "never-submit",
+  );
+  runtime.close();
   expect(
     await new QwenRuntime("/missing/python", root, script).status(),
   ).toEqual({ state: "unavailable" });

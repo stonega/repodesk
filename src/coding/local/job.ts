@@ -142,6 +142,7 @@ async function implement(job: Job) {
           process.env.CODEX_TASK_CHANNEL_TOKEN,
           fetch,
           "/task/native-transcript.jsonl",
+          process.env.CODEX_TASK_BROWSER_ENABLED === "true",
         )
       : undefined;
   let channelThread = "";

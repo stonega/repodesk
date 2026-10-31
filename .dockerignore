@@ -14,8 +14,16 @@
 !scripts/runtime-contract.ts
 !scripts/register-webhook.ts
 !scripts/code-truth-token.ts
+!scripts/browser-host-smoke.ts
 !scripts/fixtures/
 !scripts/fixtures/plugin-startup.ts
+!scripts/fixtures/browser-network.ts
+!deploy/
+!deploy/browser/
+!deploy/browser/package.ts
+!deploy/browser/install.sh
+!deploy/browser/install-smoke.sh
+!deploy/browser/repodesk-browser.service
 !services/
 !services/code-truth/
 !services/code-truth/src/

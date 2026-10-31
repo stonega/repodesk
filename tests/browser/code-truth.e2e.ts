@@ -115,6 +115,9 @@ for (const width of [1280, 390]) {
       "Application source and shared components.",
     );
     await expect(card.locator("input, select, textarea")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Save Code Truth", exact: true }),
+    ).toHaveCount(0);
     const repositories = page.getByRole("region", {
       name: "Code Truth repositories",
       exact: true,
@@ -149,6 +152,7 @@ for (const width of [1280, 390]) {
     await editor.getByLabel("Description").fill("Discard this edit");
     await editor.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(card).not.toContainText("Discard this edit");
+    expect(state.saves).toHaveLength(0);
     await expect(
       card.getByRole("button", { name: "Edit repository 1", exact: true }),
     ).toBeFocused();
@@ -159,32 +163,54 @@ for (const width of [1280, 390]) {
       .getByLabel("Description")
       .fill("Backend APIs and background jobs.\nUse for service behavior.");
     await screenshot(page, width, "editor");
-    await editor
-      .getByRole("button", { name: "Apply repository", exact: true })
-      .click();
     const pending = gate();
     state.saveGate = pending.promise;
     state.failSave = true;
-    const save = page.getByRole("button", {
-      name: "Save Code Truth",
+    const confirm = editor.getByRole("button", {
+      name: "Confirm",
       exact: true,
     });
-    await save.click();
-    await expect(save).toBeDisabled();
+    await confirm.click();
+    await expect(editor).toHaveAttribute("aria-busy", "true");
     await expect(
-      page.getByRole("button", { name: "Add repository", exact: true }),
+      editor.getByRole("button", { name: "Saving…", exact: true }),
     ).toBeDisabled();
-    await expect(card).toContainText("Backend APIs and background jobs.");
+    await expect(editor.getByLabel("GitHub repository URL")).toBeDisabled();
+    await expect(editor.getByLabel("Description")).toBeDisabled();
+    await expect(
+      editor.getByRole("button", { name: "Cancel", exact: true }),
+    ).toBeDisabled();
+    await expect(
+      editor.getByRole("button", {
+        name: "Close Edit repository example/application",
+        exact: true,
+      }),
+    ).toBeDisabled();
+    await editor.locator("form").evaluate((form: HTMLFormElement) => {
+      form.requestSubmit();
+      form.requestSubmit();
+    });
+    await page.keyboard.press("Escape");
+    await expect(editor).toBeVisible();
+    expect(state.saves).toHaveLength(1);
+    expect(state.saved.repositories[0]?.description).toBe(
+      initial.repositories[0]?.description,
+    );
     await screenshot(page, width, "pending");
     pending.release();
-    await expect(page.getByRole("alert")).toContainText(
+    await expect(editor.getByRole("alert")).toContainText(
       "Plugin settings changed in another session",
     );
-    await expect(save).toBeEnabled();
+    await expect(confirm).toBeEnabled();
+    await expect(editor.getByLabel("Description")).toHaveValue(
+      "Backend APIs and background jobs.\nUse for service behavior.",
+    );
+    await expect(page.locator(".toast").getByRole("alert")).toHaveCount(0);
     await screenshot(page, width, "error");
     state.failSave = false;
-    await save.click();
-    await expect(save).toBeDisabled();
+    await confirm.click();
+    await expect(editor).toHaveCount(0);
+    await expect(card).toContainText("Backend APIs and background jobs.");
     await expect(page.locator(".toast").getByRole("status")).toContainText(
       "Code Truth saved",
     );
@@ -196,10 +222,8 @@ for (const width of [1280, 390]) {
       .getByRole("button", { name: "Edit repository 1", exact: true })
       .click();
     await editor.getByLabel("Description").fill("");
-    await editor
-      .getByRole("button", { name: "Apply repository", exact: true })
-      .click();
-    await save.click();
+    await editor.getByRole("button", { name: "Confirm", exact: true }).click();
+    await expect(editor).toHaveCount(0);
     await expect(page.locator(".toast").getByRole("status")).toContainText(
       "Code Truth saved",
     );
@@ -216,6 +240,15 @@ for (const width of [1280, 390]) {
       };
     });
     expect(spacing).toEqual({ first: "0px", last: "0px" });
+    const bottom = await repositories.evaluate((element) => {
+      const list = element.querySelector(".repository-list");
+      if (!list) throw Error("Missing repository list");
+      return (
+        element.getBoundingClientRect().bottom -
+        list.getBoundingClientRect().bottom
+      );
+    });
+    expect(bottom).toBeLessThan(30);
     await screenshot(page, width, "without-description");
   });
 
@@ -252,22 +285,18 @@ for (const width of [1280, 390]) {
     await editor
       .getByLabel("GitHub repository URL")
       .fill("https://example.com/not-github");
-    await editor
-      .getByRole("button", { name: "Apply repository", exact: true })
-      .click();
+    await editor.getByRole("button", { name: "Confirm", exact: true }).click();
     await expect(editor.getByRole("alert")).toContainText(
       "HTTPS GitHub repository URL",
     );
+    expect(state.saves).toHaveLength(0);
     await editor
       .getByLabel("GitHub repository URL")
       .fill("https://github.com/example/new-project.git");
     await editor.getByLabel("Description").fill("General project context.");
-    await editor
-      .getByRole("button", { name: "Apply repository", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "Save Code Truth", exact: true })
-      .click();
+    await editor.getByRole("button", { name: "Confirm", exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    expect(state.saves).toHaveLength(1);
     await expect(page.locator(".toast").getByRole("status")).toContainText(
       "Code Truth saved",
     );
@@ -282,9 +311,7 @@ for (const width of [1280, 390]) {
     await editor
       .getByLabel("GitHub repository URL")
       .fill("https://github.com/EXAMPLE/new-project");
-    await editor
-      .getByRole("button", { name: "Apply repository", exact: true })
-      .click();
+    await editor.getByRole("button", { name: "Confirm", exact: true }).click();
     await expect(editor.getByRole("alert")).toHaveText(
       "This repository is already configured.",
     );
@@ -292,5 +319,52 @@ for (const width of [1280, 390]) {
     await page.keyboard.press("Escape");
     await expect(editor).toHaveCount(0);
     expect(state.saved.repositories).toHaveLength(1);
+    expect(state.saves).toHaveLength(1);
+  });
+
+  test(`Code Truth removal and enablement save immediately at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const state = await fixture(page);
+    await page.goto(url);
+    const card = page.getByRole("article", {
+      name: "Repository 1",
+      exact: true,
+    });
+    const toggle = page.getByRole("switch", {
+      name: "Enable Code Truth",
+      exact: true,
+    });
+    await toggle.click();
+    await expect(toggle).not.toBeChecked();
+    expect(state.saved.repositories).toEqual(initial.repositories);
+    await page.reload();
+    await expect(toggle).not.toBeChecked();
+    const pending = gate();
+    state.saveGate = pending.promise;
+    state.failSave = true;
+    const remove = card.getByRole("button", {
+      name: "Remove repository 1",
+      exact: true,
+    });
+    await remove.click();
+    await expect(remove).toBeDisabled();
+    await expect(toggle).toBeDisabled();
+    await expect(card).toBeVisible();
+    pending.release();
+    await expect(page.getByRole("alert")).toContainText(
+      "Plugin settings changed",
+    );
+    await expect(remove).toBeEnabled();
+    expect(state.saved.repositories).toEqual(initial.repositories);
+    await screenshot(page, width, "remove-error");
+    state.failSave = false;
+    await remove.click();
+    await expect(page.getByText("No repositories configured.")).toBeVisible();
+    expect(state.saved.repositories).toHaveLength(0);
+    await page.reload();
+    await expect(page.getByText("No repositories configured.")).toBeVisible();
+    await screenshot(page, width, "removed");
   });
 }

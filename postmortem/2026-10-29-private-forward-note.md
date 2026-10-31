@@ -1,7 +1,6 @@
 # Private forwarded references detached from their notes
 
-Reported 2026-10-29. Local regression and correction; live Telegram acceptance
-and deployment remain pending.
+Reported and deployed 2026-10-29. Live Telegram acceptance remains pending.
 
 The reported Telegram flow forwarded a release message with a `save this` note,
 but the resulting request contained only the note. Telegram delivers forwarding
@@ -37,6 +36,13 @@ Validation passed: `bun run check`, `bun run typecheck`, `bun run build`, the No
 runtime contract and 1,264 tests across 136 files in the forwarding-only snapshot
 with disposable PostgreSQL. The seven-test Stop suite passed on an isolated rerun
 after an initial PostgreSQL setup timeout.
+
+The authorized VPS deployment installed `fd388cb` on the previous audio runtime
+using source snapshot `d5057ef` and bundle `1793266373668-15413800`. Exact-image and
+disposable Compose checks passed before the guarded cutover. The protected backup
+verified, all 45 deployed artifacts match the tested images, services are healthy,
+and public/loopback health, readiness and admin checks passed. See the
+[deployment record](../docs/implementation/vps-deployment.md#private-forwarded-reference-deployment-2026-10-29).
 
 Live acceptance must repeat the reported forwarding-dialog flow and verify both
 incoming `message_thread_id` values before attributing any remaining failure to

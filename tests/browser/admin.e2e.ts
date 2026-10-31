@@ -1102,26 +1102,24 @@ test.describe
         .fill("Web application source and shared components.");
       await page
         .getByRole("dialog", { name: "Add repository", exact: true })
-        .getByRole("button", { name: "Apply repository" })
+        .getByRole("button", { name: "Confirm", exact: true })
         .click();
+      await expect(repositoryDialog).toHaveCount(0);
       await card
         .getByRole("switch", { name: "Enable Code Truth", exact: true })
         .click();
       await expect(
         card.getByRole("switch", { name: "Enable Code Truth" }),
       ).toBeEnabled();
-      const savedBeforeRepositories = await page.request.get(
+      const savedRepositories = await page.request.get(
         `/api/admin/workspaces/${workspaceId}/plugins/code-truth`,
       );
       expect(
-        (await savedBeforeRepositories.json()).settings.repositories,
-      ).toHaveLength(0);
+        (await savedRepositories.json()).settings.repositories,
+      ).toHaveLength(1);
       await expect(
         card.getByRole("heading", { name: "deepxfinance/web", exact: true }),
       ).toBeVisible();
-      await card
-        .getByRole("button", { name: "Save Code Truth", exact: true })
-        .click();
       await expect(page.locator(".toast").getByRole("status")).toContainText(
         "Code Truth saved",
       );
@@ -1191,11 +1189,9 @@ test.describe
       await card
         .getByRole("button", { name: "Remove repository 1", exact: true })
         .click();
+      await expect(card.getByText("No repositories configured.")).toBeVisible();
       await card
         .getByRole("switch", { name: "Enable Code Truth", exact: true })
-        .click();
-      await card
-        .getByRole("button", { name: "Save Code Truth", exact: true })
         .click();
       await expect(page.locator(".toast").getByRole("status")).toContainText(
         "Code Truth saved",
@@ -1320,10 +1316,13 @@ test.describe
         .getByRole("dialog", { name: "Add repository", exact: true })
         .getByLabel("GitHub repository URL")
         .fill("https://github.com/example/isolated");
-      await page.getByRole("button", { name: "Apply repository" }).click();
-      await truth
-        .getByRole("button", { name: "Save Code Truth", exact: true })
+      await page
+        .getByRole("dialog", { name: "Add repository", exact: true })
+        .getByRole("button", { name: "Confirm", exact: true })
         .click();
+      await expect(
+        page.getByRole("dialog", { name: "Add repository", exact: true }),
+      ).toHaveCount(0);
       await expect(page.locator(".toast").getByRole("status")).toContainText(
         "Code Truth saved",
       );

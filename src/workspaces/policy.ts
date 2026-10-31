@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { browserReadAllowed } from "../browser/privacy.ts";
 import { cloudflareReadAllowed } from "../cloudflare/policy.ts";
 import {
   type Audit,
@@ -92,6 +93,7 @@ function allowedRun(
   }
   const result =
     eligible(w, run.actor) &&
+    browserReadAllowed(w, run) &&
     !w.settings.paused &&
     !run.cancelled &&
     obsidianReadAllowed(w, run) &&
@@ -239,6 +241,10 @@ export function updateMembership(
       409,
     );
   w.members = members;
+  if (previous?.active && !member.active) {
+    w.browserEpochs ??= {};
+    w.browserEpochs[member.id] = (w.browserEpochs[member.id] ?? 0) + 1;
+  }
   w.memberVersion++;
   revokeWork(w);
   audit(w, actor, "member.updated", input.id, w.memberVersion);

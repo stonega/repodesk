@@ -7,6 +7,117 @@ release makes it available in the panel's version indicator. A deployment
 administrator reviews its notes and starts installation explicitly.
 See [host updater installation](updates.md) for the service and panel contract.
 
+## Private forwarded reference deployment (2026-10-29)
+
+The operator-authorized cutover deployed the forwarding fix `fd388cb` on top of
+the existing audio runtime, using snapshot
+`d5057efc946938ceecdd8f1f4a7b34a3adf9861f`, source tree
+`4d9cc7d5cea168ae3181d6468eec4e6aeb6042d7`, in bundle
+`1793266373668-15413800` (package v0.1.46). It replaces
+`1793168496847-42554913`. The snapshot differs from the previously deployed
+`a5d505cc6ed3661a859046c8d17dd75cfd94ee9d` only by the forwarding commit's nine
+files, preserving the deployed audio improvements. No dependency or migration
+was added.
+
+All 569 tracked runtime, build and test inputs match the workspace verified with
+**1,267 tests across 136 files**. Isolated lint, strict types and build passed.
+The local Node 24 image passed all 16 integration-startup cases with zero external
+startup calls. All four images built on the VPS from the checksummed archive;
+the app's 22 build files match the locally tested image. All ten core speech
+package versions match the previous deployment. Exact-image runtime contracts,
+CPU speech imports, offline Code Truth catalog/index/MCP checks, Codex CLI checks,
+disposable Compose configuration/readiness, migration rerun and backup/restore
+passed before production cutover.
+
+Both coding checkpoint checks passed. The protected backup is
+`backups/pre-release-1793266373668-15413800.dump` (**1,951,767 bytes**), with its
+archive listing verified. All 45 deployed application/supervisor/task artifacts
+match the tested images. App, worker, runner, Code Truth and PostgreSQL are healthy.
+Public and loopback health, readiness and admin return HTTP 200; public HTML and
+all seven frontend assets match the build, allowing the existing Cloudflare
+analytics insertion. A separate local probe also passed all three public routes
+with the deployment verifier's user agent; the default Python user agent was
+rejected with HTTP 403.
+
+Configuration, credentials, persistent mounts, PostgreSQL and all three CI runner
+identities were preserved. Source, build/check logs and `deployment-receipt.json`
+remain in the protected release bundle. Native Telegram acceptance of the reported
+forwarding-dialog flow and its actual topic IDs remains pending.
+
+## Audio conversation deployment (2026-10-28)
+
+The operator-authorized manual source-snapshot cutover deployed
+`a5d505cc6ed3661a859046c8d17dd75cfd94ee9d`, source tree
+`d589729fabbd5bb8f104be3dd0e9899f1c2a3f83`, based on
+`c46520778866474020f4236f5f551d8b4a000ab1`, in bundle
+`1793168496847-42554913` (package v0.1.46). It replaces
+`1793084755463-19144425` and includes natural voice replies,
+suppression of ordinary chat queue notices, warm speech-process reuse, recent
+transcript caching and incomplete-decoding rejection. No dependency or migration
+was added.
+
+All four images built on the VPS from the checksummed source archive. The app's
+22 packaged build files match the locally tested image, which passed lint, strict
+types, build and **1,232 tests across 135 files**. The exact Node 24 image passed
+all 16 integration-startup cases with zero external startup calls. CPU speech
+imports, offline Code Truth catalog/index/MCP checks, supervisor/task CLI checks,
+disposable Compose readiness, migration rerun and backup/restore passed. The VPS's
+ten core speech-package versions match the locally tested image.
+
+Both coding checkpoint checks passed. The protected backup is
+`backups/pre-release-1793168496847-42554913.dump`
+(**1,927,221 bytes**), with its archive listing verified.
+All 45 packaged application/supervisor/task artifacts and the worker image match
+the verified build. Public and loopback health, readiness and admin return HTTP
+200; all seven frontend assets match their expected hashes. The origin HTML is
+byte-identical to the image. Public HTML matches after allowing only the observed
+Cloudflare analytics insertion. The initial overly strict public-HTML check and
+its corrected verifier/log remain in the bundle; no further service cutover was
+needed.
+
+App, worker, runner, Code Truth and PostgreSQL are healthy, and the existing speech
+model cache reports Ready. Configuration, credentials, persistent mounts,
+PostgreSQL and all three CI runner identities were preserved. Source, image
+metadata, verification evidence, the HTML-check correction and
+`deployment-receipt.json` remain in the protected bundle. This manual snapshot
+cutover is separate from publishing a stable GitHub release. Live transcription
+accuracy for the reported recording and native Telegram desktop/mobile behavior
+remain acceptance checks.
+
+## Groups table deployment (2026-10-27)
+
+The operator-authorized committed-source cutover deployed
+`c46520778866474020f4236f5f551d8b4a000ab1`, source tree
+`a9287ffcd398b9b5399989c134b58540a5e8949c`, in bundle
+`1793084755463-19144425` (package v0.1.46), replacing
+`1793081723134-56518479`. Groups now uses the Members table layout with per-row
+Edit dialogs and readable mobile empty-state guidance.
+
+The retained local evidence includes lint, strict types, build, **1,229 tests
+across 135 files**, **52 browser scenarios** and the final 14 affected browser
+reruns. Four images were built on the VPS from the checksummed committed archive.
+The exact Node 24 app image passed all 16 combined integration-startup cases with
+zero external startup calls. CPU speech imports, offline Code Truth real-index/MCP
+and catalog checks, supervisor CA/task CLI checks, disposable Compose cutover,
+migration rerun and backup/restore passed. The first restore rehearsal used the
+empty pre-installation fixture backup; a post-migration backup passed the corrected
+rehearsal before production cutover.
+
+Both coding checkpoint checks passed. The protected backup is
+`backups/pre-release-1793084755463-19144425.dump` (1,906,895 bytes), with its archive
+listing verified. All 48 application artifacts match the deployed app, worker
+and supervisor; all 22 built dist files and the task image match the locally
+tested build. Public admin HTML and all seven frontend assets match their tested
+hashes. App, worker, runner, Code Truth and PostgreSQL are healthy; public and
+loopback health, readiness and admin return HTTP 200.
+
+Configuration, credentials, persistent mounts, PostgreSQL and all three CI runner
+identities were preserved. The updater and cleanup timer remain active. Source,
+verification logs and the deployment receipt remain in the release bundle. SSH
+monitoring recovered through a temporary task-specific proxy after the normal
+proxy route failed. No manual Telegram message, model call or account connection
+was performed; no dependency or migration was added.
+
 ## Code Truth startup isolation deployment (2026-10-27)
 
 The authorized manual archive cutover deployed commit
@@ -39,6 +150,36 @@ image archive was removed after success. A transient SSH drop interrupted the
 upload, which resumed and passed the complete checksum check before import.
 No manual Telegram message, model call, run replay or account connection was
 performed. No dependency or migration was added by this fix.
+
+## Matching Groups card and Skills cleanup deployment (2026-10-26)
+
+The operator-authorized manual archive cutover deployed clean commit
+`6438d74523d349dd46145996e8d71aba4064df1f`, source tree
+`599ca09bd5c993ecb70876816e72195e15d237fa`, in bundle
+`1793000844503-81693002` (package v0.1.44), replacing
+`1792979946288-50707140`. Groups now shares the Members card layout, including
+the heading, New action and padding, with an unboxed saved summary. This also
+deploys the Skills policy-test UI cleanup from `824abaa`.
+
+The retained lint, strict TypeScript, build and Node runtime checks,
+**1,193 deterministic tests** and **47 browser scenarios** cover the same
+committed source.
+Four images were freshly built; all 48 application artifacts match the tested
+source/build. Exact-image Node 24, CPU transcription, offline Code Truth
+real-index/MCP, supervisor CA and task CLI checks passed. The local guarded
+Compose cutover, migration rerun and backup/restore rehearsal passed after an
+initial fresh-database initialization race; both attempts remain in the logs.
+
+Production verified source/archive checksums and both durable coding checkpoints,
+then verified `backups/pre-release-1793000844503-81693002.dump` before migrations.
+App, worker, runner and Code Truth are healthy. Runtime configuration, secrets,
+named volumes, PostgreSQL and all three Actions runner identities were preserved;
+the updater and cleanup timer remain active. Public and loopback health,
+readiness and admin return HTTP 200. Public HTML references the tested frontend,
+and all seven public asset hashes match. A transient local proxy timeout was
+followed by successful direct public verification and separate proxy/VPS probes.
+Source, verification logs and receipts remain in the bundle; the imported image
+archive was removed after success. No dependency or migration changed.
 
 ## Workspace and Google guide deployment (2026-10-26)
 

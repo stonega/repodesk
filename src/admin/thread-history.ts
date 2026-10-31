@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { browserPanelRun } from "../browser/privacy.ts";
 import { type Run, requireThat, type Workspace } from "../domain.ts";
 import { membersWithProfiles } from "../workspaces/member-profile.ts";
 import { threadMatchesRun } from "../workspaces/threads.ts";
@@ -126,8 +127,11 @@ function summary(
   return {
     id: group.id,
     kind: group.kind,
-    title: preview(first.task, 120) || "Conversation",
-    preview: preview(last.result || last.task, 200),
+    title: preview(browserPanelRun(w, first).task, 120) || "Conversation",
+    preview: preview(
+      browserPanelRun(w, last).result || browserPanelRun(w, last).task,
+      200,
+    ),
     at: first.at,
     updatedAt: group.runs.reduce((latest, run) => {
       const at =
@@ -193,18 +197,21 @@ export function threadDetail(
   return {
     thread: summary(w, group, profiles),
     statistics,
-    items: group.runs.slice(offset, offset + limit).map(
-      (run): ThreadTurn => ({
-        id: run.id,
-        user: profiles.get(run.actor) ?? { id: run.actor },
-        task: run.task,
-        result: run.result,
-        status: run.status,
-        at: run.at,
-        finishedAt: run.finishedAt,
-        model: run.model,
-      }),
-    ),
+    items: group.runs
+      .slice(offset, offset + limit)
+      .map((run) => browserPanelRun(w, run))
+      .map(
+        (run): ThreadTurn => ({
+          id: run.id,
+          user: profiles.get(run.actor) ?? { id: run.actor },
+          task: run.task,
+          result: run.result,
+          status: run.status,
+          at: run.at,
+          finishedAt: run.finishedAt,
+          model: run.model,
+        }),
+      ),
     total: group.runs.length,
     offset,
     limit,

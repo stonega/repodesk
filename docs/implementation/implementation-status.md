@@ -1,5 +1,36 @@
 # Implementation evidence
 
+## Default-enabled private Browser (2026-10-31)
+
+Added the built-in Browser plugin, enabled by default with an explicit saved
+Disable. Chat, Codex and explicitly granted file plugins use one broker and
+persistent headed Chrome/Chromium profiles scoped to workspace plus verified
+member. The API, worker and database remain in Docker; the packaged Linux host
+service owns private UIDs/displays/profiles and enforces its network policy.
+Optional service/credential lookup occurs only when invoked.
+
+Ordinary members use one Telegram-authenticated page for site/action consent,
+password/code input, masked screenshots, downloads and manual control. No panel
+account or prior remote-desktop login is required. Input stays out of model/chat
+records. Durable leases, generation fences, current authorization and unknown
+receipts prevent stale consumers or ambiguous writes from being replayed. Private
+provenance follows task/history/source/delivery use; shared panel views redact it.
+Profile deletion revokes existing grants and schedules private-file cleanup.
+
+Validation passed lint, strict types, build, the Node runtime contract, **1,363
+PostgreSQL tests across 148 files** with a 15-second deadline, and **15 focused
+browser scenarios**. Desktop/mobile and both themes were visually inspected.
+The exact application image passes the offline 16-case startup contract with zero
+external calls and an isolated HTTP/migration smoke. Packaged headed-host,
+installer, Codex job/native dynamic-tool and supervisor-channel checks pass;
+merged Compose configuration validates. The default five-second full suite had
+an earlier unrelated timing failure and is not reported as passed.
+
+No production deployment, host installation or live account/Telegram/model use
+was performed. Host dependencies and the Mini App URL still need provisioning
+for an actual rollout. See [implementation and evidence](browser.md),
+[member workflow](../user/browser.md) and [host setup](../user/browser-host.md).
+
 ## Active Telegram input and selective reply quotations (2026-10-30)
 
 Interactive messages received during generation can now join the same actor's
@@ -30,6 +61,24 @@ desktop/mobile rendering and model judgment about quotation remain live acceptan
 checks. See [the behavior contract](../design/private-threads.md) and
 [repeatable examples](../../examples/private-threads.md).
 
+## Code Truth repository dialogs save directly (2026-10-29)
+
+Removed the separate **Save Code Truth** button and page-level repository draft.
+New/Edit dialogs now send the versioned settings request through **Confirm** and
+close only after success. Failed saves retain the URL and description with an
+in-dialog error; pending saves disable fields, duplicate submission and dismissal.
+Cancel sends no request. Repository removal saves immediately and retains the
+saved card on failure; enablement continues to save independently.
+
+Updated the UI preference, admin contract, setup guides, API example and browser
+journeys. Desktop/mobile screenshots were inspected for saved summaries, empty
+and loading states, editors, pending requests and recoverable errors, including
+card spacing after removing the save footer. No dependency or migration was added.
+
+Validation passed `bun run check`, `bun run typecheck`, `bun test` (**1,267 tests
+across 136 files** with disposable PostgreSQL), `bun run build`, and **27 browser
+scenarios** covering Code Truth, shared repository cards and web administration.
+
 ## Private forwarded messages retain their accompanying notes (2026-10-29)
 
 Outside native Topics, an adjacent forwarded message and its note now share a
@@ -58,6 +107,61 @@ reported forwarding dialog and its actual incoming topic IDs remains pending. Se
 [incident analysis](../../postmortem/2026-10-29-private-forward-note.md) and
 [repeatable examples](../../examples/private-threads.md).
 
+The operator-authorized VPS cutover subsequently deployed this fix in bundle
+`1793266373668-15413800`, using snapshot `d5057ef` on top of the already deployed
+audio improvements. Exact-image and disposable Compose checks passed; the protected
+backup verified, all 45 packaged artifacts match, and services plus public/loopback
+health, readiness and admin checks are healthy. Configuration, credentials,
+persistent mounts, PostgreSQL and CI runner identities were preserved. See the
+[deployment record](vps-deployment.md#private-forwarded-reference-deployment-2026-10-29).
+
+## Natural voice replies and faster consecutive recordings (2026-10-28)
+
+Voice-only messages and audio documents now supply their current spoken text as
+Pi's current request. Conversation guidance answers their meaning naturally,
+without unsolicited transcript quotes or audio-support diagnostics. Current and
+earlier recordings retain separate source attribution. Ordinary interactive chats
+no longer create delayed queued acknowledgements; delivery also rejects pending
+notices from older releases. Explicit status/cancel commands, native thinking/Stop
+and Codex task progress remain available. Recorded speech retains its existing
+reference-only boundary for external actions.
+
+The local speech bridge now reuses a lazily loaded model across sequential
+requests, releases it after 60 idle seconds and kills it on active cancellation.
+Cancelling a waiter cannot interrupt another inference. A 32-entry, tenant- and
+enablement-scoped transcript cache expires after five minutes or retention,
+whichever is shorter; source and policy checks still run on reuse. Duration-based
+256–2,048-token decode budgets reject unfinished generation rather than passing
+truncated speech to the assistant. No dependency or SQL migration was added.
+
+Validation: lint, strict types, build, **1,232 tests across 135 files**, the Node
+runtime contract and the rebuilt Node 24 image's 16 integration-startup cases
+passed. Compose configuration validates. Production ingress/execution/delivery
+fixtures cover consecutive recordings, duplicate updates, caption preservation,
+source attribution, stale queued notices, explicit controls and tenant/generation
+cache isolation. Standard-library Python fixtures cover stream framing, session
+reuse and token-limit failures; process tests cover UTF-8, warm reuse, crashes and
+isolated cancellation.
+
+An offline CPU smoke using public Qwen samples preserved the old transcripts:
+15.05-second English audio took 22.40 seconds with the old per-request process and
+8.44 seconds warm; 4.2-second Mandarin took 14.06 seconds old and 2.02 seconds warm.
+The new cold English path still took 18.05 seconds. The exact image's bundled
+bridge also decoded Mandarin Ogg/Opus in 2.04 seconds warm with the same transcript.
+These are single local measurements, not VPS latency guarantees or proof of
+accuracy on the reported recording. Native Telegram desktop/mobile rendering and
+real-model reply tone remain live acceptance checks.
+
+The subsequent operator-authorized VPS cutover deployed this snapshot in bundle
+`1793168496847-42554913` (v0.1.46). Exact-image and disposable
+restore checks passed; all services are healthy and the existing speech model is
+Ready. The protected production backup verified, all 45 packaged artifacts match,
+and public/loopback readiness and all seven frontend assets verify. Configuration,
+credentials, persistent mounts, PostgreSQL and CI runner identities were preserved.
+See the [deployment record](vps-deployment.md#audio-conversation-deployment-2026-10-28).
+See [transcription](transcription.md), [audio usage](../user/audio.md) and the
+[runnable journey](../../examples/telegram-audio.md).
+
 ## Groups uses the Members table layout (2026-10-27)
 
 Saved groups now appear in a table with Group (name and ID), Status, Visibility,
@@ -73,8 +177,16 @@ scenarios** passed across admin, group linking and Groups & Members; 14 affected
 scenarios passed again after the mobile empty-state correction. Saved, editor,
 loading, empty, pending and error screenshots were inspected at 1280px and 390px
 in both themes. Coverage includes keyboard scrolling, row actions, focus return,
-long/unnamed groups and full-list loading beyond 100 groups. No dependency,
-migration, live Telegram call or deployment was added.
+long/unnamed groups and full-list loading beyond 100 groups. No dependency or
+migration was added. These local checks used deterministic transports.
+
+The subsequent operator-authorized VPS cutover deployed `c465207` in bundle
+`1793084755463-19144425`. Exact-image integration-startup and offline service
+checks, disposable migrations/restore and the protected production backup passed.
+All services are healthy; deployed application files, public HTML and all seven
+frontend assets match the tested build. Configuration, credentials, persistent
+mounts, PostgreSQL and CI runner identities were preserved. See the
+[deployment record](vps-deployment.md#groups-table-deployment-2026-10-27).
 
 ## Obsidian writes for every active member (2026-10-27)
 
@@ -221,7 +333,15 @@ the combined page. The card regression first failed against the old built UI.
 Coverage checks matching surfaces, header/action placement, first/last content
 padding, absence of nested cards, independent loading/error recovery and modal
 focus/pending behavior. Saved, loading, empty, error and dialog screenshots were
-inspected at 1280px and 390px across both themes. This UI change is verified locally.
+inspected at 1280px and 390px across both themes. These initial checks ran locally.
+
+The operator-authorized VPS rollout subsequently deployed commit `6438d74` in
+bundle `1793000844503-81693002`, including the Skills UI cleanup from `824abaa`.
+Four fresh images passed runtime and Compose/backup/restore checks; the deployed
+application artifacts and public frontend match the tested build. Services are
+healthy, the protected backup verified, and configuration, volumes, PostgreSQL
+and CI runner identities were preserved. See the
+[deployment record](vps-deployment.md#matching-groups-card-and-skills-cleanup-deployment-2026-10-26).
 
 ## VPS deployment of the workspace and Google updates (2026-10-26)
 

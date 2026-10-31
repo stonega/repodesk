@@ -12,9 +12,12 @@ failed/interrupted downloads have an explicit Retry download action.
 The initial model is **Qwen/Qwen3-ASR-0.6B**, pinned to Hugging Face revision
 `5eb144179a02acc5e5ba31e748d22b0cf3e303b0`. Automatic language detection supports
 the languages and dialects documented in the [upstream model card](https://huggingface.co/Qwen/Qwen3-ASR-0.6B).
-The first implementation runs on CPU with PyTorch float32, at most four CPU threads,
-one inference at a time across the shared cache. Each request loads the model in
-an isolated process and releases its memory afterward. CPU inference may be slow;
+Inference runs on CPU with PyTorch float32, at most four CPU threads,
+one inference at a time across the shared cache. The worker reuses a lazily loaded
+model in a private subprocess across sequential
+recordings and releases it after 60 seconds idle. Cancellation kills the active
+process; a cancelled waiter cannot interrupt another request. CPU inference may
+be slow;
 measure latency and memory on the deployment host before raising input limits.
 GPU selection, live streaming and speaker diarization are outside this version.
 
@@ -27,7 +30,9 @@ model weights are **not** downloaded during image build or when the plugin is di
 Compose shares the `transcription_models` volume between app and worker at
 `/var/lib/repodesk-models`. Public weights can be reused across workspaces; audio,
 transcripts and Telegram identifiers are never stored in that cache. OS locks
-serialize downloads and inference across containers. Completed weights survive
+serialize downloads and inference across containers. Each process keeps at most one
+warm model; multiple processes may retain their own model during the idle window.
+Completed weights survive
 restarts and disable/re-enable. Interrupted downloads show an error and can resume
 from the cache on Retry. A worker reconciles enabled workspaces with no downloaded
 model after a restart. Removing the volume requires downloading the model again.
@@ -64,8 +69,11 @@ errors. Unsupported older references do not block a new request.
 
 Private voice notes start a chat request; in groups, reply to the bot or use an
 addressed caption. Undirected group recordings are not automatically transcribed.
-Voice-only requests ask the assistant to show the transcript and answer spoken
-questions. Transcripts are labeled source reference data. Spoken commands do not
+Voice-only requests supply the current spoken text as the model’s current request,
+with no automatic receipt, transcript quote or queued chat acknowledgement. Replies
+follow ordinary conversation unless transcription/troubleshooting is explicitly
+requested. Audio documents follow the same path. Current and earlier transcripts
+are labeled separately as source reference data. Spoken commands do not
 execute Telegram controls or grant GitHub/coding authority. Use an explicit text
 instruction for an external action; existing approvals and coding grants still apply.
 Forwarded and replied-to recordings retain the same reference-only treatment.
@@ -76,8 +84,16 @@ are checked around downloads and before accepting results. Disable/re-enable dur
 inference invalidates that result. Disabling prevents new decoding; transcripts
 already included in retained conversations remain subject to ordinary retention.
 
-Audio bytes travel through process pipes and in-memory decoding only. Processes
-are killed on cancellation/timeouts, including descendants. The model output joins
+Audio bytes travel through bounded, length-prefixed process pipes and in-memory
+decoding only. The warm process keeps model weights, not prior audio or conversation
+state. Successful transcripts have a 32-entry in-memory cache per service, scoped
+by tenant, plugin generation and audio digest, expiring after five minutes or the
+retention limit, whichever is shorter. Current plugin and source guards still run
+on cache hits. Disablement/deletion reconciliation clears that tenant’s cache.
+This avoids repeating inference for earlier recordings in consecutive turns.
+Decode budgets scale from 256 to 2,048 tokens with recording duration; hitting the
+limit without an end token fails instead of supplying a truncated transcript.
+Processes are killed on cancellation/timeouts, including descendants. Model output joins
 existing transcript/checkpoint retention; raw audio is not copied into repository
 checkouts, model caches, routine logs or a new public file endpoint. No SQL migration
 is needed; settings are part of the existing workspace plugin aggregate.
@@ -86,7 +102,11 @@ is needed; settings are part of the existing workspace plugin aggregate.
 
 Deterministic tests use fake transcription/model transports. They cover operator,
 tenant, CSRF and revision boundaries; enable/disable/retry; restart reconciliation;
-attachment routing, cancellation, revocation and UTF-8 subprocess output. Browser
+attachment routing, cancellation, revocation, warm-process reuse/recovery,
+queued-waiter isolation, UTF-8 subprocess output and incomplete-generation rejection.
+The PostgreSQL production execution path covers two consecutive recordings, source
+attribution, duplicate updates, tenant/generation cache isolation and ordinary replies.
+Browser
 fixtures cover the catalog and plugin page, unknown/loading settings, pending saves,
 download polling and recovery at desktop/mobile widths in both themes.
 The bridge fixtures require Python 3.11+ with its standard library; the quality CI

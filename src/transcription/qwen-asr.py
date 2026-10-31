@@ -3,6 +3,7 @@ import contextlib
 import fcntl
 import io
 import json
+import math
 import os
 from pathlib import Path
 import sys
@@ -69,10 +70,41 @@ class AudioError(Exception):
     pass
 
 
-def transcribe(root):
+def load_model(root):
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    import torch
+    from qwen_asr import Qwen3ASRModel
+    torch.set_num_threads(min(4, os.cpu_count() or 1))
+    model = Qwen3ASRModel.from_pretrained(
+        str(root / "model"), dtype=torch.float32, device_map="cpu",
+        local_files_only=True, trust_remote_code=False,
+        max_inference_batch_size=1, max_new_tokens=256,
+    )
+    generate = model.model.generate
+
+    def complete_generate(*args, **kwargs):
+        result = generate(*args, **kwargs)
+        sequences = getattr(result, "sequences", result)
+        produced = sequences.shape[1] - kwargs["input_ids"].shape[1]
+        eos = model.model.generation_config.eos_token_id
+        eos = eos if isinstance(eos, list) else [eos]
+        if produced >= kwargs["max_new_tokens"] and any(
+            token not in eos for token in sequences[:, -1].tolist()
+        ):
+            # Never present a generation cut off by its token limit as complete speech.
+            raise AudioError("audio_transcription_failed")
+        return result
+
+    model.model.generate = complete_generate
+    return model
+
+
+def transcribe(root, raw=None, session=None):
     if status(root)["state"] != "ready":
         raise AudioError("audio_model_not_ready")
-    raw = sys.stdin.buffer.read(MAX_BYTES + 1)
+    if raw is None:
+        raw = sys.stdin.buffer.read(MAX_BYTES + 1)
     if not raw or len(raw) > MAX_BYTES:
         raise AudioError("audio_invalid")
     import av
@@ -103,28 +135,49 @@ def transcribe(root):
         raise AudioError("audio_invalid") from None
     if not chunks:
         raise AudioError("audio_invalid")
-    # The OS lock bounds memory across API/worker processes sharing this cache.
+    # Serialize inference across API/worker processes sharing this cache.
     with (root / "inference.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        os.environ["HF_HUB_OFFLINE"] = "1"
-        os.environ["TRANSFORMERS_OFFLINE"] = "1"
-        import torch
-        from qwen_asr import Qwen3ASRModel
-        torch.set_num_threads(min(4, os.cpu_count() or 1))
         samples = np.concatenate(chunks)
         if float(np.max(np.abs(samples))) < 0.001:
             raise AudioError("audio_no_speech")
-        model = Qwen3ASRModel.from_pretrained(
-            str(root / "model"), dtype=torch.float32, device_map="cpu",
-            local_files_only=True, trust_remote_code=False,
-            max_inference_batch_size=1, max_new_tokens=4096,
-        )
+        session = session if session is not None else {}
+        if "model" not in session:
+            session["model"] = load_model(root)
+        model = session["model"]
+        # Short voice notes need a short decode budget; longer recordings retain room.
+        model.max_new_tokens = min(2048, max(256, math.ceil(size / 16000 * 16) + 64))
         text = "\n".join(r.text for r in model.transcribe(audio=(samples, 16000), language=None)).strip()
         if not text:
             raise AudioError("audio_no_speech")
         if len(text) > 32000:
             raise AudioError("audio_transcription_failed")
         return {"text": text}
+
+
+def serve(root):
+    session = {}
+    protocol = sys.stdout
+    while True:
+        header = sys.stdin.buffer.readline(16)
+        if not header:
+            return
+        size = int(header)
+        if not 0 < size <= MAX_BYTES or not header.endswith(b"\n"):
+            raise AudioError("audio_invalid")
+        raw = sys.stdin.buffer.read(size)
+        if len(raw) != size:
+            raise AudioError("audio_invalid")
+        try:
+            # Keep library progress/logging outside the private JSON response pipe.
+            with contextlib.redirect_stdout(sys.stderr):
+                response = transcribe(root, raw, session)
+        except Exception as error:
+            response = {"error": str(error) if isinstance(error, AudioError) else "audio_transcription_failed"}
+        finally:
+            raw = None
+        print(json.dumps(response, ensure_ascii=False), file=protocol, flush=True)
+        response = None
 
 
 def main():
@@ -137,14 +190,20 @@ def main():
         return download(root)
     if action == "transcribe":
         return transcribe(root)
+    if action == "serve":
+        serve(root)
+        return
     raise ValueError("unknown action")
 
 
 if __name__ == "__main__":
     try:
-        with contextlib.redirect_stdout(sys.stderr):
-            response = main()
-        print(json.dumps(response, ensure_ascii=False))
+        if sys.argv[1] == "serve":
+            main()
+        else:
+            with contextlib.redirect_stdout(sys.stderr):
+                response = main()
+            print(json.dumps(response, ensure_ascii=False))
     except Exception as error:
         print(json.dumps({"error": str(error) if isinstance(error, AudioError) else "audio_transcription_failed"}))
         sys.exit(1)

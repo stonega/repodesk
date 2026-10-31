@@ -22,6 +22,7 @@ export interface Progress {
   unavailable?: boolean;
 }
 interface ProgressTask {
+  browserRead?: Delivery["browserRead"];
   id: string;
   actor: string;
   chatId: string;
@@ -63,6 +64,7 @@ export function deliverTaskProgress(
   });
   const d = w.deliveries.find((d) => d.id === id);
   if (d) {
+    if (task.browserRead) d.browserRead = task.browserRead;
     d.progressMessage = { owner, id: task.id };
     // Retention may remove the original intent while a later edit still carries
     // the confirmed message ID. That later record is a valid anchor.
@@ -151,33 +153,4 @@ export function notifyRunFailure(
     runId: run.id,
     id: `run:${run.id}:failure`,
   });
-}
-
-export function queuedRunFeedback(w: Workspace, now = Date.now()) {
-  for (const run of w.runs) {
-    if (
-      run.status !== "queued" ||
-      run.chatId !== run.actor ||
-      run.workflowId ||
-      run.followup ||
-      now - Date.parse(run.at) < 30000 ||
-      !runAllowed(w, run)
-    )
-      continue;
-    const id = deliver(
-      w,
-      run.actor,
-      run.chatId,
-      "I’ve got your request. It’s still queued — I’ll let you know when it starts.",
-      {
-        topicId: run.topicId,
-        replyTo: run.replyTo,
-        runId: run.id,
-        id: `run:${run.id}:queued`,
-        buttons: taskButtons("run", run.id),
-      },
-    );
-    const d = w.deliveries.find((d) => d.id === id);
-    if (d) d.feedback = { owner: "run", id: run.id, key: "queued" };
-  }
 }

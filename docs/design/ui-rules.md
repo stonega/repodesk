@@ -16,6 +16,10 @@ when implementing or reviewing a change.
 | Saved display versus editing | [Modal editors](#add-and-create-flows-use-modals), [workspace values](#workspace-settings-show-saved-values-before-editing), [team summary](#team-configuration-uses-one-overview-editor), [model summary](#model-configuration-uses-a-summary-card-and-one-editor) |
 | Plugin detail layout | [Shared plugin layout](#plugin-details-share-card-layouts-and-a-title-switch), [Codex sections](#codex-details-show-configuration-and-tasks-separately) |
 | Integration setup input | [Discover resource identifiers](#connections-discover-resource-identifiers) |
+| Browser authentication input | [Shared secure input page](#browser-tasks-share-one-secure-input-page) |
+| VPS browser mode | [Headed host browser](#vps-browser-tasks-use-a-headed-browser) |
+| Browser account isolation | [Private user profiles](#browser-profiles-and-login-state-are-private-to-each-user) |
+| Browser plugin defaults | [Default-enabled built-in Browser](#browser-is-a-default-enabled-built-in-plugin) |
 | Code Truth setup | [URL and description](#code-truth-repositories-use-a-url-and-description) |
 | Card spacing after content changes | [Content layout owns card spacing](#content-layout-owns-card-spacing) |
 | Repository display | [Shared repository cards](#repository-cards-share-one-style), [member GitHub details](#member-github-columns-show-only-a-view-button), [connected repositories](#connected-github-repositories-stay-compact-and-directly-accessible) |
@@ -37,6 +41,93 @@ when implementing or reviewing a change.
 - Keep illustrative examples separate from established preferences.
 
 ## Recorded preferences
+
+### Browser is a default-enabled built-in plugin
+
+- **Preference:** Provide the proposed shared browser capability as a built-in
+  Browser plugin enabled by default, with the same entry serving chat, Codex and
+  other authorized plugins.
+- **Scope:** The Browser catalog entry and workspace enablement. Reuse the
+  shared plugin detail layout and title-row Enable switch. Browser service and
+  private sessions remain managed by application services.
+- **Source:** 2026-10-30 — the user requested making this feature a default-enabled
+  plugin during the host-browser design discussion.
+- **Acceptance:** Distinguish saved enablement, host-service readiness and the
+  current user's browser/authentication status. Retain an explicit Disable choice
+  across updates. Show missing/unavailable service status truthfully without
+  affecting unrelated chat. Do not display another user's login state in a shared
+  plugin summary. Verify enabled/disabled, loading, unavailable, pending and error
+  states at desktop/mobile widths and in both themes when implemented.
+- **Exceptions:** Default enablement does not grant another plugin browser access,
+  share user profiles, install host software during chat startup or authorize
+  website writes. Implementation status and evidence belong in
+  [Browser implementation](../implementation/browser.md).
+
+### Browser tasks share one secure input page
+
+- **Preference:** Provide one shared page for entering passwords and comparable
+  sensitive information required by browser tasks, instead of requiring users
+  to send those values in chat or first log in through a remote desktop.
+- **Scope:** The proposed shared host-browser workflow and its task-bound
+  sensitive input requests from chat, Codex and other authorized plugins. They
+  use the same input page; session reuse is restricted to the same owning user
+  and workspace. This does not implicitly relocate existing bot/model settings
+  or replace provider-specific OAuth consent.
+- **Source:** 2026-10-30 — during the VPS deployment discussion, the user requested
+  a unified page for entering password-like information after questioning the
+  assumption of prior manual browser login.
+- **Source update:** 2026-10-30 — the user clarified that the browser must be
+  usable by the chat bot, the Codex plugin and other plugins. Keep one shared
+  interaction surface rather than separate consumer-specific credential forms.
+- **Acceptance:** Show the task, verified destination and requested fields before
+  submission. Bind access and submission to the authorized actor, workspace,
+  browser session and current request; a copied link must not grant authority.
+  Keep raw input out of model context, chat, browser storage APIs, routine logs,
+  traces and tool receipts. Show pending, failed, expired, cancelled and completed
+  states without echoing submitted values. Verify desktop/mobile and both themes
+  when implementing; this preference records no completed UI verification.
+- **Exceptions:** A task-bound input page is a focused interaction, not a saved
+  settings editor. If reusable credentials are later introduced, their saved
+  summaries and New/Edit flows follow the existing modal-editor rule. Whether
+  to save credentials for reuse remains a separate product decision.
+
+### VPS browser tasks use a headed browser
+
+- **Preference:** Run the proposed dedicated VPS browser in normal headed mode.
+  Do not silently substitute a headless browser.
+- **Scope:** The persistent host browser discussed for RepoDesk automation,
+  shared through a service by chat, Codex and other authorized plugins.
+- **Source:** 2026-10-30 — the user explicitly rejected headless mode for this
+  workflow because they consider its limitations too restrictive.
+- **Acceptance:** Verify the actual browser launch mode and display availability.
+  A missing display reports an unavailable service rather than switching modes.
+  A virtual display is a possible deployment choice; remote viewing/control and
+  the specific display server remain implementation proposals.
+- **Exceptions:** This does not change deterministic browser tests or the existing
+  HTTP-based web reader. It does not assert that headed mode removes website
+  authentication challenges or automation restrictions.
+
+### Browser profiles and login state are private to each user
+
+- **Preference:** Keep each user's browser identity separate. Different users
+  must not share browser login information. Chat, Codex and other authorized
+  plugins may reuse a session only for its owning user within the same workspace.
+- **Scope:** The proposed shared host-browser service, browser viewing/control,
+  secure input, saved authentication state and downloaded artifacts. Sharing the
+  service or workspace does not share a user's profile.
+- **Source:** 2026-10-30 — the user explicitly required the browser to distinguish
+  users and prohibited sharing login information between different users.
+- **Acceptance:** Users in the same workspace see and control only their own
+  authorized sessions and input requests. Apply the same ownership boundary to
+  cookies, site storage, saved credentials, tabs, screenshots, downloads and live
+  display streams. Workspace/admin role alone must not grant access to another
+  user's browser identity. A copied link or guessed session ID must not change
+  ownership. Verify isolation across users, workspaces and consumer plugins;
+  session selection, loading, empty, pending, expired and error displays must not
+  reveal another user's data on desktop/mobile or in either theme.
+- **Exceptions:** No cross-user browser-profile or login-state sharing is included
+  in this feature. Anonymous/unbound tasks cannot fall back to a shared logged-in
+  profile. This records a design requirement, not implemented isolation.
 
 ### Group access explains Telegram mention setup
 
@@ -310,6 +401,14 @@ when implementing or reviewing a change.
   universal text description and removing the Repository ID input because users
   should not enter internal IDs. Default-branch indexing is the implementation
   choice supporting removal of branch settings.
+- **Source update:** 2026-10-29 — user requested removing **Save Code Truth**
+  and moving its API request to the repository dialog's **Confirm** action.
+- **Acceptance:** Confirm saves New/Edit directly and closes only after success.
+  Failed requests preserve the open editor and entered values with an in-dialog
+  error; pending saves lock fields, submission and dismissal. Cancel makes no
+  request. Repository removal saves directly and retains the saved card on failure.
+  Show saved repository summaries without a page-level save form or footer gap.
+  Verify persistence, enablement, loading/empty/error states and desktop/mobile layouts.
 - **Exceptions:** Internal MCP target/snapshot identifiers remain part of the
   service protocol and code provenance, outside the repository editor.
 
@@ -849,8 +948,8 @@ when implementing or reviewing a change.
 - **Source:** 2026-10-05 — user requested consistent plugin details based on the
   Codex screenshot and an Enable toggle to the right of the title.
 - **Exceptions:** Market discovery entries have no Enable switch. New file-plugin
-  registration can set its initial enabled state; repository drafts retain their
-  explicit save step.
+  registration can set its initial enabled state. Code Truth repository dialogs
+  save on Confirm; its Enable switch remains independent.
 
 ### Dialog support actions use secondary buttons
 
@@ -1683,8 +1782,8 @@ when implementing or reviewing a change.
 - **Exceptions:** Sign-in/bootstrap, policy forms,
   workspace creation in the setup wizard, approval decisions and
   recovery controls outside Operations stay on their pages. Field editing
-  within a modal may remain inline. Applying repository changes edits
-  a draft; the existing Save Code Truth step persists it. GitHub confirmation
+  within a modal may remain inline. Code Truth repository changes save through
+  the modal's Confirm action. GitHub confirmation
   still takes place on GitHub. The policy-form exception does not cover saved
   repository policy records on plugin detail pages, including Review Bot.
 
@@ -1854,6 +1953,26 @@ Use this format for each preference:
   lifecycles. Unaddressed group traffic still needs its existing follow-up gate.
   Explicit reply anchors and native Topics retain their routing authority.
 
+### Voice messages continue the conversation as text
+
+- **Preference:** Respond to the meaning of a voice message as naturally as typed
+  text. Do not announce receipt, quote its transcript or diagnose audio support
+  unless the person asks. Ordinary chat requests have no automatic queued message,
+  including after a long wait; retain native thinking/Stop and explicit commands.
+- **Scope:** Interactive Telegram voice notes, audio messages and audio documents
+  in private chats and addressed group conversations. The queue rule also applies
+  to typed chat requests. Codex task progress keeps its existing behavior.
+- **Source:** 2026-10-28 — user reported slow, inaccurate audio tests and showed
+  an unwanted queued acknowledgement and transcript-first reply.
+- **Acceptance:** The current spoken text reaches the model as the current request;
+  earlier recordings remain clearly attributed context. Two consecutive recordings
+  yield ordinary replies with no automatic transcript or queue acknowledgement.
+  Keep cancellation, duplicate-update protection and source authorization intact.
+- **Exceptions:** Explicit requests to transcribe, quote or troubleshoot audio may
+  discuss the recording. Unreadable/no-speech inputs still need an actionable error.
+  Forwarded recordings remain references; speech alone does not authorize writes.
+  Native desktop/mobile Telegram rendering requires live acceptance.
+
 ### Telegram feels like a warm work buddy
 
 - **Preference:** RepoDesk speaks as a dependable, approachable work partner,
@@ -1960,13 +2079,14 @@ Use this format for each preference:
   detailed cause in the user-facing reply.
   2026-10-18 — user showed a missing-GitHub-connection reply and requested clear
   instructions to connect the account through `/github`.
-- **Exceptions:** Keep short private replies on native thinking previews without
-  an extra immediate queued acknowledgement. Unaddressed group traffic stays
-  silent. Revocation and destination policy can prevent a notification. Unknown
+- **Exceptions:** Keep ordinary private replies on native thinking previews without
+  an automatic queued acknowledgement, including long waits (2026-10-28).
+  Unaddressed group traffic stays silent. Revocation and destination policy can
+  prevent a notification. Unknown
   remote outcomes require truthful uncertainty rather than a success or stopped
   claim. Execution quotas remain governed by the existing Codex preference.
   Native Stop remains the control for private streaming answers. Explicit commands
-  remain available; long private queue notices also offer inline task controls.
+  remain available; ordinary chat requests do not send queue notices.
   A confirmed deleted/uneditable progress message may be replaced once. An unknown
   original send must be reconciled before a replacement; retries of edits target
   the already-known message.

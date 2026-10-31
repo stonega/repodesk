@@ -21,6 +21,7 @@ import {
   selectedModel,
 } from "../agent/runtime.ts";
 import { applicationTools } from "../agent/tools.ts";
+import { restoreBrowserPause } from "../browser/pause.ts";
 import { developmentStatus } from "../coding/feedback.ts";
 import { codingTaskContext } from "../coding/task-context.ts";
 import { taskGet } from "../coding/task-store.ts";
@@ -134,6 +135,14 @@ export class Executor {
         discardFollowup(w, r);
         audit(w, r.actor, "run.recovery_required", r.id);
         notifyRunFailure(w, r);
+        return;
+      }
+      if (r.browserWait) {
+        if (!restoreBrowserPause(r)) {
+          r.status = "partial";
+          r.error = "browser_pause_recovery_required";
+          r.leaseUntil = undefined;
+        }
         return;
       }
       if (chatModel && !r.modelProvider && !r.attempts.length) {
@@ -459,10 +468,13 @@ export class Executor {
             });
             return id;
           }),
-        shouldPause: async () =>
-          (await this.store.read(workspaceId)).approvals.some(
-            (a) => a.runId === runId && !a.decision,
-          ),
+        shouldPause: async () => {
+          const w = await this.store.read(workspaceId);
+          return (
+            !!w.runs.find((run) => run.id === runId)?.browserWait ||
+            w.approvals.some((a) => a.runId === runId && !a.decision)
+          );
+        },
         checkpoint,
         nextInput: async () => {
           await guard();
@@ -581,6 +593,11 @@ export class Executor {
             "model_images_unsupported",
           );
         input.images = attachments.images;
+        if (attachments.requestText) {
+          const prompt = JSON.parse(input.prompt);
+          prompt.request = attachments.requestText;
+          input.prompt = JSON.stringify(prompt);
+        }
         input.prompt += attachments.prompt;
       }
       let result = completed
@@ -626,27 +643,30 @@ export class Executor {
               : result.text.trim()
                 ? result.text
                 : "";
-            r.status = proposals
-              ? "awaiting_approval"
-              : handoff
-                ? "succeeded"
-                : text
-                  ? result.status
-                  : "partial";
+            const browserWaiting = !!r.browserWait;
+            r.status =
+              proposals || browserWaiting
+                ? "awaiting_approval"
+                : handoff
+                  ? "succeeded"
+                  : text
+                    ? result.status
+                    : "partial";
             r.error =
-              proposals || handoff
+              proposals || browserWaiting || handoff
                 ? undefined
                 : "reason" in result
                   ? result.reason
                   : undefined;
-            if (!proposals && !text) r.error ??= "empty_response";
-            r.result = text;
+            if (!proposals && !browserWaiting && !text)
+              r.error ??= "empty_response";
+            r.result = browserWaiting ? undefined : text;
             r.finishedAt = new Date().toISOString();
             r.leaseUntil = undefined;
-            recordThreadAnswer(w, r);
-            if (text) commitDiscussions(w, r);
+            if (!browserWaiting) recordThreadAnswer(w, r);
+            if (text && !browserWaiting) commitDiscussions(w, r);
             else delete r.discussionUpdates;
-            if (!handoff && (text || !proposals)) {
+            if (!browserWaiting && !handoff && (text || !proposals)) {
               const response = text
                 ? `${text.slice(0, 2700)}${result.status === "partial" ? `\n\n${requestFailureMessage(r.error ?? "incomplete_response")}` : ""}`
                 : requestFailureMessage(r.error ?? "empty_response");

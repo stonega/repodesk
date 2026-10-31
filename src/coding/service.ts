@@ -74,6 +74,7 @@ export class CodingService {
     private apps: GitHubApps,
     private local?: LocalRunner,
     private encryptionKey?: string,
+    private browser?: import("../browser/codex.ts").CodexBrowsers,
   ) {}
   async purgeDeletedWorkspaceAuth(workspaceId: string) {
     const w = await this.store.read(workspaceId);
@@ -91,6 +92,9 @@ export class CodingService {
       this.apps,
       this.local,
       this.encryptionKey,
+      undefined,
+      undefined,
+      this.browser,
     ).tick(workspaceId);
   }
 }

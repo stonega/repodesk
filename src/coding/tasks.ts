@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { browserStampAllowed } from "../browser/privacy.ts";
 import type { Sql } from "../db/pool.ts";
 import {
   type Run,
@@ -44,6 +45,14 @@ export function checkDevelopment(
   requireThat(task.workspaceId === w.id, "access_denied", 403);
   audience(w, actor, task.chatId);
   if (stopping && actor === task.actor) return;
+  requireThat(
+    !task.browserRead ||
+      (actor === task.browserRead.owner &&
+        task.chatId === task.browserRead.owner &&
+        browserStampAllowed(w, task.browserRead, task.botId)),
+    "browser_private_task_required",
+    403,
+  );
   checkCodingPayload(w, task.actor, task.payload);
   if (actor !== task.actor) checkCodingPayload(w, actor, task.payload);
   checkReferenceSources(
@@ -131,7 +140,7 @@ export function notifyDevelopment(
       editOnly: true,
       buttons: prButtons,
     });
-  return deliver(w, actor, task.chatId, text, {
+  const deliveryId = deliver(w, actor, task.chatId, text, {
     topicId: task.topicId,
     format: "markdown",
     id: `development:${task.id}:${eventId}`,
@@ -143,6 +152,10 @@ export function notifyDevelopment(
         ? taskButtons("development", task.id)
         : undefined),
   });
+  const notification = w.deliveries.find((item) => item.id === deliveryId);
+  if (notification && task.browserRead)
+    notification.browserRead = task.browserRead;
+  return deliveryId;
 }
 
 export async function startDevelopment(
@@ -212,6 +225,7 @@ export async function startDevelopment(
   });
   const at = new Date().toISOString();
   const task: DevelopmentTask = {
+    ...(run.browserRead ? { browserRead: run.browserRead } : {}),
     id: randomUUID(),
     workspaceId: w.id,
     actor,
@@ -514,6 +528,9 @@ export async function appendDevelopment(
   }
   requireThat(task.revision < 100, "coding_input_capacity", 429);
   const answering = task.state === "waiting" && !!task.question;
+  task.browserRead ??=
+    source.browserRead ??
+    w.runs.find((run) => run.id === source.runId)?.browserRead;
   task.revision++;
   const input: DevelopmentInput = {
     revision: task.revision,

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { operator } from "../admin/auth.ts";
 import type { PluginRecord } from "../agent/plugin-config.ts";
 import type { Store } from "../db/repositories.ts";
@@ -20,6 +21,17 @@ function authorize(admin: Admin, workspace: Workspace) {
   );
 }
 export class TranscriptionService {
+  private cache = new Map<
+    string,
+    { text: string; timer: ReturnType<typeof setTimeout> }
+  >();
+  private forget(workspaceId: string) {
+    for (const [key, entry] of this.cache)
+      if (key.startsWith(`${workspaceId}:`)) {
+        clearTimeout(entry.timer);
+        this.cache.delete(key);
+      }
+  }
   constructor(
     private store: Store,
     private runtime: TranscriptionRuntime = qwenRuntime,
@@ -66,6 +78,7 @@ export class TranscriptionService {
         w.plugins.revision,
       );
     });
+    this.forget(workspaceId);
     if (input.enabled) this.runtime.prepare();
     return this.view(admin, workspaceId);
   }
@@ -88,6 +101,7 @@ export class TranscriptionService {
   }
   /** Reconcile durable enablement after a restart without blocking maintenance on a download. */
   async reconcile(w: Workspace) {
+    if (w.deletion || !w.plugins?.transcription?.enabled) this.forget(w.id);
     if (
       !w.deletion &&
       w.plugins?.transcription?.enabled &&
@@ -104,7 +118,9 @@ export class TranscriptionService {
     const w = await this.store.read(workspaceId);
     const setting = w.plugins?.transcription;
     requireThat(setting?.enabled && !w.deletion, "audio_plugin_disabled", 409);
-    const text = await this.runtime.transcribe(bytes, signal);
+    const key = `${workspaceId}:${setting.generation}:${createHash("sha256").update(bytes).digest("hex")}`;
+    const cached = this.cache.get(key);
+    const text = cached?.text ?? (await this.runtime.transcribe(bytes, signal));
     signal.throwIfAborted();
     const current = await this.store.read(workspaceId);
     requireThat(
@@ -114,6 +130,25 @@ export class TranscriptionService {
       "run_revoked",
       409,
     );
+    if (!cached) {
+      // Keep only short-lived text, never audio; do not cross tenant or enablement boundaries.
+      const timer = setTimeout(
+        () => this.cache.delete(key),
+        Math.min(5 * 60_000, w.settings.retentionDays * 86400_000),
+      );
+      timer.unref();
+      this.cache.set(key, {
+        text,
+        timer,
+      });
+      while (this.cache.size > 32) {
+        const oldest = this.cache.keys().next().value;
+        if (oldest !== undefined) {
+          clearTimeout(this.cache.get(oldest)?.timer);
+          this.cache.delete(oldest);
+        }
+      }
+    }
     return text;
   }
 }

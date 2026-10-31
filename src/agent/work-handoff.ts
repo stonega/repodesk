@@ -1,5 +1,10 @@
 import { Type } from "typebox";
 import { z } from "zod";
+import {
+  browserPrivateGrants,
+  browserReadAllowed,
+  browserStampAllowed,
+} from "../browser/privacy.ts";
 import { cloudflareReadAllowed } from "../cloudflare/policy.ts";
 import type {
   DevelopmentInput,
@@ -36,6 +41,7 @@ export const workHandoffParameters = Type.Object(
   { additionalProperties: false },
 );
 interface Entry {
+  browserRead?: Run["browserRead"];
   id: string;
   kind: string;
   goal: string;
@@ -138,6 +144,7 @@ function developmentEntries(
     entries.push({
       id: `development:${task.id}`,
       kind: "development",
+      browserRead: task.browserRead,
       goal: task.payload.title,
       status:
         task.cancelRequested &&
@@ -183,6 +190,12 @@ function assistantEntries(w: Workspace, r: Run, cutoff: number): Entry[] {
       run.cancelled ||
       Date.parse(run.at) <= cutoff ||
       !readable(w, r, run.actor, run.chatId, run.topicId) ||
+      !browserReadAllowed(w, {
+        ...run,
+        actor: r.actor,
+        chatId: r.chatId,
+        workflowId: r.workflowId,
+      }) ||
       !githubReadAllowed(w, run) ||
       !googleReadAllowed(w, {
         ...run,
@@ -215,6 +228,7 @@ function assistantEntries(w: Workspace, r: Run, cutoff: number): Entry[] {
     entries.push({
       id: `run:${run.id}`,
       kind: "assistant",
+      browserRead: browserPrivateGrants(w, run)[0],
       runId: run.id,
       goal: run.task.slice(0, 1000),
       status: run.status,
@@ -233,6 +247,14 @@ function discussionEntries(w: Workspace, r: Run): Entry[] {
   const entries: Entry[] = [];
   for (const thread of w.threads ?? []) {
     if (
+      thread.browserRead &&
+      (thread.browserRead.owner !== r.actor ||
+        r.chatId !== r.actor ||
+        r.workflowId ||
+        !browserStampAllowed(w, thread.browserRead))
+    )
+      continue;
+    if (
       r.chatId === r.actor
         ? thread.kind === "group" ||
           thread.actor !== r.actor ||
@@ -249,6 +271,7 @@ function discussionEntries(w: Workspace, r: Run): Entry[] {
       entries.push({
         id: `discussion:${d.id}`,
         kind: "discussion",
+        browserRead: thread.browserRead,
         goal: d.title,
         summary: d.summary.slice(0, 1500),
         status: "discussion",
@@ -310,6 +333,15 @@ export function workHandoff(
     matches = matches.slice(index + 1);
   }
   const selected = matches.slice(0, q.limit);
+  for (const entry of selected) {
+    r.browserRead ??= entry.browserRead;
+    const source = entry.runId
+      ? w.runs.find((run) => run.id === entry.runId)
+      : undefined;
+    r.browserRead ??= source
+      ? browserPrivateGrants(w, source)[0]
+      : entry.sources.find((s) => s.browserRead)?.browserRead;
+  }
   const sources = selected.flatMap((e) => e.sources);
   if (sources.length) {
     const previous = r.handoffRead;
@@ -357,10 +389,12 @@ export function workHandoff(
     hasMore: matches.length > selected.length,
     nextCursor:
       matches.length > selected.length ? selected.at(-1)?.id : undefined,
-    entries: selected.map(({ sources: originals, ...e }) => ({
-      ...e,
-      sourceIds: originals.map((s) => s.id),
-    })),
+    entries: selected.map(
+      ({ sources: originals, browserRead: _private, ...e }) => ({
+        ...e,
+        sourceIds: originals.map((s) => s.id),
+      }),
+    ),
   };
 }
 

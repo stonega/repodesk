@@ -8,6 +8,8 @@ GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/code-truth
 Cookie: repodesk_session={{session}}
 
 ### Replace revision 0 with the revision returned above
+# The repository dialog's Confirm action sends this PUT directly. Enablement
+# and repository removal also save immediately using the current revision.
 PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/code-truth
 Cookie: repodesk_session={{session}}
 Origin: {{origin}}

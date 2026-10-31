@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router";
 import type {
   CodeRepository,
@@ -34,7 +34,7 @@ const explain = (error: unknown) => {
           "The GitHub App is not configured on this deployment.",
         github_repository_not_connected:
           "Connect this repository under GitHub for the selected workspace first.",
-        code_truth_disabled: "Enable Code Truth and save before indexing.",
+        code_truth_disabled: "Enable Code Truth before indexing.",
         code_truth_no_repositories:
           "Grant a saved repository to this workspace first.",
         invalid_request:
@@ -57,14 +57,10 @@ export function CodeTruth({
 }) {
   const endpoint = `/api/admin/workspaces/${workspaceId}/plugins/code-truth`;
   const [data, setData] = useState<CodeTruthPage>();
-  const [settings, setSettings] = useState<CodeTruthSettings>({
-    enabled: false,
-    repositories: [],
-  });
   const [error, setError] = useState("");
   const notify = useToast();
   const [busy, setBusy] = useState(false);
-  const [dirty, setDirty] = useState(false);
+  const pendingSave = useRef(false);
   const [editingRepository, setEditingRepository] = useState<number | "new">();
   const [status, setStatus] = useState<CodeTruthStatus>();
   const load = useCallback(async () => {
@@ -73,8 +69,6 @@ export function CodeTruth({
     try {
       const page = await request<CodeTruthPage>(endpoint);
       setData(page);
-      setSettings(page.settings);
-      setDirty(false);
       setStatus(undefined);
     } catch (error) {
       setError(explain(error));
@@ -85,20 +79,9 @@ export function CodeTruth({
   useEffect(() => {
     void load();
   }, [load]);
-  const change = (value: CodeTruthSettings) => {
-    setSettings(value);
-    setDirty(true);
-    setStatus(undefined);
-  };
-  const update = (index: number, repo: CodeRepository) =>
-    change({
-      ...settings,
-      repositories: settings.repositories.map((r, i) =>
-        i === index ? repo : r,
-      ),
-    });
-  const save = async (value: CodeTruthSettings, preserveDraft = false) => {
-    if (!data || busy) return;
+  const save = async (value: CodeTruthSettings) => {
+    if (!data || busy || pendingSave.current) throw new Error("pending");
+    pendingSave.current = true;
     setBusy(true);
     setError("");
     try {
@@ -107,22 +90,16 @@ export function CodeTruth({
         settings: value,
       });
       setData(page);
-      if (preserveDraft) {
-        setSettings((draft) => ({ ...draft, enabled: page.settings.enabled }));
-      } else {
-        setSettings(page.settings);
-        setDirty(false);
-      }
       setStatus(undefined);
       notify(
         "Code Truth saved. These settings apply to new runs in this workspace.",
       );
-    } catch (error) {
-      setError(explain(error));
     } finally {
+      pendingSave.current = false;
       setBusy(false);
     }
   };
+  const settings = data?.settings;
   const nameForTarget = (id: string) => {
     const repo = data?.settings.repositories.find((r) => r.id === id);
     return repo ? repositoryName(repo.repositoryUrl) : "Repository";
@@ -141,7 +118,10 @@ export function CodeTruth({
             loading={!data && !error}
             disabled={busy || !data}
             onChange={(enabled) => {
-              if (data) void save({ ...data.settings, enabled }, true);
+              if (settings)
+                void save({ ...settings, enabled }).catch((error) =>
+                  setError(explain(error)),
+                );
             }}
           />
         </PluginDetailHeading>
@@ -220,96 +200,82 @@ export function CodeTruth({
         aria-label="Code Truth repositories"
         aria-busy={!data && !error}
       >
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void save(settings);
-          }}
-        >
-          <fieldset disabled={busy || !data} className="code-truth-fields">
-            <div className="plugin-card-heading">
-              <div>
-                <h2>Repositories</h2>
-                <p className="muted">
-                  Index each repository's default GitHub branch automatically.
-                </p>
-              </div>
-              <IconButton
-                icon="add"
-                label="Add repository"
-                showLabel
-                disabled={settings.repositories.length >= 12}
-                onClick={() => setEditingRepository("new")}
-              />
+        <fieldset disabled={busy || !data} className="code-truth-fields">
+          <div className="plugin-card-heading">
+            <div>
+              <h2>Repositories</h2>
+              <p className="muted">
+                Index each repository's default GitHub branch automatically.
+              </p>
             </div>
-            <p className="muted">
-              Add HTTPS GitHub repositories for this workspace. Use Manage
-              GitHub on{" "}
-              <NavLink to={`/admin/overview?workspace=${workspaceId}`}>
-                Overview
-              </NavLink>{" "}
-              to access private repositories through your GitHub App.
-            </p>
-            {!data && !error && (
-              <SkeletonRows label="Code Truth repositories" rows={2} />
-            )}
-            {data && settings.repositories.length === 0 && (
-              <p>No repositories configured.</p>
-            )}
-            {settings.repositories.length > 0 && (
-              <div className="repository-list repository-list-stacked">
-                {settings.repositories.map((repo, index) => (
-                  <RepositoryCard
-                    key={repo.id}
-                    label={`Repository ${index + 1}`}
-                    name={repositoryName(repo.repositoryUrl)}
-                    url={repo.repositoryUrl}
-                    actions={
-                      <>
-                        <IconButton
-                          icon="edit"
-                          label={`Edit repository ${index + 1}`}
-                          onClick={() => setEditingRepository(index)}
-                        />
-                        <IconButton
-                          icon="delete"
-                          label={`Remove repository ${index + 1}`}
-                          className="danger"
-                          onClick={() =>
-                            change({
-                              ...settings,
-                              repositories: settings.repositories.filter(
-                                (_, i) => i !== index,
-                              ),
-                            })
-                          }
-                        />
-                      </>
-                    }
-                  >
-                    <div className="code-truth-repository-details">
-                      {repo.description && (
-                        <p className="repository-card-note">
-                          {repo.description}
-                        </p>
-                      )}
-                      <p className="repository-card-note muted">
-                        Default GitHub branch
-                      </p>
-                    </div>
-                  </RepositoryCard>
-                ))}
-              </div>
-            )}
-            <div className="row">
-              <button type="submit" disabled={!dirty}>
-                Save Code Truth
-              </button>
+            <IconButton
+              icon="add"
+              label="Add repository"
+              showLabel
+              disabled={(settings?.repositories.length ?? 0) >= 12}
+              onClick={() => setEditingRepository("new")}
+            />
+          </div>
+          <p className="muted">
+            Add HTTPS GitHub repositories for this workspace. Use Manage GitHub
+            on{" "}
+            <NavLink to={`/admin/overview?workspace=${workspaceId}`}>
+              Overview
+            </NavLink>{" "}
+            to access private repositories through your GitHub App.
+          </p>
+          {!data && !error && (
+            <SkeletonRows label="Code Truth repositories" rows={2} />
+          )}
+          {settings?.repositories.length === 0 && (
+            <p>No repositories configured.</p>
+          )}
+          {!!settings?.repositories.length && (
+            <div className="repository-list repository-list-stacked">
+              {settings.repositories.map((repo, index) => (
+                <RepositoryCard
+                  key={repo.id}
+                  label={`Repository ${index + 1}`}
+                  name={repositoryName(repo.repositoryUrl)}
+                  url={repo.repositoryUrl}
+                  actions={
+                    <>
+                      <IconButton
+                        icon="edit"
+                        label={`Edit repository ${index + 1}`}
+                        onClick={() => setEditingRepository(index)}
+                      />
+                      <IconButton
+                        icon="delete"
+                        label={`Remove repository ${index + 1}`}
+                        className="danger"
+                        onClick={() =>
+                          void save({
+                            ...settings,
+                            repositories: settings.repositories.filter(
+                              (_, i) => i !== index,
+                            ),
+                          }).catch((error) => setError(explain(error)))
+                        }
+                      />
+                    </>
+                  }
+                >
+                  <div className="code-truth-repository-details">
+                    {repo.description && (
+                      <p className="repository-card-note">{repo.description}</p>
+                    )}
+                    <p className="repository-card-note muted">
+                      Default GitHub branch
+                    </p>
+                  </div>
+                </RepositoryCard>
+              ))}
             </div>
-          </fieldset>
-        </form>
+          )}
+        </fieldset>
       </section>
-      {editingRepository !== undefined && (
+      {editingRepository !== undefined && settings && (
         <RepositoryEditor
           initial={
             editingRepository === "new"
@@ -317,17 +283,21 @@ export function CodeTruth({
               : settings.repositories[editingRepository]
           }
           workspaceId={workspaceId}
+          busy={busy}
           existingUrls={settings.repositories
             .filter((_, i) => i !== editingRepository)
             .map((r) => r.repositoryUrl)}
           close={() => setEditingRepository(undefined)}
-          apply={(repo) => {
-            if (editingRepository === "new")
-              change({
-                ...settings,
-                repositories: [...settings.repositories, repo],
-              });
-            else update(editingRepository, repo);
+          save={async (repo) => {
+            await save({
+              ...settings,
+              repositories:
+                editingRepository === "new"
+                  ? [...settings.repositories, repo]
+                  : settings.repositories.map((saved, index) =>
+                      index === editingRepository ? repo : saved,
+                    ),
+            });
             setEditingRepository(undefined);
           }}
         />
@@ -339,15 +309,15 @@ export function CodeTruth({
           </div>
         </div>
         <p className="muted">
-          Save first, then sync and check this workspace. Indexing runs locally
-          and can take several minutes. Active configurations refresh on use at
-          most every five minutes.
+          Sync and check this workspace. Indexing runs locally and can take
+          several minutes. Active configurations refresh on use at most every
+          five minutes.
         </p>
         <div className="row">
           <button
             type="button"
             className="secondary"
-            disabled={busy || dirty || !workspaceId || !data?.settings.enabled}
+            disabled={busy || !workspaceId || !data?.settings.enabled}
             onClick={async () => {
               setBusy(true);
               setError("");
@@ -405,14 +375,16 @@ function RepositoryEditor({
   initial,
   workspaceId,
   existingUrls,
+  busy,
   close,
-  apply,
+  save,
 }: {
   initial?: CodeRepository;
   workspaceId: string;
   existingUrls: string[];
+  busy: boolean;
   close: () => void;
-  apply: (repository: CodeRepository) => void;
+  save: (repository: CodeRepository) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<CodeRepository>(() =>
     initial
@@ -433,19 +405,18 @@ function RepositoryEditor({
           : "Add repository"
       }
       onClose={close}
+      busy={busy}
     >
-      <p className="muted">
-        Apply this repository to your draft, then choose Save Code Truth to save
-        the workspace configuration.
-      </p>
       {error && (
         <p className="notice" role="alert">
           {error}
         </p>
       )}
       <form
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault();
+          if (busy) return;
+          setError("");
           const parsed = codeRepositorySchema.safeParse(draft);
           if (!parsed.success) {
             setError(
@@ -463,7 +434,11 @@ function RepositoryEditor({
             setError("This repository is already configured.");
             return;
           }
-          apply(parsed.data);
+          try {
+            await save(parsed.data);
+          } catch (error) {
+            setError(explain(error));
+          }
         }}
       >
         <label className="field">
@@ -471,6 +446,7 @@ function RepositoryEditor({
           <input
             type="url"
             required
+            disabled={busy}
             value={draft.repositoryUrl}
             placeholder="https://github.com/your-org/my-repository.git"
             onChange={(e) =>
@@ -483,6 +459,7 @@ function RepositoryEditor({
           <textarea
             rows={4}
             maxLength={2000}
+            disabled={busy}
             value={draft.description ?? ""}
             placeholder="Describe what this repository contains and when to use it."
             onChange={(e) =>
@@ -492,7 +469,9 @@ function RepositoryEditor({
           <small className="muted">Optional · up to 2,000 characters.</small>
         </label>
         <ModalActions>
-          <button type="submit">Apply repository</button>
+          <button type="submit" disabled={busy}>
+            {busy ? "Saving…" : "Confirm"}
+          </button>
         </ModalActions>
       </form>
     </Modal>

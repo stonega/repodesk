@@ -1,0 +1,30 @@
+[Unit]
+Description=RepoDesk private headed browser host
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=/etc/repodesk/browser.env
+ExecStart=/usr/bin/env node /opt/repodesk-browser/browser-host.js
+WorkingDirectory=/opt/repodesk-browser
+RuntimeDirectory=repodesk-browser
+RuntimeDirectoryMode=0750
+UMask=0077
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=45s
+KillMode=mixed
+PrivateTmp=true
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+MemoryMax=2G
+TasksMax=512
+LimitCORE=0
+
+[Install]
+WantedBy=multi-user.target

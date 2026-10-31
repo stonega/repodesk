@@ -331,6 +331,7 @@ export function codingExtension(
                 "access_denied",
                 403,
               );
+              run.browserRead ??= task.browserRead;
               return {
                 taskId: task.id,
                 state: task.state,

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { appendFile } from "node:fs/promises";
+import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
+import { browserToolDefinitions } from "../../browser/extension.ts";
 import {
   type ChannelEvent,
   type TaskMessage,
@@ -61,6 +63,23 @@ export function conversationPrompt(messages: TaskMessage[]) {
 
 /** The implementation process receives only this attempt's short-lived channel token. */
 export class JobTaskChannel {
+  private closed = new AbortController();
+  close() {
+    this.closed.abort();
+  }
+  get tools() {
+    return [
+      ...conversationTools,
+      ...(this.browserEnabled
+        ? browserToolDefinitions().map((definition) => ({
+            type: "function",
+            name: definition.name,
+            description: definition.description,
+            inputSchema: definition.parameters,
+          }))
+        : []),
+    ];
+  }
   private transcriptTail: Promise<void> = Promise.resolve();
   private transcriptFiles: Promise<void> = Promise.resolve();
   private transcriptOffline = false;
@@ -109,6 +128,7 @@ export class JobTaskChannel {
     private token: string,
     private transport: typeof fetch = fetch,
     private transcriptPath?: string,
+    readonly browserEnabled = false,
   ) {}
   private async request(path: string, body?: unknown) {
     const response = await this.transport(
@@ -121,7 +141,10 @@ export class JobTaskChannel {
         },
         body: body ? JSON.stringify(body) : undefined,
         redirect: "error",
-        signal: AbortSignal.timeout(5000),
+        signal:
+          path === "browser"
+            ? AbortSignal.any([this.closed.signal, AbortSignal.timeout(60000)])
+            : AbortSignal.timeout(5000),
       },
     );
     if (!response.ok) throw new ChannelRequestError(response.status);
@@ -190,12 +213,16 @@ export class JobTaskChannel {
         };
       return prior.result;
     }
-    const result = this.handleOnce(name, value).catch(() => ({
+    const result = (
+      name === "browser_action" || name === "browser_session"
+        ? this.browser(callId, name, value)
+        : this.handleOnce(name, value)
+    ).catch(() => ({
       success: false,
       contentItems: [
         {
           type: "inputText",
-          text: "Conversation update could not be confirmed. Do not invent delivery or an answer.",
+          text: "Tool outcome could not be confirmed. Do not repeat an uncertain browser action or invent delivery, input completion or an answer.",
         },
       ],
     }));
@@ -203,6 +230,35 @@ export class JobTaskChannel {
       this.calls.delete(this.calls.keys().next().value ?? "");
     this.calls.set(callId, { fingerprint, result });
     return result;
+  }
+  private async browser(
+    callId: string,
+    tool: "browser_action" | "browser_session",
+    input: unknown,
+  ) {
+    if (!this.browserEnabled) throw Error("Browser unavailable");
+    const deadline = Date.now() + 10 * 60_000 + 15000;
+    let result = (await this.request("browser", {
+      command: "invoke",
+      callId,
+      tool,
+      input,
+    })) as { status: string; requestId?: string };
+    while (
+      result.status === "waiting" &&
+      result.requestId &&
+      Date.now() < deadline
+    ) {
+      await delay(1000, undefined, { signal: this.closed.signal });
+      result = (await this.request("browser", {
+        command: "poll",
+        id: result.requestId,
+      })) as typeof result;
+    }
+    return {
+      success: result.status !== "unavailable" && result.status !== "waiting",
+      contentItems: [{ type: "inputText", text: JSON.stringify(result) }],
+    };
   }
   private async handleOnce(name: string, value: unknown) {
     if (name === "repodesk_task_progress") {

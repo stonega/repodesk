@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto";
+import {
+  browserPrivateGrants,
+  browserStampAllowed,
+} from "../browser/privacy.ts";
 import { checkCloudflareApproval } from "../cloudflare/service.ts";
 import {
   type Approval,
@@ -176,6 +180,20 @@ export function decide(
     requireThat(approval && approval.actor === actor, "approval_denied", 403);
   }
   requireThat(!approval.decision, "approval_consumed", 409);
+  const privateRun = approval.runId
+    ? w.runs.find((r) => r.id === approval.runId)
+    : undefined;
+  const privateStamp =
+    approval.browserRead ??
+    (privateRun ? browserPrivateGrants(w, privateRun)[0] : undefined);
+  requireThat(
+    !privateStamp ||
+      (!manager &&
+        actor === privateStamp.owner &&
+        browserStampAllowed(w, privateStamp)),
+    "approval_denied",
+    403,
+  );
   requireThat(
     Date.parse(approval.expiresAt) > now.getTime(),
     "approval_expired",

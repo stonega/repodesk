@@ -2,6 +2,7 @@ import { posix } from "node:path";
 import { z } from "zod";
 import { operator } from "../admin/auth.ts";
 import type { PluginRecord } from "../agent/plugin-config.ts";
+import { browserRunPrivate } from "../browser/privacy.ts";
 import type { Store } from "../db/repositories.ts";
 import {
   type Admin,
@@ -306,7 +307,11 @@ export class ObsidianService {
         403,
       );
       if (action === "write")
-        requireThat(!run.workflowId, "access_denied", 403);
+        requireThat(
+          !run.workflowId && !browserRunPrivate(w, run),
+          "access_denied",
+          403,
+        );
       run.obsidianRead = { generation };
       if (action === "write")
         return mutateVault(w, actor, value, `${runId}:${callId}`);

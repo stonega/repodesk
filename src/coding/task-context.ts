@@ -88,6 +88,7 @@ export async function codingTaskContext(
     )
       continue;
     for (const original of originals) sourceIds.add(original.id);
+    run.browserRead ??= task.browserRead;
     repositoryIds.add(task.payload.repositoryId);
     snapshots.push({
       taskId: task.id,

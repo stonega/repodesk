@@ -1,6 +1,7 @@
 import { serve } from "@hono/node-server";
 import { PluginService } from "./agent/plugin-service.ts";
 import { createApp } from "./app.ts";
+import { browserRuntime } from "./browser/runtime.ts";
 import { CloudflareService } from "./cloudflare/service.ts";
 import { CodeTruthClient } from "./code-truth/client.ts";
 import { LocalRunnerClient } from "./coding/local/client.ts";
@@ -20,7 +21,7 @@ import { ReleaseUpdates } from "./updates/releases.ts";
 const cfg = config();
 const pool = database(cfg.DATABASE_URL);
 const log = new RuntimeLogger(pool, "app");
-const store = new Store(pool, log);
+const store = new Store(pool, log, cfg.ENCRYPTION_KEY);
 const google = new GoogleService(store, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN);
 const githubApp = new GitHubApps(
   store,
@@ -52,6 +53,8 @@ const app = createApp(
     ),
     new SearchConsoleService(store, cfg.ENCRYPTION_KEY, undefined, google),
     google,
+    undefined,
+    browserRuntime(store, cfg.ENCRYPTION_KEY, cfg),
   ),
   new GitHubService(store, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN, githubApp),
   cfg.ENCRYPTION_KEY,

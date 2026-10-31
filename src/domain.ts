@@ -213,6 +213,8 @@ export interface Chat {
   visibleAll: boolean;
 }
 export interface ConversationThread {
+  browserRead?: BrowserReadStamp;
+  browserSealed?: string;
   kind?: "group";
   participants?: string[];
   id: string;
@@ -253,6 +255,8 @@ export interface Attachment {
   size?: number;
 }
 export interface Source {
+  browserSealed?: string;
+  browserRead?: BrowserReadStamp;
   attachments?: Attachment[];
   forwarded?: boolean;
   threadId?: string;
@@ -321,6 +325,8 @@ export interface Workflow {
   reason?: string;
 }
 export interface Approval {
+  browserRead?: BrowserReadStamp;
+  browserSealed?: string;
   runId?: string;
   id: string;
   actor: string;
@@ -357,7 +363,23 @@ export interface Approval {
     error?: string;
   };
 }
+export interface BrowserReadStamp {
+  owner: string;
+  generation: number;
+  epoch: number;
+  botId: string;
+}
 export interface Run {
+  browserSealed?: string;
+  browserRead?: BrowserReadStamp;
+  browserWait?: {
+    toolName?: string;
+    id: string;
+    kind: "site" | "action" | "input" | "control";
+    callId: string;
+    expiresAt: number;
+  };
+  browserResumed?: string[];
   obsidianRead?: { generation: number };
   searchProvider?: SearchPin;
   memoryContext?: MemoryContext;
@@ -478,6 +500,9 @@ export interface Run {
   error?: string;
 }
 export interface Delivery {
+  browserRequest?: { id: string; expiresAt: number; taskId?: string };
+  browserRead?: BrowserReadStamp;
+  browserSealed?: string;
   /** Sets the bot's reaction on a retained user message; creates no message. */
   reaction?: { sourceId: string; messageId: number; emoji: string };
   googleControl?: {
@@ -542,6 +567,8 @@ export interface Audit {
   version?: number;
 }
 export interface Workspace {
+  /** Revocation counters only. Personal sites, credentials and grants live separately. */
+  browserEpochs?: Record<string, number>;
   obsidian?: import("./obsidian/config.ts").VaultState;
   googleUsers?: Record<string, GoogleUser>;
   /** Panel diagnostics accounting only; conversation text is not persisted here. */

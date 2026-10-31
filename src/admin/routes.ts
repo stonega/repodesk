@@ -5,6 +5,11 @@ import { z } from "zod";
 import { credentialsSchema } from "../agent/model-settings.ts";
 import type { PluginService } from "../agent/plugin-service.ts";
 import { modelCapabilities } from "../agent/runtime.ts";
+import {
+  browserPanelRun,
+  browserPanelTask,
+  browserRunPrivate,
+} from "../browser/privacy.ts";
 import { cloudflareStateWorkspace } from "../cloudflare/oauth.ts";
 import type { LocalDeviceAuth } from "../coding/local/protocol.ts";
 import { codingView, saveCoding } from "../coding/service.ts";
@@ -596,7 +601,7 @@ export function adminRoutes(
     );
     const page = codingView(workspace, c.get("session").admin);
     page.repositoryRefreshError = refreshError;
-    page.tasks = await taskList(store.pool, id);
+    page.tasks = (await taskList(store.pool, id)).map(browserPanelTask);
     if (deviceAuth)
       try {
         page.deviceAuth = await deviceAuth.deviceStatus(id);
@@ -615,7 +620,7 @@ export function adminRoutes(
         await setup.models.selected(w, page.settings.model);
       return page;
     });
-    page.tasks = await taskList(store.pool, id);
+    page.tasks = (await taskList(store.pool, id)).map(browserPanelTask);
     if (deviceAuth)
       try {
         page.deviceAuth = await deviceAuth.deviceStatus(id);
@@ -663,7 +668,7 @@ export function adminRoutes(
         return codingView(w, c.get("session").admin);
       });
       page.deviceAuth = status;
-      page.tasks = await taskList(store.pool, id);
+      page.tasks = (await taskList(store.pool, id)).map(browserPanelTask);
       return c.json(page);
     },
   );
@@ -867,6 +872,23 @@ export function adminRoutes(
       ),
     );
   });
+  app.get("/api/admin/workspaces/:id/plugins/browser", async (c) =>
+    c.json(
+      await plugins.browser.view(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+      ),
+    ),
+  );
+  app.put("/api/admin/workspaces/:id/plugins/browser", async (c) =>
+    c.json(
+      await plugins.configureBrowser(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+        await c.req.json(),
+      ),
+    ),
+  );
   app.get("/api/admin/workspaces/:id/plugins/transcription", async (c) =>
     c.json(
       await plugins.transcription.view(
@@ -1212,7 +1234,15 @@ export function adminRoutes(
           take(
             w.approvals.filter(
               (a) =>
-                (a.kind === "workflow" || a.actor === actor) && !a.decision,
+                !a.browserRead &&
+                !(
+                  a.runId &&
+                  w.runs.some(
+                    (r) => r.id === a.runId && browserRunPrivate(w, r),
+                  )
+                ) &&
+                (a.kind === "workflow" || a.actor === actor) &&
+                !a.decision,
             ),
           ),
         );
@@ -1551,8 +1581,22 @@ export function adminRoutes(
       .strict()
       .parse(await c.req.json());
     return c.json(
-      await change(c, (w, actor) =>
-        decide(
+      await change(c, (w, actor) => {
+        const approval = w.approvals.find(
+          (a) => a.id === c.req.param("approval"),
+        );
+        requireThat(
+          !approval?.browserRead &&
+            !(
+              approval?.runId &&
+              w.runs.some(
+                (r) => r.id === approval.runId && browserRunPrivate(w, r),
+              )
+            ),
+          "approval_denied",
+          403,
+        );
+        return decide(
           w,
           actor,
           c.req.param("approval"),
@@ -1562,8 +1606,8 @@ export function adminRoutes(
             "workflow"
             ? actor
             : undefined,
-        ),
-      ),
+        );
+      }),
     );
   });
   app.post("/api/admin/workspaces/:id/instructions", async (c) => {
@@ -1778,10 +1822,12 @@ export function adminRoutes(
       mode: actor === w.operatorId ? "operator" : "member",
       threadId: runThreadKey(w, run),
       run: {
-        ...run,
-        deliveries: w.deliveries.filter(
-          (d) => d.runId === run.id || d.cancellationRunId === run.id,
-        ),
+        ...browserPanelRun(w, run),
+        deliveries: browserRunPrivate(w, run)
+          ? []
+          : w.deliveries.filter(
+              (d) => d.runId === run.id || d.cancellationRunId === run.id,
+            ),
       },
     });
   });
@@ -1805,8 +1851,11 @@ export function adminRoutes(
   });
   app.post("/api/admin/workspaces/:id/runs/:run/cancel", async (c) =>
     c.json(
-      await change(c, (w, actor, sql) =>
-        cancelRequest(sql, w, actor, c.req.param("run")),
+      await change(c, async (w, actor, sql) =>
+        browserPanelRun(
+          w,
+          await cancelRequest(sql, w, actor, c.req.param("run")),
+        ),
       ),
     ),
   );
@@ -1821,6 +1870,11 @@ export function adminRoutes(
           r && ["failed", "cancelled", "partial"].includes(r.status),
           "run_not_retryable",
           409,
+        );
+        requireThat(
+          !browserRunPrivate(w, r),
+          "browser_private_task_required",
+          403,
         );
         return createRun(w, actor, r.task, r.chatId, r.topicId, d.model, {
           workflowId: r.workflowId,

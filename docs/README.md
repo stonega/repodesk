@@ -38,6 +38,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [First-run setup](design/first-run-setup.md) | Initial admin creation, bot onboarding, secrets and activation |
 | [LLM extensions / plugins](design/llm-extensions.md) | Existing Pi extension loading, headless compatibility, grants and recovery |
 | [Obsidian organization notes](implementation/obsidian.md) | Default-enabled managed vault, native note formats, shared access and import/export |
+| [Shared host browser](implementation/browser.md) | Default-enabled Browser plugin, private headed sessions, shared consumers and secure input |
 | [Built-in web reader](implementation/web-reader.md) | Defuddle Markdown extraction, public network boundaries and durable reads |
 | [Google Search Console](implementation/search-console.md) | Personal Google connections and property selections, read-only search analytics, sitemaps and URL inspection |
 | [Google plugin](implementation/google-workspace.md) | Shared Web application, Telegram account connection and enablement for Docs, Sheets, Drive, Gmail and Search Console |

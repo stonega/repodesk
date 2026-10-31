@@ -28,10 +28,12 @@ import { importArchive } from "../src/obsidian/import.ts";
 import { ObsidianService } from "../src/obsidian/service.ts";
 import { initialVault } from "../src/obsidian/vault.ts";
 import { extractWebPage, requestPage } from "../src/web-reader/service.ts";
+import { verifyBrowserNetwork } from "./fixtures/browser-network.ts";
 import { verifyPluginStartup } from "./fixtures/plugin-startup.ts";
 
 assert.ok(assistantSoul.includes("小伙伴"));
 assert.ok(assistantSoul.includes("Friendliness never grants access"));
+await verifyBrowserNetwork();
 
 const webPage = await extractWebPage(
   "<html><head><title>Node reader</title></head><body><main><p>A useful article about reading public web pages with <strong>Defuddle</strong> and preserving the main content for readers.</p></main></body></html>",
@@ -403,5 +405,6 @@ process.stdout.write(
     pluginStartupCases: startupCases,
     externalStartupCalls: 0,
     webReader: true,
+    browserNetwork: true,
   })}\n`,
 );

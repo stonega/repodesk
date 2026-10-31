@@ -418,9 +418,11 @@ saves preserve entered values and show errors inside the dialog; saves in progre
 disable dismissal and repeated submission. Dialogs scroll within a mobile viewport.
 Primary and Cancel buttons share one action row, with Cancel immediately after
 the primary action in visual and keyboard order. Narrow layouts wrap in that order.
-Repository and network dialogs apply to a local Code Truth draft; **Save Code Truth**
-still persists the configuration. Creating workflows/instructions still produces
-an approval proposal, and creating a GitHub App still requires GitHub confirmation.
+Code Truth repository dialogs save through **Confirm**, close after success and
+retain entered values with an in-dialog error on failure. Repository removal saves
+immediately and retains the saved card on failure. Creating workflows/instructions
+still produces an approval proposal, and creating a GitHub App still requires
+GitHub confirmation.
 
 Test unauthorized/expired sessions, role downgrades, forged workspace IDs, cross-tenant
 reads, stale saves, credential redaction and CSRF. Test admin scheduling and Telegram
@@ -512,8 +514,252 @@ no registration. See [VPS deployment](../implementation/vps-deployment.md#custom
 Installed plugin pages use a shared title row with an Enable switch at the right,
 compact configuration summaries, and separate repository and operational cards
 where applicable. The switch saves independently with the current revision and
-shows failures without changing the saved state. Code Truth repository edits
-remain a local draft until **Save Code Truth**; toggling enablement preserves
-that draft and saves only the previously saved repositories. Codex configuration
-uses one primary **Save configuration** action; sign-in, disconnect and connection
+shows failures without changing the saved state. Code Truth repository dialogs
+persist New/Edit through **Confirm**; there is no page-level save step. Toggling
+enablement preserves saved repositories. Codex configuration uses one primary
+**Save configuration** action; sign-in, disconnect and connection
 recheck actions use secondary buttons.
+
+## Host browser and secure input (proposed, 2026-10-30)
+
+This section records a design discussion, not implemented behavior or a deployment
+change. The accepted requirements are a dedicated persistent browser on the VPS,
+normal headed operation, a default-enabled built-in Browser plugin usable by the
+chat bot, the Codex plugin and other plugins, strictly separate browser identities
+for different users, and one shared page for passwords and comparable task inputs.
+Prior manual browser login is not a
+prerequisite. See the
+[secure input](ui-rules.md#browser-tasks-share-one-secure-input-page) and
+[headed browser](ui-rules.md#vps-browser-tasks-use-a-headed-browser) preferences,
+and the [user-isolation requirement](ui-rules.md#browser-profiles-and-login-state-are-private-to-each-user).
+
+### Default-enabled built-in plugin
+
+Expose the shared capability as a bundled Browser plugin, enabled by default for
+new and existing workspaces without an explicit saved choice. Preserve explicit
+disablement across upgrades. Use the existing plugin catalog/detail conventions,
+including a saved summary and an independent title-row Enable switch. Keep the
+plugin a facade over the shared browser service rather than starting separate
+browser infrastructure for each consuming plugin.
+
+Saved enablement, host-service readiness and personal profile/authentication state
+are distinct. The host service belongs to deployment provisioning; ordinary chat
+or plugin registration must never install software or start an interactive login.
+Resolve service readiness, current actor grants and credentials only during the
+requested operation. Start a user's headed browser lazily when needed, with idle
+shutdown that preserves the private profile under the chosen retention policy.
+Browser unavailability must not block greetings or unrelated plugins. Extend the
+combined production startup fixture and exact-image runtime contract accordingly.
+
+Default enablement does not grant unrestricted browser access to every plugin.
+Each chat/Codex/plugin adapter still needs the appropriate current user, workspace,
+consumer, site and task authority. Website writes retain their action approval
+rules. Disabling Browser must prevent new automation across all consumers and
+fence/cancel active control where possible; it cannot undo an already dispatched
+external action. Preserve login/profile data until the owner explicitly logs out,
+deletes it or its retention expires. Keep authorized cleanup available while
+automation is disabled.
+
+### Candidate deployment and user flow
+
+Retain the Docker application and database. A host-managed browser service owns
+the normal browser process, its display and private profile. On a VPS without a
+physical display, a virtual display can support headed execution. A protected
+browser-viewing page may expose the same live session for inspection or optional
+manual takeover; neither prior remote-desktop login nor a headless fallback is
+part of the proposed default flow. Browser automation, display and viewing
+technologies remain implementation choices. The browser is an application-owned
+host capability; individual consumer plugins do not own its process or profile.
+
+### Private browser identity per user
+
+Browser profiles are scoped by workspace, stable verified actor ID and profile
+ID. Display names, usernames, plugin names and model-supplied actor parameters
+cannot establish ownership. The application binds every consumer request to the
+actual initiating user; a Codex task or plugin acts for that same user. A user in
+another workspace receives an independent browser identity. Unbound tasks must
+fail closed rather than use a default logged-in profile.
+
+Keep cookies, site storage, authentication state, saved credentials, tabs, browser
+history, screenshots and downloads private to that owner and tenant. The proposed
+baseline uses separate headed browser processes and private user-data directories
+per owner/workspace profile. Display and remote-viewing isolation must prevent one
+user seeing another user's browser windows; a shared virtual desktop stream is
+not an acceptable substitute for that separation. Apply equivalent ownership
+checks to artifact retrieval and browser-management/discovery endpoints.
+
+The shared interaction page lists only the current user's authorized profiles,
+tasks and sensitive-input requests. It must not expose another user's account
+labels or session state. Workspace owner/admin status alone does not authorize
+viewing, controlling or using another user's browser identity. Service health and
+operator lifecycle controls do not grant access to private sessions or credentials.
+These are application access requirements; isolation from trusted host operators
+requires a separately defined infrastructure threat model.
+
+Cross-user handoff, profile sharing and copied login state are outside this
+feature. The same user's authorized chat and plugin tasks can reuse their profile;
+sharing the browser service never changes its owner.
+
+### Shared service and session handoff
+
+Chat tools, Codex tasks and other approved plugins call one browser service
+through adapters appropriate to their runtime. Viewing and secure input use the
+same service and session identity. Within the same user and workspace, a consumer
+may hand an authorized session to another consumer so the receiving task can
+continue with its tabs, current page, login state and download references.
+Installing a separate browser or performing a separate login for each consumer
+of the same user's profile is not the intended interaction.
+
+Sharing the service does not imply a deployment-global logged-in profile. Profiles
+and sessions have explicit actor/workspace ownership. A handoff resolves current
+authorization for the destination consumer and task, including source/destination
+and plugin grants; a session identifier locates state but grants no access. One
+consumer's grant or previous login does not authorize another consumer, actor or
+workspace. Handoffs cannot cross user or workspace ownership even when the
+destination user is an administrator. Personal session state must not leak into a
+group-facing task.
+
+Use a bounded control lease to serialize operations on the shared mutable session,
+including related tabs. The holder is a specific run/attempt with an execution
+fence, not merely a plugin name. Other consumers wait or receive an explicit
+handoff; optional human takeover pauses automation before taking control. Show the
+current controller and waiting/input state on the shared interaction page. Reject
+stale-controller commands after cancellation, expiry, revocation or handoff; do not
+blindly replay an ambiguous external write after recovery. Independent owned
+sessions may run concurrently under separate leases and resource limits.
+
+Consumers receive task-scoped browser operations and sanitized results rather than
+an unrestricted browser-management or credential-export connection. The broker
+checks current grants, allowed destinations and permitted operations at dispatch.
+Use bounded service-to-service authority without exposing management tokens or
+raw debugging endpoints to models or repository code. Exact adapter transports
+remain an implementation decision; chat and Codex need not use the same transport
+to share the same session and policy service.
+
+Keep existing extension contracts: trusted file extensions remain reviewed
+in-process modules, not a security sandbox. This proposal does not grant them
+ambient host access or browser writes. New capabilities must be explicitly added
+through application services and current grants; external effects retain existing
+approval, cancellation and recovery checks. Built-in registration must remain
+local and perform no browser startup, credential lookup or optional HTTP calls;
+extend the production startup fixture when implementing the integration.
+
+### Shared secure input and continuation
+
+When a task needs sensitive input, persist a bounded waiting request and pause
+the relevant task. Link to the shared input page with a nonsensitive request
+identifier. The page authenticates the user and shows the task, verified target
+site, requested fields and request status. The link itself grants no access.
+Submission is bound to the actor, tenant, task, browser session, target origin
+and request generation. Recheck current authorization, cancellation and expiry
+before applying it. Duplicate submissions must not repeat an external action.
+Record the originating consumer and its durable task/attempt so completion resumes
+that authorized workflow, rather than always starting a new chat run. A handoff
+must invalidate or explicitly rebind outstanding input requests; a late submission
+must not fill credentials into a different consumer's active page.
+
+A trusted executor fills the authorized browser fields and reports only sanitized
+status to the agent. Page content may indicate an authentication requirement but
+cannot grant credential access or choose an arbitrary credential destination.
+Cross-origin navigation requires an explicit allowed authentication destination;
+the model must not select where a secret is sent. Filling credentials does not
+authorize unrelated website changes or other external writes.
+
+Do not expose raw inputs through model messages, arbitrary DOM/script tools,
+screenshots, traces, logs or response payloads. Observation must pause or be
+redacted while sensitive values are present; password masking alone does not
+protect values from DOM access, one-time-code fields or page echoes. Keep
+credentials out of persistent client-side storage, and never put
+secrets in URLs. Restrict browser control and live viewing to the same authorized
+identity and scope; workspace membership alone does not share a personal session.
+
+### Further product and operational decisions (proposed)
+
+The following are recommendations and unresolved design work, not additional
+user-approved features or changes to existing permissions.
+
+**Private outputs and existing run history.** Existing panel policy permits
+deployment operators and eligible workspace admins to inspect retained run
+content. Browser isolation alone does not keep page extracts or screenshots
+private after they enter ordinary run messages, tool receipts or artifacts.
+Define private browser-result storage and authorized references, along with
+history redaction and delivery rules, before adding private-site data to runs.
+Do not silently change existing history access or send private browser results
+into a group. Scheduled execution needs the recorded owner's current authority,
+and browser login does not grant a new output destination.
+
+**Host and plugin boundaries.** Separate profiles/processes provide distinct
+browser identities, but do not by themselves isolate filesystem access from
+other processes under the same Unix account. Define and test the operating-system
+identity, directory permissions, display/desktop session and browser sandbox
+boundary. Validate that graphical session services do not connect one user's
+browser to another user's display. Browser-management/debugging and remote-viewing
+endpoints must not be publicly accessible without the application authorization
+layer. A new plugin receives explicit browser operations and site/task scope;
+the same owning user does not automatically authorize all plugins for every
+logged-in site. See Chromium's
+[user-data-directory constraints](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/user_data_dir.md).
+
+**Network and file access.** A host browser can reach resources relevant to local
+projects. Decide which project preview ports and directories may be exposed to a
+task while protecting host management endpoints, cloud metadata, unrelated files
+and private services. Apply policy to redirects, page-initiated requests, uploads,
+downloads and file chooser operations, not only the initial navigation command.
+Pages and repository text remain untrusted data and cannot expand these grants.
+
+**Authentication lifecycle.** Persisted browser state contains authentication
+material and expires; retaining a profile does not guarantee an indefinitely
+valid login. Define reauthentication, user-requested logout, profile deletion,
+membership revocation and backup expiry independently. Protect browser profiles
+and backups as credentials, including required decryption/keyring material.
+Separate password retention from browser-session retention. A password/code form
+cannot complete every QR, approval, security-key or interactive authentication
+challenge; keep the optional protected takeover path and report waiting states
+truthfully. See [Playwright authentication guidance](https://playwright.dev/docs/auth).
+
+**Recovery and resource use.** Distinguish retained authentication/profile data
+from recoverable live pages and task state. Browser crashes, host restart and
+service upgrades must not blindly repeat navigation with side effects or
+resubmit forms. Define bounded waiting/input expiry, ownership-preserving
+recovery, per-owner process/tab/download limits, idle shutdown and disk cleanup.
+Keep ordinary chat independent of browser availability. Browser updates need a
+tested drain/backup/recovery path; application image rollback must not assume an
+older browser can safely reuse a profile changed by a newer version.
+
+A candidate first release is private-chat tasks, one persistent profile per user
+and workspace, one controller per profile, request-only password/code handling,
+optional protected takeover and private result delivery. Reusable password
+storage, additional profiles and unattended scheduled browser work remain
+separate decisions; this candidate scope does not override accepted requirements.
+
+### Open decisions and acceptance gates
+
+- Decide whether initial support consumes inputs only for the current request or
+  also offers explicitly saved reusable credentials. Any temporary retention
+  needs an expiry and cleanup contract; reusable values need encrypted storage,
+  write-only responses, rotation and revocation. Never persist a one-time code
+  as a reusable credential.
+- Define member authentication and task continuation without requiring an admin
+  role or treating an unlinked deployment operator as the requesting actor.
+- Define profile lifecycle, filesystem/display isolation and retention while
+  preserving the required user/workspace boundary. Decide whether one user may
+  create multiple profiles; cross-user login-state sharing is not an open option.
+- Test two users in the same workspace and users across workspaces against
+  profile discovery, session/control handoff, secure-input submission, live
+  viewing, screenshots, downloads and restore after restart. Include copied links,
+  guessed IDs, actor substitution, administrator roles, revocation and missing
+  actor context; deny access without returning the other user's data.
+- Verify chat-to-Codex and plugin-to-plugin continuation of the same authorized
+  browser session, single-controller enforcement, queued/cancelled handoffs,
+  revoked grants, unavailable services and lease recovery after process restart.
+- Specify what the unified form can complete and what requires a supported
+  provider flow or optional browser takeover. Do not promise automatic completion
+  of arbitrary website authentication challenges.
+- Implement deterministic production-path authorization, secret-redaction,
+  duplicate-submission, cancellation, expiry and restart-recovery regressions.
+  Verify headed execution and inspect the display/input flow at desktop/mobile
+  widths in both themes, including waiting, pending, error and terminal states.
+
+The shared input page, browser control and host services described here have not
+been implemented or visually verified. Existing credential screens and release
+behavior remain described by their implemented sections above.

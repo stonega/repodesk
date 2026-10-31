@@ -19,6 +19,7 @@
         "marked": "18.0.13",
         "pg": "8.20.0",
         "pg-boss": "12.33.1",
+        "playwright-core": "1.63.0",
         "react": "19.2.4",
         "react-dom": "19.2.4",
         "react-router": "7.13.1",

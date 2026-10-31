@@ -1,3 +1,7 @@
+import {
+  browserDeliveryAllowed,
+  browserReadAllowed,
+} from "../browser/privacy.ts";
 import { taskGet } from "../coding/task-store.ts";
 import { checkDevelopment } from "../coding/tasks.ts";
 import type { Sql } from "../db/pool.ts";
@@ -48,6 +52,41 @@ export class DeliveryWorker {
     d: Delivery,
     sql: Sql = this.store.pool,
   ) {
+    if (d.browserRequest?.taskId) {
+      try {
+        const task = await taskGet(sql, w.id, d.browserRequest.taskId);
+        if (
+          task.cancelRequested ||
+          task.state !== "working" ||
+          task.actor !== d.actor ||
+          task.chatId !== d.chatId ||
+          task.browserWait?.id !== d.browserRequest.id ||
+          d.browserRequest.expiresAt <= Date.now()
+        )
+          return false;
+      } catch {
+        return false;
+      }
+    } else if (
+      d.browserRequest &&
+      (!d.runId ||
+        d.browserRequest.expiresAt <= Date.now() ||
+        !w.runs.some(
+          (run) =>
+            run.id === d.runId &&
+            run.browserWait?.id === d.browserRequest?.id &&
+            run.actor === d.actor &&
+            run.chatId === d.chatId &&
+            !run.cancelled &&
+            ["running", "awaiting_approval"].includes(run.status),
+        ))
+    )
+      return false;
+    if (
+      d.browserRead &&
+      !browserDeliveryAllowed(w, d, (await this.store.deployment(sql)).bot?.id)
+    )
+      return false;
     if (d.reaction) {
       const deployment = await this.store.deployment(sql);
       if (
@@ -67,7 +106,8 @@ export class DeliveryWorker {
       const botId = (await this.store.deployment(sql)).bot?.id;
       if (
         run &&
-        (!googleReadAllowed(w, run, botId) ||
+        (!browserReadAllowed(w, run, botId) ||
+          !googleReadAllowed(w, run, botId) ||
           !searchConsoleReadAllowed(w, run, botId))
       )
         return false;
@@ -85,10 +125,8 @@ export class DeliveryWorker {
         return false;
       if (d.id.endsWith(":requested") && r.stopConfirmed) return false;
     }
-    if (d.feedback?.owner === "run")
-      return w.runs.some(
-        (r) => r.id === d.feedback?.id && r.status === "queued" && !r.cancelled,
-      );
+    // Old queued chat notices must also stay silent after an upgrade.
+    if (d.feedback?.owner === "run") return false;
     if (d.feedback?.owner === "development") {
       try {
         const t = await taskGet(sql, w.id, d.feedback.id);
@@ -112,6 +150,18 @@ export class DeliveryWorker {
     const intent = await this.store.change(workspaceId, async (w, sql) => {
       const d = w.deliveries.find((d) => d.id === id);
       if (!d || !["pending", "sending"].includes(d.state)) return;
+      if (
+        d.state === "pending" &&
+        d.browserRequest &&
+        !d.browserRequest.taskId &&
+        w.runs.some(
+          (run) =>
+            run.id === d.runId &&
+            run.browserWait?.id === d.browserRequest?.id &&
+            run.status === "running",
+        )
+      )
+        return;
       if (d.state === "sending") {
         if (Date.parse(d.startedAt ?? "") + 30000 < Date.now()) {
           // Edits and setting the same reaction can be replayed after a worker crash.

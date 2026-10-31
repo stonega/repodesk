@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { PgBoss } from "pg-boss";
 import type { AgentRunner, RunnerProvider } from "../agent/runtime.ts";
+import type { BrowserService } from "../browser/service.ts";
 import type { CloudflareService } from "../cloudflare/service.ts";
 import type { CodingService } from "../coding/service.ts";
 import { pruneDevelopment } from "../coding/tasks.ts";
@@ -18,7 +19,6 @@ import type { ReviewExecutor } from "../review-bot/executor.ts";
 import type { SearchConsoleService } from "../search-console/service.ts";
 import type { SetupService } from "../setup/service.ts";
 import { TelegramCommandMenu } from "../telegram/commands.ts";
-import { queuedRunFeedback } from "../telegram/feedback.ts";
 import { TelegramPoller } from "../telegram/polling.ts";
 import { TranscriptionService } from "../transcription/service.ts";
 import { tick } from "../workflows/service.ts";
@@ -86,6 +86,7 @@ export async function startWorker(
   google?: GoogleService,
   searchConsole?: SearchConsoleService,
   transcription = new TranscriptionService(store),
+  browser?: BrowserService,
 ) {
   const boss = queue(url, store.log);
   await boss.start();
@@ -169,12 +170,12 @@ export async function startWorker(
           }
           if (d.active && !d.paused) {
             tick(w, d.model);
-            queuedRunFeedback(w);
           }
         });
         // Durable rate-limit retries and ambiguous-send detection do not rely on queue retry timing.
         const current = await store.read(workspaceId);
         await transcription.reconcile(current);
+        browser?.maintain(workspaceId, shutdown.signal);
         if (
           coding &&
           current.deletion &&
@@ -355,6 +356,7 @@ export async function startWorker(
     await reviewBusy;
     await Promise.all([polling, boss.stop({ graceful: true, timeout: 10000 })]);
     await Promise.all([codingBusy, githubBusy, menuBusy, memoryBusy]);
+    await browser?.drain();
     while (busy) await new Promise((resolve) => setTimeout(resolve, 25));
     await store.pool.query("DELETE FROM worker_heartbeats WHERE id=$1", [id]);
   };

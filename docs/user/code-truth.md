@@ -57,7 +57,8 @@ Compose 会把该文件提供给 app/worker 和 Code Truth；这套手动配置�
 2. 打开 **Workspace → Plugins → Code Truth → Add repository**。
 3. 输入标准 HTTPS GitHub URL，例如 `https://github.com/example/app.git`。
 4. 可选填写仓库用途说明，帮助机器人判断何时查询该仓库。
-5. 启用 Code Truth 并保存。
+5. Click **Confirm** to save the repository, then enable Code Truth. Both actions
+   save immediately.
 6. 展开 **Repository indexing status**，点击 **Sync & check indexes**；索引完成后再次检查。
 
 仓库内部 ID 自动生成，分支跟随 GitHub 当前默认分支，无需手动设置网络或分支。就绪状态显示实际分支、commit SHA 和索引时间。每个工作区最多配置十二个不同仓库，其他工作区独立管理。

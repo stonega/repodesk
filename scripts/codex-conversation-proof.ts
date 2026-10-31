@@ -17,6 +17,11 @@ import {
 } from "../src/coding/local/mailbox.ts";
 
 const exec = promisify(execFile);
+const browserProof = process.env.CODEX_BROWSER_PROOF === "1";
+const browserRequestId = randomUUID();
+let browserInvocations = 0,
+  browserPolls = 0,
+  browserToolsSeen = false;
 const root = await mkdtemp(join(tmpdir(), "repodesk-channel-proof-"));
 const first = {
   id: randomUUID(),
@@ -40,26 +45,43 @@ const server = Bun.serve({
     if (path.startsWith("/conversation/")) {
       if (request.headers.get("authorization") !== "Bearer proof-task-channel")
         return new Response(null, { status: 401 });
+      if (path.endsWith("/browser")) {
+        const call = await request.json();
+        if (call.command === "poll") {
+          browserPolls++;
+          return Response.json({ status: "completed" });
+        }
+        browserInvocations++;
+        return Response.json(
+          call.input?.action === "navigate"
+            ? { status: "waiting", requestId: browserRequestId }
+            : { status: "completed", text: "private-browser-protocol-fixture" },
+        );
+      }
       if (path.endsWith("/inbox"))
         return Response.json(
           mailbox.messages
             .filter((m) => m.state === "queued")
             .map(({ id, question }) => ({ id, question })),
         );
-      applyChannelEvent(mailbox, channelEvent.parse(await request.json()));
+      const event = await request.json();
+      if (event.action !== "transcript")
+        applyChannelEvent(mailbox, channelEvent.parse(event));
       return Response.json({ ok: true });
     }
     if (!path.endsWith("/responses"))
       return new Response(null, { status: 404 });
     const body = await request.json();
     calls++;
-    if (calls > 12) return new Response(null, { status: 400 });
+    if (calls > 16) return new Response(null, { status: 400 });
     const names = (body.tools ?? [])
       .flatMap((t: { name?: string; tools?: { name: string }[] }) => [
         t.name,
         ...(t.tools ?? []).map((n) => n.name),
       ])
       .filter(Boolean);
+    browserToolsSeen ||=
+      names.includes("browser_action") && names.includes("browser_session");
     toolsSeen ||= names.some((name: string) =>
       name.includes("repodesk_task_reply"),
     );
@@ -69,7 +91,7 @@ const server = Bun.serve({
     }
     if (calls >= 5)
       liveInputSeen ||= JSON.stringify(body.input).includes(late.id);
-    const selected =
+    const originalSelected =
       calls === 1
         ? { name: "repodesk_task_read", arguments: { messageId: first.id } }
         : calls === 2
@@ -99,6 +121,22 @@ const server = Bun.serve({
                     },
                   }
                 : undefined;
+    const selected =
+      browserProof && calls >= 7
+        ? calls === 7
+          ? {
+              name: "browser_action",
+              arguments: { action: "navigate", url: "https://example.com" },
+            }
+          : calls === 8 || calls === 11
+            ? { name: "browser_action", arguments: { action: "read" } }
+            : calls === 10
+              ? {
+                  name: "repodesk_task_progress",
+                  arguments: { text: "Checking Browser tool restoration." },
+                }
+              : undefined
+        : originalSelected;
     const text = JSON.stringify({
       status: "analysis",
       intent: "analyze",
@@ -239,6 +277,9 @@ try {
     channel: new JobTaskChannel(
       `http://127.0.0.1:${server.port}`,
       "proof-task-channel",
+      fetch,
+      undefined,
+      browserProof,
     ),
   };
   const result = await runConversation(options);
@@ -260,13 +301,18 @@ try {
     channel: new JobTaskChannel(
       `http://127.0.0.1:${server.port}`,
       "proof-task-channel",
+      fetch,
+      undefined,
+      browserProof,
     ),
   });
   if (
     resumed.threadId !== result.threadId ||
     resumed.reconstructed ||
     mailbox.progress.id === progressId ||
-    calls !== 9
+    calls !== (browserProof ? 12 : 9) ||
+    (browserProof &&
+      (!browserToolsSeen || browserInvocations !== 3 || browserPolls !== 1))
   )
     throw Error(
       "Conversation tools were not restored by the pinned app-server on resume",
@@ -274,6 +320,15 @@ try {
   console.log(
     JSON.stringify({
       codexProtocol: "0.155.1",
+      ...(browserProof
+        ? {
+            browserTools: true,
+            browserWait: true,
+            browserResume: true,
+            browserInvocations,
+            browserPolls,
+          }
+        : {}),
       tools: true,
       initialQuestion: true,
       liveSteering: true,

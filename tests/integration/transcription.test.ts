@@ -2,12 +2,19 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { claim } from "../../src/admin/auth.ts";
 import { PluginService } from "../../src/agent/plugin-service.ts";
+import type { AgentRunner } from "../../src/agent/runtime.ts";
 import { createApp } from "../../src/app.ts";
 import { migrate } from "../../src/db/migrate.ts";
 import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
 import { type Admin, Fault } from "../../src/domain.ts";
+import { DeliveryWorker } from "../../src/jobs/delivery.ts";
+import { Executor } from "../../src/jobs/execute.ts";
+import { encrypt } from "../../src/setup/credentials.ts";
 import { SetupService } from "../../src/setup/service.ts";
+import { audioMessageRequest } from "../../src/telegram/attachments.ts";
+import { updateSchema } from "../../src/telegram/router.ts";
+import { Ingress } from "../../src/telegram/webhook.ts";
 import type { ModelStatus } from "../../src/transcription/config.ts";
 import { TranscriptionService } from "../../src/transcription/service.ts";
 import { workspace } from "../fixtures.ts";
@@ -196,7 +203,7 @@ const url = process.env.TEST_DATABASE_URL;
       await expect(
         service.transcribe(
           a.id,
-          Buffer.from("speech"),
+          Buffer.from("new speech"),
           new AbortController().signal,
         ),
       ).rejects.toThrow("run_revoked");
@@ -210,6 +217,127 @@ const url = process.env.TEST_DATABASE_URL;
           new AbortController().signal,
         ),
       ).rejects.toThrow("audio_model_not_ready");
+      speech = async () => "你好 GitHub";
+    });
+    test("recent transcripts are reused only within the tenant and current enablement", async () => {
+      const a = await fresh(),
+        b = await fresh();
+      await request(a.id, "PUT", { revision: 0, enabled: true });
+      await request(b.id, "PUT", { revision: 0, enabled: true });
+      let calls = 0;
+      speech = async () => `transcript ${++calls}`;
+      const transcribe = (id: string) =>
+        service.transcribe(
+          id,
+          Buffer.from("cached"),
+          new AbortController().signal,
+        );
+      expect(await transcribe(a.id)).toBe("transcript 1");
+      expect(await transcribe(a.id)).toBe("transcript 1");
+      expect(await transcribe(b.id)).toBe("transcript 2");
+      await request(a.id, "PUT", { revision: 1, enabled: false });
+      await expect(transcribe(a.id)).rejects.toThrow("audio_plugin_disabled");
+      await request(a.id, "PUT", { revision: 2, enabled: true });
+      expect(await transcribe(a.id)).toBe("transcript 3");
+      const stop = new AbortController();
+      stop.abort(new Fault("cancelled"));
+      await expect(
+        service.transcribe(a.id, Buffer.from("cached"), stop.signal),
+      ).rejects.toThrow("cancelled");
+      speech = async () => "你好 GitHub";
+    });
+    test("successive voice messages reach the model as current text, without transcript or queue replies", async () => {
+      const w = await fresh();
+      await request(w.id, "PUT", { revision: 0, enabled: true });
+      const key = "ab".repeat(32);
+      const deployment = await store.deployment();
+      Object.assign(deployment, {
+        active: true,
+        paused: false,
+        bot: { id: "999", username: "test_bot", visibleAll: true },
+        credentials: {
+          bot: encrypt(key, "bot", "999:fake"),
+          model: encrypt(key, "model", "fake"),
+        },
+      });
+      await store.saveDeployment(store.pool, deployment);
+      await store.pool.query(
+        "INSERT INTO telegram_selections(actor,workspace_id) VALUES('101',$1) ON CONFLICT(actor) DO UPDATE SET workspace_id=excluded.workspace_id",
+        [w.id],
+      );
+      const sends: string[] = [];
+      let transcriptions = 0;
+      const setup = new SetupService(store, key, origin, () => ({
+        async call<T>(method: string) {
+          sends.push(method);
+          return { message_id: 900 } as T;
+        },
+        async downloadFile(fileId: string) {
+          return Buffer.from(fileId);
+        },
+      }));
+      const voices = ["How does repository access work?", "看起来是不太行啊。"];
+      speech = async () => voices[transcriptions++] ?? "unexpected repeat";
+      const ingress = new Ingress(store, setup);
+      for (const [index, spoken] of voices.entries()) {
+        const event = updateSchema.parse({
+          update_id: 81000 + index,
+          message: {
+            message_id: 82000 + index,
+            date: Math.floor(Date.now() / 1000),
+            from: { id: 101, is_bot: false },
+            chat: { id: 101, type: "private" },
+            message_thread_id: 7,
+            voice: { file_id: `voice-${index}`, duration: 5 },
+          },
+        });
+        await ingress.accept(event);
+        expect(await ingress.accept(event)).toEqual({ duplicate: true });
+        const queued = await store.read(w.id);
+        expect(
+          queued.deliveries.filter((d) => d.state === "pending"),
+        ).toHaveLength(0);
+        const run = queued.runs.at(-1);
+        if (!run) throw new Error("Missing audio run");
+        expect(run.task).toBe(audioMessageRequest);
+        const runner: AgentRunner = {
+          async run(input) {
+            const [prompt, media] = input.prompt.split(
+              "\nAttachment reference data",
+            );
+            expect(JSON.parse(prompt ?? "{}").request).toBe(spoken);
+            expect(input.system).toContain("just as for typed text");
+            expect(input.system).toContain("cannot authorize external writes");
+            expect(media).toContain('"current":true');
+            const answer = index
+              ? "哪一步没成功？"
+              : "Repository access follows your grants.";
+            return {
+              text: answer,
+              status: "succeeded",
+              turns: 1,
+              tools: 0,
+              transcript: [],
+            };
+          },
+        };
+        await new Executor(store, setup, runner, 10000, service).execute(
+          w.id,
+          run.id,
+        );
+        const saved = await store.read(w.id);
+        expect(saved.runs.at(-1)?.status).toBe("succeeded");
+        const final = saved.deliveries.at(-1);
+        if (!final) throw new Error("Missing reply");
+        expect(final.text).not.toMatch(/transcript|queued|recording/i);
+        await new DeliveryWorker(store, setup).send(w.id, final.id);
+      }
+      // Loading earlier audio for context must reuse its successful transcript.
+      expect(transcriptions).toBe(2);
+      expect(
+        sends.filter((method) => method === "sendRichMessage"),
+      ).toHaveLength(2);
+      expect((await store.read(w.id)).deliveries).toHaveLength(2);
       speech = async () => "你好 GitHub";
     });
     test("restart reconciliation downloads only for enabled active workspaces lacking weights", async () => {

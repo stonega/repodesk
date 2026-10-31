@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { BrowserSettings } from "../browser/config.ts";
 import type { CloudflareConfig } from "../cloudflare/config.ts";
 import type { CodeTruthSettings } from "../code-truth/config.ts";
 import type { GoogleConfig, GoogleRegistration } from "../google/config.ts";
@@ -15,6 +16,7 @@ export const pluginSchema = z
     tools: z.array(z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/)).max(32),
     execution: z.literal("read-only"),
     enabled: z.boolean().default(true),
+    browserAccess: z.boolean().optional(),
   })
   .strict();
 export const pluginManifestSchema = z.array(pluginSchema).max(32);
@@ -27,6 +29,7 @@ export const pluginSaveSchema = z
 export type PluginSpec = z.infer<typeof pluginSchema>;
 export type PluginRecord = PluginSpec & { hash?: string };
 export interface PluginSettings {
+  browser?: BrowserSettings;
   transcription?: TranscriptionSettings;
   obsidian?: ObsidianSettings;
   revision: number;
