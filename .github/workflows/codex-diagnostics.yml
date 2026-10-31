@@ -12,9 +12,24 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Inspect the VPS through its trusted host Docker daemon
+      - name: Verify the original VPS using its previously trusted host key
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
           set -euo pipefail
-          docker run --rm --privileged --pid host --network host \
-            --entrypoint nsenter docker:29-cli@sha256:b1805116a6a86cc591b5d5f60a910a0715cdcc9d18d866ad68b1457ead25c35c \
-            -t 1 -m -u -i -n -p -- /bin/bash -c 'hostname; id; cat /etc/os-release; uname -m; for cmd in node chromium chromium-browser google-chrome Xvfb xauth nft dnf apt-get; do command -v "$cmd" || true; done; df -h /opt; free -h; cat /opt/repodesk/.current-release; systemctl is-active repodesk-browser 2>/dev/null || true; docker ps --format "{{.Names}} {{.Image}} {{.Status}}"; docker inspect --format "{{json .HostConfig.SecurityOpt}}" repodesk-app-1 repodesk-worker-1; ss -ltnp sport = :22'
+          umask 077
+          ssh_dir="$(mktemp -d)"
+          client="repodesk-browser-ssh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker rm -f "$client" >/dev/null 2>&1 || true; rm -rf "$ssh_dir"' EXIT
+          printf '%s\n' "$VPS_SSH_KEY" > "$ssh_dir/key"
+          printf '%s\n' '169.58.58.71 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICEDUy/5JHbjzCdnECyCEun1u7LWbFz3oM0KIvlVirfK' > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
+          docker create --name "$client" --network host --cap-drop ALL --security-opt no-new-privileges:true \
+            --entrypoint ssh docker:29-cli@sha256:b1805116a6a86cc591b5d5f60a910a0715cdcc9d18d866ad68b1457ead25c35c \
+            -T -i /tmp/key -p 22 -o BatchMode=yes -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts -o ConnectTimeout=15 \
+            root@169.58.58.71 'set -eu; hostname; id; cat /etc/os-release; uname -m; for cmd in node chromium chromium-browser google-chrome Xvfb xauth nft dnf apt-get; do command -v "$cmd" || true; done; df -h /opt; free -h; cat /opt/repodesk/.current-release; systemctl is-active repodesk-browser 2>/dev/null || true; docker ps --format "{{.Names}} {{.Image}} {{.Status}}"; docker inspect --format "{{json .HostConfig.SecurityOpt}}" repodesk-app-1 repodesk-worker-1; ss -ltnp sport = :22'
+          docker cp "$ssh_dir/key" "$client:/tmp/key"
+          docker cp "$ssh_dir/known_hosts" "$client:/tmp/known_hosts"
+          docker start -a "$client"
+          test "$(docker inspect --format '{{.State.ExitCode}}' "$client")" = 0
