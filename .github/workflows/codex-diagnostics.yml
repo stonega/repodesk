@@ -9,6 +9,10 @@ on:
       release:
         type: string
         required: false
+      log:
+        type: choice
+        options: [none, build-app.log, build-job.log, build-supervisor.log, container-checks.log, host-install.log, chrome-install.log, native-host-verification.json, cutover.log, production-verification.log, driver.log]
+        default: none
 permissions:
   contents: read
 concurrency:
@@ -49,11 +53,18 @@ jobs:
         if: ${{ inputs.mode == 'status' }}
         env:
           STATUS_RELEASE: ${{ inputs.release }}
+          DIAGNOSTIC_LOG: ${{ inputs.log }}
         run: |
           set -euo pipefail
           [[ "$STATUS_RELEASE" =~ ^[0-9]+-[0-9]+$ ]]
           source deploy/browser-operator/client.sh
           ssh_vps "set -eu; cd /opt/repodesk/releases/$STATUS_RELEASE; for f in stage deploy.exit failure.json; do if test -f \"\$f\"; then printf '%s: ' \"\$f\"; cat \"\$f\"; fi; done; printf 'current-release: '; cat /opt/repodesk/.current-release; systemctl is-active repodesk-browser || true; docker ps --format '{{.Names}} {{.Image}} {{.Status}}'"
+          case "$DIAGNOSTIC_LOG" in
+            none|'') ;;
+            build-app.log|build-job.log|build-supervisor.log|container-checks.log|host-install.log|chrome-install.log|native-host-verification.json|cutover.log|production-verification.log|driver.log)
+              ssh_vps "tail -n 30 /opt/repodesk/releases/$STATUS_RELEASE/$DIAGNOSTIC_LOG" ;;
+            *) exit 1 ;;
+          esac
       - name: Package and transfer the verified source and checksums
         if: ${{ inputs.mode != 'status' }}
         run: |
