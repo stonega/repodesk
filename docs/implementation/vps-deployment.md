@@ -2,10 +2,59 @@
 
 RepoDesk now installs approved GitHub releases through a host-side updater.
 The previous `.github/workflows/deploy.yml` is removed. GitHub Actions verifies
-code; it does not transfer images or deploy to the VPS. Publishing a stable
+code; the standard release workflow does not transfer images or deploy to the VPS.
+Explicit operator-authorized exceptions are recorded below. Publishing a stable
 release makes it available in the panel's version indicator. A deployment
 administrator reviews its notes and starts installation explicitly.
 See [host updater installation](updates.md) for the service and panel contract.
+
+## Default-enabled host Browser deployment (2026-10-31)
+
+The explicitly authorized rollout retained `https://dev.stonegate.me` and promoted
+release `41170079370-1` (package v0.1.46), replacing `1793266373668-15413800`.
+Application images use source `a601557577e0145a6b9b07488e028b3feaab3fc3`, tree
+`08bf94a2884b10bbdd8b5560ffbaa448fc648db6`. Native host code uses
+`350dfe7fdbf6e8cb93e75d7c4ab572516b608cc4`; deployment composition/preflight fixes
+use `8663584f2886f6a775b5e7b8a173f8e877b03467`. The immutable, tested images were
+reused for the final cutover. Source archives, protected logs and the verification
+receipt remain in the release directories. The normal host-updater path is unchanged.
+
+The Browser built-in defaults to enabled and keeps explicit Disable settings.
+API/worker/database remain in Docker. A systemd host service runs sandboxed headed
+Google Chrome `156.0.8078.79`, with separate Linux identities, displays and profiles
+for each workspace/user. Its private Node `v24.21.0` runtime does not replace the
+host's global tools. The authenticated Unix socket and application token are the
+only Browser additions to API/worker mounts; profiles and the host key stay private.
+
+Local validation passes lint, strict types, build, the Node startup contract and
+**1,365 tests across 148 files** with a 15-second deadline. The exact VPS application
+image passes 16 offline startup cases with zero external calls. Disposable migration,
+backup/restore, speech imports, Code Truth and native Codex dynamic-tool checks pass.
+The headed package, unprivileged installer access and Node/Ubuntu nft compatibility
+checks pass. Previously verified Browser/Mini App UI scenarios are unchanged by the
+operational corrections.
+
+The production receipt verifies **51 application/supervisor/job artifacts** and
+public/loopback HTML and assets, including the existing Cloudflare analytics
+insertion. API, worker, runner, Code Truth, PostgreSQL and the native Browser service
+are healthy. Restarting the host service preserves the socket directory inode;
+both existing API and worker mounts successfully invoke headed Browser afterward.
+Unsigned member and Codex Browser requests return HTTP 401. The existing Telegram
+main Mini App is configured; no real site login or test Telegram/model call was used.
+
+The final protected backup is
+`/opt/repodesk/backups/pre-release-41170079370-1.dump` (**2,093,924 bytes**), and its
+archive listing is verified. Migration `022_browser_profiles.sql` is applied.
+Configuration, credentials, existing volumes, PostgreSQL and all three CI runners
+are preserved. The original index and local main branch were not changed.
+
+The first cutover in `41166151438-1` failed because deployment packaging shadowed
+inherited encryption-key mounts. Recovery restored the prior release before the
+successful fresh cutover. The failed attempt's backup and logs remain available.
+The deployment script now probes migration, API and worker secret readability
+before stopping writers; regressions cover missing API and worker mounts. See the
+[incident and prevention record](../../postmortem/2026-10-31-browser-deployment-secret-mount.md)
+and [successful deployment run](https://github.com/stonega/repodesk/actions/runs/41170079370).
 
 ## Private forwarded reference deployment (2026-10-29)
 

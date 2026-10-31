@@ -26,9 +26,15 @@ installer, Codex job/native dynamic-tool and supervisor-channel checks pass;
 merged Compose configuration validates. The default five-second full suite had
 an earlier unrelated timing failure and is not reported as passed.
 
-No production deployment, host installation or live account/Telegram/model use
-was performed. Host dependencies and the Mini App URL still need provisioning
-for an actual rollout. See [implementation and evidence](browser.md),
+Deployed to the existing VPS entry on 2026-10-31 in release `41170079370-1`.
+The native headed Chrome service, application UID access, user separation and
+existing API/worker connections after a real service restart pass. All services
+are healthy; the main Telegram Mini App was already configured. The final suite
+passes **1,365 tests across 148 files** after adding pre-cutover secret-mount
+regressions. No real website account was logged in and no test Telegram message
+or live model call was sent. The earlier failed cutover and recovery are recorded
+in the [deployment incident](../../postmortem/2026-10-31-browser-deployment-secret-mount.md).
+See [deployment evidence](vps-deployment.md), [implementation details](browser.md),
 [member workflow](../user/browser.md) and [host setup](../user/browser-host.md).
 
 ## Active Telegram input and selective reply quotations (2026-10-30)

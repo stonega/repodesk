@@ -1,8 +1,8 @@
 # Shared host Browser plugin
 
-Status: implemented and locally verified, 2026-10-31. This document tracks the
-requested feature and its verification; production installation and live account
-acceptance remain separate deployment steps.
+Status: implemented, verified and deployed to the existing VPS entry, 2026-10-31,
+release `41170079370-1`. Live website account acceptance remains separate from the
+synthetic deployment checks. See [deployment evidence](vps-deployment.md).
 
 ## Required behavior and evidence
 
@@ -181,8 +181,9 @@ pending submission, recoverable errors and completed actions.
   Merged Compose configuration validates. The bundled Code Truth catalog was
   regenerated and its local service smoke passes without a catalog-content diff.
 
-No host installer, production migration/deployment, live website login, model call,
-Telegram message or webhook registration was performed. Deployment still requires
+At the end of local verification, no host installer, production migration/deployment,
+live website login, model call, Telegram message or webhook registration had been
+performed. The subsequent rollout below provides deployment evidence. Deployment requires
 explicit host provisioning, the Compose bridge and the bot's HTTPS Mini App URL.
 Website-specific account challenges and real-client acceptance belong to that
 operator-controlled rollout. See the [user workflow](../user/browser.md),
@@ -212,3 +213,27 @@ unit now preserves its runtime directory across restart and stop/start, because
 existing Docker bind mounts must retain the directory inode when the socket is
 replaced. The installer regression checks that policy; rollout acceptance also
 restarts the real unit and invokes Browser from the existing API/worker mounts.
+
+## VPS rollout acceptance (2026-10-31)
+
+Release `41170079370-1` uses the existing `https://dev.stonegate.me` entry. API,
+worker, Codex runner, Code Truth and PostgreSQL are healthy. Google Chrome
+`156.0.8078.79` runs headed on the host with private profiles; the host uses Node
+`v24.21.0` without replacing the global Node configuration. Native host code comes
+from `350dfe7fdbf6e8cb93e75d7c4ab572516b608cc4`; the final systemd override preserves
+the runtime directory across restarts. Both existing API and worker containers
+successfully invoke headed Browser after an actual service restart.
+
+The final full suite passes **1,365 tests, zero failed across 148 files**, with
+10,068 assertions and the 15-second deadline. Lint, strict types, build and the
+Node runtime contract pass. The production receipt verifies 51 image artifacts,
+public/loopback assets and preserved configuration, volumes, PostgreSQL and CI
+runners. Public member and Codex Browser endpoints reject unsigned requests with
+HTTP 401. The existing Telegram main Mini App is configured. No real website
+login, test Telegram message, webhook registration or paid model call was used.
+
+An earlier cutover failed because a deployment-only flattened Compose file omitted
+inherited encryption-key mounts. The previous release was restored, the composition
+was corrected and per-service preflight regressions were added before the successful
+new cutover. Both backups are retained. See the
+[incident record](../../postmortem/2026-10-31-browser-deployment-secret-mount.md).
