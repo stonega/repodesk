@@ -12,6 +12,7 @@ ExecStart=/usr/bin/env node /opt/repodesk-browser/browser-host.js
 WorkingDirectory=/opt/repodesk-browser
 RuntimeDirectory=repodesk-browser
 RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
 UMask=0077
 Restart=on-failure
 RestartSec=5s

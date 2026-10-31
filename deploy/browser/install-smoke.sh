@@ -33,6 +33,7 @@ assert.equal(fs.statSync('/etc/repodesk/browser-token').uid, 0);
 assert.equal(fs.statSync('/application-secrets/browser-token').uid, 1000);
 assert.equal(fs.statSync('/application-secrets').uid, 1000);
 assert.equal(fs.statSync('/etc/repodesk/browser.env').mode & 0o777, 0o600);
+assert.match(fs.readFileSync('/etc/systemd/system/repodesk-browser.service', 'utf8'), /^RuntimeDirectoryPreserve=yes$/m);
 assert.ok(fs.readFileSync('/etc/repodesk/browser.env', 'utf8').includes('BROWSER_HOST_MAX_PROCESSES=2'));
 assert.equal(fs.readFileSync('/var/lib/repodesk-browser/profiles/retained/fixture', 'utf8'), 'synthetic profile');
 process.stdout.write(JSON.stringify({installer:true,preservedToken:true,preservedSettings:true,preservedProfiles:true})+'\n');

@@ -56,7 +56,9 @@ used. Codex jobs receive only their attempt's channel access; the host key/socke
 and browser profiles are not mounted into jobs.
 
 The socket directory is mounted instead of the socket inode so a service restart
-can replace the socket. Its default application GID is `1000`. If your deployment
+can replace the socket. The supplied unit uses `RuntimeDirectoryPreserve=yes` to
+retain the mounted directory across stop/start and restart. Preserve this setting
+in custom units; replacing the directory strands existing container mounts. Its default application GID is `1000`. If your deployment
 uses another GID, change `BROWSER_HOST_SOCKET_GID`, token ownership and Compose
 `group_add` consistently. Do not mount profile directories, host `/` or the host
 Docker socket into the application for this feature.

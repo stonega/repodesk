@@ -205,3 +205,10 @@ rule updates without a shell or temporary rule files. The `nft-compatibility`
 Docker target runs the production firewall under Node and Ubuntu 24.04, checking
 default denial, the selected proxy exception, validation and restart revocation.
 This is separate from the Debian headed-browser and installer checks.
+
+A second deployment gate waits for the native Unix socket's final mode/GID before
+probing it; systemd process activation alone does not establish readiness. The
+unit now preserves its runtime directory across restart and stop/start, because
+existing Docker bind mounts must retain the directory inode when the socket is
+replaced. The installer regression checks that policy; rollout acceptance also
+restarts the real unit and invokes Browser from the existing API/worker mounts.

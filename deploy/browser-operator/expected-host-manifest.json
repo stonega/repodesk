@@ -2,7 +2,7 @@
   "browser-host.js": "ce618c93fdd9f46aaa702257a54fc2f8a2ebbb9486f466a360a53ad1d2d7f959",
   "browser-host-worker.js": "35bb3dac287cc1588431575ceb48ea70a5a79050fbafb7208cb03d74ab0b078c",
   "package.json": "1239d4d885dcad42201a27ed9324f8f0f760b78700d8db9ced39a511cffe7eae",
-  "repodesk-browser.service": "300f40b3219a4bd26d8fcbbdb292a7597dcee67b411c30a906c0c93c1483ad12",
+  "repodesk-browser.service": "7f240f18b559cd1bed42c5fa691328c34c2c8138df94cec3bff3d91b78b64554",
   "install.sh": "b66d9c0e1ee6638907e8a10a10d3a120155e78eff1e2dae1bd2b76551348628c",
   "node_modules/zod/LICENSE": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8",
   "node_modules/zod/index.cjs": "2a3455cecff4f7021c92d0a3e2e5fc170c0448dc5cc261160127e08f4888a9c2",
