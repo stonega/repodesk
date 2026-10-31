@@ -1,4 +1,4 @@
-import hashlib,json,os,subprocess,sys
+import hashlib,json,os,subprocess,sys,time,stat
 from pathlib import Path
 os.umask(0o077)
 bundle=Path(sys.argv[1]);root=Path('/opt/repodesk');meta=json.loads((bundle/'source-metadata.json').read_text())
@@ -42,6 +42,15 @@ try:
  env=os.environ.copy();env.update(PATH='/opt/repodesk-browser/runtime/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',BROWSER_EXECUTABLE='/usr/bin/google-chrome')
  run(['bash',str(fix/'package/install.sh'),str(fix/'package'),str(root/'secrets')],'resume-native-install.log',env=env)
 
+ stage('resume_wait_for_native_socket_readiness')
+ socket=Path('/run/repodesk-browser/control.sock')
+ for attempt in range(120):
+  try:
+   socket_stat=socket.stat()
+   if stat.S_ISSOCK(socket_stat.st_mode) and stat.S_IMODE(socket_stat.st_mode)==0o660 and socket_stat.st_gid==1000 and subprocess.run(['systemctl','is-active','--quiet','repodesk-browser']).returncode==0:break
+  except FileNotFoundError:pass
+  time.sleep(0.25)
+ else:raise RuntimeError('browser_host_socket_not_ready')
  stage('resume_headed_application_uid_probe')
  old=bundle/'native-host-verification.json'
  if old.exists():old.rename(bundle/'native-host-verification-initial-failure.log')
