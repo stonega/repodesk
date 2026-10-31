@@ -1,10 +1,18 @@
 name: Browser VPS deployment
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [deploy, status]
+        default: deploy
+      release:
+        type: string
+        required: false
 permissions:
   contents: read
 concurrency:
-  group: browser-vps-deployment
+  group: browser-vps-${{ inputs.mode || 'deploy' }}
   cancel-in-progress: false
 jobs:
   deploy:
@@ -16,6 +24,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
+        if: ${{ inputs.mode != 'status' }}
         with:
           node-version: '24'
       - name: Prepare an authenticated disposable SSH client
@@ -36,7 +45,17 @@ jobs:
           docker cp "$ssh_dir/known_hosts" "$client:/tmp/known_hosts"
           docker start "$client"
           printf 'DEPLOY_CLIENT=%s\nRELEASE_ID=%s-%s\n' "$client" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+      - name: Read deployment progress without changing the VPS
+        if: ${{ inputs.mode == 'status' }}
+        env:
+          STATUS_RELEASE: ${{ inputs.release }}
+        run: |
+          set -euo pipefail
+          [[ "$STATUS_RELEASE" =~ ^[0-9]+-[0-9]+$ ]]
+          source deploy/browser-operator/client.sh
+          ssh_vps "set -eu; cd /opt/repodesk/releases/$STATUS_RELEASE; for f in stage deploy.exit failure.json; do if test -f \"\$f\"; then printf '%s: ' \"\$f\"; cat \"\$f\"; fi; done; printf 'current-release: '; cat /opt/repodesk/.current-release; systemctl is-active repodesk-browser || true; docker ps --format '{{.Names}} {{.Image}} {{.Status}}'"
       - name: Package and transfer the verified source and checksums
+        if: ${{ inputs.mode != 'status' }}
         run: |
           set -euo pipefail
           umask 077
@@ -57,11 +76,13 @@ jobs:
             /tmp/payload.tgz "root@169.58.58.71:/opt/repodesk/releases/$RELEASE_ID/payload.tgz"
           ssh_vps "set -eu; cd /opt/repodesk/releases/$RELEASE_ID; tar -xzf payload.tgz; test -f source-metadata.json; test -f release.py"
       - name: Start the guarded VPS deployment
+        if: ${{ inputs.mode != 'status' }}
         run: |
           set -euo pipefail
           source deploy/browser-operator/client.sh
           ssh_vps "systemd-run --unit=repodesk-browser-deploy-$RELEASE_ID --collect --property=Type=exec --property=RuntimeMaxSec=3600 --property=TimeoutStopSec=180 --property=WorkingDirectory=/opt/repodesk/releases/$RELEASE_ID /bin/bash /opt/repodesk/releases/$RELEASE_ID/run-deployment.sh"
       - name: Wait for image checks, host installation, backup and cutover
+        if: ${{ inputs.mode != 'status' }}
         run: |
           set -euo pipefail
           source deploy/browser-operator/client.sh
@@ -78,12 +99,14 @@ jobs:
           echo 'Deployment exceeded the observation deadline. Inspect its protected VPS logs.' >&2
           exit 1
       - name: Save the production verification receipt
+        if: ${{ inputs.mode != 'status' }}
         run: |
           set -euo pipefail
           source deploy/browser-operator/client.sh
           ssh_vps "cat /opt/repodesk/releases/$RELEASE_ID/deployment-receipt.json" > "$RUNNER_TEMP/browser-deployment-receipt.json"
           node -e 'const r=require(process.env.RUNNER_TEMP+"/browser-deployment-receipt.json");console.log(JSON.stringify({release:r.release_id,commit:r.source_commit,services:r.services,browser:r.browser_host,backup:r.backup},null,2))'
       - uses: actions/upload-artifact@v4
+        if: ${{ inputs.mode != 'status' }}
         with:
           name: browser-deployment-receipt
           path: ${{ runner.temp }}/browser-deployment-receipt.json
