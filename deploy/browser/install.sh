@@ -39,7 +39,8 @@ directory_mode=$(stat -c %a /etc/repodesk)
 [[ ! -L /etc/repodesk/browser-token && ! -L /etc/repodesk/browser.env ]]
 cp -R -- "$package_dir/." /opt/repodesk-browser/
 chown -R root:root /opt/repodesk-browser
-chmod -R go-w /opt/repodesk-browser
+# Locked profile UIDs execute this public code. Secrets and profiles live elsewhere.
+chmod -R a+rX,go-w /opt/repodesk-browser
 if [[ ! -f /etc/repodesk/browser-token ]]; then
   node -e 'process.stdout.write(require("node:crypto").randomBytes(48).toString("hex"))' > /etc/repodesk/browser-token
 fi

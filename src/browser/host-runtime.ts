@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { Fault, requireThat } from "../domain.ts";
 import { decrypt, encrypt, fingerprint, hash } from "../setup/credentials.ts";
+import { browserController } from "./config.ts";
 import { BrowserEgress } from "./egress.ts";
 import {
   type BrowserCheckpoint,
@@ -47,15 +48,7 @@ const persisted = z
       })
       .strict(),
     generation: z.number().int().nonnegative().safe(),
-    controller: z
-      .object({
-        kind: z.enum(["chat", "codex", "plugin", "human"]),
-        id: z.uuid(),
-        fence: z.number().int().nonnegative(),
-        pluginId: z.string().optional(),
-      })
-      .strict()
-      .optional(),
+    controller: browserController.optional(),
     requests: z.array(
       z
         .object({

@@ -16,6 +16,14 @@ printf '\nBROWSER_HOST_MAX_PROCESSES=2\n' >> /etc/repodesk/browser.env
 mkdir -p /var/lib/repodesk-browser/profiles/retained
 printf 'synthetic profile' > /var/lib/repodesk-browser/profiles/retained/fixture
 bash /opt/repodesk/install.sh /opt/repodesk /application-secrets
+runuser -u nobody -- node --input-type=module <<'NODE'
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+await import('/opt/repodesk-browser/node_modules/playwright-core/index.mjs');
+fs.accessSync('/opt/repodesk-browser/browser-host-worker.js', fs.constants.R_OK);
+assert.throws(() => fs.readFileSync('/etc/repodesk/browser-token'), {code:'EACCES'});
+process.stdout.write(JSON.stringify({profileUidCanLoadCode:true,hostKeyStillPrivate:true})+'\n');
+NODE
 node --input-type=commonjs <<'NODE'
 const fs = require('node:fs'), assert = require('node:assert/strict');
 assert.ok(fs.readFileSync('/tmp/browser-original-token').equals(fs.readFileSync('/etc/repodesk/browser-token')));

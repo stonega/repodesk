@@ -187,3 +187,13 @@ explicit host provisioning, the Compose bridge and the bot's HTTPS Mini App URL.
 Website-specific account challenges and real-client acceptance belong to that
 operator-controlled rollout. See the [user workflow](../user/browser.md),
 [operator guide](../user/browser-host.md) and [examples](../../examples/browser.md).
+
+## Deployment preparation regressions (2026-10-31)
+
+The host journal now reuses the controller schema, including a granted plugin's
+configuration revision. The real headed smoke verifies that revision survives
+subsequent commands and restart, and that an older revision is fenced. The host
+installer explicitly grants locked profile UIDs read/execute access to public
+service code after its restrictive umask. Its disposable installer proof imports
+Playwright as an unprivileged account while confirming the root host key remains
+unreadable. These corrections were identified before production cutover.

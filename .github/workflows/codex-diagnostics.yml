@@ -3,33 +3,91 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: browser-vps-deployment
+  cancel-in-progress: false
 jobs:
-  preflight:
+  deploy:
     runs-on: [self-hosted, linux, x64]
-    timeout-minutes: 5
+    timeout-minutes: 90
     environment: production
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Verify the original VPS using its previously trusted host key
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Prepare an authenticated disposable SSH client
         env:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
           set -euo pipefail
           umask 077
           ssh_dir="$(mktemp -d)"
-          client="repodesk-browser-ssh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          trap 'docker rm -f "$client" >/dev/null 2>&1 || true; rm -rf "$ssh_dir"' EXIT
+          trap 'rm -rf "$ssh_dir"' EXIT
+          client="repodesk-browser-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           printf '%s\n' "$VPS_SSH_KEY" > "$ssh_dir/key"
           printf '%s\n' '169.58.58.71 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICEDUy/5JHbjzCdnECyCEun1u7LWbFz3oM0KIvlVirfK' > "$ssh_dir/known_hosts"
           chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
           docker create --name "$client" --network host --cap-drop ALL --cap-add DAC_OVERRIDE --security-opt no-new-privileges:true \
-            --entrypoint ssh docker:29-cli@sha256:b1805116a6a86cc591b5d5f60a910a0715cdcc9d18d866ad68b1457ead25c35c \
-            -T -i /tmp/key -p 22 -o BatchMode=yes -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts -o ConnectTimeout=15 \
-            root@169.58.58.71 'set -eu; hostname; id; cat /etc/os-release; uname -m; for cmd in node chromium chromium-browser google-chrome Xvfb xauth nft dnf apt-get; do command -v "$cmd" || true; done; df -h /opt; free -h; cat /opt/repodesk/.current-release; systemctl is-active repodesk-browser 2>/dev/null || true; docker ps --format "{{.Names}} {{.Image}} {{.Status}}"; docker inspect --format "{{json .HostConfig.SecurityOpt}}" repodesk-app-1 repodesk-worker-1; ss -ltnp sport = :22'
+            --entrypoint sleep docker:29-cli@sha256:b1805116a6a86cc591b5d5f60a910a0715cdcc9d18d866ad68b1457ead25c35c 5400
           docker cp "$ssh_dir/key" "$client:/tmp/key"
           docker cp "$ssh_dir/known_hosts" "$client:/tmp/known_hosts"
-          docker start -a "$client"
-          test "$(docker inspect --format '{{.State.ExitCode}}' "$client")" = 0
+          docker start "$client"
+          printf 'DEPLOY_CLIENT=%s\nRELEASE_ID=%s-%s\n' "$client" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+      - name: Package and transfer the verified source and checksums
+        run: |
+          set -euo pipefail
+          umask 077
+          source deploy/browser-operator/client.sh
+          payload="$RUNNER_TEMP/browser-payload"
+          mkdir -p "$payload"
+          cp deploy/browser-operator/*.py deploy/browser-operator/*.mjs deploy/browser-operator/*.json deploy/browser-operator/*.yaml deploy/browser-operator/run-deployment.sh "$payload/"
+          git archive --format=tar.gz "$GITHUB_SHA" > "$payload/source.tar.gz"
+          cp scripts/deploy-vps.sh "$payload/deploy-vps.sh"
+          cp deploy/codex/docker-compose.yaml "$payload/codex-compose.yaml"
+          cp deploy/codex/release-config.mjs "$payload/codex-release-config.mjs"
+          cp deploy/codex/wait-checkpoint.mjs "$payload/codex-wait-checkpoint.mjs"
+          node deploy/browser-operator/prepare-payload.mjs "$payload"
+          tar -czf "$RUNNER_TEMP/browser-payload.tgz" -C "$payload" .
+          ssh_vps "set -eu; test ! -e /opt/repodesk/releases/$RELEASE_ID; umask 077; mkdir /opt/repodesk/releases/$RELEASE_ID"
+          docker cp "$RUNNER_TEMP/browser-payload.tgz" "$DEPLOY_CLIENT:/tmp/payload.tgz"
+          docker exec "$DEPLOY_CLIENT" scp -i /tmp/key -P 22 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts -o ConnectTimeout=15 \
+            /tmp/payload.tgz "root@169.58.58.71:/opt/repodesk/releases/$RELEASE_ID/payload.tgz"
+          ssh_vps "set -eu; cd /opt/repodesk/releases/$RELEASE_ID; tar -xzf payload.tgz; test -f source-metadata.json; test -f release.py"
+      - name: Start the guarded VPS deployment
+        run: |
+          set -euo pipefail
+          source deploy/browser-operator/client.sh
+          ssh_vps "systemd-run --unit=repodesk-browser-deploy-$RELEASE_ID --collect --property=Type=exec --property=RuntimeMaxSec=3600 --property=TimeoutStopSec=180 --property=WorkingDirectory=/opt/repodesk/releases/$RELEASE_ID /bin/bash /opt/repodesk/releases/$RELEASE_ID/run-deployment.sh"
+      - name: Wait for image checks, host installation, backup and cutover
+        run: |
+          set -euo pipefail
+          source deploy/browser-operator/client.sh
+          previous=''
+          for attempt in {1..720}; do
+            status=$(ssh_vps "if test -f /opt/repodesk/releases/$RELEASE_ID/deploy.exit; then printf 'exit:'; cat /opt/repodesk/releases/$RELEASE_ID/deploy.exit; elif test -f /opt/repodesk/releases/$RELEASE_ID/stage; then cat /opt/repodesk/releases/$RELEASE_ID/stage; else printf 'starting'; fi")
+            if [[ "$status" != "$previous" ]]; then printf '%s\n' "$status"; previous="$status"; fi
+            case "$status" in
+              exit:0) exit 0 ;;
+              exit:*) ssh_vps "cat /opt/repodesk/releases/$RELEASE_ID/failure.json 2>/dev/null || true"; exit 1 ;;
+            esac
+            sleep 5
+          done
+          echo 'Deployment exceeded the observation deadline. Inspect its protected VPS logs.' >&2
+          exit 1
+      - name: Save the production verification receipt
+        run: |
+          set -euo pipefail
+          source deploy/browser-operator/client.sh
+          ssh_vps "cat /opt/repodesk/releases/$RELEASE_ID/deployment-receipt.json" > "$RUNNER_TEMP/browser-deployment-receipt.json"
+          node -e 'const r=require(process.env.RUNNER_TEMP+"/browser-deployment-receipt.json");console.log(JSON.stringify({release:r.release_id,commit:r.source_commit,services:r.services,browser:r.browser_host,backup:r.backup},null,2))'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: browser-deployment-receipt
+          path: ${{ runner.temp }}/browser-deployment-receipt.json
+      - name: Remove the disposable SSH client
+        if: always()
+        run: |
+          if [[ -n "${DEPLOY_CLIENT:-}" ]]; then docker rm -f "$DEPLOY_CLIENT"; fi

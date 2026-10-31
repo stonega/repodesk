@@ -451,6 +451,34 @@ try {
     }),
     /browser_page_changed/,
   );
+  const filePlugin = {
+    kind: "plugin" as const,
+    id: randomUUID(),
+    fence: 1,
+    pluginId: "smoke-plugin",
+    pluginRevision: 7,
+  };
+  await call(ownerA, 9, { command: "acquire" }, filePlugin);
+  assert.equal(
+    (
+      await call(
+        ownerA,
+        9,
+        { command: "action", input: { action: "read" } },
+        filePlugin,
+      )
+    ).status,
+    "completed",
+  );
+  await assert.rejects(
+    call(
+      ownerA,
+      9,
+      { command: "action", input: { action: "read" } },
+      { ...filePlugin, pluginRevision: 6 },
+    ),
+    /browser_control_expired/,
+  );
   await host.close();
   server.closeAllConnections();
   await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -488,7 +516,7 @@ try {
     });
     assert.equal((await stat(socket)).mode & 0o777, 0o660);
     assert.equal(
-      (await call(ownerA, 8, { command: "status" })).status,
+      (await call(ownerA, 9, { command: "status" }, filePlugin)).status,
       "closed",
     );
     cli.kill("SIGTERM");
@@ -515,6 +543,7 @@ try {
       boundedDownload: true,
       replacedFieldDenied: true,
       observingPreservesInput: true,
+      pluginRevisionFenced: true,
     })}\n`,
   );
 } finally {
