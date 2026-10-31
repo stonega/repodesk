@@ -11,7 +11,7 @@ on:
         required: false
       log:
         type: choice
-        options: [none, system, build-app.log, build-job.log, build-supervisor.log, container-checks.log, host-install.log, chrome-install.log, native-host-verification.json, cutover.log, production-verification.log, driver.log]
+        options: [none, system, resume-driver.log, resume-firewall-check.log, resume-module-nf_tables.log, resume-module-nft_reject_inet.log, build-app.log, build-job.log, build-supervisor.log, container-checks.log, host-install.log, chrome-install.log, native-host-verification.json, cutover.log, production-verification.log, driver.log]
         default: none
 permissions:
   contents: read
@@ -63,7 +63,7 @@ jobs:
             none|'') ;;
             system)
               ssh_vps "set -eu; systemctl show repodesk-browser -p MainPID -p User -p Group -p CapabilityBoundingSet -p NoNewPrivileges -p ProtectKernelModules -p ProtectKernelTunables; journalctl -u repodesk-browser --no-pager -n 20; getent passwd | grep '^rdb_' || true; nft list table inet repodesk_browser || true; command -v xdpyinfo || true; lsmod | grep -E 'nft|nf_tables' || true" ;;
-            build-app.log|build-job.log|build-supervisor.log|container-checks.log|host-install.log|chrome-install.log|native-host-verification.json|cutover.log|production-verification.log|driver.log)
+            resume-driver.log|resume-firewall-check.log|resume-module-nf_tables.log|resume-module-nft_reject_inet.log|build-app.log|build-job.log|build-supervisor.log|container-checks.log|host-install.log|chrome-install.log|native-host-verification.json|cutover.log|production-verification.log|driver.log)
               ssh_vps "tail -n 30 /opt/repodesk/releases/$STATUS_RELEASE/$DIAGNOSTIC_LOG" ;;
             *) exit 1 ;;
           esac
@@ -108,7 +108,7 @@ jobs:
             docker exec "$DEPLOY_CLIENT" scp -i /tmp/key -P 22 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts \
               "/tmp/$file" "root@169.58.58.71:/opt/repodesk/releases/$STATUS_RELEASE/$file"
           done
-          ssh_vps "set -eu; cd /opt/repodesk/releases/$STATUS_RELEASE; test -f deploy.exit; test \"\$(cat deploy.exit)\" != 0; test ! -e deploy.exit.initial-failure; mv deploy.exit deploy.exit.initial-failure; printf '%s\n' '$GITHUB_SHA' > resume-commit; systemd-run --unit=repodesk-browser-deploy-$STATUS_RELEASE-resume --collect --property=Type=exec --property=RuntimeMaxSec=3600 --property=TimeoutStopSec=180 --property=WorkingDirectory=/opt/repodesk/releases/$STATUS_RELEASE /bin/bash /opt/repodesk/releases/$STATUS_RELEASE/run-resume.sh"
+          ssh_vps "set -eu; cd /opt/repodesk/releases/$STATUS_RELEASE; test -f deploy.exit; test \"\$(cat deploy.exit)\" != 0; test ! -e deploy.exit.failure-$GITHUB_RUN_ID; mv deploy.exit deploy.exit.failure-$GITHUB_RUN_ID; printf '%s\n' '$GITHUB_SHA' > resume-commit; systemd-run --unit=repodesk-browser-deploy-$STATUS_RELEASE-resume-$GITHUB_RUN_ID --collect --property=Type=exec --property=RuntimeMaxSec=3600 --property=TimeoutStopSec=180 --property=WorkingDirectory=/opt/repodesk/releases/$STATUS_RELEASE /bin/bash /opt/repodesk/releases/$STATUS_RELEASE/run-resume.sh"
           printf 'RELEASE_ID=%s\n' "$STATUS_RELEASE" >> "$GITHUB_ENV"
       - name: Wait for image checks, host installation, backup and cutover
         if: ${{ inputs.mode != 'status' }}

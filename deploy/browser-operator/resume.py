@@ -14,10 +14,11 @@ try:
  for item in images.values():assert subprocess.check_output(['docker','image','inspect','--format','{{.Id}}',item['tag']],text=True).strip()==item['id']
  checks=json.loads((bundle/'container-verification.json').read_text());assert checks['node_runtime'] and checks['code_truth_offline'] and checks['backup_restore']
  stage('resume_host_prerequisite_repair')
- for module in ['nf_tables','nft_chain_filter','nft_reject_inet']:
+ for module in ['nf_tables','nft_reject_inet']:
   run(['modprobe',module],'resume-module-'+module+'.log')
  config=Path('/etc/modules-load.d/repodesk-browser.conf')
- config.write_text('nf_tables\nnft_chain_filter\nnft_reject_inet\n');os.chmod(config,0o644)
+ config.write_text('nf_tables\nnft_reject_inet\n');os.chmod(config,0o644)
+ run(['nft','--check','-f','-'],'resume-firewall-check.log',input=b'add table inet rdb_browser_readiness\nadd chain inet rdb_browser_readiness output { type filter hook output priority -10; policy accept; }\nadd chain inet rdb_browser_readiness unused\nadd rule inet rdb_browser_readiness unused meta skuid 997 ip daddr 127.0.0.1 tcp dport 1 accept\nadd rule inet rdb_browser_readiness unused reject\ndelete table inet rdb_browser_readiness\n')
  run(['systemctl','restart','repodesk-browser'],'resume-host-restart.log')
  stage('resume_headed_application_uid_probe')
  old=bundle/'native-host-verification.json'
