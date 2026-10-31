@@ -37,6 +37,18 @@ try:
  run(['python3',str(bundle/'verify-images.py')],'container-checks.log')
  actual=json.loads((bundle/'artifact-hashes.json').read_text())
  assert {k.removeprefix('image-app/dist/'):v for k,v in actual.items() if k.startswith('image-app/dist/')}==json.loads((bundle/'expected-dist.json').read_text()),'VPS dist differs from the tested local image'
+ stage('package_native_browser_host')
+ package_tag='repodesk-browser-package:release-'+meta['source_commit']
+ run(['docker','build','--platform','linux/amd64','--target','build','-f',str(source/'deploy/browser/smoke.Dockerfile'),'-t',package_tag,str(source)],'host-package-build.log')
+ cid=output(['docker','create',package_tag,'bun','build','--target=bun','--packages=external','scripts/codex-conversation-proof.ts','--outfile','/tmp/browser-codex-proof.js'])
+ try:
+  run(['docker','cp',cid+':/package',str(bundle/'host-package')],'host-package-copy.log')
+  run(['docker','cp',str(source/'scripts/codex-conversation-proof.ts'),cid+':/build/scripts/codex-conversation-proof.ts'],'proof-source-copy.log')
+  run(['docker','start','-a',cid],'proof-bundle.log')
+  assert output(['docker','inspect','--format','{{.State.ExitCode}}',cid])=='0'
+  run(['docker','cp',cid+':/tmp/browser-codex-proof.js',str(bundle/'browser-codex-proof.js')],'proof-bundle-copy.log')
+ finally:run(['docker','rm',cid],'host-package-cleanup.log')
+ assert json.loads((bundle/'host-package/manifest.json').read_text())==json.loads((bundle/'expected-host-manifest.json').read_text()),'Host package differs from the locally tested package'
  stage('native_codex_dynamic_tool_proof')
  proof='repodesk-browser-native-proof-'+meta['release_id']
  run(['docker','create','--name',proof,'--network','none','-e','CODEX_BROWSER_PROOF=1','-e','CODEX_PROTOCOL_BINARY=/usr/local/bin/codex','--entrypoint','bun',images['job']['id'],'/opt/deepx/browser-proof.js'],'native-codex-create.log')
@@ -45,13 +57,6 @@ try:
   run(['docker','start','-a',proof],'native-codex-proof.log')
   assert output(['docker','inspect','--format','{{.State.ExitCode}}',proof])=='0'
  finally: run(['docker','rm','-f',proof],'native-codex-cleanup.log')
- stage('package_native_browser_host')
- package_tag='repodesk-browser-package:release-'+meta['source_commit']
- run(['docker','build','--platform','linux/amd64','--target','build','-f',str(source/'deploy/browser/smoke.Dockerfile'),'-t',package_tag,str(source)],'host-package-build.log')
- cid=output(['docker','create',package_tag,'true'])
- try:run(['docker','cp',cid+':/package',str(bundle/'host-package')],'host-package-copy.log')
- finally:run(['docker','rm',cid],'host-package-cleanup.log')
- assert json.loads((bundle/'host-package/manifest.json').read_text())==json.loads((bundle/'expected-host-manifest.json').read_text()),'Host package differs from the locally tested package'
  stage('install_host_prerequisites')
  env=os.environ.copy();env.update(DEBIAN_FRONTEND='noninteractive',NEEDRESTART_MODE='l')
  run(['apt-get','update'],'host-apt-update.log',env=env)
