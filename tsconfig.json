@@ -19,6 +19,7 @@
     "tests/**/*.ts",
     "web/**/*.ts",
     "web/**/*.tsx",
-    "scripts/**/*.ts"
+    "scripts/**/*.ts",
+    "deploy/browser/**/*.ts"
   ]
 }

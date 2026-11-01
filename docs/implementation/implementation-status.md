@@ -1,5 +1,83 @@
 # Implementation evidence
 
+## Remembered Browser websites and Pi-led execution (2026-11-01)
+
+Site consent now persists per exact HTTP(S) origin in the encrypted member/workspace
+profile, independently of tasks and temporary control leases. The member page
+labels consent **Allow website**, shows **Allowed websites** as saved summaries,
+and supports revocation. Approval saves immediately; closing and service
+reconstruction retain the choice. Revocation atomically removes consent, cancels
+pending re-grants and fences current work. Legacy temporary grants and already
+approved legacy requests retain their old scope/expiry. Membership, consumer/plugin
+authorization, configuration generation and profile epochs remain current checks.
+
+Pi's conversation and tool guidance keep website work in the originating run.
+Host inspection allows ordinary fills, native link navigation and focus keys on
+remembered sites. External effects retain explicit page-bound approval; buttons,
+Enter, pointer clicks and uncertain controls conservatively wait. Link navigation
+bypasses unreviewed page click handlers. Auto-saving fields require the explicit
+external-effect flag; arbitrary application behavior cannot be inferred from DOM
+inspection alone. Codex can still use Browser inside authorized coding work.
+
+Validation in the full development workspace: lint, strict TypeScript, build and
+the Node runtime contract pass,
+including 16 startup cases with zero external calls. **1,378 deterministic tests
+across 148 files** pass on disposable PostgreSQL with the default deadline.
+**15 browser scenarios** pass: 12 desktop/mobile UI journeys and three real-DOM
+interaction tests. Saved/empty/loading, pending/error revocation and both themes
+were visually inspected. The bundled Code Truth catalog was regenerated without
+a content diff and its service smoke passed. The current native package also
+passes the real headed-host smoke, including automatic routine operations and
+blocked unapproved submission, on the previously provisioned test runtime (the
+fresh Debian download stalled). This consent follow-up adds no dependency or SQL
+migration beyond the Browser baseline below. The application and native host need a coordinated release for the new
+inspection protocol; these changes have not been deployed or exercised with live
+Telegram/model/site accounts. See [implementation details](browser.md).
+
+
+Commit-only validation on `main` excludes unrelated working changes and passes
+1,363 deterministic tests, lint, strict types, build, 17 Browser/catalog scenarios
+and the offline Node 24 application-image runtime contract. The source commit
+includes the Browser baseline needed on `main`; no production deployment was run.
+
+## Default-enabled private Browser (2026-10-31)
+
+Added the built-in Browser plugin, enabled by default with an explicit saved
+Disable. Chat, Codex and explicitly granted file plugins use one broker and
+persistent headed Chrome/Chromium profiles scoped to workspace plus verified
+member. The API, worker and database remain in Docker; the packaged Linux host
+service owns private UIDs/displays/profiles and enforces its network policy.
+Optional service/credential lookup occurs only when invoked.
+
+Ordinary members use one Telegram-authenticated page for site/action consent,
+password/code input, masked screenshots, downloads and manual control. No panel
+account or prior remote-desktop login is required. Input stays out of model/chat
+records. Durable leases, generation fences, current authorization and unknown
+receipts prevent stale consumers or ambiguous writes from being replayed. Private
+provenance follows task/history/source/delivery use; shared panel views redact it.
+Profile deletion revokes existing grants and schedules private-file cleanup.
+
+Validation passed lint, strict types, build, the Node runtime contract, **1,363
+PostgreSQL tests across 148 files** with a 15-second deadline, and **15 focused
+browser scenarios**. Desktop/mobile and both themes were visually inspected.
+The exact application image passes the offline 16-case startup contract with zero
+external calls and an isolated HTTP/migration smoke. Packaged headed-host,
+installer, Codex job/native dynamic-tool and supervisor-channel checks pass;
+merged Compose configuration validates. The default five-second full suite had
+an earlier unrelated timing failure and is not reported as passed.
+
+Deployed to the existing VPS entry on 2026-10-31 in release `41170079370-1`.
+The native headed Chrome service, application UID access, user separation and
+existing API/worker connections after a real service restart pass. All services
+are healthy; the main Telegram Mini App was already configured. The final suite
+passes **1,365 tests across 148 files** after adding pre-cutover secret-mount
+regressions. No real website account was logged in and no test Telegram message
+or live model call was sent. The earlier failed cutover and recovery are recorded
+in the [deployment incident](../../postmortem/2026-10-31-browser-deployment-secret-mount.md).
+See [deployment evidence](vps-deployment.md), [implementation details](browser.md),
+[member workflow](../user/browser.md) and [host setup](../user/browser-host.md).
+
+
 ## Active Telegram input and selective reply quotations (2026-10-30)
 
 Interactive messages received during generation can now join the same actor's

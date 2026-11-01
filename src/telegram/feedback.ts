@@ -22,6 +22,7 @@ export interface Progress {
   unavailable?: boolean;
 }
 interface ProgressTask {
+  browserRead?: Delivery["browserRead"];
   id: string;
   actor: string;
   chatId: string;
@@ -63,6 +64,7 @@ export function deliverTaskProgress(
   });
   const d = w.deliveries.find((d) => d.id === id);
   if (d) {
+    if (task.browserRead) d.browserRead = task.browserRead;
     d.progressMessage = { owner, id: task.id };
     // Retention may remove the original intent while a later edit still carries
     // the confirmed message ID. That later record is a valid anchor.

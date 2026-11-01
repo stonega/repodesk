@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { codingBrowserBridge } from "../../browser/capability.ts";
 import { runtimeProviderSchema } from "../../models/config.ts";
 import { codingPayload } from "../config.ts";
 import {
@@ -13,6 +14,7 @@ import { transcriptPage } from "../transcript.ts";
 export const localStart = z
   .object({
     workspaceId: z.uuid(),
+    browser: codingBrowserBridge.optional(),
     taskId: z.uuid(),
     payload: codingPayload,
     development: developmentRun,

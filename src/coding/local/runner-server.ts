@@ -34,6 +34,17 @@ export function runnerApp(
     );
     return c.json({ ok: true });
   });
+  app.post("/conversation/browser", async (c) => {
+    c.header("Cache-Control", "no-store");
+    return c.json(
+      await supervisor.browserCall(
+        (c.req.header("authorization") ?? "").replace(/^Bearer /, ""),
+        await c.req.json(),
+        transport,
+        c.req.raw.signal,
+      ),
+    );
+  });
   app.get("/readyz", async (c) => {
     try {
       await supervisor.ready();

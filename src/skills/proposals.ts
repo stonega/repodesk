@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import {
+  browserPrivateGrants,
+  browserReadAllowed,
+  browserRunPrivate,
+} from "../browser/privacy.ts";
 import { cloudflareReadAllowed } from "../cloudflare/policy.ts";
 import {
   type Approval,
@@ -40,6 +45,7 @@ export function completedSkillSource(
     404,
   );
   requireThat(googleReadAllowed(w, source), "skill_source_unavailable", 404);
+  requireThat(browserReadAllowed(w, source), "skill_source_unavailable", 404);
   const references = memoryReferences(source.sources);
   requireThat(githubReadAllowed(w, source), "skill_source_unavailable", 404);
   requireThat(
@@ -67,6 +73,7 @@ export function readSkillSource(w: Workspace, r: Run, id: string) {
     id,
   );
   const prior = r.handoffRead;
+  r.browserRead ??= browserPrivateGrants(w, source)[0];
   const all = w.messages.filter(
     (s) =>
       references.sourceIds.includes(s.id) ||
@@ -113,12 +120,17 @@ export function proposeSkill(
   input: unknown,
 ) {
   authorize(w, r.actor);
-  const { references } = completedSkillSource(
+  const { source, references } = completedSkillSource(
     w,
     r.actor,
     r.chatId,
     r.topicId,
     sourceRunId,
+  );
+  requireThat(
+    !browserRunPrivate(w, source) && !browserRunPrivate(w, r),
+    "browser_private_sharing_denied",
+    403,
   );
   readSkillSource(w, r, sourceRunId);
   const spec = validateSkill(input);

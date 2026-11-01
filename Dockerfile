@@ -68,6 +68,8 @@ COPY --from=base /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /opt/deepx
 COPY --from=build /app/dist/job.js ./job.js
 COPY --from=dependencies /app/node_modules/zod ./node_modules/zod
+# Browser dynamic-tool schemas share the application's explicit TypeBox dependency.
+COPY --from=dependencies /app/node_modules/typebox ./node_modules/typebox
 RUN mkdir /task /input /auth && chown node:node /task /auth
 ENV HOME=/task/home
 USER node

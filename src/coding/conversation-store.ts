@@ -47,6 +47,7 @@ export function conversationAudience(
   run: Run,
 ) {
   checkDevelopment(w, task, run.actor, false, true);
+  run.browserRead ??= task.browserRead;
   requireThat(
     run.status === "running" &&
       runAllowed(w, run) &&

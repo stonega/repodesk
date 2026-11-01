@@ -3,6 +3,8 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { PluginService } from "../../src/agent/plugin-service.ts";
 import { type AgentInput, selectedModel } from "../../src/agent/runtime.ts";
+import { browserTools } from "../../src/browser/config.ts";
+import { browserRuntime } from "../../src/browser/runtime.ts";
 import { emptyCloudflare } from "../../src/cloudflare/config.ts";
 import { CloudflareService } from "../../src/cloudflare/service.ts";
 import { CodeTruthClient } from "../../src/code-truth/client.ts";
@@ -132,6 +134,10 @@ export async function verifyPluginStartup() {
         },
       };
       w.coding = { revision: 1, settings: { ...emptyCoding, enabled: true } };
+      if (mode === "denied")
+        w.plugins.browser = { enabled: false, generation: 1 };
+      if (mode === "stale_revision")
+        w.plugins.browser = { enabled: true, generation: 3 };
       const run = createRun(w, "101", "hi", "101", 0, "gpt-4.1-mini");
       run.status = "running";
       run.fence = 1;
@@ -162,6 +168,23 @@ export async function verifyPluginStartup() {
         new CloudflareService(store, key, forbidden),
         new SearchConsoleService(store, key, forbidden, google),
         google,
+        undefined,
+        browserRuntime(
+          store,
+          key,
+          {
+            BROWSER_HOST_SOCKET: ["missing_service", "disconnected"].includes(
+              mode,
+            )
+              ? undefined
+              : "/unavailable-browser.sock",
+            BROWSER_HOST_TOKEN_FILE: "/unavailable-browser-token",
+          },
+          async () => {
+            credentials++;
+            throw new Error("Optional Browser credential read during startup");
+          },
+        ),
       );
       const model = selectedModel("gpt-4.1-mini");
       const input: AgentInput = {
@@ -196,6 +219,12 @@ export async function verifyPluginStartup() {
         (_model, context) => {
           modelCalls++;
           const names = context.tools?.map((tool) => tool.name) ?? [];
+          for (const name of browserTools)
+            assert.equal(
+              names.includes(name),
+              mode !== "denied",
+              `${mode}: Browser default enablement`,
+            );
           for (const name of [
             "obsidian_query",
             "query_google_docs",

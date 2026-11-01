@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
+import {
+  decodeBrowserWorkspace,
+  encodeBrowserWorkspace,
+} from "../browser/storage.ts";
 import { type Deployment, Fault, type Workspace } from "../domain.ts";
 import { RuntimeLogger } from "../observability/logs.ts";
 import { type Sql, transaction } from "./pool.ts";
@@ -13,7 +17,16 @@ export class Store {
   constructor(
     public pool: Pool,
     public log = new RuntimeLogger(),
+    private privateStateKey?: string,
   ) {}
+  configurePrivateState(key: string) {
+    if (
+      !/^[0-9a-f]{64}$/i.test(key) ||
+      (this.privateStateKey && this.privateStateKey !== key)
+    )
+      throw new Fault("browser_private_storage_unavailable", 503);
+    this.privateStateKey = key;
+  }
   async deployment(sql: Sql = this.pool, lock = false): Promise<Deployment> {
     const row = (
       await sql.query(
@@ -41,12 +54,18 @@ export class Store {
       )
     ).rows[0];
     if (!row) throw new Fault("not_found", 404);
-    return workspaceDefaults(row.data);
+    return decodeBrowserWorkspace(
+      workspaceDefaults(row.data),
+      this.privateStateKey,
+    );
   }
   async save(sql: Sql, workspace: Workspace) {
     await sql.query(
       "UPDATE workspaces SET data=$2,updated_at=now() WHERE id=$1",
-      [workspace.id, JSON.stringify(workspace)],
+      [
+        workspace.id,
+        JSON.stringify(encodeBrowserWorkspace(workspace, this.privateStateKey)),
+      ],
     );
     for (const [kind, records] of [
       ["run", workspace.runs.filter((r) => r.status === "queued")],
@@ -73,7 +92,9 @@ export class Store {
   async all(): Promise<Workspace[]> {
     return (
       await this.pool.query("SELECT data FROM workspaces ORDER BY id")
-    ).rows.map((r) => workspaceDefaults(r.data));
+    ).rows.map((r) =>
+      decodeBrowserWorkspace(workspaceDefaults(r.data), this.privateStateKey),
+    );
   }
   async ids(): Promise<string[]> {
     return (

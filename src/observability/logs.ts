@@ -62,6 +62,17 @@ export const logEvents = {
 export type LogEvent = keyof typeof logEvents;
 export type LogService = "app" | "worker";
 const codes = new Set([
+  "browser_reconcile_failed",
+  "browser_credentials_unavailable",
+  "browser_service_unavailable",
+  "browser_control_expired",
+  "browser_configuration_changed",
+  "browser_consumer_unavailable",
+  "browser_private_storage_unavailable",
+  "browser_capacity",
+  "browser_outcome_unknown",
+  "browser_request_unavailable",
+  "browser_page_changed",
   ...codeTruthFailureCodes,
   "code_truth_disabled",
   "code_truth_no_repositories",

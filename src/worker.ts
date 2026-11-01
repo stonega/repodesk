@@ -1,4 +1,5 @@
 import { PluginService } from "./agent/plugin-service.ts";
+import { browserRuntime } from "./browser/runtime.ts";
 import { CloudflareService } from "./cloudflare/service.ts";
 import { CodeTruthClient } from "./code-truth/client.ts";
 import { LocalRunnerClient } from "./coding/local/client.ts";
@@ -21,7 +22,7 @@ import { SetupService } from "./setup/service.ts";
 const cfg = config();
 const pool = database(cfg.DATABASE_URL);
 const log = new RuntimeLogger(pool, "worker");
-const store = new Store(pool, log);
+const store = new Store(pool, log, cfg.ENCRYPTION_KEY);
 const google = new GoogleService(store, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN);
 const githubApps = new GitHubApps(
   store,
@@ -43,6 +44,8 @@ const plugins = new PluginService(
   ),
   new SearchConsoleService(store, cfg.ENCRYPTION_KEY, undefined, google),
   google,
+  undefined,
+  browserRuntime(store, cfg.ENCRYPTION_KEY, cfg),
 );
 const stop = await startWorker(
   store,
@@ -64,6 +67,7 @@ const stop = await startWorker(
       ? new LocalRunnerClient(cfg.CODEX_RUNNER_URL, cfg.CODEX_RUNNER_TOKEN)
       : undefined,
     cfg.ENCRYPTION_KEY,
+    plugins.browser.coding,
   ),
   new GitHubUsers(store, githubApps, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN),
   new ReviewExecutor(
@@ -79,6 +83,7 @@ const stop = await startWorker(
   plugins.google,
   plugins.searchConsole,
   plugins.transcription,
+  plugins.browser,
 );
 log.write("worker_started");
 let stopping = false;

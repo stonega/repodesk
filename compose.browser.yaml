@@ -1,0 +1,26 @@
+# Optional host-browser bridge. Browser itself runs under systemd on the VPS.
+# BROWSER_TOKEN_FILE points at the application copy created by install.sh.
+services:
+  app:
+    environment:
+      BROWSER_HOST_SOCKET: /run/repodesk-browser/control.sock
+      BROWSER_HOST_TOKEN_FILE: /run/secrets/browser_token
+      BROWSER_CODEX_ORIGIN: http://app:3000
+    volumes:
+      - /run/repodesk-browser:/run/repodesk-browser:ro
+    secrets:
+      - browser_token
+    group_add: ["1000"]
+  worker:
+    environment:
+      BROWSER_HOST_SOCKET: /run/repodesk-browser/control.sock
+      BROWSER_HOST_TOKEN_FILE: /run/secrets/browser_token
+      BROWSER_CODEX_ORIGIN: http://app:3000
+    volumes:
+      - /run/repodesk-browser:/run/repodesk-browser:ro
+    secrets:
+      - browser_token
+    group_add: ["1000"]
+secrets:
+  browser_token:
+    file: ${BROWSER_TOKEN_FILE:-./secrets/browser-token}

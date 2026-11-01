@@ -56,6 +56,29 @@ its advertised schemas with the generated bundled catalog before deployment.
 
 ## Installation and grants
 
+### Planned default-enabled Browser plugin
+
+The proposed host-browser capability will be a built-in Browser plugin enabled
+by default unless the workspace explicitly disables it. It is not implemented
+or present as a working catalog entry yet. See the
+[browser design](admin-panel.md#host-browser-and-secure-input-proposed-2026-10-30).
+
+One application-owned browser service serves chat, Codex and other approved
+plugin adapters. It retains separate headed browser profiles for each user and
+workspace. Default enablement does not transfer another consumer's grant or a
+user's login state. Each operation binds the actual actor and task and enforces
+current access; external writes remain in trusted application services.
+
+Registration uses bundled schemas and local state only. Host readiness, browser
+startup and any credential access are deferred to an authorized invocation.
+Missing/failed browser infrastructure must not break ordinary greetings or
+unrelated tools. Implementation must add Browser to the combined production
+startup fixture and exact-image contract. Preserve explicit disablement and stop
+new browser automation for every consumer when disabled, without erasing private
+profiles as a side effect.
+
+### Existing installation and grants
+
 The Plugins landing page shows compact Installed cards for built-in Code Truth,
 built-in Codex, built-in Review Bot, built-in Cloudflare and workspace-registered file extensions. Clicking a card opens
 its detail route, where the existing configuration and controls live. The

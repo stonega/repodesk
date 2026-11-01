@@ -543,6 +543,14 @@ const url = process.env.TEST_DATABASE_URL;
         expect(
           (await plugins.runner(await store.deployment(), w.id))
             .extensionVersion,
+        ).toBeDefined(); // Browser remains enabled independently of Obsidian.
+        await plugins.configureBrowser(admin, w.id, {
+          revision: 1,
+          settings: { enabled: false },
+        });
+        expect(
+          (await plugins.runner(await store.deployment(), w.id))
+            .extensionVersion,
         ).toBeUndefined();
       } finally {
         await host.close();

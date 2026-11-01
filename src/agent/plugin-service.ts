@@ -1,6 +1,13 @@
 import { isAbsolute } from "node:path";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
 import { operator } from "../admin/auth.ts";
+import {
+  browserEnabled,
+  browserGeneration,
+  browserTools,
+} from "../browser/config.ts";
+import { browserExtension } from "../browser/extension.ts";
+import { BrowserService } from "../browser/service.ts";
 import { cloudflareTools } from "../cloudflare/config.ts";
 import { cloudflareExtension } from "../cloudflare/extension.ts";
 import type { CloudflareService } from "../cloudflare/service.ts";
@@ -71,6 +78,7 @@ export class PluginService {
     readonly searchConsole?: SearchConsoleService,
     readonly google?: GoogleService,
     readonly transcription = new TranscriptionService(store),
+    readonly browser = new BrowserService(store),
   ) {}
   private legacy?: Promise<PluginRecord[]>;
   private fallback(): Promise<PluginRecord[]> {
@@ -142,6 +150,7 @@ export class PluginService {
       const names = new Set<string>(TOOLS);
       // Reserve default built-ins even while disabled, so re-enabling is safe.
       for (const name of obsidianTools) names.add(name);
+      for (const name of browserTools) names.add(name);
       for (const plugin of googlePlugins)
         if (workspace.plugins?.google?.google?.settings.enabled)
           names.add(googleDefinitions[plugin].tool);
@@ -363,6 +372,21 @@ export class PluginService {
     const config = workspace.plugins?.codeTruth;
     const targets = config?.enabled ? targetsFor(config, workspaceId) : [];
     const builtins = [];
+    if (
+      browserEnabled(workspace) &&
+      !scoped.some((entry) =>
+        entry.tools.some((name) =>
+          (browserTools as readonly string[]).includes(name),
+        ),
+      )
+    )
+      builtins.push(
+        browserExtension(
+          this.browser,
+          workspaceId,
+          browserGeneration(workspace),
+        ),
+      );
     if (obsidianEnabled(workspace))
       builtins.push(
         obsidianExtension(
@@ -453,7 +477,46 @@ export class PluginService {
     return new PiRunner(
       stream,
       scoped.length || builtins.length
-        ? ExtensionCatalog.fromSnapshot(scoped, builtins)
+        ? ExtensionCatalog.fromSnapshot(
+            scoped,
+            builtins,
+            (entry, input, callId, toolName) => {
+              if (!entry.browserAccess) return;
+              const use = async (
+                name: "browser_session" | "browser_action",
+                value: unknown,
+              ) => {
+                requireThat(
+                  !input.purpose && input.workspaceId === workspaceId,
+                  "access_denied",
+                  403,
+                );
+                await input.guard();
+                const fence = await this.browser.executionFence(
+                  workspaceId,
+                  input.runId,
+                );
+                return this.browser.fileTool(
+                  workspaceId,
+                  input.runId,
+                  input.actor,
+                  fence,
+                  browserGeneration(workspace),
+                  entry.id,
+                  workspace.plugins?.revision ?? 0,
+                  toolName,
+                  callId,
+                  name,
+                  value,
+                  input.signal,
+                );
+              };
+              return {
+                session: (value) => use("browser_session", value),
+                action: (value) => use("browser_action", value),
+              };
+            },
+          )
         : undefined,
     );
   }
@@ -475,6 +538,16 @@ export class PluginService {
     const workspace = await this.store.read(workspaceId);
     authorizePlugins(admin, workspace);
     return new ObsidianService(this.store).configure(
+      admin,
+      workspaceId,
+      value,
+      await this.entries(workspace),
+    );
+  }
+  async configureBrowser(admin: Admin, workspaceId: string, value: unknown) {
+    const workspace = await this.store.read(workspaceId);
+    authorizePlugins(admin, workspace);
+    return this.browser.configure(
       admin,
       workspaceId,
       value,

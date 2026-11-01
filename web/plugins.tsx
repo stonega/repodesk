@@ -1,6 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import type { PluginPage, PluginSpec } from "../src/agent/plugin-config.ts";
+import type { BrowserPluginPage } from "../src/browser/config.ts";
 import type { CloudflarePage } from "../src/cloudflare/config.ts";
 import type { CodeTruthPage } from "../src/code-truth/config.ts";
 import type { CodingPage } from "../src/coding/config.ts";
@@ -8,6 +9,7 @@ import { type GooglePage, googlePlugins } from "../src/google/config.ts";
 import type { ObsidianPage } from "../src/obsidian/config.ts";
 import type { ReviewPage } from "../src/review-bot/config.ts";
 import type { TranscriptionPage } from "../src/transcription/config.ts";
+import { BrowserPlugin } from "./browser.tsx";
 import { Cloudflare } from "./cloudflare.tsx";
 import { CodeTruth } from "./code-truth.tsx";
 import { Coding } from "./coding.tsx";
@@ -119,6 +121,7 @@ export function Plugins({
     google?: boolean;
     obsidian?: boolean;
     transcription?: boolean;
+    browser?: boolean;
   }>({});
   const path = (suffix = "") =>
     `/admin/plugins${suffix}?workspace=${encodeURIComponent(workspaceId)}`;
@@ -151,6 +154,7 @@ export function Plugins({
     if (
       view === "catalog" ||
       (view === "installed" &&
+        pluginId !== "browser" &&
         pluginId !== "transcription" &&
         pluginId !== "obsidian" &&
         pluginId !== "google" &&
@@ -174,6 +178,7 @@ export function Plugins({
       request<ReviewPage>(`${endpoint}/review-bot`),
       request<CloudflarePage>(`${endpoint}/cloudflare`),
       request<ObsidianPage>(`${endpoint}/obsidian`),
+      request<BrowserPluginPage>(`${endpoint}/browser`),
     ]).then(
       ([
         transcription,
@@ -183,9 +188,14 @@ export function Plugins({
         review,
         cloudflare,
         obsidian,
+        browser,
       ]) => {
         if (!active) return;
         setBuiltIns({
+          browser:
+            browser.status === "fulfilled"
+              ? browser.value.settings?.enabled
+              : undefined,
           transcription:
             transcription.status === "fulfilled"
               ? transcription.value.settings?.enabled
@@ -278,7 +288,8 @@ export function Plugins({
             Manage installed extensions for this workspace.
           </p>
         </header>
-      ) : (pluginId !== "transcription" &&
+      ) : (pluginId !== "browser" &&
+          pluginId !== "transcription" &&
           pluginId !== "obsidian" &&
           pluginId !== "google" &&
           !googlePlugins.some((id) => id === pluginId) &&
@@ -349,6 +360,18 @@ export function Plugins({
             </p>
           )}
           <div className="plugin-catalog-grid">
+            <PluginCard
+              to={path("/browser")}
+              name="Browser"
+              summary="Your private headed browser, shared with authorized tasks."
+              status={
+                builtIns.browser === undefined
+                  ? "Built in"
+                  : builtIns.browser
+                    ? "Enabled"
+                    : "Disabled"
+              }
+            />
             <PluginCard
               to={path("/transcription")}
               name="Qwen3-ASR"
@@ -445,6 +468,14 @@ export function Plugins({
           </div>
         </section>
       )}
+      {view === "installed" && pluginId === "browser" && (
+        <BrowserPlugin
+          key={workspaceId}
+          request={request}
+          workspaceId={workspaceId}
+          backTo={path()}
+        />
+      )}
       {view === "installed" && pluginId === "google" && (
         <Google
           key={workspaceId}
@@ -496,6 +527,7 @@ export function Plugins({
         <Coding request={request} workspaceId={workspaceId} backTo={path()} />
       )}
       {view === "installed" &&
+        pluginId !== "browser" &&
         pluginId !== "transcription" &&
         pluginId !== "obsidian" &&
         pluginId !== "google" &&
@@ -588,6 +620,14 @@ export function Plugins({
                         {selected.tools.length
                           ? selected.tools.join(", ")
                           : "Hooks only"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Browser access</dt>
+                      <dd>
+                        {selected.browserAccess
+                          ? "Granted · member approvals required"
+                          : "Not granted"}
                       </dd>
                     </div>
                   </dl>
@@ -865,6 +905,20 @@ function PluginEditor({
             <span>Enable this plugin</span>
           </label>
         )}
+        <label className="plugin-check">
+          <input
+            type="checkbox"
+            checked={draft.browserAccess ?? false}
+            onChange={(event) =>
+              setDraft({ ...draft, browserAccess: event.target.checked })
+            }
+          />
+          <span>Allow this plugin to request the member’s Browser</span>
+        </label>
+        <p className="muted">
+          Browser access is off by default. Site and action approvals, private
+          input and individual profiles still apply.
+        </p>
         <p className="muted">
           Saving an enabled plugin grants its tools and hooks to eligible users
           in this workspace.

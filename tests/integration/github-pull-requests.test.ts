@@ -283,6 +283,8 @@ const url = process.env.TEST_DATABASE_URL;
       const tools = requests[0]?.tools as { function: { name: string } }[];
       expect(tools.map((t) => t.function.name).sort()).toEqual(
         [
+          "browser_action",
+          "browser_session",
           "find_connected_repository",
           "obsidian_query",
           "obsidian_read",

@@ -11,7 +11,7 @@ requireThat(
 );
 const cfg = config();
 const pool = database(cfg.DATABASE_URL);
-const store = new Store(pool);
+const store = new Store(pool, undefined, cfg.ENCRYPTION_KEY);
 try {
   const row = (
     await pool.query(

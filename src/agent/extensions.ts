@@ -12,6 +12,7 @@ import {
   type LoadExtensionsResult,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
+import type { BrowserPluginContext } from "../browser/plugin-context.ts";
 import { Fault, requireThat } from "../domain.ts";
 import {
   type PluginRecord,
@@ -21,6 +22,12 @@ import {
 import type { AgentInput } from "./runtime.ts";
 
 type Entry = PluginSpec & { hash: string };
+type BrowserBridge = (
+  entry: PluginSpec,
+  input: AgentInput,
+  callId: string,
+  toolName: string,
+) => BrowserPluginContext["browser"];
 export type BuiltinExtension = Entry & {
   factory: (input: AgentInput) => ExtensionFactory;
   toolErrorCodes?: readonly string[];
@@ -47,6 +54,7 @@ export class ExtensionCatalog {
   private constructor(
     private entries: Entry[],
     private builtins: BuiltinExtension[] = [],
+    private browserBridge?: BrowserBridge,
   ) {
     this.version = digest(
       JSON.stringify([
@@ -112,6 +120,7 @@ export class ExtensionCatalog {
   static fromSnapshot(
     entries: PluginRecord[],
     builtins: BuiltinExtension[] = [],
+    browserBridge?: BrowserBridge,
   ) {
     return new ExtensionCatalog(
       entries
@@ -121,6 +130,7 @@ export class ExtensionCatalog {
           return { ...entry, hash: entry.hash };
         }),
       builtins,
+      browserBridge,
     );
   }
   static async fileStatus(entry: PluginRecord) {
@@ -189,6 +199,7 @@ export class ExtensionCatalog {
             entry.toolErrorCodes ?? [],
           ]),
         ),
+        this.browserBridge,
       );
     } catch (error) {
       loaded?.runtime.invalidate();
@@ -212,6 +223,7 @@ export class ExtensionHost {
     private cwd: string,
     private input: AgentInput,
     builtinErrorCodes: ReadonlyMap<string, readonly string[]> = new Map(),
+    browserBridge?: BrowserBridge,
   ) {
     this.system = input.system;
     this.context = {
@@ -295,7 +307,16 @@ export class ExtensionHost {
                   args,
                   signal,
                   onUpdate,
-                  this.context,
+                  entry.browserAccess
+                    ? (Object.assign(Object.create(this.context), {
+                        browser: browserBridge?.(
+                          entry,
+                          input,
+                          callId,
+                          definition.name,
+                        ),
+                      }) as ExtensionContext)
+                    : this.context,
                 );
                 signal?.throwIfAborted();
                 await input.guard();

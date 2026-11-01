@@ -53,6 +53,9 @@ for (const width of [1280, 390]) {
       await expect(
         catalog.getByRole("link", { name: "Open Codex" }),
       ).toBeVisible();
+      await expect(
+        catalog.getByRole("link", { name: "Open Browser" }),
+      ).toBeVisible();
       await expect(catalog).toHaveCSS("margin-bottom", "0px");
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", width);
       for (const theme of ["light", "dark"]) {
@@ -84,7 +87,7 @@ for (const width of [1280, 390]) {
     await expect(
       page.getByRole("button", { name: "Add plugin" }),
     ).toBeEnabled();
-    await expect(catalog.getByRole("link")).toHaveCount(7);
+    await expect(catalog.getByRole("link")).toHaveCount(8);
     await expect(
       catalog.getByRole("link", { name: "Open Qwen3-ASR" }),
     ).toBeVisible();

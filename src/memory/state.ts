@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { browserRunPrivate } from "../browser/privacy.ts";
 import type { Run, Source, Workspace } from "../domain.ts";
 import { githubReadAllowed } from "../github/metadata-policy.ts";
 import {
@@ -88,6 +89,7 @@ export function scopeSources(
   );
   return w.messages.filter((s) => {
     if (
+      s.browserRead ||
       !s.threadId ||
       !threads.has(s.threadId) ||
       !retainedSource(w, s, now) ||
@@ -97,6 +99,7 @@ export function scopeSources(
     const origin = origins.get(s.runId ?? "");
     return (
       origin &&
+      !browserRunPrivate(w, origin) &&
       !origin.cancelled &&
       (!origin.followup || origin.followup.decision === "reply") &&
       githubReadAllowed(w, actor ? { ...origin, actor } : origin)

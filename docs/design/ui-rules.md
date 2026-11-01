@@ -16,6 +16,11 @@ when implementing or reviewing a change.
 | Saved display versus editing | [Modal editors](#add-and-create-flows-use-modals), [workspace values](#workspace-settings-show-saved-values-before-editing), [team summary](#team-configuration-uses-one-overview-editor), [model summary](#model-configuration-uses-a-summary-card-and-one-editor) |
 | Plugin detail layout | [Shared plugin layout](#plugin-details-share-card-layouts-and-a-title-switch), [Codex sections](#codex-details-show-configuration-and-tasks-separately) |
 | Integration setup input | [Discover resource identifiers](#connections-discover-resource-identifiers) |
+| Browser authentication input | [Shared secure input page](#browser-tasks-share-one-secure-input-page) |
+| VPS browser mode | [Headed host browser](#vps-browser-tasks-use-a-headed-browser) |
+| Browser account isolation | [Private user profiles](#browser-profiles-and-login-state-are-private-to-each-user) |
+| Browser plugin defaults | [Default-enabled built-in Browser](#browser-is-a-default-enabled-built-in-plugin) |
+| Browser site consent and task continuity | [Remember websites and keep Pi in control](#browser-remembers-websites-and-stays-in-the-current-pi-task) |
 | Code Truth setup | [URL and description](#code-truth-repositories-use-a-url-and-description) |
 | Card spacing after content changes | [Content layout owns card spacing](#content-layout-owns-card-spacing) |
 | Repository display | [Shared repository cards](#repository-cards-share-one-style), [member GitHub details](#member-github-columns-show-only-a-view-button), [connected repositories](#connected-github-repositories-stay-compact-and-directly-accessible) |
@@ -37,6 +42,124 @@ when implementing or reviewing a change.
 - Keep illustrative examples separate from established preferences.
 
 ## Recorded preferences
+
+### Browser remembers websites and stays in the current Pi task
+
+- **Preference:** Ask permission to access a website and remember the decision
+  for the same member's future private tasks in that workspace. Pi coordinates
+  browser work inside the current conversation and goal; approval or secure
+  input resumes that same run with its accumulated context.
+- **Scope:** The shared Browser member page, bundled Pi tools and authorized
+  consumer adapters. Website means an exact HTTP(S) origin, including port.
+  It does not grant another member or workspace access to a profile.
+- **Source:** 2026-11-01 — the user requested website-level remembered consent
+  instead of approval for every task, and Pi-led execution instead of independent
+  browser tasks. In a follow-up, the user chose direct routine operations on
+  approved websites while retaining confirmation for external submissions.
+- **Acceptance:** Label site consent **Allow website**, explain future reuse,
+  and show **Allowed websites** as saved readable origins with a **Revoke access**
+  action. Do not turn the saved list into a form. Closing preserves remembered
+  sites. Revocation removes the site and fences current browser work; subsequent
+  tasks ask again. Ordinary native links, nonsensitive field fills and focus keys
+  can proceed after host checks. Buttons, submitting keys, coordinate clicks,
+  explicit external effects and unrecognized controls require a task/page-bound
+  decision. Verify saved/empty/loading, pending/failed revocation, desktop/mobile
+  widths and both themes; retain one originating Pi run across waits.
+- **Exceptions:** Website permission is separate from current membership,
+  workspace/plugin grants, browser control and external-action approval. Profile
+  deletion, membership revocation or Browser configuration changes invalidate
+  earlier authority. Legacy temporary grants and already-approved legacy requests
+  do not silently become remembered consent. Codex can use the same browser while
+  carrying out an already authorized coding task. Credentials retain the shared
+  task-bound secure-input flow. Native links navigate directly rather than firing
+  unreviewed page click handlers; unsupported interactions conservatively confirm.
+
+### Browser is a default-enabled built-in plugin
+
+- **Preference:** Provide the proposed shared browser capability as a built-in
+  Browser plugin enabled by default, with the same entry serving chat, Codex and
+  other authorized plugins.
+- **Scope:** The Browser catalog entry and workspace enablement. Reuse the
+  shared plugin detail layout and title-row Enable switch. Browser service and
+  private sessions remain managed by application services.
+- **Source:** 2026-10-30 — the user requested making this feature a default-enabled
+  plugin during the host-browser design discussion.
+- **Acceptance:** Distinguish saved enablement, host-service readiness and the
+  current user's browser/authentication status. Retain an explicit Disable choice
+  across updates. Show missing/unavailable service status truthfully without
+  affecting unrelated chat. Do not display another user's login state in a shared
+  plugin summary. Verify enabled/disabled, loading, unavailable, pending and error
+  states at desktop/mobile widths and in both themes when implemented.
+- **Exceptions:** Default enablement does not grant another plugin browser access,
+  share user profiles, install host software during chat startup or authorize
+  website writes. Implementation status and evidence belong in
+  [Browser implementation](../implementation/browser.md).
+
+### Browser tasks share one secure input page
+
+- **Preference:** Provide one shared page for entering passwords and comparable
+  sensitive information required by browser tasks, instead of requiring users
+  to send those values in chat or first log in through a remote desktop.
+- **Scope:** The proposed shared host-browser workflow and its task-bound
+  sensitive input requests from chat, Codex and other authorized plugins. They
+  use the same input page; session reuse is restricted to the same owning user
+  and workspace. This does not implicitly relocate existing bot/model settings
+  or replace provider-specific OAuth consent.
+- **Source:** 2026-10-30 — during the VPS deployment discussion, the user requested
+  a unified page for entering password-like information after questioning the
+  assumption of prior manual browser login.
+- **Source update:** 2026-10-30 — the user clarified that the browser must be
+  usable by the chat bot, the Codex plugin and other plugins. Keep one shared
+  interaction surface rather than separate consumer-specific credential forms.
+- **Acceptance:** Show the task, verified destination and requested fields before
+  submission. Bind access and submission to the authorized actor, workspace,
+  browser session and current request; a copied link must not grant authority.
+  Keep raw input out of model context, chat, browser storage APIs, routine logs,
+  traces and tool receipts. Show pending, failed, expired, cancelled and completed
+  states without echoing submitted values. Verify desktop/mobile and both themes
+  when implementing; this preference records no completed UI verification.
+- **Exceptions:** A task-bound input page is a focused interaction, not a saved
+  settings editor. If reusable credentials are later introduced, their saved
+  summaries and New/Edit flows follow the existing modal-editor rule. Whether
+  to save credentials for reuse remains a separate product decision.
+
+### VPS browser tasks use a headed browser
+
+- **Preference:** Run the proposed dedicated VPS browser in normal headed mode.
+  Do not silently substitute a headless browser.
+- **Scope:** The persistent host browser discussed for RepoDesk automation,
+  shared through a service by chat, Codex and other authorized plugins.
+- **Source:** 2026-10-30 — the user explicitly rejected headless mode for this
+  workflow because they consider its limitations too restrictive.
+- **Acceptance:** Verify the actual browser launch mode and display availability.
+  A missing display reports an unavailable service rather than switching modes.
+  A virtual display is a possible deployment choice; remote viewing/control and
+  the specific display server remain implementation proposals.
+- **Exceptions:** This does not change deterministic browser tests or the existing
+  HTTP-based web reader. It does not assert that headed mode removes website
+  authentication challenges or automation restrictions.
+
+### Browser profiles and login state are private to each user
+
+- **Preference:** Keep each user's browser identity separate. Different users
+  must not share browser login information. Chat, Codex and other authorized
+  plugins may reuse a session only for its owning user within the same workspace.
+- **Scope:** The proposed shared host-browser service, browser viewing/control,
+  secure input, saved authentication state and downloaded artifacts. Sharing the
+  service or workspace does not share a user's profile.
+- **Source:** 2026-10-30 — the user explicitly required the browser to distinguish
+  users and prohibited sharing login information between different users.
+- **Acceptance:** Users in the same workspace see and control only their own
+  authorized sessions and input requests. Apply the same ownership boundary to
+  cookies, site storage, saved credentials, tabs, screenshots, downloads and live
+  display streams. Workspace/admin role alone must not grant access to another
+  user's browser identity. A copied link or guessed session ID must not change
+  ownership. Verify isolation across users, workspaces and consumer plugins;
+  session selection, loading, empty, pending, expired and error displays must not
+  reveal another user's data on desktop/mobile or in either theme.
+- **Exceptions:** No cross-user browser-profile or login-state sharing is included
+  in this feature. Anonymous/unbound tasks cannot fall back to a shared logged-in
+  profile. This records a design requirement, not implemented isolation.
 
 ### Group access explains Telegram mention setup
 

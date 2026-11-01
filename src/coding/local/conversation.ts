@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 import { z } from "zod";
+import { browserInstructions } from "../../browser/extension.ts";
 import { Fault } from "../../domain.ts";
 import {
   type DevelopmentMedia,
@@ -22,7 +23,6 @@ import {
 import {
   conversationInstructions,
   conversationPrompt,
-  conversationTools,
   type JobTaskChannel,
 } from "./job-channel.ts";
 import { type ReviewSource, reviewSourceTools } from "./review-source.ts";
@@ -382,7 +382,7 @@ export async function runConversation(options: {
         ...(options.channel || options.reviewSource
           ? {
               dynamicTools: [
-                ...(options.channel ? conversationTools : []),
+                ...(options.channel?.tools ?? []),
                 ...(options.reviewSource ? reviewSourceTools : []),
               ],
             }
@@ -408,7 +408,9 @@ export async function runConversation(options: {
       .thread.id;
     if (!/^[a-zA-Z0-9-]{1,100}$/.test(threadId)) throw failure();
     let prompt =
-      options.prompt + (options.channel ? `\n${conversationInstructions}` : "");
+      options.prompt +
+      (options.channel ? `\n${conversationInstructions}` : "") +
+      (options.channel?.browserEnabled ? `\n${browserInstructions}` : "");
     const initial = await options.channel?.pull().catch(() => []);
     if (initial?.length) prompt += `\n${conversationPrompt(initial)}`;
     // One result-only correction stays in this thread/checkout. This does not
@@ -537,6 +539,7 @@ export async function runConversation(options: {
     pending.clear();
     child.stdin.end();
     child.kill("SIGKILL");
+    options.channel?.close();
     await options.channel?.flushTranscript();
   }
 }

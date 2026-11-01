@@ -283,6 +283,16 @@ export type DevelopmentState =
   | "cancelled"
   | "unknown";
 export interface DevelopmentTask {
+  browserRead?: import("../domain.ts").BrowserReadStamp;
+  browserCapability?: import("../browser/capability.ts").BrowserCapability;
+  browserBridgeOrigin?: string;
+  browserWait?: {
+    id: string;
+    kind: "site" | "action" | "input" | "control";
+    callId: string;
+    expiresAt: number;
+  };
+  browserResumed?: string[];
   referenceSources?: ReferenceSource[];
   hasChanges?: boolean;
   replacesTaskId?: string;

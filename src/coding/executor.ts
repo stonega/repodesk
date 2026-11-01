@@ -66,6 +66,7 @@ export class DevelopmentExecutor {
     private key?: string,
     private telegram?: (deployment: Deployment) => Promise<Telegram>,
     private transcription = new TranscriptionService(store),
+    private browser?: import("../browser/codex.ts").CodexBrowsers,
   ) {}
   async tick(workspaceId: string) {
     for (const task of await taskList(this.store.pool, workspaceId)) {
@@ -578,6 +579,9 @@ export class DevelopmentExecutor {
         await guard();
         dispatched = true;
         await this.runner.start({
+          ...(this.browser
+            ? { browser: await this.browser.capability(workspaceId, id) }
+            : {}),
           workspaceId,
           taskId: reserved.attemptId,
           payload: task.payload,

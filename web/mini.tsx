@@ -8,6 +8,7 @@ import {
 } from "react";
 import { createRoot } from "react-dom/client";
 import type { HistoryItem, TaskHistory } from "../src/miniapp/history.ts";
+import { BrowserMini } from "./mini-browser.tsx";
 import { MiniMarkdown } from "./mini-markdown.tsx";
 
 type TelegramApp = {
@@ -433,4 +434,7 @@ function MiniApp() {
   );
 }
 const root = document.getElementById("root");
-if (root) createRoot(root).render(<MiniApp />);
+if (root)
+  createRoot(root).render(
+    reference.startsWith("browser_") ? <BrowserMini /> : <MiniApp />,
+  );

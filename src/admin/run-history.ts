@@ -1,3 +1,4 @@
+import { browserPanelRun } from "../browser/privacy.ts";
 import type { Delivery, Run, Workspace } from "../domain.ts";
 
 export interface RunSummary
@@ -27,7 +28,7 @@ export function runSummaries(w: Workspace, offset: number, limit: number) {
       states.get(delivery.cancellationRunId)?.add(delivery.state);
   }
   return runs.map((run): RunSummary => {
-    const task = run.task.replace(/\s+/g, " ").trim();
+    const task = browserPanelRun(w, run).task.replace(/\s+/g, " ").trim();
     return {
       id: run.id,
       actor: run.actor,

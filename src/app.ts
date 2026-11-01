@@ -10,6 +10,7 @@ import type { LocalRuntimeControl } from "./coding/runtime-config.ts";
 import type { Store } from "./db/repositories.ts";
 import { Fault, requireThat } from "./domain.ts";
 import { GitHubService } from "./github/service.ts";
+import { browserMiniRoutes } from "./miniapp/browser.ts";
 import { miniAppRoutes } from "./miniapp/history.ts";
 import type { ReviewService } from "./review-bot/service.ts";
 import { equal } from "./setup/credentials.ts";
@@ -103,6 +104,17 @@ export function createApp(
     const update = updateSchema.parse(await c.req.json());
     return c.json(await ingress.accept(update));
   });
+  app.post("/browser-api/codex", async (c) => {
+    c.header("Cache-Control", "no-store");
+    requireThat(plugins.browser.coding, "browser_service_unavailable", 503);
+    return c.json(
+      await plugins.browser.coding.invoke(
+        (c.req.header("authorization") ?? "").replace(/^Bearer /, ""),
+        await c.req.json(),
+        c.req.raw.signal,
+      ),
+    );
+  });
   app.post("/github/webhook/:operatorId", async (c) => {
     requireThat(review, "review_bot_unavailable", 409);
     return c.json(
@@ -148,8 +160,13 @@ export function createApp(
       );
     }
   });
-  if (encryptionKey)
+  if (encryptionKey) {
     app.route("/mini-api", miniAppRoutes(store, setup, encryptionKey));
+    app.route(
+      "/mini-api/browser",
+      browserMiniRoutes(store, encryptionKey, origin, plugins.browser),
+    );
+  }
   app.get("/mini", serveStatic({ path: "./dist/web/mini.html" }));
   app.route(
     "/",
