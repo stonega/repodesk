@@ -585,6 +585,7 @@ export class BrowserService {
     const { repository } = this.runtime();
     await consumer.guard("active");
     const request = await repository.change(consumer.owner, (state) => {
+      requireThat(!state.cleanup, "browser_cleanup_pending", 409);
       state.access ??= emptyBrowserAccess();
       const pending = requestBrowserAccess(state.access, {
         ...input,
@@ -747,13 +748,19 @@ export class BrowserService {
       throw error;
     }
     if (browserNeedsActionApproval(action)) {
-      const current = await control.perform(
-        authority,
-        lease.generation,
-        operationKey(consumer, `${callId}:view`),
-        { action: "read" },
-      );
+      const current = await control.review(authority, lease.generation, action);
       requireThat(current.page, "browser_page_unavailable", 409);
+      if (
+        current.approvalRequired === false &&
+        !("requireApproval" in action && action.requireApproval)
+      )
+        return control.perform(
+          authority,
+          lease.generation,
+          operationKey(consumer, callId),
+          action,
+          current.page,
+        );
       return this.wait(consumer, callId, {
         kind: "action",
         action,
@@ -792,14 +799,25 @@ export class BrowserService {
     const { repository } = this.runtime();
     return repository.change(owner, (state) => {
       state.access ??= emptyBrowserAccess();
-      return decideBrowserAccess(
+      const decision = decideBrowserAccess(
         state.access,
         id,
         approve,
         browserGeneration(w),
         browserEpoch(w, owner.actor),
       );
+      if (approve && decision.kind === "site" && decision.rememberSite)
+        grantBrowserSite(state.access, decision);
+      return decision;
     });
+  }
+  async revokeSite(owner: BrowserOwner, origin: string) {
+    authorizeBrowserOwner(
+      await this.store.read(owner.workspaceId),
+      owner.actor,
+      true,
+    );
+    await this.scheduleCleanup(owner, "close", undefined, origin);
   }
   async submitInput(
     owner: BrowserOwner,
@@ -828,12 +846,26 @@ export class BrowserService {
     owner: BrowserOwner,
     command: "close" | "delete",
     epoch?: number,
+    revokedOrigin?: string,
   ) {
     if (!this.repository) return;
     await this.repository.change(owner, (state) => {
+      if (revokedOrigin && state.access) {
+        state.access.sites = state.access.sites.filter(
+          (site) => site.origin !== revokedOrigin,
+        );
+        invalidateBrowserAccess(state.access, true);
+      }
+      const pending =
+        state.lease ||
+        (state.input && ["waiting", "applying"].includes(state.input.state)) ||
+        state.access?.requests.some((request) =>
+          ["waiting", "approved", "applying"].includes(request.state),
+        );
       if (
-        state.lifecycle === "deleted" ||
-        (state.lifecycle === "closed" && command === "close")
+        !pending &&
+        (state.lifecycle === "deleted" ||
+          (state.lifecycle === "closed" && command === "close"))
       ) {
         if (epoch !== undefined && state.lifecycle === "deleted")
           state.epoch = epoch;
@@ -845,7 +877,8 @@ export class BrowserService {
       )
         return;
       releaseBrowser(state);
-      if (state.access) invalidateBrowserAccess(state.access);
+      if (state.access)
+        invalidateBrowserAccess(state.access, command === "close");
       state.cleanup = { command, generation: state.generation };
     });
   }

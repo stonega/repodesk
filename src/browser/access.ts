@@ -36,6 +36,15 @@ export const browserGrant = z
   })
   .strict();
 export type BrowserGrant = z.infer<typeof browserGrant>;
+export const browserSite = z
+  .object({
+    origin: browserOrigin,
+    preview: z.boolean(),
+    configuration: integer,
+    epoch: integer,
+    approvedAt: integer,
+  })
+  .strict();
 const sameConsumer = (a: BrowserController, b: BrowserController) =>
   a.kind === b.kind &&
   a.id === b.id &&
@@ -52,6 +61,7 @@ export const browserAccessRequest = z
     action: browserAction.optional(),
     origin: browserOrigin.optional(),
     preview: z.boolean().default(false),
+    rememberSite: z.boolean().default(false),
     page: browserPageBinding.optional(),
     generation: integer.optional(),
     hash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -85,14 +95,35 @@ export type BrowserAccessRequest = z.infer<typeof browserAccessRequest>;
 export const browserAccessState = z
   .object({
     grants: z.array(browserGrant).max(64),
+    // Legacy task grants stay temporary; only a new website decision is remembered.
+    sites: z.array(browserSite).max(32).default([]),
     requests: z.array(browserAccessRequest).max(256),
   })
   .strict();
 export type BrowserAccessState = z.infer<typeof browserAccessState>;
 export const emptyBrowserAccess = (): BrowserAccessState => ({
   grants: [],
+  sites: [],
   requests: [],
 });
+
+export function browserSitePolicy(
+  access: BrowserAccessState,
+  configuration: number,
+  epoch: number,
+): BrowserHostPolicy {
+  const sites = access.sites.filter(
+    (site) => site.configuration === configuration && site.epoch === epoch,
+  );
+  return {
+    origins: sites.map((site) => site.origin),
+    previewOrigins: sites
+      .filter((site) => site.preview)
+      .map((site) => site.origin),
+    routineOrigins: sites.map((site) => site.origin),
+    interact: false,
+  };
+}
 
 export function browserGrantPolicy(
   access: BrowserAccessState,
@@ -108,9 +139,16 @@ export function browserGrantPolicy(
       grant.epoch === epoch &&
       grant.expiresAt > now,
   );
+  const sites = browserSitePolicy(access, configuration, epoch);
   return {
-    origins: [...(grant?.origins ?? [])],
-    previewOrigins: [...(grant?.previewOrigins ?? [])],
+    origins: [...new Set([...sites.origins, ...(grant?.origins ?? [])])].slice(
+      0,
+      32,
+    ),
+    previewOrigins: [
+      ...new Set([...sites.previewOrigins, ...(grant?.previewOrigins ?? [])]),
+    ].slice(0, 8),
+    routineOrigins: sites.origins,
     interact: false,
   };
 }
@@ -149,6 +187,7 @@ export function requestBrowserAccess(
   requireThat(access.requests.length < 256, "browser_capacity", 409);
   const request = browserAccessRequest.parse({
     ...input,
+    rememberSite: input.kind === "site",
     id: randomUUID(),
     hash,
     state: "waiting",
@@ -199,44 +238,73 @@ export function grantBrowserSite(
 ) {
   requireThat(
     request.kind === "site" &&
-      request.state === "applying" &&
+      (request.state === "applying" ||
+        (request.rememberSite && request.state === "approved")) &&
       request.origin &&
       request.expiresAt > now,
     "browser_request_unavailable",
     409,
   );
-  let grant = access.grants.find(
-    (grant) =>
-      sameConsumer(grant.controller, request.controller) &&
-      grant.configuration === request.configuration &&
-      grant.epoch === request.epoch &&
-      grant.expiresAt > now,
+  if (!request.rememberSite) {
+    let grant = access.grants.find(
+      (grant) =>
+        sameConsumer(grant.controller, request.controller) &&
+        grant.configuration === request.configuration &&
+        grant.epoch === request.epoch &&
+        grant.expiresAt > now,
+    );
+    if (!grant) {
+      access.grants = access.grants.filter((grant) => grant.expiresAt > now);
+      requireThat(access.grants.length < 64, "browser_capacity", 409);
+      grant = {
+        controller: request.controller,
+        configuration: request.configuration,
+        epoch: request.epoch,
+        origins: [],
+        previewOrigins: [],
+        expiresAt: now + 30 * 60_000,
+      };
+      access.grants.push(grant);
+    }
+    if (!grant.origins.includes(request.origin))
+      grant.origins.push(request.origin);
+    if (request.preview && !grant.previewOrigins.includes(request.origin))
+      grant.previewOrigins.push(request.origin);
+    browserGrant.parse(grant);
+    return;
+  }
+  access.sites = access.sites.filter(
+    (site) =>
+      site.configuration === request.configuration &&
+      site.epoch === request.epoch,
   );
-  if (!grant) {
-    access.grants = access.grants.filter((grant) => grant.expiresAt > now);
-    requireThat(access.grants.length < 64, "browser_capacity", 409);
-    grant = {
-      controller: request.controller,
+  if (access.sites.some((site) => site.origin === request.origin)) return;
+  requireThat(access.sites.length < 32, "browser_capacity", 409);
+  requireThat(
+    !request.preview || access.sites.filter((site) => site.preview).length < 8,
+    "browser_capacity",
+    409,
+  );
+  access.sites.push(
+    browserSite.parse({
+      origin: request.origin,
+      preview: request.preview,
       configuration: request.configuration,
       epoch: request.epoch,
-      origins: [],
-      previewOrigins: [],
-      expiresAt: now + 30 * 60_000,
-    };
-    access.grants.push(grant);
-  }
-  if (!grant.origins.includes(request.origin))
-    grant.origins.push(request.origin);
-  if (request.preview && !grant.previewOrigins.includes(request.origin))
-    grant.previewOrigins.push(request.origin);
-  browserGrant.parse(grant);
+      approvedAt: now,
+    }),
+  );
 }
 
 export const browserNeedsActionApproval = (action: BrowserAction) =>
   ["click", "fill", "press", "pointer"].includes(action.action);
 
-export function invalidateBrowserAccess(access: BrowserAccessState) {
+export function invalidateBrowserAccess(
+  access: BrowserAccessState,
+  preserveSites = false,
+) {
   access.grants = [];
+  if (!preserveSites) access.sites = [];
   for (const request of access.requests)
     if (["waiting", "approved", "applying"].includes(request.state))
       request.state = request.state === "applying" ? "unknown" : "cancelled";

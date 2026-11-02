@@ -7,9 +7,9 @@ for c in containers:
     name=c['Name'].removeprefix('/')
     if name not in ['repodesk-app-1','repodesk-worker-1','repodesk-codex-runner-1','repodesk-code-truth-1','repodesk-postgres-1'] and not name.startswith('repodesk-actions-runner-'):
         continue
-    selected[name]={'id':c['Id'],'image':c['Image'],'status':c['State']['Status'],'health':c['State'].get('Health',{}).get('Status'),'started_at':c['State']['StartedAt'],'mounts':[{k:m.get(k) for k in ['Type','Name','Source','Destination']} for m in c['Mounts']]}
+    selected[name]={'id':c['Id'],'image':c['Image'],'status':c['State']['Status'],'health':c['State'].get('Health',{}).get('Status'),'started_at':c['State']['StartedAt'],'mounts':[{k:m.get(k) for k in ['Type','Name','Source','Destination','RW','Propagation','Mode']} for m in c['Mounts']]}
 secrets={}
-for relative in ['.env','secrets/encryption-key','secrets/codex-runner-token']:
+for relative in ['.env','secrets/encryption-key','secrets/codex-runner-token','secrets/browser-token','/etc/repodesk/browser-token','/etc/repodesk/browser.env']:
     path=root/relative
     secrets[relative]=hashlib.sha256(path.read_bytes()).hexdigest()
 result={'release_id':(root/'.current-release').read_text().strip(),'containers':selected,'secret_hashes':secrets}

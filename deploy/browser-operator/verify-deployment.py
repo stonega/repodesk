@@ -10,9 +10,7 @@ after=json.loads((release/'after-state.json').read_text())
 assert before['secret_hashes']==after['secret_hashes'],'Configuration or credentials changed'
 for name,value in before['containers'].items():
     new=after['containers'][name]
-    extra={'/run/repodesk-browser','/run/secrets/browser_token'} if name in ['repodesk-app-1','repodesk-worker-1'] else set()
-    retained=[m for m in new['mounts'] if m['Destination'] not in extra]
-    assert sorted(value['mounts'],key=lambda m:m['Destination'])==sorted(retained,key=lambda m:m['Destination']),f'Persistent mounts changed for {name}'
+    assert sorted(value['mounts'],key=lambda m:m['Destination'])==sorted(new['mounts'],key=lambda m:m['Destination']),f'Persistent mounts changed for {name}'
     if name=='repodesk-postgres-1' or name.startswith('repodesk-actions-runner-'):
         assert value['id']==new['id'],f'Unrelated container was replaced: {name}'
 for name in ['repodesk-app-1','repodesk-worker-1','repodesk-codex-runner-1','repodesk-code-truth-1']:

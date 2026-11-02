@@ -29,7 +29,7 @@ if (!/^[a-f0-9]{40}$/.test(meta.source_commit ?? ""))
   throw Error("Invalid source commit");
 fs.writeFileSync(
   path.join(destination, "source-metadata.json"),
-  JSON.stringify(meta, null, 2) + "\n",
+  `${JSON.stringify(meta, null, 2)}\n`,
   { mode: 0o600 },
 );
 const hashes = {};
@@ -39,7 +39,7 @@ for (const f of fs.readdirSync(destination)) {
 }
 fs.writeFileSync(
   path.join(destination, "payload-checksums.json"),
-  JSON.stringify(hashes, null, 2) + "\n",
+  `${JSON.stringify(hashes, null, 2)}\n`,
   { mode: 0o600 },
 );
 console.log(

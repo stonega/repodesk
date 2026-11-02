@@ -9,7 +9,7 @@ export default function (pi: ExtensionAPI) {
     name: "open_private_site",
     label: "Open my private site",
     description:
-      "Open a website in the actor's own headed browser. Site consent is requested on Browser.",
+      "Open a website in the actor's own headed browser. Remembered site consent is reused; a new website requests permission on Browser.",
     parameters: Type.Object(
       { url: Type.String({ maxLength: 2048 }) },
       { additionalProperties: false },

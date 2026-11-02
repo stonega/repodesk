@@ -406,6 +406,19 @@ summary:focus-visible {
 .mini-browser-request p {
   margin: 8px 0;
 }
+.mini-browser-sites,
+.mini-browser-site {
+  display: grid;
+  gap: 12px;
+}
+.mini-browser-sites > h2,
+.mini-browser-sites > p {
+  margin: 0;
+}
+.mini-browser-site {
+  border-top: 1px solid var(--tg-theme-section-separator-color);
+  padding-top: 16px;
+}
 .mini-browser-screen {
   display: block;
   width: 100%;

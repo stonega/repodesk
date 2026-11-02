@@ -68,6 +68,7 @@ export const browserAction = z.discriminatedUnion("action", [
   z
     .object({
       action: z.literal("pointer"),
+      requireApproval: z.literal(true).optional(),
       x: z.number().int().min(0).max(1280),
       y: z.number().int().min(0).max(800),
     })
@@ -81,12 +82,14 @@ export const browserAction = z.discriminatedUnion("action", [
   z
     .object({
       action: z.literal("click"),
+      requireApproval: z.literal(true).optional(),
       selector: z.string().min(1).max(500),
     })
     .strict(),
   z
     .object({
       action: z.literal("fill"),
+      requireApproval: z.literal(true).optional(),
       selector: z.string().min(1).max(500),
       text: z.string().max(4096),
     })
@@ -94,6 +97,7 @@ export const browserAction = z.discriminatedUnion("action", [
   z
     .object({
       action: z.literal("press"),
+      requireApproval: z.literal(true).optional(),
       key: z.enum([
         "Enter",
         "Tab",

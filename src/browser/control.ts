@@ -127,6 +127,32 @@ export class BrowserControl {
     });
     return result;
   }
+  async review(
+    authority: BrowserAuthority,
+    generation: number,
+    input: unknown,
+  ) {
+    await this.check(authority);
+    await this.repository.change(authority.owner, (state) =>
+      requireBrowserLease(state, authority.controller, generation),
+    );
+    const result = await this.host.invoke(
+      {
+        owner: authority.owner,
+        controller: authority.controller,
+        generation,
+        operation: { command: "review", input: browserAction.parse(input) },
+        policy: await authority.policy?.(authority.controller),
+      },
+      authority.signal,
+    );
+    await this.check(authority);
+    await this.repository.change(authority.owner, (state) =>
+      requireBrowserLease(state, authority.controller, generation),
+    );
+    requireThat(result.page, "browser_page_unavailable", 409);
+    return result;
+  }
   async submitInput(
     authority: BrowserAuthority,
     requestId: string,

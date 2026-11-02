@@ -4,7 +4,9 @@ import { requireThat } from "../domain.ts";
 import { revokeWork } from "../workspaces/policy.ts";
 import {
   browserGrantPolicy,
+  browserOrigin,
   browserPageBinding,
+  browserSitePolicy,
   emptyBrowserAccess,
 } from "./access.ts";
 import {
@@ -49,6 +51,7 @@ export interface PersonalBrowserPage {
     expiresAt: number;
   };
   origins: string[];
+  savedOrigins: string[];
 }
 export const personalBrowserOperation = z.discriminatedUnion("command", [
   z.object({ command: z.literal("status") }).strict(),
@@ -90,6 +93,9 @@ export const personalBrowserOperation = z.discriminatedUnion("command", [
     })
     .strict(),
   z.object({ command: z.literal("close") }).strict(),
+  z
+    .object({ command: z.literal("revoke_site"), origin: browserOrigin })
+    .strict(),
   z.object({ command: z.literal("delete") }).strict(),
   z.object({ command: z.literal("cancel_input"), id: z.uuid() }).strict(),
 ]);
@@ -111,6 +117,7 @@ export class BrowserMembers {
       generation: 0,
       requests: [],
       origins: [],
+      savedOrigins: [],
     };
     if (!page.configured) return page;
     const { repository } = await this.service.personalRuntime(
@@ -151,6 +158,11 @@ export class BrowserMembers {
     page.revision = state.revision;
     page.generation = state.generation;
     page.lifecycle = state.lifecycle;
+    page.savedOrigins = browserSitePolicy(
+      state.access ?? emptyBrowserAccess(),
+      browserGeneration(w),
+      browserEpoch(w, owner.actor),
+    ).origins;
     page.controller =
       state.lease && state.lease.expiresAt > Date.now()
         ? {
@@ -179,7 +191,9 @@ export class BrowserMembers {
         origin: r.origin ?? r.page?.origin,
         description:
           r.kind === "site"
-            ? "Allow this task to use this site for 30 minutes."
+            ? r.rememberSite
+              ? "Remember this website for your future private tasks in this workspace. Routine browsing can continue; submissions still need approval."
+              : "Allow this task to use this site for 30 minutes."
             : r.kind === "control"
               ? "Allow this task to take control of your browser."
               : r.action?.action === "fill"
@@ -221,6 +235,11 @@ export class BrowserMembers {
     configuration: number,
     epoch: number,
   ): BrowserHostPolicy {
+    const sites = browserSitePolicy(
+      state.access ?? emptyBrowserAccess(),
+      configuration,
+      epoch,
+    );
     const grants = (state.access?.grants ?? []).filter(
       (g) =>
         g.configuration === configuration &&
@@ -228,8 +247,15 @@ export class BrowserMembers {
         g.expiresAt > Date.now(),
     );
     return {
-      origins: [...new Set(grants.flatMap((g) => g.origins))].slice(0, 32),
-      previewOrigins: [...new Set(grants.flatMap((g) => g.previewOrigins))]
+      origins: [
+        ...new Set([...sites.origins, ...grants.flatMap((g) => g.origins)]),
+      ].slice(0, 32),
+      previewOrigins: [
+        ...new Set([
+          ...sites.previewOrigins,
+          ...grants.flatMap((g) => g.previewOrigins),
+        ]),
+      ]
         .filter((o) => previews.includes(o))
         .slice(0, 8),
       interact: false,
@@ -241,7 +267,7 @@ export class BrowserMembers {
     value: unknown,
   ): Promise<HostResult | { status: "completed" }> {
     const operation = personalBrowserOperation.parse(value),
-      cleanup = operation.command === "delete" || operation.command === "close";
+      cleanup = ["delete", "close", "revoke_site"].includes(operation.command);
     const { repository, host, control, guard } =
       await this.service.personalRuntime(owner, botId, cleanup);
     let w = await this.store.read(owner.workspaceId),
@@ -286,7 +312,15 @@ export class BrowserMembers {
         return { ...current, interact: true };
       },
     };
-    if (cleanup) {
+    if (
+      operation.command === "close" ||
+      operation.command === "delete" ||
+      operation.command === "revoke_site"
+    ) {
+      if (operation.command === "revoke_site") {
+        await this.service.revokeSite(owner, operation.origin);
+        return { status: "completed" };
+      }
       if (operation.command === "delete")
         await this.store.change(owner.workspaceId, (current) => {
           authorizeBrowserOwner(current, owner.actor, true);

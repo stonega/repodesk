@@ -16,6 +16,7 @@ export const browserHostPolicy = z
     origins: z.array(origin).max(32),
     previewOrigins: z.array(origin).max(8),
     interact: z.boolean(),
+    routineOrigins: z.array(origin).max(32).optional(),
   })
   .strict();
 export type BrowserHostPolicy = z.infer<typeof browserHostPolicy>;
@@ -37,6 +38,7 @@ export const hostCommand = z.discriminatedUnion("command", [
   z.object({ command: z.literal("close") }).strict(),
   z.object({ command: z.literal("delete") }).strict(),
   z.object({ command: z.literal("artifact"), id: z.uuid() }).strict(),
+  z.object({ command: z.literal("review"), input: browserAction }).strict(),
   z
     .object({
       command: z.literal("action"),
@@ -79,6 +81,7 @@ export const hostResult = z
     reference: z.uuid().optional(),
     headed: z.literal(true).optional(),
     inputApplied: z.literal(true).optional(),
+    approvalRequired: z.boolean().optional(),
     blockedOrigins: z.array(origin).max(32).optional(),
     controls: z
       .array(

@@ -12,11 +12,15 @@ can carry between those consumers after you approve their access.
 ## Use Browser
 
 1. Ask the bot to open a website in your private conversation. For a Codex task,
-   ask it to use Browser while working on the authorized repository.
+   ask it to use Browser while working on the authorized repository. Ordinary
+   website work stays with Pi in your current conversation; it needs no separate
+   coding task.
 2. Open **Browser** from the task's Telegram message. Telegram verifies your
    identity; no panel account or earlier remote-desktop login is required.
-3. Review the task and destination before approving site access or an interaction.
-   Site consent lasts 30 minutes. Another task or plugin needs its own consent.
+3. Review the destination and choose **Allow website**. RepoDesk remembers that
+   exact website for your future private tasks in this workspace, including
+   authorized plugins. Closing the browser or restarting the service preserves
+   this choice. A different website needs its own approval.
 4. Enter requested passwords, codes and similar values on that page. The field
    clears when submitted. A confirmed submission resumes the originating task.
    Do not send these values in chat.
@@ -24,6 +28,19 @@ can carry between those consumers after you approve their access.
 The same page shows pending and completed requests, your session's controller,
 private screenshots and available downloads. **View browser** does not interrupt
 an outstanding input request. Screenshot fields are masked.
+
+**Allowed websites** shows saved permissions. **Revoke access** forgets that
+website and closes current browser work while preserving login. Other saved
+websites remain. The next visit needs permission again. Deleting the profile,
+revoking membership or changing Browser configuration invalidates earlier access.
+Older temporary task approvals keep their original scope and expiry.
+
+On allowed websites, ordinary field fills, native link navigation and focus keys
+can run directly. Submitting, sending, saving, publishing, purchases and deletions
+still require confirmation. Buttons, Enter, coordinate clicks, downloads and
+unrecognized controls also require a decision. Fields that save automatically
+must be treated as an external change. Pi pauses for that decision or private
+input, then continues the same task with its existing context.
 
 **Take control** explicitly interrupts the current controller and cancels any
 outstanding input request. While you have control, open a website, view its current
@@ -50,13 +67,16 @@ messages already delivered.
   Password/code submissions go directly to the bound browser field and do not
   enter model messages, chat history or routine logs. The destination website
   receives the value and controls its own storage.
-- Website content cannot grant permission. Clicks, filling ordinary fields,
-  key presses and coordinate clicks require a reviewed task action or your own
-  explicit manual gesture. Browser has no arbitrary JavaScript, host-file upload
-  or public debugging interface.
+- Website content cannot grant permission. The host checks routine interactions
+  against saved website access and the actual control. Routine links navigate
+  directly, without invoking their page click handlers. External or ambiguous
+  interactions require a reviewed task action or your own explicit manual gesture.
+  Browser has no arbitrary JavaScript, host-file upload or public debugging interface.
 - Only approved origins can connect. Login providers, redirects and asset domains
   may require additional consent. Private/metadata destinations are blocked.
   Local previews require matching operator configuration and member consent.
+- Up to 32 websites can be remembered per profile, including up to eight approved
+  local previews. Revoke unused websites when that limit is reached.
 - Four active browsers, eight tabs per browser, twenty accepted downloads and
   25 MiB per download are the default limits. Input requests expire after ten
   minutes. Idle browsers close after five minutes and preserve login. Artifact

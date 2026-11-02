@@ -11,13 +11,24 @@ Send in the bot's private conversation:
 > Open my dashboard at https://example.com/account using Browser. Ask for any
 > password or code through Browser, then summarize the dashboard privately.
 
-Open **Browser** from the task's message. Review each site and interaction.
+Open **Browser** from the task's message and choose **Allow website** for the
+verified destination. The choice is remembered for this member and workspace;
+future private tasks reuse it. Review external submissions and ambiguous controls.
 Requested input goes to the task's current field. The original conversation run
 pauses and resumes; a separate chat message containing the password is unnecessary.
 An additional login-provider/asset origin can be requested using
 `browser_action({action:"request_site",url:"https://accounts.example.com"})`.
 Approval adds that origin without navigating away. Page reads include visible
 controls/selectors and observed blocked origins, without reading form values.
+Pi uses these tools directly within the original conversation; website work does
+not start a separate Codex task. **Allowed websites → Revoke access** forgets a
+site and closes current browser work. Closing alone preserves saved sites.
+
+Ordinary fills and native link navigation can run after host checks. Mark every
+external effect, including fields that save automatically, with
+`browser_action({action:"fill",selector:"#title",text:"New title",requireApproval:true})`.
+Sending/submitting through buttons or Enter and coordinate clicks still wait for
+a reviewed page-bound decision. An unknown result must never be replayed.
 
 ## Codex
 

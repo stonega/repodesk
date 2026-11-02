@@ -628,6 +628,15 @@ stale-controller commands after cancellation, expiry, revocation or handoff; do 
 blindly replay an ambiguous external write after recovery. Independent owned
 sessions may run concurrently under separate leases and resource limits.
 
+Website consent is remembered per exact origin for the owning member/workspace
+and displayed with revocation on the shared member page (2026-11-01). It is
+independent of the current consumer's authorization and single-controller lease.
+Pi coordinates ordinary browser work within the current run and resumes it after
+consent/input. Host-checked routine fills, native links and focus keys can run on
+remembered sites; external changes and ambiguous controls retain page-bound
+confirmation. A coding task may use Browser without becoming the default route
+for website-only work. See the [recorded preference](ui-rules.md#browser-remembers-websites-and-stays-in-the-current-pi-task).
+
 Consumers receive task-scoped browser operations and sanitized results rather than
 an unrestricted browser-management or credential-export connection. The broker
 checks current grants, allowed destinations and permitted operations at dispatch.

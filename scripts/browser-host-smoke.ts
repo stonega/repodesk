@@ -165,6 +165,39 @@ try {
     await delay(50);
   }
   assert.ok(pageReady);
+  const routine = (
+    operation: Parameters<BrowserHostClient["invoke"]>[0]["operation"],
+  ) =>
+    client.invoke({
+      owner: ownerA,
+      controller: chat,
+      generation: 1,
+      operation,
+      policy: { ...policy, interact: false, routineOrigins: [origin] },
+    });
+  const ordinary = {
+    action: "fill" as const,
+    selector: "#name",
+    text: "Routine fixture",
+  };
+  const inspection = await routine({ command: "review", input: ordinary });
+  assert.equal(inspection.approvalRequired, false);
+  await routine({ command: "action", input: ordinary, page: inspection.page });
+  const submission = { action: "click" as const, selector: "#submit" };
+  assert.equal(
+    (await routine({ command: "review", input: submission })).approvalRequired,
+    true,
+  );
+  await assert.rejects(
+    routine({ command: "action", input: submission }),
+    /browser_action_approval_required/,
+  );
+  const navigation = { action: "click" as const, selector: "#next" };
+  assert.equal(
+    (await routine({ command: "review", input: navigation })).approvalRequired,
+    false,
+  );
+  await routine({ command: "action", input: navigation });
   await action(ownerA, 1, { action: "fill", selector: "#name", text: "Alice" });
   const fields = (await action(ownerA, 1, { action: "read" })).controls;
   assert.ok(

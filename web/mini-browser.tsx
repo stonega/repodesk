@@ -45,7 +45,7 @@ const messages: Record<string, string> = {
   browser_page_unavailable:
     "No page is open. Take control and open a permitted website.",
   browser_capacity:
-    "The browser reached its resource limit. Close unused tabs or try again later.",
+    "The browser reached its resource limit. Revoke an unused website, close unused tabs or try again later.",
   browser_field_unavailable:
     "Focus an editable field in the browser view, then request private input again.",
 };
@@ -377,7 +377,7 @@ export function BrowserMini() {
         </p>
         <p className="mini-muted">
           Only you can view this profile. Chat and authorized plugins use your
-          session after your approval.
+          session on websites you allow.
         </p>
       </header>
       <div className="mini-browser-body" aria-busy={loading}>
@@ -537,11 +537,13 @@ export function BrowserMini() {
                           void act(
                             "decide",
                             { id: request.id, approve: true },
-                            "Approved. The originating task will continue.",
+                            request.kind === "site"
+                              ? "Website allowed. Your task will continue."
+                              : "Approved. The originating task will continue.",
                           )
                         }
                       >
-                        Approve
+                        {request.kind === "site" ? "Allow website" : "Approve"}
                       </button>
                       <button
                         type="button"
@@ -568,6 +570,51 @@ export function BrowserMini() {
                   )}
                 </article>
               ))
+          )}
+        </section>
+        <section
+          className="mini-browser-card mini-browser-sites"
+          aria-label="Allowed websites"
+        >
+          <h2>Allowed websites</h2>
+          <p className="mini-muted">
+            Remembered for your private tasks in this workspace. A different
+            website needs its own approval. Routine browsing can continue;
+            submissions still need approval.
+          </p>
+          {loading ? (
+            <p className="mini-placeholder">Checking allowed websites…</p>
+          ) : !data ? (
+            <p className="mini-muted">Website permissions are unavailable.</p>
+          ) : !data.configured ? (
+            <p className="mini-muted">
+              Connect the host browser service to view saved website
+              permissions.
+            </p>
+          ) : !data?.savedOrigins.length ? (
+            <p className="mini-muted">No websites remembered yet.</p>
+          ) : (
+            data.savedOrigins.map((origin) => (
+              <article className="mini-browser-site" key={origin}>
+                <code className="mini-browser-origin">{origin}</code>
+                <div className="mini-browser-actions">
+                  <button
+                    type="button"
+                    disabled={busy || blocked}
+                    aria-label={`Revoke access to ${origin}`}
+                    onClick={() =>
+                      void act(
+                        "operate",
+                        { command: "revoke_site", origin },
+                        "Website access revoked. Your browser is closing.",
+                      )
+                    }
+                  >
+                    Revoke access
+                  </button>
+                </div>
+              </article>
+            ))
           )}
         </section>
         <section className="mini-browser-card" aria-label="Browser view">

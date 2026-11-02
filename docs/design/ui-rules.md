@@ -20,6 +20,7 @@ when implementing or reviewing a change.
 | VPS browser mode | [Headed host browser](#vps-browser-tasks-use-a-headed-browser) |
 | Browser account isolation | [Private user profiles](#browser-profiles-and-login-state-are-private-to-each-user) |
 | Browser plugin defaults | [Default-enabled built-in Browser](#browser-is-a-default-enabled-built-in-plugin) |
+| Browser site consent and task continuity | [Remember websites and keep Pi in control](#browser-remembers-websites-and-stays-in-the-current-pi-task) |
 | Code Truth setup | [URL and description](#code-truth-repositories-use-a-url-and-description) |
 | Card spacing after content changes | [Content layout owns card spacing](#content-layout-owns-card-spacing) |
 | Repository display | [Shared repository cards](#repository-cards-share-one-style), [member GitHub details](#member-github-columns-show-only-a-view-button), [connected repositories](#connected-github-repositories-stay-compact-and-directly-accessible) |
@@ -41,6 +42,37 @@ when implementing or reviewing a change.
 - Keep illustrative examples separate from established preferences.
 
 ## Recorded preferences
+
+### Browser remembers websites and stays in the current Pi task
+
+- **Preference:** Ask permission to access a website and remember the decision
+  for the same member's future private tasks in that workspace. Pi coordinates
+  browser work inside the current conversation and goal; approval or secure
+  input resumes that same run with its accumulated context.
+- **Scope:** The shared Browser member page, bundled Pi tools and authorized
+  consumer adapters. Website means an exact HTTP(S) origin, including port.
+  It does not grant another member or workspace access to a profile.
+- **Source:** 2026-11-01 — the user requested website-level remembered consent
+  instead of approval for every task, and Pi-led execution instead of independent
+  browser tasks. In a follow-up, the user chose direct routine operations on
+  approved websites while retaining confirmation for external submissions.
+- **Acceptance:** Label site consent **Allow website**, explain future reuse,
+  and show **Allowed websites** as saved readable origins with a **Revoke access**
+  action. Do not turn the saved list into a form. Closing preserves remembered
+  sites. Revocation removes the site and fences current browser work; subsequent
+  tasks ask again. Ordinary native links, nonsensitive field fills and focus keys
+  can proceed after host checks. Buttons, submitting keys, coordinate clicks,
+  explicit external effects and unrecognized controls require a task/page-bound
+  decision. Verify saved/empty/loading, pending/failed revocation, desktop/mobile
+  widths and both themes; retain one originating Pi run across waits.
+- **Exceptions:** Website permission is separate from current membership,
+  workspace/plugin grants, browser control and external-action approval. Profile
+  deletion, membership revocation or Browser configuration changes invalidate
+  earlier authority. Legacy temporary grants and already-approved legacy requests
+  do not silently become remembered consent. Codex can use the same browser while
+  carrying out an already authorized coding task. Credentials retain the shared
+  task-bound secure-input flow. Native links navigate directly rather than firing
+  unreviewed page click handlers; unsupported interactions conservatively confirm.
 
 ### Browser is a default-enabled built-in plugin
 

@@ -1,10 +1,36 @@
 import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { request } from "node:http";
+import { createServer, request } from "node:http";
 
 const key = (await readFile("/run/secrets/browser_token", "utf8")).trim();
 const workspaceId = randomUUID();
+const routine = process.env.BROWSER_PROBE_ROUTINE === "true";
+let submissions = 0;
+const fixture = routine
+  ? createServer((req, res) => {
+      if (req.method === "POST") submissions++;
+      res.setHeader("content-type", "text/html");
+      res.end(
+        '<h1>Routine browser probe</h1><form action="/submit" method="POST"><input id="ordinary" name="query"><button id="submit" type="submit">Submit</button></form><a id="next" href="/next">Next</a>',
+      );
+    })
+  : undefined;
+if (fixture)
+  await new Promise((resolve) => fixture.listen(0, "127.0.0.1", resolve));
+const address = fixture?.address();
+const origin =
+  address && typeof address === "object"
+    ? `http://127.0.0.1:${address.port}`
+    : undefined;
+const policy = origin
+  ? {
+      origins: [origin],
+      previewOrigins: [origin],
+      routineOrigins: [origin],
+      interact: false,
+    }
+  : { origins: [], previewOrigins: [], interact: false };
 async function call(owner, controller, generation, operation) {
   const now = Date.now(),
     body = JSON.stringify({
@@ -15,7 +41,7 @@ async function call(owner, controller, generation, operation) {
       issuedAt: now,
       expiresAt: now + 30000,
       operation,
-      policy: { origins: [], previewOrigins: [], interact: false },
+      policy,
     });
   const signature = createHmac("sha256", key)
     .update(`repodesk:browser:v1\n${body}`)
@@ -82,6 +108,45 @@ for (const actor of ["900000000000001", "900000000000002"]) {
       }),
       /browser_control_expired/,
     );
+    if (origin) {
+      await call(owner, controller, 1, {
+        command: "action",
+        input: { action: "navigate", url: origin },
+      });
+      const fill = {
+        action: "fill",
+        selector: "#ordinary",
+        text: "synthetic routine value",
+      };
+      const inspection = await call(owner, controller, 1, {
+        command: "review",
+        input: fill,
+      });
+      assert.equal(inspection.approvalRequired, false);
+      await call(owner, controller, 1, {
+        command: "action",
+        input: fill,
+        page: inspection.page,
+      });
+      const submit = { action: "click", selector: "#submit" };
+      assert.equal(
+        (await call(owner, controller, 1, { command: "review", input: submit }))
+          .approvalRequired,
+        true,
+      );
+      await assert.rejects(
+        call(owner, controller, 1, { command: "action", input: submit }),
+        /browser_action_approval_required/,
+      );
+      const next = { action: "click", selector: "#next" };
+      assert.equal(
+        (await call(owner, controller, 1, { command: "review", input: next }))
+          .approvalRequired,
+        false,
+      );
+      await call(owner, controller, 1, { command: "action", input: next });
+      assert.equal(submissions, 0);
+    }
   } finally {
     await call(owner, controller, 2, { command: "close" });
     assert.equal(
@@ -89,6 +154,10 @@ for (const actor of ["900000000000001", "900000000000002"]) {
       "deleted",
     );
   }
+}
+if (fixture) {
+  fixture.closeAllConnections();
+  await new Promise((resolve) => fixture.close(resolve));
 }
 console.log(
   JSON.stringify({
@@ -98,5 +167,8 @@ console.log(
     pluginRevisionFenced: true,
     cleaned: true,
     externalWebsitesUsed: false,
+    ...(routine
+      ? { nativeRoutineActions: true, externalSubmissionsGated: true }
+      : {}),
   }),
 );

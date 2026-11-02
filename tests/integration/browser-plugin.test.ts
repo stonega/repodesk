@@ -57,6 +57,20 @@ const url = process.env.TEST_DATABASE_URL,
       async invoke(input) {
         calls.push(structuredClone(input));
         const operation = input.operation;
+        if (operation.command === "review")
+          return {
+            status: "completed",
+            page,
+            approvalRequired:
+              !input.policy?.routineOrigins?.includes(page.origin) ||
+              ("requireApproval" in operation.input &&
+                !!operation.input.requireApproval) ||
+              !(
+                operation.input.action === "fill" ||
+                (operation.input.action === "click" &&
+                  operation.input.selector === "#next")
+              ),
+          };
         if (operation.command === "action") {
           if (operation.input.action === "read")
             return {
@@ -329,6 +343,184 @@ const url = process.env.TEST_DATABASE_URL,
             ),
           ),
       ).toBe(false);
+    });
+    test("Pi keeps website work in one run and remembered access survives new tasks, close and reconstruction until revoked", async () => {
+      const { w, run } = await seed(
+        "Read my account, navigate and prepare a change",
+      );
+      const owner = { workspaceId: w.id, actor: "202" };
+      const sequence = modelSequence([
+        {
+          name: "browser_action",
+          args: { action: "navigate", url: "https://example.com/account" },
+        },
+        {
+          name: "browser_action",
+          args: { action: "fill", selector: "#search", text: "report" },
+        },
+        {
+          name: "browser_action",
+          args: { action: "click", selector: "#next" },
+        },
+        {
+          name: "browser_action",
+          args: { action: "click", selector: "#submit", requireApproval: true },
+        },
+        "The original account task is complete.",
+      ]);
+      const executor = new Executor(store, setup, (d, id) =>
+        plugins.runner(d, id, sequence),
+      );
+      await executor.execute(w.id, run.id);
+      const site = (await store.read(w.id)).runs[0]?.browserWait;
+      if (!site) throw Error("missing website request");
+      expect(
+        (await personal(w, "202", "decide", { id: site.id, approve: true }))
+          .status,
+      ).toBe(200);
+      await browser.reconcile(w.id);
+      await executor.execute(w.id, run.id);
+      let saved = await store.read(w.id);
+      expect(saved.runs).toHaveLength(1);
+      expect(saved.runs[0]?.task).toBe(run.task);
+      const submission = saved.runs[0]?.browserWait;
+      expect(submission?.kind).toBe("action");
+      const actions = () =>
+        calls.filter(
+          (c) =>
+            c.owner.workspaceId === w.id && c.operation.command === "action",
+        );
+      expect(
+        actions().filter(
+          (c) =>
+            c.operation.command === "action" &&
+            ["fill", "click"].includes(c.operation.input.action),
+        ),
+      ).toHaveLength(2);
+      if (!submission) throw Error("missing submission approval");
+      await browser.decide(owner, submission.id, true);
+      await browser.reconcile(w.id);
+      await executor.execute(w.id, run.id);
+      saved = await store.read(w.id);
+      expect(saved.runs[0]?.status).toBe("succeeded");
+      expect(saved.runs[0]?.result).toBe(
+        "The original account task is complete.",
+      );
+      expect((await personal(w, "202", "view")).status).toBe(200);
+      expect(
+        (await (await personal(w, "202", "view")).json()).savedOrigins,
+      ).toEqual([page.origin]);
+      expect(
+        (await (await personal(w, "101", "view")).json()).savedOrigins,
+      ).toEqual([]);
+      const otherWorkspace = await seed();
+      expect(
+        (await (await personal(otherWorkspace.w, "202", "view")).json())
+          .savedOrigins,
+      ).toEqual([]);
+      await personal(w, "202", "operate", { command: "close" });
+      await browser.reconcile(w.id);
+      const restarted = new BrowserService(store, key, host);
+      const restartedPlugins = new PluginService(
+        store,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        restarted,
+      );
+      const next = await store.change(w.id, (current) =>
+        createRun(
+          current,
+          "202",
+          "Read my account again",
+          "202",
+          7,
+          "gpt-4.1-mini",
+          { botId: "999" },
+        ),
+      );
+      await new Executor(store, setup, (d, id) =>
+        restartedPlugins.runner(
+          d,
+          id,
+          modelSequence([
+            {
+              name: "browser_action",
+              args: { action: "navigate", url: "https://example.com/account" },
+            },
+            "Account checked again.",
+          ]),
+        ),
+      ).execute(w.id, next.id);
+      expect(
+        (await store.read(w.id)).runs.find((r) => r.id === next.id)?.status,
+      ).toBe("succeeded");
+      const repo = new PostgresBrowserRepository(store.pool, key);
+      expect(
+        (await repo.read(owner)).access?.requests.filter(
+          (r) => r.kind === "site",
+        ),
+      ).toHaveLength(1);
+      expect(
+        (
+          await personal(w, "202", "operate", {
+            command: "revoke_site",
+            origin: page.origin,
+          })
+        ).status,
+      ).toBe(200);
+      await browser.reconcile(w.id);
+      expect(
+        (await (await personal(w, "202", "view")).json()).savedOrigins,
+      ).toEqual([]);
+      const last = await store.change(w.id, (current) =>
+        createRun(
+          current,
+          "202",
+          "Revisit the revoked website",
+          "202",
+          7,
+          "gpt-4.1-mini",
+          { botId: "999" },
+        ),
+      );
+      await new Executor(store, setup, (d, id) =>
+        restartedPlugins.runner(
+          d,
+          id,
+          modelSequence([
+            {
+              name: "browser_action",
+              args: { action: "navigate", url: "https://example.com/account" },
+            },
+          ]),
+        ),
+      ).execute(w.id, last.id);
+      const pending = (await store.read(w.id)).runs.find(
+        (r) => r.id === last.id,
+      )?.browserWait;
+      expect(pending?.kind).toBe("site");
+      expect((await repo.read(owner)).access?.sites).toEqual([]);
+      if (!pending) throw Error("missing renewed request");
+      await browser.decide(owner, pending.id, true);
+      expect(
+        (await (await personal(w, "202", "view")).json()).savedOrigins,
+      ).toEqual([page.origin]);
+      // A closed browser can have an approved request without an active lease.
+      // Revoking before the worker processes it must not restore that consent.
+      await personal(w, "202", "operate", {
+        command: "revoke_site",
+        origin: page.origin,
+      });
+      await browser.reconcile(w.id);
+      expect((await repo.read(owner)).access?.sites).toEqual([]);
+      expect(
+        (await store.read(w.id)).runs.find((r) => r.id === last.id)?.status,
+      ).toBe("partial");
     });
     test("the member portal verifies signed identity, origin and membership without an admin login", async () => {
       const { w, run } = await seed();
@@ -868,9 +1060,9 @@ const url = process.env.TEST_DATABASE_URL,
       expect(
         (await store.read(w.id)).runs.find((r) => r.id === run.id)?.status,
       ).toBe("queued");
-      expect((await repo.read(owner)).access?.grants[0]?.origins).toEqual([
-        "https://example.com",
-      ]);
+      expect(
+        (await repo.read(owner)).access?.sites.map((site) => site.origin),
+      ).toEqual(["https://example.com"]);
       expect(
         calls.filter(
           (c) =>

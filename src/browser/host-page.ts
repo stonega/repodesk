@@ -8,7 +8,7 @@ import {
   type Page,
 } from "playwright-core";
 import { Fault, requireThat } from "../domain.ts";
-import { browserLimits } from "./config.ts";
+import { type BrowserAction, browserLimits } from "./config.ts";
 import {
   type BrowserArtifact as Artifact,
   browserArtifacts,
@@ -29,6 +29,50 @@ const fieldIdentity = (element: Element) =>
       element.getAttribute(name),
     ),
   ]);
+// Runs in the page. Return native, bounded operations, never execute page handlers
+// to decide whether an interaction is safe. Unknown controls require a decision.
+function routineElement(element: Element, action: "click" | "fill") {
+  if (action === "fill") {
+    if (
+      !(
+        element instanceof HTMLInputElement ||
+        element instanceof HTMLTextAreaElement
+      )
+    )
+      return;
+    if (
+      /password|secret|token|otp|one.time|card|verification/i.test(
+        `${element.name} ${element.id} ${element.autocomplete}`,
+      )
+    )
+      return;
+    if (
+      element instanceof HTMLInputElement &&
+      !["text", "search", "email", "url", "tel", "number"].includes(
+        element.type,
+      )
+    )
+      return;
+    return { kind: "fill" as const };
+  }
+  const link = element.closest("a");
+  if (!(link instanceof HTMLAnchorElement) || link.hasAttribute("download"))
+    return;
+  const url = new URL(link.href, location.href);
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password
+  )
+    return;
+  if (
+    /delete|remove|destroy|logout|log.out|sign.out|unsubscribe|submit|send|publish|purchase|checkout|confirm|approve|revoke|删除|移除|退出|提交|发送|支付|购买|确认|授权/i.test(
+      `${url.pathname}${url.search} ${link.textContent} ${link.getAttribute("aria-label") ?? ""}`,
+    )
+  )
+    return;
+  return { kind: "navigate" as const, url: url.href };
+}
 export interface HostPageOptions {
   home: string;
   executable: string;
@@ -254,6 +298,35 @@ export class HeadedBrowser {
   private pageStatus(tab: Tab) {
     return { id: tab.id, revision: tab.revision, origin: this.allowed(tab) };
   }
+  private async routine(action: BrowserAction) {
+    const tab = this.tab();
+    if (
+      !this.policy.routineOrigins?.includes(this.allowed(tab)) ||
+      ("requireApproval" in action && action.requireApproval)
+    )
+      return;
+    if (action.action === "press")
+      return !["Enter", "Backspace", "Delete"].includes(action.key)
+        ? { kind: "key" as const }
+        : undefined;
+    if (action.action !== "fill" && action.action !== "click") return;
+    const locator = tab.page.locator(action.selector);
+    if ((await locator.count()) !== 1 || !(await locator.isVisible())) return;
+    const field = await locator.elementHandle();
+    if (!field) return;
+    let retained = false;
+    try {
+      if ((await field.ownerFrame()) !== tab.page.mainFrame()) return;
+      const result = await field.evaluate(routineElement, action.action);
+      if (!result || (result.kind === "fill" && !(await field.isEditable())))
+        return;
+      // The execution uses this exact element, rather than resolving a changed selector.
+      retained = true;
+      return { ...result, field };
+    } finally {
+      if (!retained) await field.dispose().catch(() => {});
+    }
+  }
   async execute(
     command: HostCommand,
     policy = this.policy,
@@ -323,6 +396,15 @@ export class HeadedBrowser {
       this.clearInput();
       return { status: "completed", page: this.pageStatus(tab) };
     }
+    if (command.command === "review") {
+      const routine = await this.routine(command.input);
+      if (routine && "field" in routine) await routine.field.dispose();
+      return {
+        status: "completed",
+        page: this.pageStatus(this.tab()),
+        approvalRequired: !routine,
+      };
+    }
     requireThat(command.command === "action", "browser_action_invalid", 400);
     const action = command.input;
     requireThat(
@@ -346,12 +428,38 @@ export class HeadedBrowser {
       !["tabs", "read", "screenshot"].includes(action.action)
     )
       throw new Fault("browser_input_pending", 409);
-    if (["click", "fill", "press", "pointer"].includes(action.action))
-      requireThat(
-        this.policy.interact,
-        "browser_action_approval_required",
-        403,
-      );
+    if (
+      ["click", "fill", "press", "pointer"].includes(action.action) &&
+      !this.policy.interact
+    ) {
+      const routine = await this.routine(action);
+      requireThat(routine, "browser_action_approval_required", 403);
+      try {
+        if (routine.kind === "navigate") {
+          requireThat(
+            this.policy.origins.includes(new URL(routine.url).origin),
+            "browser_destination_denied",
+            403,
+          );
+          // Direct native navigation avoids a link's unreviewed click/submit handlers.
+          await this.tab().page.goto(routine.url, {
+            waitUntil: "domcontentloaded",
+            timeout: 20_000,
+          });
+        } else if (routine.kind === "fill" && action.action === "fill") {
+          requireThat(
+            await routine.field.evaluate((element) => element.isConnected),
+            "browser_page_changed",
+            409,
+          );
+          await routine.field.fill(action.text);
+        } else if (routine.kind === "key" && action.action === "press")
+          await this.tab().page.keyboard.press(action.key);
+        return { status: "completed", page: this.pageStatus(this.tab()) };
+      } finally {
+        if ("field" in routine) await routine.field.dispose().catch(() => {});
+      }
+    }
     if (action.action === "new_tab") {
       requireThat(this.tabs.size < browserLimits.tabs, "browser_capacity", 409);
       const page = await this.context.newPage();

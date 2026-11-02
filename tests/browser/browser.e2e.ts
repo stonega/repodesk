@@ -77,6 +77,7 @@ async function personalFixture(page: Page) {
     generation: 1,
     controller: { kind: "chat", expiresAt: Date.now() + 600000 },
     origins: ["https://accounts.example.com"],
+    savedOrigins: [],
     requests: [
       {
         id: "070f4007-59d0-48f5-9354-a398342357c0",
@@ -84,7 +85,8 @@ async function personalFixture(page: Page) {
         consumer: "chat",
         task: "Read my dashboard",
         origin: "https://accounts.example.com",
-        description: "Allow this task to use this site for 30 minutes.",
+        description:
+          "Remember this website for your future private tasks in this workspace. Routine browsing can continue; submissions still need approval.",
         state: "waiting",
         expiresAt: Date.now() + 600000,
       },
@@ -184,8 +186,26 @@ async function personalFixture(page: Page) {
       });
     await pending;
     if (path === "input" && data.input) data.input.state = "completed";
-    if (path === "decide" && data.requests[0])
+    if (path === "decide" && data.requests[0]) {
       data.requests[0].state = body.operation.approve ? "approved" : "denied";
+      if (
+        body.operation.approve &&
+        data.requests[0].kind === "site" &&
+        data.requests[0].origin
+      )
+        data.savedOrigins.push(data.requests[0].origin);
+    }
+    if (path === "operate" && body.operation.command === "revoke_site") {
+      data.savedOrigins = data.savedOrigins.filter(
+        (origin) => origin !== body.operation.origin,
+      );
+      for (const request of data.requests)
+        if (["waiting", "approved"].includes(request.state))
+          request.state = "cancelled";
+      delete data.controller;
+      data.lifecycle = "closed";
+      data.generation++;
+    }
     if (path === "operate" && body.operation.command === "takeover") {
       data.controller = { kind: "human", expiresAt: Date.now() + 120000 };
       data.generation++;
@@ -239,7 +259,71 @@ async function personalShots(page: Page, state: string) {
   }
 }
 
+async function websiteShots(page: Page, state: string) {
+  await personalShots(page, state);
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate(
+      (t) =>
+        (
+          window as unknown as { browserTheme: (v: string) => void }
+        ).browserTheme(t),
+      theme,
+    );
+    await page.getByRole("region", { name: "Allowed websites" }).screenshot({
+      path: test.info().outputPath(`${state}-card-${theme}.png`),
+    });
+  }
+}
+
 for (const width of [1280, 390]) {
+  test(`Website consent is remembered, shown as a saved summary and revocable at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 950 });
+    const f = await personalFixture(page);
+    delete f.data.input;
+    await page.goto(
+      `/mini?tgWebAppStartParam=browser_${workspace.replaceAll("-", "")}`,
+    );
+    const websites = page.getByRole("region", { name: "Allowed websites" });
+    await expect(websites).toContainText("No websites remembered yet.");
+    await expect(
+      page.getByRole("region", { name: "Browser requests" }),
+    ).toContainText("future private tasks");
+    await page
+      .getByRole("button", { name: "Allow website", exact: true })
+      .click();
+    await expect(websites).toContainText("https://accounts.example.com");
+    await expect(websites.locator("input,textarea,select")).toHaveCount(0);
+    await page.reload();
+    await expect(websites).toContainText("https://accounts.example.com");
+    await expect(
+      page.getByRole("button", { name: "Allow website", exact: true }),
+    ).toHaveCount(0);
+    await websiteShots(page, "website-saved");
+    const revoke = websites.getByRole("button", {
+      name: "Revoke access to https://accounts.example.com",
+    });
+    f.unavailable(true);
+    await revoke.click();
+    await expect(page.getByRole("alert")).toContainText(
+      "host browser service is unavailable",
+    );
+    await expect(revoke).toBeEnabled();
+    await websiteShots(page, "website-revoke-error");
+    f.unavailable(false);
+    const release = f.pause();
+    await revoke.click();
+    await expect(revoke).toBeDisabled();
+    await websiteShots(page, "website-revoke-pending");
+    release();
+    await expect(websites).toContainText("No websites remembered yet.");
+    await expect(revoke).toHaveCount(0);
+    expect(
+      f.calls.filter((c) => c.operation?.command === "revoke_site"),
+    ).toHaveLength(2);
+    await websiteShots(page, "website-revoked");
+  });
   test(`Browser saved summary, modal editor, default and explicit disable at ${width}px`, async ({
     page,
   }) => {
@@ -354,6 +438,9 @@ for (const width of [1280, 390]) {
     ).toBeVisible();
     await expect(page.getByText("Checking your browser…")).toBeVisible();
     await expect(
+      page.getByRole("region", { name: "Allowed websites" }),
+    ).toContainText("Checking allowed websites…");
+    await expect(
       page.getByRole("button", { name: "View browser" }),
     ).toBeDisabled();
     await personalShots(page, "loading");
@@ -367,6 +454,11 @@ for (const width of [1280, 390]) {
       page.getByText("Not configured", { exact: true }),
     ).toBeVisible();
     await expect(page.getByText(/No requests. Ask the bot/)).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Allowed websites" }),
+    ).toContainText(
+      "Connect the host browser service to view saved website permissions.",
+    );
     for (const theme of ["light", "dark"]) {
       await page.evaluate(
         (t) =>
@@ -399,7 +491,7 @@ for (const width of [1280, 390]) {
       page.getByRole("button", { name: "Apply securely" }),
     ).toHaveCount(0);
     await expect(
-      page.getByRole("button", { name: "Approve", exact: true }),
+      page.getByRole("button", { name: "Allow website", exact: true }),
     ).toHaveCount(0);
     await personalShots(page, "expired");
     f.unavailable(true);
@@ -481,7 +573,7 @@ for (const width of [1280, 390]) {
       page.getByRole("heading", { name: "My browser" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Approve", exact: true }),
+      page.getByRole("button", { name: "Allow website", exact: true }),
     ).toBeVisible();
     const field = page.getByLabel("Password", { exact: true });
     await expect(field).toHaveAttribute("type", "password");
@@ -525,7 +617,9 @@ for (const width of [1280, 390]) {
         .first(),
     ).toBeVisible();
     await expect(page.getByLabel("Password", { exact: true })).toHaveCount(0);
-    await page.getByRole("button", { name: "Approve", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Allow website", exact: true })
+      .click();
     await expect(
       page.getByText("Approved · waiting for the task"),
     ).toBeVisible();

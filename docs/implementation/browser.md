@@ -1,5 +1,56 @@
 # Shared host Browser plugin
 
+## Remembered websites and Pi continuity (2026-11-01)
+
+Website decisions now save exact-origin permissions in the encrypted owner
+repository, independently of task/controller IDs and temporary leases. Current
+membership, private destination, consumer/plugin grants, configuration generation
+and profile epoch remain mandatory. Close/restart preserves saved permissions;
+the member page lists them and can revoke a site, cancel pending work and queue
+host closure. Profile deletion and changed authority invalidate earlier consent.
+Schema defaults retain existing temporary grants and pending decisions without
+upgrading them to permanent authorization. No SQL migration is needed.
+
+Pi's context and Browser/Codex tool guidance keep website work within the current
+conversation/run. Consent and secure input resume its existing transcript and
+original goal. Codex remains a Browser consumer inside authorized coding work.
+
+The native protocol adds an inspection-only `review` command, an
+`approvalRequired` result and optional `routineOrigins` policy. The app dispatches
+routine interactions only after an explicit host decision and binds execution to
+the inspected page. The host rechecks the actual element at dispatch. Ordinary
+nonsensitive fields, direct HTTP(S) links and non-submitting focus/navigation keys
+can proceed on remembered origins. Native links navigate without firing page
+click handlers. Buttons, Enter/Delete/Backspace, pointer clicks, unsupported
+controls and explicit `requireApproval:true` effects still require review. Tool
+instructions require that flag for external changes, including auto-saving fields;
+generic DOM inspection cannot infer arbitrary application auto-save behavior.
+Sensitive fields continue through the bound secure-input path.
+
+The application and native host must be released together for this protocol
+addition. This section describes local changes; the October deployment evidence
+below applies to the earlier task-scoped consent implementation.
+
+The full development workspace passed lint, strict types, all 1,378 deterministic
+tests with disposable PostgreSQL, build, the Node runtime contract (16 startup cases, zero external
+calls), 15 Browser scenarios and the Code Truth service smoke after catalog
+regeneration. Desktop/mobile and both themes were inspected for consent, saved
+sites, empty/loading, pending/failed revocation and the resulting empty summary.
+The current native package passes the real headed-host smoke, including routine
+fill/navigation and blocked unapproved submission, along with existing
+isolation/input/restart/download checks. That smoke image overlays the current
+package onto the previously provisioned test runtime; a fresh Debian package
+download stalled and was stopped. This is not a fresh OS-dependency rebuild or a
+production cutover. No live account, model or Telegram call was made.
+
+The isolated commit for `main` also passes 1,363 deterministic tests, lint,
+strict types, build and 17 Browser/catalog scenarios. Its Node 24 application
+image passes the offline runtime contract using the existing test runtime
+dependencies. Unrelated voice, Code Truth UI and cross-channel coding work was
+excluded from that commit and remains in the development working tree.
+
+## Earlier deployment baseline (2026-10-31)
+
 Status: implemented, verified and deployed to the existing VPS entry, 2026-10-31,
 release `41170079370-1`. Live website account acceptance remains separate from the
 synthetic deployment checks. See [deployment evidence](vps-deployment.md).
