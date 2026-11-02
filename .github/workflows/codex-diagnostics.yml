@@ -4,7 +4,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [deploy, resume, finish, status]
+        options: [deploy, resume, finish, status, update-recover]
         default: deploy
       release:
         type: string
@@ -79,6 +79,15 @@ jobs:
               ssh_vps "tail -n 30 /opt/repodesk/releases/$STATUS_RELEASE/$DIAGNOSTIC_LOG" ;;
             *) exit 1 ;;
           esac
+      - name: Restore unchanged writers after a pre-cutover update failure
+        if: ${{ inputs.mode == 'update-recover' }}
+        env:
+          STATUS_RELEASE: ${{ inputs.release }}
+        run: |
+          set -euo pipefail
+          [[ "$STATUS_RELEASE" =~ ^[0-9]+-[0-9]+$ ]]
+          source deploy/browser-operator/client.sh
+          ssh_vps "python3 - /opt/repodesk/releases/$STATUS_RELEASE" < deploy/browser-operator/restore-update-writers.py
       - name: Package and transfer the verified source and checksums
         if: ${{ inputs.mode == 'deploy' }}
         run: |
