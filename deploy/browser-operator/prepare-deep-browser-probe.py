@@ -31,3 +31,7 @@ Path('src/browser/incident-diagnostic-egress.ts').write_text(egress)
 
 probe=Path("deploy/browser-operator/deep-browser-probe.ts").read_text().replace("../../src/browser/host-runtime.ts", "../../src/browser/incident-diagnostic-runtime.ts")
 Path("deploy/browser-operator/incident-native-probe.ts").write_text(probe)
+egress=Path('src/browser/incident-diagnostic-egress.ts').read_text()
+egress=egress.replace('        requireThat(origin, "browser_destination_denied", 403);','''        console.log(JSON.stringify({egressProbe:"authority",hostname:authority.hostname.slice(0,253),port:authority.port||"443",authorized:!!origin}));
+        requireThat(origin, "browser_destination_denied", 403);''')
+Path('src/browser/incident-diagnostic-egress.ts').write_text(egress)
