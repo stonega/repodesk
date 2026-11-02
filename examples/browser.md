@@ -29,6 +29,10 @@ external effect, including fields that save automatically, with
 `browser_action({action:"fill",selector:"#title",text:"New title",requireApproval:true})`.
 Sending/submitting through buttons or Enter and coordinate clicks still wait for
 a reviewed page-bound decision. An unknown result must never be replayed.
+If navigation loses its response, inspect the current page with
+`browser_action({action:"read"})` before deciding whether to make a fresh
+navigation call. Saved website consent still applies to that origin; another
+**Allow website** decision is unnecessary.
 
 ## Codex
 

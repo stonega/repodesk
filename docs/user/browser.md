@@ -88,7 +88,9 @@ messages already delivered.
   minutes. Idle browsers close after five minutes and preserve login. Artifact
   references expire after 24 hours; screenshots retain the latest fifty.
 - An uncertain operation is not automatically retried. Check the current page
-  and obtain a fresh decision instead of assuming success or submitting twice.
+  instead of assuming success or submitting twice. Saved website access remains
+  valid after an interrupted navigation; a fresh navigation call does not need
+  another website approval. External changes still require their own decision.
 - Headed mode does not guarantee every website's sign-in challenge will work.
   File upload and secure input into cross-origin frames are unavailable; flows
   requiring a hardware key or approval on another device need that site's

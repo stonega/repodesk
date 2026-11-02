@@ -720,14 +720,9 @@ export class BrowserService {
       const origin = new URL(action.url).origin;
       const policy = await authority.policy?.(consumer.controller);
       requireThat(policy, "browser_service_unavailable", 503);
-      if (
-        !policy.origins.includes(origin) ||
-        state.operations.some(
-          (operation) =>
-            operation.state === "started" &&
-            operation.hash === fingerprint(action),
-        )
-      ) {
+      // An uncertain navigation does not revoke website consent. Operation
+      // receipts still prevent replaying its original call in control.perform.
+      if (!policy.origins.includes(origin)) {
         const w = await this.store.read(consumer.owner.workspaceId);
         const preview = !!w.plugins?.browser?.previewOrigins?.includes(origin);
         return this.wait(consumer, callId, {

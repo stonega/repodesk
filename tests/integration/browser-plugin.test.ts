@@ -522,6 +522,99 @@ const url = process.env.TEST_DATABASE_URL,
         (await store.read(w.id)).runs.find((r) => r.id === last.id)?.status,
       ).toBe("partial");
     });
+    test("interrupted navigation retains website consent for fresh calls in the same run", async () => {
+      const { w, run } = await seed();
+      const owner = { workspaceId: w.id, actor: "202" },
+        repo = new PostgresBrowserRepository(store.pool, key);
+      let interrupted = false;
+      const flakyBrowser = new BrowserService(store, key, {
+        async invoke(input) {
+          const result = await host.invoke(input);
+          if (
+            !interrupted &&
+            input.operation.command === "action" &&
+            input.operation.input.action === "navigate"
+          ) {
+            interrupted = true;
+            throw Error("synthetic lost navigation response");
+          }
+          return result;
+        },
+      });
+      const flakyPlugins = new PluginService(
+        store,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        flakyBrowser,
+      );
+      const sequence = modelSequence([
+        {
+          name: "browser_action",
+          args: { action: "navigate", url: "https://example.com/account" },
+        },
+        { name: "browser_action", args: { action: "read" } },
+        {
+          name: "browser_action",
+          args: { action: "request_site", url: "https://example.com/account" },
+        },
+        {
+          name: "browser_action",
+          args: { action: "navigate", url: "https://example.com/account" },
+        },
+        {
+          name: "browser_action",
+          args: { action: "navigate", url: "https://example.com/account" },
+        },
+        {
+          name: "browser_action",
+          args: { action: "navigate", url: "https://example.com/reports" },
+        },
+        "Account checked after interrupted navigation.",
+      ]);
+      const executor = new Executor(store, setup, (d, id) =>
+        flakyPlugins.runner(d, id, sequence),
+      );
+      await executor.execute(w.id, run.id);
+      const pending = (await store.read(w.id)).runs[0]?.browserWait;
+      if (!pending) throw Error("missing website request");
+      await flakyBrowser.decide(owner, pending.id, true);
+      await flakyBrowser.reconcile(w.id);
+      expect((await repo.read(owner)).access?.requests[0]?.result).toEqual({
+        status: "unavailable",
+        code: "browser_outcome_unknown",
+      });
+
+      await executor.execute(w.id, run.id);
+      const saved = (await store.read(w.id)).runs[0];
+      expect(saved?.status).toBe("succeeded");
+      expect(saved?.browserWait).toBeUndefined();
+      expect(saved?.result).toBe(
+        "Account checked after interrupted navigation.",
+      );
+      const state = await repo.read(owner);
+      expect(state.access?.sites.map((site) => site.origin)).toEqual([
+        page.origin,
+      ]);
+      expect(state.access?.requests).toHaveLength(1);
+      expect(
+        state.operations.filter((op) => op.state === "started"),
+      ).toHaveLength(1);
+      const navigations = calls.filter(
+        (call) =>
+          call.owner.workspaceId === w.id &&
+          call.operation.command === "action" &&
+          call.operation.input.action === "navigate",
+      );
+      expect(navigations).toHaveLength(4);
+      expect(
+        state.operations.filter((op) => op.state === "completed"),
+      ).toHaveLength(4);
+    });
     test("the member portal verifies signed identity, origin and membership without an admin login", async () => {
       const { w, run } = await seed();
       const executor = new Executor(store, setup, (d, id) =>
