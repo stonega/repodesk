@@ -8,6 +8,57 @@ release makes it available in the panel's version indicator. A deployment
 administrator reviews its notes and starts installation explicitly.
 See [host updater installation](updates.md) for the service and panel contract.
 
+## Remembered Browser websites deployment (2026-11-02)
+
+The operator-authorized coordinated application/native-host update promoted
+release `1793583945996-1` at `https://dev.stonegate.me`, replacing
+`41170079370-1`. Package version remains v0.1.46. Application source is
+`56350be2895ce813741826e12c14b5198b58379b`, tree
+`a787df36b525f6b396c6565a5de432ec04731e64`. It layers the Browser consent feature
+`f93676304df69dc507bf01d23965191d6113d7db` onto the existing deployment branch
+`eac952d1ab45dc68f4acafd65a33bfc269e91a6f`, preserving deployed audio and Code Truth
+behavior. Later operator-only recovery corrections were used without rebuilding
+the verified application images. The unrelated local development worktree was
+not included. This explicit source deployment does not publish a stable release.
+
+Website approval now persists per workspace/member and exact origin. Routine
+operations on an approved site proceed within Pi's original run; external effects
+still require approval. The application and native host share the new inspection
+protocol. No dependency or SQL migration was added. The unchanged Code Truth
+image/index and existing native Node/Chrome runtimes were retained.
+
+Before production cutover, lint, strict types, build, **1,368 deterministic tests**
+and **17 Browser/catalog scenarios** passed. The exact VPS image passed all 16
+offline startup cases with zero external calls, CPU speech imports, Code Truth
+smoke, disposable Compose readiness, migration rerun and backup/restore. Native
+package hashes match the locally verified manifest; the native Codex dynamic-tool
+proof also passed. Two operator regressions added after the initial failed attempt
+bring the final suite to **1,370 tests across 149 files**, with lint/types passing.
+
+The final receipt at 02:29:20 UTC verifies **51 packaged artifacts**, expected live
+images and all frontend assets through both loopback and the public entry. Health,
+readiness, admin and Mini App return HTTP 200. API, worker, supervisor, Code Truth,
+PostgreSQL and all three CI runners are healthy. The headed Browser probe confirms
+routine fill/navigation, blocked unapproved submission, revision fencing and
+private profile cleanup. Native restart preserves the socket directory; both
+existing API and worker mounts successfully invoke Browser afterward.
+
+The protected backup is
+`/opt/repodesk/backups/pre-release-1793583945996-1.dump` (**2,238,307 bytes**), with
+its archive listing verified. Configuration, credentials, persistent mounts,
+PostgreSQL and CI runner identities are preserved. Protected source metadata,
+checksums, image checks, native proofs and `deployment-receipt.json` remain under
+`/opt/repodesk/releases/1793583945996-1`.
+
+The first attempt interrupted service when Compose progress contaminated checkpoint
+JSON and Compose dependency resolution blocked recovery. The original writers
+were restored before the corrected exact-image resume. See the
+[incident and regressions](../../postmortem/2026-11-02-browser-checkpoint-output.md),
+[successful status check](https://github.com/stonega/repodesk/actions/runs/41378162854)
+and [full receipt](https://github.com/stonega/repodesk/actions/runs/41378414076).
+Real website accounts, native Telegram consent and live Pi/model interactions
+remain separate acceptance checks; none were used as deployment probes.
+
 ## Default-enabled host Browser deployment (2026-10-31)
 
 The explicitly authorized rollout retained `https://dev.stonegate.me` and promoted

@@ -30,15 +30,21 @@ a content diff and its service smoke passed. The current native package also
 passes the real headed-host smoke, including automatic routine operations and
 blocked unapproved submission, on the previously provisioned test runtime (the
 fresh Debian download stalled). This consent follow-up adds no dependency or SQL
-migration beyond the Browser baseline below. The application and native host need a coordinated release for the new
-inspection protocol; these changes have not been deployed or exercised with live
-Telegram/model/site accounts. See [implementation details](browser.md).
+migration beyond the Browser baseline below. The coordinated application/native
+release `1793583945996-1` deployed on 2026-11-02. Exact-image startup, native routine
+actions/submission gating, public assets and existing API/worker Browser mounts
+pass. Final release validation includes 1,370 deterministic tests and 17
+Browser/catalog scenarios. Live Telegram/model/site-account acceptance remains
+pending. See [implementation details](browser.md), [deployment evidence](vps-deployment.md)
+and the [deployment incident](../../postmortem/2026-11-02-browser-checkpoint-output.md).
 
 
 Commit-only validation on `main` excludes unrelated working changes and passes
 1,363 deterministic tests, lint, strict types, build, 17 Browser/catalog scenarios
 and the offline Node 24 application-image runtime contract. The source commit
-includes the Browser baseline needed on `main`; no production deployment was run.
+includes the Browser baseline needed on `main`. The later production source
+snapshot preserves already deployed changes from the deployment branch, as
+recorded above.
 
 ## Default-enabled private Browser (2026-10-31)
 
