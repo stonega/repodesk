@@ -95,3 +95,15 @@ No account was logged in, real external submission sent, Telegram message sent o
 model call made during diagnosis. The historical run and its unknown navigation
 receipt were not rewritten or replayed. The repair preserves current website
 consent, private profiles and the existing repository authorization boundary.
+
+## Verified outcome
+
+The complete repair deployed as `41406054824-1`, source
+`895d0e6925be87d49e300815783bcfdefb1c516b`, with receipt at 07:30:46 UTC. The VPS
+application-UID probe passes partitioned-cookie and denied HTTPS redirect checks;
+the original public URL returns its missing consent origin and keeps its session.
+A synthetic grant permits subsequent navigation/read. The real member's grants
+and privacy choices remain unchanged. Current-scope street-polls source reading
+also succeeds. The release snapshot passes 1,380 tests, and the isolated main
+repair passes 1,383. Protected artifacts, backup and successful deployment/probe
+links are recorded in the deployment evidence above.

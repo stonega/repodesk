@@ -48,9 +48,10 @@ instructions require that flag for external changes, including auto-saving field
 generic DOM inspection cannot infer arbitrary application auto-save behavior.
 Sensitive fields continue through the bound secure-input path.
 
-The application and native host must be released together for this protocol
-addition. This section describes local changes; the October deployment evidence
-below applies to the earlier task-scoped consent implementation.
+The application and native host were released together. The latest repair release
+`41406054824-1` includes remembered website consent, redirect handling and
+partitioned-cookie compatibility; see [deployment evidence](vps-deployment.md).
+Live website-account and Telegram/model acceptance remain separate checks.
 
 The full development workspace passed lint, strict types, all 1,378 deterministic
 tests with disposable PostgreSQL, build, the Node runtime contract (16 startup cases, zero external
