@@ -1,5 +1,21 @@
 # Implementation evidence
 
+## Browser chat repair on VPS (2026-11-02)
+
+Release `41406054824-1` deploys the confirmed YouTube redirect-consent correction,
+partitioned-cookie compatibility and cancellable Code Truth initialization wait.
+The original public URL reports its missing consent origin while retaining the
+session; a synthetic grant then permits navigation/read. Current-authority source
+reading of street-polls succeeds. The historical Telegram run and its website
+grants were not rewritten or replayed.
+
+The release snapshot passes 1,380 tests; the isolated main repair passes 1,383,
+with lint/types/build and the 16-case offline Node startup contract. Exact VPS
+images, native redirect/cookie/routine-action/submission gates, public assets,
+backup and existing API/worker Browser connections pass. Real website consent and
+cookie choices remain member decisions. See [deployment evidence](vps-deployment.md)
+and the [incident](../../postmortem/2026-11-02-browser-partitioned-cookie.md).
+
 ## Remembered Browser websites and Pi-led execution (2026-11-01)
 
 Site consent now persists per exact HTTP(S) origin in the encrypted member/workspace
