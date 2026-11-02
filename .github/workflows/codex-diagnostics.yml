@@ -69,7 +69,7 @@ jobs:
               ssh_vps "python3 -" < deploy/browser-operator/network-family-probe.py ;;
             deep-browser-probe)
               python3 deploy/browser-operator/prepare-deep-browser-probe.py
-              bun build deploy/browser-operator/deep-browser-probe.ts --target=node --packages=external --outfile="$RUNNER_TEMP/deep-browser-probe.mjs"
+              bun build deploy/browser-operator/incident-native-probe.ts --target=node --packages=external --outfile="$RUNNER_TEMP/deep-browser-probe.mjs"
               bun build src/browser/incident-diagnostic-worker.ts --target=node --packages=external --outfile="$RUNNER_TEMP/deep-browser-worker.mjs"
               ssh_vps "install -d -m 755 /opt/repodesk-browser/incident-$GITHUB_RUN_ID"
               for name in deep-browser-probe.mjs deep-browser-worker.mjs; do

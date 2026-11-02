@@ -16,3 +16,18 @@ egress=egress.replace('''      } catch {
 Path('src/browser/incident-diagnostic-egress.ts').write_text(egress)
 runtime=Path('src/browser/host-runtime.ts').read_text().replace('"./egress.ts"','"./incident-diagnostic-egress.ts"')
 Path('src/browser/incident-diagnostic-runtime.ts').write_text(runtime)
+egress=Path('src/browser/incident-diagnostic-egress.ts').read_text()
+egress=egress.replace('family:destination.family,port:destination.port}', 'family:destination.family,port:destination.port,policyUnchanged:policy===this.policy}')
+start=egress.index('    server.on("connect",')
+end=egress.index('    server.on("upgrade",',start)
+section=egress[start:end]
+section=section.replace('      try {','      let phase="authority";\n      try {',1)
+section=section.replace('        const target = await this.destination(new URL(origin));','        phase="resolve";\n        const target = await this.destination(new URL(origin));\n        console.log(JSON.stringify({egressProbe:"client_state",destroyed:client.destroyed}));\n        phase="client_state";')
+section=section.replace('        const upstream = connect({','        phase="connect";\n        const upstream = connect({')
+section=section.replace('        upstream.once("connect", () => {','        upstream.once("connect", () => { console.log(JSON.stringify({egressProbe:"tunnel_open"}));')
+section=section.replace('egressProbe:"denied",code:', 'egressProbe:"denied",phase,code:')
+egress=egress[:start]+section+egress[end:]
+Path('src/browser/incident-diagnostic-egress.ts').write_text(egress)
+
+probe=Path("deploy/browser-operator/deep-browser-probe.ts").read_text().replace("../../src/browser/host-runtime.ts", "../../src/browser/incident-diagnostic-runtime.ts")
+Path("deploy/browser-operator/incident-native-probe.ts").write_text(probe)
