@@ -7,9 +7,17 @@ const key = (await readFile("/run/secrets/browser_token", "utf8")).trim();
 const workspaceId = randomUUID();
 const routine = process.env.BROWSER_PROBE_ROUTINE === "true";
 let submissions = 0;
+let partitionedCookieObserved = false;
 const fixture = routine
   ? createServer((req, res) => {
       if (req.method === "POST") submissions++;
+      partitionedCookieObserved ||= (req.headers.cookie ?? "").includes(
+        "partitioned=",
+      );
+      res.setHeader(
+        "set-cookie",
+        "partitioned=synthetic-probe-cookie; HttpOnly; Secure; SameSite=None; Partitioned; Path=/",
+      );
       res.setHeader("content-type", "text/html");
       res.end(
         '<h1>Routine browser probe</h1><form action="/submit" method="POST"><input id="ordinary" name="query"><button id="submit" type="submit">Submit</button></form><a id="next" href="/next">Next</a>',
@@ -146,6 +154,7 @@ for (const actor of ["900000000000001", "900000000000002"]) {
       );
       await call(owner, controller, 1, { command: "action", input: next });
       assert.equal(submissions, 0);
+      assert.equal(partitionedCookieObserved, true);
     }
   } finally {
     await call(owner, controller, 2, { command: "close" });
@@ -168,7 +177,11 @@ console.log(
     cleaned: true,
     externalWebsitesUsed: false,
     ...(routine
-      ? { nativeRoutineActions: true, externalSubmissionsGated: true }
+      ? {
+          nativeRoutineActions: true,
+          externalSubmissionsGated: true,
+          partitionedCookieCheckpoint: true,
+        }
       : {}),
   }),
 );
