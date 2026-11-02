@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { NativeBrowserHost } from "../../src/browser/host-runtime.ts";
 import { browserHostSettings } from "../../src/browser/host-settings.ts";
+import { NativeBrowserHost } from "../../src/browser/incident-diagnostic-runtime.ts";
 import type { HostCommand } from "../../src/browser/protocol.ts";
 import { Fault } from "../../src/domain.ts";
 
