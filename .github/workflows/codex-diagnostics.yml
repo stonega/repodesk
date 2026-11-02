@@ -11,7 +11,7 @@ on:
         required: false
       log:
         type: choice
-        options: [none, resume-driver.log, browser-checkpoint-after-stop.stderr, pre-cutover-writer-recovery.log, finish-driver.log, workerdiag, recover, restart, probe, entry, trace, system, resume-native-package-build.log, resume-nft-build.log, resume-native-install.log, resume-nft-verification.json, resume-driver.log, resume-firewall-check.log, resume-module-nf_tables.log, resume-module-nft_reject_inet.log, build-app.log, build-job.log, build-supervisor.log, container-checks.log, host-install.log, chrome-install.log, native-host-verification.json, cutover.log, production-verification.log, driver.log]
+        options: [none, deployment-receipt.json, resume-driver.log, browser-checkpoint-after-stop.stderr, pre-cutover-writer-recovery.log, finish-driver.log, workerdiag, recover, restart, probe, entry, trace, system, resume-native-package-build.log, resume-nft-build.log, resume-native-install.log, resume-nft-verification.json, resume-firewall-check.log, resume-module-nf_tables.log, resume-module-nft_reject_inet.log, build-app.log, build-job.log, build-supervisor.log, container-checks.log, host-install.log, chrome-install.log, native-host-verification.json, cutover.log, production-verification.log, driver.log]
         default: none
 permissions:
   contents: read
@@ -61,6 +61,8 @@ jobs:
           ssh_vps "set -eu; cd /opt/repodesk/releases/$STATUS_RELEASE; for f in stage deploy.exit failure.json; do if test -f \"\$f\"; then printf '%s: ' \"\$f\"; cat \"\$f\"; fi; done; printf 'current-release: '; cat /opt/repodesk/.current-release; systemctl is-active repodesk-browser || true; docker ps --format '{{.Names}} {{.Image}} {{.Status}}'"
           case "$DIAGNOSTIC_LOG" in
             none|'') ;;
+            deployment-receipt.json)
+              ssh_vps "cat /opt/repodesk/releases/$STATUS_RELEASE/deployment-receipt.json" ;;
             workerdiag)
               ssh_vps "python3 - /opt/repodesk/releases/$STATUS_RELEASE" < deploy/browser-operator/worker-diagnostic.py ;;
             recover)
@@ -75,7 +77,7 @@ jobs:
               ssh_vps "bash -s -- /opt/repodesk/releases/$STATUS_RELEASE" < deploy/browser-operator/diagnose.sh ;;
             system)
               ssh_vps "set -eu; systemctl show repodesk-browser -p MainPID -p User -p Group -p CapabilityBoundingSet -p NoNewPrivileges -p ProtectKernelModules -p ProtectKernelTunables; journalctl -u repodesk-browser --no-pager -n 20; getent passwd | grep '^rdb_' || true; nft list table inet repodesk_browser || true; command -v xdpyinfo || true; lsmod | grep -E 'nft|nf_tables' || true" ;;
-            resume-driver.log|browser-checkpoint-after-stop.stderr|pre-cutover-writer-recovery.log|finish-driver.log|resume-native-package-build.log|resume-nft-build.log|resume-native-install.log|resume-nft-verification.json|resume-driver.log|resume-firewall-check.log|resume-module-nf_tables.log|resume-module-nft_reject_inet.log|build-app.log|build-job.log|build-supervisor.log|container-checks.log|host-install.log|chrome-install.log|native-host-verification.json|cutover.log|production-verification.log|driver.log)
+            resume-driver.log|browser-checkpoint-after-stop.stderr|pre-cutover-writer-recovery.log|finish-driver.log|resume-native-package-build.log|resume-nft-build.log|resume-native-install.log|resume-nft-verification.json|resume-firewall-check.log|resume-module-nf_tables.log|resume-module-nft_reject_inet.log|build-app.log|build-job.log|build-supervisor.log|container-checks.log|host-install.log|chrome-install.log|native-host-verification.json|cutover.log|production-verification.log|driver.log)
               ssh_vps "tail -n 30 /opt/repodesk/releases/$STATUS_RELEASE/$DIAGNOSTIC_LOG" ;;
             *) exit 1 ;;
           esac
