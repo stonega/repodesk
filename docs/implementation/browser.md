@@ -1,5 +1,15 @@
 # Shared host Browser plugin
 
+## Partitioned-cookie checkpoint correction (2026-11-02)
+
+The private native checkpoint now preserves Chromium's cross-site partition bit
+alongside `partitionKey`. This repairs navigation to sites such as YouTube whose
+session cookies carry that metadata. Unknown checkpoint data remains rejected;
+`browser_checkpoint_invalid` is the safe failure code. The real native fixture
+covers partitioned cookies through encrypted worker/root checkpoints, with no
+cookie metadata exposed to Pi. See the [incident](../../postmortem/2026-11-02-browser-partitioned-cookie.md)
+and [deployment evidence](vps-deployment.md).
+
 ## Remembered websites and Pi continuity (2026-11-01)
 
 Website decisions now save exact-origin permissions in the encrypted owner

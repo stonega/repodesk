@@ -111,6 +111,7 @@ export function browserExtension(
       "browser_sensitive_field",
       "browser_display_unavailable",
       "browser_operation_timeout",
+      "browser_checkpoint_invalid",
       "browser_duplicate_conflict",
       "browser_request_unavailable",
     ],

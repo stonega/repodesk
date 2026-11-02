@@ -12,6 +12,15 @@ or retry; Cancel discards them. Pending saves lock fields and dismissal. Removin
 a repository saves immediately, retaining its saved card if the request fails.
 The title's Enable switch saves independently; no page-level save is required.
 
+## First-query initialization
+
+Source calls wait up to 20 seconds when a newly configured namespace is still
+indexing. A slower initialization returns `code_truth_indexing`, separately from
+service failure or denied repository access. Waiting respects cancellation; the
+Pi factory rechecks its guard and current target scope before querying source.
+Existing ready snapshots remain usable during background synchronization. This
+adds no startup lookup, dependency, migration or service protocol change.
+
 ## Standard Docker deployment
 
 The base `compose.yaml` includes Code Truth. `docker compose up --build -d`

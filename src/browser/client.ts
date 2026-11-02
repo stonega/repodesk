@@ -38,6 +38,7 @@ const knownFaults = new Set([
   "browser_host_system_unavailable",
   "browser_host_cleanup_failed",
   "browser_profile_invalid",
+  "browser_checkpoint_invalid",
   "browser_credentials_unavailable",
   "browser_launch_failed",
   "browser_protocol_unavailable",
