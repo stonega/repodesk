@@ -291,15 +291,18 @@ zero-cost requests. Existing explicit dollar budgets remain configured until edi
 Model calls per run has been removed; older clients' `maxTurns` is discarded and
 migration `018_remove_model_call_limit.sql` removes current saved overrides. Historical
 run snapshots remain audit evidence and no longer impose call quotas. Ordinary
-assistant requests have no fixed model-call or tool-call quota. Set
-`RUN_TIMEOUT_SECONDS` in `.env` (default 300, range 1–1800)
-and redeploy to change the total wall-time allowance per execution. Reasoning
-models can need more than the previous 90 seconds. Queue expiry is set 60 seconds
-beyond this limit. Existing queued jobs retain their original queue expiry; let
-pending work drain before increasing the deadline. Timeouts report `run_timeout`;
-shutdown reports `worker_shutdown`, while explicit user cancellation remains
-`cancelled`. An interrupted request with unconfirmed usage keeps its reservation
-until billing reconciliation; raising the deadline does not retry old failures. Concurrent reservations can still exhaust the remaining
+assistant requests have no fixed model-call, tool-call or total execution-time
+limit. `RUN_TIMEOUT_SECONDS` has been removed; old environment values are ignored.
+The queue only dispatches durable runs and acknowledges each wakeup before
+execution. Existing queued jobs' expiry therefore applies only to dispatch, not
+to assistant execution. Up to three executions run concurrently per worker;
+one-second authorization/cancellation checks renew their 120-second leases.
+An acknowledged wakeup is recovered through the outbox after a crash, while
+uncertain provider attempts stop for reconciliation. Shutdown reports
+`worker_shutdown`, and explicit user cancellation remains `cancelled`.
+Historical `run_timeout` failures are not automatically retried. An interrupted
+request with unconfirmed usage keeps its reservation until billing reconciliation.
+Concurrent reservations can still exhaust the remaining
 budget between estimating output and reserving it; the final transaction prevents
 overspend before dispatch.
 

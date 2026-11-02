@@ -393,10 +393,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
           prepare() {},
           transcribe: async () => "No overnight travel",
         });
-        await new Executor(store, setup, runner, 30000, audio).execute(
-          w.id,
-          run.id,
-        );
+        await new Executor(store, setup, runner, audio).execute(w.id, run.id);
         const saved = await store.read(w.id);
         expect(saved.runs[0]?.status).toBe("succeeded");
         expect(saved.deliveries.map((d) => d.text)).toEqual([
@@ -486,7 +483,6 @@ const rootUrl = process.env.TEST_DATABASE_URL;
             };
           },
         },
-        30000,
         audio,
       ).execute(w.id, run.id);
       const saved = await store.read(w.id);

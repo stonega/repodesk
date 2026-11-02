@@ -25,7 +25,6 @@ import { restoreBrowserPause } from "../browser/pause.ts";
 import { developmentStatus } from "../coding/feedback.ts";
 import { codingTaskContext } from "../coding/task-context.ts";
 import { taskGet } from "../coding/task-store.ts";
-import { DEFAULT_RUN_TIMEOUT_SECONDS } from "../config.ts";
 import type { Store } from "../db/repositories.ts";
 import { Fault, requireThat } from "../domain.ts";
 import type { SearchPin } from "../search/config.ts";
@@ -54,7 +53,6 @@ export class Executor {
     private store: Store,
     private setup: SetupService,
     private runner: AgentRunner | RunnerProvider = new PiRunner(),
-    private timeoutMs = DEFAULT_RUN_TIMEOUT_SECONDS * 1000,
     private transcription = new TranscriptionService(store),
   ) {}
   async execute(workspaceId: string, runId: string, shutdown?: AbortSignal) {
@@ -188,10 +186,8 @@ export class Executor {
     if (!claimed) return;
     const fence = claimed.fence;
     const controller = new AbortController();
-    const deadline = AbortSignal.timeout(this.timeoutMs);
     const signal = AbortSignal.any([
       controller.signal,
-      deadline,
       ...(shutdown ? [shutdown] : []),
     ]);
     let handedOff = !!claimed.codingTaskId;
@@ -701,16 +697,12 @@ export class Executor {
     } catch (error) {
       // AbortSignal.any preserves the first reason, even if another source aborts later.
       const failure = signal.aborted
-        ? deadline.aborted && signal.reason === deadline.reason
-          ? new Fault("run_timeout", 504)
-          : shutdown?.aborted && signal.reason === shutdown.reason
-            ? new Fault("worker_shutdown", 503)
-            : signal.reason instanceof Fault
-              ? signal.reason
-              : new Fault("cancelled", 409)
+        ? shutdown?.aborted && signal.reason === shutdown.reason
+          ? new Fault("worker_shutdown", 503)
+          : signal.reason instanceof Fault
+            ? signal.reason
+            : new Fault("cancelled", 409)
         : error;
-      const timedOut =
-        failure instanceof Fault && failure.code === "run_timeout";
       this.store.log.write("run_failed", {
         error: failure,
         workspaceId,
@@ -721,8 +713,7 @@ export class Executor {
         if (!r || r.fence !== fence) return;
         for (const a of r.attempts)
           if (a.status === "reserved") a.status = "unknown";
-        r.status =
-          r.cancelled || (signal.aborted && !timedOut) ? "cancelled" : "failed";
+        r.status = r.cancelled || signal.aborted ? "cancelled" : "failed";
         r.error = r.cancelled
           ? "cancelled"
           : failure instanceof Fault

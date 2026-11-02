@@ -1,8 +1,6 @@
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 
-export const DEFAULT_RUN_TIMEOUT_SECONDS = 300;
-
 const schema = z.object({
   GITHUB_APP_ID: z.coerce.number().int().positive().optional(),
   GITHUB_APP_CLIENT_ID: z.string().min(1).optional(),
@@ -15,12 +13,6 @@ const schema = z.object({
   DATABASE_URL: z.string().url(),
   PUBLIC_ORIGIN: z.string().url().default("http://localhost:3000"),
   TELEGRAM_TRANSPORT: z.enum(["webhook", "polling"]).default("webhook"),
-  RUN_TIMEOUT_SECONDS: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(1800)
-    .default(DEFAULT_RUN_TIMEOUT_SECONDS),
   CODEX_RUNNER_URL: z.string().url().optional(),
   CODEX_RUNNER_TOKEN: z.string().min(32).optional(),
   CODE_TRUTH_URL: z.string().url().optional(),

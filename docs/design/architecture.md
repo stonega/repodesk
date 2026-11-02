@@ -236,15 +236,20 @@ cannot prove a claim follows from its citation. Thinking blocks are never persis
 
 Per-call reservations precede dispatch and reconcile completed usage. Provider retries
 are disabled. The worker checks cancellation every second and between tool/model
-steps, with configurable run deadlines (five minutes by default), model capacity and
-optional budget limits, with no fixed model-call or tool-call quota. Workspace run
+steps, with model capacity and optional budget limits, without a total execution
+deadline or fixed model-call or tool-call quota. Workspace run
 and monthly budgets default to `null` (unlimited); zero permits only zero-cost
 requests. Workflow runs inherit these team settings without a separate budget.
-`RUN_TIMEOUT_SECONDS` accepts 1–1800
-seconds. New queue jobs expire 60 seconds after the configured run deadline; the
-120-second conversation lease is renewed by the one-second guard. Deadline expiry
-is recorded as `failed (run_timeout)`, distinct from user cancellation and worker
-shutdown. Unknown provider usage remains reserved after any interruption. Skills request capabilities from the application registry; extension tools require
+`RUN_TIMEOUT_SECONDS` is retired and ignored in older environments. The queue
+acknowledges each run wakeup before assistant execution starts; its finite dispatch
+expiry does not bound the assistant's lifetime. A worker tracks at most three
+executions and drains them on shutdown. The 120-second conversation lease is
+renewed by the one-second guard. The transactional outbox recovers acknowledged
+wakeups after a crash, including a crash before claiming the run. Live leases
+prevent redispatch, and uncertain provider attempts still stop for reconciliation.
+Cancellation, current authorization and shutdown can interrupt execution;
+`run_timeout` remains a historical diagnostic. Unknown provider usage remains
+reserved after any interruption. Skills request capabilities from the application registry; extension tools require
 separate explicit operator grants. Extension configurations are pinned on runs and
 extension tool outcomes use durable reservations without automatic unknown replay. Proposals cannot
 activate schedules or persistent instructions.

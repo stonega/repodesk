@@ -1877,7 +1877,7 @@ suite("PostgreSQL integration (isolated database)", () => {
     );
     const boss = queue(testUrl);
     await boss.start();
-    await Promise.all([dispatch(store, boss, 600), dispatch(store, boss, 600)]);
+    await Promise.all([dispatch(store, boss), dispatch(store, boss)]);
     const jobs = await boss.findJobs("run", {});
     expect(
       jobs.filter((j) => (j.data as { targetId: string }).targetId === r.id),
@@ -1885,32 +1885,29 @@ suite("PostgreSQL integration (isolated database)", () => {
     expect(
       jobs.find((j) => (j.data as { targetId: string }).targetId === r.id)
         ?.expireInSeconds,
-    ).toBe(660);
+    ).toBe(180);
     await boss.stop();
   });
-  test("queue migration updates existing run expiry without changing delivery expiry", async () => {
-    await migrateJobs(testUrl, 600);
+  test("queue migration replaces legacy run deadlines with dispatch expiry", async () => {
     const boss = queue(testUrl);
     await boss.start();
     try {
-      expect((await boss.getQueue("run"))?.expireInSeconds).toBe(660);
+      await boss.updateQueue("run", { expireInSeconds: 660 });
+      await migrateJobs(testUrl);
+      expect((await boss.getQueue("run"))?.expireInSeconds).toBe(180);
       expect((await boss.getQueue("delivery"))?.expireInSeconds).toBe(180);
     } finally {
       await boss.stop();
       await migrateJobs(testUrl);
     }
   });
-  test("deadlines, shutdown and user cancellation retain distinct outcomes and unknown charges", async () => {
-    for (const cause of ["timeout", "shutdown", "user"] as const) {
+  test("shutdown and user cancellation retain distinct outcomes and unknown charges", async () => {
+    for (const cause of ["shutdown", "user"] as const) {
       const w = await seed();
       const r = await store.change(w.id, (v) =>
         createRun(v, "101", "slow request", "101", 0, "gpt-4.1-mini"),
       );
-      const deadline = new AbortController();
       const shutdown = new AbortController();
-      const timeout = spyOn(AbortSignal, "timeout").mockReturnValue(
-        deadline.signal,
-      );
       const log = spyOn(store.log, "write");
       const runner: AgentRunner = {
         async run(input) {
@@ -1920,13 +1917,7 @@ suite("PostgreSQL integration (isolated database)", () => {
               const run = v.runs.find((run) => run.id === r.id);
               if (run) run.cancelled = true;
             });
-          } else if (cause === "timeout") {
-            deadline.abort(new DOMException("deadline", "TimeoutError"));
-            shutdown.abort();
-          } else {
-            shutdown.abort();
-            deadline.abort(new DOMException("deadline", "TimeoutError"));
-          }
+          } else shutdown.abort();
           // Pi reports an abort generically; the executor must recover its source.
           throw new Fault("cancelled", 409);
         },
@@ -1937,16 +1928,10 @@ suite("PostgreSQL integration (isolated database)", () => {
           r.id,
           shutdown.signal,
         );
-        expect(timeout).toHaveBeenCalledWith(300000);
         const saved = await store.read(w.id);
         const run = saved.runs.find((run) => run.id === r.id);
-        const code =
-          cause === "timeout"
-            ? "run_timeout"
-            : cause === "shutdown"
-              ? "worker_shutdown"
-              : "cancelled";
-        expect(run?.status).toBe(cause === "timeout" ? "failed" : "cancelled");
+        const code = cause === "shutdown" ? "worker_shutdown" : "cancelled";
+        expect(run?.status).toBe("cancelled");
         expect(run?.error).toBe(code);
         expect(run?.cancelled).toBe(cause === "user");
         expect(run?.attempts[0]?.status).toBe("unknown");
@@ -1961,9 +1946,7 @@ suite("PostgreSQL integration (isolated database)", () => {
           expect(saved.deliveries.at(-1)?.cancellationRunId).toBe(r.id);
         } else {
           expect(saved.deliveries.at(-1)?.text).not.toContain(code);
-          expect(saved.deliveries.at(-1)?.text).toContain(
-            cause === "timeout" ? "timed out" : "restart",
-          );
+          expect(saved.deliveries.at(-1)?.text).toContain("restart");
         }
         // A repeated queue event must not replay an uncertain provider call.
         let replayed = false;
@@ -1975,46 +1958,30 @@ suite("PostgreSQL integration (isolated database)", () => {
         }).execute(w.id, r.id);
         expect(replayed).toBe(false);
       } finally {
-        timeout.mockRestore();
         log.mockRestore();
       }
     }
   });
-  test("timeout before dispatch records no unknown charge and uses the configured deadline", async () => {
+  test("shutdown before dispatch records no unknown charge", async () => {
     const w = await seed();
     const r = await store.change(w.id, (v) =>
       createRun(v, "101", "test", "101", 0, "gpt-4.1-mini"),
     );
-    const deadline = new AbortController();
-    deadline.abort(new DOMException("deadline", "TimeoutError"));
-    const timeout = spyOn(AbortSignal, "timeout").mockReturnValue(
-      deadline.signal,
-    );
+    const shutdown = new AbortController();
+    shutdown.abort();
     let called = false;
-    try {
-      await new Executor(
-        store,
-        setup,
-        {
-          async run() {
-            called = true;
-            throw Error();
-          },
-        },
-        600000,
-      ).execute(w.id, r.id);
-      expect(timeout).toHaveBeenCalledWith(600000);
-      expect(called).toBe(false);
-      const saved = await store.read(w.id);
-      expect(saved.runs[0]?.error).toBe("run_timeout");
-      expect(saved.runs[0]?.attempts).toHaveLength(0);
-      expect(saved.deliveries[0]?.text).toContain("request timed out");
-      expect(saved.deliveries[0]?.text).not.toContain(
-        "charges remain reserved",
-      );
-    } finally {
-      timeout.mockRestore();
-    }
+    await new Executor(store, setup, {
+      async run() {
+        called = true;
+        throw Error();
+      },
+    }).execute(w.id, r.id, shutdown.signal);
+    expect(called).toBe(false);
+    const saved = await store.read(w.id);
+    expect(saved.runs[0]?.error).toBe("worker_shutdown");
+    expect(saved.runs[0]?.attempts).toHaveLength(0);
+    expect(saved.deliveries[0]?.text).toContain("restart");
+    expect(saved.deliveries[0]?.text).not.toContain("charges remain reserved");
   });
   test("two approvals and two scheduler ticks produce one occurrence", async () => {
     const w = await seed();

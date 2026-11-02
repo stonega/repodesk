@@ -32,8 +32,8 @@ acknowledges each together with its user-message checkpoint. A pending message
 blocks stale tool preflight, and publication checks the queue again under the same
 lock. Text, supported attachments, speech and private forwarded references retain
 their source and authorization boundaries. Internal classification/summary passes
-cannot consume conversational input. The existing deadline and dollar budgets
-cover all turns. No dependency or SQL migration is added.
+cannot consume conversational input. Dollar budgets cover all turns; ordinary
+assistant execution has no total time limit. No dependency or SQL migration is added.
 
 Plain final answers no longer set a native reply target. An explicit authorized
 source citation can select a human message in the same bot/chat/Topic. Controls,

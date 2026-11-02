@@ -1,5 +1,27 @@
 # Implementation evidence
 
+## Ordinary assistant runs have no total execution deadline (2026-11-02)
+
+The 300-second executor deadline and `RUN_TIMEOUT_SECONDS` setting are removed;
+older environment values are ignored. Queue wakeups are acknowledged before
+execution, so pg-boss dispatch expiry no longer bounds assistant runtime. Three
+local execution slots, renewable fenced leases, cancellation, authorization,
+spending budgets and shutdown interruption remain. The durable outbox recovers
+acknowledged wakeups after a crash; uncertain provider attempts stop for
+reconciliation. Historical terminal runs are not automatically retried.
+
+Deterministic regressions cover long analysis, duplicate dispatch, live leases,
+acknowledgement/claim crashes, unknown provider usage, concurrency, cancellation,
+revocation and shutdown through the production dispatch/Executor composition.
+Biome, strict TypeScript, build and **1,352 tests across 144 files** passed with
+disposable PostgreSQL and a 15-second test deadline. All seven new dispatch/run
+regressions passed. The built Node runtime and exact Docker image passed all 16
+plugin-startup cases with zero external startup calls. Compose configuration,
+image migrations, HTTP health/readiness/admin checks, worker heartbeat and clean
+app/worker shutdown passed. No live rollout is claimed. See the
+[incident](../../postmortem/2026-11-02-assistant-run-timeout.md).
+
+
 ## Remembered Browser websites and Pi-led execution (2026-11-01)
 
 Site consent now persists per exact HTTP(S) origin in the encrypted member/workspace

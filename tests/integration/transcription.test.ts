@@ -321,10 +321,7 @@ const url = process.env.TEST_DATABASE_URL;
             };
           },
         };
-        await new Executor(store, setup, runner, 10000, service).execute(
-          w.id,
-          run.id,
-        );
+        await new Executor(store, setup, runner, service).execute(w.id, run.id);
         const saved = await store.read(w.id);
         expect(saved.runs.at(-1)?.status).toBe("succeeded");
         const final = saved.deliveries.at(-1);

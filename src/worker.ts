@@ -59,7 +59,6 @@ const stop = await startWorker(
   ),
   cfg.DATABASE_URL,
   (deployment, workspaceId) => plugins.runner(deployment, workspaceId),
-  cfg.RUN_TIMEOUT_SECONDS,
   new GitHubIssues(store, githubApps),
   new CodingService(
     store,
