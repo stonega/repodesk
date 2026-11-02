@@ -182,6 +182,25 @@ currently support same-repository PRs using their actual GitHub base branch;
 fork PRs support reviews and answers. Merge and deployment retain their separate
 authorization boundaries.
 
+Confirmed PRs published by a continuous Telegram task have a binding to the
+installation, repository, PR number and branch. A directly addressed fix from
+that task's original verified requester appends a source-bound input to the
+existing development task instead of creating another Review Bot fix task.
+Both requests and fixes must be enabled. The original task, PR, Telegram
+destination and history continue; product questions still arrive in Telegram.
+The new revision passes Codex intake before implementation. Duplicate comment
+deliveries do not append another revision. Inline replies include the parent
+review comment as reference data, not authorization.
+
+The application checks the comment's current author, full-body fingerprint and
+PR membership before execution and publication. Removed/inaccessible or changed
+comments stop further work. Temporary source failures hold the same task for
+retry without replaying execution or publication. Inputs expire with the original
+retained task context. Read-only comments, other collaborators, ambiguous bindings
+and historical PRs without a binding keep the existing independent route. A
+stopped bound task cannot be resumed by this path. See the
+[cross-channel journey](../../examples/cross-channel-coding.md).
+
 The runner selects and runs repository checks. Application services require confirmed
 check success before publishing. A maintainer push restarts unpublished work from
 current code. Publication proves the commit descends from the recorded head and

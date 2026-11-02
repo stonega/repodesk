@@ -7,6 +7,7 @@ import {
 import { z } from "zod";
 import { deploymentOrigin } from "../admin/site.ts";
 import { branchName, codingPayload } from "../coding/config.ts";
+import { appendGitHubDevelopment } from "../coding/github-inputs.ts";
 import type { Store } from "../db/repositories.ts";
 import { type Admin, Fault, requireThat, type Workspace } from "../domain.ts";
 import type { GitHubApps } from "../github/registry.ts";
@@ -395,6 +396,23 @@ export class ReviewService {
             hash: fingerprint(data.comment.body),
             githubId: githubUserId,
           };
+          if (mention.mode === "fix") {
+            if (!target.allowFixes) return;
+            if (
+              await appendGitHubDevelopment(sql, w, {
+                installationId: data.installation.id,
+                repositoryId,
+                number,
+                actor,
+                githubId: githubUserId,
+                kind: source.kind,
+                id: source.id,
+                body: data.comment.body,
+                text: mention.text,
+              })
+            )
+              return;
+          }
           if (
             active?.state === "waiting" &&
             active.actor === actor &&

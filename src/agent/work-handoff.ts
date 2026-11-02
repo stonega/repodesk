@@ -10,6 +10,7 @@ import type {
   DevelopmentInput,
   DevelopmentTask,
 } from "../coding/development.ts";
+import { developmentInputPresent } from "../coding/input-sources.ts";
 import { checkDevelopment } from "../coding/tasks.ts";
 import type { Sql } from "../db/pool.ts";
 import {
@@ -446,11 +447,14 @@ export async function queryWorkHandoff(
     const context =
       contexts.find((row) => row.task_id === task.id)?.data.sources ?? [];
     const originals = [
-      ...taskInputs.map((input) => ({ id: input.sourceId, text: input.text })),
+      ...taskInputs
+        .filter((input) => !input.github)
+        .map((input) => ({ id: input.sourceId, text: input.text })),
       ...context,
     ];
     if (
       !taskInputs.length ||
+      !taskInputs.every((input) => developmentInputPresent(w, task, input)) ||
       !originals.every((input) =>
         w.messages.some(
           (s) =>

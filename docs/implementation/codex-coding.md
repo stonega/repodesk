@@ -22,6 +22,14 @@ Tasks require no Issue, execution-mode selector or separate coding approval.
 Reviewed proposals and the legacy issue/exec engine have been removed without a
 compatibility or automatic migration path.
 
+After this version confirms PR publication, the original requester's directly
+addressed GitHub fix can continue the same task through the enabled Review Bot.
+The application retains GitHub provenance separately from Telegram sources and
+rechecks it before work and publication. Status, questions, final notifications
+and **View conversation** stay in the original Telegram audience. See the
+[cross-channel journey](../../examples/cross-channel-coding.md) for prerequisites,
+fallback routing and deterministic checks.
+
 The runner defaults to four active tasks. Set `CODEX_RUNNER_CONCURRENCY` (1–32) in
 the deployment environment to change capacity. API-key tasks execute Codex in
 parallel; tasks sharing one workspace's ChatGPT login serialize Codex phases while

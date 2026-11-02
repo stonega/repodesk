@@ -1,6 +1,8 @@
 import type { Sql } from "../db/pool.ts";
 import type { Run, Workspace } from "../domain.ts";
 import { memoryReferences } from "../workspaces/conversation-memory.ts";
+import type { DevelopmentInput } from "./development.ts";
+import { developmentInputPresent } from "./input-sources.ts";
 import { taskList } from "./task-store.ts";
 import { checkDevelopment } from "./tasks.ts";
 
@@ -43,7 +45,7 @@ export async function codingTaskContext(
   const repositoryIds = new Set(run.handoffRead?.repositoryIds);
   const acceptedInputs: {
     task_id: string;
-    data: { sourceId: string; text: string };
+    data: DevelopmentInput;
   }[] = candidates.length
     ? (
         await sql.query(
@@ -70,11 +72,14 @@ export async function codingTaskContext(
     const references =
       contexts.find((row) => row.task_id === task.id)?.data.sources ?? [];
     const originals = [
-      ...inputs.map((i) => ({ id: i.sourceId, text: i.text })),
+      ...inputs
+        .filter((input) => !input.github)
+        .map((i) => ({ id: i.sourceId, text: i.text })),
       ...references,
     ];
     if (
       !inputs.length ||
+      !inputs.every((input) => developmentInputPresent(w, task, input)) ||
       !originals.every((original) =>
         w.messages.some(
           (s) =>

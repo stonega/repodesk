@@ -65,6 +65,13 @@ Member comment requests additionally check membership and GitHub permissions.
 
 ## Use GitHub comments
 
+For a PR confirmed as published by a Telegram development task in this version,
+an explicit fix from its original verified requester continues that same task.
+Requests and fixes must both be enabled. Progress, product questions and task
+history remain in the original Telegram conversation. Other collaborators and
+PRs without a confirmed binding retain the separate Review Bot workflow. See
+[continuing a task from GitHub](codex.md#continue-a-task-from-github).
+
 Use the actual App bot name displayed on the plugin page. Here, `repodesk` is only
 an example:
 

@@ -11,6 +11,10 @@ import {
   taskExchanges,
 } from "./conversation-store.ts";
 import { type DevelopmentTask, developmentStopped } from "./development.ts";
+import {
+  developmentInputPresent,
+  verifyDevelopmentGitHubInputs,
+} from "./input-sources.ts";
 import type { LocalRunner, LocalStart, LocalStatus } from "./local/protocol.ts";
 import { taskGet, taskInputs, taskSave } from "./task-store.ts";
 import { checkDevelopment, notifyDevelopment } from "./tasks.ts";
@@ -59,12 +63,7 @@ export class TaskConversationExecutor {
     );
     requireThat(
       inputs.length &&
-        inputs.every((input) =>
-          w.messages.some(
-            (s) =>
-              s.id === input.sourceId && Date.parse(s.expiresAt) > Date.now(),
-          ),
-        ),
+        inputs.every((input) => developmentInputPresent(w, task, input)),
       "coding_source_expired",
       409,
     );
@@ -420,6 +419,13 @@ export class TaskConversationExecutor {
     const pr = task.pr
       ? await app.codingPull(token, task.payload.repository, task.pr.number)
       : undefined;
+    await verifyDevelopmentGitHubInputs(
+      app,
+      token,
+      w,
+      task,
+      await taskInputs(this.store.pool, task),
+    );
     const shared =
       task.payload.authMode === "provider_key"
         ? await new ModelProviders(this.store, this.key).runner(
@@ -564,6 +570,13 @@ export class TaskConversationExecutor {
           )
         ).token
       : undefined;
+    await verifyDevelopmentGitHubInputs(
+      app,
+      token,
+      await this.store.read(task.workspaceId),
+      task,
+      await taskInputs(this.store.pool, task),
+    );
     await this.allowed(
       await this.store.read(task.workspaceId),
       await taskGet(this.store.pool, task.workspaceId, task.id),

@@ -2,6 +2,10 @@ import { attachmentErrors } from "../telegram/attachments.ts";
 import type { CodingPayload } from "./config.ts";
 
 const messages: Record<string, string> = {
+  coding_github_source_changed:
+    "A GitHub instruction was edited, deleted, became inaccessible or no longer belongs to this PR. Further execution and publication have stopped; inspect the task before making a new request.",
+  coding_github_source_unavailable:
+    "A GitHub instruction could not be verified. RepoDesk will retry automatically; execution and PR publication wait until its source is verified.",
   coding_reference_source_unavailable:
     "A required reference repository snapshot is unavailable. Ask the workspace administrator to check the selected source repository and its read permissions before a new request. Repeating your confirmation cannot prepare the missing source.",
   coding_reference_source_changed:
