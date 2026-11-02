@@ -13,9 +13,9 @@ try{
  const rows=await pool.query("SELECT id,data FROM workspaces WHERE data::text LIKE '%street-polls%' AND NOT(data ? 'deletion')");
  for(const row of rows.rows){
   const w=row.data;
-  const runs=(w.runs??[]).filter(r=>text(r).includes('mdddj')||text(r).includes('browser_service_unavailable')).slice(-12);
+  const runs=(w.runs??[]).filter(r=>r.id==='f4a1cac1-f7f6-47dd-906d-29a9b3bd5c9e').slice(-12);
   const runIds=new Set(runs.map(r=>r.id));
-  console.log(JSON.stringify({workspaceId:row.id,plugins:Object.fromEntries(['browser','codeTruth'].map(k=>[k,w.plugins?.[k]])),runs:runs.map(r=>({id:r.id,status:r.status,createdAt:r.createdAt,updatedAt:r.updatedAt,startedAt:r.startedAt,completedAt:r.completedAt,error:r.error,actor:r.actor,keys:Object.keys(r),messages:(r.transcript??[]).map(summary)}))}));
+  console.log(JSON.stringify({workspaceId:row.id,plugins:Object.fromEntries(['browser','codeTruth'].map(k=>[k,w.plugins?.[k]])),runs:runs.map(r=>({id:r.id,status:r.status,at:r.at,finishedAt:r.finishedAt,error:r.error,actor:r.actor,keys:Object.keys(r),messages:(r.transcript??[]).map(summary),toolReceipts:Object.entries(r.tools??{}).map(([id,t])=>({id,name:t.name,state:t.state,codes:codes(t.result),resultShape:Object.keys(t.result??{}),arguments:t.arguments?{action:t.arguments.action,url:t.arguments.url}:undefined}))}))}));
   const logs=await pool.query("SELECT at,event,code,run_id FROM runtime_logs WHERE workspace_id=$1 AND at>now()-interval '6 hours' ORDER BY id DESC LIMIT 80",[row.id]);console.log(JSON.stringify({runtime:logs.rows}));
   const key=readFileSync(process.env.ENCRYPTION_KEY_FILE,'utf8').trim();
   const profiles=await pool.query('SELECT workspace_id,actor,data,updated_at FROM browser_profiles WHERE workspace_id=$1',[row.id]);
@@ -37,3 +37,8 @@ for line in logs.stdout.splitlines():
   if d.get('event')=='browser_host_failed': print(json.dumps({k:d[k] for k in ['event','code','workspaceId','controllerId','requestId'] if k in d}))
  except ValueError: pass
 print(subprocess.check_output(['systemctl','is-active','repodesk-browser'],text=True).strip())
+
+# Fixed public read probes; print transport metadata only, never page bodies.
+for url in ['https://example.com','https://www.youtube.com/@mdddj/videos','https://api.github.com/repos/stonega/street-polls']:
+ r=subprocess.run(['curl','--silent','--output','/dev/null','--max-time','15','--write-out','%{http_code} %{remote_ip} %{time_total}',url],text=True,capture_output=True)
+ print(json.dumps({'networkProbe':url,'exit':r.returncode,'metrics':r.stdout}))

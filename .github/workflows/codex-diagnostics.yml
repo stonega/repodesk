@@ -11,7 +11,7 @@ on:
         required: false
       log:
         type: choice
-        options: [none, chat-diagnostic, deployment-receipt.json, resume-driver.log, browser-checkpoint-after-stop.stderr, pre-cutover-writer-recovery.log, finish-driver.log, workerdiag, recover, restart, probe, entry, trace, system, resume-native-package-build.log, resume-nft-build.log, resume-native-install.log, resume-nft-verification.json, resume-firewall-check.log, resume-module-nf_tables.log, resume-module-nft_reject_inet.log, build-app.log, build-job.log, build-supervisor.log, container-checks.log, host-install.log, chrome-install.log, native-host-verification.json, cutover.log, production-verification.log, driver.log]
+        options: [none, public-browser-probe, chat-diagnostic, deployment-receipt.json, resume-driver.log, browser-checkpoint-after-stop.stderr, pre-cutover-writer-recovery.log, finish-driver.log, workerdiag, recover, restart, probe, entry, trace, system, resume-native-package-build.log, resume-nft-build.log, resume-native-install.log, resume-nft-verification.json, resume-firewall-check.log, resume-module-nf_tables.log, resume-module-nft_reject_inet.log, build-app.log, build-job.log, build-supervisor.log, container-checks.log, host-install.log, chrome-install.log, native-host-verification.json, cutover.log, production-verification.log, driver.log]
         default: none
 permissions:
   contents: read
@@ -61,6 +61,8 @@ jobs:
           ssh_vps "set -eu; cd /opt/repodesk/releases/$STATUS_RELEASE; for f in stage deploy.exit failure.json; do if test -f \"\$f\"; then printf '%s: ' \"\$f\"; cat \"\$f\"; fi; done; printf 'current-release: '; cat /opt/repodesk/.current-release; systemctl is-active repodesk-browser || true; docker ps --format '{{.Names}} {{.Image}} {{.Status}}'"
           case "$DIAGNOSTIC_LOG" in
             none|'') ;;
+            public-browser-probe)
+              ssh_vps "docker exec -i repodesk-app-1 node --input-type=module" < deploy/browser-operator/public-browser-probe.mjs ;;
             chat-diagnostic)
               ssh_vps "python3 -" < deploy/browser-operator/chat-diagnostic.py ;;
             deployment-receipt.json)
