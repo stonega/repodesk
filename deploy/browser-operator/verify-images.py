@@ -22,7 +22,7 @@ key=smoke/'secrets/encryption-key'
 key.write_text(secrets.token_hex(32)+'\n')
 key.chmod(0o644)
 envfile=smoke/'.env'
-envfile.write_text('\n'.join(['POSTGRES_PASSWORD='+secrets.token_hex(24),'PUBLIC_ORIGIN=http://localhost:33149','APP_PORT=33149','TELEGRAM_TRANSPORT=polling','APP_IMAGE='+images['app']['id'],'CODE_TRUTH_IMAGE='+images['code_truth']['id'],'CODEX_SUPERVISOR_IMAGE='+images['supervisor']['id'],'CODEX_RUNNER_IMAGE='+images['job']['id'],'CODEX_RUNNER_TOKEN='+secrets.token_hex(32),'CODEX_RUNNER_NETWORK=repodesk_browser_smoke_tasks','']))
+envfile.write_text('\n'.join(['POSTGRES_PASSWORD='+secrets.token_hex(24),'PUBLIC_ORIGIN=http://localhost:33149','APP_PORT=33149','TELEGRAM_TRANSPORT=polling','APP_IMAGE='+images['app']['id'],'CODE_TRUTH_IMAGE='+images['code_truth']['id'],'CODEX_SUPERVISOR_IMAGE='+images['supervisor']['id'],'CODEX_RUNNER_IMAGE='+images['job']['id'],'CODEX_RUNNER_TOKEN='+secrets.token_hex(32),'CODEX_RUNNER_NETWORK=repodesk_browser_smoke_tasks_'+meta['release_id'],'']))
 envfile.chmod(0o600)
 (smoke/'local-selinux.yaml').write_text('services:\n  app:\n    security_opt: [label=disable]\n  worker:\n    security_opt: [label=disable]\n  migrate:\n    security_opt: [label=disable]\n')
 compose=['docker','compose','--project-directory',str(smoke),'-p','repodesk-browser-smoke-'+meta['release_id'],'--env-file',str(envfile),'-f',str(source/'compose.yaml'),'-f',str(source/'deploy/codex/docker-compose.yaml'),'-f',str(smoke/'local-selinux.yaml')]
