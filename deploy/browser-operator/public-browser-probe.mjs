@@ -76,7 +76,7 @@ try {
     try {
       await call(owner, controller, 1, { command: "acquire" });
       const start = Date.now();
-      const result = await call(owner, controller, 1, {
+      let result = await call(owner, controller, 1, {
         command: "action",
         input: { action: "navigate", url },
       });
@@ -88,6 +88,26 @@ try {
           blockedOrigins: result.blockedOrigins,
         }),
       );
+      if (url.includes("youtube.com") && result.status === "unavailable") {
+        if (!result.blockedOrigins?.includes("https://consent.youtube.com"))
+          throw Error("unexpected_redirect_boundary");
+        console.log(
+          JSON.stringify({
+            redirectConsentReported: true,
+            origin: "https://consent.youtube.com",
+            originalSessionPreserved:
+              (await call(owner, controller, 1, { command: "status" }))
+                .status === "ready",
+          }),
+        );
+        // Explicit permission for this isolated synthetic probe only. Never alter
+        // the real member's saved websites or decide their privacy preference.
+        policy.origins.push("https://consent.youtube.com");
+        result = await call(owner, controller, 1, {
+          command: "action",
+          input: { action: "navigate", url },
+        });
+      }
       let page = await call(owner, controller, 1, {
         command: "action",
         input: { action: "read" },

@@ -10,6 +10,11 @@ let submissions = 0;
 let partitionedCookieObserved = false;
 const fixture = routine
   ? createServer((req, res) => {
+      if (req.url === "/blocked-redirect") {
+        res.writeHead(302, { location: "https://unapproved.example/blocked" });
+        res.end();
+        return;
+      }
       if (req.method === "POST") submissions++;
       partitionedCookieObserved ||= (req.headers.cookie ?? "").includes(
         "partitioned=",
@@ -155,6 +160,18 @@ for (const actor of ["900000000000001", "900000000000002"]) {
       await call(owner, controller, 1, { command: "action", input: next });
       assert.equal(submissions, 0);
       assert.equal(partitionedCookieObserved, true);
+      const redirected = await call(owner, controller, 1, {
+        command: "action",
+        input: { action: "navigate", url: `${origin}/blocked-redirect` },
+      });
+      assert.equal(redirected.status, "unavailable");
+      assert.ok(
+        redirected.blockedOrigins.includes("https://unapproved.example"),
+      );
+      assert.equal(
+        (await call(owner, controller, 1, { command: "status" })).status,
+        "ready",
+      );
     }
   } finally {
     await call(owner, controller, 2, { command: "close" });
@@ -181,6 +198,7 @@ console.log(
           nativeRoutineActions: true,
           externalSubmissionsGated: true,
           partitionedCookieCheckpoint: true,
+          httpsRedirectConsent: true,
         }
       : {}),
   }),

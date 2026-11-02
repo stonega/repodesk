@@ -1,15 +1,16 @@
 {
-  "previous_release_id": "1793583945996-1",
-  "previous_source_commit": "56350be2895ce813741826e12c14b5198b58379b",
-  "base_commit": "56350be2895ce813741826e12c14b5198b58379b",
+  "previous_release_id": "41403209516-1",
+  "previous_source_commit": "7a0c2de5f888b5b7a30a79d56194fc3274f97a5b",
+  "base_commit": "7a0c2de5f888b5b7a30a79d56194fc3274f97a5b",
   "feature_commit": "f93676304df69dc507bf01d23965191d6113d7db",
   "previous_code_truth_tree": "c3a0bce767072af9f2ed803d3d093290e0bd3cba",
   "previous_migration_tree": "a55dbde98ea0a81f7d241c686c8154a04257f69b",
   "verification": {
-    "deterministic_tests": 1378,
+    "deterministic_tests": 1380,
     "plugin_startup_cases": 16,
     "external_startup_calls": 0,
     "browser_checkpoint_regressions": 3,
-    "code_truth_readiness_regressions": 3
+    "code_truth_readiness_regressions": 3,
+    "https_redirect_regressions": 2
   }
 }
