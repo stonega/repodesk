@@ -1,5 +1,22 @@
 # Shared host Browser plugin
 
+## Interrupted navigation and repeated consent (2026-11-02)
+
+An unfinished navigation receipt no longer creates another website request for
+an already allowed origin. A lost host response keeps its original uncertain
+receipt, while fresh calls in the same run can inspect the page and navigate
+without repeating site consent. Operation replay protection, exact-origin checks
+and separate external-action approvals remain enforced.
+
+The production-composition regression simulates a lost navigation response after
+approval, then checks page inspection, repeated site requests, repeated navigation
+and another path on the same origin. It requires one website decision and retains
+the original uncertain receipt. This is a local correction, not deployment evidence.
+
+Validation: lint, strict TypeScript, build, the Node runtime contract and all 1,386
+deterministic tests across 149 files pass with disposable PostgreSQL. The new
+regression first failed with a second website wait and passes after the fix.
+
 ## Remembered websites and Pi continuity (2026-11-01)
 
 Website decisions now save exact-origin permissions in the encrypted owner
