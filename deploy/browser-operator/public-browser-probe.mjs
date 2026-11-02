@@ -88,20 +88,56 @@ try {
           blockedOrigins: result.blockedOrigins,
         }),
       );
-      const page = await call(owner, controller, 1, {
+      let page = await call(owner, controller, 1, {
         command: "action",
         input: { action: "read" },
       });
+      for (
+        let attempt = 0;
+        url.includes("youtube.com") &&
+        attempt < 3 &&
+        !(page.controls ?? []).some((control) =>
+          control.href?.includes("/watch"),
+        );
+        attempt++
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        page = await call(owner, controller, 1, {
+          command: "action",
+          input: { action: "read" },
+        });
+      }
       console.log(
         JSON.stringify({
           nativePublicProbe: url,
           status: result.status,
           elapsedMs: Date.now() - start,
           textLength: page.text?.length,
+          videoControls: (page.controls ?? []).filter((control) =>
+            control.href?.includes("/watch"),
+          ).length,
+          botChallenge: /sign in to confirm you.re not a bot/i.test(
+            page.text ?? "",
+          ),
           blockedOrigins: page.blockedOrigins,
         }),
       );
     } catch (e) {
+      for (
+        let attempt = 0;
+        url.includes("youtube.com") &&
+        attempt < 3 &&
+        !(page.controls ?? []).some((control) =>
+          control.href?.includes("/watch"),
+        );
+        attempt++
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        page = await call(owner, controller, 1, {
+          command: "action",
+          input: { action: "read" },
+        });
+      }
       console.log(
         JSON.stringify({
           nativePublicProbe: url,
