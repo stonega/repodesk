@@ -8,16 +8,17 @@ import {createDecipheriv,createHash} from 'node:crypto';
 const pool=new Pool({connectionString:process.env.DATABASE_URL});
 const text=(v)=>JSON.stringify(v??'');
 const codes=(v)=>[...new Set(text(v).match(/\b(?:browser_[a-z_]+|code_truth_[a-z_]+|github_[a-z_]+|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|unavailable)\b/g)??[])];
-const summary=(m)=>({role:m.role,toolName:m.toolName,toolCallId:m.toolCallId,isError:m.isError,codes:codes(m),tools:(m.content??[]).filter?.(c=>c.type==='toolCall').map(c=>({name:c.name,id:c.id,action:c.arguments?.action,url:c.arguments?.url,target:c.arguments?.target,network:c.arguments?.network}))});
+const summary=(m)=>({role:m.role,toolName:m.toolName,toolCallId:m.toolCallId,isError:m.isError,codes:codes(m),targetSummary:m.toolName==='list_code_targets'?(m.content??[]).filter(c=>c.type==='text').map(c=>{try{const v=JSON.parse(c.text);return {targets:(v.targets??v).map?.(t=>({target:t.target,networks:t.networks?.map(n=>({status:n.status,commit:n.commit,errorCodes:codes(n),errorFlags:[...new Set(text(n.error).match(/401|403|404|429|Bad credentials|rate limit|not indexed|fetch failed|timed out/g)??[])]}))}))}}catch{return undefined}}):undefined,statusMarkers:[...new Set(text(m).match(/ready|unavailable|not indexed yet|Bad credentials|rate limit|401|403|404|429|fetch failed|branch|commit|indexing/g)??[])],tools:(m.content??[]).filter?.(c=>c.type==='toolCall').map(c=>({name:c.name,id:c.id,action:c.arguments?.action,url:c.arguments?.url,target:c.arguments?.target,network:c.arguments?.network}))});
 try{
  const rows=await pool.query("SELECT id,data FROM workspaces WHERE data::text LIKE '%street-polls%' AND NOT(data ? 'deletion')");
  for(const row of rows.rows){
   const w=row.data;
+  const key=readFileSync(process.env.ENCRYPTION_KEY_FILE,'utf8').trim();
+  for(const r of w.runs??[]){if(r.id!=='f4a1cac1-f7f6-47dd-906d-29a9b3bd5c9e'||!r.browserSealed)continue;const [v,iv,tag,data]=r.browserSealed.split('.');const d=createDecipheriv('aes-256-gcm',Buffer.from(key,'hex'),Buffer.from(iv,'base64'));d.setAAD(Buffer.from(`repodesk:v2:browser-content:${w.id}:${r.browserRead.owner}:run:${r.id}`));d.setAuthTag(Buffer.from(tag,'base64'));Object.assign(r,JSON.parse(Buffer.concat([d.update(Buffer.from(data,'base64')),d.final()])));}
   const runs=(w.runs??[]).filter(r=>r.id==='f4a1cac1-f7f6-47dd-906d-29a9b3bd5c9e').slice(-12);
   const runIds=new Set(runs.map(r=>r.id));
   console.log(JSON.stringify({workspaceId:row.id,plugins:Object.fromEntries(['browser','codeTruth'].map(k=>[k,w.plugins?.[k]])),runs:runs.map(r=>({id:r.id,status:r.status,at:r.at,finishedAt:r.finishedAt,error:r.error,actor:r.actor,keys:Object.keys(r),messages:(r.transcript??[]).map(summary),toolReceipts:Object.entries(r.tools??{}).map(([id,t])=>({id,name:t.name,state:t.state,codes:codes(t.result),resultShape:Object.keys(t.result??{}),arguments:t.arguments?{action:t.arguments.action,url:t.arguments.url}:undefined}))}))}));
   const logs=await pool.query("SELECT at,event,code,run_id FROM runtime_logs WHERE workspace_id=$1 AND at>now()-interval '6 hours' ORDER BY id DESC LIMIT 80",[row.id]);console.log(JSON.stringify({runtime:logs.rows}));
-  const key=readFileSync(process.env.ENCRYPTION_KEY_FILE,'utf8').trim();
   const profiles=await pool.query('SELECT workspace_id,actor,data,updated_at FROM browser_profiles WHERE workspace_id=$1',[row.id]);
   for(const p of profiles.rows){
    const owner={actor:p.actor,workspaceId:p.workspace_id};const hash=createHash('sha256').update(JSON.stringify(owner)).digest('hex');
