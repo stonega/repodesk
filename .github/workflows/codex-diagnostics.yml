@@ -4,14 +4,14 @@ on:
     inputs:
       mode:
         type: choice
-        options: [deploy, resume, finish, status, update-recover]
+        options: [deploy, resume, finish, status, update-recover, update-resume]
         default: deploy
       release:
         type: string
         required: false
       log:
         type: choice
-        options: [none, finish-driver.log, workerdiag, recover, restart, probe, entry, trace, system, resume-native-package-build.log, resume-nft-build.log, resume-native-install.log, resume-nft-verification.json, resume-driver.log, resume-firewall-check.log, resume-module-nf_tables.log, resume-module-nft_reject_inet.log, build-app.log, build-job.log, build-supervisor.log, container-checks.log, host-install.log, chrome-install.log, native-host-verification.json, cutover.log, production-verification.log, driver.log]
+        options: [none, resume-driver.log, browser-checkpoint-after-stop.stderr, pre-cutover-writer-recovery.log, finish-driver.log, workerdiag, recover, restart, probe, entry, trace, system, resume-native-package-build.log, resume-nft-build.log, resume-native-install.log, resume-nft-verification.json, resume-driver.log, resume-firewall-check.log, resume-module-nf_tables.log, resume-module-nft_reject_inet.log, build-app.log, build-job.log, build-supervisor.log, container-checks.log, host-install.log, chrome-install.log, native-host-verification.json, cutover.log, production-verification.log, driver.log]
         default: none
 permissions:
   contents: read
@@ -28,7 +28,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
-        if: ${{ inputs.mode != 'status' }}
+        if: ${{ inputs.mode == 'deploy' || inputs.mode == 'resume' || inputs.mode == 'finish' }}
         with:
           node-version: '24'
       - name: Prepare an authenticated disposable SSH client
@@ -75,7 +75,7 @@ jobs:
               ssh_vps "bash -s -- /opt/repodesk/releases/$STATUS_RELEASE" < deploy/browser-operator/diagnose.sh ;;
             system)
               ssh_vps "set -eu; systemctl show repodesk-browser -p MainPID -p User -p Group -p CapabilityBoundingSet -p NoNewPrivileges -p ProtectKernelModules -p ProtectKernelTunables; journalctl -u repodesk-browser --no-pager -n 20; getent passwd | grep '^rdb_' || true; nft list table inet repodesk_browser || true; command -v xdpyinfo || true; lsmod | grep -E 'nft|nf_tables' || true" ;;
-            finish-driver.log|resume-native-package-build.log|resume-nft-build.log|resume-native-install.log|resume-nft-verification.json|resume-driver.log|resume-firewall-check.log|resume-module-nf_tables.log|resume-module-nft_reject_inet.log|build-app.log|build-job.log|build-supervisor.log|container-checks.log|host-install.log|chrome-install.log|native-host-verification.json|cutover.log|production-verification.log|driver.log)
+            resume-driver.log|browser-checkpoint-after-stop.stderr|pre-cutover-writer-recovery.log|finish-driver.log|resume-native-package-build.log|resume-nft-build.log|resume-native-install.log|resume-nft-verification.json|resume-driver.log|resume-firewall-check.log|resume-module-nf_tables.log|resume-module-nft_reject_inet.log|build-app.log|build-job.log|build-supervisor.log|container-checks.log|host-install.log|chrome-install.log|native-host-verification.json|cutover.log|production-verification.log|driver.log)
               ssh_vps "tail -n 30 /opt/repodesk/releases/$STATUS_RELEASE/$DIAGNOSTIC_LOG" ;;
             *) exit 1 ;;
           esac
@@ -88,6 +88,22 @@ jobs:
           [[ "$STATUS_RELEASE" =~ ^[0-9]+-[0-9]+$ ]]
           source deploy/browser-operator/client.sh
           ssh_vps "python3 - /opt/repodesk/releases/$STATUS_RELEASE" < deploy/browser-operator/restore-update-writers.py
+      - name: Resume an exact-image Browser update before cutover
+        if: ${{ inputs.mode == 'update-resume' }}
+        env:
+          STATUS_RELEASE: ${{ inputs.release }}
+        run: |
+          set -euo pipefail
+          [[ "$STATUS_RELEASE" =~ ^[0-9]+-[0-9]+$ ]]
+          source deploy/browser-operator/client.sh
+          cp deploy/browser-operator/update.py "$RUNNER_TEMP/resume-update.py"
+          cp deploy/browser-operator/update_runtime.py "$RUNNER_TEMP/update_runtime.py"
+          cp deploy/browser-operator/resume-update.sh "$RUNNER_TEMP/resume-update.sh"
+          for name in resume-update.py update_runtime.py resume-update.sh; do
+            docker cp "$RUNNER_TEMP/$name" "$DEPLOY_CLIENT:/tmp/$name"
+            docker exec "$DEPLOY_CLIENT" scp -i /tmp/key -P 22 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts "/tmp/$name" "root@169.58.58.71:/opt/repodesk/releases/$STATUS_RELEASE/$name"
+          done
+          ssh_vps "systemd-run --unit=repodesk-browser-resume-$STATUS_RELEASE-${GITHUB_SHA:0:8} --collect --property=Type=exec --property=RuntimeMaxSec=3600 --property=TimeoutStopSec=180 --property=WorkingDirectory=/opt/repodesk/releases/$STATUS_RELEASE /bin/bash /opt/repodesk/releases/$STATUS_RELEASE/resume-update.sh"
       - name: Package and transfer the verified source and checksums
         if: ${{ inputs.mode == 'deploy' }}
         run: |
@@ -157,7 +173,7 @@ jobs:
           done
           ssh_vps "set -eu; printf '%s\n' '$GITHUB_SHA' > /opt/repodesk/releases/$RELEASE_ID/operator-commit; systemd-run --unit=repodesk-browser-deploy-$RELEASE_ID --collect --property=Type=exec --property=RuntimeMaxSec=1800 --property=WorkingDirectory=/opt/repodesk/releases/$RELEASE_ID /bin/bash /opt/repodesk/releases/$RELEASE_ID/run-finish.sh"
       - name: Wait for image checks, host installation, backup and cutover
-        if: ${{ inputs.mode != 'status' }}
+        if: ${{ inputs.mode == 'deploy' || inputs.mode == 'resume' || inputs.mode == 'finish' }}
         run: |
           set -euo pipefail
           source deploy/browser-operator/client.sh
@@ -174,14 +190,14 @@ jobs:
           echo 'Deployment exceeded the observation deadline. Inspect its protected VPS logs.' >&2
           exit 1
       - name: Save the production verification receipt
-        if: ${{ inputs.mode != 'status' }}
+        if: ${{ inputs.mode == 'deploy' || inputs.mode == 'resume' || inputs.mode == 'finish' }}
         run: |
           set -euo pipefail
           source deploy/browser-operator/client.sh
           ssh_vps "cat /opt/repodesk/releases/$RELEASE_ID/deployment-receipt.json" > "$RUNNER_TEMP/browser-deployment-receipt.json"
           node -e 'const r=require(process.env.RUNNER_TEMP+"/browser-deployment-receipt.json");console.log(JSON.stringify({release:r.release_id,commit:r.source_commit,services:r.services,browser:r.browser_host,backup:r.backup},null,2))'
       - uses: actions/upload-artifact@v4
-        if: ${{ inputs.mode != 'status' }}
+        if: ${{ inputs.mode == 'deploy' || inputs.mode == 'resume' || inputs.mode == 'finish' }}
         with:
           name: browser-deployment-receipt
           path: ${{ runner.temp }}/browser-deployment-receipt.json

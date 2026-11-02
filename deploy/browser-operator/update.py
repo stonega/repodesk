@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from update_runtime import command_json, start_unchanged_writers
 
 os.umask(0o077)
 bundle = Path(sys.argv[1]).resolve()
@@ -62,61 +63,78 @@ def browser_checkpoint():
 
 
 try:
-    stage('verify_source_and_capture_baseline')
-    assert output(['id', '-u']) == '0'
-    assert (root / '.current-release').read_text().strip() == meta['previous_release_id']
-    for name, digest in json.loads((bundle / 'payload-checksums.json').read_text()).items():
-        assert hashlib.sha256((bundle / name).read_bytes()).hexdigest() == digest, name
-    assert hashlib.sha256((bundle / 'source.tar.gz').read_bytes()).hexdigest() == meta['source_sha256']
-    run(['python3', str(bundle / 'capture-state.py'), str(bundle / 'baseline.json')], 'baseline.log')
-    source.mkdir(mode=0o700)
-    run(['tar', '-xzf', str(bundle / 'source.tar.gz'), '-C', str(source)], 'source-extract.log')
-    images = {}
-    for name, repository, target in [('app', 'repodesk', 'app'),
-                                      ('job', 'repodesk-codex-job', 'codex-job'),
-                                      ('supervisor', 'repodesk-codex-supervisor', 'codex-supervisor')]:
-        stage('build_' + name)
-        assert shutil.disk_usage(root).free > 6 * 1024**3, 'disk_headroom'
-        tag = repository + ':release-' + meta['source_commit']
-        run(['docker', 'build', '--platform', 'linux/amd64', '--target', target,
-             '-t', tag, str(source)], 'build-' + name + '.log')
-        images[name] = {'tag': tag, 'id': output(['docker', 'image', 'inspect', '--format', '{{.Id}}', tag])}
-    # Code Truth's source subtree is unchanged from the existing deployment.
-    assert meta['code_truth_tree'] == meta['previous_code_truth_tree']
-    old_truth = json.loads((previous / 'build-images.json').read_text())['code_truth']
-    truth_tag = 'repodesk-code-truth:release-' + meta['source_commit']
-    run(['docker', 'tag', old_truth['id'], truth_tag], 'code-truth-retag.log')
-    images['code_truth'] = {'tag': truth_tag, 'id': old_truth['id']}
-    (bundle / 'build-images.json').write_text(json.dumps(images, indent=2) + '\n')
-    for name, prefix in [('app', 'image'), ('job', 'codex-job'), ('supervisor', 'codex-supervisor'), ('code_truth', 'code-truth')]:
-        for field in ['tag', 'id']:
-            (bundle / f'{prefix}-{field}').write_text(images[name][field] + '\n')
-    stage('exact_image_runtime_and_disposable_database_checks')
-    run(['python3', str(bundle / 'verify-images.py')], 'container-checks.log')
-    actual = json.loads((bundle / 'artifact-hashes.json').read_text())
-    assert {k.removeprefix('image-app/dist/'): v for k, v in actual.items()
-            if k.startswith('image-app/dist/')} == json.loads((bundle / 'expected-dist.json').read_text())
-    stage('package_native_browser_host')
-    package_tag = 'repodesk-browser-package:release-' + meta['source_commit']
-    run(['docker', 'build', '--platform', 'linux/amd64', '--target', 'build', '-f',
-         str(source / 'deploy/browser/smoke.Dockerfile'), '-t', package_tag, str(source)], 'host-package-build.log')
-    cid = output(['docker', 'create', package_tag, 'true'])
-    try:
-        run(['docker', 'cp', cid + ':/package', str(bundle / 'host-package')], 'host-package-copy.log')
-    finally:
-        run(['docker', 'rm', cid], 'host-package-cleanup.log')
-    assert json.loads((bundle / 'host-package/manifest.json').read_text()) == json.loads((bundle / 'expected-host-manifest.json').read_text())
-    stage('native_codex_dynamic_tool_proof')
-    proof = 'repodesk-browser-native-proof-' + meta['release_id']
-    run(['docker', 'create', '--name', proof, '--network', 'none', '-e', 'CODEX_BROWSER_PROOF=1',
-         '-e', 'CODEX_PROTOCOL_BINARY=/usr/local/bin/codex', '--entrypoint', 'bun',
-         images['job']['id'], '/opt/deepx/browser-proof.js'], 'native-codex-create.log')
-    try:
-        run(['docker', 'cp', str(bundle / 'browser-codex-proof.mjs'), proof + ':/opt/deepx/browser-proof.js'], 'native-codex-copy.log')
-        run(['docker', 'start', '-a', proof], 'native-codex-proof.log')
-        assert output(['docker', 'inspect', '--format', '{{.State.ExitCode}}', proof]) == '0'
-    finally:
-        run(['docker', 'rm', proof], 'native-codex-cleanup.log')
+    if len(sys.argv) > 2 and sys.argv[2] == '--resume':
+        assert (root / '.current-release').read_text().strip() == meta['previous_release_id']
+        assert (bundle / 'stage').read_text().strip() in ['wait_for_browser_and_coding_checkpoints', 'deployment_failed']
+        assert not (bundle / 'cutover.log').exists()
+        assert hashlib.sha256((bundle / 'source.tar.gz').read_bytes()).hexdigest() == meta['source_sha256']
+        images = json.loads((bundle / 'build-images.json').read_text())
+        verified = json.loads((bundle / 'container-verification.json').read_text())
+        assert verified['images'] == images and all(verified.get(key) for key in ['node_runtime','transcription_runtime','code_truth_offline','compose_config','compose_readiness','migration_rerun','backup_restore'])
+        for item in images.values():
+            assert output(['docker','image','inspect','--format','{{.Id}}',item['tag']]) == item['id']
+        assert json.loads((bundle / 'host-package/manifest.json').read_text()) == json.loads((bundle / 'expected-host-manifest.json').read_text())
+        run(['python3', str(bundle / 'capture-state.py'), str(bundle / 'resume-baseline.json')], 'resume-baseline.log')
+        old = json.loads((bundle / 'baseline.json').read_text())
+        current = json.loads((bundle / 'resume-baseline.json').read_text())
+        assert old['secret_hashes'] == current['secret_hashes']
+        stage('resume_verified_pre_cutover_images')
+    else:
+        stage('verify_source_and_capture_baseline')
+        assert output(['id', '-u']) == '0'
+        assert (root / '.current-release').read_text().strip() == meta['previous_release_id']
+        for name, digest in json.loads((bundle / 'payload-checksums.json').read_text()).items():
+            assert hashlib.sha256((bundle / name).read_bytes()).hexdigest() == digest, name
+        assert hashlib.sha256((bundle / 'source.tar.gz').read_bytes()).hexdigest() == meta['source_sha256']
+        run(['python3', str(bundle / 'capture-state.py'), str(bundle / 'baseline.json')], 'baseline.log')
+        source.mkdir(mode=0o700)
+        run(['tar', '-xzf', str(bundle / 'source.tar.gz'), '-C', str(source)], 'source-extract.log')
+        images = {}
+        for name, repository, target in [('app', 'repodesk', 'app'),
+                                          ('job', 'repodesk-codex-job', 'codex-job'),
+                                          ('supervisor', 'repodesk-codex-supervisor', 'codex-supervisor')]:
+            stage('build_' + name)
+            assert shutil.disk_usage(root).free > 6 * 1024**3, 'disk_headroom'
+            tag = repository + ':release-' + meta['source_commit']
+            run(['docker', 'build', '--platform', 'linux/amd64', '--target', target,
+                 '-t', tag, str(source)], 'build-' + name + '.log')
+            images[name] = {'tag': tag, 'id': output(['docker', 'image', 'inspect', '--format', '{{.Id}}', tag])}
+        # Code Truth's source subtree is unchanged from the existing deployment.
+        assert meta['code_truth_tree'] == meta['previous_code_truth_tree']
+        old_truth = json.loads((previous / 'build-images.json').read_text())['code_truth']
+        truth_tag = 'repodesk-code-truth:release-' + meta['source_commit']
+        run(['docker', 'tag', old_truth['id'], truth_tag], 'code-truth-retag.log')
+        images['code_truth'] = {'tag': truth_tag, 'id': old_truth['id']}
+        (bundle / 'build-images.json').write_text(json.dumps(images, indent=2) + '\n')
+        for name, prefix in [('app', 'image'), ('job', 'codex-job'), ('supervisor', 'codex-supervisor'), ('code_truth', 'code-truth')]:
+            for field in ['tag', 'id']:
+                (bundle / f'{prefix}-{field}').write_text(images[name][field] + '\n')
+        stage('exact_image_runtime_and_disposable_database_checks')
+        run(['python3', str(bundle / 'verify-images.py')], 'container-checks.log')
+        actual = json.loads((bundle / 'artifact-hashes.json').read_text())
+        assert {k.removeprefix('image-app/dist/'): v for k, v in actual.items()
+                if k.startswith('image-app/dist/')} == json.loads((bundle / 'expected-dist.json').read_text())
+        stage('package_native_browser_host')
+        package_tag = 'repodesk-browser-package:release-' + meta['source_commit']
+        run(['docker', 'build', '--platform', 'linux/amd64', '--target', 'build', '-f',
+             str(source / 'deploy/browser/smoke.Dockerfile'), '-t', package_tag, str(source)], 'host-package-build.log')
+        cid = output(['docker', 'create', package_tag, 'true'])
+        try:
+            run(['docker', 'cp', cid + ':/package', str(bundle / 'host-package')], 'host-package-copy.log')
+        finally:
+            run(['docker', 'rm', cid], 'host-package-cleanup.log')
+        assert json.loads((bundle / 'host-package/manifest.json').read_text()) == json.loads((bundle / 'expected-host-manifest.json').read_text())
+        stage('native_codex_dynamic_tool_proof')
+        proof = 'repodesk-browser-native-proof-' + meta['release_id']
+        run(['docker', 'create', '--name', proof, '--network', 'none', '-e', 'CODEX_BROWSER_PROOF=1',
+             '-e', 'CODEX_PROTOCOL_BINARY=/usr/local/bin/codex', '--entrypoint', 'bun',
+             images['job']['id'], '/opt/deepx/browser-proof.js'], 'native-codex-create.log')
+        try:
+            run(['docker', 'cp', str(bundle / 'browser-codex-proof.mjs'), proof + ':/opt/deepx/browser-proof.js'], 'native-codex-copy.log')
+            run(['docker', 'start', '-a', proof], 'native-codex-proof.log')
+            assert output(['docker', 'inspect', '--format', '{{.State.ExitCode}}', proof]) == '0'
+        finally:
+            run(['docker', 'rm', proof], 'native-codex-cleanup.log')
     stage('verify_existing_configuration_and_secret_bindings')
     shutil.copyfile(previous / 'compose.yaml', bundle / 'compose.yaml')
     (bundle / 'release.env').write_text('APP_IMAGE=' + images['app']['id'] + '\nCODE_TRUTH_IMAGE=' + images['code_truth']['id'] + '\n')
@@ -147,10 +165,11 @@ try:
     run(compose(previous) + ['exec', '-T', 'codex-runner', 'node', '--input-type=module', '-', '1800'],
         'coding-checkpoint-after-stop.log', input=(bundle / 'codex-wait-checkpoint.mjs').read_bytes())
     # Prevent concurrent ingress from creating a fresh browser wait during the update.
-    run(compose(previous) + ['run', '--rm', '--no-deps', '--pull', 'never', '-T', '--entrypoint', 'node',
-                             'app', '--input-type=module'],
-        'browser-checkpoint-after-stop.json', input=(bundle / 'browser-checkpoint.mjs').read_bytes())
-    assert sum(json.loads((bundle / 'browser-checkpoint-after-stop.json').read_text()).values()) == 0, 'browser_checkpoint_changed'
+    checkpoint = command_json(compose(previous) + ['run', '--rm', '--no-deps', '--pull', 'never', '-T', '--entrypoint', 'node',
+                                                   'app', '--input-type=module'],
+                              bundle / 'browser-checkpoint-after-stop.stderr', input=(bundle / 'browser-checkpoint.mjs').read_bytes())
+    (bundle / 'browser-checkpoint-after-stop.json').write_text(json.dumps(checkpoint) + '\n')
+    assert sum(checkpoint.values()) == 0, 'browser_checkpoint_changed'
     stage('install_native_browser_update')
     old_manifest = json.loads(Path('/opt/repodesk-browser/manifest.json').read_text())
     host_backup = bundle / 'previous-host-package'
@@ -214,11 +233,17 @@ try:
 except Exception as error:
     # Before replacement, resuming the unchanged writers is safe. Never restore a DB
     # or replay writes automatically after a cutover failure.
-    if frozen and not cutover and writers:
-        run(compose(previous) + ['start', *writers], 'pre-cutover-writer-recovery.log')
-    (bundle / 'failure.json').write_text(json.dumps({
+    failure = {
         'stage': (bundle / 'stage').read_text().strip(), 'error': type(error).__name__,
         'code': 'browser_update_failed', 'cutover_started': cutover,
-    }) + '\n')
+    }
+    (bundle / 'failure.json').write_text(json.dumps(failure) + '\n')
+    if frozen and not cutover and writers:
+        try:
+            start_unchanged_writers(json.loads((bundle / 'baseline.json').read_text()), writers)
+            failure['previous_writers_restarted'] = True
+        except Exception:
+            failure['previous_writers_restarted'] = False
+        (bundle / 'failure.json').write_text(json.dumps(failure) + '\n')
     stage('deployment_failed')
     raise
