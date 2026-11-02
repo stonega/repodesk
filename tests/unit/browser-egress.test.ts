@@ -169,6 +169,51 @@ describe("headed browser network boundary", () => {
     expect((await get(endpoint, fixture.origin)).status).toBe(403);
     expect(fixture.calls()).toBe(0);
   });
+  test("denied HTTPS CONNECT reports its origin without DNS or an authorization grant", async () => {
+    let dns = 0;
+    const egress = new BrowserEgress(policy, async () => {
+      dns++;
+      return [];
+    });
+    const endpoint = await egress.start();
+    cleanup.push(() => egress.close());
+    expect(
+      (await get(endpoint, "http://unapproved.example", false)).status,
+    ).toBe(407);
+    expect(egress.blockedOrigins()).toEqual([]);
+    const status = await new Promise<number>((resolve, reject) => {
+      const socket = connect({ host: "127.0.0.1", port: endpoint.port });
+      let raw = "";
+      socket.on("connect", () =>
+        socket.write(
+          `CONNECT consent.example:443 HTTP/1.1\r\nHost: consent.example:443\r\nProxy-Authorization: Basic ${Buffer.from(`browser:${endpoint.password}`).toString("base64")}\r\n\r\n`,
+        ),
+      );
+      socket.on("data", (data) => {
+        raw += data;
+      });
+      socket.on("error", reject);
+      socket.on("end", () => resolve(Number(raw.split(" ")[1])));
+    });
+    expect(status).toBe(403);
+    expect(dns).toBe(0);
+    expect(egress.blockedOrigins()).toEqual(["https://consent.example"]);
+    egress.update({ ...policy, origins: [] });
+    expect(egress.blockedOrigins()).toEqual([]);
+    await expect(
+      browserDestination(new URL("https://consent.example"), policy),
+    ).rejects.toThrow("browser_destination_denied");
+  });
+  test("observed denials are bounded and do not survive a new navigation", async () => {
+    const endpoint = await proxy([]);
+    for (let i = 0; i < 35; i++)
+      expect(
+        (await get(endpoint, `http://unapproved-${i}.example`)).status,
+      ).toBe(403);
+    expect(endpoint.egress.blockedOrigins()).toHaveLength(32);
+    endpoint.egress.resetBlockedOrigins();
+    expect(endpoint.egress.blockedOrigins()).toEqual([]);
+  });
   test("a request awaiting DNS cannot connect after revocation", async () => {
     let finish!: (value: { address: string; family: number }[]) => void;
     let resolving!: () => void;

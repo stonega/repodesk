@@ -593,6 +593,11 @@ export class NativeBrowserHost {
             }
           } else {
             requireThat(live, "browser_artifact_unavailable", 404);
+            if (
+              input.operation.command === "action" &&
+              input.operation.input.action === "navigate"
+            )
+              live.egress.resetBlockedOrigins();
             result = await live.worker.call({
               command: "execute",
               operation: input.operation,
@@ -609,17 +614,38 @@ export class NativeBrowserHost {
           }
         }
       } catch (error) {
+        const blockedOrigins =
+          this.live.get(key)?.egress.blockedOrigins() ?? [];
         if (
-          !(error instanceof Fault) ||
-          [
-            "browser_operation_timeout",
-            "browser_service_unavailable",
-            "browser_execution_failed",
-          ].includes(error.code)
-        )
-          await this.stop(key);
-        throw error;
+          input.operation.command === "action" &&
+          input.operation.input.action === "navigate" &&
+          blockedOrigins.length &&
+          error instanceof Fault &&
+          ["browser_execution_failed", "browser_operation_timeout"].includes(
+            error.code,
+          )
+        ) {
+          // Redirect CONNECTs can bypass Playwright routing. Keep the session for
+          // site consent and report the boundary instead of a service outage.
+          result = { status: "unavailable", headed: true, blockedOrigins };
+        } else {
+          if (
+            !(error instanceof Fault) ||
+            [
+              "browser_operation_timeout",
+              "browser_service_unavailable",
+              "browser_execution_failed",
+            ].includes(error.code)
+          )
+            await this.stop(key);
+          throw error;
+        }
       }
+      const blockedOrigins = this.live.get(key)?.egress.blockedOrigins() ?? [];
+      if (blockedOrigins.length)
+        result.blockedOrigins = [
+          ...new Set([...(result.blockedOrigins ?? []), ...blockedOrigins]),
+        ].slice(0, 32);
       const receipt = journal.requests.find(
         (request) => request.id === input.id,
       );

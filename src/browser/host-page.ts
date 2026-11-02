@@ -504,6 +504,7 @@ export class HeadedBrowser {
     }
     const tab = this.tab();
     if (action.action === "navigate") {
+      this.blockedOrigins.clear();
       requireThat(
         this.policy.origins.includes(new URL(action.url).origin),
         "browser_destination_denied",

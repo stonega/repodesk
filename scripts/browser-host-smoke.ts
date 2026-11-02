@@ -28,6 +28,13 @@ const settings = browserHostSettings.parse({
 let largeSent = 0;
 const largeSize = 30 * 1024 * 1024;
 const site = createServer(async (req, res) => {
+  if (req.url === "/redirect-blocked") {
+    res.writeHead(302, {
+      location: "https://unapproved.example/redirect-target",
+    });
+    res.end();
+    return;
+  }
   if (req.url === "/worker.js") {
     res.setHeader("content-type", "application/javascript");
     res.end(
@@ -156,6 +163,15 @@ function action(owner: BrowserOwner, generation: number, input: BrowserAction) {
 }
 try {
   assert.equal((await call(ownerA, 1, { command: "acquire" })).headed, true);
+  const blockedRedirect = await action(ownerA, 1, {
+    action: "navigate",
+    url: `${origin}/redirect-blocked`,
+  });
+  assert.equal(blockedRedirect.status, "unavailable");
+  assert.ok(
+    blockedRedirect.blockedOrigins?.includes("https://unapproved.example"),
+  );
+  assert.equal((await call(ownerA, 1, { command: "status" })).status, "ready");
   await action(ownerA, 1, { action: "navigate", url: `${origin}/` });
   let pageReady = false;
   for (let attempt = 0; attempt < 100; attempt++) {

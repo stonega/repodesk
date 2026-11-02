@@ -1,4 +1,4 @@
-# YouTube Browser navigation failed while persisting a partitioned cookie
+# YouTube redirects were reported as Browser unavailability
 
 ## Impact
 
@@ -15,7 +15,31 @@ before the final reply at 06:22:14, but that reply reused the earlier status.
 Current authorization checks later confirmed both targets ready. There was no
 confirmed loss of repository access or deletion of the existing snapshots.
 
-## Investigation and causes
+## Confirmed redirect failure
+
+The first cookie/readiness repair deployed in `41403209516-1` passed synthetic
+checks, but the exact YouTube URL still failed. An isolated native supervisor
+with its own profile root and Unix identity confirmed that the YouTube TLS tunnel
+opened successfully, then Chrome requested `consent.youtube.com`, which was not
+in the member's saved origins. Direct IPv4 and IPv6 HTTPS reads both succeeded.
+The permission boundary was correct; the resulting failure report was not.
+
+Playwright routing did not expose this redirect before Chrome's proxy CONNECT.
+The proxy rejected it but did not retain that origin in its result. The worker's
+tunnel error therefore became generic Browser unavailability instead of a request
+for the necessary new website. This is the primary confirmed cause of the reported
+YouTube failure. The partitioned-cookie issue below was a separate latent failure
+found and repaired during the investigation.
+
+The proxy now retains bounded denied origins, without granting them or resolving
+unapproved destinations. The native supervisor returns them on failed navigation
+and preserves the session for consent. A new navigation or changed controller
+policy clears old denials. Pi guidance treats these results as website consent,
+then continues the original run after approval. Real member grants are not expanded
+automatically. Deterministic CONNECT tests and a real headed HTTP-to-HTTPS redirect
+fixture cover this failure through the production boundary.
+
+## Additional checkpoint and indexing causes
 
 The retained run was decrypted only in memory on the VPS. Diagnostics emitted
 scoped run IDs, tool names, fixed error codes and status/provenance metadata;

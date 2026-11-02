@@ -1,5 +1,16 @@
 # Shared host Browser plugin
 
+## Redirect website consent (2026-11-02)
+
+The native proxy now returns bounded denied CONNECT origins to the current
+Browser consumer. An HTTPS redirect to an unapproved origin returns an unavailable
+navigation with `blockedOrigins`, keeps the headed session available for consent
+and does not become a generic service outage. Pi requests the required origin,
+then continues the original goal after approval. Current saved websites are not
+expanded implicitly. A new navigation or controller policy clears old denials.
+Deterministic proxy tests and the real headed HTTPS redirect fixture enforce this
+boundary. See the [incident](../../postmortem/2026-11-02-browser-partitioned-cookie.md).
+
 ## Partitioned-cookie checkpoint correction (2026-11-02)
 
 The private native checkpoint now preserves Chromium's cross-site partition bit
