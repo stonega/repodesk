@@ -17,6 +17,7 @@ import { browserHostSettings } from "../src/browser/host-settings.ts";
 import { hostCommand } from "../src/browser/host-system.ts";
 import { profileKey } from "../src/browser/state.ts";
 import { Fault } from "../src/domain.ts";
+import { decrypt, hash } from "../src/setup/credentials.ts";
 
 // Synthetic accounts and a loopback-only fixture. No live sites, models or logins.
 assert.equal(process.getuid?.(), 0);
@@ -78,8 +79,12 @@ const site = createServer(async (req, res) => {
     return;
   }
   res.setHeader("content-type", "text/html");
+  res.setHeader(
+    "set-cookie",
+    "partitioned=synthetic-partitioned-value; HttpOnly; Secure; SameSite=None; Partitioned; Path=/",
+  );
   res.end(
-    `<html><head><title>Private browser fixture</title></head><body><h1>${req.headers.cookie ?? "not signed in"}</h1><form action="/login" method="POST"><input name="name" id="name"><input type="password" name="password" id="password"><button id="submit" type="submit">Sign in</button></form><a id="next" href="/next">Next</a><a id="download-small" href="/download-small">Small download</a><a id="download-large" href="/download-large">Large download</a><button id="replace-field" type="button" onclick="setTimeout(()=>{const f=document.getElementById('password');f.replaceWith(f.cloneNode(true));},2000)">Replace field</button><p id="socket">connecting</p><p id="worker">initializing</p><script>const ws=new WebSocket('ws://'+location.host+'/socket');ws.onmessage=()=>document.getElementById('socket').textContent='websocket-connected';navigator.serviceWorker.register('/worker.js').then(()=>navigator.serviceWorker.ready).then(()=>document.getElementById('worker').textContent='service-worker-ready');</script></body></html>`,
+    `<html><head><title>Private browser fixture</title></head><body><h1>${req.headers.cookie?.split("; ").find((cookie) => cookie.startsWith("account=")) ?? "not signed in"}</h1><form action="/login" method="POST"><input name="name" id="name"><input type="password" name="password" id="password"><button id="submit" type="submit">Sign in</button></form><a id="next" href="/next">Next</a><a id="download-small" href="/download-small">Small download</a><a id="download-large" href="/download-large">Large download</a><button id="replace-field" type="button" onclick="setTimeout(()=>{const f=document.getElementById('password');f.replaceWith(f.cloneNode(true));},2000)">Replace field</button><p id="socket">connecting</p><p id="worker">initializing</p><script>const ws=new WebSocket('ws://'+location.host+'/socket');ws.onmessage=()=>document.getElementById('socket').textContent='websocket-connected';navigator.serviceWorker.register('/worker.js').then(()=>navigator.serviceWorker.ready).then(()=>document.getElementById('worker').textContent='service-worker-ready');</script></body></html>`,
   );
 });
 site.on("upgrade", (req, socket) => {
@@ -446,6 +451,26 @@ try {
   );
   assert.ok(
     session.sealed.startsWith("v2.") && !session.sealed.includes("Alice"),
+  );
+  const checkpoint = JSON.parse(
+    decrypt(
+      hash(`repodesk:browser-session:v1:${key}`),
+      `browser-session:${profileKey(ownerA)}`,
+      session.sealed,
+    ),
+  );
+  assert.ok(
+    checkpoint.cookies.some(
+      (cookie: {
+        name: string;
+        partitionKey?: string;
+        _crHasCrossSiteAncestor?: boolean;
+      }) =>
+        cookie.name === "partitioned" &&
+        !!cookie.partitionKey &&
+        typeof cookie._crHasCrossSiteAncestor === "boolean",
+    ),
+    "Partitioned session cookies must survive encrypted worker/root checkpoints",
   );
   await call(ownerA, 5, { command: "close" });
   const persistedImage = await call(ownerA, 5, {

@@ -16,6 +16,8 @@ export const browserCheckpoint = z
             secure: z.boolean(),
             sameSite: z.enum(["Strict", "Lax", "None"]),
             partitionKey: z.string().max(2048).optional(),
+            // Playwright's Chromium adapter requires this CHIPS bit on restore.
+            _crHasCrossSiteAncestor: z.boolean().optional(),
           })
           .strict(),
       )
