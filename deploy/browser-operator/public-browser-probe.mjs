@@ -123,21 +123,6 @@ try {
         }),
       );
     } catch (e) {
-      for (
-        let attempt = 0;
-        url.includes("youtube.com") &&
-        attempt < 3 &&
-        !(page.controls ?? []).some((control) =>
-          control.href?.includes("/watch"),
-        );
-        attempt++
-      ) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        page = await call(owner, controller, 1, {
-          command: "action",
-          input: { action: "read" },
-        });
-      }
       console.log(
         JSON.stringify({
           nativePublicProbe: url,

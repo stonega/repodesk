@@ -11,7 +11,7 @@ on:
         required: false
       log:
         type: choice
-        options: [none, code-truth-probe, public-browser-probe, chat-diagnostic, deployment-receipt.json, resume-driver.log, browser-checkpoint-after-stop.stderr, pre-cutover-writer-recovery.log, finish-driver.log, workerdiag, recover, restart, probe, entry, trace, system, resume-native-package-build.log, resume-nft-build.log, resume-native-install.log, resume-nft-verification.json, resume-firewall-check.log, resume-module-nf_tables.log, resume-module-nft_reject_inet.log, build-app.log, build-job.log, build-supervisor.log, container-checks.log, host-install.log, chrome-install.log, native-host-verification.json, cutover.log, production-verification.log, driver.log]
+        options: [none, deep-browser-probe, code-truth-probe, public-browser-probe, chat-diagnostic, deployment-receipt.json, resume-driver.log, browser-checkpoint-after-stop.stderr, pre-cutover-writer-recovery.log, finish-driver.log, workerdiag, recover, restart, probe, entry, trace, system, resume-native-package-build.log, resume-nft-build.log, resume-native-install.log, resume-nft-verification.json, resume-firewall-check.log, resume-module-nf_tables.log, resume-module-nft_reject_inet.log, build-app.log, build-job.log, build-supervisor.log, container-checks.log, host-install.log, chrome-install.log, native-host-verification.json, cutover.log, production-verification.log, driver.log]
         default: none
 permissions:
   contents: read
@@ -32,7 +32,7 @@ jobs:
         with:
           node-version: '24'
       - uses: oven-sh/setup-bun@v2
-        if: ${{ (inputs.mode == 'status' && inputs.log == 'code-truth-probe') || inputs.mode == 'source-update' }}
+        if: ${{ (inputs.mode == 'status' && (inputs.log == 'code-truth-probe' || inputs.log == 'deep-browser-probe')) || inputs.mode == 'source-update' }}
         with:
           bun-version: 1.3.14
       - name: Prepare an authenticated disposable SSH client
@@ -65,6 +65,17 @@ jobs:
           ssh_vps "set -eu; cd /opt/repodesk/releases/$STATUS_RELEASE; for f in stage deploy.exit failure.json; do if test -f \"\$f\"; then printf '%s: ' \"\$f\"; cat \"\$f\"; fi; done; printf 'current-release: '; cat /opt/repodesk/.current-release; systemctl is-active repodesk-browser || true; docker ps --format '{{.Names}} {{.Image}} {{.Status}}'"
           case "$DIAGNOSTIC_LOG" in
             none|'') ;;
+            deep-browser-probe)
+              python3 deploy/browser-operator/prepare-deep-browser-probe.py
+              bun build deploy/browser-operator/deep-browser-probe.ts --target=node --packages=external --outfile="$RUNNER_TEMP/deep-browser-probe.mjs"
+              bun build src/browser/incident-diagnostic-worker.ts --target=node --packages=external --outfile="$RUNNER_TEMP/deep-browser-worker.mjs"
+              ssh_vps "install -d -m 755 /opt/repodesk-browser/incident-$GITHUB_RUN_ID"
+              for name in deep-browser-probe.mjs deep-browser-worker.mjs; do
+                chmod 644 "$RUNNER_TEMP/$name"
+                docker cp "$RUNNER_TEMP/$name" "$DEPLOY_CLIENT:/tmp/$name"
+                docker exec "$DEPLOY_CLIENT" scp -i /tmp/key -P 22 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts "/tmp/$name" "root@169.58.58.71:/opt/repodesk-browser/incident-$GITHUB_RUN_ID/$name"
+              done
+              ssh_vps "/opt/repodesk-browser/runtime/bin/node /opt/repodesk-browser/incident-$GITHUB_RUN_ID/deep-browser-probe.mjs" ;;
             code-truth-probe)
               bun build deploy/browser-operator/code-truth-probe.ts --target=node --packages=external --outfile="$RUNNER_TEMP/code-truth-probe.mjs"
               ssh_vps "docker exec -i repodesk-app-1 node --input-type=module" < "$RUNNER_TEMP/code-truth-probe.mjs" ;;
