@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     name: Quality and database tests
@@ -46,6 +50,7 @@ jobs:
 
   browser:
     name: Browser (${{ matrix.shard }}/2)
+    needs: quality
     runs-on: [self-hosted, linux, x64]
     strategy:
       fail-fast: false
@@ -78,6 +83,7 @@ jobs:
 
   containers:
     name: Application containers
+    needs: quality
     runs-on: [self-hosted, linux, x64]
     # The first CPU speech runtime build includes PyTorch and a larger export.
     timeout-minutes: 30

@@ -48,6 +48,9 @@ CI runs the complete browser suite across two isolated database-backed matrix
 jobs, with one Playwright worker per shard. This preserves serial fixture behavior
 while avoiding the previous whole-suite job timeout. The required `checks` job
 still requires both shards, the quality job and the container checks to pass.
+Quality checks finish before browser/image jobs so the type checker has memory
+headroom on the shared runners. Branch and PR events share a concurrency group;
+only the latest verification run for that branch remains active.
 
 These changes are implemented but not deployed. Native Telegram rendering, the packaged headed-host
 release smoke and a coordinated app/host VPS rollout remain release checks. No
