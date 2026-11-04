@@ -51,6 +51,9 @@ still requires both shards, the quality job and the container checks to pass.
 Quality checks finish before browser/image jobs so the type checker has memory
 headroom on the shared runners. Branch and PR events share a concurrency group;
 only the latest verification run for that branch remains active.
+The CI compiler uses a tested 1536 MiB Node heap and reports its runner memory
+constraints. The complete strict check passes with that bound on Node 24;
+reducing the bound further exhausts the compiler heap.
 
 These changes are implemented but not deployed. Native Telegram rendering, the packaged headed-host
 release smoke and a coordinated app/host VPS rollout remain release checks. No
