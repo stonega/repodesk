@@ -68,6 +68,49 @@ test("active private input shares its run, stays pending until checkpoint, and r
   expect(originalReply.threadId).toBe(run.threadId);
 });
 
+test("continuation checkpoints retain the latest queued goal and the attributed human input", () => {
+  const { w, run, source } = fixture();
+  createRun(w, "101", source.text, "101", 0, run.model, {
+    botId: "999",
+    replyTo: 2,
+    liveInput: true,
+  });
+  const continuation: Source = {
+    ...source,
+    id: "999:101:3",
+    text: "try again",
+    runId: run.id,
+    threadId: run.threadId,
+    role: "user",
+  };
+  w.messages.push(continuation);
+  run.pendingInputs?.push({
+    sourceId: continuation.id,
+    task: continuation.text,
+    messageId: 3,
+    preserveTask: true,
+  });
+  const restored = JSON.parse(JSON.stringify(w)) as typeof w;
+  const current = restored.runs[0];
+  if (!current) throw Error("missing run");
+  for (let i = 0; i < 2; i++) {
+    const next = liveSource(restored, current);
+    if (!next) throw Error("missing input");
+    checkpointLiveInput(
+      restored,
+      current,
+      liveMessage(current, next.source, next.pending.task, {
+        prompt: "",
+        images: [],
+      }),
+    );
+    expect(current.task).toBe(source.text);
+  }
+  expect(current.pendingInputs).toEqual([]);
+  expect(current.replyTo).toBe(3);
+  expect(current.sources.at(-1)?.text).toBe("try again");
+});
+
 test("changed, missing or cross-actor live sources cannot become current input", () => {
   for (const mutation of [
     "edit",

@@ -63,6 +63,87 @@ export function saveBrowserArtifact(
     .catch(() => {});
   return next;
 }
+
+/** Stream into an owner-private file; partial and oversized copies never become artifacts. */
+export async function saveBrowserDownload(
+  home: string,
+  id: string,
+  source: AsyncIterable<Uint8Array>,
+) {
+  z.uuid().parse(id);
+  const path = join(home, "artifacts", id);
+  const file = await open(
+    path,
+    constants.O_WRONLY |
+      constants.O_CREAT |
+      constants.O_EXCL |
+      constants.O_NOFOLLOW,
+    0o600,
+  );
+  let size = 0;
+  try {
+    for await (const chunk of source) {
+      size += chunk.byteLength;
+      requireThat(
+        size <= browserLimits.downloadBytes,
+        "browser_download_too_large",
+        409,
+      );
+      await file.writeFile(chunk);
+    }
+    requireThat(size > 0, "browser_download_empty", 409);
+    await file.sync();
+    return size;
+  } catch (error) {
+    await unlink(path).catch(() => {});
+    throw error;
+  } finally {
+    await file.close();
+  }
+}
+
+/** A recorded filename alone is not proof that a usable download was saved. */
+export async function verifiedBrowserDownloads(
+  home: string,
+  policy: BrowserHostPolicy,
+) {
+  const downloads: { id: string; name: string; size: number }[] = [];
+  for (const artifact of await browserArtifacts(home)) {
+    if (downloads.length >= browserLimits.downloads) break;
+    if (
+      artifact.mimeType !== "application/octet-stream" ||
+      !policy.origins.includes(artifact.origin) ||
+      artifact.at <= Date.now() - 24 * 3600_000 ||
+      artifact.size <= 0
+    )
+      continue;
+    try {
+      const file = await open(
+        join(home, "artifacts", artifact.id),
+        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+      );
+      try {
+        const info = await file.stat();
+        if (
+          info.isFile() &&
+          info.nlink === 1 &&
+          info.size === artifact.size &&
+          info.size <= browserLimits.downloadBytes
+        )
+          downloads.push({
+            id: artifact.id,
+            name: artifact.name,
+            size: info.size,
+          });
+      } finally {
+        await file.close();
+      }
+    } catch {
+      // Missing, replaced and unreadable files cannot establish task completion.
+    }
+  }
+  return downloads;
+}
 async function saveArtifact(home: string, artifact: BrowserArtifact) {
   browserArtifact.parse(artifact);
   await mkdir(join(home, "artifacts"), { recursive: true, mode: 0o700 });
@@ -107,6 +188,7 @@ export async function readBrowserArtifact(
     const stat = await file.stat();
     requireThat(
       stat.isFile() &&
+        stat.size === artifact.size &&
         stat.size <= browserLimits.downloadBytes &&
         stat.nlink === 1,
       "browser_artifact_unavailable",
@@ -114,7 +196,8 @@ export async function readBrowserArtifact(
     );
     const data = await file.readFile();
     requireThat(
-      data.length <= browserLimits.downloadBytes,
+      data.length === artifact.size &&
+        data.length <= browserLimits.downloadBytes,
       "browser_artifact_unavailable",
       404,
     );

@@ -77,6 +77,15 @@ test("browser evidence stays private across derived sources, retention and actor
 });
 test("panel run/thread histories redact private browser content including derived runs", () => {
   const { w, r } = fixture();
+  r.browserWait = {
+    id: randomUUID(),
+    kind: "action",
+    callId: "private-browser-control",
+    expiresAt: Date.now() + 60000,
+    origin: "https://private-browser-site.example",
+    operation: "click",
+  };
+  r.browserObserverOf = "private-browser-parent";
   expect(JSON.stringify(browserPanelRun(w, r))).not.toContain(
     "private-browser-",
   );

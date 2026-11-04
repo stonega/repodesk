@@ -1,5 +1,73 @@
 # Shared host Browser plugin
 
+## Paused-task coordination and recovery (2026-11-04)
+
+Pi Browser work now keeps one controller per verified member/bot/private Topic.
+Short English/Chinese progress and continuation controls inspect its saved state
+without another model run. Pending consent is never inferred from “continue”. An
+explicit retry after expiration queues the original run with its transcript and
+an attributed input; the next action needs a fresh decision. Cancelled, denied,
+uncertain and revoked attempts are not automatically revived. Other questions
+and attachments retain normal routing, while the broker binds concurrent Browser
+observers to the original task and blocks takeover, navigation, filling and new
+approval creation, even after the original task ends. Private history alone does
+not establish Browser task ownership.
+
+Wait messages distinguish website, action, secure input and control, with only a
+safe exact origin and operation description. Pi expiration/denial/cancellation
+gets a deduplicated outcome notice. Requested status is refreshed before delivery;
+outdated terminal notices are suppressed after continuation. Current membership,
+source, Browser configuration, profile epoch, bot and actor/Topic guards remain.
+Requested status keeps refreshing its text and Browser link across confirmed-safe
+transport retries. Continuation retains the attributed human input and preserves
+the current goal through live-input checkpoints, including earlier queued edits.
+Requested status is refreshed durably again at the final send check, so task
+transitions after claiming a reply do not discard it. Current authorization and
+attempt/audience ownership are rechecked before dispatch; revocation cancels it.
+
+Approved controls can report a denied destination without closing the browser.
+The saved outcome keeps its unavailable status and bounded origins on replay;
+an uncertain submission is never redispatched. Pi is instructed to inspect the
+current page/tabs and distinguish necessary destinations from optional background
+requests before a new decision, rather than restarting the form.
+
+Native download status now verifies file existence, regular-file identity, link
+count, nonzero size and the saved byte count. Downloads stream into exclusive
+owner-private files with the existing 25 MiB bound; failed, empty and oversized
+copies are removed. Fixed download failure codes enter the private tool status,
+without upstream exception text. A completed click or a page banner is not file
+completion evidence. Browser's private artifact page remains the delivery surface.
+
+Production-composition regressions reproduce status contention and expiry/retry;
+all three fail on the previous `main`. Further tests cover scope/revocation,
+observer reconstruction, stale notices, unavailable receipts and partial files.
+Real-DOM tests exercise an approved denied-origin redirect and a real local HTTP
+download through file verification. See the [incident](../../postmortem/2026-11-04-browser-task-contention.md).
+Validation passes lint, strict TypeScript, build, the 16-case offline Node startup
+contract with zero external startup calls, and 1,423 deterministic tests across
+151 files with disposable PostgreSQL. All 17 focused browser scenarios pass:
+five native interaction/file cases and 12 desktop/mobile Browser UI cases.
+Code Truth catalog regeneration and the service smoke also pass; the bundled
+catalog is unchanged. No dependency or SQL migration was added.
+
+CI runs the complete browser suite across two isolated database-backed matrix
+jobs, with one Playwright worker per shard. This preserves serial fixture behavior
+while avoiding the previous whole-suite job timeout. The required `checks` job
+still requires both shards, the quality job and the container checks to pass.
+Quality checks finish before browser/image jobs so the type checker has memory
+headroom on the shared runners. Branch and PR events share a concurrency group;
+only the latest verification run for that branch remains active.
+The CI compiler uses a tested 1536 MiB Node heap and reports its runner memory
+constraints. The complete strict check passes with that bound on Node 24;
+reducing the bound further exhausts the compiler heap.
+The shared-runner database suite has a 30-minute job budget and a 30-second test
+deadline. Complete Browser and Review Bot journeys exceeded the previous
+15-second deadline in CI; all assertions and permission/revocation cases remain.
+
+These changes are implemented but not deployed. Native Telegram rendering, the packaged headed-host
+release smoke and a coordinated app/host VPS rollout remain release checks. No
+historical run, website decision or live submission was replayed.
+
 ## Telegram continuation confirmation (2026-11-04)
 
 Successful Browser approvals and private-input submissions now create a short

@@ -1,4 +1,5 @@
 import { ZodError } from "zod";
+import { activeBrowserTask, browserTaskControl } from "../browser/tasks.ts";
 import { codingFailureMessage } from "../coding/failure-messages.ts";
 import { routeDevelopment, selectDevelopment } from "../coding/telegram.ts";
 import { type Sql, transaction } from "../db/pool.ts";
@@ -510,6 +511,7 @@ export class Ingress {
     const msg = u.message;
     const cmd = msg && d.bot ? command(msg, d.bot) : undefined;
     const actor = msg?.from && String(msg.from.id);
+    if (msg && browserTaskControl(w, u, d, msg, cmd)) return true;
     if (
       d.bot &&
       msg &&
@@ -1086,6 +1088,10 @@ export class Ingress {
       case "recap":
       case "ask": {
         if (!text && !attachments.length) break;
+        const browserTask =
+          chatId === actor
+            ? activeBrowserTask(w, actor, topic, d.bot.id)
+            : undefined;
         const previousDelivery = w.deliveries.find(
           (d) =>
             d.chatId === chatId &&
@@ -1103,7 +1109,7 @@ export class Ingress {
                 f.status === "active",
             )
           : undefined;
-        createRun(
+        const requested = createRun(
           w,
           actor,
           cmd.name === "recap"
@@ -1127,6 +1133,8 @@ export class Ingress {
             liveInput: cmd.name === "ask" && !followup,
           },
         );
+        if (browserTask && requested.id !== browserTask.id)
+          requested.browserObserverOf = browserTask.id;
         break;
       }
       default:

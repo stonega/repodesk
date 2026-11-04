@@ -7,12 +7,16 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     name: Quality and database tests
     runs-on: [self-hosted, linux, x64]
-    # Database fixtures share the VPS with browser tests and image builds.
-    timeout-minutes: 20
+    # The full database suite takes about 15 minutes on the shared VPS runners.
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:17-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
@@ -36,16 +40,28 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends python3
       - run: bun install --frozen-lockfile
+      - name: Install Code Truth integration test dependencies
+        run: bun install --cwd services/code-truth --frozen-lockfile
       - run: bun run check
-      - run: bun run typecheck
-      - run: bun test --timeout 15000 ./tests
+      - name: Type check within runner memory budget
+        env:
+          NODE_OPTIONS: --max-old-space-size=1536
+        run: |
+          node -e 'console.log(JSON.stringify({code:"ci_typecheck_memory",node:process.version,constrainedBytes:process.constrainedMemory(),availableBytes:process.availableMemory()}))'
+          bun run typecheck
+      - run: bun test --timeout 30000 ./tests
       - run: bun run build
       - run: bun run test:runtime
 
   browser:
-    name: Browser
+    name: Browser (${{ matrix.shard }}/2)
+    needs: quality
     runs-on: [self-hosted, linux, x64]
-    # The complete serial suite needs headroom on the shared VPS runners.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    # Keep each fixture serial, with an isolated server/database for each shard.
     timeout-minutes: 45
     services:
       postgres:
@@ -68,10 +84,11 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run build
       - run: bunx playwright install --with-deps --only-shell chromium
-      - run: bun run test:browser
+      - run: bun run test:browser --shard=${{ matrix.shard }}/2
 
   containers:
     name: Application containers
+    needs: quality
     runs-on: [self-hosted, linux, x64]
     # The first CPU speech runtime build includes PyTorch and a larger export.
     timeout-minutes: 30

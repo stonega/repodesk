@@ -56,6 +56,34 @@ function fixture() {
 }
 
 describe("shared browser control service", () => {
+  test("replaying an unavailable action preserves its failure and denied origins without dispatching it again", async () => {
+    const f = fixture();
+    const lease = await f.service.acquire(f.authority);
+    f.host.invoke = async (input) => {
+      f.calls.push(input);
+      return {
+        status: "unavailable",
+        blockedOrigins: ["https://required.example"],
+      };
+    };
+    const action = { action: "click", selector: "#submit" };
+    const result = await f.service.perform(
+      f.authority,
+      lease.generation,
+      "submit",
+      action,
+    );
+    expect(result).toEqual({
+      status: "unavailable",
+      blockedOrigins: ["https://required.example"],
+    });
+    const count = f.calls.length;
+    const restarted = new BrowserControl(f.repository, f.host);
+    expect(
+      await restarted.perform(f.authority, lease.generation, "submit", action),
+    ).toEqual(result);
+    expect(f.calls.length).toBe(count);
+  });
   test("hands one user's existing profile to Codex while fencing the chat controller", async () => {
     const f = fixture();
     const chat = await f.service.acquire(f.authority);
