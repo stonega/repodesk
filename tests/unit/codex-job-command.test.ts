@@ -56,7 +56,7 @@ test("fragmented multilingual Git output remains an applicable publication patch
     const patch = await jobCommand("git", [], { env }, fragmentedCommand(raw));
     expect(patch).toBe(raw);
     expect(patch).not.toContain("\ufffd");
-    await writeFile(join(root, "guide.md"), before);
+    git(["checkout", "--", "guide.md"]);
     git(["apply", "--index", "-"], patch);
     expect(await readFile(join(root, "guide.md"), "utf8")).toBe(after);
     expect(git(["show", ":guide.md"])).toBe(after);
