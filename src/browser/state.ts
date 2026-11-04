@@ -42,7 +42,7 @@ export interface BrowserOperation {
   generation: number;
   state: "started" | "completed";
   // Only safe status/references; private browser content stays in the host service.
-  result?: { status: string; reference?: string };
+  result?: { status: string; reference?: string; blockedOrigins?: string[] };
 }
 export interface BrowserState extends BrowserOwner {
   receipts?: {

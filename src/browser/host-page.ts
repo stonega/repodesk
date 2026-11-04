@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type BrowserContext,
@@ -14,6 +14,8 @@ import {
   browserArtifacts,
   readBrowserArtifact,
   saveBrowserArtifact,
+  saveBrowserDownload,
+  verifiedBrowserDownloads,
 } from "./host-artifacts.ts";
 import {
   type BrowserCheckpoint,
@@ -88,6 +90,7 @@ export class HeadedBrowser {
   private selected?: string;
   private artifacts: Artifact[] = [];
   private pendingDownloads = 0;
+  private downloadFailure?: string;
   private secrets = new Set<string>();
   private blockedOrigins = new Set<string>();
   private input?: {
@@ -209,6 +212,8 @@ export class HeadedBrowser {
     );
     page.on("download", (download) => {
       this.pendingDownloads++;
+      let failure = "browser_download_failed";
+      let savedPath: string | undefined;
       void (async () => {
         const origin = new URL(page.url()).origin;
         if (
@@ -223,17 +228,22 @@ export class HeadedBrowser {
             browserLimits.downloads
         ) {
           await download.cancel();
+          this.downloadFailure = "browser_download_denied";
           return;
         }
-        const path = await download.path();
-        requireThat(path, "browser_download_failed", 409);
-        const size = (await stat(path)).size;
-        if (size > browserLimits.downloadBytes) {
-          await download.delete();
-          return;
-        }
+        failure = "browser_download_read_failed";
+        const stream = await download.createReadStream();
+        const id = randomUUID();
+        failure = "browser_download_save_failed";
+        const size = await saveBrowserDownload(this.options.home, id, stream);
+        savedPath = join(this.options.home, "artifacts", id);
+        requireThat(
+          this.policy.origins.includes(origin),
+          "browser_download_denied",
+          403,
+        );
         const artifact: Artifact = {
-          id: randomUUID(),
+          id,
           name:
             this.clean(download.suggestedFilename())
               .split("")
@@ -251,13 +261,24 @@ export class HeadedBrowser {
           origin,
           at: Date.now(),
         };
-        await download.saveAs(
-          join(this.options.home, "artifacts", artifact.id),
-        );
+        failure = "browser_download_index_failed";
         await this.saveArtifact(artifact);
+        this.downloadFailure = undefined;
       })()
-        .catch(() => {})
-        .finally(() => {
+        .catch(async (error) => {
+          if (savedPath) await rm(savedPath, { force: true }).catch(() => {});
+          this.downloadFailure =
+            error instanceof Fault &&
+            [
+              "browser_download_too_large",
+              "browser_download_empty",
+              "browser_download_denied",
+            ].includes(error.code)
+              ? error.code
+              : failure;
+        })
+        .finally(async () => {
+          await download.delete().catch(() => {});
           this.pendingDownloads--;
         });
     });
@@ -279,6 +300,12 @@ export class HeadedBrowser {
   }
   private allowed(tab: Tab) {
     const url = new URL(tab.page.url());
+    if (
+      !this.policy.origins.includes(url.origin) &&
+      ["http:", "https:"].includes(url.protocol) &&
+      this.blockedOrigins.size < 32
+    )
+      this.blockedOrigins.add(url.origin);
     requireThat(
       this.policy.origins.includes(url.origin),
       "browser_destination_denied",
@@ -331,6 +358,27 @@ export class HeadedBrowser {
     command: HostCommand,
     policy = this.policy,
   ): Promise<HostResult> {
+    try {
+      return await this.perform(command, policy);
+    } catch (error) {
+      if (
+        ["action", "review"].includes(command.command) &&
+        error instanceof Fault &&
+        error.code === "browser_destination_denied" &&
+        this.blockedOrigins.size
+      )
+        return {
+          status: "unavailable",
+          text: error.code,
+          blockedOrigins: [...this.blockedOrigins],
+        };
+      throw error;
+    }
+  }
+  private async perform(
+    command: HostCommand,
+    policy: BrowserHostPolicy,
+  ): Promise<HostResult> {
     requireThat(this.context, "browser_service_unavailable", 503);
     if (command.command === "observe") {
       const previous = this.policy;
@@ -354,14 +402,8 @@ export class HeadedBrowser {
       return {
         status: "ready",
         headed: true,
-        downloads: this.artifacts
-          .filter(
-            (item) =>
-              item.mimeType === "application/octet-stream" &&
-              policy.origins.includes(item.origin) &&
-              item.at > Date.now() - 24 * 3600_000,
-          )
-          .map(({ id, name, size }) => ({ id, name, size })),
+        downloads: await verifiedBrowserDownloads(this.options.home, policy),
+        ...(this.downloadFailure ? { text: this.downloadFailure } : {}),
       };
     if (command.command === "artifact") {
       return readBrowserArtifact(this.options.home, command.id, policy);

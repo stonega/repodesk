@@ -7,7 +7,11 @@ import {
   type BrowserOwner,
   browserAction,
 } from "./config.ts";
-import type { BrowserHostPolicy, HostResult } from "./protocol.ts";
+import {
+  type BrowserHostPolicy,
+  type HostResult,
+  hostResult,
+} from "./protocol.ts";
 import type { BrowserRepository } from "./repository.ts";
 import {
   acquireBrowser,
@@ -86,8 +90,7 @@ export class BrowserControl {
         page ? { input, page } : input,
       ),
     );
-    if (previous?.result)
-      return { status: "completed", reference: previous.result.reference };
+    if (previous?.result) return hostResult.parse(previous.result);
     // Persist started before dispatch. Failure or cancellation deliberately leaves
     // an uncertain receipt, so neither a retry nor a restart repeats the effect.
     await this.check(authority);
@@ -110,7 +113,7 @@ export class BrowserControl {
         "browser_outcome_unknown",
         409,
       );
-      if (input.action === "request_input") {
+      if (input.action === "request_input" && result.status !== "unavailable") {
         requireThat(result.page, "browser_page_changed", 409);
         requestBrowserInput(state, authority.controller, generation, {
           selector: input.selector,
@@ -122,7 +125,13 @@ export class BrowserControl {
         });
       }
       operation.state = "completed";
-      operation.result = { status: result.status, reference: result.reference };
+      operation.result = {
+        status: result.status,
+        reference: result.reference,
+        ...(result.blockedOrigins
+          ? { blockedOrigins: result.blockedOrigins }
+          : {}),
+      };
       state.revision++;
     });
     return result;
@@ -150,6 +159,7 @@ export class BrowserControl {
     await this.repository.change(authority.owner, (state) =>
       requireBrowserLease(state, authority.controller, generation),
     );
+    if (result.status === "unavailable") return result;
     requireThat(result.page, "browser_page_unavailable", 409);
     return result;
   }

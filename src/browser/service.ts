@@ -2,7 +2,7 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { operator } from "../admin/auth.ts";
 import type { PluginRecord } from "../agent/plugin-config.ts";
 import type { Store } from "../db/repositories.ts";
-import { type Admin, Fault, requireThat } from "../domain.ts";
+import { type Admin, Fault, type Run, requireThat } from "../domain.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import {
   audit,
@@ -47,6 +47,12 @@ import {
   releaseBrowser,
   sameController,
 } from "./state.ts";
+import {
+  activeBrowserTask,
+  browserTaskRuns,
+  browserTaskSnapshot,
+  browserWaitText,
+} from "./tasks.ts";
 
 export interface BrowserDirectory extends BrowserRepository {
   owners(workspaceId: string): Promise<BrowserOwner[]>;
@@ -65,6 +71,8 @@ export interface BrowserConsumer {
       id: string;
       kind: "site" | "action" | "input" | "control";
       expiresAt: number;
+      origin?: string;
+      operation?: string;
     },
     callId: string,
     phase?: "active" | "waiting",
@@ -388,6 +396,9 @@ export class BrowserService {
             epoch,
             botId: bot.id,
           };
+          run.browserTask = true;
+          const task = activeBrowserTask(w, owner.actor, run.topicId, bot.id);
+          if (task && task.id !== run.id) run.browserObserverOf ??= task.id;
         });
       },
       pause: async (request, callId, phase = "active") => {
@@ -403,8 +414,19 @@ export class BrowserService {
             "access_denied",
             403,
           );
+          requireThat(
+            !run.browserObserverOf &&
+              activeBrowserTask(w, owner.actor, run.topicId, bot.id)?.id ===
+                run.id,
+            "browser_task_in_progress",
+            409,
+          );
           run.browserWait = {
-            ...request,
+            id: request.id,
+            kind: request.kind,
+            expiresAt: request.expiresAt,
+            origin: request.origin,
+            operation: request.operation,
             callId,
             toolName: run.tools[callId]?.name,
           };
@@ -413,7 +435,7 @@ export class BrowserService {
               w,
               owner.actor,
               owner.actor,
-              "Browser needs your input or approval. Open Browser to continue.",
+              browserWaitText(run.browserWait),
               {
                 id: `browser:${request.id}`,
                 runId: run.id,
@@ -523,6 +545,29 @@ export class BrowserService {
           if (terminal) {
             run.error = code;
             run.finishedAt = new Date().toISOString();
+            const id = deliver(
+              w,
+              owner.actor,
+              owner.actor,
+              code === "browser_request_expired" ||
+                code === "browser_input_expired"
+                ? "The Browser request expired, so this step did not complete. Say “continue” or “try again” to resume the original task with a fresh review where needed."
+                : code === "browser_request_denied"
+                  ? "The Browser request was denied. This browser step has stopped."
+                  : "The Browser request was cancelled. This browser step has stopped.",
+              {
+                id: `browser:${requestId}:ended`,
+                runId: run.id,
+                topicId: run.topicId,
+              },
+            );
+            const notification = w.deliveries.find((d) => d.id === id);
+            if (notification)
+              notification.browserTaskState = {
+                status: run.status,
+                fence: run.fence,
+                error: run.error,
+              };
           }
           const status =
             result && typeof result === "object" && "status" in result
@@ -578,7 +623,14 @@ export class BrowserService {
       owner: consumer.owner,
       controller: consumer.controller,
       signal,
-      guard: () => consumer.guard(phase),
+      guard: async () => {
+        await consumer.guard(phase);
+        requireThat(
+          !(await this.taskBlocker(consumer)),
+          "browser_task_in_progress",
+          409,
+        );
+      },
       policy: async () => {
         await consumer.guard(phase);
         const state = await repository.read(consumer.owner);
@@ -595,6 +647,30 @@ export class BrowserService {
         return { ...policy, interact };
       },
     };
+  }
+  private async taskBlocker(
+    consumer: BrowserConsumer,
+  ): Promise<{ task?: Run } | undefined> {
+    if (!["chat", "plugin"].includes(consumer.controller.kind)) return;
+    const w = await this.store.read(consumer.owner.workspaceId);
+    const run = w.runs.find((r) => r.id === consumer.controller.id);
+    if (!run) return;
+    if (run.browserObserverOf)
+      return {
+        task: browserTaskRuns(
+          w,
+          consumer.owner.actor,
+          run.topicId,
+          consumer.botId,
+        ).find((task) => task.id === run.browserObserverOf),
+      };
+    const task = activeBrowserTask(
+      w,
+      consumer.owner.actor,
+      run.topicId,
+      consumer.botId,
+    );
+    return task && task.id !== run.id ? { task } : undefined;
   }
   private async wait(
     consumer: BrowserConsumer,
@@ -626,7 +702,16 @@ export class BrowserService {
         state.lease.expiresAt = pending.expiresAt;
       return pending;
     });
-    await consumer.pause(request, callId);
+    await consumer.pause(
+      {
+        id: request.id,
+        kind: request.kind,
+        expiresAt: request.expiresAt,
+        origin: request.origin ?? request.page?.origin,
+        operation: request.action?.action,
+      },
+      callId,
+    );
     return {
       status: "waiting",
       requestId: request.id,
@@ -695,6 +780,23 @@ export class BrowserService {
     signal?.throwIfAborted();
     const { repository, control, host } = this.runtime();
     await consumer.markPrivate();
+    const blocker = await this.taskBlocker(consumer);
+    if (blocker) {
+      const status =
+        name === "browser_session" &&
+        browserSession.parse(value).action === "status";
+      if (name === "browser_action") browserAction.parse(value);
+      return {
+        status: status ? "completed" : "unavailable",
+        ...(status ? {} : { code: "browser_task_in_progress" }),
+        task: blocker.task
+          ? browserTaskSnapshot(blocker.task)
+          : { status: "unavailable" },
+        observerOnly: true,
+        message:
+          "An existing Browser task owns this conversation. Report its saved status; do not acquire, navigate, refill, submit or create another approval. A continuation belongs to that same task.",
+      };
+    }
     const state = await repository.read(consumer.owner);
     if ((state.epoch ?? 0) !== consumer.epoch) {
       if (
@@ -769,6 +871,7 @@ export class BrowserService {
     }
     if (browserNeedsActionApproval(action)) {
       const current = await control.review(authority, lease.generation, action);
+      if (current.status === "unavailable") return current;
       requireThat(current.page, "browser_page_unavailable", 409);
       if (
         current.approvalRequired === false &&
@@ -794,6 +897,7 @@ export class BrowserService {
       operationKey(consumer, callId),
       action,
     );
+    if (result.status === "unavailable") return result;
     if (action.action === "request_input") {
       const input = (await repository.read(consumer.owner)).input;
       requireThat(input, "browser_input_unavailable", 409);
@@ -801,7 +905,12 @@ export class BrowserService {
         if (state.input?.id === input.id) state.input.callId = callId;
       });
       await consumer.pause(
-        { id: input.id, kind: "input", expiresAt: input.expiresAt },
+        {
+          id: input.id,
+          kind: "input",
+          expiresAt: input.expiresAt,
+          origin: input.origin,
+        },
         callId,
       );
       return {
@@ -1249,6 +1358,12 @@ export class BrowserService {
       return;
     }
     if (request.state === "waiting" && request.expiresAt > Date.now()) return;
+    if (
+      request.state === "approved" &&
+      request.expiresAt > Date.now() &&
+      (await this.taskBlocker(consumer))
+    )
+      return;
     const current = await repository.read(owner);
     if (
       request.state === "approved" &&
@@ -1317,7 +1432,10 @@ export class BrowserService {
               request.kind === "action" ? request.page : undefined,
             )
           : { status: "completed" };
-        if (request.action?.action === "request_input") {
+        if (
+          request.action?.action === "request_input" &&
+          result.status !== "unavailable"
+        ) {
           const input = (await repository.read(owner)).input;
           requireThat(input, "browser_input_unavailable", 409);
           await repository.change(owner, (state) => {
@@ -1325,7 +1443,12 @@ export class BrowserService {
               state.input.callId = request.operationId;
           });
           await consumer.pause(
-            { id: input.id, kind: "input", expiresAt: input.expiresAt },
+            {
+              id: input.id,
+              kind: "input",
+              expiresAt: input.expiresAt,
+              origin: input.origin,
+            },
             request.operationId,
             "waiting",
           );

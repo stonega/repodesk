@@ -1,5 +1,6 @@
 # Postmortems
 
+- [2026-11-04: Progress requests interrupted private Browser work](2026-11-04-browser-task-contention.md)
 - [2026-11-02: Browser partitioned cookies and premature source availability](2026-11-02-browser-partitioned-cookie.md)
 
 - [2026-10-23: Missing reference source repeatedly presented as a user question](2026-10-23-codex-reference-source-question-loop.md)

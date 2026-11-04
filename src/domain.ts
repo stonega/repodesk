@@ -370,9 +370,14 @@ export interface BrowserReadStamp {
   botId: string;
 }
 export interface Run {
+  /** A concurrent assistant turn may observe this Browser task, never take it over. */
+  browserObserverOf?: string;
+  browserTask?: true;
   browserSealed?: string;
   browserRead?: BrowserReadStamp;
   browserWait?: {
+    origin?: string;
+    operation?: string;
     toolName?: string;
     id: string;
     kind: "site" | "action" | "input" | "control";
@@ -500,6 +505,13 @@ export interface Run {
   error?: string;
 }
 export interface Delivery {
+  browserTaskState?: {
+    refresh?: boolean;
+    status: Run["status"];
+    fence: number;
+    requestId?: string;
+    error?: string;
+  };
   browserRequest?: { id: string; expiresAt: number; taskId?: string };
   browserResume?: { id: string; taskId?: string };
   browserRead?: BrowserReadStamp;

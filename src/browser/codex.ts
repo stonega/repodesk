@@ -20,6 +20,7 @@ import {
 import { authorizeBrowserOwner } from "./policy.ts";
 import { browserEpoch } from "./privacy.ts";
 import type { BrowserConsumer, BrowserService } from "./service.ts";
+import { browserWaitText } from "./tasks.ts";
 
 const invocation = z.discriminatedUnion("command", [
   z
@@ -207,9 +208,10 @@ export class CodexBrowsers {
               w,
               owner.actor,
               owner.actor,
-              "Codex needs browser input or approval. Open Browser to continue.",
+              browserWaitText({ ...request, callId }),
               {
                 id: `browser:${request.id}`,
+                topicId: t.topicId,
                 buttons: [
                   [
                     {

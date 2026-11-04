@@ -9,6 +9,7 @@ import {
   browserController,
   browserOwner,
 } from "./config.ts";
+import { hostResult } from "./protocol.ts";
 import { type BrowserState, emptyBrowserState, profileKey } from "./state.ts";
 
 const safeInteger = z.number().int().nonnegative().safe();
@@ -82,6 +83,7 @@ const stateSchema = browserOwner
               .object({
                 status: z.string().max(100),
                 reference: z.string().max(200).optional(),
+                blockedOrigins: hostResult.shape.blockedOrigins,
               })
               .strict()
               .optional(),

@@ -595,7 +595,9 @@ export class NativeBrowserHost {
             requireThat(live, "browser_artifact_unavailable", 404);
             if (
               input.operation.command === "action" &&
-              input.operation.input.action === "navigate"
+              ["navigate", "click", "fill", "press", "pointer"].includes(
+                input.operation.input.action,
+              )
             )
               live.egress.resetBlockedOrigins();
             result = await live.worker.call({
@@ -618,16 +620,22 @@ export class NativeBrowserHost {
           this.live.get(key)?.egress.blockedOrigins() ?? [];
         if (
           input.operation.command === "action" &&
-          input.operation.input.action === "navigate" &&
           blockedOrigins.length &&
           error instanceof Fault &&
-          ["browser_execution_failed", "browser_operation_timeout"].includes(
-            error.code,
-          )
+          [
+            "browser_execution_failed",
+            "browser_operation_timeout",
+            "browser_destination_denied",
+          ].includes(error.code)
         ) {
-          // Redirect CONNECTs can bypass Playwright routing. Keep the session for
-          // site consent and report the boundary instead of a service outage.
-          result = { status: "unavailable", headed: true, blockedOrigins };
+          // Both navigation and approved controls can redirect through CONNECT.
+          // Keep the session for inspection; never retry an uncertain action.
+          result = {
+            status: "unavailable",
+            headed: true,
+            text: error.code,
+            blockedOrigins,
+          };
         } else {
           if (
             !(error instanceof Fault) ||

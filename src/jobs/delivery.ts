@@ -2,6 +2,7 @@ import {
   browserDeliveryAllowed,
   browserReadAllowed,
 } from "../browser/privacy.ts";
+import { browserTaskStatus } from "../browser/tasks.ts";
 import { taskGet } from "../coding/task-store.ts";
 import { checkDevelopment } from "../coding/tasks.ts";
 import type { Sql } from "../db/pool.ts";
@@ -52,6 +53,22 @@ export class DeliveryWorker {
     d: Delivery,
     sql: Sql = this.store.pool,
   ) {
+    if (d.browserTaskState) {
+      const run = w.runs.find((r) => r.id === d.runId);
+      const expected = d.browserTaskState;
+      if (
+        !run ||
+        run.cancelled ||
+        run.actor !== d.actor ||
+        run.chatId !== d.chatId ||
+        run.topicId !== d.topicId ||
+        run.status !== expected.status ||
+        run.fence !== expected.fence ||
+        run.browserWait?.id !== expected.requestId ||
+        run.error !== expected.error
+      )
+        return false;
+    }
     if (d.browserResume?.taskId) {
       try {
         const task = await taskGet(sql, w.id, d.browserResume.taskId);
@@ -186,6 +203,19 @@ export class DeliveryWorker {
     const intent = await this.store.change(workspaceId, async (w, sql) => {
       const d = w.deliveries.find((d) => d.id === id);
       if (!d || !["pending", "sending"].includes(d.state)) return;
+      if (d.state === "pending" && d.browserTaskState?.refresh) {
+        const run = w.runs.find((r) => r.id === d.runId);
+        if (run) {
+          d.text = browserTaskStatus(run);
+          d.browserTaskState = {
+            status: run.status,
+            fence: run.fence,
+            requestId: run.browserWait?.id,
+            error: run.error,
+          };
+          if (!run.browserWait) delete d.buttons;
+        }
+      }
       if (
         d.state === "pending" &&
         d.browserRequest &&
