@@ -1,5 +1,28 @@
 # Shared host Browser plugin
 
+## Telegram continuation confirmation (2026-11-04)
+
+Successful Browser approvals and private-input submissions now create a short
+Telegram continuation confirmation when the originating Pi/plugin run is queued
+again or the Codex browser wait is cleared. The delivery intent and continuation
+marker are saved atomically, with a stable request-based ID, private provenance
+and the original chat/Topic. Retries and reconstruction cannot create a second
+intent. An unavailable or uncertain operation does not claim success; an approval
+that transitions into another required input retains its waiting prompt.
+
+The delivery worker rechecks the current task, membership, Browser authorization
+and bot. Delayed notices are suppressed after cancellation, completion, another
+wait or a newer Browser continuation. Deterministic production-composition tests
+cover the authenticated member decision, repeated maintenance/delivery, secure
+input, Codex, denial/expiry and stale-notice suppression. Native Telegram
+desktop/mobile rendering and production deployment remain separate checks.
+
+Validation: lint, strict TypeScript, build, the Node runtime contract (16 startup
+cases, zero external startup calls) and all 1,392 deterministic tests across
+149 files pass with disposable PostgreSQL and a 15-second test deadline. The
+21 focused Browser integration tests also pass with the final notification
+assertions. No dependency or SQL migration was added.
+
 ## Interrupted navigation and repeated consent (2026-11-02)
 
 An unfinished navigation receipt no longer creates another website request for

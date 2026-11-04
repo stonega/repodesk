@@ -52,6 +52,40 @@ export class DeliveryWorker {
     d: Delivery,
     sql: Sql = this.store.pool,
   ) {
+    if (d.browserResume?.taskId) {
+      try {
+        const task = await taskGet(sql, w.id, d.browserResume.taskId);
+        checkDevelopment(w, task);
+        if (
+          task.cancelRequested ||
+          task.contentRemoved ||
+          task.state !== "working" ||
+          task.actor !== d.actor ||
+          task.chatId !== d.chatId ||
+          task.topicId !== d.topicId ||
+          task.botId !== (await this.store.deployment(sql)).bot?.id ||
+          task.browserWait ||
+          task.browserResumed?.at(-1) !== d.browserResume.id
+        )
+          return false;
+      } catch {
+        return false;
+      }
+    } else if (
+      d.browserResume &&
+      !w.runs.some(
+        (run) =>
+          run.id === d.runId &&
+          run.actor === d.actor &&
+          run.chatId === d.chatId &&
+          run.topicId === d.topicId &&
+          !run.cancelled &&
+          !run.browserWait &&
+          ["queued", "running"].includes(run.status) &&
+          run.browserResumed?.at(-1) === d.browserResume?.id,
+      )
+    )
+      return false;
     if (d.browserRequest?.taskId) {
       try {
         const task = await taskGet(sql, w.id, d.browserRequest.taskId);

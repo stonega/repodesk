@@ -240,16 +240,18 @@ export class CodexBrowsers {
         );
         if (t.browserResumed?.includes(id)) return true;
         await consumer.waiting(id);
-        await this.browser.saveReceipt(
-          consumer,
-          id,
-          callId,
-          browserAccessRequest.shape.result.unwrap().parse(result),
-        );
+        const receipt = browserAccessRequest.shape.result
+          .unwrap()
+          .parse(result);
+        await this.browser.saveReceipt(consumer, id, callId, receipt);
         await this.store.change(owner.workspaceId, async (w, sql) => {
           const current = await taskGet(sql, w.id, controller.id);
+          if (current.browserResumed?.includes(id)) return;
+          checkDevelopment(w, current);
           requireThat(
             current.fence === controller.fence &&
+              current.state === "working" &&
+              !current.cancelRequested &&
               current.browserWait?.id === id,
             "browser_control_expired",
             409,
@@ -260,6 +262,26 @@ export class CodexBrowsers {
             id,
           ].slice(-256);
           await taskSave(sql, current);
+          if (receipt.status === "completed" || receipt.status === "ready") {
+            const deliveryId = deliver(
+              w,
+              owner.actor,
+              owner.actor,
+              "Browser request completed. I’m continuing your task.",
+              {
+                id: `browser:${id}:resumed`,
+                topicId: current.topicId,
+              },
+            );
+            const notification = w.deliveries.find(
+              (item) => item.id === deliveryId,
+            );
+            if (notification) {
+              notification.botId = current.botId;
+              notification.browserRead = current.browserRead;
+              notification.browserResume = { id, taskId: current.id };
+            }
+          }
         });
         return true;
       },

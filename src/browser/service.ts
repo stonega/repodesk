@@ -524,6 +524,31 @@ export class BrowserService {
             run.error = code;
             run.finishedAt = new Date().toISOString();
           }
+          const status =
+            result && typeof result === "object" && "status" in result
+              ? result.status
+              : undefined;
+          if (
+            run.status === "queued" &&
+            (status === "completed" || status === "ready")
+          ) {
+            const id = deliver(
+              w,
+              owner.actor,
+              owner.actor,
+              "Browser request completed. I’m continuing your task.",
+              {
+                id: `browser:${requestId}:resumed`,
+                runId: run.id,
+                topicId: run.topicId,
+              },
+            );
+            const notification = w.deliveries.find((item) => item.id === id);
+            if (notification) {
+              notification.browserRead = run.browserRead;
+              notification.browserResume = { id: requestId };
+            }
+          }
           await sql.query(
             "DELETE FROM outbox WHERE kind='run' AND workspace_id=$1 AND target_id=$2",
             [w.id, run.id],

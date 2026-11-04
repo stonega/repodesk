@@ -16,6 +16,10 @@ verified destination. The choice is remembered for this member and workspace;
 future private tasks reuse it. Review external submissions and ambiguous controls.
 Requested input goes to the task's current field. The original conversation run
 pauses and resumes; a separate chat message containing the password is unnecessary.
+When the approved request or private input succeeds and the task can continue,
+the bot confirms in the same Topic: “Browser request completed. I’m continuing
+your task.” There is no need to send “continue”. Another required approval/input
+gets its own Browser prompt.
 An additional login-provider/asset origin can be requested using
 `browser_action({action:"request_site",url:"https://accounts.example.com"})`.
 Approval adds that origin without navigating away. Page reads include visible

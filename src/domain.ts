@@ -501,6 +501,7 @@ export interface Run {
 }
 export interface Delivery {
   browserRequest?: { id: string; expiresAt: number; taskId?: string };
+  browserResume?: { id: string; taskId?: string };
   browserRead?: BrowserReadStamp;
   browserSealed?: string;
   /** Sets the bot's reaction on a retained user message; creates no message. */
