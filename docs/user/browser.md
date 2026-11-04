@@ -25,6 +25,12 @@ can carry between those consumers after you approve their access.
    clears when submitted. A confirmed submission resumes the originating task.
    Do not send these values in chat.
 
+A redirect can require another website once. For example, YouTube may open
+`consent.youtube.com` after `www.youtube.com`. Pi explains the required website,
+asks for its consent and continues the same task after you allow it. The original
+website remains remembered. A website's cookie or privacy buttons remain your
+decision; allowing its address does not choose those settings.
+
 The same page shows pending and completed requests, your session's controller,
 private screenshots and available downloads. **View browser** does not interrupt
 an outstanding input request. Screenshot fields are masked.

@@ -504,6 +504,7 @@ export class HeadedBrowser {
     }
     const tab = this.tab();
     if (action.action === "navigate") {
+      this.blockedOrigins.clear();
       requireThat(
         this.policy.origins.includes(new URL(action.url).origin),
         "browser_destination_denied",
@@ -704,10 +705,12 @@ export class HeadedBrowser {
   }
   async checkpoint(): Promise<BrowserCheckpoint> {
     requireThat(this.context, "browser_service_unavailable", 503);
-    return browserCheckpoint.parse({
+    const checkpoint = browserCheckpoint.safeParse({
       cookies: (await this.context.cookies()).filter(
         (cookie) => cookie.expires === -1,
       ),
     });
+    requireThat(checkpoint.success, "browser_checkpoint_invalid", 503);
+    return checkpoint.data;
   }
 }

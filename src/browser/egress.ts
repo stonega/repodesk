@@ -71,6 +71,7 @@ export class BrowserEgress {
   readonly password = randomBytes(32).toString("base64url");
   private server?: Server;
   private sockets = new Set<Socket>();
+  private blocked = new Set<string>();
   private policy: BrowserHostPolicy;
   private expiry?: ReturnType<typeof setTimeout>;
   constructor(
@@ -93,9 +94,19 @@ export class BrowserEgress {
   }
   update(policy: BrowserHostPolicy) {
     this.policy = structuredClone(policy);
+    this.blocked.clear();
     // A handoff cannot retain an older consumer's open authenticated tunnels.
     for (const socket of this.sockets) socket.destroy();
     this.renew();
+  }
+  blockedOrigins() {
+    return [...this.blocked];
+  }
+  resetBlockedOrigins() {
+    this.blocked.clear();
+  }
+  private block(origin: string) {
+    if (this.blocked.size < 32) this.blocked.add(origin);
   }
   private track(socket: Socket) {
     this.sockets.add(socket);
@@ -103,6 +114,7 @@ export class BrowserEgress {
   }
   private async destination(url: URL) {
     const policy = this.policy;
+    if (!policy.origins.includes(url.origin)) this.block(url.origin);
     const destination = await browserDestination(url, policy, this.resolve);
     requireThat(policy === this.policy, "browser_destination_denied", 403);
     return destination;
@@ -206,6 +218,7 @@ export class BrowserEgress {
             ) === Number(authority.port || 443)
           );
         });
+        if (!origin) this.block(authority.origin);
         requireThat(origin, "browser_destination_denied", 403);
         const target = await this.destination(new URL(origin));
         requireThat(!client.destroyed, "browser_destination_denied", 403);

@@ -1,6 +1,7 @@
 // Fixed codes shared by model-visible tool failures and sanitized runtime logs.
 export const codeTruthFailureCodes = [
   "code_truth_unavailable",
+  "code_truth_indexing",
   "code_truth_tools_changed",
   "github_user_access_denied",
   "github_user_access_unavailable",

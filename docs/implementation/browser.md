@@ -23,6 +23,27 @@ cases, zero external startup calls) and all 1,392 deterministic tests across
 21 focused Browser integration tests also pass with the final notification
 assertions. No dependency or SQL migration was added.
 
+## Redirect website consent (2026-11-02)
+
+The native proxy now returns bounded denied CONNECT origins to the current
+Browser consumer. An HTTPS redirect to an unapproved origin returns an unavailable
+navigation with `blockedOrigins`, keeps the headed session available for consent
+and does not become a generic service outage. Pi requests the required origin,
+then continues the original goal after approval. Current saved websites are not
+expanded implicitly. A new navigation or controller policy clears old denials.
+Deterministic proxy tests and the real headed HTTPS redirect fixture enforce this
+boundary. See the [incident](../../postmortem/2026-11-02-browser-partitioned-cookie.md).
+
+## Partitioned-cookie checkpoint correction (2026-11-02)
+
+The private native checkpoint now preserves Chromium's cross-site partition bit
+alongside `partitionKey`. This repairs navigation to sites such as YouTube whose
+session cookies carry that metadata. Unknown checkpoint data remains rejected;
+`browser_checkpoint_invalid` is the safe failure code. The real native fixture
+covers partitioned cookies through encrypted worker/root checkpoints, with no
+cookie metadata exposed to Pi. See the [incident](../../postmortem/2026-11-02-browser-partitioned-cookie.md)
+and [deployment evidence](vps-deployment.md).
+
 ## Interrupted navigation and repeated consent (2026-11-02)
 
 An unfinished navigation receipt no longer creates another website request for
@@ -36,9 +57,12 @@ approval, then checks page inspection, repeated site requests, repeated navigati
 and another path on the same origin. It requires one website decision and retains
 the original uncertain receipt. This is a local correction, not deployment evidence.
 
-Validation: lint, strict TypeScript, build, the Node runtime contract and all 1,386
-deterministic tests across 149 files pass with disposable PostgreSQL. The new
-regression first failed with a second website wait and passes after the fix.
+Validation in the development workspace: lint, strict TypeScript, build, the Node
+runtime contract and all 1,386 deterministic tests across 149 files pass with
+disposable PostgreSQL. The new regression first failed with a second website wait
+and passes after the fix.
+The isolated commit on the latest `main` also passes lint, strict TypeScript,
+build, the Node runtime contract and all 1,384 tests across 150 files.
 
 ## Remembered websites and Pi continuity (2026-11-01)
 
@@ -67,9 +91,10 @@ instructions require that flag for external changes, including auto-saving field
 generic DOM inspection cannot infer arbitrary application auto-save behavior.
 Sensitive fields continue through the bound secure-input path.
 
-The application and native host must be released together for this protocol
-addition. This section describes local changes; the October deployment evidence
-below applies to the earlier task-scoped consent implementation.
+The application and native host were released together. The latest repair release
+`41406054824-1` includes remembered website consent, redirect handling and
+partitioned-cookie compatibility; see [deployment evidence](vps-deployment.md).
+Live website-account and Telegram/model acceptance remain separate checks.
 
 The full development workspace passed lint, strict types, all 1,378 deterministic
 tests with disposable PostgreSQL, build, the Node runtime contract (16 startup cases, zero external

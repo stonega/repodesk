@@ -70,6 +70,15 @@ export async function codeTruthExtension(
                 scope.targets,
                 activeSignal,
                 async (mcp) => {
+                  await input.guard();
+                  if (resolveScope) {
+                    const current = await resolveScope(input.actor);
+                    requireThat(
+                      isDeepStrictEqual(current.targets, scope.targets),
+                      "github_user_access_denied",
+                      403,
+                    );
+                  }
                   const available = await mcp.listTools(
                     {},
                     {

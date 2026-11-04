@@ -15,6 +15,12 @@ explain that the requested source could not be inspected. Never invent evidence,
 restore an older permission grant or repeatedly retry the same failing call.
 Continue unrelated work normally; retry source access after the problem is resolved.
 
+`code_truth_indexing` means the current authorized namespace is still preparing
+its source snapshot after a bounded readiness wait. It does not establish a service
+outage, lost repository access or a need to reconnect. Explain that preparation is
+still running; do not substitute an older grant or claim source evidence is ready.
+A later query may retry after preparation, without starting a separate coding task.
+
 ## Configured repositories
 
 Use only targets returned by `list_code_targets` for this workspace. Operators

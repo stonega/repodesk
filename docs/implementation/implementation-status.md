@@ -16,6 +16,22 @@ The 21 focused Browser integration tests pass. No dependency or SQL migration wa
 added. Production deployment and native Telegram desktop/mobile rendering remain
 unverified for this change.
 
+## Browser chat repair on VPS (2026-11-02)
+
+Release `41406054824-1` deploys the confirmed YouTube redirect-consent correction,
+partitioned-cookie compatibility and cancellable Code Truth initialization wait.
+The original public URL reports its missing consent origin while retaining the
+session; a synthetic grant then permits navigation/read. Current-authority source
+reading of street-polls succeeds. The historical Telegram run and its website
+grants were not rewritten or replayed.
+
+The release snapshot passes 1,380 tests; the isolated main repair passes 1,383,
+with lint/types/build and the 16-case offline Node startup contract. Exact VPS
+images, native redirect/cookie/routine-action/submission gates, public assets,
+backup and existing API/worker Browser connections pass. Real website consent and
+cookie choices remain member decisions. See [deployment evidence](vps-deployment.md)
+and the [incident](../../postmortem/2026-11-02-browser-partitioned-cookie.md).
+
 ## GitHub fixes continue the original Telegram coding task (2026-11-01)
 
 Confirmed PR publication now records an installation/repository/PR/branch binding.
@@ -82,9 +98,9 @@ a content diff and its service smoke passed. The current native package also
 passes the real headed-host smoke, including automatic routine operations and
 blocked unapproved submission, on the previously provisioned test runtime (the
 fresh Debian download stalled). This consent follow-up adds no dependency or SQL
-migration beyond the Browser baseline below. The application and native host need a coordinated release for the new
-inspection protocol; these changes have not been deployed or exercised with live
-Telegram/model/site accounts. See [implementation details](browser.md).
+migration beyond the Browser baseline below. The coordinated application/native protocol is deployed; the latest repair is
+`41406054824-1`, as recorded above. Live Telegram/model/site-account acceptance
+remains separate from synthetic deployment probes. See [implementation details](browser.md).
 
 
 Commit-only validation on `main` excludes unrelated working changes and passes

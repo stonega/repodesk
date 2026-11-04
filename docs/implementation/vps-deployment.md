@@ -2,10 +2,49 @@
 
 RepoDesk now installs approved GitHub releases through a host-side updater.
 The previous `.github/workflows/deploy.yml` is removed. GitHub Actions verifies
-code; it does not transfer images or deploy to the VPS. Publishing a stable
+code; the standard release workflow does not transfer images or deploy to the VPS.
+Explicit operator-authorized exceptions are recorded below. Publishing a stable
 release makes it available in the panel's version indicator. A deployment
 administrator reviews its notes and starts installation explicitly.
 See [host updater installation](updates.md) for the service and panel contract.
+
+## Browser chat repair deployment (2026-11-02)
+
+The authorized repair promoted release `41406054824-1` from source
+`895d0e6925be87d49e300815783bcfdefb1c516b`, replacing `41403209516-1`.
+It retains the existing deployment's audio and Code Truth behavior. The preceding
+cookie/readiness repair alone did not fix the reported YouTube redirect; the final
+release adds the confirmed proxy-consent correction. Package version remains
+v0.1.46; no dependency, migration or stable GitHub release was added.
+
+The source snapshot passes **1,380 deterministic tests across 151 files**. The
+isolated `main` repair passes **1,383 tests across 150 files**, lint, strict types,
+build and the Node 24 startup contract. The real headed fixture covers partitioned
+cookies and an HTTP-to-HTTPS redirect denied without a website grant. Exact VPS
+images pass all 16 startup cases with zero external calls, disposable Compose
+readiness, migration rerun, backup/restore, speech imports, Code Truth real-index
+smoke and the native Codex dynamic-tool proof.
+
+The receipt at **07:30:46 UTC** verifies **51 artifacts**, public/loopback HTML and
+assets, healthy services, saved configuration/credentials and persistent mounts.
+The native host passes application-UID routine actions, blocked submission,
+partitioned-cookie checkpoint and denied HTTPS redirect tests. Its socket directory
+survives restart, and both existing API/worker mounts reconnect. PostgreSQL and all
+three CI runner identities are preserved. The verified protected backup is
+`/opt/repodesk/backups/pre-release-41406054824-1.dump` (**2,303,262 bytes**).
+
+The original public YouTube URL now reports the missing
+`https://consent.youtube.com` origin and preserves its headed session. An explicit
+grant in an isolated synthetic profile then allows navigation and reading. That
+probe does not grant websites or decide cookie preferences for the real member.
+A current-authority Code Truth probe reads `stonega/street-polls` source at
+`3a7cbe02e46b5a8b5329066b52d2953f64492309`; only provenance and byte counts are logged.
+No live account login, Telegram message or model call was used.
+
+See the [deployment and receipt](https://github.com/stonega/repodesk/actions/runs/41406054824),
+[public redirect proof](https://github.com/stonega/repodesk/actions/runs/41406866977),
+[current-scope source proof](https://github.com/stonega/repodesk/actions/runs/41404066398)
+and [incident record](../../postmortem/2026-11-02-browser-partitioned-cookie.md).
 
 ## Code Truth startup isolation deployment (2026-10-27)
 

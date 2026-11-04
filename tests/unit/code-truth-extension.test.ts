@@ -83,6 +83,7 @@ class RepositoryClient extends CodeTruthClient {
   error?: Error;
   toolCalls = 0;
   tools = structuredClone(codeTruthToolCatalog) as unknown as Tool[];
+  beforeQuery?: () => void;
   constructor() {
     super("http://unused.invalid", "unused");
   }
@@ -94,6 +95,7 @@ class RepositoryClient extends CodeTruthClient {
   ): Promise<T> {
     this.calls++;
     if (this.error) throw this.error;
+    this.beforeQuery?.();
     return action({
       listTools: async () => ({ tools: this.tools }),
       callTool: async () => {
@@ -114,6 +116,7 @@ for (const code of [
   "github_rate_limited",
   "github_unavailable",
   "code_truth_unavailable",
+  "code_truth_indexing",
 ]) {
   test(`${code} cannot affect greetings and is enforced when source is requested`, async () => {
     const client = new RepositoryClient();
@@ -194,9 +197,38 @@ test("source permissions are rechecked on every call and recover without a new c
     await expect(tool?.execute("revoked", {}, input().signal)).rejects.toThrow(
       "github_user_access_denied",
     );
-    expect(resolutions).toBe(3);
+    expect(resolutions).toBe(4);
     expect(client.toolCalls).toBe(1);
     expect(client.calls).toBe(1);
+  } finally {
+    await host?.close();
+  }
+});
+
+test("revocation during Code Truth warmup prevents the eventual source query", async () => {
+  const client = new RepositoryClient();
+  let allowed = true;
+  client.beforeQuery = () => {
+    allowed = false;
+  };
+  const extension = await codeTruthExtension(
+    client,
+    workspaceId,
+    targets,
+    1,
+    async () => {
+      if (!allowed) throw new Fault("github_user_access_denied", 403);
+      return { client, targets };
+    },
+  );
+  const host = await ExtensionCatalog.fromSnapshot([], [extension]).open(
+    input(),
+  );
+  try {
+    await expect(
+      host?.tools[0]?.execute("revoked-during-warmup", {}, input().signal),
+    ).rejects.toThrow("github_user_access_denied");
+    expect(client.toolCalls).toBe(0);
   } finally {
     await host?.close();
   }
