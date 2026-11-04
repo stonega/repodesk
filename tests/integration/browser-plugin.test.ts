@@ -342,6 +342,84 @@ const url = process.env.TEST_DATABASE_URL,
       expect(refreshed?.text).not.toContain("Allow website");
       expect(refreshed?.buttons).toBeUndefined();
     });
+    for (const transition of ["approval", "revocation"] as const)
+      test(`requested Browser status handles ${transition} after claim and before dispatch`, async () => {
+        const { w, run } = await seed("Continue the original Browser goal");
+        await new Executor(store, setup, (d, id) =>
+          plugins.runner(
+            d,
+            id,
+            modelSequence([
+              {
+                name: "browser_action",
+                args: { action: "navigate", url: "https://example.com" },
+              },
+            ]),
+          ),
+        ).execute(w.id, run.id);
+        const site = (await store.read(w.id)).runs[0]?.browserWait;
+        if (!site) throw Error("missing website decision");
+        await input(w, "progress");
+        const notice = (await store.read(w.id)).deliveries.find(
+          (d) => d.browserTaskState?.refresh,
+        );
+        if (!notice) throw Error("missing requested status");
+        let armed = true;
+        const changing = new Proxy(store, {
+          get(target, property) {
+            const value = Reflect.get(target, property, target);
+            if (property !== "change")
+              return typeof value === "function" ? value.bind(target) : value;
+            return async (...args: Parameters<Store["change"]>) => {
+              const result = await target.change(...args);
+              if (
+                armed &&
+                result !== null &&
+                typeof result === "object" &&
+                "id" in result &&
+                result.id === notice.id &&
+                "state" in result &&
+                result.state === "sending"
+              ) {
+                armed = false;
+                if (transition === "approval") {
+                  await browser.decide(
+                    { workspaceId: w.id, actor: "202" },
+                    site.id,
+                    true,
+                  );
+                  await browser.reconcile(w.id);
+                } else
+                  await store.change(w.id, (current) => {
+                    const member = current.members.find((m) => m.id === "202");
+                    if (member) member.active = false;
+                  });
+              }
+              return result;
+            };
+          },
+        });
+        const before = telegramCalls.length;
+        await new DeliveryWorker(changing, setup).send(w.id, notice.id);
+        expect(armed).toBe(false);
+        const delivered = (await store.read(w.id)).deliveries.find(
+          (d) => d.id === notice.id,
+        );
+        if (transition === "approval") {
+          expect(delivered?.state).toBe("sent");
+          expect(delivered?.text).toContain("queued");
+          expect(delivered?.buttons).toBeUndefined();
+          expect(telegramCalls.slice(before)).toEqual([
+            {
+              method: "sendMessage",
+              params: expect.objectContaining({ text: delivered?.text }),
+            },
+          ]);
+        } else {
+          expect(delivered?.state).toBe("cancelled");
+          expect(telegramCalls.slice(before)).toEqual([]);
+        }
+      });
     test("requested Browser status survives repeated safe Telegram retries and follows the latest wait", async () => {
       const { w, run } = await seed(
         "Keep working on the original Browser goal",

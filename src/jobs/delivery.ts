@@ -7,7 +7,12 @@ import { taskGet } from "../coding/task-store.ts";
 import { checkDevelopment } from "../coding/tasks.ts";
 import type { Sql } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
-import { type Delivery, requireThat, type Workspace } from "../domain.ts";
+import {
+  type Delivery,
+  type Deployment,
+  requireThat,
+  type Workspace,
+} from "../domain.ts";
 import { repositoryDeliveryAllowed } from "../github/repository-context.ts";
 import { googleDeliveryAllowed, googleReadAllowed } from "../google/policy.ts";
 import { taskReference } from "../miniapp/auth.ts";
@@ -31,6 +36,54 @@ export class DeliveryWorker {
     private store: Store,
     private setup: SetupService,
   ) {}
+  private refreshBrowserStatus(
+    w: Workspace,
+    d: Delivery,
+    bot: Deployment["bot"],
+  ) {
+    if (!d.browserTaskState?.refresh) return;
+    const run = w.runs.find((r) => r.id === d.runId);
+    if (!run) return;
+    d.text = browserTaskStatus(run);
+    d.browserTaskState = {
+      refresh: true,
+      status: run.status,
+      fence: run.fence,
+      requestId: run.browserWait?.id,
+      error: run.error,
+    };
+    d.buttons = browserTaskButtons(w, run, bot);
+  }
+  private browserStatusBeforeSend(
+    workspaceId: string,
+    intent: Delivery,
+    bot: Deployment["bot"],
+  ) {
+    return this.store.change(workspaceId, async (w, sql) => {
+      const d = w.deliveries.find((d) => d.id === intent.id);
+      if (
+        d?.state !== "sending" ||
+        d.attempts !== intent.attempts ||
+        d.actor !== intent.actor ||
+        d.chatId !== intent.chatId ||
+        d.topicId !== intent.topicId ||
+        d.runId !== intent.runId ||
+        d.botId !== intent.botId ||
+        !d.browserTaskState?.refresh
+      )
+        return;
+      this.refreshBrowserStatus(w, d, bot);
+      if (!(await this.feedbackAllowed(w, d, sql))) {
+        d.state = "cancelled";
+        return;
+      }
+      const fresh = structuredClone(d);
+      intent.text = fresh.text;
+      intent.buttons = fresh.buttons;
+      intent.browserTaskState = fresh.browserTaskState;
+      return structuredClone(w);
+    });
+  }
   private editTarget(w: Workspace, d: Delivery, botId?: string) {
     const target = w.deliveries.find((t) => t.id === d.editOf);
     const scope = target?.progressMessage ?? target?.feedback;
@@ -203,20 +256,8 @@ export class DeliveryWorker {
     const intent = await this.store.change(workspaceId, async (w, sql) => {
       const d = w.deliveries.find((d) => d.id === id);
       if (!d || !["pending", "sending"].includes(d.state)) return;
-      if (d.state === "pending" && d.browserTaskState?.refresh) {
-        const run = w.runs.find((r) => r.id === d.runId);
-        if (run) {
-          d.text = browserTaskStatus(run);
-          d.browserTaskState = {
-            refresh: true,
-            status: run.status,
-            fence: run.fence,
-            requestId: run.browserWait?.id,
-            error: run.error,
-          };
-          d.buttons = browserTaskButtons(w, run, deployment.bot);
-        }
-      }
+      if (d.state === "pending")
+        this.refreshBrowserStatus(w, d, deployment.bot);
       if (
         d.state === "pending" &&
         d.browserRequest &&
@@ -344,7 +385,14 @@ export class DeliveryWorker {
     if (!intent) return;
     try {
       // This last durable policy check precedes the external effect. In-flight revocation cannot undo a send.
-      const current = await this.store.read(workspaceId);
+      const current = intent.browserTaskState?.refresh
+        ? await this.browserStatusBeforeSend(
+            workspaceId,
+            intent,
+            deployment.bot,
+          )
+        : await this.store.read(workspaceId);
+      if (!current) return;
       if (intent.repositoryMenu)
         requireThat(
           intent.botId === (await this.store.deployment()).bot?.id,

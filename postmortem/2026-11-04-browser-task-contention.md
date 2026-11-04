@@ -69,6 +69,9 @@ checkpoints. Requested status remains refreshable across confirmed-safe retries,
 including adding or removing the Browser link as the task changes state. A
 continuation records the actual human input while retaining the current goal for
 later approvals and secure-input labels, including earlier queued goal edits.
+A final durable refresh also covers a task transition between delivery claim and
+dispatch. Regressions reproduce the former lost reply and verify that revocation
+still cancels it before transport. Fixed terminal notices retain their fences.
 
 Denied approved interactions retain bounded origin diagnostics and the current
 session. Unavailable operation replay stays unavailable, without repeating the
@@ -93,7 +96,7 @@ status, stale notices, actor/Topic/bot/revocation/forward boundaries, failed rec
 replay and invalid/partial files. Real-DOM tests exercise an approved cross-origin
 control and a real local HTTP download through verified artifact retrieval.
 
-Final validation passes lint, strict TypeScript, build, 1,421 deterministic tests
+Final validation passes lint, strict TypeScript, build, 1,423 deterministic tests
 across 151 files and all 17 focused browser scenarios. The built Node runtime
 contract passes 16 startup cases with zero external startup calls. Code Truth
 catalog regeneration produces no diff and the service smoke passes.
