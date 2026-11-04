@@ -11,10 +11,13 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import {
   browserArtifacts,
   readBrowserArtifact,
   saveBrowserArtifact,
+  saveBrowserDownload,
+  verifiedBrowserDownloads,
 } from "../../src/browser/host-artifacts.ts";
 
 describe("private persistent browser artifacts", () => {
@@ -52,6 +55,72 @@ describe("private persistent browser artifacts", () => {
       (await readBrowserArtifact(f.home, f.item.id, f.policy)).artifact?.data,
     ).toBe(Buffer.from("private").toString("base64"));
     expect((await browserArtifacts(f.home))[0]?.name).toBe("report.txt");
+  });
+  test("streamed downloads preserve all bytes and do not overwrite a saved file", async () => {
+    const f = await fixture();
+    const id = randomUUID();
+    expect(
+      await saveBrowserDownload(
+        f.home,
+        id,
+        Readable.from([Buffer.from("one"), Buffer.from("two")]),
+      ),
+    ).toBe(6);
+    expect(await readFile(join(f.home, "artifacts", id), "utf8")).toBe(
+      "onetwo",
+    );
+    await expect(
+      saveBrowserDownload(
+        f.home,
+        id,
+        Readable.from([Buffer.from("overwrite")]),
+      ),
+    ).rejects.toThrow();
+    expect(await readFile(join(f.home, "artifacts", id), "utf8")).toBe(
+      "onetwo",
+    );
+  });
+  for (const outcome of ["empty", "too large", "interrupted"] as const)
+    test(`a ${outcome} download removes its partial file and never creates completion evidence`, async () => {
+      const f = await fixture();
+      const id = randomUUID();
+      async function* bytes() {
+        if (outcome === "empty") return;
+        yield Buffer.from("partial");
+        if (outcome === "interrupted")
+          throw Error("synthetic upstream failure");
+        yield Buffer.alloc(25 * 1024 * 1024);
+      }
+      await expect(saveBrowserDownload(f.home, id, bytes())).rejects.toThrow();
+      await expect(readFile(join(f.home, "artifacts", id))).rejects.toThrow();
+      expect((await browserArtifacts(f.home)).some((a) => a.id === id)).toBe(
+        false,
+      );
+    });
+  test("download completion requires an authorized, nonempty, unchanged regular file", async () => {
+    const f = await fixture();
+    expect(await verifiedBrowserDownloads(f.home, f.policy)).toEqual([
+      { id: f.item.id, name: f.item.name, size: 7 },
+    ]);
+    expect(
+      await verifiedBrowserDownloads(f.home, { ...f.policy, origins: [] }),
+    ).toEqual([]);
+    const path = join(f.home, "artifacts", f.item.id);
+    await writeFile(path, "changed size");
+    expect(await verifiedBrowserDownloads(f.home, f.policy)).toEqual([]);
+    await rm(path);
+    expect(await verifiedBrowserDownloads(f.home, f.policy)).toEqual([]);
+    const other = join(f.home, "private");
+    await writeFile(other, "private");
+    await symlink(other, path);
+    expect(await verifiedBrowserDownloads(f.home, f.policy)).toEqual([]);
+    await rm(path);
+    await link(other, path);
+    expect(await verifiedBrowserDownloads(f.home, f.policy)).toEqual([]);
+    await rm(path);
+    await writeFile(path, "");
+    await saveBrowserArtifact(f.home, { ...f.item, size: 0 });
+    expect(await verifiedBrowserDownloads(f.home, f.policy)).toEqual([]);
   });
   test("a different profile or site grant cannot fetch the artifact", async () => {
     const a = await fixture(),

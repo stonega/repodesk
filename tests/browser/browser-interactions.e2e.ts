@@ -1,8 +1,14 @@
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
+import { readBrowserArtifact } from "../../src/browser/host-artifacts.ts";
 import { HeadedBrowser } from "../../src/browser/host-page.ts";
 
 const origin = "https://routine.example";
-async function fixture(page: Page) {
+test.use({ acceptDownloads: true });
+async function fixture(page: Page, home = "/unused") {
   let submissions = 0;
   await page.route(`${origin}/**`, async (route) => {
     if (route.request().method() === "POST") submissions++;
@@ -21,7 +27,7 @@ async function fixture(page: Page) {
   });
   await page.goto(`${origin}/account`);
   const native = new HeadedBrowser({
-    home: "/unused",
+    home,
     executable: "/unused",
     env: {},
     proxy: { server: "", username: "", password: "" },
@@ -61,6 +67,131 @@ test("remembered websites allow native navigation, ordinary fills and focus with
   await native.execute({ command: "action", input: click });
   await expect(page).toHaveURL(`${origin}/next`);
   expect(submissions()).toBe(0);
+});
+
+test("an approved control that changes to a denied website returns its origin and allows inspection without replay", async ({
+  page,
+}) => {
+  const denied = "https://destination.example";
+  const { native } = await fixture(page);
+  let visits = 0;
+  await page.route(`${denied}/**`, async (route) => {
+    visits++;
+    await route.fulfill({
+      contentType: "text/html",
+      body: "The submitted step reached this destination.",
+    });
+  });
+  await page.evaluate((url) => {
+    const button = document.createElement("button");
+    button.id = "redirect";
+    button.type = "button";
+    button.textContent = "Submit";
+    button.addEventListener("click", () => location.assign(url));
+    document.body.appendChild(button);
+  }, `${denied}/result?private=never-return-this-query`);
+  const input = { action: "click" as const, selector: "#redirect" };
+  const review = await native.execute({ command: "review", input });
+  native.setPolicy({ origins: [origin], previewOrigins: [], interact: true });
+  const result = await native.execute({
+    command: "action",
+    input,
+    page: review.page,
+  });
+  expect(result).toEqual({
+    status: "unavailable",
+    text: "browser_destination_denied",
+    blockedOrigins: [denied],
+  });
+  expect(JSON.stringify(result)).not.toContain("never-return-this-query");
+  expect(visits).toBe(1);
+  native.setPolicy({
+    origins: [origin, denied],
+    previewOrigins: [],
+    interact: false,
+  });
+  const observed = await native.execute({
+    command: "action",
+    input: { action: "read" },
+  });
+  expect(observed.status).toBe("completed");
+  expect(observed.page?.origin).toBe(denied);
+  expect(visits).toBe(1);
+});
+
+test("download completion is reported only after the approved download is saved and verified", async ({
+  page,
+}) => {
+  const home = await mkdtemp(join(tmpdir(), "repodesk-native-download-"));
+  await mkdir(join(home, "artifacts"));
+  const payload = "verified-download-fixture";
+  const server = createServer((req, res) => {
+    if (req.url === "/download") {
+      res.writeHead(200, {
+        "content-type": "text/plain",
+        "content-disposition": "attachment; filename=fixture.txt",
+      });
+      res.end(payload);
+    } else {
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(
+        '<a id="download" href="/download" download="fixture.txt">Download</a>',
+      );
+    }
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string")
+    throw Error("missing fixture server");
+  const site = `http://127.0.0.1:${address.port}`;
+  try {
+    await page.goto(site);
+    const native = new HeadedBrowser({
+      home,
+      executable: "/unused",
+      env: {},
+      proxy: { server: "", username: "", password: "" },
+    });
+    Object.assign(native, { context: page.context() });
+    (native as unknown as { addPage(page: Page): void }).addPage(page);
+    native.setPolicy({ origins: [site], previewOrigins: [], interact: false });
+    expect((await native.execute({ command: "status" })).downloads).toEqual([]);
+    const input = { action: "click" as const, selector: "#download" };
+    const review = await native.execute({ command: "review", input });
+    expect(review.approvalRequired).toBe(true);
+    native.setPolicy({ origins: [site], previewOrigins: [], interact: true });
+    const download = page.waitForEvent("download");
+    await native.execute({ command: "action", input, page: review.page });
+    const event = await download;
+    expect(await event.failure()).toBeNull();
+    await expect
+      .poll(async () => {
+        const status = await native.execute({ command: "status" });
+        return status.text ?? status.downloads?.length;
+      })
+      .toBe(1);
+    const saved = (await native.execute({ command: "status" })).downloads?.[0];
+    expect(saved?.size).toBe(Buffer.byteLength(payload));
+    if (!saved) throw Error("missing confirmed download");
+    const artifact = await readBrowserArtifact(home, saved.id, {
+      origins: [site],
+      previewOrigins: [],
+      interact: false,
+    });
+    expect(artifact.artifact?.data).toBe(
+      Buffer.from(payload).toString("base64"),
+    );
+    native.setPolicy({ origins: [], previewOrigins: [], interact: false });
+    expect((await native.execute({ command: "status" })).downloads).toEqual([]);
+    native.setPolicy({ origins: [site], previewOrigins: [], interact: false });
+    await rm(join(home, "artifacts", saved.id));
+    expect((await native.execute({ command: "status" })).downloads).toEqual([]);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+    await rm(home, { recursive: true, force: true });
+  }
 });
 
 test("submissions, uncertain controls, sensitive fields and explicit external effects remain gated", async ({

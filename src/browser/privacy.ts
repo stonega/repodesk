@@ -90,6 +90,8 @@ export function browserPanelRun(w: Workspace, run: Run): Run {
   safe.instructions = [];
   safe.transcript = [];
   safe.tools = {};
+  delete safe.browserWait;
+  delete safe.browserObserverOf;
   delete safe.result;
   delete safe.contextSummary;
   delete safe.compaction;

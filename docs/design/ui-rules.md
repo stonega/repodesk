@@ -43,6 +43,34 @@ when implementing or reviewing a change.
 
 ## Recorded preferences
 
+### Browser follow-ups preserve one task and show its actual wait
+
+- **Preference:** Progress checks observe the current Browser task without
+  navigating, refilling a form, submitting or creating another approval. Short
+  continuation messages belong to the original task and its saved goal/context.
+  Explain the type of wait, the website and the action requiring review. Report
+  expiration and verify a saved file before calling a download complete.
+- **Scope:** Private Pi Browser work and authorized file plugins, separately per
+  workspace, verified member, bot and Telegram Topic. Shared approval wording
+  also applies to Codex. Independent Browser goals use separate Topics or wait
+  until the current goal finishes.
+- **Source:** 2026-11-04 — after VPS diagnosis of a progress question creating
+  a competing SnapYT run, the user approved the task-coordination, wait feedback
+  and recovery improvements.
+- **Acceptance:** A recognized short status/continue message creates no new run
+  or browser effect. Other assistant turns observing a live Browser goal stay
+  read-only, including after that goal ends. Expired Pi work resumes only after
+  an explicit human continuation with current access and fresh decisions; do not
+  revive denied, cancelled or uncertain attempts. Delayed status reflects current
+  state and stale expiration notices remain silent. Website/action/input/control
+  waits have distinct copy without field values or URL secrets. Download evidence
+  requires an authorized nonempty regular file matching the recorded size.
+- **Exceptions:** Unrecognized phrasing, attachments, forwards and unrelated
+  questions retain ordinary routing; the broker still prevents a second Browser
+  controller in the same Topic. Cross-Topic handoff and Codex's own durable task
+  lifecycle retain their existing rules. Native Telegram desktop/mobile rendering
+  remains a live check; this change adds no web settings editor or layout.
+
 ### Browser approvals acknowledge continuation in Telegram
 
 - **Preference:** After a Browser approval or private-input request succeeds and

@@ -29,6 +29,7 @@ import { Executor } from "../../src/jobs/execute.ts";
 import { encrypt } from "../../src/setup/credentials.ts";
 import { SetupService } from "../../src/setup/service.ts";
 import type { Telegram } from "../../src/telegram/client.ts";
+import { Ingress } from "../../src/telegram/webhook.ts";
 import { createRun } from "../../src/workspaces/service.ts";
 import { grantGitHubAccess, workspace } from "../fixtures.ts";
 
@@ -157,6 +158,27 @@ const url = process.env.TEST_DATABASE_URL,
       );
       return { w, run };
     }
+    let nextInput = 900000;
+    async function input(w: { id: string }, text: string, topic = 7) {
+      await store.pool.query(
+        "INSERT INTO telegram_selections(actor,workspace_id) VALUES('202',$1) ON CONFLICT(actor) DO UPDATE SET workspace_id=excluded.workspace_id",
+        [w.id],
+      );
+      const update = {
+        update_id: nextInput++,
+        message: {
+          message_id: nextInput++,
+          date: Math.floor(Date.now() / 1000),
+          from: { id: 202, is_bot: false, first_name: "Fixture" },
+          chat: { id: 202, type: "private" as const },
+          message_thread_id: topic,
+          text,
+        },
+      };
+      const ingress = new Ingress(store, setup);
+      await ingress.accept(update);
+      return { update, ingress };
+    }
     function launch(actor: string, reference: string) {
       const fields = new URLSearchParams({
         auth_date: String(Math.floor(Date.now() / 1000)),
@@ -250,6 +272,372 @@ const url = process.env.TEST_DATABASE_URL,
         return stream;
       };
     }
+    test("progress and continue observe the original paused task without acquiring, refilling or creating another approval", async () => {
+      const { w, run } = await seed(
+        "Download the requested video from the website",
+      );
+      const executor = new Executor(store, setup, (d, id) =>
+        plugins.runner(
+          d,
+          id,
+          modelSequence([
+            {
+              name: "browser_action",
+              args: { action: "navigate", url: "https://example.com/download" },
+            },
+          ]),
+        ),
+      );
+      await executor.execute(w.id, run.id);
+      const repo = new PostgresBrowserRepository(store.pool, key);
+      const owner = { workspaceId: w.id, actor: "202" };
+      const before = await repo.read(owner);
+      const callCount = calls.length;
+      const { update, ingress } = await input(w, "what is the progress");
+      await ingress.accept(update);
+      await input(w, "continue");
+      const current = await store.read(w.id);
+      expect(current.runs).toHaveLength(1);
+      expect(current.runs[0]).toMatchObject({
+        id: run.id,
+        task: run.task,
+        status: "awaiting_approval",
+      });
+      expect(await repo.read(owner)).toEqual(before);
+      expect(calls.length).toBe(callCount);
+      const notices = current.deliveries.filter((d) => d.browserTaskState);
+      expect(notices).toHaveLength(2);
+      expect(notices[0]).toMatchObject({
+        runId: run.id,
+        actor: "202",
+        chatId: "202",
+        topicId: 7,
+      });
+      expect(notices[0]?.text).toContain("https://example.com");
+      expect(notices[0]?.text).toContain("Allow website");
+      if (!notices[0]) throw Error("missing status notice");
+      const beforeSend = telegramCalls.length;
+      await new DeliveryWorker(store, setup).send(w.id, notices[0].id);
+      expect(telegramCalls.slice(beforeSend)).toEqual([
+        {
+          method: "sendMessage",
+          params: expect.objectContaining({
+            chat_id: "202",
+            message_thread_id: 7,
+            text: notices[0].text,
+          }),
+        },
+      ]);
+      const pendingNotice = notices[1];
+      if (!pendingNotice || !before.access?.requests[0])
+        throw Error("missing pending status");
+      await browser.decide(owner, before.access.requests[0].id, true);
+      await browser.reconcile(w.id);
+      await new DeliveryWorker(store, setup).send(w.id, pendingNotice.id);
+      const refreshed = (await store.read(w.id)).deliveries.find(
+        (d) => d.id === pendingNotice.id,
+      );
+      expect(refreshed?.state).toBe("sent");
+      expect(refreshed?.text).toContain("queued");
+      expect(refreshed?.text).not.toContain("Allow website");
+      expect(refreshed?.buttons).toBeUndefined();
+    });
+    test("an unrecognized progress turn cannot steal the paused Browser even after its lease expires", async () => {
+      const { w, run } = await seed("Finish the original browser goal");
+      const original = new Executor(store, setup, (d, id) =>
+        plugins.runner(
+          d,
+          id,
+          modelSequence([
+            {
+              name: "browser_action",
+              args: { action: "navigate", url: "https://example.com" },
+            },
+          ]),
+        ),
+      );
+      await original.execute(w.id, run.id);
+      const repo = new PostgresBrowserRepository(store.pool, key);
+      const owner = { workspaceId: w.id, actor: "202" };
+      await repo.change(owner, (state) => {
+        if (state.lease) state.lease.expiresAt = 0;
+      });
+      const before = await repo.read(owner);
+      const callCount = calls.length;
+      await input(w, "Could you explain where this task has got to?");
+      const observer = (await store.read(w.id)).runs.find(
+        (r) => r.id !== run.id,
+      );
+      if (!observer) throw Error("missing observer turn");
+      expect(observer.browserObserverOf).toBe(run.id);
+      await new Executor(store, setup, (d, id) =>
+        plugins.runner(
+          d,
+          id,
+          modelSequence([
+            { name: "browser_session", args: { action: "status" } },
+            {
+              name: "browser_action",
+              args: { action: "navigate", url: "https://example.com/restart" },
+            },
+            "The original browser task is waiting for your website permission.",
+          ]),
+        ),
+      ).execute(w.id, observer.id);
+      const current = await store.read(w.id);
+      const completed = current.runs.find((r) => r.id === observer.id);
+      expect(completed?.status).toBe("succeeded");
+      expect(JSON.stringify(completed?.tools)).toContain(
+        "browser_task_in_progress",
+      );
+      expect(JSON.stringify(completed?.tools)).toContain("observerOnly");
+      expect(
+        current.runs.find((r) => r.id === run.id)?.browserWait,
+      ).toBeDefined();
+      expect(await repo.read(owner)).toEqual(before);
+      expect(calls.length).toBe(callCount);
+      expect(current.deliveries.filter((d) => d.browserRequest)).toHaveLength(
+        1,
+      );
+      expect(completed?.browserObserverOf).toBe(run.id);
+      await store.change(w.id, (state) => {
+        const parent = state.runs.find((r) => r.id === run.id);
+        const observing = state.runs.find((r) => r.id === observer.id);
+        if (!parent || !observing) throw Error("missing task pair");
+        parent.status = "succeeded";
+        delete parent.browserWait;
+        observing.status = "running";
+      });
+      expect(
+        await browser.tool(
+          w.id,
+          observer.id,
+          "202",
+          0,
+          completed?.fence ?? 0,
+          "browser_action",
+          {
+            action: "navigate",
+            url: "https://example.com/restart-after-completion",
+          },
+          "late-navigation",
+        ),
+      ).toMatchObject({
+        status: "unavailable",
+        code: "browser_task_in_progress",
+        observerOnly: true,
+        task: { runId: run.id, status: "succeeded" },
+      });
+      expect(calls.length).toBe(callCount);
+    });
+    test("an expired action explains its outcome once and explicit retry resumes the same transcript with a fresh decision", async () => {
+      const { w, run } = await seed(
+        "Submit the original video link and verify its download",
+      );
+      const sequence = modelSequence([
+        {
+          name: "browser_action",
+          args: { action: "navigate", url: "https://example.com" },
+        },
+        {
+          name: "browser_action",
+          args: { action: "click", selector: "#submit", requireApproval: true },
+        },
+        { name: "browser_action", args: { action: "read" } },
+        {
+          name: "browser_action",
+          args: { action: "click", selector: "#submit", requireApproval: true },
+        },
+      ]);
+      const executor = new Executor(store, setup, (d, id) =>
+        plugins.runner(d, id, sequence),
+      );
+      const owner = { workspaceId: w.id, actor: "202" };
+      const repo = new PostgresBrowserRepository(store.pool, key);
+      await executor.execute(w.id, run.id);
+      const site = (await store.read(w.id)).runs[0]?.browserWait;
+      if (!site) throw Error("missing website decision");
+      await browser.decide(owner, site.id, true);
+      await browser.reconcile(w.id);
+      await executor.execute(w.id, run.id);
+      const action = (await store.read(w.id)).runs[0]?.browserWait;
+      if (!action) throw Error("missing action decision");
+      await repo.change(owner, (state) => {
+        const request = state.access?.requests.find((r) => r.id === action.id);
+        if (request) request.expiresAt = Date.now() - 1;
+      });
+      await Promise.all([browser.reconcile(w.id), browser.reconcile(w.id)]);
+      let current = await store.read(w.id);
+      expect(current.runs[0]?.error).toBe("browser_request_expired");
+      const notices = current.deliveries.filter(
+        (d) => d.id === `browser:${action.id}:ended`,
+      );
+      expect(notices).toHaveLength(1);
+      expect(notices[0]?.text).toContain("expired");
+      expect(
+        current.deliveries.find((d) => d.id === `browser:${action.id}`)?.text,
+      ).toContain("click a control on https://example.com");
+      const oldLength = current.runs[0]?.transcript.length ?? 0;
+      await input(w, "try again");
+      current = await store.read(w.id);
+      expect(current.runs).toHaveLength(1);
+      expect(current.runs[0]).toMatchObject({
+        id: run.id,
+        task: run.task,
+        status: "queued",
+      });
+      expect(current.runs[0]?.transcript.length).toBe(oldLength);
+      await new DeliveryWorker(store, setup).send(
+        w.id,
+        `browser:${action.id}:ended`,
+      );
+      expect(
+        (await store.read(w.id)).deliveries.find(
+          (d) => d.id === `browser:${action.id}:ended`,
+        )?.state,
+      ).toBe("cancelled");
+      await executor.execute(w.id, run.id);
+      const resumed = (await store.read(w.id)).runs[0];
+      expect(resumed?.status).toBe("awaiting_approval");
+      expect(resumed?.id).toBe(run.id);
+      expect(resumed?.browserWait?.kind).toBe("action");
+      expect(resumed?.browserWait?.id).not.toBe(action.id);
+      expect(
+        (await repo.read(owner)).access?.requests.find(
+          (r) => r.id === action.id,
+        )?.state,
+      ).toBe("expired");
+      expect(
+        calls.filter(
+          (c) =>
+            c.owner.workspaceId === w.id &&
+            c.operation.command === "action" &&
+            c.operation.input.action === "click",
+        ),
+      ).toHaveLength(0);
+    });
+    test("a progress turn bound at ingress remains read-only if the task finishes before its first tool call", async () => {
+      const { w, run } = await seed("Complete the original Browser goal");
+      await new Executor(store, setup, (d, id) =>
+        plugins.runner(
+          d,
+          id,
+          modelSequence([
+            {
+              name: "browser_action",
+              args: { action: "navigate", url: "https://example.com" },
+            },
+          ]),
+        ),
+      ).execute(w.id, run.id);
+      await input(w, "Please explain how the ongoing task is getting on");
+      const observer = (await store.read(w.id)).runs.find(
+        (r) => r.id !== run.id,
+      );
+      expect(observer?.browserObserverOf).toBe(run.id);
+      if (!observer) throw Error("missing observer");
+      await store.change(w.id, (w) => {
+        const r = w.runs.find((r) => r.id === run.id);
+        if (r) {
+          r.status = "succeeded";
+          delete r.browserWait;
+        }
+      });
+      const count = calls.length;
+      await new Executor(store, setup, (d, id) =>
+        plugins.runner(
+          d,
+          id,
+          modelSequence([
+            {
+              name: "browser_action",
+              args: { action: "navigate", url: "https://example.com/restart" },
+            },
+            "The original task has finished; see its final response.",
+          ]),
+        ),
+      ).execute(w.id, observer.id);
+      expect(calls.length).toBe(count);
+      const current = (await store.read(w.id)).runs.find(
+        (r) => r.id === observer.id,
+      );
+      expect(current?.status).toBe("succeeded");
+      expect(JSON.stringify(current?.tools)).toContain(
+        "browser_task_in_progress",
+      );
+    });
+    test("a denied-origin review retains recovery evidence without an action or another approval", async () => {
+      const { w, run } = await seed("Inspect the requested submit safely");
+      const repo = new PostgresBrowserRepository(store.pool, key);
+      await repo.change({ workspaceId: w.id, actor: "202" }, (state) => {
+        state.access = {
+          grants: [],
+          sites: [
+            {
+              origin: page.origin,
+              preview: false,
+              configuration: 0,
+              epoch: 0,
+              approvedAt: Date.now(),
+            },
+          ],
+          requests: [],
+        };
+      });
+      const service = new BrowserService(store, key, {
+        invoke: async (invocation) =>
+          invocation.operation.command === "review"
+            ? {
+                status: "unavailable",
+                text: "browser_destination_denied",
+                blockedOrigins: ["https://required.example"],
+              }
+            : host.invoke(invocation),
+      });
+      const scoped = new PluginService(
+        store,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        service,
+      );
+      await new Executor(store, setup, (d, id) =>
+        scoped.runner(
+          d,
+          id,
+          modelSequence([
+            {
+              name: "browser_action",
+              args: {
+                action: "click",
+                selector: "#submit",
+                requireApproval: true,
+              },
+            },
+            "The browser reported a destination requiring review before I can proceed.",
+          ]),
+        ),
+      ).execute(w.id, run.id);
+      const current = await store.read(w.id);
+      expect(current.runs[0]?.status).toBe("succeeded");
+      expect(JSON.stringify(current.runs[0]?.tools)).toContain(
+        "https://required.example",
+      );
+      expect(current.runs[0]?.browserWait).toBeUndefined();
+      expect(
+        (await repo.read({ workspaceId: w.id, actor: "202" })).access?.requests,
+      ).toHaveLength(0);
+      expect(
+        calls.filter(
+          (c) =>
+            c.owner.workspaceId === w.id && c.operation.command === "action",
+        ),
+      ).toHaveLength(0);
+    });
     test("ordinary member pauses for site consent, resumes the same run and retains private results encrypted", async () => {
       const { w, run } = await seed();
       const stream = modelSequence([
@@ -271,7 +659,11 @@ const url = process.env.TEST_DATABASE_URL,
       expect(saved?.browserWait?.kind).toBe("site");
       expect(saved?.result).toBeUndefined();
       expect(
-        calls.filter((call) => call.operation.command === "action"),
+        calls.filter(
+          (call) =>
+            call.owner.workspaceId === w.id &&
+            call.operation.command === "action",
+        ),
       ).toHaveLength(0);
       if (!saved?.browserWait) throw Error("missing browser wait");
       await expect(

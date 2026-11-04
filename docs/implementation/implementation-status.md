@@ -1,5 +1,30 @@
 # Implementation evidence
 
+## Browser status and continuation retain the original task (2026-11-04)
+
+Short private status/continue controls use current task state, and concurrent
+Browser observers cannot acquire, navigate, refill or create another approval in
+the same Topic. Explicit continuation of expired Pi work retains the original
+run and transcript with current authorization and fresh decisions. Wait notices
+name their kind, safe website and operation; terminal Browser waits get a durable
+explanation. Status delivery refreshes its facts and obsolete notices are fenced.
+
+Denied-origin recovery preserves the session and unavailable receipts without
+replaying effects. Download status requires a saved nonempty file with a matching
+size; partial/oversized copies are removed. Three incident regressions fail on
+the previous `main`; production-composition, scope and real-DOM/file cases cover
+the correction. See [implementation and release limits](browser.md#paused-task-coordination-and-recovery-2026-11-04)
+and the [incident](../../postmortem/2026-11-04-browser-task-contention.md).
+No VPS change, Telegram message or historical task replay was performed.
+
+Validation passes lint, strict TypeScript, build, all 1,419 deterministic tests
+across 151 files, the 16-case Node startup contract with zero external startup
+calls, and 17 focused browser scenarios including desktop/mobile states and
+native recovery/download cases. Code Truth catalog regeneration and its service
+smoke pass without a catalog diff. No dependency or SQL migration was added.
+Native Telegram rendering, the exact packaged headed-host smoke and coordinated
+VPS deployment remain release checks.
+
 ## Browser approvals confirm continuation in Telegram (2026-11-04)
 
 Successful Browser approvals and secure-input completion queue one short Telegram

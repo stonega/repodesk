@@ -34,6 +34,21 @@ external effect, including fields that save automatically, with
 Sending/submitting through buttons or Enter and coordinate clicks still wait for
 a reviewed page-bound decision. An unknown result must never be replayed.
 
+Ask “what is the progress” while the task is waiting. Expect the website/action
+or private-input explanation in the same Topic, with no second browser controller
+or new approval. “Continue” during that wait does not approve it. If the request
+expired, “try again” resumes the original Pi run and inspects its saved outcome
+before requesting a fresh decision. An unrelated question still gets its own
+conversation turn, whose Browser tools can only observe that active goal.
+
+For a download, inspect `browser_session({action:"status"})`. A `downloads` entry
+with a private artifact ID and nonzero `size` confirms a saved file. Report that
+reference for retrieval on Browser; do not invent a public URL. An empty list or
+a fixed download failure code is not success. The per-file limit remains 25 MiB.
+After a denied/uncertain submit, inspect the current page and tabs, identify the
+destination actually required, and obtain current page-bound approval before
+another submission. Do not reopen/refill/submit merely to answer a status query.
+
 ## Codex
 
 > Implement the requested change in the selected repository. Use Browser to

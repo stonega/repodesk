@@ -47,6 +47,19 @@ continue, the bot sends **“Browser request completed. I’m continuing your ta
 in the original private conversation and Topic. You do not need to send “continue”.
 If another approval or input is needed, the bot shows the next Browser request.
 
+Short questions such as “what is the progress”, “status” or “进度如何” report the
+existing Browser task without opening another website or submitting the form.
+“Continue” keeps the original goal and context. While a decision or private input
+is pending, it explains that wait; it does not approve the request. If a Pi Browser
+request expired, “continue” or “try again” resumes that same task with fresh review
+where needed. Denied, cancelled or uncertain work is not automatically restarted.
+Use another Topic for an independent browser goal while the first is waiting.
+
+The bot distinguishes website permission, action approval, private input and
+control handoff. Expired Pi requests get an explanation. A download is confirmed
+only when Browser lists a saved nonempty file; a successful click or a page's
+download banner is not enough. Get the verified file from the private Browser page.
+
 **Take control** explicitly interrupts the current controller and cancels any
 outstanding input request. While you have control, open a website, view its current
 screen, click a position, use Tab/Enter or scroll. To type privately, focus the
