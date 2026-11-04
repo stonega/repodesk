@@ -15,8 +15,8 @@ jobs:
   quality:
     name: Quality and database tests
     runs-on: [self-hosted, linux, x64]
-    # Database fixtures share the VPS with browser tests and image builds.
-    timeout-minutes: 20
+    # The full database suite takes about 15 minutes on the shared VPS runners.
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:17-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
@@ -49,7 +49,7 @@ jobs:
         run: |
           node -e 'console.log(JSON.stringify({code:"ci_typecheck_memory",node:process.version,constrainedBytes:process.constrainedMemory(),availableBytes:process.availableMemory()}))'
           bun run typecheck
-      - run: bun test --timeout 15000 ./tests
+      - run: bun test --timeout 30000 ./tests
       - run: bun run build
       - run: bun run test:runtime
 

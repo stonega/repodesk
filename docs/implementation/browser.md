@@ -54,6 +54,9 @@ only the latest verification run for that branch remains active.
 The CI compiler uses a tested 1536 MiB Node heap and reports its runner memory
 constraints. The complete strict check passes with that bound on Node 24;
 reducing the bound further exhausts the compiler heap.
+The shared-runner database suite has a 30-minute job budget and a 30-second test
+deadline. Complete Browser and Review Bot journeys exceeded the previous
+15-second deadline in CI; all assertions and permission/revocation cases remain.
 
 These changes are implemented but not deployed. Native Telegram rendering, the packaged headed-host
 release smoke and a coordinated app/host VPS rollout remain release checks. No
