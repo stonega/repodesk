@@ -28,7 +28,7 @@ import { DeliveryWorker } from "../../src/jobs/delivery.ts";
 import { Executor } from "../../src/jobs/execute.ts";
 import { encrypt } from "../../src/setup/credentials.ts";
 import { SetupService } from "../../src/setup/service.ts";
-import type { Telegram } from "../../src/telegram/client.ts";
+import { type Telegram, TelegramError } from "../../src/telegram/client.ts";
 import { Ingress } from "../../src/telegram/webhook.ts";
 import { createRun } from "../../src/workspaces/service.ts";
 import { grantGitHubAccess, workspace } from "../fixtures.ts";
@@ -342,6 +342,81 @@ const url = process.env.TEST_DATABASE_URL,
       expect(refreshed?.text).not.toContain("Allow website");
       expect(refreshed?.buttons).toBeUndefined();
     });
+    test("requested Browser status survives repeated safe Telegram retries and follows the latest wait", async () => {
+      const { w, run } = await seed(
+        "Keep working on the original Browser goal",
+      );
+      const sequence = modelSequence([
+        {
+          name: "browser_action",
+          args: { action: "navigate", url: "https://example.com" },
+        },
+        {
+          name: "browser_action",
+          args: { action: "click", selector: "#submit", requireApproval: true },
+        },
+      ]);
+      const executor = new Executor(store, setup, (d, id) =>
+        plugins.runner(d, id, sequence),
+      );
+      await executor.execute(w.id, run.id);
+      const site = (await store.read(w.id)).runs[0]?.browserWait;
+      if (!site) throw Error("missing initial website decision");
+      await input(w, "progress");
+      const notice = (await store.read(w.id)).deliveries.find(
+        (d) => d.browserTaskState?.refresh,
+      );
+      if (!notice) throw Error("missing requested status");
+      const attempts: Record<string, unknown>[] = [];
+      const limited: Telegram = {
+        async call<T>(method: string, params = {}) {
+          expect(method).toBe("sendMessage");
+          attempts.push(structuredClone(params));
+          if (attempts.length < 3)
+            throw new TelegramError("telegram_rate_limited", "retry", 1);
+          return telegram.call<T>(method, params);
+        },
+      };
+      const worker = new DeliveryWorker(
+        store,
+        new SetupService(store, key, origin, () => limited),
+      );
+      const retry = async () => {
+        await store.change(w.id, (current) => {
+          const d = current.deliveries.find((d) => d.id === notice.id);
+          if (d) d.nextAt = new Date(0).toISOString();
+        });
+        await worker.send(w.id, notice.id);
+      };
+      await worker.send(w.id, notice.id);
+      expect(attempts[0]?.text).toContain("Allow website");
+      expect(
+        (await store.read(w.id)).deliveries.find((d) => d.id === notice.id)
+          ?.state,
+      ).toBe("pending");
+      await browser.decide({ workspaceId: w.id, actor: "202" }, site.id, true);
+      await browser.reconcile(w.id);
+      await retry();
+      expect(attempts).toHaveLength(2);
+      expect(attempts[1]?.text).toContain("queued");
+      expect(attempts[1]?.reply_markup).toBeUndefined();
+      await executor.execute(w.id, run.id);
+      expect((await store.read(w.id)).runs[0]?.browserWait?.kind).toBe(
+        "action",
+      );
+      await retry();
+      expect(attempts).toHaveLength(3);
+      expect(attempts[2]?.text).toContain("click a control");
+      expect(attempts[2]?.reply_markup).toMatchObject({
+        inline_keyboard: [[{ text: "Open Browser" }]],
+      });
+      const sent = (await store.read(w.id)).deliveries.find(
+        (d) => d.id === notice.id,
+      );
+      expect(sent).toMatchObject({ state: "sent", attempts: 3, remoteId: 123 });
+      await worker.send(w.id, notice.id);
+      expect(attempts).toHaveLength(3);
+    });
     test("an unrecognized progress turn cannot steal the paused Browser even after its lease expires", async () => {
       const { w, run } = await seed("Finish the original browser goal");
       const original = new Executor(store, setup, (d, id) =>
@@ -500,8 +575,18 @@ const url = process.env.TEST_DATABASE_URL,
       const resumed = (await store.read(w.id)).runs[0];
       expect(resumed?.status).toBe("awaiting_approval");
       expect(resumed?.id).toBe(run.id);
+      expect(resumed?.task).toBe(run.task);
+      expect(
+        resumed?.sources.some((source) => source.text === "try again"),
+      ).toBe(true);
       expect(resumed?.browserWait?.kind).toBe("action");
       expect(resumed?.browserWait?.id).not.toBe(action.id);
+      const page = await (await personal(w, "202", "view")).json();
+      expect(
+        page.requests.find(
+          (request: { id: string }) => request.id === resumed?.browserWait?.id,
+        )?.task,
+      ).toBe(run.task);
       expect(
         (await repo.read(owner)).access?.requests.find(
           (r) => r.id === action.id,

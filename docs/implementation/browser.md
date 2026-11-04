@@ -18,6 +18,9 @@ safe exact origin and operation description. Pi expiration/denial/cancellation
 gets a deduplicated outcome notice. Requested status is refreshed before delivery;
 outdated terminal notices are suppressed after continuation. Current membership,
 source, Browser configuration, profile epoch, bot and actor/Topic guards remain.
+Requested status keeps refreshing its text and Browser link across confirmed-safe
+transport retries. Continuation retains the attributed human input and preserves
+the current goal through live-input checkpoints, including earlier queued edits.
 
 Approved controls can report a denied destination without closing the browser.
 The saved outcome keeps its unavailable status and bounded origins on replay;
@@ -38,7 +41,7 @@ observer reconstruction, stale notices, unavailable receipts and partial files.
 Real-DOM tests exercise an approved denied-origin redirect and a real local HTTP
 download through file verification. See the [incident](../../postmortem/2026-11-04-browser-task-contention.md).
 Validation passes lint, strict TypeScript, build, the 16-case offline Node startup
-contract with zero external startup calls, and 1,419 deterministic tests across
+contract with zero external startup calls, and 1,421 deterministic tests across
 151 files with disposable PostgreSQL. All 17 focused browser scenarios pass:
 five native interaction/file cases and 12 desktop/mobile Browser UI cases.
 Code Truth catalog regeneration and the service smoke also pass; the bundled

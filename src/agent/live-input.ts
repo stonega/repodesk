@@ -62,7 +62,7 @@ export function checkpointLiveInput(
   );
   if (!run.sources.some((s) => s.id === input.source.id))
     run.sources.push(structuredClone(input.source));
-  run.task = input.pending.task;
+  if (!input.pending.preserveTask) run.task = input.pending.task;
   run.replyTo = input.pending.messageId;
   run.coverage = `${run.sources.length} retained messages in this conversation. Other conversations are searched only when needed. Earlier messages may have expired.`;
   run.pendingInputs?.shift();

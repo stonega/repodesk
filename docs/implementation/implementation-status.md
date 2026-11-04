@@ -8,6 +8,8 @@ the same Topic. Explicit continuation of expired Pi work retains the original
 run and transcript with current authorization and fresh decisions. Wait notices
 name their kind, safe website and operation; terminal Browser waits get a durable
 explanation. Status delivery refreshes its facts and obsolete notices are fenced.
+Confirmed-safe transport retries refresh both status text and the Browser link;
+continuation checkpoints retain the current goal and the attributed human input.
 
 Denied-origin recovery preserves the session and unavailable receipts without
 replaying effects. Download status requires a saved nonempty file with a matching
@@ -17,7 +19,7 @@ the correction. See [implementation and release limits](browser.md#paused-task-c
 and the [incident](../../postmortem/2026-11-04-browser-task-contention.md).
 No VPS change, Telegram message or historical task replay was performed.
 
-Validation passes lint, strict TypeScript, build, all 1,419 deterministic tests
+Validation passes lint, strict TypeScript, build, all 1,421 deterministic tests
 across 151 files, the 16-case Node startup contract with zero external startup
 calls, and 17 focused browser scenarios including desktop/mobile states and
 native recovery/download cases. Code Truth catalog regeneration and its service

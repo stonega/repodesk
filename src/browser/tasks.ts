@@ -82,6 +82,23 @@ export function browserWaitText(wait: NonNullable<Run["browserWait"]>) {
   return `Browser needs your approval to ${operation}${destination}. Open Browser to review and approve this action.`;
 }
 
+export function browserTaskButtons(
+  w: Workspace,
+  run: Run,
+  bot: Deployment["bot"],
+) {
+  return bot?.username && run.browserWait
+    ? [
+        [
+          {
+            text: "Open Browser",
+            url: `https://t.me/${bot.username}?startapp=browser_${w.id.replaceAll("-", "")}`,
+          },
+        ],
+      ]
+    : undefined;
+}
+
 export function browserTaskSnapshot(run: Run) {
   return {
     runId: run.id,
@@ -260,6 +277,7 @@ export function browserTaskControl(
         sourceId,
         task: cmd.args,
         messageId: msg.message_id,
+        preserveTask: true,
       });
     run.status = "queued";
     delete run.error;
@@ -270,17 +288,7 @@ export function browserTaskControl(
     id: `event:${update.update_id}:browser-status`,
     runId: run.id,
     topicId: run.topicId,
-    buttons:
-      deployment.bot.username && run.browserWait
-        ? [
-            [
-              {
-                text: "Open Browser",
-                url: `https://t.me/${deployment.bot.username}?startapp=browser_${w.id.replaceAll("-", "")}`,
-              },
-            ],
-          ]
-        : undefined,
+    buttons: browserTaskButtons(w, run, deployment.bot),
   });
   const delivery = w.deliveries.find((d) => d.id === id);
   if (delivery)
