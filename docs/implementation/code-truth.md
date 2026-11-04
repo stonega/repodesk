@@ -52,6 +52,10 @@ bun install --frozen-lockfile
 bun install --cwd services/code-truth --frozen-lockfile
 ```
 
+The CI quality job installs both lockfiles before lint, type checks and database
+tests. Integration tests import the local service, whose dependencies and Zod
+version are separate from the application's.
+
 Create a separate service token once (do not overwrite an existing token):
 
 ```sh

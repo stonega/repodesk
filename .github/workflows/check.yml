@@ -36,6 +36,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends python3
       - run: bun install --frozen-lockfile
+      - name: Install Code Truth integration test dependencies
+        run: bun install --cwd services/code-truth --frozen-lockfile
       - run: bun run check
       - run: bun run typecheck
       - run: bun test --timeout 15000 ./tests
