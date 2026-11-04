@@ -419,7 +419,13 @@ export interface Run {
   threadNotice?: string;
   replyAnchor?: number;
   /** Received during generation; removed atomically with its user checkpoint. */
-  pendingInputs?: { sourceId: string; task: string; messageId: number }[];
+  pendingInputs?: {
+    sourceId: string;
+    task: string;
+    messageId: number;
+    /** Application-owned continuation inputs keep the current goal. */
+    preserveTask?: true;
+  }[];
   followupClosed?: boolean;
   followup?: {
     kind?: "forward";

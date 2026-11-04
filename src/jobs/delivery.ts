@@ -2,7 +2,7 @@ import {
   browserDeliveryAllowed,
   browserReadAllowed,
 } from "../browser/privacy.ts";
-import { browserTaskStatus } from "../browser/tasks.ts";
+import { browserTaskButtons, browserTaskStatus } from "../browser/tasks.ts";
 import { taskGet } from "../coding/task-store.ts";
 import { checkDevelopment } from "../coding/tasks.ts";
 import type { Sql } from "../db/pool.ts";
@@ -206,12 +206,13 @@ export class DeliveryWorker {
         if (run) {
           d.text = browserTaskStatus(run);
           d.browserTaskState = {
+            refresh: true,
             status: run.status,
             fence: run.fence,
             requestId: run.browserWait?.id,
             error: run.error,
           };
-          if (!run.browserWait) delete d.buttons;
+          d.buttons = browserTaskButtons(w, run, deployment.bot);
         }
       }
       if (
