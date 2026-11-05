@@ -86,12 +86,14 @@ async function call(owner, controller, generation, operation) {
           try {
             const result = JSON.parse(raw);
             if (res.statusCode !== 200) {
-              console.error(JSON.stringify({
-                probeCommand: operation.command,
-                probeAction: operation.input?.action,
-                probeSelector: operation.input?.selector,
-                code: result.error,
-              }));
+              console.error(
+                JSON.stringify({
+                  probeCommand: operation.command,
+                  probeAction: operation.input?.action,
+                  probeSelector: operation.input?.selector,
+                  code: result.error,
+                }),
+              );
               reject(Error(result.error ?? "browser_probe_failed"));
             } else resolve(result);
           } catch {
@@ -174,6 +176,9 @@ for (const actor of ["900000000000001", "900000000000002"]) {
       await call(owner, controller, 1, { command: "action", input: next });
       assert.equal(submissions, 0);
       assert.equal(partitionedCookieObserved, true);
+      // The synthetic download needs the same explicit interaction grant as a
+      // member-approved download. The earlier submission checks run without it.
+      policy.interact = true;
       await call(owner, controller, 1, {
         command: "action",
         input: { action: "click", selector: "#download" },
@@ -195,6 +200,7 @@ for (const actor of ["900000000000001", "900000000000002"]) {
         Buffer.from(artifact.artifact?.data ?? "", "base64").toString(),
         "verified-private-download",
       );
+      policy.interact = false;
       const redirected = await call(owner, controller, 1, {
         command: "action",
         input: { action: "navigate", url: `${origin}/blocked-redirect` },
