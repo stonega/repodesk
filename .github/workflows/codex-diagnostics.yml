@@ -29,5 +29,5 @@ jobs:
           docker cp "$ssh_dir/known_hosts" "$client:/tmp/known_hosts"
           docker start "$client"
           ssh_vps() { docker exec -i "$client" ssh -T -i /tmp/key -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts -o ConnectTimeout=15 root@169.58.58.71 "$@"; }
-          ssh_vps 'cat /opt/repodesk/releases/41958024518-1/stage; df -h /opt/repodesk; free -m; ps -eo comm,pcpu,pmem --sort=-pcpu | head -12; tail -8 /opt/repodesk/releases/41958024518-1/build-app.log'
+          ssh_vps 'cat /opt/repodesk/releases/41958024518-1/stage; docker stats --no-stream --format "{{.Name}} CPU={{.CPUPerc}} MEM={{.MemUsage}} IO={{.BlockIO}}" repodesk-app-1 repodesk-worker-1; ps -eo pid,ppid,comm,stat,wchan:32 --sort=-pcpu | head -18; vmstat 1 3; tail -12 /opt/repodesk/releases/41958024518-1/build-app.log'
 
