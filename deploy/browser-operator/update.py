@@ -208,6 +208,7 @@ try:
     assert native['nativeRoutineActions'] and native['externalSubmissionsGated']
     assert native['partitionedCookieCheckpoint']
     assert native['httpsRedirectConsent']
+    assert native['verifiedPrivateDownload']
     native.update(socketDirectoryPreservedOnRestart=True,
                   chromeVersion=(bundle / 'chrome-version.log').read_text().strip(),
                   nodeVersion=(bundle / 'host-node-version.log').read_text().strip(),

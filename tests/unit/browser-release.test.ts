@@ -1,11 +1,74 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const modulePath = fileURLToPath(
   new URL("../../deploy/browser-operator/update_runtime.py", import.meta.url),
 );
 const load = `import importlib.util,json,sys,tempfile\nfrom pathlib import Path\nspec=importlib.util.spec_from_file_location('update_runtime',sys.argv[1]);runtime=importlib.util.module_from_spec(spec);spec.loader.exec_module(runtime)\n`;
+
+test("Browser update packaging rejects source that omits the deployed production commit", () => {
+  const root = mkdtempSync(join(tmpdir(), "repodesk-release-ancestry-"));
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+  const prepare = fileURLToPath(
+    new URL(
+      "../../deploy/browser-operator/prepare-update-payload.mjs",
+      import.meta.url,
+    ),
+  );
+  try {
+    git("init", "-q");
+    git("config", "user.name", "Fixture");
+    git("config", "user.email", "fixture@example.invalid");
+    for (const dir of [
+      "services/code-truth",
+      "migrations",
+      "deploy/browser-operator",
+      "payload",
+    ])
+      mkdirSync(join(root, dir), { recursive: true });
+    writeFileSync(join(root, "package.json"), '{"version":"0.1.46"}');
+    writeFileSync(join(root, "services/code-truth/fixture"), "service");
+    writeFileSync(join(root, "migrations/fixture"), "schema");
+    git("add", ".");
+    git("commit", "-qm", "base");
+    const base = git("rev-parse", "HEAD");
+    writeFileSync(join(root, "production-fix"), "retained");
+    git("add", ".");
+    git("commit", "-qm", "deployed fix");
+    const production = git("rev-parse", "HEAD");
+    const baseline = {
+      previous_source_commit: production,
+      previous_code_truth_tree: git("rev-parse", "HEAD:services/code-truth"),
+      previous_migration_tree: git("rev-parse", "HEAD:migrations"),
+    };
+    git("checkout", "-q", "--detach", base);
+    writeFileSync(
+      join(root, "deploy/browser-operator/update-baseline.json"),
+      JSON.stringify(baseline),
+    );
+    writeFileSync(join(root, "payload/source.tar.gz"), "fixture");
+    const run = (commit: string) =>
+      execFileSync(process.execPath, [prepare, join(root, "payload")], {
+        cwd: root,
+        env: { ...process.env, RELEASE_ID: "123-1", GITHUB_SHA: commit },
+        stdio: "pipe",
+      });
+    expect(() => run(base)).toThrow(
+      "update_source_does_not_preserve_production",
+    );
+    git("checkout", "-q", "--detach", production);
+    expect(JSON.parse(run(production).toString()).source_commit).toBe(
+      production,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("Browser release checkpoint parses application JSON separately from Compose progress", () => {
   const script = `${load}

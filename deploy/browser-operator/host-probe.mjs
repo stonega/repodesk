@@ -10,6 +10,14 @@ let submissions = 0;
 let partitionedCookieObserved = false;
 const fixture = routine
   ? createServer((req, res) => {
+      if (req.url === "/download") {
+        res.writeHead(200, {
+          "content-type": "application/octet-stream",
+          "content-disposition": 'attachment; filename="probe.txt"',
+        });
+        res.end("verified-private-download");
+        return;
+      }
       if (req.url === "/blocked-redirect") {
         res.writeHead(302, { location: "https://unapproved.example/blocked" });
         res.end();
@@ -25,7 +33,7 @@ const fixture = routine
       );
       res.setHeader("content-type", "text/html");
       res.end(
-        '<h1>Routine browser probe</h1><form action="/submit" method="POST"><input id="ordinary" name="query"><button id="submit" type="submit">Submit</button></form><a id="next" href="/next">Next</a>',
+        '<h1>Routine browser probe</h1><form action="/submit" method="POST"><input id="ordinary" name="query"><button id="submit" type="submit">Submit</button></form><a id="next" href="/next">Next</a><a id="download" href="/download">Download fixture</a>',
       );
     })
   : undefined;
@@ -160,6 +168,27 @@ for (const actor of ["900000000000001", "900000000000002"]) {
       await call(owner, controller, 1, { command: "action", input: next });
       assert.equal(submissions, 0);
       assert.equal(partitionedCookieObserved, true);
+      await call(owner, controller, 1, {
+        command: "action",
+        input: { action: "click", selector: "#download" },
+      });
+      let downloads = [];
+      for (let attempt = 0; attempt < 100; attempt++) {
+        downloads =
+          (await call(owner, controller, 1, { command: "status" })).downloads ??
+          [];
+        if (downloads.length) break;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      assert.equal(downloads.length, 1);
+      const artifact = await call(owner, controller, 1, {
+        command: "artifact",
+        id: downloads[0].id,
+      });
+      assert.equal(
+        Buffer.from(artifact.artifact?.data ?? "", "base64").toString(),
+        "verified-private-download",
+      );
       const redirected = await call(owner, controller, 1, {
         command: "action",
         input: { action: "navigate", url: `${origin}/blocked-redirect` },
@@ -199,6 +228,7 @@ console.log(
           externalSubmissionsGated: true,
           partitionedCookieCheckpoint: true,
           httpsRedirectConsent: true,
+          verifiedPrivateDownload: true,
         }
       : {}),
   }),

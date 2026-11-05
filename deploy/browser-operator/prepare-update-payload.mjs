@@ -14,6 +14,11 @@ const digest = (path) =>
 const baseline = JSON.parse(
   readFileSync("deploy/browser-operator/update-baseline.json", "utf8"),
 );
+try {
+  git("merge-base", "--is-ancestor", baseline.previous_source_commit, commit);
+} catch {
+  throw Error("update_source_does_not_preserve_production");
+}
 const meta = {
   ...baseline,
   release_id: release,

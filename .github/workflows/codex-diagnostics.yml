@@ -26,6 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@v4
         if: ${{ inputs.mode == 'deploy' || inputs.mode == 'resume' || inputs.mode == 'finish' || inputs.mode == 'source-update' }}
