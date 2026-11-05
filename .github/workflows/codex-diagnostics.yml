@@ -131,7 +131,7 @@ jobs:
             docker cp "$RUNNER_TEMP/$name" "$DEPLOY_CLIENT:/tmp/$name"
             docker exec "$DEPLOY_CLIENT" scp -i /tmp/key -P 22 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts "/tmp/$name" "root@169.58.58.71:/opt/repodesk/releases/$STATUS_RELEASE/$name"
           done
-          ssh_vps "systemd-run --unit=repodesk-browser-resume-$STATUS_RELEASE-${GITHUB_SHA:0:8} --collect --property=Type=exec --property=RuntimeMaxSec=3600 --property=TimeoutStopSec=180 --property=WorkingDirectory=/opt/repodesk/releases/$STATUS_RELEASE /bin/bash /opt/repodesk/releases/$STATUS_RELEASE/resume-update.sh"
+          ssh_vps "if test -f /opt/repodesk/releases/$STATUS_RELEASE/resume.exit; then mv /opt/repodesk/releases/$STATUS_RELEASE/resume.exit /opt/repodesk/releases/$STATUS_RELEASE/resume.exit.before-$GITHUB_RUN_ID; fi; systemd-run --unit=repodesk-browser-resume-$STATUS_RELEASE-${GITHUB_SHA:0:8} --collect --property=Type=exec --property=RuntimeMaxSec=3600 --property=TimeoutStopSec=180 --property=WorkingDirectory=/opt/repodesk/releases/$STATUS_RELEASE /bin/bash /opt/repodesk/releases/$STATUS_RELEASE/resume-update.sh"
           printf 'RELEASE_ID=%s\nDEPLOY_RESULT_FILE=resume.exit\n' "$STATUS_RELEASE" >> "$GITHUB_ENV"
       - name: Package and start an update of an installed Browser deployment
         if: ${{ inputs.mode == 'source-update' }}

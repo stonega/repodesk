@@ -132,3 +132,20 @@ with tempfile.TemporaryDirectory() as root:
     }).trim(),
   ).toBe("original_backup_retained");
 });
+
+test("Browser native verification parses its receipt while retaining diagnostic stderr", () => {
+  const script = `${load}
+with tempfile.TemporaryDirectory() as root:
+ log=Path(root)/'native.stderr'
+ code="import json,sys;print('browser_control_expired',file=sys.stderr);print(json.dumps({'headed':True,'verifiedPrivateDownload':True}))"
+ result=runtime.command_json([sys.executable,'-c',code],log)
+ assert result=={'headed':True,'verifiedPrivateDownload':True}
+ assert 'browser_control_expired' in log.read_text()
+ print('native_receipt_preserved')
+`;
+  expect(
+    execFileSync("python3", ["-c", script, modulePath], {
+      encoding: "utf8",
+    }).trim(),
+  ).toBe("native_receipt_preserved");
+});

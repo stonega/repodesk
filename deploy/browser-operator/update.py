@@ -187,13 +187,12 @@ try:
     assert Path('/run/repodesk-browser').stat().st_ino == socket_inode
     stage('headed_browser_application_uid_probe')
     os.chmod(bundle / 'host-probe.mjs', 0o644)
-    run(['docker', 'run', '--rm', '--network', 'host', '--group-add', '1000',
+    native = command_json(['docker', 'run', '--rm', '--network', 'host', '--group-add', '1000',
          '--env', 'BROWSER_PROBE_ROUTINE=true',
          '--volume', '/run/repodesk-browser:/run/repodesk-browser:ro',
          '--volume', str(root / 'secrets/browser-token') + ':/run/secrets/browser_token:ro',
          '--volume', str(bundle / 'host-probe.mjs') + ':/app/host-probe.mjs:ro',
-         '--entrypoint', 'node', images['app']['id'], '/app/host-probe.mjs'], 'native-host-verification.json')
-    native = json.loads((bundle / 'native-host-verification.json').read_text())
+         '--entrypoint', 'node', images['app']['id'], '/app/host-probe.mjs'], bundle / 'native-host-verification.stderr')
     assert native['headed'] and native['cleaned'] and native['applicationUid'] == 1000
     assert native['nativeRoutineActions'] and native['externalSubmissionsGated']
     assert native['partitionedCookieCheckpoint']
