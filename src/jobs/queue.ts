@@ -7,6 +7,7 @@ import type { CodingService } from "../coding/service.ts";
 import { pruneDevelopment } from "../coding/tasks.ts";
 import { transaction } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
+import { Fault } from "../domain.ts";
 import type { GitHubIssues } from "../github/issues.ts";
 import type { GitHubPullRequests } from "../github/pull-requests.ts";
 import type { GitHubUsers } from "../github/users.ts";
@@ -102,6 +103,25 @@ export async function startWorker(
     },
   );
   let busy = false;
+  let heartbeatBusy: Promise<void> | undefined;
+  const heartbeatTick = () => {
+    if (shutdown.signal.aborted) return Promise.resolve();
+    heartbeatBusy ??= store.pool
+      .query(
+        "INSERT INTO worker_heartbeats(id,at) VALUES($1,now()) ON CONFLICT(id) DO UPDATE SET at=now()",
+        [id],
+      )
+      .then(() => {})
+      .catch(() => {
+        store.log.write("worker_maintenance_failed", {
+          error: new Fault("worker_heartbeat_failed", 503),
+        });
+      })
+      .finally(() => {
+        heartbeatBusy = undefined;
+      });
+    return heartbeatBusy;
+  };
   let lastLogCleanup = 0;
   const maintain = async () => {
     if (busy) return;
@@ -210,10 +230,7 @@ export async function startWorker(
       await deliverAccessHelp(store, setup);
       await recoverJobs(store, boss);
       await dispatch(store, boss);
-      await store.pool.query(
-        "INSERT INTO worker_heartbeats(id,at) VALUES($1,now()) ON CONFLICT(id) DO UPDATE SET at=now()",
-        [id],
-      );
+      await heartbeatTick();
       await store.pool.query(
         "DELETE FROM github_flows WHERE expires_at<=now()",
       );
@@ -233,6 +250,8 @@ export async function startWorker(
   };
   await maintain();
   await runTick();
+  // Slow maintenance and upstream delivery do not imply that this process died.
+  const heartbeatTimer = setInterval(() => void heartbeatTick(), 5000);
   const runTimer = setInterval(() => void runTick(), 1000);
   const polling =
     setup.telegramTransport === "polling"
@@ -327,6 +346,7 @@ export async function startWorker(
   memoryTick();
   const memoryTimer = setInterval(memoryTick, 60000);
   return async () => {
+    clearInterval(heartbeatTimer);
     clearInterval(runTimer);
     clearInterval(memoryTimer);
     clearInterval(timer);
@@ -341,6 +361,7 @@ export async function startWorker(
     await Promise.all([codingBusy, githubBusy, menuBusy, memoryBusy]);
     await browser?.drain();
     while (busy) await new Promise((resolve) => setTimeout(resolve, 25));
+    await heartbeatBusy;
     await store.pool.query("DELETE FROM worker_heartbeats WHERE id=$1", [id]);
   };
 }
