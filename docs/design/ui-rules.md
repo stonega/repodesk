@@ -43,6 +43,26 @@ when implementing or reviewing a change.
 
 ## Recorded preferences
 
+### Browser approvals acknowledge continuation in Telegram
+
+- **Preference:** After a Browser approval or private-input request succeeds and
+  its originating task can continue, send a short Telegram message confirming
+  that work is continuing.
+- **Scope:** Private Browser requests from Pi, Codex and authorized plugins. Keep
+  the message in the requesting user's original chat and Topic.
+- **Source:** 2026-11-04 — the user showed repeated Browser approval prompts and
+  requested a message after approval so they know work will continue.
+- **Acceptance:** Send one confirmation per successfully resumed request, including
+  after retries or service reconstruction. Do not expose submitted values or page
+  content. Suppress delayed confirmations after completion, cancellation,
+  revocation or another wait. Verify the Mini App decision through durable task
+  continuation and Telegram delivery with deterministic fixtures.
+- **Exceptions:** Denied, expired, cancelled, failed and uncertain operations do
+  not claim successful continuation. An approval that leads to another required
+  input keeps its waiting prompt. Telegram transport uncertainty retains existing
+  delivery recovery behavior. Native desktop/mobile rendering remains a live
+  acceptance check; this preference adds no web-page layout requirement.
+
 ### Browser remembers websites and stays in the current Pi task
 
 - **Preference:** Ask permission to access a website and remember the decision

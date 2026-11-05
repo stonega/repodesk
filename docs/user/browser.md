@@ -42,6 +42,11 @@ unrecognized controls also require a decision. Fields that save automatically
 must be treated as an external change. Pi pauses for that decision or private
 input, then continues the same task with its existing context.
 
+After an approved request or private-input submission succeeds and your task can
+continue, the bot sends **“Browser request completed. I’m continuing your task.”**
+in the original private conversation and Topic. You do not need to send “continue”.
+If another approval or input is needed, the bot shows the next Browser request.
+
 **Take control** explicitly interrupts the current controller and cancels any
 outstanding input request. While you have control, open a website, view its current
 screen, click a position, use Tab/Enter or scroll. To type privately, focus the

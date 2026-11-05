@@ -1,5 +1,22 @@
 # Implementation evidence
 
+## Browser approvals confirm continuation in Telegram (2026-11-04)
+
+Successful Browser approvals and secure-input completion queue one short Telegram
+confirmation in the originating user's chat/Topic when the task can continue.
+Pi, authorized file plugins and Codex retain their existing task and context.
+The confirmation is atomic with the saved continuation and deduplicated by request;
+delivery rechecks authorization and suppresses stale notices after another wait,
+completion or cancellation. Failed/uncertain Browser operations do not claim
+success. See [Browser implementation](browser.md#telegram-continuation-confirmation-2026-11-04).
+
+Lint, strict TypeScript, build, the Node runtime contract and all 1,392 deterministic
+tests across 149 files pass with disposable PostgreSQL and a 15-second deadline.
+The 21 focused Browser integration tests pass. No dependency or SQL migration was
+added. Production deployment and native Telegram desktop/mobile rendering remain
+unverified for this change.
+
+
 ## Ordinary assistant runs have no total execution deadline (2026-11-02)
 
 The 300-second executor deadline and `RUN_TIMEOUT_SECONDS` setting are removed;

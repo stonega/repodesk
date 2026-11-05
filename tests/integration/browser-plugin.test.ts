@@ -281,15 +281,54 @@ const url = process.env.TEST_DATABASE_URL,
           true,
         ),
       ).rejects.toThrow("browser_request_unavailable");
-      await browser.decide(
-        { workspaceId: w.id, actor: "202" },
-        saved.browserWait.id,
-        true,
-      );
+      const requestId = saved.browserWait.id;
+      expect(
+        (await store.read(w.id)).deliveries.filter((d) => d.browserResume),
+      ).toHaveLength(0);
+      expect(
+        (
+          await personal(w, "202", "decide", {
+            id: requestId,
+            approve: true,
+          })
+        ).status,
+      ).toBe(200);
+      expect(
+        (await store.read(w.id)).deliveries.filter((d) => d.browserResume),
+      ).toHaveLength(0);
       await Promise.all([browser.reconcile(w.id), browser.reconcile(w.id)]);
       saved = (await store.read(w.id)).runs.find((item) => item.id === run.id);
       expect(saved?.status).toBe("queued");
       expect(saved?.browserWait).toBeUndefined();
+      await new BrowserService(store, key, host).reconcile(w.id);
+      const notifications = (await store.read(w.id)).deliveries.filter(
+        (d) => d.browserResume,
+      );
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0]).toMatchObject({
+        id: `browser:${requestId}:resumed`,
+        actor: "202",
+        chatId: "202",
+        topicId: 7,
+        runId: run.id,
+        browserRead: { owner: "202", botId: "999" },
+        browserResume: { id: requestId },
+      });
+      const worker = new DeliveryWorker(store, setup);
+      const beforeNotice = telegramCalls.length;
+      await worker.send(w.id, `browser:${requestId}`);
+      await worker.send(w.id, `browser:${requestId}:resumed`);
+      await worker.send(w.id, `browser:${requestId}:resumed`);
+      expect(telegramCalls.slice(beforeNotice)).toEqual([
+        {
+          method: "sendMessage",
+          params: expect.objectContaining({
+            chat_id: "202",
+            message_thread_id: 7,
+            text: "Browser request completed. I’m continuing your task.",
+          }),
+        },
+      ]);
       await executor.execute(w.id, run.id);
       saved = (await store.read(w.id)).runs.find((item) => item.id === run.id);
       expect(saved?.status).toBe("succeeded");
@@ -400,6 +439,11 @@ const url = process.env.TEST_DATABASE_URL,
       if (!submission) throw Error("missing submission approval");
       await browser.decide(owner, submission.id, true);
       await browser.reconcile(w.id);
+      expect(
+        (await store.read(w.id)).deliveries.find(
+          (d) => d.browserResume?.id === submission.id,
+        ),
+      ).toMatchObject({ runId: run.id, topicId: run.topicId });
       await executor.execute(w.id, run.id);
       saved = await store.read(w.id);
       expect(saved.runs[0]?.status).toBe("succeeded");
@@ -588,6 +632,9 @@ const url = process.env.TEST_DATABASE_URL,
         status: "unavailable",
         code: "browser_outcome_unknown",
       });
+      expect(
+        (await store.read(w.id)).deliveries.filter((d) => d.browserResume),
+      ).toHaveLength(0);
 
       await executor.execute(w.id, run.id);
       const saved = (await store.read(w.id)).runs[0];
@@ -853,10 +900,24 @@ const url = process.env.TEST_DATABASE_URL,
         id: waiting.requestId,
         approve: true,
       });
-      await browser.reconcile(w.id);
+      await Promise.all([browser.reconcile(w.id), browser.reconcile(w.id)]);
       expect(
         (await invoke({ command: "poll", id: waiting.requestId })).status,
       ).toBe("completed");
+      const worker = new DeliveryWorker(store, setup);
+      const beforeNotice = telegramCalls.length;
+      await worker.send(w.id, `browser:${waiting.requestId}:resumed`);
+      await worker.send(w.id, `browser:${waiting.requestId}:resumed`);
+      expect(telegramCalls.slice(beforeNotice)).toEqual([
+        {
+          method: "sendMessage",
+          params: expect.objectContaining({
+            chat_id: "202",
+            message_thread_id: task.topicId,
+            text: "Browser request completed. I’m continuing your task.",
+          }),
+        },
+      ]);
       const input = await invoke({
         command: "invoke",
         callId: "codex-password",
@@ -878,10 +939,21 @@ const url = process.env.TEST_DATABASE_URL,
           })
         ).status,
       ).toBe(200);
-      await browser.reconcile(w.id);
+      await Promise.all([browser.reconcile(w.id), browser.reconcile(w.id)]);
       expect(
         await invoke({ command: "poll", id: input.requestId }),
       ).toMatchObject({ status: "completed", inputApplied: true });
+      expect(
+        (await store.read(w.id)).deliveries.filter((d) => d.browserResume),
+      ).toHaveLength(2);
+      const inputNotice = (await store.read(w.id)).deliveries.find(
+        (d) => d.id === `browser:${input.requestId}:resumed`,
+      );
+      expect(inputNotice).toMatchObject({
+        topicId: task.topicId,
+        browserResume: { id: input.requestId, taskId: task.id },
+        browserRead: { owner: "202" },
+      });
       expect(
         (
           await invoke({
@@ -908,6 +980,14 @@ const url = process.env.TEST_DATABASE_URL,
         await taskSave(sql, t);
       });
       const before = calls.length;
+      const beforeCancelledNotice = telegramCalls.length;
+      await worker.send(w.id, `browser:${input.requestId}:resumed`);
+      expect(telegramCalls.length).toBe(beforeCancelledNotice);
+      expect(
+        (await store.read(w.id)).deliveries.find(
+          (d) => d.id === inputNotice?.id,
+        )?.state,
+      ).toBe("cancelled");
       await expect(
         browser.coding?.invoke(bridge.token, {
           command: "invoke",
@@ -964,6 +1044,15 @@ const url = process.env.TEST_DATABASE_URL,
           true,
         );
         await browser.reconcile(w.id);
+        expect(
+          (await store.read(w.id)).deliveries.filter((d) => d.browserResume),
+        ).toEqual([
+          expect.objectContaining({
+            runId: run.id,
+            topicId: run.topicId,
+            browserResume: { id: paused.browserWait.id },
+          }),
+        ]);
         await executor.execute(w.id, run.id);
         expect(
           (await store.read(w.id)).runs.find((r) => r.id === run.id)?.status,
@@ -1078,7 +1167,8 @@ const url = process.env.TEST_DATABASE_URL,
         current.browserWait.id,
         true,
       );
-      await browser.reconcile(w.id);
+      await Promise.all([browser.reconcile(w.id), browser.reconcile(w.id)]);
+      await new BrowserService(store, key, host).reconcile(w.id);
       await executor.execute(w.id, run.id);
       current = (await store.read(w.id)).runs.find(
         (item) => item.id === run.id,
@@ -1116,6 +1206,16 @@ const url = process.env.TEST_DATABASE_URL,
         ),
       ).toHaveLength(1);
       await browser.reconcile(w.id);
+      await new BrowserService(store, key, host).reconcile(w.id);
+      const inputNotice = (await store.read(w.id)).deliveries.filter(
+        (d) => d.browserResume?.id === id,
+      );
+      expect(inputNotice).toHaveLength(1);
+      expect(inputNotice[0]).toMatchObject({
+        runId: run.id,
+        topicId: 8,
+        text: "Browser request completed. I’m continuing your task.",
+      });
       await executor.execute(w.id, run.id);
       current = (await store.read(w.id)).runs.find(
         (item) => item.id === run.id,
@@ -1286,7 +1386,79 @@ const url = process.env.TEST_DATABASE_URL,
         ),
       ).toHaveLength(0);
     });
-    for (const ending of ["expired", "close", "delete"] as const)
+    for (const change of [
+      "cancelled",
+      "membership revoked",
+      "browser disabled",
+      "waiting again",
+      "finished",
+    ] as const)
+      test(`a delayed Browser continuation notice stays silent after the task is ${change}`, async () => {
+        const { w, run } = await seed();
+        const executor = new Executor(store, setup, (d, id) =>
+          plugins.runner(
+            d,
+            id,
+            modelSequence([
+              {
+                name: "browser_action",
+                args: { action: "navigate", url: "https://example.com" },
+              },
+              ...(change === "waiting again"
+                ? [
+                    {
+                      name: "browser_action",
+                      args: {
+                        action: "navigate",
+                        url: "https://other.example",
+                      },
+                    },
+                  ]
+                : ["Finished."]),
+            ]),
+          ),
+        );
+        await executor.execute(w.id, run.id);
+        const request = (await store.read(w.id)).runs[0]?.browserWait;
+        if (!request) throw Error("missing browser wait");
+        await browser.decide(
+          { workspaceId: w.id, actor: "202" },
+          request.id,
+          true,
+        );
+        await browser.reconcile(w.id);
+        const id = `browser:${request.id}:resumed`;
+        expect(
+          (await store.read(w.id)).deliveries.find((d) => d.id === id)?.state,
+        ).toBe("pending");
+        if (change === "waiting again" || change === "finished")
+          await executor.execute(w.id, run.id);
+        else
+          await store.change(w.id, (current) => {
+            if (change === "cancelled") {
+              const r = current.runs.find((r) => r.id === run.id);
+              if (!r) throw Error("missing run");
+              r.cancelled = true;
+              r.status = "cancelled";
+            } else if (change === "membership revoked") {
+              const member = current.members.find((m) => m.id === "202");
+              if (!member) throw Error("missing member");
+              member.active = false;
+            } else
+              current.plugins = {
+                revision: 1,
+                entries: [],
+                browser: { enabled: false, generation: 1 },
+              };
+          });
+        const before = telegramCalls.length;
+        await new DeliveryWorker(store, setup).send(w.id, id);
+        expect(telegramCalls.length).toBe(before);
+        expect(
+          (await store.read(w.id)).deliveries.find((d) => d.id === id)?.state,
+        ).toBe("cancelled");
+      });
+    for (const ending of ["denied", "expired", "close", "delete"] as const)
       test(`a ${ending} browser wait terminates without replaying navigation`, async () => {
         const { w, run } = await seed();
         const owner = { workspaceId: w.id, actor: "202" },
@@ -1304,7 +1476,18 @@ const url = process.env.TEST_DATABASE_URL,
           ),
         );
         await executor.execute(w.id, run.id);
-        if (ending === "expired")
+        if (ending === "denied") {
+          const request = (await store.read(w.id)).runs[0]?.browserWait;
+          if (!request) throw Error("missing browser wait");
+          expect(
+            (
+              await personal(w, "202", "decide", {
+                id: request.id,
+                approve: false,
+              })
+            ).status,
+          ).toBe(200);
+        } else if (ending === "expired")
           await repo.change(owner, (state) => {
             for (const request of state.access?.requests ?? [])
               request.expiresAt = 0;
@@ -1315,6 +1498,9 @@ const url = process.env.TEST_DATABASE_URL,
           ).toBe(200);
         await browser.reconcile(w.id);
         await browser.reconcile(w.id);
+        expect(
+          (await store.read(w.id)).deliveries.filter((d) => d.browserResume),
+        ).toHaveLength(0);
         const saved = (await store.read(w.id)).runs.find(
             (r) => r.id === run.id,
           ),
