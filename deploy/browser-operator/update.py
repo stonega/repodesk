@@ -212,9 +212,9 @@ try:
     stage('verify_live_images_assets_and_preserved_state')
     run(['python3', str(bundle / 'verify-deployment.py'), str(bundle)], 'production-verification.log')
     for name in ['repodesk-app-1', 'repodesk-worker-1']:
-        run(['docker', 'exec', '-i', name, 'node', '--input-type=module'], name + '-browser-proof.json',
-            input=(bundle / 'host-probe.mjs').read_bytes())
-        result = json.loads((bundle / (name + '-browser-proof.json')).read_text())
+        result = command_json(['docker', 'exec', '-i', name, 'node', '--input-type=module'], bundle / (name + '-browser-proof.stderr'),
+                              input=(bundle / 'host-probe.mjs').read_bytes())
+        (bundle / (name + '-browser-proof.json')).write_text(json.dumps(result) + '\n')
         assert result['headed'] and result['cleaned']
     receipt = json.loads((bundle / 'deployment-receipt.json').read_text())
     receipt['feature_commit'] = meta['feature_commit']
