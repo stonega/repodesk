@@ -1,18 +1,19 @@
 {
-  "previous_release_id": "1793614570991-61029298",
-  "previous_source_commit": "c0ef7f8e6eef34675b0c234f2dfeb4f45b5eb4d6",
-  "base_commit": "c0ef7f8e6eef34675b0c234f2dfeb4f45b5eb4d6",
-  "feature_commit": "445ec494ae16b9da5591bea83ebfa97c35b292e0",
+  "previous_release_id": "41958024518-1",
+  "previous_source_commit": "52ea869cd0927bfee7a15cf0df30cdff863ac0ae",
+  "base_commit": "52ea869cd0927bfee7a15cf0df30cdff863ac0ae",
+  "feature_commit": "d56001f5e8202fa4fa699506f1fb68798d045ace",
   "previous_code_truth_tree": "c3a0bce767072af9f2ed803d3d093290e0bd3cba",
   "previous_migration_tree": "a55dbde98ea0a81f7d241c686c8154a04257f69b",
   "verification": {
-    "deterministic_tests": 1427,
+    "deterministic_tests": 1431,
     "plugin_startup_cases": 16,
     "external_startup_calls": 0,
     "browser_scenarios": 17,
     "ci_run": "41819505686",
     "browser_correction_source": "445ec494ae16b9da5591bea83ebfa97c35b292e0",
-    "focused_release_regressions": 3,
-    "preserved_production_source": true
+    "focused_release_regressions": 5,
+    "preserved_production_source": true,
+    "worker_heartbeat_regressions": 1
   }
 }

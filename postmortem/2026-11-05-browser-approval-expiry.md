@@ -42,3 +42,29 @@ native Browser package, startup contract, disposable Compose state and
 backup/restore must pass before guarded production cutover. Historical terminal
 runs and existing website decisions are preserved; no manual Telegram message,
 model call or task approval is a deployment probe.
+
+## Readiness instability found during verification
+
+The Browser correction cut over as release `41958024518-1`, source
+`52ea869cd0927bfee7a15cf0df30cdff863ac0ae`. Native private downloads and
+approval enforcement pass. The release's final HTTP check exposed intermittent
+`worker_unavailable` responses despite a healthy running worker. Read-only
+metadata showed a heartbeat age near the 30-second readiness threshold and no
+worker maintenance errors. Heartbeats were written only after a complete
+maintenance pass; slow delivery or ordinary maintenance could outlast that limit.
+
+A production-composition regression blocks maintenance, ages the recorded
+heartbeat and exercises the real worker timers and `/readyz` route. It fails
+before the correction and passes with a separate, serialized heartbeat timer.
+Shutdown clears the timer, drains its pending write and deletes the heartbeat;
+the regression also requires readiness to fail after shutdown. Database heartbeat
+failures retain a fixed `worker_heartbeat_failed` diagnostic.
+
+Pre-cutover verification also caught a synthetic download probe missing its
+interaction grant and a receipt parser mixing diagnostics with JSON. The first
+recovery helper expected container names while Compose supplied service names.
+Those failures briefly interrupted app/worker availability. The unchanged writers
+were restored without a database restore. Regressions now cover service-name
+recovery, retained original host backups, receipt stream separation and production
+source ancestry. The corrected native probe passes, and later verification is
+read-only. Original run outcomes and unknown provider usage remain preserved.

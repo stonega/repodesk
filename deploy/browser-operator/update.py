@@ -181,8 +181,11 @@ try:
     run([runtime + '/node', '--version'], 'host-node-version.log')
     run(['/usr/bin/google-chrome', '--version'], 'chrome-version.log')
     socket_inode = Path('/run/repodesk-browser').stat().st_ino
-    run(['bash', str(bundle / 'host-package/install.sh'), str(bundle / 'host-package'), str(root / 'secrets')],
-        'host-install.log', env=env)
+    if json.loads(Path('/opt/repodesk-browser/manifest.json').read_text()) != json.loads((bundle / 'expected-host-manifest.json').read_text()):
+        run(['bash', str(bundle / 'host-package/install.sh'), str(bundle / 'host-package'), str(root / 'secrets')],
+            'host-install.log', env=env)
+    else:
+        stage('reuse_verified_native_browser_host')
     wait_socket()
     assert Path('/run/repodesk-browser').stat().st_ino == socket_inode
     stage('headed_browser_application_uid_probe')
