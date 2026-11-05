@@ -86,9 +86,14 @@ verified-download probes pass, including access from both running writers.
 Configuration, credentials, persistent mounts, PostgreSQL and the Actions runner
 identities are preserved. The protected pre-release backup is **3,157,334 bytes**,
 and its archive listing is verified. No production database restore, manual
-Telegram message, model request or automatic replay of terminal runs was used.
+Telegram message or model request was used as a deployment probe, and terminal
+runs were not automatically replayed.
 
 The original expired Browser attempt can be selected by replying to its approval
 message with an authenticated continuation; new required decisions remain fresh.
 The later cancelled attempt and its unknown model usage retain their history.
 Native Telegram desktop/mobile visual acceptance remains a separate user check.
+
+[Post-cutover observation](https://github.com/stonega/repodesk/actions/runs/41967182945)
+recorded eight successful readiness checks across 35 seconds. Heartbeat age stayed
+between **2.61 and 4.51 seconds**, below the former 30-second false-outage window.

@@ -1,5 +1,24 @@
 # Implementation evidence
 
+## Browser thread recovery and stable worker readiness deployed (2026-11-05)
+
+Release `41965848447-1`, source `726a45ab26885f17bd0236c967a87461f820f0f3`,
+is verified on the VPS. Browser expiry feedback and authenticated retries retain
+the original task while requiring fresh decisions. An independent, serialized
+five-second worker heartbeat prevents slow maintenance from falsely marking the
+worker unavailable; shutdown drains the heartbeat and removes its record.
+The new production-composition readiness regression fails before the correction
+and passes afterward, including unavailable readiness after shutdown.
+
+Lint, strict types, build, all 1,431 deterministic tests across 154 files and the
+Node runtime contract pass. Exact-image startup reports 16 cases with zero
+external startup calls. Compose, CPU speech, offline Code Truth, migration and
+backup/restore checks pass. All 51 deployed artifacts match, app/worker/runner and
+Code Truth are healthy, and eight post-cutover samples retain ready status with
+heartbeat age 2.61–4.51 seconds. Configuration, secrets and persistent state are
+preserved. No dependency or SQL migration was added. See the
+[incident and rollout evidence](../../postmortem/2026-11-05-browser-approval-expiry.md).
+
 ## Browser status and continuation retain the original task (2026-11-04)
 
 Short private status/continue controls use current task state, and concurrent
