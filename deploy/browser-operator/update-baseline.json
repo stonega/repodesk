@@ -1,0 +1,15 @@
+{
+  "previous_release_id": "1793614570991-61029298",
+  "previous_source_commit": "c0ef7f8e6eef34675b0c234f2dfeb4f45b5eb4d6",
+  "base_commit": "445ec494ae16b9da5591bea83ebfa97c35b292e0",
+  "feature_commit": "445ec494ae16b9da5591bea83ebfa97c35b292e0",
+  "previous_code_truth_tree": "c3a0bce767072af9f2ed803d3d093290e0bd3cba",
+  "previous_migration_tree": "a55dbde98ea0a81f7d241c686c8154a04257f69b",
+  "verification": {
+    "deterministic_tests": 1423,
+    "plugin_startup_cases": 16,
+    "external_startup_calls": 0,
+    "browser_scenarios": 17,
+    "ci_run": "41819505686"
+  }
+}
