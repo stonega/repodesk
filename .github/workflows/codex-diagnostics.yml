@@ -29,6 +29,4 @@ jobs:
           docker cp "$ssh_dir/known_hosts" "$client:/tmp/known_hosts"
           docker start "$client"
           ssh_vps() { docker exec -i "$client" ssh -T -i /tmp/key -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts -o ConnectTimeout=15 root@169.58.58.71 "$@"; }
-          docker cp deploy/thread-incident/host-probe.mjs "$client:/tmp/host-probe.mjs"
-          docker exec "$client" scp -i /tmp/key -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts /tmp/host-probe.mjs root@169.58.58.71:/opt/repodesk/releases/41958024518-1/host-probe.mjs
-          ssh_vps 'docker ps --format "{{.Names}} {{.Status}}"; docker run --rm --network host --group-add 1000 --env BROWSER_PROBE_ROUTINE=true --volume /run/repodesk-browser:/run/repodesk-browser:ro --volume /opt/repodesk/secrets/browser-token:/run/secrets/browser_token:ro --volume /opt/repodesk/releases/41958024518-1/host-probe.mjs:/app/host-probe.mjs:ro --entrypoint node "$(cat /opt/repodesk/releases/41958024518-1/image-id)" /app/host-probe.mjs'
+          ssh_vps 'cat /opt/repodesk/.current-release; docker ps --format "{{.Names}} {{.Status}}"; cat /opt/repodesk/releases/41958024518-1/stage; tail -45 /opt/repodesk/releases/41958024518-1/production-verification.log; for f in repodesk-app-1-browser-proof.json repodesk-worker-1-browser-proof.json; do if test -f /opt/repodesk/releases/41958024518-1/$f; then cat /opt/repodesk/releases/41958024518-1/$f; fi; done'
