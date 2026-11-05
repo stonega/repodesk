@@ -1,4 +1,4 @@
-name: Diagnose Codex device login
+name: Inspect private browser thread
 on:
   workflow_dispatch:
 permissions:
@@ -6,35 +6,33 @@ permissions:
 jobs:
   diagnose:
     runs-on: [self-hosted, linux, x64]
-    timeout-minutes: 5
+    timeout-minutes: 8
     environment: production
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Probe the deployed runner without accessing account credentials
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun build deploy/thread-incident/diagnostic.ts --target=node --packages=external --outfile=/tmp/thread-diagnostic.mjs
+      - name: Inspect scoped production metadata
         env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
-          VPS_PORT: ${{ vars.VPS_PORT || '22' }}
-          VPS_PROJECT: ${{ vars.VPS_PROJECT || 'repodesk' }}
         run: |
           set -euo pipefail
-          : "${VPS_HOST:?Set VPS_HOST}" "${VPS_USER:?Set VPS_USER}" "${VPS_SSH_KEY:?Set VPS_SSH_KEY}" "${VPS_KNOWN_HOSTS:?Set VPS_KNOWN_HOSTS}"
-          [[ "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
-          [[ "$VPS_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]
-          [[ "$VPS_PORT" =~ ^[0-9]{1,5}$ ]] && (( 10#$VPS_PORT > 0 && 10#$VPS_PORT <= 65535 ))
-          [[ "$VPS_PROJECT" =~ ^[a-z0-9][a-z0-9_-]*$ ]]
+          umask 077
           ssh_dir="$(mktemp -d)"
-          trap 'rm -rf "$ssh_dir"' EXIT
-          chmod 700 "$ssh_dir"
+          client="repodesk-thread-inspect-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker rm -f "$client" >/dev/null 2>&1 || true; rm -rf "$ssh_dir"' EXIT
           printf '%s\n' "$VPS_SSH_KEY" > "$ssh_dir/key"
-          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          printf '%s\n' '169.58.58.71 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICEDUy/5JHbjzCdnECyCEun1u7LWbFz3oM0KIvlVirfK' > "$ssh_dir/known_hosts"
           chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
-          ssh -T -i "$ssh_dir/key" -p "$VPS_PORT" -o BatchMode=yes -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$ssh_dir/known_hosts" -o ConnectTimeout=15 \
-            "$VPS_USER@$VPS_HOST" \
-            "set -eu; runner=\$(docker ps --filter label=com.docker.compose.project='$VPS_PROJECT' --filter label=com.docker.compose.service=codex-runner --format '{{.ID}}'); test -n \"\$runner\"; docker exec -i \"\$runner\" node --input-type=module -" \
-            < scripts/codex-login-diagnostics.mjs
+          docker create --name "$client" --network host --cap-drop ALL --cap-add DAC_OVERRIDE --security-opt no-new-privileges:true --entrypoint sleep docker:29-cli@sha256:b1805116a6a86cc591b5d5f60a910a0715cdcc9d18d866ad68b1457ead25c35c 480
+          docker cp "$ssh_dir/key" "$client:/tmp/key"
+          docker cp "$ssh_dir/known_hosts" "$client:/tmp/known_hosts"
+          docker start "$client"
+          ssh_vps() { docker exec -i "$client" ssh -T -i /tmp/key -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts -o ConnectTimeout=15 root@169.58.58.71 "$@"; }
+          ssh_vps 'cat /opt/repodesk/.current-release; docker ps --format "{{.Names}} {{.Status}}"; docker inspect --format "{{.Image}}" repodesk-app-1'
+          ssh_vps 'docker exec -i repodesk-app-1 node --input-type=module' < /tmp/thread-diagnostic.mjs
