@@ -29,4 +29,4 @@ jobs:
           docker cp "$ssh_dir/known_hosts" "$client:/tmp/known_hosts"
           docker start "$client"
           ssh_vps() { docker exec -i "$client" ssh -T -i /tmp/key -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts -o ConnectTimeout=15 root@169.58.58.71 "$@"; }
-          ssh_vps 'cat /opt/repodesk/.current-release; docker ps --format "{{.Names}} {{.Status}}"; cat /opt/repodesk/releases/41958024518-1/stage; tail -45 /opt/repodesk/releases/41958024518-1/production-verification.log; for f in repodesk-app-1-browser-proof.json repodesk-worker-1-browser-proof.json; do if test -f /opt/repodesk/releases/41958024518-1/$f; then cat /opt/repodesk/releases/41958024518-1/$f; fi; done'
+          ssh_vps "python3 - /opt/repodesk/releases/41958024518-1 $GITHUB_SHA" < deploy/thread-incident/finalize.py
