@@ -86,14 +86,20 @@ async function call(owner, controller, generation, operation) {
           try {
             const result = JSON.parse(raw);
             if (res.statusCode !== 200) {
-              console.error(
-                JSON.stringify({
-                  probeCommand: operation.command,
-                  probeAction: operation.input?.action,
-                  probeSelector: operation.input?.selector,
-                  code: result.error,
-                }),
-              );
+              if (
+                ![
+                  "browser_control_expired",
+                  "browser_action_approval_required",
+                ].includes(result.error)
+              )
+                console.error(
+                  JSON.stringify({
+                    probeCommand: operation.command,
+                    probeAction: operation.input?.action,
+                    probeSelector: operation.input?.selector,
+                    code: result.error,
+                  }),
+                );
               reject(Error(result.error ?? "browser_probe_failed"));
             } else resolve(result);
           } catch {
