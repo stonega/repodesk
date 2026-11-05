@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from update_runtime import command_json, start_unchanged_writers
+from update_runtime import command_json, start_unchanged_writers, preserve_host_backup
 
 os.umask(0o077)
 bundle = Path(sys.argv[1]).resolve()
@@ -171,18 +171,8 @@ try:
     (bundle / 'browser-checkpoint-after-stop.json').write_text(json.dumps(checkpoint) + '\n')
     assert sum(checkpoint.values()) == 0, 'browser_checkpoint_changed'
     stage('install_native_browser_update')
-    old_manifest = json.loads(Path('/opt/repodesk-browser/manifest.json').read_text())
     host_backup = bundle / 'previous-host-package'
-    host_backup.mkdir(mode=0o700)
-    for name, digest in old_manifest.items():
-        relative = Path(name)
-        assert not relative.is_absolute() and '..' not in relative.parts
-        original = Path('/opt/repodesk-browser') / relative
-        assert hashlib.sha256(original.read_bytes()).hexdigest() == digest
-        destination = host_backup / relative
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(original, destination)
-    shutil.copyfile('/opt/repodesk-browser/manifest.json', host_backup / 'manifest.json')
+    preserve_host_backup(Path('/opt/repodesk-browser'), host_backup)
     # Existing Node, Chrome, settings, host key, profiles and socket directory remain.
     runtime = '/opt/repodesk-browser/runtime/bin'
     env = os.environ.copy()

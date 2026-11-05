@@ -93,7 +93,7 @@ with tempfile.TemporaryDirectory() as root:
  root=Path(root);calls=root/'calls';fake=root/'engine.py'
  fake.write_text("import json,sys\\nfrom pathlib import Path\\ncalls=Path(sys.argv[1]);args=sys.argv[2:];calls.open('a').write(json.dumps(args)+'\\\\n')\\nif args[0]=='inspect':print(json.dumps([{'Id':'original','Image':'old-image','State':{'Status':'exited'}}]))\\n")
  baseline={'containers':{'repodesk-app-1':{'id':'original','image':'old-image'}}}
- runtime.start_unchanged_writers(baseline,['repodesk-app-1'],engine=[sys.executable,str(fake),str(calls)])
+ runtime.start_unchanged_writers(baseline,['app'],engine=[sys.executable,str(fake),str(calls)])
  assert json.loads(calls.read_text().splitlines()[-1])==['start','original']
  calls.write_text('');baseline['containers']['repodesk-app-1']['id']='replacement'
  try:runtime.start_unchanged_writers(baseline,['repodesk-app-1'],engine=[sys.executable,str(fake),str(calls)])
@@ -107,4 +107,28 @@ with tempfile.TemporaryDirectory() as root:
       encoding: "utf8",
     }).trim(),
   ).toBe("recovery_fenced");
+});
+
+test("Browser release resume retains the original host backup and rejects tampering", () => {
+  const script = `${load}
+import hashlib
+with tempfile.TemporaryDirectory() as root:
+ root=Path(root);installed=root/'installed';backup=root/'backup';installed.mkdir()
+ def write(value):
+  (installed/'host.js').write_text(value)
+  (installed/'manifest.json').write_text(json.dumps({'host.js':hashlib.sha256(value.encode()).hexdigest()}))
+ write('original');runtime.preserve_host_backup(installed,backup)
+ write('replacement');runtime.preserve_host_backup(installed,backup)
+ assert (backup/'host.js').read_text()=='original'
+ (backup/'host.js').write_text('tampered')
+ try:runtime.preserve_host_backup(installed,backup)
+ except AssertionError:pass
+ else:raise AssertionError('A corrupt host backup was accepted')
+ print('original_backup_retained')
+`;
+  expect(
+    execFileSync("python3", ["-c", script, modulePath], {
+      encoding: "utf8",
+    }).trim(),
+  ).toBe("original_backup_retained");
 });

@@ -126,11 +126,13 @@ jobs:
           cp deploy/browser-operator/update.py "$RUNNER_TEMP/resume-update.py"
           cp deploy/browser-operator/update_runtime.py "$RUNNER_TEMP/update_runtime.py"
           cp deploy/browser-operator/resume-update.sh "$RUNNER_TEMP/resume-update.sh"
-          for name in resume-update.py update_runtime.py resume-update.sh; do
+          cp deploy/browser-operator/host-probe.mjs "$RUNNER_TEMP/host-probe.mjs"
+          for name in resume-update.py update_runtime.py resume-update.sh host-probe.mjs; do
             docker cp "$RUNNER_TEMP/$name" "$DEPLOY_CLIENT:/tmp/$name"
             docker exec "$DEPLOY_CLIENT" scp -i /tmp/key -P 22 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts "/tmp/$name" "root@169.58.58.71:/opt/repodesk/releases/$STATUS_RELEASE/$name"
           done
           ssh_vps "systemd-run --unit=repodesk-browser-resume-$STATUS_RELEASE-${GITHUB_SHA:0:8} --collect --property=Type=exec --property=RuntimeMaxSec=3600 --property=TimeoutStopSec=180 --property=WorkingDirectory=/opt/repodesk/releases/$STATUS_RELEASE /bin/bash /opt/repodesk/releases/$STATUS_RELEASE/resume-update.sh"
+          printf 'RELEASE_ID=%s\nDEPLOY_RESULT_FILE=resume.exit\n' "$STATUS_RELEASE" >> "$GITHUB_ENV"
       - name: Package and start an update of an installed Browser deployment
         if: ${{ inputs.mode == 'source-update' }}
         run: |
@@ -226,13 +228,13 @@ jobs:
           done
           ssh_vps "set -eu; printf '%s\n' '$GITHUB_SHA' > /opt/repodesk/releases/$RELEASE_ID/operator-commit; systemd-run --unit=repodesk-browser-deploy-$RELEASE_ID --collect --property=Type=exec --property=RuntimeMaxSec=1800 --property=WorkingDirectory=/opt/repodesk/releases/$RELEASE_ID /bin/bash /opt/repodesk/releases/$RELEASE_ID/run-finish.sh"
       - name: Wait for image checks, host installation, backup and cutover
-        if: ${{ inputs.mode == 'deploy' || inputs.mode == 'resume' || inputs.mode == 'finish' || inputs.mode == 'source-update' }}
+        if: ${{ inputs.mode == 'deploy' || inputs.mode == 'resume' || inputs.mode == 'finish' || inputs.mode == 'source-update' || inputs.mode == 'update-resume' }}
         run: |
           set -euo pipefail
           source deploy/browser-operator/client.sh
           previous=''
           for attempt in {1..720}; do
-            status=$(ssh_vps "if test -f /opt/repodesk/releases/$RELEASE_ID/deploy.exit; then printf 'exit:'; cat /opt/repodesk/releases/$RELEASE_ID/deploy.exit; elif test -f /opt/repodesk/releases/$RELEASE_ID/stage; then cat /opt/repodesk/releases/$RELEASE_ID/stage; else printf 'starting'; fi")
+            status=$(ssh_vps "if test -f /opt/repodesk/releases/$RELEASE_ID/${DEPLOY_RESULT_FILE:-deploy.exit}; then printf 'exit:'; cat /opt/repodesk/releases/$RELEASE_ID/${DEPLOY_RESULT_FILE:-deploy.exit}; elif test -f /opt/repodesk/releases/$RELEASE_ID/stage; then cat /opt/repodesk/releases/$RELEASE_ID/stage; else printf 'starting'; fi")
             if [[ "$status" != "$previous" ]]; then printf '%s\n' "$status"; previous="$status"; fi
             case "$status" in
               exit:0) exit 0 ;;
@@ -243,14 +245,14 @@ jobs:
           echo 'Deployment exceeded the observation deadline. Inspect its protected VPS logs.' >&2
           exit 1
       - name: Save the production verification receipt
-        if: ${{ inputs.mode == 'deploy' || inputs.mode == 'resume' || inputs.mode == 'finish' || inputs.mode == 'source-update' }}
+        if: ${{ inputs.mode == 'deploy' || inputs.mode == 'resume' || inputs.mode == 'finish' || inputs.mode == 'source-update' || inputs.mode == 'update-resume' }}
         run: |
           set -euo pipefail
           source deploy/browser-operator/client.sh
           ssh_vps "cat /opt/repodesk/releases/$RELEASE_ID/deployment-receipt.json" > "$RUNNER_TEMP/browser-deployment-receipt.json"
           node -e 'const r=require(process.env.RUNNER_TEMP+"/browser-deployment-receipt.json");console.log(JSON.stringify({release:r.release_id,commit:r.source_commit,services:r.services,browser:r.browser_host,backup:r.backup},null,2))'
       - uses: actions/upload-artifact@v4
-        if: ${{ inputs.mode == 'deploy' || inputs.mode == 'resume' || inputs.mode == 'finish' || inputs.mode == 'source-update' }}
+        if: ${{ inputs.mode == 'deploy' || inputs.mode == 'resume' || inputs.mode == 'finish' || inputs.mode == 'source-update' || inputs.mode == 'update-resume' }}
         with:
           name: browser-deployment-receipt
           path: ${{ runner.temp }}/browser-deployment-receipt.json
