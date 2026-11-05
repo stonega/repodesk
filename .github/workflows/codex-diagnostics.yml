@@ -34,5 +34,5 @@ jobs:
           docker cp "$ssh_dir/known_hosts" "$client:/tmp/known_hosts"
           docker start "$client"
           ssh_vps() { docker exec -i "$client" ssh -T -i /tmp/key -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts -o ConnectTimeout=15 root@169.58.58.71 "$@"; }
-          ssh_vps 'cat /opt/repodesk/.current-release; docker ps --format "{{.Names}} {{.Status}}"; docker inspect --format "{{.Image}}" repodesk-app-1'
-          ssh_vps 'docker exec -i repodesk-app-1 node --input-type=module' < /tmp/thread-diagnostic.mjs
+          ssh_vps 'set -eu; test "$(cat /opt/repodesk/.current-release)" = 1793614570991-61029298; test ! -e /opt/repodesk/releases/41957394949-1/cutover.log; systemctl stop repodesk-browser-update-41957394949-1.service; cat /opt/repodesk/releases/41957394949-1/stage; docker ps --format "{{.Names}} {{.Status}}"'
+
