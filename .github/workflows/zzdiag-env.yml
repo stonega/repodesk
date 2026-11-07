@@ -1,6 +1,8 @@
 name: zzdiag-env
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - zzdiag-env
 jobs:
   e:
     runs-on: ubuntu-latest
