@@ -15,8 +15,9 @@ export function modelError(error: unknown) {
       model_provider_auth_failed:
         "The provider rejected the API key. Check the key and try again.",
       model_discovery_failed:
-        "Could not fetch models. Check the API base URL and try again.",
-      model_discovery_invalid: "The provider did not return a model list.",
+        "Could not fetch models from this provider. Check the API base URL and network access from the RepoDesk server, then try again.",
+      model_discovery_invalid:
+        "The provider did not return a valid JSON model list. Check the API base URL and whether a proxy or sign-in page is blocking access.",
       model_provider_in_use:
         "Choose another provider for each service before removing this one.",
       model_not_available:

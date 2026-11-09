@@ -1,5 +1,46 @@
 # Implementation evidence
 
+## Provider save errors distinguish HTML gateway responses (2026-11-09)
+
+The admin request client now retains the HTTP status when a response cannot be
+parsed as JSON. Malformed success responses show an unexpected-response error;
+HTML 502/503/504 pages outside provider saves use a temporary RepoDesk server error.
+Provider-save gateway errors now identify the model fetch and suggest checking
+the API base URL and network access from the RepoDesk server. JSON discovery
+failures use the same recovery guidance; API-key rejection keeps its specific text.
+This wording follows the user's subsequent request to improve the dialog error.
+Provider New/Edit dialogs retain drafts, unlock their controls after failure and
+keep explicit retry behavior. Session expiry and request cancellation retain
+their existing behavior.
+
+Malformed upstream model JSON now produces `model_discovery_invalid`, and runtime
+logs preserve allowlisted discovery codes without response bodies or credentials.
+Production-composition regressions cover HTML model responses, safe JSON errors,
+operator-owned state preservation and sanitized diagnostic codes. The model-list
+Bearer header, trailing-slash normalization and optional anonymous New API pricing
+remain unchanged and match the current official endpoint documentation.
+
+Validation: lint, strict TypeScript, the production build, the Node runtime
+contract and all 1,424 deterministic tests passed with disposable PostgreSQL.
+All 35 provider/session-expiry browser scenarios passed, including readable
+gateway/discovery errors, distinct key rejection and retained drafts on retry.
+Saved summaries and New/Edit pending/error states were inspected at 1280px
+and 390px, including mobile scrolling to Save/Cancel and successful draft recovery.
+
+VPS follow-up reproduced Node `UND_ERR_CONNECT_TIMEOUT` from the running app
+container with the user-supplied key, before an HTTP response. The host also
+could not reach the provider's agreed DNS address, 114.55.242.113, on ports 80/443,
+while GitHub and Cloudflare connectivity worked. App health/readiness remained
+successful, with zero container restarts. Local authenticated discovery through
+the workstation proxy returned 200 and 14 models. A provider filtering/routing
+cause remains unconfirmed; a reachable endpoint or approved proxy is needed.
+The VPS outbound IPv4 address was verified as 169.58.58.71. Follow-up validation
+passed 21 focused metadata/provider tests (including connect-timeout New/Edit
+failures), lint, strict types and the build.
+See the [incident record](../../postmortem/2026-11-09-model-provider-html-gateway.md).
+No deployment, network/configuration change, model inference, account connection
+or Telegram send was performed.
+
 ## Browser status and continuation retain the original task (2026-11-04)
 
 Short private status/continue controls use current task state, and concurrent

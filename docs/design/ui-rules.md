@@ -542,6 +542,24 @@ when implementing or reviewing a change.
   Provider records use New/Edit dialogs and saved summaries; the setup chat-model
   selector is a guided form. API keys are edited only on the provider record.
 
+### Provider save errors explain the failed request
+
+- **Preference:** Provider save errors identify the failed model fetch in plain
+  language and suggest checking the API base URL and network access from the
+  RepoDesk server. Gateway responses retain their HTTP status without exposing
+  HTML fragments or JSON parser exceptions.
+- **Scope:** Model provider New/Edit dialogs in setup and Model settings. Keep
+  errors inside the open dialog and retain the draft for explicit retry.
+- **Source:** 2026-11-09 — after a VPS provider connection timed out, the user
+  showed the dialog's `Unexpected token '<'` error and requested clearer text.
+- **Acceptance:** Verify gateway HTML and application discovery errors at desktop
+  and mobile widths. The message wraps, Save/Cancel remain reachable, pending
+  saves block duplicate submission, and failed saves retain the entered values.
+  Saved provider summaries remain separate from the editor.
+- **Exceptions:** API-key rejection, validation and version-conflict errors keep
+  their specific explanations. A gateway error alone does not establish a
+  provider-side outage or a particular firewall/routing cause.
+
 ### Provider types supply automatic model information
 
 - **Preference:** Check the provider type and fetch model prices and context

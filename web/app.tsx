@@ -137,7 +137,22 @@ async function api<T>(
     csrf = "";
     sessionEvents.dispatchEvent(new Event("expired"));
   }
-  const data = await response.json();
+  const data = await response.json().catch((error: unknown) => {
+    if (signal?.aborted) throw error;
+    throw new ApiError(
+      response.status === 401
+        ? path === "/api/admin/auth/login"
+          ? "Invalid username or password."
+          : "Your session expired. Sign in again."
+        : [502, 503, 504].includes(response.status)
+          ? path === "/api/admin/operator/model-providers" && method === "PUT"
+            ? `Could not fetch models from this provider (HTTP ${response.status}). Check the API base URL and network access from the RepoDesk server, then try again.`
+            : `The RepoDesk server is temporarily unavailable (HTTP ${response.status}). Please try again shortly.`
+          : `The RepoDesk server returned an unexpected response (HTTP ${response.status}). Reload the page and try again.`,
+      [],
+      response.status,
+    );
+  });
   const githubAccountError: Record<string, string> = {
     github_member_not_found:
       "GitHub could not find this account. Check the username and try again.",

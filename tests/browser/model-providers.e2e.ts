@@ -83,6 +83,166 @@ async function addProvider(page: Page) {
   return catalog.providers[0].id as string;
 }
 for (const width of [1280, 390]) {
+  test(`provider drafts recover from HTML gateway errors in New and Edit at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await fixture(page);
+    await page.getByRole("button", { name: "New model provider" }).click();
+    const endpoint = "**/api/admin/operator/model-providers";
+    const providers = page.getByRole("region", { name: "Model providers" });
+    for (const editing of [false, true]) {
+      const editor = page.getByRole("dialog", {
+        name: editing ? "Edit model provider" : "New model provider",
+      });
+      if (editing)
+        await providers
+          .getByRole("button", { name: "Edit Gateway API" })
+          .click();
+      else {
+        await chooseOption(editor.getByLabel("Provider type"), "newapi");
+        await editor
+          .getByLabel("API base URL")
+          .fill("https://models.example.test/v1/");
+        await editor
+          .getByLabel("API key", { exact: true })
+          .fill("fixture-model-key");
+        await editor.getByLabel("New API billing group (optional)").fill("vip");
+      }
+      const name = editing ? "Updated Gateway API" : "Gateway API";
+      await editor.getByLabel("Provider name").fill(name);
+      let held: Route | undefined;
+      let saves = 0;
+      await page.route(endpoint, (route) => {
+        if (route.request().method() === "PUT") {
+          saves++;
+          held = route;
+        } else return route.continue();
+      });
+      await editor.getByRole("button", { name: "Save provider" }).click();
+      await expect(
+        editor.getByRole("button", { name: "Fetching models…" }),
+      ).toBeDisabled();
+      await expect(
+        editor.getByRole("button", { name: "Cancel", exact: true }),
+      ).toBeDisabled();
+      await page.keyboard.press("Escape");
+      await expect(editor).toBeVisible();
+      await expect.poll(() => held !== undefined).toBe(true);
+      await editor
+        .getByRole("button", { name: "Fetching models…" })
+        .scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: test.info().outputPath(`${editing ? "edit" : "new"}-pending.png`),
+        fullPage: true,
+      });
+      await held?.fulfill({
+        status: editing ? 200 : 502,
+        contentType: "text/html",
+        body: "<!DOCTYPE html><h1>private-gateway-fixture</h1>",
+      });
+      await expect(editor.getByRole("alert")).toContainText(
+        editing
+          ? "unexpected response (HTTP 200)"
+          : "Could not fetch models from this provider (HTTP 502). Check the API base URL and network access from the RepoDesk server, then try again.",
+      );
+      await expect(editor.getByRole("alert")).not.toContainText(
+        /Unexpected token|private-gateway-fixture|DOCTYPE/,
+      );
+      await expect(editor.getByLabel("Provider name")).toHaveValue(name);
+      await expect(editor.getByLabel("Provider type")).toContainText(
+        "New API (self-hosted)",
+      );
+      await expect(editor.getByLabel("API base URL")).toHaveValue(
+        `https://models.example.test/v1${editing ? "" : "/"}`,
+      );
+      await expect(
+        editor.getByLabel("New API billing group (optional)"),
+      ).toHaveValue("vip");
+      await expect(editor.getByLabel("API key", { exact: true })).toHaveValue(
+        editing ? "" : "fixture-model-key",
+      );
+      await expect(
+        editor.getByRole("button", { name: "Save provider" }),
+      ).toBeEnabled();
+      expect(saves).toBe(1);
+      await editor
+        .getByRole("button", { name: "Save provider" })
+        .scrollIntoViewIfNeeded();
+      await expect(
+        editor.getByRole("button", { name: "Save provider" }),
+      ).toBeInViewport();
+      await expect(
+        editor.getByRole("button", { name: "Cancel", exact: true }),
+      ).toBeInViewport();
+      await page.screenshot({
+        path: test.info().outputPath(`${editing ? "edit" : "new"}-error.png`),
+        fullPage: true,
+      });
+      await page.unroute(endpoint);
+      for (const [code, status, message] of [
+        [
+          "model_discovery_failed",
+          502,
+          "Could not fetch models from this provider. Check the API base URL and network access from the RepoDesk server, then try again.",
+        ],
+        [
+          "model_provider_auth_failed",
+          400,
+          "The provider rejected the API key. Check the key and try again.",
+        ],
+      ] as const) {
+        await page.route(endpoint, (route) =>
+          route.request().method() === "PUT"
+            ? route.fulfill({ status, json: { error: code } })
+            : route.continue(),
+        );
+        await editor.getByRole("button", { name: "Save provider" }).click();
+        await expect(editor.getByRole("alert")).toHaveText(message);
+        await expect(editor.getByLabel("Provider name")).toHaveValue(name);
+        await expect(editor.getByLabel("API key", { exact: true })).toHaveValue(
+          editing ? "" : "fixture-model-key",
+        );
+        await editor
+          .getByRole("button", { name: "Save provider" })
+          .scrollIntoViewIfNeeded();
+        await expect(
+          editor.getByRole("button", { name: "Save provider" }),
+        ).toBeInViewport();
+        await expect(
+          editor.getByRole("button", { name: "Cancel", exact: true }),
+        ).toBeInViewport();
+        await page.screenshot({
+          path: test
+            .info()
+            .outputPath(`${editing ? "edit" : "new"}-${code}.png`),
+          fullPage: true,
+        });
+        await page.unroute(endpoint);
+      }
+      await editor.getByRole("button", { name: "Save provider" }).click();
+      await expect(editor).toHaveCount(0);
+      await expect(providers).toContainText(name);
+      await expect(providers.locator("input, select")).toHaveCount(0);
+      await expect(providers).toContainText("New API (self-hosted)");
+      const catalog = await (
+        await page.request.get("/api/admin/operator/model-providers")
+      ).json();
+      expect(catalog.providers).toHaveLength(1);
+      expect(catalog.providers[0]).toMatchObject({
+        name,
+        baseUrl: "https://models.example.test/v1",
+        type: "newapi",
+        pricingGroup: "vip",
+        apiKeyConfigured: true,
+      });
+      expect(JSON.stringify(catalog)).not.toContain("fixture-model-key");
+    }
+    await page.screenshot({
+      path: test.info().outputPath("recovered-summary.png"),
+      fullPage: true,
+    });
+  });
   test(`typed provider metadata stays separate from overrides with cache-price save recovery at ${width}px`, async ({
     page,
   }) => {

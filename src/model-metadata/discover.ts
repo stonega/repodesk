@@ -49,7 +49,11 @@ async function readJson(
       joined.set(chunk, offset);
       offset += chunk.length;
     }
-    return JSON.parse(new TextDecoder().decode(joined));
+    try {
+      return JSON.parse(new TextDecoder().decode(joined));
+    } catch {
+      throw new MetadataError("model_discovery_invalid");
+    }
   } finally {
     await reader.cancel().catch(() => {});
   }
