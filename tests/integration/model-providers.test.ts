@@ -9,6 +9,7 @@ import type { Admin, Workspace } from "../../src/domain.ts";
 import { Executor } from "../../src/jobs/execute.ts";
 import type { ProviderCatalog } from "../../src/models/config.ts";
 import type { ModelTransport } from "../../src/models/service.ts";
+import { RuntimeLogger } from "../../src/observability/logs.ts";
 import { encrypt, passwordHash } from "../../src/setup/credentials.ts";
 import { SetupService } from "../../src/setup/service.ts";
 import { createRun } from "../../src/workspaces/service.ts";
@@ -227,6 +228,83 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         apiKey: "key",
       }),
     ).rejects.toThrow("version_conflict");
+  });
+  test("HTML and connection failures return safe JSON and preserve new and existing provider state", async () => {
+    const catalog = await setup.models.catalog(admin);
+    const lines: string[] = [];
+    const htmlStore = new Store(
+      store.pool,
+      new RuntimeLogger(undefined, "app", (line) => lines.push(line)),
+    );
+    for (const upstreamStatus of [200, 502, "connect_timeout"] as const) {
+      const htmlSetup = new SetupService(
+        htmlStore,
+        key,
+        origin,
+        undefined,
+        "webhook",
+        async () => {
+          if (upstreamStatus === "connect_timeout")
+            throw new TypeError("private-upstream-fixture", {
+              cause: { code: "UND_ERR_CONNECT_TIMEOUT" },
+            });
+          return new Response(
+            "<!DOCTYPE html><p>private-upstream-fixture</p>",
+            {
+              status: upstreamStatus,
+              headers: { "content-type": "text/html" },
+            },
+          );
+        },
+      );
+      const htmlApp = createApp(
+        htmlStore,
+        htmlSetup,
+        origin,
+        undefined,
+        undefined,
+        key,
+      );
+      for (const id of [undefined, providerId]) {
+        const response = await htmlApp.request(endpoint, {
+          method: "PUT",
+          headers: {
+            cookie: `repodesk_session=${auth.raw}`,
+            origin,
+            "x-csrf-token": auth.csrf,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            version: catalog.version,
+            id,
+            name: "Unsuccessful provider",
+            type: "newapi",
+            baseUrl: "https://models.example.test/v1/",
+            apiKey: "fixture-provider-secret",
+          }),
+        });
+        expect(response.status).toBe(502);
+        expect(response.headers.get("content-type")).toContain(
+          "application/json",
+        );
+        expect(await response.json()).toEqual({
+          error:
+            upstreamStatus === 200
+              ? "model_discovery_invalid"
+              : "model_discovery_failed",
+        });
+        expect(JSON.parse(lines.at(-1) ?? "{}")).toMatchObject({
+          event: "request_failed",
+          code:
+            upstreamStatus === 200
+              ? "model_discovery_invalid"
+              : "model_discovery_failed",
+        });
+        expect(await setup.models.catalog(admin)).toEqual(catalog);
+      }
+    }
+    expect(lines.join("\n")).not.toContain("private-upstream-fixture");
+    expect(lines.join("\n")).not.toContain("fixture-provider-secret");
   });
   test("bot selection is workspace-specific and custom metadata is optional", async () => {
     const path = `/api/admin/workspaces/${w.id}/models`;

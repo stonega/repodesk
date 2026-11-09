@@ -15,6 +15,36 @@ docker compose logs --tail=100 app worker
 
 检查日志时间和面板当前状态，历史错误不代表问题仍在。分享诊断时提供版本、时间、任务引用和脱敏错误信息，不提供 `.env`、Token、密码或完整私聊内容。
 
+## Model provider saves return HTML or gateway errors
+
+Model discovery sends the provider API key as `Authorization: Bearer <API key>`
+to the inference base URL's `/models` endpoint. An API base URL ending in `/v1/`
+is accepted. A provider response containing HTML instead of a JSON model list
+produces a model-list error; check the endpoint and any proxy or sign-in page.
+
+An HTML 502/503/504 response while saving a model provider appears as a failed
+model-fetch error with its HTTP status and guidance to check the API base URL and
+network access from the RepoDesk server. Check the app, database and reverse
+proxy using the health checks above. The dialog keeps its draft and unlocks its
+controls after failure. Check the saved provider before retrying if the request's
+outcome is uncertain. A browser JSON parser message alone does not establish that
+the provider rejected the API key.
+
+If model discovery works on your workstation but fails from the VPS, test
+connectivity from both the VPS host and the running app container. Node
+`UND_ERR_CONNECT_TIMEOUT` means the server could not establish the provider
+connection before receiving an HTTP response. Compare DNS answers and reachability
+to other services. A healthy RepoDesk process does not prove provider connectivity.
+Resolve routing or provider-side access restrictions, use a reachable API endpoint,
+or configure an approved outbound proxy before retrying. Workstation proxy settings
+are not automatically available to the VPS app.
+
+New API pricing is requested separately from the same server's public
+`/api/pricing` endpoint without the inference key. If anonymous pricing returns
+401/403, HTML or another failure, model discovery can still succeed; prices stay
+unknown and the saved provider shows a pricing warning. Use manual price overrides
+when public pricing is unavailable.
+
 ## 机器人不回复
 
 | 现象 | 检查与处理 |
