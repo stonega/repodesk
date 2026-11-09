@@ -56,6 +56,14 @@ and cap responses at 1 MiB (8 MiB for richer OpenRouter/New API catalogs). Failu
 expose stable error codes, never upstream bodies or credentials. Unsupported
 metadata does not prevent model discovery; model-list failures do.
 
+An HTML or malformed JSON model response produces `model_discovery_invalid`;
+unsuccessful HTTP responses produce `model_discovery_failed` (or
+`model_provider_auth_failed` for 401/403). Optional pricing failures only set
+`newapi_pricing_unavailable`. New API's model-list Bearer authentication and
+anonymous pricing contract were rechecked on 2026-11-09 against its current
+[model-list documentation](https://docs.newapi.pro/en/docs/api/ai-model/models/list/listmodels)
+and [pricing documentation](https://docs.newapi.pro/en/docs/api/management/system/pricing-get).
+
 Sources checked 2026-10-14:
 
 - [OpenRouter model API](https://openrouter.ai/docs/api/api-reference/models/get-models)

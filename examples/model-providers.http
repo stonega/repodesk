@@ -22,6 +22,8 @@ Content-Type: application/json
 }
 
 ### New API: replace version, endpoint and billing group with the key's actual group
+### Model discovery calls /v1/models with Authorization: Bearer <apiKey>.
+### A trailing slash on the inference base URL is accepted.
 ### Pricing is fetched anonymously from the same server's public /api/pricing.
 ### If that endpoint is unavailable, the model list still saves with unknown prices.
 PUT {{baseUrl}}/api/admin/operator/model-providers

@@ -247,17 +247,22 @@ describe("standalone model metadata", () => {
     expect(result.modelMetadata[0]?.pricing?.cacheWrite).toBeCloseTo(0.175);
   });
   test("New API price failure is recoverable without losing model discovery or exposing upstream errors", async () => {
-    const result = await discoverModels(
-      { baseUrl: "http://localhost/v1", type: "newapi", apiKey: key },
-      async (url) =>
-        url.endsWith("/models")
-          ? Response.json({ data: [{ id: "custom" }] })
-          : Response.json({ error: key }, { status: 403 }),
-    );
-    expect(result.models).toEqual(["custom"]);
-    expect(result.metadataWarning).toBe("newapi_pricing_unavailable");
-    expect(result.modelMetadata[0]?.pricing).toBeUndefined();
-    expect(JSON.stringify(result)).not.toContain(key);
+    for (const status of [200, 403, 502]) {
+      const result = await discoverModels(
+        { baseUrl: "http://localhost/v1", type: "newapi", apiKey: key },
+        async (url) =>
+          url.endsWith("/models")
+            ? Response.json({ data: [{ id: "custom" }] })
+            : new Response(`<!DOCTYPE html><p>${key}</p>`, {
+                status,
+                headers: { "content-type": "text/html" },
+              }),
+      );
+      expect(result.models).toEqual(["custom"]);
+      expect(result.metadataWarning).toBe("newapi_pricing_unavailable");
+      expect(result.modelMetadata[0]?.pricing).toBeUndefined();
+      expect(JSON.stringify(result)).not.toContain(key);
+    }
   });
   test("New API missing/invalid group, per-call and expression prices stay unknown; zero ratios remain free", async () => {
     const rows = [
@@ -329,6 +334,19 @@ describe("standalone model metadata", () => {
         "model_discovery_invalid",
       ],
       [new Response("x".repeat(1024 * 1024 + 1)), "model_discovery_too_large"],
+      [
+        new Response(`<!DOCTYPE html><p>${key}</p>`, {
+          headers: { "content-type": "text/html" },
+        }),
+        "model_discovery_invalid",
+      ],
+      [
+        new Response(`<!DOCTYPE html><p>${key}</p>`, {
+          status: 502,
+          headers: { "content-type": "text/html" },
+        }),
+        "model_discovery_failed",
+      ],
       [
         Response.json({ error: key }, { status: 401 }),
         "model_provider_auth_failed",
