@@ -69,3 +69,10 @@ The VPS remains healthy and the rich-input correction is deployed, with 1,466
 full-suite tests and exact-image runtime/Compose/restore checks passed. Native
 chat is not restored until pricing/budget configuration and a writable Telegram
 destination are resolved. The current dollar budget remains unchanged.
+
+The operator subsequently chose to remove the per-request budget explicitly.
+The audited update clears only `runBudgetUsd`; monthly and other settings are
+preserved. Existing failed runs are not replayed. Topic delivery remains blocked
+by the confirmed Telegram rejection. The focused Topic-boundary suite passes all
+29 scenarios after disposable PostgreSQL readiness; its initial attempt stopped
+during database startup, before any scenario ran.
