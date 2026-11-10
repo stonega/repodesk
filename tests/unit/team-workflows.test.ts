@@ -204,7 +204,7 @@ describe("conversation skill drafts", () => {
       source = successfulRun(w, "202"),
       r = requestRun(w, "202");
     const p = proposeSkill(w, r, source.id, reusableSkill);
-    expect(w.skills).toHaveLength(2);
+    expect(w.skills).toHaveLength(3);
     expect(() => decide(w, "101", p.approval.id, true)).toThrow(
       "approval_denied",
     );

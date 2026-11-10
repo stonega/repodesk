@@ -28,9 +28,13 @@ in the panel. Updates are manual; changes in GitHub do not sync automatically.
 
 ## Preset and custom skills
 
-**Team recap** and **Follow-up draft** are read-only presets. Inspect their
+**Team recap**, **Follow-up draft** and **Telegram widgets** are read-only presets. Inspect their
 instructions and enable or disable them. Create a separate custom skill if you
 need different rules.
+
+The default-enabled [Telegram widgets](widgets.md) preset creates compact local
+interactions in private chats and Topics. It cannot grant service access or
+authorize external actions.
 
 For a custom skill, choose **New**, describe its purpose and instructions, select
 only the necessary tools and configure its output settings. Choose **Save skill**.

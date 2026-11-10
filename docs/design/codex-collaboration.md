@@ -24,6 +24,18 @@ The durable application task is the collaboration unit. A Pi conversation run,
 Codex execution attempt, container and Codex session are subordinate records;
 finishing any one of them does not erase the task or its follow-up relationship.
 
+Cross-channel continuation, 2026-11-01: after confirmed PR publication, the
+application binds the task to its installation, repository, PR number and branch.
+With Review Bot requests and fixes enabled, an explicitly addressed GitHub fix
+from the original requester's verified account appends to that same task. It
+receives a new input revision and intake interpretation; it does not inherit
+implementation authority merely from the PR association. Original Telegram
+questions, progress, status and history remain on that task and audience.
+GitHub comments retain independent author/content provenance, are rechecked before
+execution and publication, and expire no later than the retained original context.
+Read-only requests and other collaborators retain Review Bot's independent route.
+Historical PRs without a confirmed binding are not joined automatically.
+
 ## Responsibilities
 
 | Layer | Responsibility | Decision boundary |

@@ -568,6 +568,19 @@ when implementing or reviewing a change.
   their specific explanations. A gateway error alone does not establish a
   provider-side outage or a particular firewall/routing cause.
 
+### Telegram token errors explain the expected credential
+
+- **Preference:** Explain malformed Telegram bot tokens with BotFather guidance
+  and an example of the expected token format, rather than a bare API error code.
+- **Scope:** The Telegram setup step and Manage Telegram bot dialog.
+- **Source:** 2026-11-10 — the user submitted a model-key-shaped value as a bot
+  token, received `invalid_request` and requested a clearer error message.
+- **Acceptance:** Keep the draft and recovery controls available after a failed
+  save. Show the validation message beside the relevant form or inside its dialog
+  at desktop and mobile widths. Never echo the submitted credential in the error.
+- **Exceptions:** A malformed token must be rejected before contacting Telegram;
+  a well-formed token still requires the existing upstream identity verification.
+
 ### Provider types supply automatic model information
 
 - **Preference:** Check the provider type and fetch model prices and context

@@ -25,6 +25,19 @@ Content-Type: application/json
 @telegramUserId = REPLACE_TELEGRAM_USER_ID
 @requestId = REPLACE_REQUEST_UUID
 
+### Malformed bot-token example: HTTP 400 invalid_request with a botToken issue.
+### The issue explains @BotFather and the expected format; no Telegram call or save occurs.
+PUT {{baseUrl}}/api/admin/operator/credentials
+Origin: {{baseUrl}}
+Cookie: repodesk_session={{session}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{
+  "version": 1,
+  "botToken": "sk-example-not-a-telegram-bot-token"
+}
+
 ### Get the request link, pending requests, active members, and membership version.
 GET {{baseUrl}}/api/setup/workspaces/{{workspaceId}}/access
 Cookie: repodesk_session={{session}}

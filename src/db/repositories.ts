@@ -6,10 +6,12 @@ import {
 } from "../browser/storage.ts";
 import { type Deployment, Fault, type Workspace } from "../domain.ts";
 import { RuntimeLogger } from "../observability/logs.ts";
+import { ensureTelegramWidgetSkill } from "../skills/telegram-widgets.ts";
 import { type Sql, transaction } from "./pool.ts";
 
 function workspaceDefaults(workspace: Workspace): Workspace {
   workspace.settings.currency ??= "USD";
+  ensureTelegramWidgetSkill(workspace);
   return workspace;
 }
 

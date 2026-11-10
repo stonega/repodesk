@@ -134,6 +134,13 @@ export function sweep(w: Workspace, now = new Date()) {
         r.sources = [];
         r.transcript = [];
         r.result = undefined;
+        delete r.widget;
+        for (const d of w.deliveries) {
+          if (d.runId !== r.id || !d.widget) continue;
+          delete d.widget;
+          d.text = "[source removed]";
+          if (d.state !== "sent") d.state = "cancelled";
+        }
         r.task = "[source removed]";
         r.tools = {};
         delete r.contextSummary;
@@ -184,6 +191,7 @@ export function sweep(w: Workspace, now = new Date()) {
       r.instructions = [];
       r.transcript = [];
       r.result = undefined;
+      delete r.widget;
       r.tools = {};
       delete r.contextSummary;
       delete r.compaction;

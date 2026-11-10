@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createHmac, randomUUID } from "node:crypto";
 import { createApp } from "../../src/app.ts";
+import { askTask } from "../../src/coding/conversation-store.ts";
 import type {
   DevelopmentResult,
   DevelopmentTask,
@@ -11,18 +12,26 @@ import type {
   LocalStart,
   LocalStatus,
 } from "../../src/coding/local/protocol.ts";
+import { codingTaskContext } from "../../src/coding/task-context.ts";
+import { taskGet, taskInputs, taskSave } from "../../src/coding/task-store.ts";
+import { pruneDevelopment, startDevelopment } from "../../src/coding/tasks.ts";
 import { migrate } from "../../src/db/migrate.ts";
 import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
 import { type Admin, Fault, type Workspace } from "../../src/domain.ts";
 import { GitHubApp } from "../../src/github/app.ts";
 import { GitHubApps } from "../../src/github/registry.ts";
+import { taskReference } from "../../src/miniapp/auth.ts";
+import { miniAppRoutes } from "../../src/miniapp/history.ts";
 import { sweep } from "../../src/privacy/service.ts";
 import { ReviewExecutor } from "../../src/review-bot/executor.ts";
 import { ReviewService } from "../../src/review-bot/service.ts";
+import { encrypt } from "../../src/setup/credentials.ts";
 import { SetupService } from "../../src/setup/service.ts";
+import { createRun } from "../../src/workspaces/service.ts";
 import { workspace } from "../fixtures.ts";
 import { githubFixtureConfig, githubTransport } from "../github-fixture.ts";
+import { signedMiniAppData } from "../miniapp-fixture.ts";
 
 const url = process.env.TEST_DATABASE_URL;
 const secret = "review-fixture-webhook-secret-32-characters";
@@ -58,6 +67,7 @@ class Runner implements LocalRunner {
   erased: string[] = [];
   loseStart = false;
   available = true;
+  nextPublishedSha = published;
   async start(input: LocalStart) {
     if (this.states.has(input.taskId)) return;
     this.starts.push(structuredClone(input));
@@ -76,7 +86,7 @@ class Runner implements LocalRunner {
     this.pushes.push(id);
     expect(token).toBe("ghs_fixture_installation_secret");
     const input = this.starts.find((s) => s.taskId === id);
-    if (!input?.development?.pr) throw Error("Missing PR");
+    if (!input?.development) throw Error("Missing development task");
     this.states.set(id, {
       state: "succeeded",
       result: {
@@ -86,8 +96,10 @@ class Runner implements LocalRunner {
         verificationCommands: ["bun test"],
       },
       checkPassed: true,
-      publishedSha: published,
-      prUrl: input.development.pr.url,
+      publishedSha: this.nextPublishedSha,
+      prUrl:
+        input.development.pr?.url ??
+        "https://github.com/example/workspace/pull/23",
     });
   }
   async cancel(_w: string, id: string) {
@@ -207,7 +219,9 @@ class Runner implements LocalRunner {
     const writes: { url: string; method: string; body: unknown }[] = [];
     const permissions: unknown[] = [];
     let loseReview = false,
-      loseProgress = false;
+      loseProgress = false,
+      sourceAvailable = true;
+    let onSourceRead: (() => Promise<void>) | undefined;
     const transport = (async (
       input: RequestInfo | URL,
       init: RequestInit = {},
@@ -269,6 +283,8 @@ class Runner implements LocalRunner {
         if (path.endsWith("/issues/23/comments"))
           return Response.json([...comments.values()]);
         if (/\/(?:issues|pulls)\/comments\/\d+$/.test(path)) {
+          if (!sourceAvailable) return Response.json({}, { status: 503 });
+          await onSourceRead?.();
           const c = comments.get(Number(path.split("/").at(-1)));
           return c ? Response.json(c) : Response.json({}, { status: 404 });
         }
@@ -349,6 +365,12 @@ class Runner implements LocalRunner {
       accept,
       mention,
       task,
+      sourceAvailable: (available: boolean) => {
+        sourceAvailable = available;
+      },
+      onSourceRead: (action: () => Promise<void>) => {
+        onSourceRead = action;
+      },
       loseReview: () => {
         loseReview = true;
       },
@@ -357,6 +379,396 @@ class Runner implements LocalRunner {
       },
     };
   }
+  async function telegramFixture() {
+    const f = await fixture();
+    const d = await store.deployment();
+    d.bot = { id: "999", username: "fixture", visibleAll: true };
+    d.credentials.bot = encrypt("ab".repeat(32), "bot", "123456:fixture-token");
+    await store.saveDeployment(store.pool, d);
+    const original = "Fix pagination and open a PR";
+    const task = await store.change(f.w.id, async (w, sql) => {
+      const run = createRun(w, "101", original, "101", 0, "fixture-model", {
+        replyTo: 10,
+        botId: "999",
+      });
+      run.status = "running";
+      const source = w.messages.find(
+        (message) => message.runId === run.id && message.role === "user",
+      );
+      if (!source) throw Error("Missing Telegram requirement");
+      return startDevelopment(sql, w, run.id, "101", 7001, [source.id], "999");
+    });
+    f.pull.head.ref = `codex/repodesk-${task.id}`;
+    const executor = () =>
+      new DevelopmentExecutor(store, f.service.apps, f.runner, "ab".repeat(32));
+    const read = () => taskGet(store.pool, f.w.id, task.id);
+    const tick = async (status?: LocalStatus) => {
+      const current = await read();
+      if (status && current.attemptId)
+        f.runner.states.set(current.attemptId, status);
+      await store.change(f.w.id, async (_w, sql) => {
+        const current = await taskGet(sql, f.w.id, task.id);
+        current.nextPollAt = undefined;
+        await taskSave(sql, current);
+      });
+      await executor().advance(f.w.id, task.id);
+      return read();
+    };
+    const outcome = (
+      revision: number,
+      evidence: string,
+      status: "intent" | "completed",
+    ): DevelopmentResult => ({
+      ...analysis,
+      status,
+      intent: "implement",
+      evidenceRevision: revision,
+      evidence,
+      summary: "Pagination fixed and checked.",
+      publishRequested: true,
+      verificationCommands: ["bun test"],
+    });
+    await tick();
+    await tick({
+      state: "succeeded",
+      result: outcome(1, original, "intent"),
+      tokens: 10,
+    });
+    await tick();
+    await tick({
+      state: "ready",
+      checkPassed: true,
+      result: outcome(1, original, "completed"),
+      tokens: 10,
+    });
+    await tick();
+    f.pull.head.sha = published;
+    expect((await read()).pullBinding).toEqual({
+      installationId: 501,
+      repositoryId: 7001,
+      number: 23,
+      branch: f.pull.head.ref,
+    });
+    return { ...f, task, read, tick, outcome };
+  }
+  test("GitHub fixes continue the published Telegram task and PR across executor reconstruction", async () => {
+    const f = await telegramFixture();
+    const text = "fix the remaining pagination edge case";
+    await f.mention(`@deepx-fixture[bot] ${text}`);
+    await f.mention(`@deepx-fixture[bot] ${text}`);
+    expect((await f.read()).revision).toBe(2);
+    expect((await store.read(f.w.id)).reviewTasks ?? []).toHaveLength(0);
+    expect(
+      await store.pool
+        .query("SELECT id FROM coding_tasks WHERE workspace_id=$1", [f.w.id])
+        .then((r) => r.rowCount),
+    ).toBe(1);
+    const inputs = await taskInputs(store.pool, f.task);
+    expect(inputs[1]).toMatchObject({
+      actor: "101",
+      sourceId: "github:issue:90",
+      text,
+      github: { githubId: 42, kind: "issue", id: 90 },
+    });
+    expect(
+      (await store.read(f.w.id)).messages.some(
+        (message) => message.id === "github:issue:90",
+      ),
+    ).toBe(false);
+    await f.tick();
+    expect(f.runner.starts.at(-1)?.development).toMatchObject({
+      taskId: f.task.id,
+      revision: 2,
+      mode: "intake",
+      pr: { number: 23 },
+    });
+    await f.tick({
+      state: "succeeded",
+      result: f.outcome(2, text, "intent"),
+      tokens: 10,
+    });
+    await f.tick();
+    f.runner.nextPublishedSha = "d".repeat(40);
+    await f.tick({
+      state: "ready",
+      checkPassed: true,
+      result: f.outcome(2, text, "completed"),
+      tokens: 10,
+    });
+    await f.tick();
+    const saved = await f.read();
+    expect(saved).toMatchObject({
+      state: "review",
+      revision: 2,
+      verifiedRevision: 2,
+      pr: { number: 23, headSha: "d".repeat(40) },
+    });
+    expect(f.runner.pushes).toHaveLength(2);
+    f.pull.head.sha = "d".repeat(40);
+    const w = await store.read(f.w.id);
+    expect(
+      w.deliveries.some(
+        (delivery) =>
+          delivery.id === `development:${f.task.id}:published:${saved.fence}` &&
+          delivery.chatId === "101" &&
+          delivery.text.includes(saved.pr?.url ?? "missing"),
+      ),
+    ).toBe(true);
+    expect(f.writes).toHaveLength(0);
+    const run = w.runs.find((run) => run.codingTaskId === f.task.id);
+    if (!run) throw Error("Missing original run");
+    expect(await codingTaskContext(store.pool, w, run, "999")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ taskId: f.task.id, state: "review" }),
+      ]),
+    );
+    const history = miniAppRoutes(store, {} as SetupService, "ab".repeat(32));
+    const response = await history.request("/history", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        initData: signedMiniAppData("123456:fixture-token"),
+        reference: taskReference(f.w.id, f.task.id),
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      task: { state: "review" },
+      items: expect.arrayContaining([expect.objectContaining({ text })]),
+    });
+    await store.change(f.w.id, async (current, sql) => {
+      const run = createRun(
+        current,
+        "101",
+        "Which checks passed?",
+        "101",
+        0,
+        "fixture-model",
+        { replyTo: 11, botId: "999" },
+      );
+      run.status = "running";
+      await askTask(
+        sql,
+        current,
+        await taskGet(sql, current.id, f.task.id),
+        run,
+        "latest-checks",
+        "Which checks passed?",
+      );
+    });
+    await f.tick();
+    expect(f.runner.starts.at(-1)?.development).toMatchObject({
+      taskId: f.task.id,
+      mode: "analysis",
+      pr: { number: 23, headSha: "d".repeat(40) },
+    });
+    expect(f.runner.starts.at(-1)?.messages).toEqual([
+      expect.objectContaining({ question: "Which checks passed?" }),
+    ]);
+    await store.change(f.w.id, (current, sql) =>
+      pruneDevelopment(sql, current),
+    );
+    expect((await f.read()).contentRemoved).toBeUndefined();
+  });
+  test("edited, deleted and foreign-PR GitHub inputs cannot execute a bound Telegram task", async () => {
+    for (const change of ["edit", "delete", "foreign"] as const) {
+      const f = await telegramFixture();
+      await f.mention();
+      const comment = f.comments.get(90);
+      if (!comment) throw Error("Missing source");
+      if (change === "edit") comment.body += " changed";
+      if (change === "delete") f.comments.delete(90);
+      if (change === "foreign")
+        comment.issue_url =
+          "https://api.github.com/repos/example/workspace/issues/24";
+      await f.tick();
+      expect({
+        change,
+        state: (await f.read()).state,
+        error: (await f.read()).error,
+      }).toEqual({
+        change,
+        state: "failed",
+        error: "coding_github_source_changed",
+      });
+      expect(f.runner.starts).toHaveLength(2);
+      expect(f.runner.pushes).toHaveLength(1);
+    }
+  });
+  test("a GitHub follow-up cannot reuse the previous revision's grant to publish during intake", async () => {
+    const f = await telegramFixture();
+    await f.mention();
+    await f.tick();
+    await f.tick({
+      state: "ready",
+      checkPassed: true,
+      result: f.outcome(2, "fix this", "completed"),
+      tokens: 10,
+    });
+    expect((await f.read()).state).toBe("failed");
+    expect((await f.read()).error).toBe("coding_unverified_artifact");
+    expect(f.runner.pushes).toHaveLength(1);
+  });
+  test("GitHub source outages retain the task and retry without duplicate execution", async () => {
+    const f = await telegramFixture();
+    await f.mention();
+    f.sourceAvailable(false);
+    await f.tick();
+    expect(await f.read()).toMatchObject({
+      state: "queued",
+      error: "coding_github_source_unavailable",
+      revision: 2,
+      attempts: 2,
+    });
+    expect(f.runner.starts).toHaveLength(2);
+    f.sourceAvailable(true);
+    await f.tick();
+    expect(await f.read()).toMatchObject({
+      state: "working",
+      revision: 2,
+      attempts: 3,
+    });
+    expect((await f.read()).error).toBeUndefined();
+    expect(f.runner.starts).toHaveLength(3);
+  });
+  test("GitHub source edits and permission revocation block publication of completed follow-up work", async () => {
+    for (const change of [
+      "edit",
+      "member",
+      "settings",
+      "settingsDuringRead",
+      "destination",
+    ] as const) {
+      const f = await telegramFixture();
+      const text = "fix this";
+      await f.mention();
+      await f.tick();
+      await f.tick({
+        state: "succeeded",
+        result: f.outcome(2, text, "intent"),
+        tokens: 10,
+      });
+      await f.tick();
+      if (change === "edit") {
+        const comment = f.comments.get(90);
+        if (!comment) throw Error("Missing source");
+        comment.body += " changed";
+      } else if (change === "settingsDuringRead") {
+        f.onSourceRead(async () => {
+          await store.change(f.w.id, (w) => {
+            if (w.reviewBot) w.reviewBot.settings.allowFixes = false;
+          });
+        });
+      } else if (change === "destination") {
+        const other = structuredClone(await store.read(f.w.id));
+        other.id = "00000000-0000-4000-8000-000000000001";
+        await store.pool.query(
+          "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",
+          [other.id, other.operatorId, JSON.stringify(other)],
+        );
+      } else
+        await store.change(f.w.id, (w) => {
+          if (change === "member") {
+            const member = w.members.find((member) => member.id === "101");
+            if (member) member.active = false;
+          } else if (w.reviewBot) w.reviewBot.settings.allowFixes = false;
+        });
+      await f.tick({
+        state: "ready",
+        checkPassed: true,
+        result: f.outcome(2, text, "completed"),
+        tokens: 10,
+      });
+      expect(["failed", "cancelled"]).toContain((await f.read()).state);
+      expect(f.runner.pushes).toHaveLength(1);
+      expect(f.runner.cancels.length).toBeGreaterThan(0);
+    }
+  });
+  test("inline GitHub fixes carry parent review evidence into the original task", async () => {
+    const f = await telegramFixture();
+    const pullUrl = "https://api.github.com/repos/example/workspace/pulls/23";
+    f.comments.set(80, {
+      id: 80,
+      body: "Validate the cursor before incrementing.",
+      user: { id: 500, type: "Bot", login: "reviewer" },
+      pull_request_url: pullUrl,
+      path: "src/api.ts",
+      line: 2,
+    });
+    const comment = {
+      id: 91,
+      body: "@deepx-fixture[bot] fix this",
+      user: { id: 42, type: "User", login: "fixture-user" },
+      pull_request_url: pullUrl,
+      in_reply_to_id: 80,
+    };
+    f.comments.set(91, comment);
+    await f.accept("pull_request_review_comment", { comment });
+    await f.tick();
+    const run = f.runner.starts.at(-1)?.development;
+    expect(run?.inputs.at(-1)?.github).toMatchObject({
+      kind: "review",
+      id: 91,
+    });
+    expect(run?.context).toContain("Validate the cursor before incrementing.");
+    expect((await store.read(f.w.id)).reviewTasks ?? []).toHaveLength(0);
+  });
+  test("GitHub inputs are erased with original task sources", async () => {
+    const f = await telegramFixture();
+    await f.mention();
+    await store.change(f.w.id, async (w, sql) => {
+      const task = await taskGet(sql, w.id, f.task.id);
+      const source = w.messages.find((message) => message.id === task.sourceId);
+      if (source) source.expiresAt = new Date(0).toISOString();
+      await pruneDevelopment(sql, w);
+    });
+    expect((await f.read()).contentRemoved).toBe(true);
+    expect(await taskInputs(store.pool, f.task)).toHaveLength(0);
+    expect((await f.read()).pullBinding).toBeUndefined();
+  });
+  test("GitHub fixes cannot revive a stopped bound Telegram task", async () => {
+    const f = await telegramFixture();
+    await store.change(f.w.id, async (_w, sql) => {
+      const task = await taskGet(sql, f.w.id, f.task.id);
+      task.state = "cancelled";
+      task.cancelRequested = true;
+      await taskSave(sql, task);
+    });
+    await expect(f.mention()).rejects.toThrow("coding_cancelled");
+    expect((await f.read()).state).toBe("cancelled");
+    expect((await f.read()).revision).toBe(1);
+    expect((await store.read(f.w.id)).reviewTasks ?? []).toHaveLength(0);
+  });
+  test("unbound historical PRs retain independent Review Bot routing", async () => {
+    const f = await telegramFixture();
+    await store.change(f.w.id, async (_w, sql) => {
+      const task = await taskGet(sql, f.w.id, f.task.id);
+      task.pullBinding = undefined;
+      await taskSave(sql, task);
+    });
+    await f.mention();
+    expect((await f.read()).revision).toBe(1);
+    expect((await store.read(f.w.id)).reviewTasks).toHaveLength(1);
+  });
+  test("read-only comments and other verified collaborators keep separate Review Bot routing", async () => {
+    const f = await telegramFixture();
+    await f.mention("@deepx-fixture[bot] explain this finding");
+    expect((await f.read()).revision).toBe(1);
+    expect((await store.read(f.w.id)).reviewTasks?.[0]?.mode).toBe("answer");
+    await store.change(f.w.id, (w) => {
+      const owner = w.members.find((member) => member.id === "101");
+      const other = w.members.find((member) => member.id === "202");
+      if (!owner?.github || !other) throw Error("Missing members");
+      other.github = {
+        ...structuredClone(owner.github),
+        id: 43,
+        login: "other",
+      };
+    });
+    await f.mention("@deepx-fixture[bot] fix this", 91, 43);
+    expect((await f.read()).revision).toBe(1);
+    expect((await store.read(f.w.id)).reviewTasks).toHaveLength(2);
+  });
   test("review source preparation failures stop the task without a question or publication", async () => {
     const f = await fixture();
     await f.accept();

@@ -22,6 +22,17 @@ export const developmentInput = z.object({
   text: z.string().max(20000),
   kind: z.enum(["request", "answer", "followup"]),
   hasAttachments: z.literal(true).optional(),
+  github: z
+    .object({
+      kind: z.enum(["issue", "review"]),
+      id: z.number().int().positive().safe(),
+      githubId: z.number().int().positive().safe(),
+      hash: z.string().regex(/^[a-f0-9]{64}$/),
+      reviewRevision: z.number().int().nonnegative(),
+      expiresAt: z.iso.datetime(),
+    })
+    .strict()
+    .optional(),
 });
 export type DevelopmentInput = z.infer<typeof developmentInput>;
 const imageBytes = (data: string) =>
@@ -283,6 +294,12 @@ export type DevelopmentState =
   | "cancelled"
   | "unknown";
 export interface DevelopmentTask {
+  pullBinding?: {
+    installationId: number;
+    repositoryId: number;
+    number: number;
+    branch: string;
+  };
   browserRead?: import("../domain.ts").BrowserReadStamp;
   browserCapability?: import("../browser/capability.ts").BrowserCapability;
   browserBridgeOrigin?: string;

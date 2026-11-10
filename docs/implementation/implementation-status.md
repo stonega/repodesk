@@ -1,5 +1,97 @@
 # Implementation evidence
 
+## GitHub fixes continue the original Telegram coding task (2026-11-01)
+
+Confirmed PR publication now records an installation/repository/PR/branch binding.
+With Review Bot requests and fixes enabled, an explicit fix from the original
+requester's verified GitHub account appends a deduplicated input revision to the
+same durable development task. Codex intake determines its implementation grant;
+the existing attempt fences, verification and same-PR publication rules apply.
+Read-only comments, other collaborators and unbound historical PRs retain Review
+Bot routing. A stopped bound task cannot be revived through GitHub.
+
+GitHub inputs retain their author, full-body fingerprint, fix-policy revision and
+expiry separately from Telegram messages. Source reads happen outside workspace
+transactions; current membership, fix policy and Review Bot routing ownership are
+checked again at execution/publication. Changed, inaccessible or foreign-PR
+sources stop work; transient source failures retry the same task without duplicate
+execution. Inline replies supply their parent review as reference data. No private
+Telegram result or question is automatically posted to GitHub. Status, delivery
+and Mini App history retain the original Telegram audience, and source erasure
+removes the external inputs with the task. No dependency or SQL migration was added.
+Publication also requires the current work phase: a previous revision's grant
+cannot publish a new follow-up while its intake is still pending.
+
+The deterministic journey covers Telegram task creation and confirmed publication,
+signed GitHub follow-up, executor reconstruction, same-PR update, original-audience
+delivery intents, Pi task context and the Mini App history API. It also covers
+duplicates, revoked sources/permissions, policy changes during source verification,
+routing ownership changes, outages, inline references, fallback routing and erasure.
+Validation on an isolated commit snapshot excluding unrelated working changes
+passed Biome, strict TypeScript, build, **1,373 tests across 148 files** with
+disposable PostgreSQL and a 15-second deadline, including **40 Review Bot
+integration tests**. The built Node runtime contract passed all 16 plugin-startup
+cases with zero external startup calls. Documentation links and whitespace checks
+passed.
+Live model interpretation, webhook delivery and native Telegram acceptance remain
+pilot checks. See [the repeatable journey](../../examples/cross-channel-coding.md).
+
+## Telegram bot token format errors provide recovery guidance (2026-11-10)
+
+Bot-token format validation now belongs to the credentials field schema, keeping
+the `botToken` issue path through the production API error handler. HTTP 400
+retains the `invalid_request` code and includes a safe message asking for a token
+from `@BotFather`, with a numeric-ID/colon example. The shared web client displays
+that message in the Telegram setup form and Manage Telegram bot dialog without
+the raw field name. Neither the API nor its error message echoes the submitted
+credential. Existing empty/omitted-token retention and the 200-character limit
+remain supported; well-formed values still require upstream identity verification.
+
+Production-composition regressions prove malformed values make no Telegram calls,
+leave deployment state and credential audit records unchanged, and preserve the
+operator permission check. Browser coverage verifies readable messages, retained
+drafts, unlocked recovery controls and successful correction in both flows. Their
+error states were visually inspected at 1280px and 390px; the saved bot summary
+remains unchanged while an invalid replacement is rejected.
+
+Validation: lint, strict TypeScript, build, the Node runtime contract (16 startup
+cases, zero external startup calls), the full deterministic suite, and the focused first-visit browser journey pass. No dependency or SQL
+migration was added. This correction is local; it has not been deployed to the VPS.
+
+## Telegram widget tool and bundled preset (2026-11-10)
+
+Added `send_telegram_widget` and the default-enabled, read-only **Telegram widgets**
+preset, with a bundled `SKILL.md` and supporting rendering guide. Existing tenants
+receive the preset without changing current run pins, disabled records or slug
+collisions. The tool stages one self-contained presentation for a private chat or
+Topic; only a successful answer atomically publishes its durable delivery.
+Groups, schedules, shared widgets, wallet operations and widget-to-bot queries
+are outside this implementation. Local controls can explore a chart or estimate.
+
+Delivery rechecks audience, source permissions, bot identity and skill grants;
+confirmed Telegram rejections fall back to a useful caption while unknown sends
+remain unreplayed. HTML follows existing private Browser encryption and source
+erasure. See [implementation and verification](telegram-widgets.md) and
+[conversation examples](../../examples/telegram-widgets.md).
+
+Validation: Biome, strict TypeScript, build, skill validation and the Node runtime
+contract passed. All 15 focused widget/preset tests and all 13 browser scenarios
+passed; desktop/mobile preset, pending/error and local widget example screenshots
+were inspected in light/dark themes. The exact Docker image passed its 16-case
+startup contract with zero external startup calls, migrations, API health/readiness,
+admin HTTP and worker-heartbeat smoke checks; Compose configuration validated.
+The final full suite recorded 1,406 passes and one unrelated intermittent Git
+index mismatch in `codex-job-command.test.ts`; its four tests passed immediately
+in isolation. That file was not changed. Native Telegram desktop/mobile rendering
+and real-model widget quality remain staging checks. No production deployment or
+live Telegram message was performed.
+
+Commit-only verification based on upstream `a8dba53` excludes unrelated local
+edits and passes all **1,438 deterministic tests across 153 files**, Biome,
+strict TypeScript, build, the 16-case offline Node runtime contract and all
+**13 widget/preset browser scenarios**. The upstream Git fixture correction
+also removes the intermittent index mismatch seen in the earlier working-tree run.
+
 ## Provider save errors distinguish HTML gateway responses (2026-11-09)
 
 The admin request client now retains the HTTP status when a response cannot be

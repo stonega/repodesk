@@ -133,6 +133,33 @@ test.describe
       await expect(page.getByRole("alert")).toContainText(
         "Enter a bot token to continue.",
       );
+      const invalidBotToken = "sk-fixture-model-provider-key";
+      const setupBotToken = page.getByLabel(/Bot token/);
+      await setupBotToken.fill(invalidBotToken);
+      await page
+        .getByRole("button", { name: "Continue to GitHub App" })
+        .click();
+      await expect(page.getByRole("alert")).toContainText(
+        "Enter a Telegram bot token from @BotFather",
+      );
+      await expect(page.getByRole("alert")).toContainText("123456789:ABC...");
+      await expect(page.getByRole("alert")).not.toContainText(invalidBotToken);
+      await expect(setupBotToken).toHaveValue(invalidBotToken);
+      await expect(
+        page.getByRole("button", { name: "Continue to GitHub App" }),
+      ).toBeEnabled();
+      for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        await expect(page.locator("body")).toHaveJSProperty(
+          "scrollWidth",
+          width,
+        );
+        await page.screenshot({
+          path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/telegram-token-setup-error-${width}.png`,
+          fullPage: true,
+        });
+      }
+      await page.setViewportSize({ width: 1280, height: 720 });
       await page
         .getByLabel(/Bot token/)
         .fill("999:fake-token-that-is-never-sent-to-Telegram");
@@ -209,6 +236,33 @@ test.describe
       const replacementToken = botDialog.getByLabel("New bot token");
       await expect(replacementToken).toHaveAttribute("type", "text");
       await expect(replacementToken).toHaveValue("");
+      await replacementToken.fill(invalidBotToken);
+      await botDialog.getByRole("button", { name: "Save token" }).click();
+      await expect(botDialog.getByRole("alert")).toContainText(
+        "Enter a Telegram bot token from @BotFather",
+      );
+      await expect(botDialog.getByRole("alert")).toContainText(
+        "123456789:ABC...",
+      );
+      await expect(botDialog.getByRole("alert")).not.toContainText(
+        invalidBotToken,
+      );
+      await expect(replacementToken).toHaveValue(invalidBotToken);
+      await expect(
+        botDialog.getByRole("button", { name: "Save token" }),
+      ).toBeEnabled();
+      await expect(botCard).toContainText("@fixture_bot");
+      for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        await botDialog
+          .getByRole("button", { name: "Save token" })
+          .scrollIntoViewIfNeeded();
+        await page.screenshot({
+          path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/telegram-token-dialog-error-${width}.png`,
+          fullPage: true,
+        });
+      }
+      await page.setViewportSize({ width: 1280, height: 720 });
       await replacementToken.fill(
         "999:fake-token-that-is-never-sent-to-Telegram",
       );

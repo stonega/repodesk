@@ -666,11 +666,13 @@ export async function pruneDevelopment(sql: Sql, w: Workspace) {
           ),
       ) ||
       Date.parse(task.createdAt) <= cutoff ||
-      inputs.some(
-        (i) =>
-          !w.messages.some(
-            (s) => s.id === i.sourceId && Date.parse(s.expiresAt) > Date.now(),
-          ),
+      inputs.some((i) =>
+        i.github
+          ? Date.parse(i.github.expiresAt) <= Date.now()
+          : !w.messages.some(
+              (s) =>
+                s.id === i.sourceId && Date.parse(s.expiresAt) > Date.now(),
+            ),
       );
     if (!invalid || task.contentRemoved) continue;
     task.cancelRequested = true;
@@ -679,6 +681,7 @@ export async function pruneDevelopment(sql: Sql, w: Workspace) {
     task.payload.body = "[removed]";
     task.result = undefined;
     task.referenceSources = undefined;
+    task.pullBinding = undefined;
     task.question = undefined;
     task.sourceId = "[removed]";
     task.state = "queued";

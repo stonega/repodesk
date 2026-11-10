@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { DevelopmentTask } from "../coding/development.ts";
 import { codingStatusLabel } from "../coding/feedback.ts";
+import { developmentInputPresent } from "../coding/input-sources.ts";
 import { taskGet, taskInputs } from "../coding/task-store.ts";
 import { checkDevelopment } from "../coding/tasks.ts";
 import { transcriptText } from "../coding/transcript.ts";
@@ -128,8 +129,9 @@ export function miniAppRoutes(
     );
     requireThat(
       inputs.length &&
+        inputs.every((input) => developmentInputPresent(w, task, input)) &&
         [
-          ...inputs.map((i) => i.sourceId),
+          ...inputs.filter((input) => !input.github).map((i) => i.sourceId),
           ...refs.map((r: { id: string }) => r.id),
           ...exchanges.rows.flatMap((row) => row.data.sourceIds ?? []),
         ].every((id) =>

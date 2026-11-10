@@ -56,6 +56,34 @@ test("model configuration validates URL, model ID, thinking and prices", () => {
     );
 });
 
+test("bot token validation identifies the field and explains the expected credential without echoing it", () => {
+  for (const botToken of [
+    "sk-fixture-model-provider-key",
+    "987654321",
+    "bot:fixture_bot_token_that_is_long_enough",
+    "123456789:short",
+    "123456789:invalid/token/with/slashes",
+    `123456789:${"a".repeat(201)}`,
+  ]) {
+    const result = credentialsSchema.safeParse({ version: 1, botToken });
+    expect(result.success).toBe(false);
+    if (result.success) throw Error("Malformed bot token was accepted");
+    expect(result.error.issues).toHaveLength(1);
+    expect(result.error.issues[0]?.path).toEqual(["botToken"]);
+    expect(result.error.issues[0]?.message).toContain("@BotFather");
+    expect(result.error.issues[0]?.message).toContain("123456789:ABC...");
+    expect(result.error.issues[0]?.message).not.toContain(botToken);
+  }
+  for (const botToken of [
+    undefined,
+    "",
+    "123456789:fixture_bot_token_for_validation",
+  ])
+    expect(credentialsSchema.safeParse({ version: 1, botToken }).success).toBe(
+      true,
+    );
+});
+
 test("model price currencies require an explicit valid USD rate and retain legacy USD prices", () => {
   const parse = (modelPricing: unknown) =>
     credentialsSchema.safeParse({ version: 1, modelPricing });

@@ -12,6 +12,7 @@ import { GitHubRateLimitError } from "../github/app.ts";
 import type { GitHubApps } from "../github/registry.ts";
 import { githubAccessPending } from "../github/user-access.ts";
 import { ModelProviders } from "../models/service.ts";
+import { reviewDestination } from "../review-bot/policy.ts";
 import { decrypt, fingerprint } from "../setup/credentials.ts";
 import {
   isAudioAttachment,
@@ -35,6 +36,11 @@ import {
   runnerStage,
   taskUnknown,
 } from "./feedback.ts";
+import {
+  checkDevelopmentGitHubPolicy,
+  developmentInputPresent,
+  verifyDevelopmentGitHubInputs,
+} from "./input-sources.ts";
 import type {
   LocalDeviceAuth,
   LocalRunner,
@@ -112,21 +118,23 @@ export class DevelopmentExecutor {
       409,
     );
     const inputs = await taskInputs(sql, task);
+    checkDevelopmentGitHubPolicy(w, inputs);
+    if (inputs.some((input) => input.github))
+      requireThat(
+        (await reviewDestination(
+          this.store,
+          w.operatorId,
+          task.payload.installationId,
+          task.payload.repositoryId,
+        )) === w.id,
+        "review_configuration_changed",
+        409,
+      );
     for (const actor of new Set(inputs.map((i) => i.actor)))
       checkDevelopment(w, task, actor);
     requireThat(
       inputs.length &&
-        inputs.every((i) =>
-          w.messages.some(
-            (s) =>
-              s.id === i.sourceId &&
-              s.author === i.actor &&
-              (!i.hasAttachments || !!s.attachments?.length) &&
-              s.chatId === task.chatId &&
-              s.topicId === task.topicId &&
-              Date.parse(s.expiresAt) > Date.now(),
-          ),
-        ),
+        inputs.every((input) => developmentInputPresent(w, task, input)),
       "coding_source_expired",
       409,
     );
@@ -146,7 +154,14 @@ export class DevelopmentExecutor {
         permission === "contents" ? "coding_read" : permission,
       )
     ).token;
-    return { token, app };
+    const githubContext = await verifyDevelopmentGitHubInputs(
+      app,
+      token,
+      w,
+      task,
+      await taskInputs(this.store.pool, task),
+    );
+    return { token, app, githubContext };
   }
   async advance(workspaceId: string, id: string) {
     await new TaskConversationExecutor(
@@ -229,7 +244,13 @@ export class DevelopmentExecutor {
       if (!t.cancelRequested && !t.contentRemoved && !t.cleanupAttemptId) {
         try {
           await this.allowed(w, sql, t);
-          if (t.error === "github_user_access_unavailable") t.error = undefined;
+          if (
+            [
+              "github_user_access_unavailable",
+              "coding_github_source_unavailable",
+            ].includes(t.error ?? "")
+          )
+            t.error = undefined;
         } catch (error) {
           if (githubAccessPending(error)) {
             await this.holdAccess(w, sql, t, error);
@@ -370,7 +391,10 @@ export class DevelopmentExecutor {
             409,
           );
         }
-        const { token, app } = await this.token(task, "contents");
+        const { token, app, githubContext } = await this.token(
+          task,
+          "contents",
+        );
         if (!(await this.prepareReferences(task, lease, app))) return;
         const referenceToken = await this.referenceToken(task, app);
         const pr = task.pr
@@ -433,6 +457,7 @@ export class DevelopmentExecutor {
                 : {}),
               context: JSON.stringify({
                 references: events?.sources ?? [],
+                ...(githubContext ? { githubReferences: githubContext } : {}),
                 decisions,
                 priorResult: t.result,
                 priorQuestion: t.question,
@@ -576,6 +601,13 @@ export class DevelopmentExecutor {
             if (poll) clearInterval(poll);
           }
         }
+        await verifyDevelopmentGitHubInputs(
+          app,
+          token,
+          await this.store.read(workspaceId),
+          task,
+          await taskInputs(this.store.pool, task),
+        );
         await guard();
         dispatched = true;
         await this.runner.start({
@@ -708,6 +740,12 @@ export class DevelopmentExecutor {
             await this.allowed(w, sql, t);
             await this.settle(sql, t, status);
             t.pr = pr;
+            t.pullBinding = {
+              installationId: t.payload.installationId,
+              repositoryId: t.payload.repositoryId,
+              number: pr.number,
+              branch: pr.branch,
+            };
             t.state = t.revision > t.consumedRevision ? "queued" : "review";
             t.phase = "intake";
             t.attemptId = undefined;
@@ -762,6 +800,12 @@ export class DevelopmentExecutor {
             url: status.prUrl,
             branch: t.pr?.branch ?? `codex/repodesk-${t.id}`,
             headSha: status.publishedSha,
+          };
+          t.pullBinding = {
+            installationId: t.payload.installationId,
+            repositoryId: t.payload.repositoryId,
+            number: t.pr.number,
+            branch: t.pr.branch,
           };
           t.state = t.revision > t.consumedRevision ? "queued" : "review";
           t.phase = "intake";
@@ -898,7 +942,11 @@ export class DevelopmentExecutor {
         });
         return;
       }
-      if (githubAccessPending(error) && !task.cancelRequested) {
+      if (
+        (githubAccessPending(error) ||
+          code === "coding_github_source_unavailable") &&
+        !task.cancelRequested
+      ) {
         await this.update(
           task,
           lease,
@@ -915,7 +963,13 @@ export class DevelopmentExecutor {
               t.attempts--;
               t.state = "queued";
             }
-            await this.holdAccess(w, sql, t, error);
+            await this.holdAccess(
+              w,
+              sql,
+              t,
+              error,
+              code === "coding_github_source_unavailable" ? code : undefined,
+            );
           },
           false,
         );
@@ -1010,6 +1064,7 @@ export class DevelopmentExecutor {
     sql: Sql,
     task: DevelopmentTask,
     error: unknown,
+    code = "github_user_access_unavailable",
   ) {
     if (task.cancelRequested) {
       task.lease = undefined;
@@ -1018,7 +1073,7 @@ export class DevelopmentExecutor {
       await taskSave(sql, task);
       return;
     }
-    task.error = "github_user_access_unavailable";
+    task.error = code;
     task.lease = undefined;
     task.leaseUntil = undefined;
     task.nextPollAt = new Date(
@@ -1031,7 +1086,7 @@ export class DevelopmentExecutor {
       w,
       task,
       codingFailureMessage(task.error, task.payload),
-      `access-unavailable:${task.fence}`,
+      `${code === "github_user_access_unavailable" ? "access-unavailable" : code}:${task.fence}`,
     );
     await taskSave(sql, task);
   }
@@ -1205,6 +1260,7 @@ export class DevelopmentExecutor {
         task.attemptId &&
         status.checkPassed &&
         status.result?.status === "completed" &&
+        task.phase === "work" &&
         task.canImplement,
       "coding_unverified_artifact",
       409,

@@ -9,6 +9,7 @@ import {
 import { hash } from "../setup/credentials.ts";
 import { audit, authorize, revokeWork } from "../workspaces/policy.ts";
 import { skillSourcesPresent } from "./provenance.ts";
+import { telegramWidgetSpec } from "./telegram-widgets.ts";
 export function validateSkill(value: unknown) {
   const spec = skillSchema.parse(value);
   const resources = spec.resources ?? [];
@@ -56,20 +57,22 @@ function starterSpecs() {
       description: "Draft a follow-up for review",
       body: "Draft a concise follow-up from supplied context, citing [source:ID]. Label inferred owners and dates as suggestions. Do not send messages or create active schedules.",
     },
-  ].map((s) => {
-    const spec = skillSchema.parse({
-      ...s,
-      tools: [
-        "query_model_cost",
-        "read_chat_context",
-        "read_instructions",
-        "propose_workflow",
-        "propose_instruction",
-        "load_skill",
-      ],
-    });
-    return spec;
-  });
+  ]
+    .map((s) => {
+      const spec = skillSchema.parse({
+        ...s,
+        tools: [
+          "query_model_cost",
+          "read_chat_context",
+          "read_instructions",
+          "propose_workflow",
+          "propose_instruction",
+          "load_skill",
+        ],
+      });
+      return spec;
+    })
+    .concat(telegramWidgetSpec());
 }
 export function starterSkills(): Workspace["skills"] {
   return starterSpecs().map((spec) => ({

@@ -91,6 +91,21 @@ resolve. Repeating “continue” does not repair a missing environment prerequi
 
 后续修改通常更新同一个 PR。已关闭或合并的 PR 不会自动重建。目标仓库写错时立即说明；只有尚未产生工作成果且满足安全条件的空任务可以替换目标，已有修改不能直接搬到其他仓库。
 
+## Continue a task from GitHub
+
+When Review Bot requests and fixes are enabled, use the same verified GitHub
+account that started the Telegram task to post a clear fix request on its PR:
+
+> @repodesk[bot] fix the pagination edge case described above.
+
+Use your installation's actual bot handle. PRs confirmed as published by this
+version continue the original task and PR. Return to the original Telegram
+conversation for status, product questions and **View conversation**. Explanations
+and reviews remain read-only; other collaborators and older PRs without a binding
+use Review Bot's separate workflow. Edited/deleted instructions or lost access
+stop further execution and publication. Temporary source failures retry
+automatically. Merge and deployment require their own authorization.
+
 ## 状态、停止与 PR
 
 进度消息更新已确认阶段；必要问题、阻塞和最终结果会有新消息。用最新任务消息上的 **Status / Cancel**，或 `/status`、`/cancel` 查看和停止。也可以在绑定对话发送“停止”或 `stop`。
