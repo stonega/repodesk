@@ -4,9 +4,11 @@ Diagnostic code: `telegram_thread_not_found`. Investigated 2026-11-10.
 
 ## Finding and limits
 
-The confirmed failure boundary is Telegram's explicit private-Topic resolution
-before message sending. No RepoDesk serialization, Topic mapping or deployed
-version regression was found. The fallback restored delivery through the main
+The confirmed failure is Telegram rejecting properly formed explicit private-Topic
+send requests. Current upstream source contains a Topic-lookup path that produces
+this exact error, which supports a resolution failure; the hosted API's internal
+trace is unavailable. No RepoDesk serialization, Topic mapping or deployed version
+regression was found. The fallback restored delivery through the main
 private chat; it did not repair native Topic delivery. The precise Telegram
 server-side reason remains unconfirmed.
 

@@ -147,6 +147,6 @@ The user confirmed the same bot worked before the reset. The subsequent
 [reset/version and fresh-Topic investigation](2026-11-10-private-topic-root-cause-investigation.md)
 finds byte-identical old/current send requests and unchanged Topic routing.
 A new user test received in a previously working Topic completed model execution,
-then failed Telegram's explicit Topic lookup before the main-chat fallback sent.
+then received Telegram's explicit-Topic rejection before the main-chat fallback sent.
 The exact Telegram server-side cause remains unconfirmed. No-op Topic edits are
 not evidence of Topic existence: a made-up ID also returned HTTP 200.
