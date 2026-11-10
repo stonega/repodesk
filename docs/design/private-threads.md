@@ -46,8 +46,9 @@ requests it. Only an ordinary run result/failure with a confirmed Telegram 400
 `message thread not found` can retry in that same member's main chat. Consent is
 bound to the workspace, member and bot; it is rechecked before sending and removed
 on membership deactivation. Buttons, Browser/control messages, scheduled replies,
-groups and uncertain sends are excluded. The wire retry omits both Topic and reply
-parameters and adds a short explanation. The original run/Topic context remains
+groups and uncertain sends are excluded. The wire retry uses standard text delivery, preserves text entities/links, omits
+both Topic and reply parameters and adds a short explanation. The answer appears
+in Telegram's All messages view; this does not repair the unavailable native Topic. The original run/Topic context remains
 unchanged; the delivery receipt records `deliveredTopicId: 0`. Replies to that
 main-chat receipt do not import the Topic's history into a new conversation.
 See [operator recovery](../implementation/telegram-topic-fallback.md).

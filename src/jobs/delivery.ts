@@ -382,6 +382,9 @@ export class DeliveryWorker {
         }
         d.remoteId = target.remoteId;
       }
+      // Recovery uses the standard text transport verified visible in the main chat.
+      // Persist this before sending, including intents queued by an older worker.
+      if (d.privateTopicFallback) d.format = "markdown";
       d.state = "sending";
       d.botId = deployment.bot?.id;
       d.startedAt = new Date().toISOString();

@@ -12,7 +12,7 @@ TEST_DATABASE_URL=postgres://USER:PASSWORD@127.0.0.1:5432/TEST_DB bun test tests
 3. For a consenting fixture member, configure the current bot-bound preference.
    Simulate that same confirmed rejection, then reconstruct the delivery worker.
 4. The second attempt goes to the same private chat without Topic/reply parameters.
-   It includes the recovery explanation; the receipt keeps logical `topicId: 77`
+   It uses `sendMessage` with text entities/links and includes the recovery explanation; the receipt keeps logical `topicId: 77`
    and records `deliveredTopicId: 0`. The model executes once.
 5. Repeating the job sends nothing. Revocation before retry cancels the intent;
    an uncertain main-chat send remains unknown and is never automatically replayed.

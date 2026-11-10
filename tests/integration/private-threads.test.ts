@@ -276,7 +276,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         ),
       ).toHaveLength(attempts.length);
     });
-    async function topicReply(optIn = true) {
+    async function topicReply(optIn = true, answer = "Hello!") {
       const w = await seed();
       if (optIn)
         await store.change(w.id, (w) => {
@@ -296,7 +296,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         setup,
         new PiRunner(() => {
           modelCalls++;
-          return response("Hello!");
+          return response(answer);
         }),
       ).execute(w.id, run.id);
       const delivery = (await store.read(w.id)).deliveries.find(
@@ -337,6 +337,8 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         ["sendMessage", "sendRichMessage"].includes(c.method),
       );
       expect(sends).toHaveLength(2);
+      expect(sends[0]?.method).toBe("sendRichMessage");
+      expect(sends[1]?.method).toBe("sendMessage");
       expect(sends[0]?.params.message_thread_id).toBe(77);
       expect(sends[1]?.params.chat_id).toBe("101");
       expect(sends[1]?.params.message_thread_id).toBeUndefined();
@@ -356,6 +358,44 @@ const rootUrl = process.env.TEST_DATABASE_URL;
           ["sendMessage", "sendRichMessage"].includes(c.method),
         ),
       ).toHaveLength(2);
+    });
+    test("recovery normalizes an already queued rich reply to standard text and preserves links", async () => {
+      const { w, delivery } = await topicReply(
+        true,
+        "Hello **there**. Read the [guide](https://example.com/guide).",
+      );
+      await new DeliveryWorker(store, setup).send(w.id, delivery.id);
+      const queued = (await store.read(w.id)).deliveries.find(
+        (d) => d.id === delivery.id,
+      );
+      // Previous releases persisted the rich format alongside the fallback decision.
+      expect(queued).toMatchObject({ state: "pending", format: "rich" });
+      expect(queued?.privateTopicFallback).toBeDefined();
+      await new DeliveryWorker(store, setup).send(w.id, delivery.id);
+      const sent = calls
+        .filter((c) => ["sendMessage", "sendRichMessage"].includes(c.method))
+        .at(-1);
+      expect(sent?.method).toBe("sendMessage");
+      expect(sent?.params.rich_message).toBeUndefined();
+      expect(sent?.params.message_thread_id).toBeUndefined();
+      expect(sent?.params.reply_parameters).toBeUndefined();
+      expect(sent?.params.text).toContain("Hello there. Read the guide.");
+      expect(sent?.params.entities).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "bold" }),
+          expect.objectContaining({
+            type: "text_link",
+            url: "https://example.com/guide",
+          }),
+        ]),
+      );
+      expect(
+        (await store.read(w.id)).deliveries.find((d) => d.id === delivery.id),
+      ).toMatchObject({
+        state: "sent",
+        format: "markdown",
+        deliveredTopicId: 0,
+      });
     });
     test("missing Topic without consent fails without moving or downgrading the reply", async () => {
       const { w, delivery } = await topicReply(false);

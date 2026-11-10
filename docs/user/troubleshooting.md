@@ -135,7 +135,8 @@ Review Bot 额外检查 HTTPS webhook、secret、事件订阅和 GitHub delivery
 Telegram can reject replies to a private Topic even when a request reaches the bot.
 Ask your host operator to check the run's delivery error separately from model
 execution. If you request it, the operator can enable recovery of ordinary answers
-in your main private chat. A recovered answer explains why it appears there.
+in your main private chat. Look in the bot's **All messages** view. Recovery uses standard text delivery and
+explains why the answer appears there. The native Topic can remain unavailable.
 This setting applies only to your current workspace and bot. It does not recover
 messages Telegram never delivered to the bot. Group replies, buttons and uncertain
 sends stay excluded. Ask the operator to disable recovery when it is no longer needed.

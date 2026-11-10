@@ -38,6 +38,12 @@ Only the original `run:<id>:result` / `:failure` ordinary private response quali
 The first known rejection durably saves the current bot/consent generation on the
 same delivery intent. The next attempt removes both `message_thread_id` and
 `reply_parameters`, keeps the same private chat and adds a short explanatory prefix.
+Recovery now uses the standard `sendMessage` text transport with existing text
+entities, including bold text and links. The user confirmed a plain main-chat
+probe visible; rich fallback visibility was not established. This is a conservative
+recovery choice, not proof that rich formatting caused the native Topic failure.
+The format decision is persisted when claiming the retry, so rich fallback intents
+queued by an older worker also use standard text after restart.
 Run context, citations and logical `topicId` stay unchanged. Successful receipts
 include `remoteId` and `deliveredTopicId` (zero for the main chat), visible in Runs &
 delivery's existing detail data. No frontend/editor contract changes.

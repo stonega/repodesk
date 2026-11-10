@@ -1,5 +1,15 @@
 # Implementation evidence
 
+## Standard text for private Topic recovery (2026-11-10)
+
+The explicitly opted-in main-chat recovery now uses `sendMessage` with existing
+text entities, including links. The user confirmed a plain main-chat diagnostic
+visible; this change chooses that transport for recovery without attributing the
+native Topic outage to rich formatting. The decision is persisted before sending
+and applies to rich intents queued by an older worker. Native Topic routing and
+ordinary rich replies keep their existing behavior. See
+[the recovery contract](telegram-topic-fallback.md).
+
 ## Scoped private Topic delivery recovery (2026-11-10)
 
 Ordinary run results/failures can recover from a confirmed Telegram 400
