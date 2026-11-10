@@ -82,3 +82,8 @@ Later safe metadata captured updates `915026487` and `915026488` as
 This corrects the earlier rich-format hypothesis for the empty-content events.
 The deployed rich-input compatibility correction is independently covered, but
 the observed remaining delivery failure is the Telegram Topic rejection above.
+
+After budget removal, run `5c24aa89-32a4-4de2-9833-79b921f4c6c3` completed
+successfully with one model attempt. Its response still failed delivery to Topic
+`1997120` after rich/text transport attempts. This confirms model execution works
+and the current remaining blocker is Telegram delivery to that private Topic.
