@@ -80,3 +80,11 @@ Reply 一条定时输出：
 - Telegram 发送结果未知时，先确认群内是否已有消息，不会自动重复发送。
 
 群总结能覆盖多少消息取决于 [群组收集设置](groups.md) 和保留期限；不能补读 Telegram 旧历史。预算失败或无人收到报告时，参阅 [排障指南](troubleshooting.md)。
+
+## Formatted Telegram messages
+
+Displayed text in incoming Telegram rich messages can start the same private
+conversation as ordinary text. Paragraphs and readable formatted blocks become
+bounded plain text. Quoted or forwarded commands remain reference material.
+Hidden links, buttons and widget content do not grant permission or invoke actions.
+Media embedded only inside a rich message is not imported as an attachment.

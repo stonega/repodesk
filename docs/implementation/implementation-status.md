@@ -1,5 +1,17 @@
 # Implementation evidence
 
+## Incoming Telegram rich-message text (2026-11-10)
+
+Normalize displayed incoming rich-message content before the webhook/polling
+schema strips unknown fields. Private Topic paragraphs, formatted text, edits and
+replied-to references use the existing bounded text/entity route. Legacy text and
+captions take precedence. Hidden URLs, buttons, widgets and quoted commands or
+mentions grant no additional authority. Membership, audience, provenance and
+duplicate-update checks remain enforced. Production-composition regressions cover
+authenticated rich input through deterministic execution and Topic delivery,
+including duplicates and inactive members. Native Telegram confirmation remains
+pending; see the [incident record](../../postmortem/2026-11-10-telegram-rich-input.md).
+
 ## GitHub fixes continue the original Telegram coding task (2026-11-01)
 
 Confirmed PR publication now records an installation/repository/PR/branch binding.

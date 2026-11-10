@@ -16,6 +16,7 @@ import {
   liveSource,
 } from "../../src/agent/live-input.ts";
 import { type AgentRunner, PiRunner } from "../../src/agent/runtime.ts";
+import { createApp } from "../../src/app.ts";
 import { migrate } from "../../src/db/migrate.ts";
 import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
@@ -170,6 +171,85 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       stream.end(result);
       return stream;
     }
+    test("rich private Topic input reaches the production API, execution and delivery once", async () => {
+      const w = await seed();
+      const app = createApp(store, setup, "http://localhost:3000");
+      const update = {
+        update_id: ++sequence,
+        message: {
+          message_id: ++sequence,
+          date: Math.floor(Date.now() / 1000),
+          from: { id: 101, is_bot: false },
+          chat: { id: 101, type: "private" },
+          message_thread_id: 37,
+          rich_message: { blocks: [{ type: "paragraph", text: "hi" }] },
+        },
+      };
+      const send = () =>
+        app.request("/telegram/webhook", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-telegram-bot-api-secret-token": "test-secret",
+          },
+          body: JSON.stringify(update),
+        });
+      expect((await send()).status).toBe(200);
+      expect(await (await send()).json()).toEqual({ duplicate: true });
+      let saved = await store.read(w.id);
+      expect(saved.messages).toHaveLength(1);
+      expect(saved.runs).toHaveLength(1);
+      const run = saved.runs[0];
+      if (!run) throw Error("missing rich-message run");
+      expect(run.task).toBe("hi");
+      expect(run.topicId).toBe(37);
+      await new Executor(
+        store,
+        setup,
+        new PiRunner(() => response("Hello!")),
+      ).execute(w.id, run.id);
+      saved = await store.read(w.id);
+      expect(saved.runs[0]?.status).toBe("succeeded");
+      const delivery = saved.deliveries.find((d) => d.runId === run.id);
+      if (!delivery) throw Error("missing rich-message response");
+      await new DeliveryWorker(store, setup).send(w.id, delivery.id);
+      expect(
+        (await store.read(w.id)).deliveries.find((d) => d.id === delivery.id)
+          ?.state,
+      ).toBe("sent");
+      expect(calls.some((c) => c.params.message_thread_id === 37)).toBe(true);
+    });
+    test("rich input cannot bypass inactive membership or webhook authentication", async () => {
+      const w = await seed();
+      await store.change(w.id, (w) => {
+        for (const member of w.members) member.active = false;
+      });
+      const app = createApp(store, setup, "http://localhost:3000");
+      const update = {
+        update_id: ++sequence,
+        message: {
+          message_id: ++sequence,
+          date: Math.floor(Date.now() / 1000),
+          from: { id: 101, is_bot: false },
+          chat: { id: 101, type: "private" },
+          rich_message: { blocks: [{ type: "paragraph", text: "hi" }] },
+        },
+      };
+      for (const secret of ["wrong", "test-secret"]) {
+        const result = await app.request("/telegram/webhook", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-telegram-bot-api-secret-token": secret,
+          },
+          body: JSON.stringify(update),
+        });
+        expect(result.status).toBe(secret === "wrong" ? 401 : 200);
+      }
+      const saved = await store.read(w.id);
+      expect(saved.runs).toHaveLength(0);
+      expect(saved.messages).toHaveLength(0);
+    });
     test.each([false, true])(
       "worker reconstruction resumes received input without replay (checkpointed %s)",
       async (checkpointed) => {
