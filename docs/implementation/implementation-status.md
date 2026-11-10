@@ -1,5 +1,27 @@
 # Implementation evidence
 
+## Telegram bot token format errors provide recovery guidance (2026-11-10)
+
+Bot-token format validation now belongs to the credentials field schema, keeping
+the `botToken` issue path through the production API error handler. HTTP 400
+retains the `invalid_request` code and includes a safe message asking for a token
+from `@BotFather`, with a numeric-ID/colon example. The shared web client displays
+that message in the Telegram setup form and Manage Telegram bot dialog without
+the raw field name. Neither the API nor its error message echoes the submitted
+credential. Existing empty/omitted-token retention and the 200-character limit
+remain supported; well-formed values still require upstream identity verification.
+
+Production-composition regressions prove malformed values make no Telegram calls,
+leave deployment state and credential audit records unchanged, and preserve the
+operator permission check. Browser coverage verifies readable messages, retained
+drafts, unlocked recovery controls and successful correction in both flows. Their
+error states were visually inspected at 1280px and 390px; the saved bot summary
+remains unchanged while an invalid replacement is rejected.
+
+Validation: lint, strict TypeScript, build, the Node runtime contract (16 startup
+cases, zero external startup calls), the full deterministic suite, and the focused first-visit browser journey pass. No dependency or SQL
+migration was added. This correction is local; it has not been deployed to the VPS.
+
 ## Telegram widget tool and bundled preset (2026-11-10)
 
 Added `send_telegram_widget` and the default-enabled, read-only **Telegram widgets**

@@ -1183,6 +1183,46 @@ suite("PostgreSQL integration (isolated database)", () => {
         .status,
     ).toBe(404);
   });
+  test("malformed bot tokens return safe field guidance without Telegram calls or saved changes", async () => {
+    const original = await store.deployment();
+    const callCount = calls.length;
+    const audits = await store.pool.query(
+      "SELECT count(*) FROM operator_audit WHERE action='credentials.updated'",
+    );
+    for (const botToken of [
+      "sk-fixture-provider-key",
+      "123456789:short",
+      `123456789:${"a".repeat(201)}`,
+    ]) {
+      const response = await request("/api/admin/operator/credentials", "PUT", {
+        version: original.version,
+        botToken,
+      });
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.error).toBe("invalid_request");
+      expect(body.issues).toHaveLength(1);
+      expect(body.issues[0].path).toBe("botToken");
+      expect(body.issues[0].message).toContain("@BotFather");
+      expect(body.issues[0].message).toContain("123456789:ABC...");
+      expect(JSON.stringify(body)).not.toContain(botToken);
+    }
+    expect(calls).toHaveLength(callCount);
+    expect(await store.deployment()).toEqual(original);
+    expect(
+      (
+        await store.pool.query(
+          "SELECT count(*) FROM operator_audit WHERE action='credentials.updated'",
+        )
+      ).rows,
+    ).toEqual(audits.rows);
+    await expect(
+      setup.saveCredentials(
+        { id: operatorId, username: "member", operator: false },
+        { version: original.version, botToken: "sk-fixture-provider-key" },
+      ),
+    ).rejects.toThrow("operator_required");
+  });
   test("operator saves compatible settings, protects keys and worker uses the saved model", async () => {
     const original = await store.deployment();
     const path = "/api/admin/operator/credentials";

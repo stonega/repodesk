@@ -66,6 +66,13 @@ and direct `/setup` links remain available.
 Bot and model credentials are write-only and encrypted
 with AES-256-GCM; the database does not contain the runtime encryption key.
 
+Malformed Telegram bot tokens return HTTP 400 with a `botToken` field issue that
+asks for a token from `@BotFather` and shows the expected numeric-ID/colon format.
+Setup and Manage Telegram bot display this guidance and retain the entered draft
+for correction. Format validation runs before Telegram identity verification and
+does not echo or save the submitted credential. The API retains its
+`invalid_request` code with the explanatory message in `issues`.
+
 `GET /healthz` reports process liveness. `GET /readyz` also requires a recent
 worker heartbeat. `/admin/*` deep links load the SPA; `/api/*` failures remain JSON.
 

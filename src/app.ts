@@ -214,6 +214,7 @@ export function createApp(
         "missedRunMinutes",
         "paused",
         "version",
+        "botToken",
         "model",
         "modelLimits",
         "contextWindow",
