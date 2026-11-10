@@ -25,7 +25,7 @@ import { Executor } from "../../src/jobs/execute.ts";
 import { recoverJobs } from "../../src/jobs/recovery.ts";
 import { encrypt } from "../../src/setup/credentials.ts";
 import { SetupService } from "../../src/setup/service.ts";
-import type { Telegram } from "../../src/telegram/client.ts";
+import { type Telegram, TelegramError } from "../../src/telegram/client.ts";
 import { type Update, updateSchema } from "../../src/telegram/router.ts";
 import { Ingress } from "../../src/telegram/webhook.ts";
 import { TranscriptionService } from "../../src/transcription/service.ts";
@@ -48,6 +48,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     let downloads: string[] = [];
     let files = new Map<string, Uint8Array>();
     let onDownload: (() => Promise<void>) | undefined;
+    let rejectTopicDelivery = false;
     const telegram: Telegram = {
       async downloadFile(fileId) {
         downloads.push(fileId);
@@ -58,6 +59,11 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       },
       async call<T>(method: string, params = {}) {
         calls.push({ method, params });
+        if (
+          rejectTopicDelivery &&
+          ["sendMessage", "sendRichMessage"].includes(method)
+        )
+          throw new TelegramError("telegram_destination_rejected", "permanent");
         return (
           method === "getUpdates"
             ? updates
@@ -91,6 +97,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       downloads = [];
       files = new Map();
       onDownload = undefined;
+      rejectTopicDelivery = false;
       const d = await store.deployment();
       Object.assign(d, {
         active: true,
@@ -218,6 +225,42 @@ const rootUrl = process.env.TEST_DATABASE_URL;
           ?.state,
       ).toBe("sent");
       expect(calls.some((c) => c.params.message_thread_id === 37)).toBe(true);
+    });
+    test("a rejected private Topic reply stays in that Topic and is not resent to the main chat", async () => {
+      const w = await seed();
+      await ingress.accept(message("hi", undefined, 77));
+      const run = (await store.read(w.id)).runs[0];
+      if (!run) throw Error("missing run");
+      await new Executor(
+        store,
+        setup,
+        new PiRunner(() => response("Hello!")),
+      ).execute(w.id, run.id);
+      const delivery = (await store.read(w.id)).deliveries.find(
+        (d) => d.runId === run.id,
+      );
+      if (!delivery) throw Error("missing reply");
+      rejectTopicDelivery = true;
+      const worker = new DeliveryWorker(store, setup);
+      await worker.send(w.id, delivery.id);
+      await worker.send(w.id, delivery.id);
+      const attempts = calls.filter((c) =>
+        ["sendMessage", "sendRichMessage"].includes(c.method),
+      );
+      expect(attempts.length).toBeGreaterThan(0);
+      expect(attempts.every((c) => c.params.message_thread_id === 77)).toBe(
+        true,
+      );
+      expect(
+        (await store.read(w.id)).deliveries.find((d) => d.id === delivery.id)
+          ?.state,
+      ).toBe("failed");
+      await worker.send(w.id, delivery.id);
+      expect(
+        calls.filter((c) =>
+          ["sendMessage", "sendRichMessage"].includes(c.method),
+        ),
+      ).toHaveLength(attempts.length);
     });
     test("rich input cannot bypass inactive membership or webhook authentication", async () => {
       const w = await seed();

@@ -37,3 +37,35 @@ using a fresh message after cutover. No dependency or migration is required.
 Sources checked 2026-11-10: [Message](https://core.telegram.org/bots/api#message),
 [RichMessage](https://core.telegram.org/bots/api#richmessage), and
 [RichText](https://core.telegram.org/bots/api#richtext).
+
+## Live follow-up: pricing and an unavailable private Topic
+
+After cutover to `80946f2` in bundle `1794297677476-38110726`, update `915026482`
+contained legacy text and created run `e4629e72-ac5d-4a31-ba76-9fe7ec9b9300`.
+Therefore the rich-input gap was not the cause of this later run's failure.
+
+The selected `glm-5.3-flash` had no price metadata while a per-request dollar
+budget was configured. Execution stopped with `model_pricing_required_for_budget`
+before a billable model attempt. The New API pricing endpoint returned HTTP 401,
+and no pricing group was configured. Do not fabricate rates or remove the budget
+without the operator's explicit choice.
+
+The failure reply targeted private Topic `1997120`. Telegram rejected it with
+HTTP 400, categorized as `telegram_private_topic_unavailable` (upstream response:
+message thread not found). A retry of the same confirmed-failed error intent
+through the production delivery worker returned the same category. Neither attempt
+was ambiguous. The bot's topic settings are enabled and the registered webhook is
+correct. Existing main-chat access confirmation had succeeded.
+
+This is consistent with [Telegram Bot API issue 905](https://github.com/tdlib/telegram-bot-api/issues/905),
+including November 9–10 reports of newly created private topics accepting inbound
+messages but rejecting bot writes, and opening messages that never reach bots.
+The upstream server-side cause is unconfirmed. An older working Topic may be a
+workaround; creating another new Topic is not guaranteed to repair it. Do not
+silently move private replies to the main chat. A deterministic production-path
+regression proves confirmed Topic rejection does not cause an unthreaded resend.
+
+The VPS remains healthy and the rich-input correction is deployed, with 1,466
+full-suite tests and exact-image runtime/Compose/restore checks passed. Native
+chat is not restored until pricing/budget configuration and a writable Telegram
+destination are resolved. The current dollar budget remains unchanged.
