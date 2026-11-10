@@ -76,3 +76,9 @@ preserved. Existing failed runs are not replayed. Topic delivery remains blocked
 by the confirmed Telegram rejection. The focused Topic-boundary suite passes all
 29 scenarios after disposable PostgreSQL readiness; its initial attempt stopped
 during database startup, before any scenario ran.
+
+Later safe metadata captured updates `915026487` and `915026488` as
+`forum_topic_created` service messages, without any message text or rich content.
+This corrects the earlier rich-format hypothesis for the empty-content events.
+The deployed rich-input compatibility correction is independently covered, but
+the observed remaining delivery failure is the Telegram Topic rejection above.
