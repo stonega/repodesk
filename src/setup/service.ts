@@ -153,9 +153,6 @@ export class SetupService {
     input = credentialsSchema.parse(input);
     let identity: BotIdentity | undefined;
     if (input.botToken) {
-      z.string()
-        .regex(/^\d+:[A-Za-z0-9_-]{20,}$/)
-        .parse(input.botToken);
       identity = await this.transport(input.botToken).call<BotIdentity>(
         "getMe",
       );

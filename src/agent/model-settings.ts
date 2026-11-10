@@ -111,7 +111,15 @@ export type ModelOptions = z.infer<typeof modelOptionsSchema> & {
 export const credentialsSchema = modelOptionsSchema
   .extend({
     version: z.number().int().positive(),
-    botToken: z.string().max(200).optional(),
+    botToken: z
+      .string()
+      .refine(
+        (value) =>
+          !value ||
+          (value.length <= 200 && /^\d+:[A-Za-z0-9_-]{20,}$/.test(value)),
+        "Enter a Telegram bot token from @BotFather (for example, 123456789:ABC...).",
+      )
+      .optional(),
     modelKey: z.string().trim().min(1).max(4096).optional(),
     model: z.string().trim().min(1).max(200).regex(/^\S+$/).optional(),
   })

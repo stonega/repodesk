@@ -182,9 +182,10 @@ async function api<T>(
                     ? "Webhook mode requires a public HTTPS address. For local use, set TELEGRAM_TRANSPORT=polling and restart the app and worker."
                     : data.issues?.length
                       ? data.issues
-                          .map(
-                            (issue: { path: string; message: string }) =>
-                              `${issue.path}: ${issue.message}`,
+                          .map((issue: { path: string; message: string }) =>
+                            issue.path === "botToken"
+                              ? issue.message
+                              : `${issue.path}: ${issue.message}`,
                           )
                           .join(" ")
                       : (data.error ?? "Request failed")),
