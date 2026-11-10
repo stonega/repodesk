@@ -83,7 +83,14 @@ This corrects the earlier rich-format hypothesis for the empty-content events.
 The deployed rich-input compatibility correction is independently covered, but
 the observed remaining delivery failure is the Telegram Topic rejection above.
 
-After budget removal, run `5c24aa89-32a4-4de2-9833-79b921f4c6c3` completed
-successfully with one model attempt. Its response still failed delivery to Topic
-`1997120` after rich/text transport attempts. This confirms model execution works
-and the current remaining blocker is Telegram delivery to that private Topic.
+Run `5c24aa89-32a4-4de2-9833-79b921f4c6c3` completed successfully at
+08:09 UTC with one model attempt. Its response failed delivery to Topic `1997120`.
+This run predates the 08:18 UTC budget removal; it must not be presented as a new
+post-change model test. No newer model run was recorded at the subsequent recheck.
+
+At the operator's next recheck around 08:50 UTC, the VPS and webhook remained
+healthy, both dollar budgets were null, and the latest received update at 08:48
+created no new run. A third attempt to deliver the existing confirmed-failed
+result in its original Topic again received HTTP 400, categorized as
+`telegram_private_topic_unavailable`. The intent remains failed; no alternative
+destination was used.
