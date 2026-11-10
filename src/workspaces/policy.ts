@@ -230,6 +230,9 @@ export function updateMembership(
     id: input.id,
     role: input.role,
     active: input.active,
+    privateTopicFallback: input.active
+      ? previous?.privateTopicFallback
+      : undefined,
   };
   const members = previous
     ? w.members.map((m) => (m.id === input.id ? member : m))

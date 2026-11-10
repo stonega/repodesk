@@ -1,5 +1,14 @@
 # Implementation evidence
 
+## Scoped private Topic delivery recovery (2026-11-10)
+
+Ordinary run results/failures can recover from a confirmed Telegram 400
+`message thread not found` into the same member's main private chat, after explicit
+member consent recorded by the host operator. Default routing stays Topic-bound.
+Bot-bound consent and current access are rechecked after worker restart; unknown
+sends are never replayed. Delivery receipts preserve the logical Topic and record
+the actual send destination. See [operation and boundaries](telegram-topic-fallback.md).
+
 ## Incoming Telegram rich-message text (2026-11-10)
 
 Normalize displayed incoming rich-message content before the webhook/polling

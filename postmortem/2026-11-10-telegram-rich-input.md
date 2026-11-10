@@ -94,3 +94,22 @@ created no new run. A third attempt to deliver the existing confirmed-failed
 result in its original Topic again received HTTP 400, categorized as
 `telegram_private_topic_unavailable`. The intent remains failed; no alternative
 destination was used.
+
+
+## Explicitly requested main-chat recovery
+
+After the fourth confirmed Topic rejection, the operator explained the main-chat
+workaround and the user requested "fix it". The correction adds a narrow opt-in for
+that member, workspace and current bot. A known 400 Topic rejection can now queue
+a durable retry of the same saved ordinary reply in the same private main chat.
+The retry removes both Topic and reply references, explains the changed location,
+and records the actual delivered Topic separately from its logical context.
+
+Default Topic routing and input conversation boundaries are unchanged. Groups,
+interactive controls, widgets, Browser requests, scheduled output and uncertain
+sends remain excluded. Current member/run permissions, bot identity and consent
+generation are checked after reconstruction and before sending. Membership removal
+clears consent. An operator-only audited recovery command enables/disables the
+preference; it does not replay old deliveries. Production-path regressions cover
+successful recovery, duplicates, absent/revoked consent, membership/bot/run changes
+and unknown fallback outcomes. See the [runbook](../docs/implementation/telegram-topic-fallback.md).

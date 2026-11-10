@@ -32,6 +32,22 @@ LaTeX, inline rich buttons, ephemeral group messages and Communities remain outs
 this change. Live Telegram behavior still requires staging verification.
 See [manual example](../../examples/telegram-streaming.md).
 
+## Private Topic rejection (2026-11-10)
+
+A live private Topic request reached RepoDesk, but sending the saved answer with
+its original Topic ID repeatedly returned a confirmed 400 `message thread not found`.
+This matches current [upstream reports](https://github.com/tdlib/telegram-bot-api/issues/905);
+the internal Telegram cause is unconfirmed. Draft/action success does not prove a
+final send destination is writable. Some Topic-opening service updates contain no
+user text; do not interpret those as a rich-input parsing failure.
+
+[sendMessage](https://core.telegram.org/bots/api#sendmessage) supports omitting the
+optional Topic ID. RepoDesk's explicitly opted-in private recovery also removes
+`reply_parameters` to prevent a reply reference from routing back to the rejected
+Topic. It preserves logical context and records the actual destination; this is a
+scoped transport workaround, not evidence Telegram repaired the Topic or delivered
+previously missing input. See [recovery](../implementation/telegram-topic-fallback.md).
+
 ## Native emoji reactions
 
 Checked 2026-10-27: [`setMessageReaction`](https://core.telegram.org/bots/api#setmessagereaction)

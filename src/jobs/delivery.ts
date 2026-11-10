@@ -30,6 +30,10 @@ import {
   withoutTaskControls,
 } from "../telegram/task-control-messages.ts";
 import { selectionAllowed } from "../telegram/task-controls.ts";
+import {
+  privateTopicFallback,
+  privateTopicFallbackText,
+} from "../telegram/topic-fallback.ts";
 import { widgetDeliveryAllowed } from "../telegram/widgets.ts";
 import { eligible, runAllowed } from "../workspaces/policy.ts";
 export class DeliveryWorker {
@@ -331,6 +335,8 @@ export class DeliveryWorker {
       }
       const run = d.runId ? w.runs.find((r) => r.id === d.runId) : undefined;
       if (
+        (d.privateTopicFallback &&
+          !privateTopicFallback(w, d, deployment.bot?.id)) ||
         w.deletion ||
         !eligible(w, d.actor) ||
         (d.runId && (!run || !runAllowed(w, run))) ||
@@ -393,6 +399,19 @@ export class DeliveryWorker {
           )
         : await this.store.read(workspaceId);
       if (!current) return;
+      if (intent.privateTopicFallback) {
+        const freshDeployment = await this.store.deployment();
+        if (
+          !freshDeployment.active ||
+          freshDeployment.paused ||
+          !privateTopicFallback(current, intent, freshDeployment.bot?.id)
+        ) {
+          await this.finish(workspaceId, intent, (d) => {
+            d.state = "cancelled";
+          });
+          return;
+        }
+      }
       if (intent.repositoryMenu)
         requireThat(
           intent.botId === (await this.store.deployment()).bot?.id,
@@ -519,8 +538,12 @@ export class DeliveryWorker {
         ];
       }
       intent.buttons = buttons;
-      const sent = await (await this.setup.client()).call<{
+      const text = intent.privateTopicFallback
+        ? privateTopicFallbackText(intent.text)
+        : intent.text;
+      const sent = await (await this.setup.client(deployment)).call<{
         message_id: number;
+        message_thread_id?: number;
       }>(
         intent.taskControlsCleanup
           ? "editMessageReplyMarkup"
@@ -539,15 +562,16 @@ export class DeliveryWorker {
               chat_id: intent.chatId,
               ...(intent.editOf ? { message_id: intent.remoteId } : {}),
               ...(intent.format === "rich"
-                ? { rich_message: telegramRichMessage(intent.text) }
+                ? { rich_message: telegramRichMessage(text) }
                 : intent.format === "markdown"
-                  ? telegramMarkdown(intent.text)
-                  : { text: intent.text }),
-              message_thread_id: intent.editOf
-                ? undefined
-                : intent.topicId || undefined,
+                  ? telegramMarkdown(text)
+                  : { text }),
+              message_thread_id:
+                intent.editOf || intent.privateTopicFallback
+                  ? undefined
+                  : intent.topicId || undefined,
               reply_parameters:
-                !intent.editOf && intent.replyTo
+                !intent.editOf && !intent.privateTopicFallback && intent.replyTo
                   ? {
                       message_id: intent.replyTo,
                       allow_sending_without_reply: true,
@@ -564,6 +588,9 @@ export class DeliveryWorker {
       );
       await this.finish(workspaceId, intent, (d) => {
         d.state = "sent";
+        d.deliveredTopicId =
+          sent.message_thread_id ??
+          (intent.privateTopicFallback ? 0 : intent.topicId);
         d.remoteId =
           intent.editOf || intent.taskControlsCleanup
             ? intent.remoteId
@@ -585,6 +612,18 @@ export class DeliveryWorker {
       });
       await this.finish(workspaceId, intent, (d, w) => {
         if (
+          error instanceof TelegramError &&
+          error.code === "telegram_thread_not_found" &&
+          error.disposition === "permanent"
+        ) {
+          const consent = privateTopicFallback(w, d, deployment.bot?.id);
+          if (!d.privateTopicFallback && consent) {
+            // Telegram confirmed no send occurred. Persist the changed wire destination
+            // before retrying; membership and consent are checked again after restart.
+            d.privateTopicFallback = consent;
+            d.state = "pending";
+          } else d.state = "failed";
+        } else if (
           (intent.editOf || intent.taskControlsCleanup) &&
           error instanceof TelegramError &&
           error.code === "telegram_message_not_modified"

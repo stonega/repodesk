@@ -30,6 +30,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Native Telegram reactions](implementation/telegram-reactions.md) | Optional conversational emoji reactions, scoped message targeting and durable delivery |
 | [Telegram widgets](implementation/telegram-widgets.md) | Bundled interactive HTML skill, private Topics, durable delivery and caption fallback |
 | [Telegram platform constraints](reference/telegram-platform.md) | What changes when Slack becomes Telegram |
+| [Private Topic delivery recovery](implementation/telegram-topic-fallback.md) | Explicit member opt-in, safe main-chat retries and operator recovery |
 | [Private conversation threads](design/private-threads.md) | Native Topics, discussion memory, cache-aware compaction and private history |
 | [Group conversations](design/group-conversations.md) | Per-user continuity, shared discussions and natural follow-up triggering |
 | [Long-term memory](design/long-term-memory.md) | Scoped private/shared recall, background extraction, user controls and retention |
