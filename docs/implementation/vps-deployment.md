@@ -8,6 +8,31 @@ release makes it available in the panel's version indicator. A deployment
 administrator reviews its notes and starts installation explicitly.
 See [host updater installation](updates.md) for the service and panel contract.
 
+## Standard text recovery deployed (2026-11-10)
+
+Bundle `1794305442311-77002991` deploys source
+`ac7abf189f0599bcdeda8ce6bd3c2e548d999dde` over
+`1794301988625-49496411`. The user confirmed a plain main-chat diagnostic visible.
+Opted-in recovery now persists standard `sendMessage` text delivery before sending,
+including rich fallback intents queued by the previous worker. Links and text
+entities are preserved. This is a conservative transport choice, not an established
+rich-format root cause or a repair of Telegram's native Topic outage.
+
+All **1,479 tests across 158 files**, lint, strict types, build and the local offline
+runtime contract pass. Exact-image startup, CPU speech, Code Truth, Compose
+readiness/configuration, migration rerun and backup/restore checks pass. All 55
+running artifacts and public/loopback assets verify. The backup is
+`backups/pre-release-1794305442311-77002991.dump` (125,821 bytes). Configuration,
+credentials, model/budget choices and persistent volumes are preserved.
+
+A previously confirmed-failed saved answer was retried through the production
+DeliveryWorker. Its original Topic returned HTTP 400; the standard-text main-chat
+send returned HTTP 200 and a confirmed remote ID. The receipt records markdown
+text delivery, logical Topic `1997139` and actual `deliveredTopicId: 0`. Model
+attempts are unchanged. User visibility confirmation of this recovered answer is
+pending; the separate plain diagnostic was confirmed visible. No sent or unknown
+answer was reset or automatically replayed.
+
 ## Private Topic recovery deployed and delivered (2026-11-10)
 
 Bundle `1794301988625-49496411` deploys source

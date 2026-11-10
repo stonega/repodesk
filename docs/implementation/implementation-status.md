@@ -10,6 +10,12 @@ and applies to rich intents queued by an older worker. Native Topic routing and
 ordinary rich replies keep their existing behavior. See
 [the recovery contract](telegram-topic-fallback.md).
 
+All 1,479 deterministic tests, lint, types, build and exact-image runtime/Compose/
+restore checks pass. Release `1794305442311-77002991` is deployed. A saved answer's
+standard-text main-chat delivery is API-confirmed without rerunning its model;
+its user-visible acceptance is pending. The independent plain diagnostic is
+user-confirmed visible. Native Topic restoration remains blocked externally.
+
 ## Scoped private Topic delivery recovery (2026-11-10)
 
 Ordinary run results/failures can recover from a confirmed Telegram 400

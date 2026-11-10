@@ -23,3 +23,13 @@ Production-composition coverage checks rich-to-standard-text method selection,
 restart from a rich pending fallback, preserved links, duplicate jobs, revocation
 and unknown outcomes. Native Topic restoration is a separate unresolved Telegram
 issue; this correction is limited to reliable recovery in All messages.
+
+
+Release `1794305442311-77002991` (source `ac7abf1`) is deployed and healthy.
+Validation passes all 1,479 deterministic tests across 158 files, lint, types,
+build, the local runtime contract and exact-image Compose/restore checks. The
+production worker retried one previously failed saved result: the original Topic
+returned 400, then `sendMessage` in the main chat returned 200. The persisted receipt
+records standard text format and actual Topic zero; model attempts are unchanged.
+Visibility of the recovered answer remains pending user confirmation. The earlier
+plain-text main-chat diagnostic was confirmed visible. Native Topics remain affected.
