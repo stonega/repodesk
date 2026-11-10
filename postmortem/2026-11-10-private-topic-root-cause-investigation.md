@@ -122,3 +122,11 @@ Sanitized evidence is retained locally in
 `/tmp/repodesk-topic-cause-20261110/investigation-proof.json` and in the protected
 VPS release directory. No token, actor ID, private message contents or raw upstream
 exception was included in the report or routine logs.
+
+
+## Native restoration attempt
+
+Subsequent [native repair tests](2026-11-10-native-topic-repair-attempts.md) found
+an accepted-but-invisible strict reply-anchor response and directly reproduced
+`BOT_TOPIC_WRONG_HOME` during a single bot-created Topic attempt. No experimental
+native routing was deployed.
