@@ -8,6 +8,34 @@ release makes it available in the panel's version indicator. A deployment
 administrator reviews its notes and starts installation explicitly.
 See [host updater installation](updates.md) for the service and panel contract.
 
+## Private Topic recovery deployed and delivered (2026-11-10)
+
+Bundle `1794301988625-49496411` deploys source
+`8b518732ec0a5d21ca7cf97705c2a6dd85f4d005` over
+`1794297677476-38110726`. After the user explicitly requested the main-chat
+workaround, an audited opt-in was enabled for the sole verified active member and
+current bot. The saved successful answer was retried through the production
+DeliveryWorker: its original Topic returned HTTP 400, and the same intent's
+main-private-chat attempt returned HTTP 200 with a confirmed remote message ID.
+The receipt is `sent`, preserves logical Topic `1997120`, records
+`deliveredTopicId: 0`, and retains one model attempt; the model was not rerun.
+The original Telegram Topic remains unavailable. This does not recover input
+Telegram never delivered. Future ordinary replies can use the scoped fallback;
+groups, controls and uncertain sends remain excluded.
+
+All **1,478 tests across 158 files**, lint, strict TypeScript, build and the local
+runtime contract pass. Exact-image checks include the 16-case offline startup
+contract with zero external startup calls, CPU speech imports, Code Truth smoke,
+Compose validation/readiness, migration rerun and backup/restore. All 55 deployed
+artifacts and public/loopback assets verify. All five services are healthy;
+configuration, credentials, persistent mounts and native Browser state are
+preserved. The protected pre-cutover dump is
+`backups/pre-release-1794301988625-49496411.dump` (122,561 bytes).
+Release and recovery receipts remain in the protected release directory. No
+frontend interaction was changed; the existing run details expose the additional
+receipt metadata. The divergent original development branch and index were not
+changed by the isolated release commit.
+
 ## Remembered Browser websites deployment (2026-11-02)
 
 The operator-authorized coordinated application/native-host update promoted

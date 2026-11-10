@@ -1,6 +1,6 @@
 # Private messages acknowledged without an assistant run
 
-Diagnostic code: `telegram_rich_input_dropped`.
+Diagnostic codes: `telegram_rich_input_dropped`, `telegram_thread_not_found`.
 
 On 2026-11-10, private messages were silent after source `2b05a41` was deployed.
 The operator registered the initially absent webhook and redeemed an invitation.
@@ -113,3 +113,22 @@ clears consent. An operator-only audited recovery command enables/disables the
 preference; it does not replay old deliveries. Production-path regressions cover
 successful recovery, duplicates, absent/revoked consent, membership/bot/run changes
 and unknown fallback outcomes. See the [runbook](../docs/implementation/telegram-topic-fallback.md).
+
+
+Live recovery is confirmed in release `1794301988625-49496411` (source `8b51873`).
+After a fifth original-Topic attempt again received HTTP 400, attempt six sent the
+same saved answer in the main private chat with HTTP 200 and a confirmed remote ID.
+The persisted receipt records `state: sent`, logical Topic `1997120` and actual
+`deliveredTopicId: 0`. The model attempt count remains one; no old input was
+fabricated or new model run created. Exactly one active member's bot-bound consent
+was enabled and audited. Telegram's original Topic and missing-input behavior
+remain upstream limitations; new messages should use the main private chat while
+that Topic is unavailable.
+
+Validation passes all 1,478 deterministic tests across 158 files, lint, strict
+TypeScript, build and the offline Node runtime contract. The exact images pass
+Compose readiness, migration rerun, backup/restore, Code Truth and CPU speech
+checks. All 55 running artifacts and public/loopback assets verify; all five
+services are healthy and existing credentials/persistent state are preserved.
+The protected pre-cutover dump is 122,561 bytes. Initial fixture/type-check issues
+were corrected before the passing checks and production cutover.

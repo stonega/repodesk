@@ -9,6 +9,12 @@ Bot-bound consent and current access are rechecked after worker restart; unknown
 sends are never replayed. Delivery receipts preserve the logical Topic and record
 the actual send destination. See [operation and boundaries](telegram-topic-fallback.md).
 
+All 1,478 deterministic tests, lint, types, build, offline runtime and exact-image
+Compose/restore checks pass. Release `1794301988625-49496411` is deployed; Telegram
+accepted the existing saved answer in the opted-in main private chat (HTTP 200),
+with its original logical Topic preserved and actual destination recorded. The
+original Topic remains rejected; missing upstream input is not recovered.
+
 ## Incoming Telegram rich-message text (2026-11-10)
 
 Normalize displayed incoming rich-message content before the webhook/polling
