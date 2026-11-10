@@ -48,3 +48,23 @@ The protected VPS release directory retains `native-repair-proof.json`. The loca
 proof is `/tmp/repodesk-topic-anchor-20261110/native-repair-proof.json`.
 No actor IDs, tokens, raw upstream descriptions or private message contents were
 written to this report or routine logs.
+
+
+## Direct-link follow-up and main-chat visibility
+
+The user reported the direct Topic link still did not restore the conversation.
+A subsequent real request at 09:56 UTC reached RepoDesk as Topic `1997156`, run
+`4c3eec49-9f3b-4f2e-8d67-049279e13d15`. Model execution succeeded; the explicit
+Topic send failed and the opted-in main-chat fallback received a confirmed remote
+ID. This receipt establishes API acceptance, not user-visible recovery.
+
+One audited plain `sendMessage` check was then sent to the same verified member's
+main private chat. Telegram returned a nonzero message ID, no Topic, no rich content,
+no business/guest/ephemeral context, and the expected bot/chat identities. User
+visibility confirmation remains pending. Earlier references to a "working" main-chat
+fallback should be read as confirmed API delivery until the user verifies display.
+No new routing or formatting change was deployed based on an unverified receipt.
+
+The second model attempt later recorded on the 08:59 request was inspected and
+identified as `memory_extract`, not a rerun of its assistant answer. No run-retry
+or delivery-deduplication bug was inferred from that accounting entry.
