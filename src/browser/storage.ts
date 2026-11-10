@@ -13,6 +13,7 @@ const runFields = [
   "instructions",
   "transcript",
   "tools",
+  "widget",
   "result",
   "contextSummary",
   "compaction",
@@ -24,7 +25,7 @@ const runFields = [
 ];
 const sourceFields = ["text", "attachments"];
 const threadFields = ["summary", "discussions"];
-const deliveryFields = ["text", "buttons", "sentButtons"];
+const deliveryFields = ["text", "buttons", "sentButtons", "widget"];
 const approvalFields = ["payload"];
 const record = (value: object) => value as PrivateRecord;
 const name = (w: Workspace, kind: string, id: string, owner: string) =>

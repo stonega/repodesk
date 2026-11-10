@@ -22,6 +22,40 @@ Validation: lint, strict TypeScript, build, the Node runtime contract (16 startu
 cases, zero external startup calls), the full deterministic suite, and the focused first-visit browser journey pass. No dependency or SQL
 migration was added. This correction is local; it has not been deployed to the VPS.
 
+## Telegram widget tool and bundled preset (2026-11-10)
+
+Added `send_telegram_widget` and the default-enabled, read-only **Telegram widgets**
+preset, with a bundled `SKILL.md` and supporting rendering guide. Existing tenants
+receive the preset without changing current run pins, disabled records or slug
+collisions. The tool stages one self-contained presentation for a private chat or
+Topic; only a successful answer atomically publishes its durable delivery.
+Groups, schedules, shared widgets, wallet operations and widget-to-bot queries
+are outside this implementation. Local controls can explore a chart or estimate.
+
+Delivery rechecks audience, source permissions, bot identity and skill grants;
+confirmed Telegram rejections fall back to a useful caption while unknown sends
+remain unreplayed. HTML follows existing private Browser encryption and source
+erasure. See [implementation and verification](telegram-widgets.md) and
+[conversation examples](../../examples/telegram-widgets.md).
+
+Validation: Biome, strict TypeScript, build, skill validation and the Node runtime
+contract passed. All 15 focused widget/preset tests and all 13 browser scenarios
+passed; desktop/mobile preset, pending/error and local widget example screenshots
+were inspected in light/dark themes. The exact Docker image passed its 16-case
+startup contract with zero external startup calls, migrations, API health/readiness,
+admin HTTP and worker-heartbeat smoke checks; Compose configuration validated.
+The final full suite recorded 1,406 passes and one unrelated intermittent Git
+index mismatch in `codex-job-command.test.ts`; its four tests passed immediately
+in isolation. That file was not changed. Native Telegram desktop/mobile rendering
+and real-model widget quality remain staging checks. No production deployment or
+live Telegram message was performed.
+
+Commit-only verification based on upstream `a8dba53` excludes unrelated local
+edits and passes all **1,438 deterministic tests across 153 files**, Biome,
+strict TypeScript, build, the 16-case offline Node runtime contract and all
+**13 widget/preset browser scenarios**. The upstream Git fixture correction
+also removes the intermittent index mismatch seen in the earlier working-tree run.
+
 ## Provider save errors distinguish HTML gateway responses (2026-11-09)
 
 The admin request client now retains the HTTP status when a response cannot be

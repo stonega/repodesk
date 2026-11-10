@@ -37,6 +37,8 @@ const url = process.env.TEST_DATABASE_URL;
   test("legacy presets expose toggle-only metadata and reject all other management endpoints", async () => {
     const w = workspace();
     w.operatorId = operatorId;
+    // Model a stored workspace created before the widget preset existed.
+    w.skills = w.skills.filter((s) => s.draft.slug !== "telegram-widgets");
     for (const skill of w.skills) delete skill.preset;
     const skill = w.skills[0];
     if (!skill) throw Error("Missing preset");
@@ -62,6 +64,7 @@ const url = process.env.TEST_DATABASE_URL;
       });
     const list = await (await request()).json();
     expect(list.items.map((s: { preset: boolean }) => s.preset)).toEqual([
+      true,
       true,
       true,
     ]);
@@ -107,6 +110,18 @@ const url = process.env.TEST_DATABASE_URL;
     });
     expect(enabled.status).toBe(200);
     expect((await enabled.json()).enabled).toBe(true);
+    const widget = list.items.find(
+      (s: { draft: { slug: string } }) => s.draft.slug === "telegram-widgets",
+    );
+    expect(widget.preset).toBe(true);
+    expect((await store.read(w.id)).skills.at(-1)?.id).toBe(widget.id);
+    const widgetDisabled = await request(`/${widget.id}/action`, "POST", {
+      version: widget.version,
+      action: "disable",
+    });
+    expect(widgetDisabled.status).toBe(200);
+    expect((await store.read(w.id)).skills.at(-1)?.enabled).toBe(false);
+    expect((await (await request()).json()).items.at(-1).enabled).toBe(false);
     expect((await store.read(w.id)).skills[0]?.published).toEqual(
       skill.published,
     );
