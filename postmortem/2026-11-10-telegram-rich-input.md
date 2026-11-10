@@ -132,3 +132,10 @@ checks. All 55 running artifacts and public/loopback assets verify; all five
 services are healthy and existing credentials/persistent state are preserved.
 The protected pre-cutover dump is 122,561 bytes. Initial fixture/type-check issues
 were corrected before the passing checks and production cutover.
+
+
+A final configuration check found the operator had subsequently saved workspace
+settings version 4 at 08:54 UTC: a $100 run budget, `deepseek-flash` and explicit
+input/output prices. Those newer choices were preserved during deployment and
+recovery. They supersede the earlier null-budget / unknown-price configuration;
+this recovery did not change the current model or budget.
