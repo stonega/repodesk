@@ -26,6 +26,12 @@ import {
   queueReaction,
   reactionParameters,
 } from "../telegram/reactions.ts";
+import {
+  authorizeWidget,
+  authorizeWidgetBot,
+  stageWidget,
+  widgetParameters,
+} from "../telegram/widgets.ts";
 import { proposeInstruction, proposeWorkflow } from "../workflows/service.ts";
 import { contextSources } from "../workspaces/conversation-memory.ts";
 import { runAllowed } from "../workspaces/policy.ts";
@@ -133,6 +139,15 @@ export function applicationTools(
             "tool_call_conflict",
             409,
           );
+          if (name === "send_telegram_widget") {
+            const deployment = await store.deployment(sql);
+            requireThat(
+              deployment.active && !deployment.paused,
+              "deployment_paused",
+              409,
+            );
+            authorizeWidgetBot(w, r, deployment.bot?.id);
+          }
           if (name === "query_discussions") {
             const fresh = queryDiscussions(
               w,
@@ -202,6 +217,21 @@ export function applicationTools(
     },
   });
   return [
+    bind(
+      "send_telegram_widget",
+      "Stage one self-contained interactive HTML widget for this private conversation. Load the Telegram widgets skill rendering guide first. Requires a useful plain-text caption. Inline CSS/JS only, max 32 KiB HTML and 4 KiB zlib; no network, inputs, bot callbacks, sharing or wallet. Publishes with a successful answer; staging does not confirm delivery. Destination is fixed by the application.",
+      widgetParameters,
+      async (w, r, a, sql) => {
+        const deployment = await store.deployment(sql);
+        requireThat(
+          deployment.active && !deployment.paused,
+          "deployment_paused",
+          409,
+        );
+        return stageWidget(w, r, a, deployment.bot?.id);
+      },
+      authorizeWidget,
+    ),
     bind(
       "react_to_message",
       "Optionally react to the current requester's message with one emoji. Use sparingly when their mood fits, e.g. thanks or a confirmed win; skip failures, risks, approvals and formal reports. The application fixes the target. Queued does not mean sent. Continue the normal reply without announcing the reaction.",

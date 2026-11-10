@@ -55,8 +55,10 @@ for (const width of [1280, 375]) {
       await fixture(page, items);
       const published = structuredClone(skill.published);
       const cards = page.locator(".skill-card");
-      await expect(cards).toHaveCount(2);
-      for (const card of await cards.all()) {
+      await expect(cards).toHaveCount(items.length);
+      for (const [index, card] of (await cards.all()).entries()) {
+        const spec = items[index]?.draft;
+        if (!spec) throw Error("Missing preset spec");
         await expect(card.getByText("Preset", { exact: true })).toBeVisible();
         await expect(card.getByRole("button")).toHaveCount(1);
         await expect(
@@ -69,21 +71,41 @@ for (const width of [1280, 375]) {
             exact: true,
           })
           .click();
-        await expect(card.locator(".prose")).toBeVisible();
+        await expect(card.locator(".prose").first()).toBeVisible();
         await expect(card.getByLabel("Settings")).toContainText(
           "Maximum words",
         );
         await expect(card.getByLabel("Settings")).toContainText("400");
         await expect(card.getByLabel("Settings")).toContainText(
-          "Decisions, blockers, next steps",
+          spec.settings.sections,
         );
         const tools = card.getByRole("list", { name: "Required tools" });
-        await expect(tools.getByRole("listitem")).toHaveText(skill.draft.tools);
+        await expect(tools.getByRole("listitem")).toHaveText(spec.tools);
         const toolsBounds = await tools.boundingBox();
         expect(toolsBounds?.height).toBeLessThan(width > 640 ? 90 : 160);
+        // Supporting guides add their own collapsed disclosure row.
+        const guideRow = spec.resources?.length ? 80 : 0;
         expect((await card.boundingBox())?.height).toBeLessThan(
-          width > 640 ? 450 : 700,
+          (width > 640 ? 450 : 700) + guideRow,
         );
+        if (spec.resources?.length) {
+          await card
+            .getByText(`Supporting files (${spec.resources.length})`, {
+              exact: true,
+            })
+            .click();
+          await card
+            .getByText("references/rendering.md", { exact: true })
+            .click();
+          await expect(card.locator(".prose").nth(1)).toContainText(
+            "Telegram widget rendering",
+          );
+          await card
+            .getByText(`Supporting files (${spec.resources.length})`, {
+              exact: true,
+            })
+            .click();
+        }
         await expect(
           card.getByText("No dependent workflows", { exact: true }),
         ).toBeVisible();
@@ -92,9 +114,9 @@ for (const width of [1280, 375]) {
         expect((await toggle.boundingBox())?.height).toBeGreaterThanOrEqual(44);
         await toggle.focus();
         await page.keyboard.press("Enter");
-        await expect(card.locator(".prose")).toBeHidden();
+        await expect(card.locator(".prose").first()).toBeHidden();
         await page.keyboard.press("Enter");
-        await expect(card.locator(".prose")).toBeVisible();
+        await expect(card.locator(".prose").first()).toBeVisible();
       }
       await expect(
         page.getByRole("heading", { name: "Test skill policy" }),
@@ -211,7 +233,7 @@ for (const width of [1280, 375]) {
     await expect(card.locator("input, textarea, select")).toHaveCount(0);
     const toggle = card.locator(".skill-card-preview > summary");
     await toggle.click();
-    await expect(card.locator(".prose")).toHaveText(custom.draft.body);
+    await expect(card.locator(".prose").first()).toHaveText(custom.draft.body);
     await expect(card.getByLabel("Settings").locator("dd").first()).toHaveText(
       "400",
     );
@@ -239,7 +261,7 @@ for (const width of [1280, 375]) {
     });
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(card.locator(".prose")).toHaveText(custom.draft.body);
+    await expect(card.locator(".prose").first()).toHaveText(custom.draft.body);
 
     custom.draft.tools = [];
     custom.dependents = [];

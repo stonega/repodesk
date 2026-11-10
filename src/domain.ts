@@ -115,6 +115,7 @@ export const workflowSchema = z.preprocess(
 );
 export type WorkflowSpec = z.infer<typeof workflowSchema>;
 export const TOOLS = [
+  "send_telegram_widget",
   "read_web",
   "query_model_cost",
   "query_chat_history",
@@ -370,6 +371,8 @@ export interface BrowserReadStamp {
   botId: string;
 }
 export interface Run {
+  /** Staged presentation; published only with a successful interactive answer. */
+  widget?: TelegramWidget;
   browserSealed?: string;
   browserRead?: BrowserReadStamp;
   browserWait?: {
@@ -499,7 +502,17 @@ export interface Run {
   result?: string;
   error?: string;
 }
+export interface TelegramWidget {
+  html: string;
+  caption: string;
+  width?: number;
+  height?: number;
+  botId: string;
+  requestMessageId?: number;
+}
 export interface Delivery {
+  widget?: TelegramWidget;
+  widgetFallback?: boolean;
   browserRequest?: { id: string; expiresAt: number; taskId?: string };
   browserResume?: { id: string; taskId?: string };
   browserRead?: BrowserReadStamp;

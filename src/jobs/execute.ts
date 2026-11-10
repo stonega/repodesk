@@ -39,6 +39,7 @@ import {
   requestFailureMessage,
 } from "../telegram/feedback.ts";
 import { discardFollowup } from "../telegram/followup.ts";
+import { publishWidget } from "../telegram/widgets.ts";
 import { TranscriptionService } from "../transcription/service.ts";
 import { webReaderTool } from "../web-reader/tool.ts";
 import { commitDiscussions } from "../workspaces/conversation-memory.ts";
@@ -661,6 +662,9 @@ export class Executor {
             if (!browserWaiting) recordThreadAnswer(w, r);
             if (text && !browserWaiting) commitDiscussions(w, r);
             else delete r.discussionUpdates;
+            if (r.widget)
+              validateSources(`${r.widget.caption}\n${r.widget.html}`, r);
+            publishWidget(w, r, deployment.bot?.id);
             if (!browserWaiting && !handoff && (text || !proposals)) {
               const response = text
                 ? `${text.slice(0, 2700)}${result.status === "partial" ? `\n\n${requestFailureMessage(r.error ?? "incomplete_response")}` : ""}`

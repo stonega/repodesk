@@ -24,6 +24,7 @@ import {
   withoutTaskControls,
 } from "../telegram/task-control-messages.ts";
 import { selectionAllowed } from "../telegram/task-controls.ts";
+import { widgetDeliveryAllowed } from "../telegram/widgets.ts";
 import { eligible, runAllowed } from "../workspaces/policy.ts";
 export class DeliveryWorker {
   constructor(
@@ -121,12 +122,13 @@ export class DeliveryWorker {
       !browserDeliveryAllowed(w, d, (await this.store.deployment(sql)).bot?.id)
     )
       return false;
-    if (d.reaction) {
+    if (d.reaction || d.widget) {
       const deployment = await this.store.deployment(sql);
       if (
         !deployment.active ||
         deployment.paused ||
-        !reactionDeliveryAllowed(w, d, deployment.bot?.id)
+        !reactionDeliveryAllowed(w, d, deployment.bot?.id) ||
+        !widgetDeliveryAllowed(w, d, deployment.bot?.id)
       )
         return false;
     }
@@ -356,6 +358,33 @@ export class DeliveryWorker {
         });
         return;
       }
+      if (intent.widget && !intent.widgetFallback) {
+        const sent = await (await this.setup.client(deployment)).call<{
+          message_id: number;
+        }>("sendWidget", {
+          chat_id: intent.chatId,
+          message_thread_id: intent.topicId || undefined,
+          html: intent.widget.html,
+          caption: intent.widget.caption,
+          width: intent.widget.width,
+          height: intent.widget.height,
+          allow_queries: false,
+          is_shared: false,
+          protect_content: true,
+          reply_parameters: intent.replyTo
+            ? { message_id: intent.replyTo, allow_sending_without_reply: true }
+            : undefined,
+        });
+        await this.finish(workspaceId, intent, (d) => {
+          d.state = "sent";
+          d.remoteId = sent.message_id;
+        });
+        this.store.log.write("delivery_sent", {
+          workspaceId,
+          runId: intent.runId,
+        });
+        return;
+      }
       const taskId = developmentMessageTask(intent);
       if (taskId) {
         const task = await taskGet(this.store.pool, workspaceId, taskId);
@@ -509,6 +538,15 @@ export class DeliveryWorker {
           d.state = "pending";
           d.attempts = 0;
         } else if (
+          intent.widget &&
+          !intent.widgetFallback &&
+          error instanceof TelegramError &&
+          error.code === "telegram_destination_rejected" &&
+          error.disposition === "permanent"
+        ) {
+          d.widgetFallback = true;
+          d.state = "pending";
+        } else if (
           intent.format === "rich" &&
           error instanceof TelegramError &&
           error.code === "telegram_destination_rejected" &&
@@ -532,6 +570,12 @@ export class DeliveryWorker {
         } else if (
           error instanceof TelegramError &&
           error.disposition === "permanent"
+        )
+          d.state = "failed";
+        else if (
+          intent.widget &&
+          error instanceof TelegramError &&
+          error.disposition === "retry"
         )
           d.state = "failed";
         else d.state = intent.reaction ? "failed" : "delivery_unknown";

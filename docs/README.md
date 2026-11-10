@@ -28,6 +28,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Local voice transcription](implementation/transcription.md) | Optional Qwen3-ASR plugin, automatic model download and Telegram audio input |
 | [Telegram image and attachment input](implementation/telegram-attachments.md) | Implemented formats, download controls, media budgets and limits |
 | [Native Telegram reactions](implementation/telegram-reactions.md) | Optional conversational emoji reactions, scoped message targeting and durable delivery |
+| [Telegram widgets](implementation/telegram-widgets.md) | Bundled interactive HTML skill, private Topics, durable delivery and caption fallback |
 | [Telegram platform constraints](reference/telegram-platform.md) | What changes when Slack becomes Telegram |
 | [Private conversation threads](design/private-threads.md) | Native Topics, discussion memory, cache-aware compaction and private history |
 | [Group conversations](design/group-conversations.md) | Per-user continuity, shared discussions and natural follow-up triggering |

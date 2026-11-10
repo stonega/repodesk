@@ -3,6 +3,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { PluginService } from "../../src/agent/plugin-service.ts";
 import { type AgentInput, selectedModel } from "../../src/agent/runtime.ts";
+import { applicationTools } from "../../src/agent/tools.ts";
 import { browserTools } from "../../src/browser/config.ts";
 import { browserRuntime } from "../../src/browser/runtime.ts";
 import { emptyCloudflare } from "../../src/cloudflare/config.ts";
@@ -196,7 +197,7 @@ export async function verifyPluginStartup() {
         system: "Startup fixture",
         prompt: "hi",
         transcript: [],
-        tools: [],
+        tools: applicationTools(store, w.id, run.id, run.fence),
         maxTurns: 1,
         signal: AbortSignal.timeout(5000),
         guard: async () => {},
@@ -226,6 +227,7 @@ export async function verifyPluginStartup() {
               `${mode}: Browser default enablement`,
             );
           for (const name of [
+            "send_telegram_widget",
             "obsidian_query",
             "query_google_docs",
             "query_search_console",
@@ -235,6 +237,12 @@ export async function verifyPluginStartup() {
             ...codeTruthTools,
           ])
             assert.ok(names.includes(name), `${mode}: missing ${name}`);
+          assert.ok(
+            w.skills.some(
+              (s) =>
+                s.preset && s.enabled && s.draft.slug === "telegram-widgets",
+            ),
+          );
           const message: AssistantMessage = {
             role: "assistant",
             content: [{ type: "text", text: "Hello" }],
