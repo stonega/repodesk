@@ -1758,7 +1758,7 @@ function MembersSection({ id }: { id: string }) {
     githubChanged: false,
   });
   const [open, setOpen] = useState(false);
-  const [editingMember, setEditingMember] = useState(false);
+  const [inviteWorkspace, setInviteWorkspace] = useState<string>();
   const [memberError, setMemberError] = useState("");
   return (
     <>
@@ -1785,18 +1785,7 @@ function MembersSection({ id }: { id: string }) {
             label="Add member"
             showLabel
             disabled={!data || loading}
-            onClick={() => {
-              setMember({
-                id: "",
-                role: "member",
-                active: true,
-                githubId: "",
-                githubChanged: false,
-              });
-              setEditingMember(false);
-              setMemberError("");
-              setOpen(true);
-            }}
+            onClick={() => setInviteWorkspace(id)}
           />
         </div>
         <p className="muted">All active workspace members can use the bot.</p>
@@ -1887,7 +1876,6 @@ function MembersSection({ id }: { id: string }) {
                               github: m.github,
                               githubChanged: false,
                             });
-                            setEditingMember(true);
                             setMemberError("");
                             setOpen(true);
                           }}
@@ -1908,18 +1896,13 @@ function MembersSection({ id }: { id: string }) {
         request={api}
         onChange={reload}
         refreshKey={data}
+        inviteOpen={inviteWorkspace === id}
+        onCloseInvite={() => setInviteWorkspace(undefined)}
       />
       {open && (
-        <Modal
-          title={editingMember ? "Edit member" : "Add member"}
-          onClose={() => setOpen(false)}
-        >
+        <Modal title="Edit member" onClose={() => setOpen(false)}>
           <Field label="Telegram user ID">
-            <input
-              value={member.id}
-              readOnly={editingMember}
-              onChange={(e) => setMember({ ...member, id: e.target.value })}
-            />
+            <input value={member.id} readOnly />
           </Field>
           <p className="muted member-id-help">
             Usernames are received from Telegram; a numeric user ID is required

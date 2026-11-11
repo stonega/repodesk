@@ -18,8 +18,9 @@ them. Panel vault management remains restricted to the workspace's deployment op
 
 The **Groups & Members** page offers a searchable, paginated member table with
 Telegram profiles, IDs, roles, membership, GitHub detail actions and effective access.
-Add/edit dialogs manage role and active membership. Access requests and their
-shareable Telegram invite link remain on this page. The access policy card, whitelist
+Members → **New** opens an invite dialog matching the group-link dialog. Existing
+members use **Edit** to manage role, active membership and GitHub association.
+Pending access requests remain on the page. The access policy card, whitelist
 column, whitelist toggle and bulk ID editor have been removed.
 Old `/admin/chats` and `/admin/access-policy` browser links redirect to
 `/admin/members` while preserving query parameters. The retired access-policy API and preview routes
@@ -124,15 +125,15 @@ An unauthorized user can press **Request access** after messaging the bot privat
 or directing a command/reply to it in a linked group. Private routing uses an
 existing workspace selection or membership; exactly one configured workspace with
 a verified owner may be inferred. With multiple possible workspaces, use the
-workspace-specific invite link from **Groups & Members → Access requests**.
+workspace-specific invite link from **Groups & Members → Members → New**.
 Ordinary requests and legacy workspace-ID request links still require approval.
 They never expose workspace/member lists. Requests also work before activation
 once Telegram updates are being received.
 
 ### Single-account invite links (implemented, 2026-10-14)
 
-The shareable card now displays a signed invite, refreshed automatically every
-10 seconds with an animated circular countdown after its title. Timing and
+The Add member dialog displays a signed invite, refreshed automatically every
+10 seconds with an animated circular countdown after the Access link label. Timing and
 refresh status remain available to screen readers and on hover, with static
 updates for reduced motion. In private Telegram, sending its `/start` command
 immediately enrolls/reactivates regular membership for the actual sender, without
@@ -154,7 +155,7 @@ account or additional repository permissions. It works before bot activation.
 Expired claim records are pruned; workspace purge clears all claims.
 
 The card keeps its current link visible while refreshing; failed refreshes pause
-the countdown and offer Retry in an error toast. The next successful refresh also
+the countdown and offer Retry inside the open dialog (or in a page error toast when closed). The next successful refresh also
 updates the member table when the membership revision changes.
 
 ### Manual request review
@@ -190,7 +191,7 @@ under `/api/setup/workspaces/:id/access-requests/:request/decision`.
 
 ## GitHub identity and repository permission sync (2026-10-05)
 
-Add/Edit member forms automatically fetch organization members from the GitHub API
+Edit member forms automatically fetch organization members from the GitHub API
 or use the personal installation owner directly, without repository metadata.
 Administrators can select a fetched account or enter a custom username, resolved
 to its canonical login and numeric GitHub ID when saved, and associate it with a

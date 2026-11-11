@@ -470,8 +470,11 @@ See [workflow API examples](../../examples/workflows.http).
 
 ### Access request review (implemented)
 
-The **Groups & Members** page includes **Access requests** and a shareable
-Telegram invite link that refreshes every 10 seconds with a countdown. Each token
+The **Groups & Members** page keeps pending approvals in **Access requests**.
+**Members → New** opens **Add member**, with invite instructions and a copyable
+Telegram link using the same layout as **Link a group**. It replaces the manual
+creation form; role, membership and GitHub fields remain in **Edit member**.
+The invite link refreshes every 10 seconds with a countdown. Each token
 immediately adds one Telegram account as a regular member; copied links expire
 after 24 hours. Requests sent without an invite still need review.
 Pending rows show the Telegram ID, available display name and

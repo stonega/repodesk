@@ -870,30 +870,6 @@ p {
 .team-currency-card > p {
   margin: 0;
 }
-.access-link-card {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  min-width: 0;
-  margin: 16px 0;
-  padding: 16px 18px;
-}
-.access-link-details {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-.access-link-details > * {
-  margin: 0;
-}
-.access-link-heading h3 {
-  display: inline;
-  margin: 0;
-}
-.access-link-heading-end {
-  white-space: nowrap;
-}
 .access-link-timer {
   display: inline-flex;
   margin-inline-start: 8px;
@@ -918,11 +894,8 @@ p {
     transition: none;
   }
 }
-.access-link-url {
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  overflow-wrap: anywhere;
-}
 .members-card,
+.access-requests-card,
 .groups-card,
 .group-mention-guide,
 .group-link-details {
@@ -932,6 +905,7 @@ p {
   gap: 16px;
 }
 .members-card > *,
+.access-requests-card > *,
 .groups-card > *,
 .group-table-message > *,
 .group-mention-guide > *,

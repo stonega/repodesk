@@ -412,7 +412,7 @@ References: [Merge a pull request](https://docs.github.com/en/rest/pulls/pulls#m
 
 ## Fetch GitHub accounts in member forms
 
-Implemented locally, updated 2026-10-14. Add/Edit member dialogs fetch account choices
+Implemented locally, updated 2026-11-11. Edit member dialogs fetch account choices
 automatically from the workspace's connected installation. Organization installations
 return organization members from `GET /orgs/{org}/members`; personal installations
 return only the owner from the installation account. Neither path uses repository

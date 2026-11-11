@@ -198,7 +198,31 @@ for (const width of [1280, 390]) {
       await expect(members).toContainText("Team member");
       await expect(
         page.getByRole("region", { name: "Access requests", exact: true }),
-      ).toContainText("access_fixture");
+      ).not.toContainText("access_fixture");
+      const requestSpacing = await page
+        .getByRole("region", { name: "Access requests", exact: true })
+        .evaluate((card) => {
+          const bounds = card.getBoundingClientRect();
+          const style = getComputedStyle(card);
+          return {
+            top:
+              (card.firstElementChild?.getBoundingClientRect().top ?? 0) -
+              bounds.top,
+            bottom:
+              bounds.bottom -
+              (card.lastElementChild?.getBoundingClientRect().bottom ?? 0),
+            expectedTop:
+              parseFloat(style.paddingTop) + parseFloat(style.borderTopWidth),
+            expectedBottom:
+              parseFloat(style.paddingBottom) +
+              parseFloat(style.borderBottomWidth),
+          };
+        });
+      expect(requestSpacing.top).toBeCloseTo(requestSpacing.expectedTop, 0);
+      expect(requestSpacing.bottom).toBeCloseTo(
+        requestSpacing.expectedBottom,
+        0,
+      );
       await expect(groups.locator("input, select, textarea")).toHaveCount(0);
       await expect(members.getByLabel("Telegram user ID")).toHaveCount(0);
       await expectMatchingGroupCard(page);
@@ -274,7 +298,16 @@ for (const width of [1280, 390]) {
         name: "Add member",
         exact: true,
       });
-      await expect(memberDialog.getByLabel("Telegram user ID")).toBeVisible();
+      await expect(memberDialog).toContainText("access_fixture");
+      await expect(memberDialog.locator("input, select, textarea")).toHaveCount(
+        0,
+      );
+      await expect(
+        memberDialog.getByRole("button", { name: "Save membership" }),
+      ).toHaveCount(0);
+      expect(
+        state.requests.some((path) => path.endsWith("/members/github")),
+      ).toBe(false);
       await expect(
         page.getByRole("dialog", { name: "Edit group", exact: true }),
       ).toHaveCount(0);

@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { IconButton } from "./icon-button.tsx";
 import { Skeleton } from "./skeleton.tsx";
 
 export function ServiceUrl({
   label,
+  labelSuffix,
   value,
   loading = false,
   copyFailureText = "Could not copy. Select the URL to copy it manually.",
 }: {
   label: string;
+  labelSuffix?: ReactNode;
   value?: string;
   loading?: boolean;
   copyFailureText?: string;
@@ -18,6 +20,10 @@ export function ServiceUrl({
   );
   const [copying, setCopying] = useState(false);
   useEffect(() => {
+    void value;
+    setCopyStatus(null);
+  }, [value]);
+  useEffect(() => {
     if (copyStatus !== "copied") return;
     const timer = setTimeout(() => setCopyStatus(null), 1000);
     return () => clearTimeout(timer);
@@ -25,7 +31,10 @@ export function ServiceUrl({
 
   return (
     <div className="service-url">
-      <dt>{label}</dt>
+      <dt>
+        {label}
+        {labelSuffix}
+      </dt>
       <dd>
         <div className="service-url-value">
           {value ? (

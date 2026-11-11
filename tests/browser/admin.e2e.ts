@@ -2010,19 +2010,29 @@ test.describe
         await expect(dialog).toHaveCount(0);
         await expect(trigger).toBeFocused();
       }
-      // Dismissing a draft must not update membership or retain the entered ID.
+      // New shares an invite; only Edit exposes membership fields.
       await page.goto("/admin/members");
       await page
         .getByRole("button", { name: "Add member", exact: true })
         .click();
-      await page.getByLabel("Telegram user ID", { exact: true }).fill("909090");
-      await page.getByRole("button", { name: "Cancel", exact: true }).click();
-      await page
-        .getByRole("button", { name: "Add member", exact: true })
-        .click();
+      const invite = page.getByRole("dialog", {
+        name: "Add member",
+        exact: true,
+      });
+      await expect(invite.locator("input, select, textarea")).toHaveCount(0);
       await expect(
-        page.getByLabel("Telegram user ID", { exact: true }),
-      ).toHaveValue("");
+        invite.getByRole("button", { name: "Copy Access link" }),
+      ).toBeEnabled();
+      await invite.getByRole("button", { name: "Cancel", exact: true }).click();
+      const fixture = JSON.parse(await readFile(browserDbPath, "utf8"));
+      const pool = database(fixture.url);
+      const store = new Store(pool);
+      await store.change(workspaceId, (w) => {
+        w.members.push({ id: "909090", role: "member", active: true });
+        w.memberVersion++;
+      });
+      await page.goto(`/admin/members?workspace=${workspaceId}`);
+      await page.getByRole("button", { name: "Edit member 909090" }).click();
       let release!: () => void;
       const response = new Promise<void>((resolve) => {
         release = resolve;
@@ -2035,12 +2045,12 @@ test.describe
           json: { error: "version_conflict" },
         });
       });
-      await page.getByLabel("Telegram user ID", { exact: true }).fill("909090");
+      await page.getByRole("switch", { name: "Active membership" }).click();
       await page
         .getByRole("button", { name: "Save membership", exact: true })
         .click();
       const memberDialog = page.getByRole("dialog", {
-        name: "Add member",
+        name: "Edit member",
         exact: true,
       });
       await expect(
@@ -2057,6 +2067,11 @@ test.describe
       ).toHaveValue("909090");
       await page.getByRole("button", { name: "Cancel", exact: true }).click();
       await page.unroute("**/api/admin/workspaces/*/members");
+      await store.change(workspaceId, (w) => {
+        w.members = w.members.filter((member) => member.id !== "909090");
+        w.memberVersion++;
+      });
+      await pool.end();
       // Repository creation uses only a URL and description; Cancel discards the draft.
       await page.goto("/admin/plugins/code-truth");
       await page
@@ -2132,30 +2147,41 @@ test.describe
         await expect(
           requests.getByRole("heading", { name: "Access requests (2)" }),
         ).toBeVisible();
-        const accessLink = requests.getByText(/start=access_/);
+        await expect(requests.getByText(/start=access_/)).toHaveCount(0);
+        await page
+          .getByRole("button", { name: "Add member", exact: true })
+          .click();
+        const invite = page.getByRole("dialog", {
+          name: "Add member",
+          exact: true,
+        });
+        const accessLink = invite.getByText(/start=access_/);
         await expect(accessLink).toBeVisible();
         await expect(requests.getByRole("textbox")).toHaveCount(0);
         await page
           .context()
           .grantPermissions(["clipboard-read", "clipboard-write"]);
-        const copyButton = requests.getByRole("button", {
-          name: "Copy access link",
+        const copyButton = invite.getByRole("button", {
+          name: "Copy Access link",
         });
         const copyIcon = await copyButton.locator("svg").innerHTML();
         await copyButton.click();
-        const copiedButton = requests.getByRole("button", {
-          name: "Copied access link",
+        const copiedButton = invite.getByRole("button", {
+          name: "Copied Access link",
         });
         await expect(copiedButton).toBeVisible();
         expect(await copiedButton.locator("svg").innerHTML()).not.toBe(
           copyIcon,
         );
-        await expect(requests.getByText("Link copied.")).toHaveCount(0);
+        await expect(invite.getByText("Link copied.")).toHaveCount(0);
         expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
           await accessLink.textContent(),
         );
         await expect(copyButton).toBeVisible();
         expect(await copyButton.locator("svg").innerHTML()).toBe(copyIcon);
+        await invite
+          .getByRole("button", { name: "Cancel", exact: true })
+          .click();
         await page.setViewportSize({ width: 390, height: 844 });
         await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
         await page.screenshot({

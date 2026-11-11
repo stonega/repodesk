@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AccessRequest } from "../src/domain.ts";
-import { IconButton } from "./icon-button.tsx";
+import { Modal, ModalActions } from "./modal.tsx";
+import { ServiceUrl } from "./service-url.tsx";
 import { SkeletonRows } from "./skeleton.tsx";
 import { ErrorToast, useToast } from "./toast.tsx";
 
@@ -16,20 +17,20 @@ export function AccessRequests({
   request,
   onChange,
   refreshKey,
+  inviteOpen,
+  onCloseInvite,
 }: {
   id: string;
   request: Request;
   onChange: () => void;
   refreshKey?: unknown;
+  inviteOpen: boolean;
+  onCloseInvite: () => void;
 }) {
   const endpoint = `/api/admin/workspaces/${id}/access-requests`;
   const [data, setData] = useState<Requests>();
   const [error, setError] = useState("");
   const notify = useToast();
-  const [copyStatus, setCopyStatus] = useState<"copied" | "failed" | null>(
-    null,
-  );
-  const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshAt, setRefreshAt] = useState<number>();
@@ -46,7 +47,6 @@ export function AccessRequests({
       const next = await request<Requests>(endpoint);
       if (sequence !== latestLoad.current) return;
       setData(next);
-      setCopyStatus(null);
       setRefreshAt(Date.now() + 10_000);
       setRemainingMs(10_000);
       if (
@@ -87,12 +87,6 @@ export function AccessRequests({
     const timer = setInterval(tick, 250);
     return () => clearInterval(timer);
   }, [data?.requestUrl, refreshAt, error, loading, busy, load]);
-  useEffect(
-    () => () => {
-      if (copyResetTimer.current !== null) clearTimeout(copyResetTimer.current);
-    },
-    [],
-  );
   const decide = async (
     entry: AccessRequest,
     decision: "approved" | "rejected",
@@ -100,7 +94,6 @@ export function AccessRequests({
     if (!data || busy) return;
     setBusy(true);
     setError("");
-    setCopyStatus(null);
     try {
       await request(`${endpoint}/${entry.id}/decision`, "POST", {
         decision,
@@ -115,165 +108,173 @@ export function AccessRequests({
       setBusy(false);
     }
   };
-  const copyLink = async () => {
-    if (!data?.requestUrl) return;
-    if (copyResetTimer.current !== null) {
-      clearTimeout(copyResetTimer.current);
-      copyResetTimer.current = null;
-    }
-    try {
-      await navigator.clipboard.writeText(data.requestUrl);
-      setCopyStatus("copied");
-      copyResetTimer.current = setTimeout(() => {
-        setCopyStatus(null);
-        copyResetTimer.current = null;
-      }, 1000);
-    } catch {
-      setCopyStatus("failed");
-    }
-  };
   const refreshLabel = error
     ? "Link refresh paused."
     : loading
       ? "Updating link…"
       : `New link in ${Math.ceil(remainingMs / 1000)}s`;
   return (
-    <section className="card" aria-label="Access requests">
-      <div className="row between">
+    <>
+      <section
+        className="card access-requests-card"
+        aria-label="Access requests"
+        aria-busy={loading}
+      >
         <h2>Access requests{data ? ` (${data.items.length})` : ""}</h2>
-      </div>
-      <p>
-        Invite links add members automatically. Requests sent without an invite
-        still need approval. Admin permissions are managed separately.
-      </p>
-      {data?.requestUrl && (
-        <div className="card access-link-card">
-          <div className="access-link-details">
-            <div className="access-link-heading">
-              <h3>
-                Share this link with someone who needs{" "}
-                <span className="access-link-heading-end">
-                  access
-                  <span
-                    className={`access-link-timer${error || busy ? " is-paused" : ""}`}
-                    role="timer"
-                    aria-label="Invite link refresh"
-                    aria-live="off"
-                    title={refreshLabel}
-                  >
-                    <svg
-                      className={
-                        loading && !error ? "icon-spinning" : undefined
-                      }
-                      width="18"
-                      height="18"
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      strokeWidth="2"
-                      aria-hidden="true"
-                      focusable="false"
-                    >
-                      <circle
-                        className="access-link-timer-track"
-                        cx="10"
-                        cy="10"
-                        r="8"
-                      />
-                      <circle
-                        className="access-link-timer-progress"
-                        cx="10"
-                        cy="10"
-                        r="8"
-                        pathLength="100"
-                        strokeDasharray={
-                          loading && !error ? "25 75" : "100 100"
-                        }
-                        strokeDashoffset={
-                          loading && !error ? 0 : 100 - remainingMs / 100
-                        }
-                        transform="rotate(-90 10 10)"
-                      />
-                    </svg>
-                    <span className="sr-only">{refreshLabel}</span>
-                  </span>
-                </span>
-              </h3>
+        <p>
+          Requests sent without an invite need approval. Admin permissions are
+          managed separately.
+        </p>
+        <ErrorToast message={inviteOpen ? "" : error}>
+          {error && (
+            <button
+              type="button"
+              aria-label="Reload access requests"
+              disabled={busy || loading}
+              onClick={() => void load()}
+            >
+              Retry
+            </button>
+          )}
+        </ErrorToast>
+        {loading && !data && !error && (
+          <SkeletonRows label="Access requests" rows={2} />
+        )}
+        {data?.items.length === 0 && (
+          <p className="muted">No pending access requests.</p>
+        )}
+        {data?.items.map((entry) => (
+          <article key={entry.id} className="card">
+            <h3>
+              {entry.name ||
+                (entry.username
+                  ? `@${entry.username}`
+                  : `Telegram user ${entry.actor}`)}
+            </h3>
+            <p>
+              Telegram ID: {entry.actor}
+              {entry.username ? ` · @${entry.username}` : ""}
+            </p>
+            <p className="muted">
+              Requested {new Date(entry.requestedAt).toLocaleString()}
+            </p>
+            <div className="row">
+              <button
+                type="button"
+                disabled={busy || loading}
+                onClick={() => void decide(entry, "approved")}
+              >
+                Approve access
+              </button>
+              <button
+                type="button"
+                className="danger"
+                disabled={busy || loading}
+                onClick={() => void decide(entry, "rejected")}
+              >
+                Reject request
+              </button>
             </div>
-            <p className="access-link-url">{data.requestUrl}</p>
+          </article>
+        ))}
+      </section>
+      {inviteOpen && (
+        <Modal title="Add member" onClose={onCloseInvite}>
+          <div className="group-link-details">
+            <p>
+              Share this link with someone who needs access. Opening it in
+              Telegram adds them to this workspace as a regular member, without
+              approval. Admin permissions are managed separately.
+            </p>
+            <dl className="service-urls">
+              <ServiceUrl
+                label="Access link"
+                labelSuffix={
+                  data?.requestUrl ? (
+                    <span
+                      className={`access-link-timer${error || busy ? " is-paused" : ""}`}
+                      role="timer"
+                      aria-label="Invite link refresh"
+                      aria-live="off"
+                      title={refreshLabel}
+                    >
+                      <svg
+                        className={
+                          loading && !error ? "icon-spinning" : undefined
+                        }
+                        width="18"
+                        height="18"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        strokeWidth="2"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <circle
+                          className="access-link-timer-track"
+                          cx="10"
+                          cy="10"
+                          r="8"
+                        />
+                        <circle
+                          className="access-link-timer-progress"
+                          cx="10"
+                          cy="10"
+                          r="8"
+                          pathLength="100"
+                          strokeDasharray={
+                            loading && !error ? "25 75" : "100 100"
+                          }
+                          strokeDashoffset={
+                            loading && !error ? 0 : 100 - remainingMs / 100
+                          }
+                          transform="rotate(-90 10 10)"
+                        />
+                      </svg>
+                      <span className="sr-only">{refreshLabel}</span>
+                    </span>
+                  ) : undefined
+                }
+                value={data?.requestUrl ?? undefined}
+                loading={loading}
+                copyFailureText="Could not copy the link. Select the URL to copy it."
+              />
+            </dl>
+            {loading && !data && (
+              <p className="muted" role="status">
+                Loading invite link…
+              </p>
+            )}
+            {!loading && data && !data.requestUrl && !error && (
+              <p role="status">
+                Connect your Telegram bot before inviting members.
+              </p>
+            )}
             <p className="muted">
               One Telegram account per link. No approval required. Copied links
               remain valid for 24 hours.
             </p>
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+            <ModalActions>
+              {error && (
+                <button
+                  type="button"
+                  className="secondary"
+                  aria-label="Reload access requests"
+                  disabled={busy || loading}
+                  onClick={() => void load()}
+                >
+                  Retry
+                </button>
+              )}
+            </ModalActions>
           </div>
-          <IconButton
-            icon={copyStatus === "copied" ? "done" : "copy"}
-            label={
-              copyStatus === "copied"
-                ? "Copied access link"
-                : "Copy access link"
-            }
-            onClick={() => void copyLink()}
-          />
-        </div>
+        </Modal>
       )}
-      <ErrorToast
-        message={
-          copyStatus === "failed"
-            ? "Could not copy the link. Select the URL to copy it."
-            : error
-        }
-      >
-        {error && (
-          <button
-            type="button"
-            aria-label="Reload access requests"
-            disabled={busy || loading}
-            onClick={() => void load()}
-          >
-            Retry
-          </button>
-        )}
-      </ErrorToast>
-      {loading && !data && !error && (
-        <SkeletonRows label="Access requests" rows={2} />
-      )}
-      {data?.items.length === 0 && (
-        <p className="muted">No pending access requests.</p>
-      )}
-      {data?.items.map((entry) => (
-        <article key={entry.id} className="card">
-          <h3>
-            {entry.name ||
-              (entry.username
-                ? `@${entry.username}`
-                : `Telegram user ${entry.actor}`)}
-          </h3>
-          <p>
-            Telegram ID: {entry.actor}
-            {entry.username ? ` · @${entry.username}` : ""}
-          </p>
-          <p className="muted">
-            Requested {new Date(entry.requestedAt).toLocaleString()}
-          </p>
-          <div className="row">
-            <button
-              type="button"
-              disabled={busy || loading}
-              onClick={() => void decide(entry, "approved")}
-            >
-              Approve access
-            </button>
-            <button
-              type="button"
-              className="danger"
-              disabled={busy || loading}
-              onClick={() => void decide(entry, "rejected")}
-            >
-              Reject request
-            </button>
-          </div>
-        </article>
-      ))}
-    </section>
+    </>
   );
 }
