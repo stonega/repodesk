@@ -35,8 +35,16 @@ export const logEvents = {
     "warn",
     "Telegram streaming preview failed; final delivery remains enabled.",
   ],
+  telegram_control_rejected: [
+    "warn",
+    "A Telegram control was rejected. Inspect its safe failure code.",
+  ],
   run_started: ["info", "An assistant run started."],
   run_completed: ["info", "An assistant run finished or paused for approval."],
+  workflow_activation_recovered: [
+    "warn",
+    "A saved schedule activation was confirmed after a chat interruption.",
+  ],
   run_failed: [
     "error",
     "An assistant run failed. Inspect the run for its status.",
@@ -62,6 +70,13 @@ export const logEvents = {
 export type LogEvent = keyof typeof logEvents;
 export type LogService = "app" | "worker";
 const codes = new Set([
+  "workflow_request_unverified",
+  "approval_consumed",
+  "approval_denied",
+  "approval_expired",
+  "approval_changed",
+  "approval_stale",
+  "access_denied",
   "browser_reconcile_failed",
   "browser_credentials_unavailable",
   "browser_service_unavailable",

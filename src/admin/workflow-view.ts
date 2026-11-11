@@ -1,10 +1,13 @@
 import {
+  type Member,
   requireThat,
   type Workflow,
   type WorkflowSpec,
   type Workspace,
 } from "../domain.ts";
 import { repositoryAccess } from "../github/user-access.ts";
+import { nextOccurrences } from "../workflows/schedule.ts";
+import { membersWithProfiles } from "../workspaces/member-profile.ts";
 import { eligible } from "../workspaces/policy.ts";
 
 // Panel authority and the Telegram identity used at execution are separate.
@@ -51,11 +54,26 @@ export type WorkflowMetadata = Pick<
   Workflow,
   "id" | "owner" | "status" | "version" | "reason"
 > & {
+  ownerProfile?: Pick<Member, "id" | "name" | "username">;
   name: string;
   recurrence: Workflow["spec"]["recurrence"];
   next: string[];
 };
-export type MemberWorkflow = Workflow & { next: string[] };
+export type MemberWorkflow = Workflow &
+  Pick<WorkflowMetadata, "ownerProfile"> & { next: string[] };
+
+export function workflowView(w: Workspace, workflow: Workflow): MemberWorkflow {
+  const owner = membersWithProfiles(w).find((m) => m.id === workflow.owner);
+  return {
+    ...workflow,
+    ownerProfile: {
+      id: workflow.owner,
+      name: owner?.name,
+      username: owner?.username,
+    },
+    next: nextOccurrences(workflow.spec.recurrence, new Date()),
+  };
+}
 type RepositorySources = ReturnType<typeof workflowRepositories>;
 export type WorkflowCollection = {
   mode: "operator" | "member";

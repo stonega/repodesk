@@ -392,6 +392,11 @@ suite("PostgreSQL integration (isolated database)", () => {
           content: [{ type: "text", text: "Saved checkpoint" }],
         },
       ];
+      Object.assign(saved.members[0] ?? {}, {
+        name: "Taylor Example",
+        username: "taylor",
+        profileUpdatedAt: new Date().toISOString(),
+      });
       proposeWorkflow(saved, "101", spec(saved));
     });
     await store.pool.query("UPDATE admins SET telegram_id=NULL WHERE id=$1", [
@@ -468,6 +473,7 @@ suite("PostgreSQL integration (isolated database)", () => {
       expect(workflowHistory.items[0]).toMatchObject({
         spec: { name: "Friday recap" },
         status: "draft",
+        ownerProfile: { id: "101", name: "Taylor Example", username: "taylor" },
       });
       expect(workflowHistory.items[0].spec).toEqual(spec(w));
       const workflowId = workflowHistory.items[0].id;
@@ -514,7 +520,7 @@ suite("PostgreSQL integration (isolated database)", () => {
       );
     }
   });
-  test("unlinked panel admins create, approve, edit and control workflows without changing the execution owner", async () => {
+  test("unlinked panel admins save active workflows without a separate approval and preserve execution ownership", async () => {
     const w = await seed();
     const base = `/api/admin/workspaces/${w.id}`;
     await store.pool.query("UPDATE admins SET telegram_id=NULL WHERE id=$1", [
@@ -524,14 +530,14 @@ suite("PostgreSQL integration (isolated database)", () => {
       const input = { ...spec(w), chatId: "202" };
       const created = await request(`${base}/workflows`, "POST", input);
       expect(created.status).toBe(201);
-      const { workflow, approval } = await created.json();
+      const creation = await created.json();
+      const { workflow } = creation;
       expect(workflow.owner).toBe("202");
-      expect(approval).toMatchObject({ actor: operatorId, kind: "workflow" });
-      expect(approval.decision).toBeUndefined();
-      const approve = () =>
-        request(`${base}/approvals/${approval.id}`, "POST", { approve: true });
-      expect((await approve()).status).toBe(200);
-      expect((await approve()).status).toBe(409);
+      expect(workflow.status).toBe("active");
+      expect(creation).not.toHaveProperty("approval");
+      expect((await (await request(`${base}/approvals`)).json()).items).toEqual(
+        [],
+      );
       const action = (action: string, version = 1) =>
         request(`${base}/workflows/${workflow.id}/action`, "POST", {
           action,
@@ -555,16 +561,13 @@ suite("PostgreSQL integration (isolated database)", () => {
       expect(proposal.workflow).toMatchObject({
         owner: "202",
         version: 2,
-        status: "draft",
+        status: "active",
       });
       expect((await action("pause")).status).toBe(409);
-      expect(
-        (
-          await request(`${base}/approvals/${proposal.approval.id}`, "POST", {
-            approve: true,
-          })
-        ).status,
-      ).toBe(200);
+      expect(proposal).not.toHaveProperty("approval");
+      expect((await (await request(`${base}/approvals`)).json()).items).toEqual(
+        [],
+      );
       expect((await action("delete", 2)).status).toBe(200);
       expect((await request(`${base}/workflows/${workflow.id}`)).status).toBe(
         404,
@@ -1730,6 +1733,206 @@ suite("PostgreSQL integration (isolated database)", () => {
       w.id,
     ]);
   });
+  test("a member's schedule activates immediately and legacy Telegram controls report the saved outcome", async () => {
+    const w = await seed();
+    const run = await store.change(w.id, (current) =>
+      createRun(current, "202", "Every day at 8 AM", "202", 7, "gpt-4.1-mini"),
+    );
+    const runner = new PiRunner((model) => {
+      const stream = new AssistantMessageEventStream();
+      const message = {
+        role: "assistant" as const,
+        content: [
+          {
+            type: "toolCall" as const,
+            id: "schedule-call",
+            name: "propose_workflow",
+            arguments: {
+              requestQuote: "Every day at 8 AM",
+              name: "Daily reminder",
+              task: "Send a reminder",
+              frequency: "daily",
+              hour: 8,
+              minute: 0,
+              timezone: "Asia/Taipei",
+              format: "Plain text",
+              windowDays: 1,
+            },
+          },
+          {
+            type: "toolCall" as const,
+            id: "after-schedule",
+            name: "read_chat_context",
+            arguments: {},
+          },
+        ],
+        api: model.api,
+        provider: model.provider,
+        model: model.id,
+        stopReason: "toolUse" as const,
+        timestamp: Date.now(),
+        usage: {
+          input: 10,
+          output: 10,
+          totalTokens: 20,
+          cacheRead: 0,
+          cacheWrite: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+      };
+      stream.push({ type: "done", reason: "toolUse", message });
+      stream.end(message);
+      return stream;
+    });
+    await new Executor(store, setup, runner).execute(w.id, run.id);
+    const proposal = (await store.read(w.id)).approvals[0];
+    if (!proposal) throw Error("Missing schedule proposal");
+    expect(proposal.actor).toBe("202");
+    expect((await store.read(w.id)).runs[0]?.status).toBe("succeeded");
+    expect(
+      (await store.read(w.id)).runs[0]?.tools["after-schedule"],
+    ).toBeUndefined();
+    expect((await store.read(w.id)).runs[0]?.attempts).toHaveLength(1);
+    const activation = (await store.read(w.id)).deliveries.find(
+      (d) => d.id === `run:${run.id}:result`,
+    );
+    expect(activation?.text).toContain("Schedule active: Daily reminder");
+    expect(activation?.text).toContain("08:00 (Asia/Taipei)");
+    expect(activation?.buttons).toBeUndefined();
+    await new Executor(store, setup, runner).execute(w.id, run.id);
+    expect((await store.read(w.id)).workflows).toHaveLength(1);
+    expect(
+      (await (await request(`/api/admin/workspaces/${w.id}/approvals`)).json())
+        .items,
+    ).toEqual([]);
+    await store.pool.query(
+      "INSERT INTO telegram_selections(actor,workspace_id) VALUES('202',$1),('101',$1) ON CONFLICT(actor) DO UPDATE SET workspace_id=excluded.workspace_id",
+      [w.id],
+    );
+    const callback = (updateId: number, actor = 202, action = "approve") =>
+      request(
+        "/telegram/webhook",
+        "POST",
+        {
+          update_id: updateId,
+          callback_query: {
+            id: String(updateId),
+            from: { id: actor, is_bot: false },
+            chat_instance: "fixture",
+            data: `${action}:${proposal.id}`,
+            message: {
+              message_id: 12,
+              date: Math.floor(Date.now() / 1000),
+              message_thread_id: 7,
+              chat: { id: actor, type: "private" },
+            },
+          },
+        },
+        { "x-telegram-bot-api-secret-token": "test-webhook-secret" },
+      );
+    await callback(31001, 101);
+    expect((await store.read(w.id)).approvals[0]?.decision).toBe("approved");
+    await callback(31002);
+    await callback(31002);
+    await callback(31003);
+    await callback(31004, 202, "reject");
+    const saved = await store.read(w.id);
+    expect(saved.workflows).toHaveLength(1);
+    expect(saved.workflows[0]).toMatchObject({
+      owner: "202",
+      status: "active",
+    });
+    expect(saved.runs[0]?.status).toBe("succeeded");
+    expect(saved.approvals[0]?.decision).toBe("approved");
+    const confirmations = saved.deliveries.filter((d) =>
+      /^Proposal (?:already )?approved\.$/.test(d.text),
+    );
+    expect(confirmations).toHaveLength(3);
+    expect(
+      confirmations.every((d) => d.chatId === "202" && d.topicId === 7),
+    ).toBe(true);
+    expect(saved.deliveries.some((d) => d.text.includes("snag"))).toBe(false);
+    expect(
+      saved.audit.filter((a) => a.action === "approval.approved"),
+    ).toHaveLength(1);
+    await new DeliveryWorker(store, setup).send(
+      w.id,
+      confirmations[0]?.id ?? "",
+    );
+    expect(calls.at(-1)).toMatchObject({
+      method: "sendMessage",
+      params: {
+        chat_id: "202",
+        message_thread_id: 7,
+        text: "Proposal already approved.",
+      },
+    });
+    const dueAt = new Date(saved.workflows[0]?.nextAt ?? "");
+    tick(saved, "gpt-4.1-mini", dueAt);
+    tick(saved, "gpt-4.1-mini", dueAt);
+    expect(saved.occurrences).toHaveLength(1);
+    await store.pool.query(
+      "DELETE FROM telegram_selections WHERE workspace_id=$1",
+      [w.id],
+    );
+  });
+
+  test("schedule activation survives an interrupted chat response without replay or a failure notice", async () => {
+    const w = await seed();
+    const task = "Remind me daily at 8 AM Asia/Taipei";
+    const run = await store.change(w.id, (current) =>
+      createRun(current, "202", task, "202", 7, "gpt-4.1-mini"),
+    );
+    let executions = 0;
+    const runner: AgentRunner = {
+      async run(input) {
+        executions++;
+        const tool = input.tools.find((t) => t.name === "propose_workflow");
+        if (!tool) throw Error("Missing schedule tool");
+        const args = {
+          requestQuote: task,
+          name: "Reminder",
+          task: "Send a reminder",
+          frequency: "daily",
+          hour: 8,
+          minute: 0,
+          timezone: "Asia/Taipei",
+          format: "Plain text",
+          windowDays: 1,
+        };
+        await expect(
+          tool.execute("invalid-quote", {
+            ...args,
+            requestQuote: "an earlier user's request",
+          }),
+        ).rejects.toThrow("workflow_request_unverified");
+        await tool.execute("create-reminder", args);
+        throw new Fault("worker_shutdown", 503);
+      },
+    };
+    const executor = new Executor(store, setup, runner);
+    await executor.execute(w.id, run.id);
+    const saved = await store.read(w.id);
+    expect(saved.workflows).toHaveLength(1);
+    expect(saved.workflows[0]?.status).toBe("active");
+    expect(saved.runs[0]?.status).toBe("succeeded");
+    expect(saved.deliveries).toHaveLength(1);
+    expect(saved.deliveries[0]?.text).toContain("Schedule active: Reminder");
+    await store.change(w.id, (current) => {
+      const resumed = current.runs[0];
+      if (!resumed) throw Error("Missing run");
+      resumed.status = "running";
+      resumed.leaseUntil = new Date(0).toISOString();
+    });
+    await executor.execute(w.id, run.id);
+    expect(executions).toBe(1);
+    expect((await store.read(w.id)).deliveries).toHaveLength(1);
+    const erased = await store.read(w.id);
+    erased.messages = [];
+    sweep(erased);
+    expect(erased.runs[0]?.workflowActivation).toBeUndefined();
+  });
+
   test("group mentions preserve access, deduplication, topic and retention boundaries", async () => {
     const w = await seed();
     const chatId = -100301;

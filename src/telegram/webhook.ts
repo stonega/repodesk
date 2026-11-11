@@ -258,6 +258,14 @@ export class Ingress {
       } catch (error) {
         if (!(error instanceof Fault) && !(error instanceof ZodError))
           throw error;
+        if (callback) {
+          const approvalId = callback.data?.split(":")[1];
+          this.store.log.write("telegram_control_rejected", {
+            error,
+            workspaceId: workspace.id,
+            runId: workspace.approvals.find((a) => a.id === approvalId)?.runId,
+          });
+        }
         const actor = msg?.from
           ? String(msg.from.id)
           : callback?.from
@@ -734,12 +742,24 @@ export class Ingress {
       if (id && ["approve", "reject"].includes(action ?? "")) {
         const sender = String(callback.from.id);
         requireThat(!callback.from.is_bot, "access_denied", 403);
-        decide(w, sender, id, action === "approve");
+        const approval = w.approvals.find((a) => a.id === id);
+        const alreadyDecided = !!approval?.decision;
+        if (alreadyDecided) {
+          authorize(w, sender);
+          requireThat(approval?.actor === sender, "approval_denied", 403);
+        } else decide(w, sender, id, action === "approve");
+        const samePrivateChat =
+          callback.message?.chat.type === "private" &&
+          String(callback.message.chat.id) === sender;
         deliver(
           w,
           sender,
           sender,
-          `Proposal ${action === "approve" ? "approved" : "rejected"}.`,
+          `Proposal ${alreadyDecided ? "already " : ""}${approval?.decision}.`,
+          {
+            id: `event:${u.update_id}:approval`,
+            topicId: samePrivateChat ? callback.message?.message_thread_id : 0,
+          },
         );
       }
       return true;

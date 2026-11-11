@@ -110,7 +110,7 @@ export function workflowFields(
             label: "Repository sources",
             kind: "choices" as const,
             numeric: true,
-            help: "Optional, up to six repositories. Private repository reports to a group require an admin's approval.",
+            help: "Optional, up to six repositories. Group reports from private repositories require an owner or admin as the execution owner.",
             options: repositories.map((repo) => ({
               value: String(repo.id),
               label: repo.full_name,

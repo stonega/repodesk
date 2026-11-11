@@ -1,4 +1,5 @@
 import type { WorkflowMetadata } from "../src/admin/workflow-view.ts";
+import { TelegramUserInfo } from "./telegram-identity.tsx";
 
 export function scheduleLabel(recurrence: WorkflowMetadata["recurrence"]) {
   const day = [
@@ -44,6 +45,12 @@ export function WorkflowSummary({
     <>
       <dl className="workflow-summary">
         <div>
+          <dt>Owner</dt>
+          <dd>
+            <TelegramUserInfo user={f.ownerProfile ?? { id: f.owner }} linked />
+          </dd>
+        </div>
+        <div>
           <dt>Schedule</dt>
           <dd>
             {scheduleLabel(f.recurrence)}
@@ -85,10 +92,6 @@ export function WorkflowSummary({
             <p>No upcoming time.</p>
           )}
           <dl className="workflow-summary">
-            <div>
-              <dt>Owner (Telegram ID)</dt>
-              <dd>{f.owner}</dd>
-            </div>
             <div>
               <dt>Version</dt>
               <dd>{f.version}</dd>

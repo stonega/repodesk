@@ -344,10 +344,16 @@ const url = process.env.TEST_DATABASE_URL;
       ).toBe("00:00");
       expect(result.complete).toBe(true);
     });
-    test("free-form schedule proposals and runs survive persistence without a skill or extra tool grants", async () => {
+    test("free-form schedules activate immediately and survive persistence without a skill or extra tool grants", async () => {
       const w = teamWorkspace();
       w.settings.runBudgetUsd = 25;
-      const r = requestRun(w);
+      const r = requestRun(
+        w,
+        "101",
+        "101",
+        0,
+        "Remind me to take a break daily at 9 AM Asia/Taipei",
+      );
       for (const skill of w.skills)
         for (const version of skill.published)
           version.tools = ["read_chat_context"];
@@ -358,6 +364,7 @@ const url = process.env.TEST_DATABASE_URL;
         ),
       );
       const args = {
+        requestQuote: r.task,
         name: "Daily reminder",
         task: "Remind me to take a break",
         frequency: "daily",
@@ -369,18 +376,22 @@ const url = process.env.TEST_DATABASE_URL;
       };
       await tool.execute("schedule", args);
       await tool.execute("schedule", args);
+      await expect(
+        tool.execute("schedule", { ...args, hour: 10 }),
+      ).rejects.toThrow("tool_call_conflict");
       const restart = new Store(store.pool);
       const proposed = await restart.read(w.id);
       expect(proposed.workflows).toHaveLength(1);
       expect(proposed.approvals).toHaveLength(1);
-      expect(proposed.deliveries).toHaveLength(1);
+      expect(proposed.approvals[0]?.decision).toBe("approved");
+      expect(proposed.workflows[0]?.status).toBe("active");
+      expect(proposed.deliveries).toHaveLength(0);
       expect(proposed.workflows[0]?.spec.skillId).toBeUndefined();
       expect(proposed.workflows[0]?.spec).not.toHaveProperty("budgetUsd");
-      expect(proposed.deliveries[0]?.text).toContain(
+      expect(proposed.runs[0]?.workflowActivation?.text).toContain(
         "Budget: follows team settings",
       );
       await restart.change(w.id, (current) => {
-        decide(current, "101", fixtureValue(proposed.approvals[0]).id, true);
         current.skills = [];
         current.settings.runBudgetUsd = null;
         fixtureValue(current.runs.find((run) => run.id === r.id)).status =

@@ -2029,7 +2029,6 @@ test.describe
       ).toBeVisible();
       for (const [path, label, title] of [
         ["members", "Add member", "Add member"],
-        ["workflows", "Add workflow", "Propose a schedule"],
         ["skills", "Add skill", "Create skill"],
         ["skills", "Import skill", "Import SKILL.md"],
         ["instructions", "Add instruction", "Propose an instruction"],
@@ -2424,7 +2423,7 @@ test.describe
         await pool.end();
       }
     });
-    test("structured forms preserve versions, drafts, and safe approval previews", async ({
+    test("workflow editors preserve versions and failed drafts when saving directly", async ({
       page,
     }) => {
       await page.goto("/admin/workflows");
@@ -2443,9 +2442,7 @@ test.describe
           exact: true,
         }),
       });
-      await card
-        .getByRole("button", { name: "Edit proposal", exact: true })
-        .click();
+      await card.getByRole("button", { name: "Edit", exact: true }).click();
       const dialog = page.getByRole("dialog", {
         name: "Edit Browser weekly recap",
       });
@@ -2476,9 +2473,7 @@ test.describe
           });
         },
       );
-      await dialog
-        .getByRole("button", { name: "Preview approval proposal" })
-        .click();
+      await dialog.getByRole("button", { name: "Save", exact: true }).click();
       await expect(
         dialog.getByRole("button", { name: "Cancel", exact: true }),
       ).toBeDisabled();

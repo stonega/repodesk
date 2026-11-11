@@ -54,11 +54,10 @@ import { githubSkillUrl } from "../skills/github-source.ts";
 import { importMarkdown } from "../skills/import.ts";
 import { TelegramError } from "../telegram/client.ts";
 import { groupVisibility } from "../telegram/visibility.ts";
-import { nextOccurrences } from "../workflows/schedule.ts";
 import {
   decide,
   proposeInstruction,
-  proposeWorkflow,
+  saveManagedWorkflow,
   workflowAction,
 } from "../workflows/service.ts";
 import { decideAccessRequest } from "../workspaces/access-requests.ts";
@@ -84,7 +83,11 @@ import {
   threadKey,
   threadSummaries,
 } from "./thread-history.ts";
-import { workflowOwner, workflowRepositories } from "./workflow-view.ts";
+import {
+  workflowOwner,
+  workflowRepositories,
+  workflowView,
+} from "./workflow-view.ts";
 
 type Env = { Variables: { session: Session } };
 const sessionCookie = "repodesk_session";
@@ -1224,10 +1227,7 @@ export function adminRoutes(
           ...take(
             w.workflows
               .filter((f) => f.status !== "deleted")
-              .map((f) => ({
-                ...f,
-                next: nextOccurrences(f.spec.recurrence, new Date()),
-              })),
+              .map((f) => workflowView(w, f)),
           ),
         });
       case "approvals":
@@ -1242,7 +1242,8 @@ export function adminRoutes(
                     (r) => r.id === a.runId && browserRunPrivate(w, r),
                   )
                 ) &&
-                (a.kind === "workflow" || a.actor === actor) &&
+                a.kind !== "workflow" &&
+                a.actor === actor &&
                 !a.decision,
             ),
           ),
@@ -1507,10 +1508,7 @@ export function adminRoutes(
     requireThat(workflow, "not_found", 404);
     return c.json({
       mode: operatorView ? "operator" : "member",
-      workflow: {
-        ...workflow,
-        next: nextOccurrences(workflow.spec.recurrence, new Date()),
-      },
+      workflow: workflowView(w, workflow),
       repositorySources: workflowRepositories(w, actor),
     });
   });
@@ -1518,15 +1516,7 @@ export function adminRoutes(
     const input = workflowSchema.parse(await c.req.json());
     return c.json(
       await change(c, (w, actor) =>
-        proposeWorkflow(
-          w,
-          workflowOwner(w, actor, input),
-          input,
-          new Date(),
-          undefined,
-          undefined,
-          actor,
-        ),
+        saveManagedWorkflow(w, workflowOwner(w, actor, input), input, actor),
       ),
       201,
     );
@@ -1538,14 +1528,13 @@ export function adminRoutes(
       .parse(await c.req.json());
     return c.json(
       await change(c, (w, actor) =>
-        proposeWorkflow(
+        saveManagedWorkflow(
           w,
           workflowOwner(w, actor, input.spec, c.req.param("workflow")),
           input.spec,
-          new Date(),
+          actor,
           c.req.param("workflow"),
           input.version,
-          actor,
         ),
       ),
     );

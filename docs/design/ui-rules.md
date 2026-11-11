@@ -659,27 +659,49 @@ when implementing or reviewing a change.
 - **Source:** 2026-10-08 — user requested improving card content, adding a workflow
   detail page and updating related APIs, with a screenshot of the workflows page.
   The labeled summary layout is the implementation choice for that request.
+- **Source update:** 2026-11-11 — the user requested user information on each
+  workflow card. Show the execution owner's saved Telegram name, username and
+  numeric ID in both list and detail summaries, reusing the shared Telegram
+  identity display. Missing profile fields fall back to the numeric identity.
 - **Exceptions:** Workspace boundaries still apply. Display recurrence previews
   as previews when a workflow is not active.
 
 ### Panel administrators manage workflows without Telegram linking
 
 - **Preference:** Treat authorized panel administrators as workflow managers.
-  Show full saved workflow details and New, Edit, approval and lifecycle actions
+  Show full saved workflow details and Edit and lifecycle actions
   without requiring their personal Telegram identity to be linked.
 - **Scope:** Workflow lists, details and modal editors, including deployment
   operators before Telegram linking. This does not change Telegram command access.
 - **Source:** 2026-10-21 — user rejected the read-only workflow notice because
   the web panel is for administrators who already have management permission.
 - **Acceptance:** At desktop and mobile widths, an unlinked administrator can
-  open details, create/edit in modals, approve and control schedules. Remove the
+  open details, edit in modals and control schedules. Remove the
   read-only notice and its spacing. Keep saved summaries separate from editors,
   pending locks, retained failed drafts and actionable errors.
+- **Source update:** 2026-11-11 — the user clarified that workflows do not need
+  administrator approval. Panel Save applies the exact edited schedule directly,
+  with no separate preview/approve step or workflow approval queue. The user subsequently chose immediate activation from explicit Telegram requests;
+  send a confirmation with time and destination, with no approval buttons. Ask
+  only when essential schedule information is missing.
 - **Exceptions:** Execution still uses an active Telegram member's permissions.
   Existing workflows retain that owner. New private schedules use their active
   recipient; new group schedules use the linked administrator's membership or
   an active workspace owner/admin. Destinations, repositories, versions, skills
   and team budgets are rechecked through the existing execution policy.
+
+### Scheduled workflows omit creation in the web panel
+
+- **Preference:** Remove the Add workflow action and schedule creation dialog
+  from the web panel. Keep saved workflow summaries, details, modal editing
+  and lifecycle actions available. Panel edits save directly.
+- **Scope:** Scheduled workflows in the admin web app, on desktop and mobile.
+- **Source:** 2026-11-05 — user requested removing Add new workflow from the web UI.
+  This supersedes the creation action in the earlier panel-management preference.
+- **Acceptance:** Loading, populated, empty and failed list states have no creation
+  action or form. Remove the empty heading action wrapper; failed loads retain
+  Try again. Editing retains pending locks and failed drafts.
+- **Exceptions:** Telegram proposals and the workflow creation API remain available.
 
 ### Workflow budgets follow team settings
 

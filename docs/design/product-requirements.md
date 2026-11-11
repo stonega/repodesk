@@ -130,6 +130,9 @@ destination, owner, instructions, allowed tools and approval policy. Scheduled a
 manually triggered workflow runs use the team's per-run and monthly budgets.
 
 - Show a readable preview and next three execution times; require activation.
+- Explicit Telegram schedule requests activate immediately without approval.
+  Explicit panel saves activate the exact version in one action; cards show the
+  owner's saved Telegram name, username and ID.
 - Confirm ambiguous dates/timezones. Store an IANA timezone and explicitly define
   daylight-saving behavior rather than silently converting to a fixed UTC time.
 - Provide list, inspect, run-now, edit, pause, resume and delete actions.
@@ -140,7 +143,8 @@ manually triggered workflow runs use the team's per-run and monthly budgets.
 - Default missed-run policy: skip stale occurrences, notify owner, do not flood a
   chat with historical catch-up outputs. Make the threshold a documented setting.
 
-Acceptance: a rejected draft never runs; repeated approval is harmless; paused
+Acceptance: an explicit request activates once without approval; duplicate events
+create no extra schedule or confirmation; legacy repeated approval is harmless; paused
 workflows do not enqueue new work; permission loss blocks execution; timezone/DST
 fixtures match the preview; scheduler retries cannot double-publish a report.
 

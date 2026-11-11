@@ -2,15 +2,22 @@
 
 ## VPS access
 
-Operator-provided SSH destination, recorded at the user's request on 2026-10-06:
+Operator-provided SSH destination, updated at the user's request on 2026-11-09:
 
 ```sh
-ssh root@169.58.58.71
+ssh root@13.140.242.169
 ```
 
 Admin site: `https://dev.stonegate.me`. Deployment directory: `/opt/repodesk`.
 Compose project: `repodesk`. Observed containers: `repodesk-app-1`,
-`repodesk-worker-1`, `repodesk-postgres-1`, `repodesk-codex-runner-1`.
+`repodesk-worker-1`, `repodesk-postgres-1`, `repodesk-codex-runner-1` and
+`repodesk-code-truth-1`. Use `/opt/repodesk/compose` for the pinned release's
+Compose commands. The operator requested a clean reset on 2026-11-10: no
+administrator, workspace, session, saved profile or previous backup remains.
+First-run setup is available directly at `https://dev.stonegate.me/setup`.
+The temporary SSH-only maintenance gate and publication helper were removed;
+the first administrator is created in the web UI. See the
+[reset and onboarding instructions](vps-deployment.md#operator-requested-clean-reset-2026-11-10).
 Use the existing SSH credentials and verified host key; keep credentials,
 encryption keys, private messages and database dumps out of debugging reports.
 
@@ -38,9 +45,17 @@ attempts, transcript roles/stop reasons, answer length and delivery state.
 Read only the relevant workspace and runs. Summarize tool names and outcomes;
 avoid dumping full workspace JSON, credentials or chat history.
 
+For a schedule proposal followed by a generic error, inspect the workflow's
+saved status and approval audit separately. A later click on an already decided
+proposal can fail after successful activation in older builds. Current code
+reports the saved decision, keeps private confirmations in the original Topic
+and logs rejected controls as `telegram_control_rejected` with a safe cause and
+workspace/run IDs. Missing older diagnostics cannot establish the exact cause.
+See the [workflow feedback incident](../../postmortem/2026-11-11-workflow-approval-feedback.md).
+
 ```sh
-ssh root@169.58.58.71 'docker ps --format "{{.Names}} {{.Status}}"'
-ssh root@169.58.58.71 'docker logs --since 30m --tail 200 repodesk-worker-1'
+ssh root@13.140.242.169 'docker ps --format "{{.Names}} {{.Status}}"'
+ssh root@13.140.242.169 'docker logs --since 30m --tail 200 repodesk-worker-1'
 ```
 
 Interpret the states separately:
