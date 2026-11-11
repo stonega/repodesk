@@ -53,5 +53,9 @@ repeated/opposite clicks, original-Topic delivery and duplicate scheduler ticks.
 Additional API/unit and desktop/mobile browser checks cover profile projection,
 direct saves, version conflicts, editor recovery and missing profile fields.
 
-VPS inspection made no state changes or manual Telegram/model calls. These
-corrections are local until a separately authorized deployment.
+The initial VPS inspection made no state changes or manual Telegram/model calls.
+After explicit operator authorization, bundle `1794371404708-33447708` deployed
+source `d1ee70db29d5114764f9027796f03a28f79417d0`. All five services are healthy; the verified
+backup, exact-image checks, 55 artifact hashes and public
+readiness are recorded in the protected deployment receipt. No old request or
+schedule was replayed. See [deployment evidence](../docs/implementation/vps-deployment.md#immediate-schedules-and-workflow-owners-deployed-2026-11-11).

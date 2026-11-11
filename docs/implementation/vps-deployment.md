@@ -8,6 +8,42 @@ release makes it available in the panel's version indicator. A deployment
 administrator reviews its notes and starts installation explicitly.
 See [host updater installation](updates.md) for the service and panel contract.
 
+## Immediate schedules and workflow owners deployed (2026-11-11)
+
+The operator-authorized release `1794371404708-33447708` deploys source
+`d1ee70db29d5114764f9027796f03a28f79417d0` over `1794367751621-08425833`. It incorporates
+main commits `776d96c` and `dffb66b`, retaining the existing production fixes.
+Explicit Telegram requests now activate schedules immediately and receive one
+application-owned confirmation. Cards/details show the owner's saved Telegram
+name, username and ID. Panel saves apply directly and preserve paused state.
+Legacy repeated controls report their saved outcome; interrupted activation does
+not replay creation or report a false failure.
+
+The production-based source passed **1,487 deterministic tests across 158 files**,
+**29 admin/workflow browser scenarios**, lint, strict types, build and the local
+Node runtime contract. The pinned Bun 1.3.14 build image passed all **40 focused
+workflow, agent and diagnostic tests**. Exact-image startup passed 16 integration
+cases with zero external startup calls. CPU speech imports, offline Code Truth,
+Compose readiness/configuration, migration rerun and disposable backup/restore
+also passed. A stale browser expectation for Add workflow was corrected before
+cutover; the passing final evidence is retained with the initial check logs.
+
+All **55 deployed artifacts** and the public/loopback HTML
+and frontend assets match the verified images. Public health and readiness return
+HTTP 200. All five stack services are healthy. The HTML's versioned JavaScript
+URL matches the release. Cloudflare retains the previous file at the unused bare
+`/assets/app.js` alias; its cache headers and prior-release hash are audited
+separately in the receipt. No CDN configuration was changed. The native Browser package's
+**813 files** remain unchanged, and headed
+bridge checks pass from app and worker. Configuration, credentials, persistent
+mounts and PostgreSQL identity are preserved.
+
+The protected backup `backups/pre-release-1794371404708-33447708.dump` is **197,234 bytes** and
+its archive listing verifies. Source archives, quality logs, image IDs and
+`deployment-receipt.json` remain under the protected release directory. Package
+version remains v0.1.46; no dependency or SQL migration was added. No manual
+Telegram message, live model inference or replay of historical requests was used.
+
 ## Browser chat repair deployment (2026-11-02)
 
 The authorized repair promoted release `41406054824-1` from source

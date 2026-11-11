@@ -56,8 +56,9 @@ Use only your dedicated staging bot/group and explicit model spend cap.
    must create one run. Link a group as both workspace and Telegram administrator.
 4. With explicit visibility/collection consent, add representative source messages.
    Request a recap. Confirm references, gaps, topic and group/private boundaries.
-5. Propose Friday recurrence. Inspect next three instants and approve once; replay
-   the callback and verify no second activation.
+5. Request a Friday schedule with a clear time and timezone. Verify immediate
+   activation and one confirmation with the next three instants. Replay the
+   update and verify no second schedule or confirmation.
 6. Reply `/correct save Put blockers first`, approve, then restart app and worker.
 7. Observe one scheduled recap using the pinned workflow/skill and corrected
    instruction. Inspect generation, usage and delivery separately in the panel.

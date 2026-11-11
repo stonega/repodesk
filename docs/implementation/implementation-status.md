@@ -1,5 +1,16 @@
 # Implementation evidence
 
+## Immediate workflow activation deployed (2026-11-11)
+
+Authorized bundle `1794371404708-33447708` deploys source `d1ee70db29d5114764f9027796f03a28f79417d0`
+with main commits `776d96c` and `dffb66b`. The preserved production snapshot passed
+1,487 tests across 158 files, 29 browser scenarios, all required quality checks
+and exact-image startup/Compose/restore checks. All five services are healthy;
+55 artifacts and current HTML asset URLs verify; the known Cloudflare bare alias
+is recorded separately. Existing
+configuration, credentials, mounts and PostgreSQL are preserved. The protected
+backup archive verifies. See [deployment evidence](vps-deployment.md#immediate-schedules-and-workflow-owners-deployed-2026-11-11).
+
 ## Immediate schedules and owner profiles (2026-11-11)
 
 Explicit Telegram schedule requests now activate immediately, without requester
@@ -37,8 +48,8 @@ The final focused activation/recovery and agent checks pass. Desktop/mobile
 saved summaries, missing profiles, loading/empty states and pending/failed editors
 were visually inspected; owner summaries were checked in both themes. Initial
 broad checks hit disposable-database setup timeouts; isolated reruns with test-only
-storage settings pass. No dependency or migration was added. VPS inspection was
-read-only; these changes have not been deployed.
+storage settings pass. No dependency or migration was added. The initial VPS investigation was
+read-only; the subsequently authorized rollout is recorded above.
 
 The isolated upstream commit preparation additionally passed **1,445 tests across
 153 files**, lint, strict types, build and the Node runtime contract. Deployment
