@@ -103,6 +103,46 @@ export function proposeWorkflow(
   );
   return { workflow, approval, next: nextOccurrences(spec.recurrence, now) };
 }
+/** A current explicit schedule request authorizes immediate activation. */
+export function activateWorkflow(
+  w: Workspace,
+  actor: string,
+  input: WorkflowSpec,
+) {
+  const result = proposeWorkflow(w, actor, input);
+  decide(w, actor, result.approval.id, true);
+  return { workflow: result.workflow, next: result.next };
+}
+
+/** An explicit panel save authorizes this exact version without a second review. */
+export function saveManagedWorkflow(
+  w: Workspace,
+  owner: string,
+  input: WorkflowSpec,
+  manager: string,
+  id?: string,
+  expectedVersion?: number,
+  now = new Date(),
+) {
+  const paused =
+    id && w.workflows.find((f) => f.id === id)?.status === "paused";
+  const result = proposeWorkflow(
+    w,
+    owner,
+    input,
+    now,
+    id,
+    expectedVersion,
+    manager,
+  );
+  decide(w, manager, result.approval.id, true, now, manager);
+  if (paused) {
+    result.workflow.status = "paused";
+    result.workflow.nextAt = undefined;
+  }
+  return { workflow: result.workflow, next: result.next };
+}
+
 export function proposeInstruction(
   w: Workspace,
   actor: string,

@@ -34,6 +34,25 @@ test("runtime logs allow only fixed codes, messages and UUID context", async () 
   log.write("app_started");
   expect(output).toHaveLength(3);
 });
+test("approval rejection diagnostics retain safe codes and run context without private text", () => {
+  const output: string[] = [];
+  const log = new RuntimeLogger(undefined, "worker", (line) =>
+    output.push(line),
+  );
+  const workspaceId = randomUUID(),
+    runId = randomUUID();
+  const error = new Fault("approval_expired");
+  error.message += " private callback payload";
+  log.write("telegram_control_rejected", { error, workspaceId, runId });
+  expect(JSON.parse(output[0] ?? "{}")).toMatchObject({
+    event: "telegram_control_rejected",
+    code: "approval_expired",
+    workspace_id: workspaceId,
+    run_id: runId,
+  });
+  expect(output.join("")).not.toContain("private callback payload");
+});
+
 test("logging storage failures do not throw or recursively log database errors", async () => {
   const output: string[] = [];
   let calls = 0;

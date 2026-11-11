@@ -1,5 +1,49 @@
 # Implementation evidence
 
+## Immediate schedules and owner profiles (2026-11-11)
+
+Explicit Telegram schedule requests now activate immediately, without requester
+or administrator approval. The existing `propose_workflow` tool name is retained
+for compatibility; its description and required `requestQuote` document the new
+behavior. Creation requires a current interactive request, its exact quoted text,
+current membership and destination/repository permissions. Old conversation data,
+scheduled runs and unconsumed input cannot authorize another schedule.
+
+The tool commits an activation marker with the workflow. Pi stops after that
+effect, and Executor publishes one application-owned confirmation in the original
+chat/Topic, with recurrence, timezone, destination and upcoming times. Interrupted
+execution recovers the committed outcome without another model call or tool
+replay. Duplicate tool IDs bind to the same arguments; conflicting replays fail.
+Activation content is removed with derived run content and retention. Internal
+authorization/version audit records remain; there is no pending human decision.
+
+Workflow list/detail APIs project the same workspace's saved owner name, username
+and Telegram ID. Cards reuse the shared identity component and fall back to the
+numeric identity when profile fields are unavailable. Panel Save applies exact
+edits directly, retaining paused state, version checks and execution ownership.
+Workflow proposals no longer appear in the panel approval list. Cards show only
+the lifecycle action appropriate to their current state; New remains absent.
+
+Legacy repeated Telegram approval controls report their saved decision without
+changing it. Private confirmations preserve the original Topic. Rejected controls
+have specific recovery messages and safe workspace/run diagnostics. See the
+[VPS investigation](../../postmortem/2026-11-11-workflow-approval-feedback.md): the
+reported schedule was active; older logs do not establish the exact later error.
+
+Initial development verification: **1,422 deterministic tests across 151 files**, **29 admin/workflow
+browser scenarios**, Biome, strict TypeScript, build and the Node runtime contract
+pass, including 16 integration-startup cases with zero external startup calls.
+The final focused activation/recovery and agent checks pass. Desktop/mobile
+saved summaries, missing profiles, loading/empty states and pending/failed editors
+were visually inspected; owner summaries were checked in both themes. Initial
+broad checks hit disposable-database setup timeouts; isolated reruns with test-only
+storage settings pass. No dependency or migration was added. VPS inspection was
+read-only; these changes have not been deployed.
+
+The isolated upstream commit preparation additionally passed **1,445 tests across
+153 files**, lint, strict types, build and the Node runtime contract. Deployment
+uses a separately verified snapshot based on the current production source.
+
 ## Telegram bot token format errors provide recovery guidance (2026-11-10)
 
 Bot-token format validation now belongs to the credentials field schema, keeping

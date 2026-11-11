@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { workflowOwner } from "../../src/admin/workflow-view.ts";
+import { workflowOwner, workflowView } from "../../src/admin/workflow-view.ts";
 import {
   decide,
   proposeInstruction,
   proposeWorkflow,
+  saveManagedWorkflow,
   tick,
   workflowAction,
 } from "../../src/workflows/service.ts";
@@ -12,6 +13,77 @@ import { spec } from "../fixtures.ts";
 import { fixtureValue, teamWorkspace } from "../team-workflows-fixture.ts";
 
 describe("panel workflow management", () => {
+  test("workflow summaries expose only the current owner's display profile", () => {
+    const w = teamWorkspace();
+    const owner = fixtureValue(w.members.find((m) => m.id === "202"));
+    Object.assign(owner, {
+      name: "Taylor Example",
+      username: "taylor",
+      profileUpdatedAt: new Date().toISOString(),
+    });
+    const { workflow } = proposeWorkflow(w, owner.id, {
+      ...spec(w),
+      chatId: owner.id,
+    });
+    expect(workflowView(w, workflow).ownerProfile).toEqual({
+      id: "202",
+      name: "Taylor Example",
+      username: "taylor",
+    });
+    owner.name = "Updated name";
+    owner.username = undefined;
+    expect(workflowView(w, workflow).ownerProfile).toEqual({
+      id: "202",
+      name: "Updated name",
+      username: undefined,
+    });
+    w.members = [];
+    expect(workflowView(w, workflow).ownerProfile).toEqual({
+      id: "202",
+      name: undefined,
+      username: undefined,
+    });
+  });
+
+  test("panel saves activate the exact version without a pending admin review", () => {
+    const w = teamWorkspace();
+    const result = saveManagedWorkflow(
+      w,
+      "202",
+      { ...spec(w), chatId: "202" },
+      w.operatorId,
+    );
+    expect(result.workflow).toMatchObject({ owner: "202", status: "active" });
+    expect(result).not.toHaveProperty("approval");
+    expect(w.approvals.every((a) => a.decision === "approved")).toBe(true);
+    workflowAction(
+      w,
+      "202",
+      result.workflow.id,
+      "pause",
+      1,
+      "test-model",
+      w.operatorId,
+    );
+    const edited = saveManagedWorkflow(
+      w,
+      "202",
+      {
+        ...result.workflow.spec,
+        task: "Updated while paused",
+      },
+      w.operatorId,
+      result.workflow.id,
+      1,
+    );
+    expect(edited.workflow).toMatchObject({ status: "paused", version: 2 });
+    expect(edited.workflow.nextAt).toBeUndefined();
+    expect(w.approvals.every((a) => a.decision === "approved")).toBe(true);
+    expect(() =>
+      saveManagedWorkflow(w, "202", result.workflow.spec, "202"),
+    ).toThrow("access_denied");
+  });
+
   test("operator approval preserves execution ownership, duplicate ticks and team budgets", () => {
     const w = teamWorkspace();
     const manager = w.operatorId;

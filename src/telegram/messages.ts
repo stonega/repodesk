@@ -32,6 +32,16 @@ export const ongoingStageMessage = (stage: string) =>
   ongoingStages[stage] ?? "I’m still on it. I’ll keep you posted.";
 
 const failures: Record<string, string> = {
+  workflow_request_unverified:
+    "Please send the schedule request directly, including its recurrence, time and timezone.",
+  approval_consumed: "This proposal has already been decided.",
+  approval_denied: "Only the requester can confirm this proposal.",
+  approval_expired:
+    "This proposal expired. Ask for a new proposal and confirm it within 15 minutes.",
+  approval_changed:
+    "This proposal changed. Review and confirm the current proposal.",
+  approval_stale:
+    "This proposal was replaced. Review and confirm the current proposal.",
   google_not_configured:
     "Google is not enabled or configured for this workspace. Ask the administrator to configure Plugins → Google in the panel.",
   google_not_connected:

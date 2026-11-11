@@ -246,8 +246,9 @@ seconds. New queue jobs expire 60 seconds after the configured run deadline; the
 is recorded as `failed (run_timeout)`, distinct from user cancellation and worker
 shutdown. Unknown provider usage remains reserved after any interruption. Skills request capabilities from the application registry; extension tools require
 separate explicit operator grants. Extension configurations are pinned on runs and
-extension tool outcomes use durable reservations without automatic unknown replay. Proposals cannot
-activate schedules or persistent instructions.
+extension tool outcomes use durable reservations without automatic unknown replay.
+Instruction proposals require their existing approval before becoming persistent
+instructions. Explicit schedule requests use immediate, application-owned activation.
 
 Approvals hash canonical JSON so persistence key ordering cannot change their identity.
 They bind actor, version, payload and 15-minute expiry. Approval transactions activate
@@ -255,6 +256,17 @@ the exact draft once. The worker pauses after a proposal without holding a human
 Promise. Incomplete batches are reconciled from atomic stored tool outcomes; missing
 outcomes stop with an explicit recovery error. Unknown model attempts remain reserved
 and are not replayed automatically. Completed transcript boundaries can resume.
+
+Explicit Telegram schedule requests activate immediately when recurrence, time
+and timezone are clear. No requester or administrator approval step is required.
+An explicit panel save authorizes and activates the exact workflow version in one
+transaction. The Telegram tool quotes the current authenticated request, records
+a durable activation outcome, and stops Pi before another model call. Executor
+recovery confirms a committed activation without replaying it or sending a false
+failure notice. Activation confirmation content follows run erasure/retention.
+The panel displays saved owner profiles and does not queue workflow proposals for administrator approval. Repeat Telegram
+decisions report the existing outcome without applying another decision; private
+confirmations retain the original Topic.
 
 Daily/weekly recurrence uses Temporal in IANA zones. Nonexistent local times skip;
 repeated local times use the earlier instant. Scheduler previews and execution share

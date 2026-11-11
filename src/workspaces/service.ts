@@ -157,6 +157,7 @@ export function createRun(
             Date.parse(r.leaseUntil ?? "") > now.getTime() &&
             !r.workflowId &&
             !r.codingTaskId &&
+            !r.workflowActivation &&
             !r.followup &&
             !w.runs.some(
               (other) =>

@@ -411,6 +411,7 @@ export interface Run {
     codingRevision?: number;
   };
   codingTaskId?: string;
+  workflowActivation?: { id: string; version: number; text: string };
   stopConfirmed?: boolean;
   id: string;
   actor: string;

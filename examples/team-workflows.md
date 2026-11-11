@@ -11,18 +11,17 @@ Schedules also accept free-form tasks without a saved skill. For example:
 每天 09:00 Asia/Taipei 提醒我检查当天的优先事项，发到这里，用一句话。
 ```
 
-Review and approve the proposal. In the panel, leave **Skill** as **No skill**.
+The explicit request activates the schedule immediately; check its confirmation. In the panel, leave **Skill** as **No skill**.
 For the API, omit `skillId`; see [the free-form proposal](freeform-workflow-proposal.json).
 Selecting a skill remains optional and pins its published version. Scheduling
 does not add tools or data sources: live weather requires an authorized live-data
-tool, and access checks, budgets and approval still apply.
+tool, and access checks and budgets still apply.
 
 Repeat the reminder request in the same chat/topic using different wording. The
 assistant should identify the existing workflow and its status instead of making
 another proposal. Pause it and repeat: paused schedules still count as existing.
 For a similar request with a different time or purpose, expect a clarification
-before a separate proposal. Explicitly confirming a second workflow still requires
-the usual approval before activation. Other private chats and Topics stay separate.
+before a separate proposal. Explicitly requesting a separate workflow activates it without an approval step. Other private chats and Topics stay separate.
 
 After connecting/selecting a repository, ask in private Telegram chat:
 
@@ -34,16 +33,16 @@ example/project 当前有哪些 PR 等待审核？附链接和查询时间。
 ```
 
 Review the schedule's repository sources, destination, timezone, next occurrences
-then approve it. Workflow runs inherit the team's per-run and monthly budgets;
-there is no separate workflow budget. In the panel, **Workflows → New/Edit → Repository
-sources** selects up to six repositories. Editing needs a new approval.
+in its activation confirmation. Workflow runs inherit the team's per-run and monthly budgets;
+there is no separate workflow budget. In the panel, **Workflows → Edit → Repository
+sources** selects up to six repositories. Save applies edits directly.
 Default merged-PR report windows cover the previous complete calendar days in the
 schedule's timezone; daylight-saving days may have 23 or 25 hours. Explicit query
 dates can narrow the window. Open-PR status is current at retrieval.
 
-For a linked group, a workspace admin can request and approve a private repository
-report for that group/topic. The preview explicitly says the metadata will be
-shared with that audience. Ad-hoc private repository reads stay in private chat.
+For a linked group, a workspace owner/admin with repository access can request a
+private repository report for that group/topic. The request activates immediately
+and the confirmation names the destination. Ad-hoc private repository reads stay in private chat.
 Repository selection/connection or actor permission changes block old grants;
 review a fresh proposal after reconnecting. Linked GitHub users can use
 `/github sync` to refresh their upstream permissions.

@@ -369,7 +369,7 @@ export class Executor {
         tail?.role === "assistant" &&
         tail.stopReason === "stop" &&
         !claimed.pendingInputs?.length;
-      if (!completed) await draft?.start();
+      if (!completed && !claimed.workflowActivation) await draft?.start();
       const input: AgentInput = {
         cacheKey: claimed.threadId
           ? createHash("sha256")
@@ -471,6 +471,8 @@ export class Executor {
           }),
         shouldPause: async () => {
           const w = await this.store.read(workspaceId);
+          if (w.runs.find((run) => run.id === runId)?.workflowActivation)
+            return "completed";
           return (
             !!w.runs.find((run) => run.id === runId)?.browserWait ||
             w.approvals.some((a) => a.runId === runId && !a.decision)
@@ -596,15 +598,20 @@ export class Executor {
         input.images = attachments.images;
         input.prompt += attachments.prompt;
       }
-      let result = completed
+      let result = claimed.workflowActivation
         ? {
-            text: tail.content
-              .filter((c) => c.type === "text")
-              .map((c) => c.text)
-              .join("\n"),
+            text: claimed.workflowActivation.text,
             status: "succeeded" as const,
           }
-        : await runner.run(input);
+        : completed
+          ? {
+              text: tail.content
+                .filter((c) => c.type === "text")
+                .map((c) => c.text)
+                .join("\n"),
+              status: "succeeded" as const,
+            }
+          : await runner.run(input);
       while (true) {
         await guard();
         const finished = await this.store.change(
@@ -619,7 +626,8 @@ export class Executor {
             // Ingress and final publication share this lock. Input received after
             // Pi's last steering poll must be answered before committing the result.
             if (r.pendingInputs?.length) return false;
-            if (result.text) validateSources(result.text, r);
+            const activation = r.workflowActivation;
+            if (result.text && !activation) validateSources(result.text, r);
             const proposals = w.approvals.some(
               (a) =>
                 !a.decision &&
@@ -630,18 +638,23 @@ export class Executor {
             const task = r.codingTaskId
               ? await taskGet(sql, w.id, r.codingTaskId)
               : undefined;
-            const text = handoff
-              ? task?.state === "queued" && !task.cancelRequested && !task.error
-                ? `Your coding request for ${task.payload.repository} has been queued for Codex. Task updates will appear in this conversation.`
-                : task
-                  ? developmentStatus(task)
-                  : "Task status is unavailable."
-              : result.text.trim()
-                ? result.text
-                : "";
+            const text = activation
+              ? activation.text
+              : handoff
+                ? task?.state === "queued" &&
+                  !task.cancelRequested &&
+                  !task.error
+                  ? `Your coding request for ${task.payload.repository} has been queued for Codex. Task updates will appear in this conversation.`
+                  : task
+                    ? developmentStatus(task)
+                    : "Task status is unavailable."
+                : result.text.trim()
+                  ? result.text
+                  : "";
             const browserWaiting = !!r.browserWait;
-            r.status =
-              proposals || browserWaiting
+            r.status = activation
+              ? "succeeded"
+              : proposals || browserWaiting
                 ? "awaiting_approval"
                 : handoff
                   ? "succeeded"
@@ -649,7 +662,7 @@ export class Executor {
                     ? result.status
                     : "partial";
             r.error =
-              proposals || browserWaiting || handoff
+              activation || proposals || browserWaiting || handoff
                 ? undefined
                 : "reason" in result
                   ? result.reason
@@ -667,7 +680,7 @@ export class Executor {
             publishWidget(w, r, deployment.bot?.id);
             if (!browserWaiting && !handoff && (text || !proposals)) {
               const response = text
-                ? `${text.slice(0, 2700)}${result.status === "partial" ? `\n\n${requestFailureMessage(r.error ?? "incomplete_response")}` : ""}`
+                ? `${text.slice(0, 2700)}${result.status === "partial" && !activation ? `\n\n${requestFailureMessage(r.error ?? "incomplete_response")}` : ""}`
                 : requestFailureMessage(r.error ?? "empty_response");
               deliver(
                 w,
@@ -710,16 +723,38 @@ export class Executor {
         : error;
       const timedOut =
         failure instanceof Fault && failure.code === "run_timeout";
-      this.store.log.write("run_failed", {
-        error: failure,
-        workspaceId,
-        runId,
-      });
       await this.store.change(workspaceId, (w) => {
         const r = w.runs.find((r) => r.id === runId);
         if (!r || r.fence !== fence) return;
         for (const a of r.attempts)
           if (a.status === "reserved") a.status = "unknown";
+        if (r.workflowActivation && !r.cancelled && runAllowed(w, r)) {
+          this.store.log.write("workflow_activation_recovered", {
+            error: failure,
+            workspaceId,
+            runId,
+          });
+          // Creation committed before interruption; publish its saved outcome
+          // without replaying the tool or claiming the active schedule failed.
+          r.status = "succeeded";
+          r.error = undefined;
+          r.result = r.workflowActivation.text;
+          r.finishedAt = new Date().toISOString();
+          r.leaseUntil = undefined;
+          recordThreadAnswer(w, r);
+          deliver(w, r.actor, r.chatId, r.workflowActivation.text, {
+            id: `run:${r.id}:result`,
+            topicId: r.topicId,
+            runId: r.id,
+          });
+          audit(w, r.actor, "run.succeeded", r.id);
+          return;
+        }
+        this.store.log.write("run_failed", {
+          error: failure,
+          workspaceId,
+          runId,
+        });
         r.status =
           r.cancelled || (signal.aborted && !timedOut) ? "cancelled" : "failed";
         r.error = r.cancelled

@@ -168,7 +168,7 @@ export interface AgentInput {
   remainingBudget?: () => Promise<{ run: number; workspace: number }>;
   signal: AbortSignal;
   guard: () => Promise<void>;
-  shouldPause?: () => Promise<boolean>;
+  shouldPause?: () => Promise<boolean | "completed">;
   nextInput?: () => Promise<AgentMessage | undefined>;
   reserve: (amount: number) => Promise<string>;
   checkpoint: (message: AgentMessage, attemptId?: string) => Promise<void>;
@@ -443,10 +443,14 @@ export class PiRunner implements AgentRunner {
         try {
           input.signal.throwIfAborted();
           await input.guard();
-          if (await input.shouldPause?.())
+          const pause = await input.shouldPause?.();
+          if (pause)
             return {
               block: true,
-              reason: "awaiting_approval",
+              reason:
+                pause === "completed"
+                  ? "application_action_completed"
+                  : "awaiting_approval",
               terminate: true,
             };
           if (await queueInput())
