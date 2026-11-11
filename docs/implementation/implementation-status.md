@@ -1,5 +1,25 @@
 # Implementation evidence
 
+## Member invitation dialog (2026-11-11)
+
+**Groups & Members → Members → New** now opens **Add member** with Telegram
+invite instructions and the shared group-link dialog's copyable value layout.
+The manual creation fields and Save membership action are removed from New;
+existing members retain role, active membership and GitHub editing in **Edit**.
+Pending access requests and their approval/rejection actions remain on the page.
+
+Invites retain automatic ten-second refresh, the accessible circular countdown,
+one-second copy feedback and 24-hour copied-link validity. Refresh failures keep
+the current URL and offer Retry inside the dialog. Initial loading and missing-bot
+states keep the layout visible; background refresh preserves copy-button focus.
+The remaining Access requests card uses balanced container spacing.
+
+Validation: `bun run check`, `bun run typecheck`, `bun run build` and all **1,462**
+deterministic tests passed with disposable PostgreSQL. **89 focused browser
+scenarios** passed across invites, member/GitHub editing, groups, shared URL copying
+and administration. Desktop (1280px) and mobile (390px) screenshots were inspected
+in both themes, with loading, refresh, error, missing-bot and pending-approval
+states also reviewed. No live Telegram/GitHub action or deployment was performed.
 ## Conversational Telegram controls deployed (2026-11-11)
 
 Bundle `1794386364054-96360541` deploys production source

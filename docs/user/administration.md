@@ -15,7 +15,7 @@
 
 ## 邀请成员
 
-1. 打开 **Groups & Members**，复制当前邀请链接。
+1. Open **Groups & Members → Members → New** and copy the link in **Add member**.
 2. 私下交给预定成员，对方用自己的 Telegram 账号打开并发送 Start。
 3. 确认成员列表出现其身份，再使用新链接邀请下一人。
 
@@ -32,7 +32,7 @@
 
 ## 手动管理成员
 
-Add/Edit 对话框管理角色和活跃状态。身份以 Telegram 数字用户 ID 为准，显示名和用户名仅供识别。停用会阻止其继续执行机器人工作，已有远端结果不会撤回。
+Use the member row’s **Edit** dialog to manage its role, active membership and GitHub account. **New** opens the invite dialog.身份以 Telegram 数字用户 ID 为准，显示名和用户名仅供识别。停用会阻止其继续执行机器人工作，已有远端结果不会撤回。
 
 管理员可以关联成员的 GitHub 资料，但此时显示 **Verification pending**。只有本人在私聊完成 `/github` 授权并返回确认后，才是已验证连接。当前 GitHub 写权限是执行 Codex 的必要条件，管理员角色不能替代。
 

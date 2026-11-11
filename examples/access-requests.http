@@ -11,6 +11,7 @@ GET {{origin}}/api/admin/workspaces/{{workspace}}/members?offset=0
 Cookie: {{cookie}}
 
 ### Pending requests, membership version, and a signed single-account invite
+# The panel exposes this invite through Groups & Members → Members → New.
 # requestUrl grants regular membership automatically to the first Telegram account.
 # Share the returned URL; do not construct a link from the workspace ID.
 # UI fetches a new link every 10 seconds and shows a countdown.

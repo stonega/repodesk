@@ -775,7 +775,7 @@ when implementing or reviewing a change.
   fetch available accounts from the workspace's connected GitHub installation.
   Show the saved account and a profile link in the form and member GitHub detail
   dialog, opened from View in the member table.
-- **Scope:** Add/Edit member dialogs and the Groups & Members table. Organization
+- **Scope:** Edit member dialogs and the Groups & Members table. Organization
   installations supply organization members; personal installations supply their
   owner directly. Do not derive member choices from repository metadata. Allow
   entering a custom GitHub username alongside fetched choices, including when
@@ -1726,7 +1726,7 @@ when implementing or reviewing a change.
 - **Preference:** Show active membership as a switch aligned to the right of its
   label in the member dialog. Membership alone enables bot use; do not show a
   whitelist switch. Keep guidance about numeric Telegram IDs beside the ID field.
-- **Scope:** Add and edit member dialogs in the admin panel.
+- **Scope:** Edit member dialogs in the admin panel.
 - **Source:** 2026-09-27 — user asked to change the member checkboxes to toggles
   and move them to the right.
   Updated 2026-10-07 — user removed whitelist permission; retain only the active
@@ -1746,18 +1746,22 @@ when implementing or reviewing a change.
 ### Shareable access links use a card and copy action
 
 - **Preference:** Display the Telegram invite URL as monospace text in a
-  regular card with a copy icon button, rather than as a read-only input. After a
-  successful copy, show a check icon for one second, then restore the copy icon.
+  copyable value row in the Add member dialog, using the same shared modal,
+  instructions, value/copy layout and action spacing as Link a group. New opens
+  this invite dialog; omit the Telegram ID, role, active membership and GitHub
+  fields and the Save membership action. Existing members retain their Edit dialog.
+  After a successful copy, show a check icon for one second, then restore the copy icon.
   Do not show a separate success message. Refresh the displayed invite link
   automatically every 10 seconds and show a small animated circular countdown
-  immediately after the card title, without a separate visible countdown text row.
+  immediately after the Access link label, without a separate visible countdown
+  text row.
   Keep the timing and refresh/paused status accessible to screen readers and on hover;
   respect reduced-motion preferences. Explain that opening it
   grants regular membership immediately and that each token works for one Telegram
   account. Keep the current link visible during refresh and offer Retry on failure.
-  Keep the card's vertical padding balanced, with no extra bottom margin after
-  its final guidance paragraph.
-- **Scope:** The shareable invite link in Groups & Members → Access requests.
+  Keep the dialog and remaining Access requests card spacing balanced after moving
+  the invite; pending approvals remain on the page.
+- **Scope:** Groups & Members → Members → New (Add member).
 - **Source:** 2026-09-27 — user requested a common card and copy icon button for
   the link shown in the access-request section. 2026-09-28 — user requested a
   one-second done icon in place of the “Link copied.” message.
@@ -1768,6 +1772,9 @@ when implementing or reviewing a change.
   after the invite card title. This placement applies to this card.
   2026-10-18 — user requested removing the extra space below the invite card's
   guidance text.
+- **Source update:** 2026-11-11 — user requested moving the invite from Access
+  requests into Add member, removing its original form and matching Add group.
+  This supersedes the page-level invite card and Add member form preferences.
 - **Exceptions:** Ordinary access requests without an invite still need approval.
   The countdown controls the displayed link; copied links remain valid for 24 hours.
 

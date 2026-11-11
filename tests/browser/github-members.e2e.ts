@@ -137,9 +137,8 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     const f = await fixture(page, true);
     await page.goto(`/admin/members?workspace=${f.w.id}`);
-    await page.getByRole("button", { name: "Add member" }).click();
-    const dialog = page.getByRole("dialog", { name: "Add member" });
-    await dialog.getByLabel("Telegram user ID").fill("303");
+    await page.getByRole("button", { name: "Edit member 202" }).click();
+    const dialog = page.getByRole("dialog", { name: "Edit member" });
     await expect(dialog.getByRole("alert")).toContainText(
       "Enable Members: read",
     );
@@ -182,7 +181,7 @@ for (const width of [1280, 390]) {
     await dialog.getByRole("button", { name: "Save membership" }).click();
     await expect(dialog).not.toBeVisible();
     expect(f.saved()).toMatchObject({
-      id: "303",
+      id: "202",
       githubUsername: "outside-user",
     });
     expect(f.saved()).not.toHaveProperty("githubRevision");
