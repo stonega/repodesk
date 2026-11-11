@@ -219,7 +219,7 @@ test.describe
       await expect(page.getByText("No scheduled workflows yet.")).toBeVisible();
       await expect(
         page.getByRole("button", { name: "Add workflow" }),
-      ).toBeVisible();
+      ).toHaveCount(0);
       await page.goto("/admin");
       const botCard = page.getByRole("region", { name: "Telegram bot" });
       const githubCard = page.getByRole("region", { name: "GitHub" });
