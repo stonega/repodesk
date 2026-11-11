@@ -194,6 +194,8 @@ export interface AccessRequest {
   decidedBy?: string;
 }
 export interface Member {
+  /** Explicit private-chat recovery preference, bound to the consenting bot. */
+  privateTopicFallback?: { botId: string; enabledAt: string };
   github?: GitHubUserAccess;
   githubAccount?: { id: number; login: string };
   id: string;
@@ -573,6 +575,10 @@ export interface Delivery {
   replyTo?: number;
   runId?: string;
   text: string;
+  /** Confirmed Topic rejection; logical conversation and authorization stay unchanged. */
+  privateTopicFallback?: { botId: string; enabledAt: string };
+  /** Actual destination of a confirmed send; zero means the main chat. */
+  deliveredTopicId?: number;
   format?: "markdown" | "rich";
   buttons?: (
     | { text: string; callback_data: string; url?: never }

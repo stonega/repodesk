@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeRichUpdate } from "./rich-input.ts";
 
 const user = z.object({
   id: z.number().int().positive().safe(),
@@ -93,7 +94,7 @@ const membership = z.object({
   date: z.number().int(),
   new_chat_member: z.object({ status: z.string(), user }),
 });
-export const updateSchema = z.object({
+const updateObject = z.object({
   update_id: z.number().int().nonnegative().safe(),
   message: message.optional(),
   edited_message: message.optional(),
@@ -119,6 +120,7 @@ export const updateSchema = z.object({
     })
     .optional(),
 });
+export const updateSchema = z.preprocess(normalizeRichUpdate, updateObject);
 export type Update = z.infer<typeof updateSchema>;
 export type Message = z.infer<typeof message>;
 export const forwardedRequest =

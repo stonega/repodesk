@@ -16,6 +16,7 @@ import {
   liveSource,
 } from "../../src/agent/live-input.ts";
 import { type AgentRunner, PiRunner } from "../../src/agent/runtime.ts";
+import { createApp } from "../../src/app.ts";
 import { migrate } from "../../src/db/migrate.ts";
 import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
@@ -24,7 +25,7 @@ import { Executor } from "../../src/jobs/execute.ts";
 import { recoverJobs } from "../../src/jobs/recovery.ts";
 import { encrypt } from "../../src/setup/credentials.ts";
 import { SetupService } from "../../src/setup/service.ts";
-import type { Telegram } from "../../src/telegram/client.ts";
+import { type Telegram, TelegramError } from "../../src/telegram/client.ts";
 import { type Update, updateSchema } from "../../src/telegram/router.ts";
 import { Ingress } from "../../src/telegram/webhook.ts";
 import { TranscriptionService } from "../../src/transcription/service.ts";
@@ -47,6 +48,9 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     let downloads: string[] = [];
     let files = new Map<string, Uint8Array>();
     let onDownload: (() => Promise<void>) | undefined;
+    let rejectTopicDelivery = false;
+    let missingTopic = false;
+    let unknownMainSend = false;
     const telegram: Telegram = {
       async downloadFile(fileId) {
         downloads.push(fileId);
@@ -55,8 +59,23 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         if (!bytes) throw Error("missing fixture file");
         return bytes;
       },
-      async call<T>(method: string, params = {}) {
+      async call<T>(method: string, params: Record<string, unknown> = {}) {
         calls.push({ method, params });
+        if (["sendMessage", "sendRichMessage"].includes(method)) {
+          if (
+            missingTopic &&
+            "message_thread_id" in params &&
+            params.message_thread_id
+          )
+            throw new TelegramError("telegram_thread_not_found", "permanent");
+          if (unknownMainSend && !params.message_thread_id)
+            throw new TelegramError("telegram_outcome_unknown", "unknown");
+        }
+        if (
+          rejectTopicDelivery &&
+          ["sendMessage", "sendRichMessage"].includes(method)
+        )
+          throw new TelegramError("telegram_destination_rejected", "permanent");
         return (
           method === "getUpdates"
             ? updates
@@ -90,6 +109,9 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       downloads = [];
       files = new Map();
       onDownload = undefined;
+      rejectTopicDelivery = false;
+      missingTopic = false;
+      unknownMainSend = false;
       const d = await store.deployment();
       Object.assign(d, {
         active: true,
@@ -170,6 +192,302 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       stream.end(result);
       return stream;
     }
+    test("rich private Topic input reaches the production API, execution and delivery once", async () => {
+      const w = await seed();
+      const app = createApp(store, setup, "http://localhost:3000");
+      const update = {
+        update_id: ++sequence,
+        message: {
+          message_id: ++sequence,
+          date: Math.floor(Date.now() / 1000),
+          from: { id: 101, is_bot: false },
+          chat: { id: 101, type: "private" },
+          message_thread_id: 37,
+          rich_message: { blocks: [{ type: "paragraph", text: "hi" }] },
+        },
+      };
+      const send = () =>
+        app.request("/telegram/webhook", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-telegram-bot-api-secret-token": "test-secret",
+          },
+          body: JSON.stringify(update),
+        });
+      expect((await send()).status).toBe(200);
+      expect(await (await send()).json()).toEqual({ duplicate: true });
+      let saved = await store.read(w.id);
+      expect(saved.messages).toHaveLength(1);
+      expect(saved.runs).toHaveLength(1);
+      const run = saved.runs[0];
+      if (!run) throw Error("missing rich-message run");
+      expect(run.task).toBe("hi");
+      expect(run.topicId).toBe(37);
+      await new Executor(
+        store,
+        setup,
+        new PiRunner(() => response("Hello!")),
+      ).execute(w.id, run.id);
+      saved = await store.read(w.id);
+      expect(saved.runs[0]?.status).toBe("succeeded");
+      const delivery = saved.deliveries.find((d) => d.runId === run.id);
+      if (!delivery) throw Error("missing rich-message response");
+      await new DeliveryWorker(store, setup).send(w.id, delivery.id);
+      expect(
+        (await store.read(w.id)).deliveries.find((d) => d.id === delivery.id)
+          ?.state,
+      ).toBe("sent");
+      expect(calls.some((c) => c.params.message_thread_id === 37)).toBe(true);
+    });
+    test("a rejected private Topic reply stays in that Topic and is not resent to the main chat", async () => {
+      const w = await seed();
+      await ingress.accept(message("hi", undefined, 77));
+      const run = (await store.read(w.id)).runs[0];
+      if (!run) throw Error("missing run");
+      await new Executor(
+        store,
+        setup,
+        new PiRunner(() => response("Hello!")),
+      ).execute(w.id, run.id);
+      const delivery = (await store.read(w.id)).deliveries.find(
+        (d) => d.runId === run.id,
+      );
+      if (!delivery) throw Error("missing reply");
+      rejectTopicDelivery = true;
+      const worker = new DeliveryWorker(store, setup);
+      await worker.send(w.id, delivery.id);
+      await worker.send(w.id, delivery.id);
+      const attempts = calls.filter((c) =>
+        ["sendMessage", "sendRichMessage"].includes(c.method),
+      );
+      expect(attempts.length).toBeGreaterThan(0);
+      expect(attempts.every((c) => c.params.message_thread_id === 77)).toBe(
+        true,
+      );
+      expect(
+        (await store.read(w.id)).deliveries.find((d) => d.id === delivery.id)
+          ?.state,
+      ).toBe("failed");
+      await worker.send(w.id, delivery.id);
+      expect(
+        calls.filter((c) =>
+          ["sendMessage", "sendRichMessage"].includes(c.method),
+        ),
+      ).toHaveLength(attempts.length);
+    });
+    async function topicReply(optIn = true, answer = "Hello!") {
+      const w = await seed();
+      if (optIn)
+        await store.change(w.id, (w) => {
+          const member = w.members.find((m) => m.id === "101");
+          if (!member) throw Error("missing member");
+          member.privateTopicFallback = {
+            botId: "999",
+            enabledAt: new Date().toISOString(),
+          };
+        });
+      await ingress.accept(message("hi", undefined, 77));
+      const run = (await store.read(w.id)).runs[0];
+      if (!run) throw Error("missing run");
+      let modelCalls = 0;
+      await new Executor(
+        store,
+        setup,
+        new PiRunner(() => {
+          modelCalls++;
+          return response(answer);
+        }),
+      ).execute(w.id, run.id);
+      const delivery = (await store.read(w.id)).deliveries.find(
+        (d) => d.id === `run:${run.id}:result`,
+      );
+      if (!delivery) throw Error("missing reply");
+      await store.change(w.id, (w) => {
+        const d = w.deliveries.find((d) => d.id === delivery.id);
+        if (d) d.replyTo = 123; // The main-chat send must also remove reply inference.
+      });
+      missingTopic = true;
+      return { w, run, delivery, modelCalls };
+    }
+    test("opted-in Topic recovery survives restart and sends once to the same member's main chat", async () => {
+      const { w, run, delivery, modelCalls } = await topicReply();
+      await new DeliveryWorker(store, setup).send(w.id, delivery.id);
+      let saved = (await store.read(w.id)).deliveries.find(
+        (d) => d.id === delivery.id,
+      );
+      expect(saved).toMatchObject({
+        state: "pending",
+        topicId: 77,
+        attempts: 1,
+        privateTopicFallback: { botId: "999" },
+      });
+      await new DeliveryWorker(store, setup).send(w.id, delivery.id);
+      saved = (await store.read(w.id)).deliveries.find(
+        (d) => d.id === delivery.id,
+      );
+      expect(saved).toMatchObject({
+        state: "sent",
+        topicId: 77,
+        deliveredTopicId: 0,
+        attempts: 2,
+      });
+      expect(saved?.remoteId).toBeGreaterThan(0);
+      const sends = calls.filter((c) =>
+        ["sendMessage", "sendRichMessage"].includes(c.method),
+      );
+      expect(sends).toHaveLength(2);
+      expect(sends[0]?.method).toBe("sendRichMessage");
+      expect(sends[1]?.method).toBe("sendMessage");
+      expect(sends[0]?.params.message_thread_id).toBe(77);
+      expect(sends[1]?.params.chat_id).toBe("101");
+      expect(sends[1]?.params.message_thread_id).toBeUndefined();
+      expect(sends[1]?.params.reply_parameters).toBeUndefined();
+      expect(sends[1]?.params.reply_markup).toBeUndefined();
+      expect(JSON.stringify(sends[1]?.params)).toContain(
+        "Telegram couldn't reply in your Topic",
+      );
+      expect(saved?.text).toBe("Hello!");
+      expect(modelCalls).toBe(1);
+      expect(
+        (await store.read(w.id)).runs.find((r) => r.id === run.id)?.topicId,
+      ).toBe(77);
+      await new DeliveryWorker(store, setup).send(w.id, delivery.id);
+      expect(
+        calls.filter((c) =>
+          ["sendMessage", "sendRichMessage"].includes(c.method),
+        ),
+      ).toHaveLength(2);
+    });
+    test("recovery normalizes an already queued rich reply to standard text and preserves links", async () => {
+      const { w, delivery } = await topicReply(
+        true,
+        "Hello **there**. Read the [guide](https://example.com/guide).",
+      );
+      await new DeliveryWorker(store, setup).send(w.id, delivery.id);
+      const queued = (await store.read(w.id)).deliveries.find(
+        (d) => d.id === delivery.id,
+      );
+      // Previous releases persisted the rich format alongside the fallback decision.
+      expect(queued).toMatchObject({ state: "pending", format: "rich" });
+      expect(queued?.privateTopicFallback).toBeDefined();
+      await new DeliveryWorker(store, setup).send(w.id, delivery.id);
+      const sent = calls
+        .filter((c) => ["sendMessage", "sendRichMessage"].includes(c.method))
+        .at(-1);
+      expect(sent?.method).toBe("sendMessage");
+      expect(sent?.params.rich_message).toBeUndefined();
+      expect(sent?.params.message_thread_id).toBeUndefined();
+      expect(sent?.params.reply_parameters).toBeUndefined();
+      expect(sent?.params.text).toContain("Hello there. Read the guide.");
+      expect(sent?.params.entities).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "bold" }),
+          expect.objectContaining({
+            type: "text_link",
+            url: "https://example.com/guide",
+          }),
+        ]),
+      );
+      expect(
+        (await store.read(w.id)).deliveries.find((d) => d.id === delivery.id),
+      ).toMatchObject({
+        state: "sent",
+        format: "markdown",
+        deliveredTopicId: 0,
+      });
+    });
+    test("missing Topic without consent fails without moving or downgrading the reply", async () => {
+      const { w, delivery } = await topicReply(false);
+      await new DeliveryWorker(store, setup).send(w.id, delivery.id);
+      await new DeliveryWorker(store, setup).send(w.id, delivery.id);
+      expect(
+        (await store.read(w.id)).deliveries.find((d) => d.id === delivery.id),
+      ).toMatchObject({ state: "failed", attempts: 1 });
+      const sends = calls.filter((c) =>
+        ["sendMessage", "sendRichMessage"].includes(c.method),
+      );
+      expect(sends).toHaveLength(1);
+      expect(sends[0]?.params.message_thread_id).toBe(77);
+    });
+    for (const revocation of ["consent", "member", "bot", "run"] as const)
+      test(`Topic fallback rechecks ${revocation} before sending after restart`, async () => {
+        const { w, delivery } = await topicReply();
+        await new DeliveryWorker(store, setup).send(w.id, delivery.id);
+        if (revocation === "bot") {
+          const deployment = await store.deployment();
+          if (deployment.bot) deployment.bot.id = "1000";
+          await store.saveDeployment(store.pool, deployment);
+        } else
+          await store.change(w.id, (w) => {
+            const member = w.members.find((m) => m.id === "101");
+            if (!member) throw Error("missing member");
+            if (revocation === "consent") delete member.privateTopicFallback;
+            if (revocation === "member") member.active = false;
+            if (revocation === "run") {
+              const run = w.runs.find((r) => r.id === delivery.runId);
+              if (run) run.cancelled = true;
+            }
+          });
+        await new DeliveryWorker(store, setup).send(w.id, delivery.id);
+        expect(
+          (await store.read(w.id)).deliveries.find((d) => d.id === delivery.id)
+            ?.state,
+        ).toBe("cancelled");
+        expect(
+          calls.filter((c) =>
+            ["sendMessage", "sendRichMessage"].includes(c.method),
+          ),
+        ).toHaveLength(1);
+      });
+    test("an ambiguous main-chat fallback send is retained as unknown and never replayed", async () => {
+      const { w, delivery } = await topicReply();
+      await new DeliveryWorker(store, setup).send(w.id, delivery.id);
+      unknownMainSend = true;
+      await new DeliveryWorker(store, setup).send(w.id, delivery.id);
+      await new DeliveryWorker(store, setup).send(w.id, delivery.id);
+      const d = (await store.read(w.id)).deliveries.find(
+        (d) => d.id === delivery.id,
+      );
+      expect(d).toMatchObject({ state: "delivery_unknown", attempts: 2 });
+      expect(d?.deliveredTopicId).toBeUndefined();
+      expect(
+        calls.filter((c) =>
+          ["sendMessage", "sendRichMessage"].includes(c.method),
+        ),
+      ).toHaveLength(2);
+    });
+    test("rich input cannot bypass inactive membership or webhook authentication", async () => {
+      const w = await seed();
+      await store.change(w.id, (w) => {
+        for (const member of w.members) member.active = false;
+      });
+      const app = createApp(store, setup, "http://localhost:3000");
+      const update = {
+        update_id: ++sequence,
+        message: {
+          message_id: ++sequence,
+          date: Math.floor(Date.now() / 1000),
+          from: { id: 101, is_bot: false },
+          chat: { id: 101, type: "private" },
+          rich_message: { blocks: [{ type: "paragraph", text: "hi" }] },
+        },
+      };
+      for (const secret of ["wrong", "test-secret"]) {
+        const result = await app.request("/telegram/webhook", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-telegram-bot-api-secret-token": secret,
+          },
+          body: JSON.stringify(update),
+        });
+        expect(result.status).toBe(secret === "wrong" ? 401 : 200);
+      }
+      const saved = await store.read(w.id);
+      expect(saved.runs).toHaveLength(0);
+      expect(saved.messages).toHaveLength(0);
+    });
     test.each([false, true])(
       "worker reconstruction resumes received input without replay (checkpointed %s)",
       async (checkpointed) => {

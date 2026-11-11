@@ -41,7 +41,19 @@ from outside Topics through reply fallback. Control commands such as `/help`,
 Ordinary final answers stay in their original Topic without automatically quoting
 the triggering message. When the model explicitly cites a retained human message
 to emphasize its wording or attribution, that same-bot/chat/Topic message can be
-the native reply target. Thinking drafts, streamed previews and native Stop retain
+the native reply target. An operator can enable main-private-chat recovery for a named member who explicitly
+requests it. Only an ordinary run result/failure with a confirmed Telegram 400
+`message thread not found` can retry in that same member's main chat. Consent is
+bound to the workspace, member and bot; it is rechecked before sending and removed
+on membership deactivation. Buttons, Browser/control messages, scheduled replies,
+groups and uncertain sends are excluded. The wire retry uses standard text delivery, preserves text entities/links, omits
+both Topic and reply parameters and adds a short explanation. The answer appears
+in Telegram's All messages view; this does not repair the unavailable native Topic. The original run/Topic context remains
+unchanged; the delivery receipt records `deliveredTopicId: 0`. Replies to that
+main-chat receipt do not import the Topic's history into a new conversation.
+See [operator recovery](../implementation/telegram-topic-fallback.md).
+
+Thinking drafts, streamed previews and native Stop retain
 the original Topic ID. Among outgoing bot messages outside Topics, only replies
 with confirmed remote message IDs can select a thread;
 ephemeral drafts and uncertain sends have no confirmed mapping.
