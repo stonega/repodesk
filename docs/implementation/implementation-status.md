@@ -1,5 +1,18 @@
 # Implementation evidence
 
+## Conversational Telegram controls deployed (2026-11-11)
+
+Bundle `1794386364054-96360541` deploys production source
+`41b179b93d88411437aab6c39cdb86dc45341c62` with main feature `bf644bb978827ed20066f6581d0c1a133eee11fd`.
+The existing runtime fixes, configuration, credentials, mounts and database are
+preserved. All five services are healthy; protected backup/restore, exact-image
+checks, 55 artifact hashes and public readiness verify.
+The production source passed 1,496 tests across 159 files;
+read-only live Telegram verification confirms all three published command scopes
+are empty. Native rendering and real-model intent selection remain acceptance
+checks. See [deployment evidence](vps-deployment.md#conversational-telegram-controls-deployed-2026-11-11).
+
+
 ## Telegram features through ordinary chat (2026-11-11)
 
 The worker removes the previously published default, private-chat and group-chat
@@ -31,8 +44,8 @@ durable picker delivery/callback, account identity/Topic, duplicate/conflicting
 calls, revoked/private/admin boundaries, workspace selection and direct stopping.
 Biome, strict TypeScript, build and the Node runtime contract pass, including
 16 integration-startup cases with zero external startup calls. Tests use fake
-models/providers/Telegram transports. No deployment or live account/message action
-was performed. Real-model intent selection and native desktop/mobile menu and
+models/providers/Telegram transports. The initial implementation made no live account/message action; the subsequently
+authorized deployment and read-only menu verification are recorded above. Real-model intent selection and native desktop/mobile menu and
 button rendering remain live acceptance checks; deployment of the updated worker
 is required to clear a running bot's existing menu.
 

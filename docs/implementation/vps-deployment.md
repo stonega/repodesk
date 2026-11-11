@@ -8,6 +8,42 @@ release makes it available in the panel's version indicator. A deployment
 administrator reviews its notes and starts installation explicitly.
 See [host updater installation](updates.md) for the service and panel contract.
 
+## Conversational Telegram controls deployed (2026-11-11)
+
+Operator-authorized bundle `1794386364054-96360541` deploys source
+`41b179b93d88411437aab6c39cdb86dc45341c62` over `1794371404708-33447708`, preserving
+existing production fixes. The feature commit `bf644bb978827ed20066f6581d0c1a133eee11fd` is on
+`main`; the exact production source is retained on
+`deploy/telegram-chat-controls-20261111`.
+
+The bot no longer advertises slash-command menus. Ordinary chat requests reach
+repository selection, account connections, task controls, workflow management,
+instructions, settings, usage and privacy through the existing authorized services.
+Read-only Telegram API verification after cutover confirms empty lists for the
+**default**, **all private chats** and **all group chats** scopes. The previous
+lists contained five, seven and five entries respectively. No manual user message
+or live model request was used. Native client appearance and real-model phrasing
+remain live acceptance checks.
+
+The isolated main tree passed **1,454 tests**; the preserved production source
+passed **1,496 tests across 159 files**.
+Biome, strict types, build, the Node runtime contract and pinned-Bun control checks
+pass. One pre-existing Browser expiration assertion failed during the first
+concurrent suite; its isolated retry and final full rerun both pass. Exact VPS
+images pass 16 integration-startup cases with zero external startup calls, CPU
+speech imports, offline Code Truth, Compose readiness/configuration, migration
+rerun and disposable backup/restore.
+
+All five services are healthy; public/loopback health, readiness and frontend
+artifacts verify. **55 deployed artifacts** match the
+verified images. The existing unused bare JavaScript cache alias remains separately
+audited; current HTML asset URLs match. Configuration, credentials, persistent
+mounts, PostgreSQL identity and the native Browser installation are preserved.
+The protected backup `backups/pre-release-1794386364054-96360541.dump` is
+**231,489 bytes** and its archive listing verifies. Source,
+image identities, checks, menu results and the deployment receipt remain under the
+protected release directory. No dependency, migration or stable release was added.
+
 ## Immediate schedules and workflow owners deployed (2026-11-11)
 
 The operator-authorized release `1794371404708-33447708` deploys source
