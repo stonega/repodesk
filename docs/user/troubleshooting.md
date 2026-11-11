@@ -42,8 +42,9 @@ are not automatically available to the VPS app.
 New API pricing is requested separately from the same server's public
 `/api/pricing` endpoint without the inference key. If anonymous pricing returns
 401/403, HTML or another failure, model discovery can still succeed; prices stay
-unknown and the saved provider shows a pricing warning. Use manual price overrides
-when public pricing is unavailable.
+unavailable and the saved provider shows a pricing warning. Missing token prices
+count as zero in application budgets and usage totals. Enter manual price overrides
+to include those costs in the estimates.
 
 ## 机器人不回复
 

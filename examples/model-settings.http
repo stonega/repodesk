@@ -29,7 +29,7 @@ Content-Type: application/json
 ### The example rate is illustrative, not a current exchange-rate quote.
 ### Catalog fallback prices, budgets and usage totals remain USD; runs pin their rate.
 ### Set modelLimits to null to restore automatic catalog/app default capacity.
-### Unknown model prices require unlimited budgets; configure prices before finite budgets.
+### Missing token prices count as zero for budgets and usage; available rates still apply.
 
 ### Save workspace budgets (replace workspace ID and its current version)
 PUT {{baseUrl}}/api/admin/workspaces/REPLACE_WORKSPACE_ID/settings

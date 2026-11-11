@@ -114,7 +114,7 @@ export function Usage({
         </div>
         <p className="muted" id="usage-note">
           Recorded spend includes unresolved reservations. All amounts are in
-          USD. Calls marked Unknown price are excluded from dollar totals.
+          USD. Missing token prices count as zero.
         </p>
         <section
           className="usage-table-scroll"
@@ -162,12 +162,12 @@ export function Usage({
                   </td>
                   <td className="usage-money">
                     {item.pricingUnknown && item.actual === undefined
-                      ? "Unknown price"
+                      ? money(0)
                       : money(item.reserved)}
                   </td>
                   <td className="usage-money">
                     {item.pricingUnknown && item.actual === undefined ? (
-                      "Unknown price"
+                      money(0)
                     ) : item.actual === undefined ? (
                       <span>
                         <span aria-hidden="true">—</span>

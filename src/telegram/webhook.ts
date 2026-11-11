@@ -1,4 +1,5 @@
 import { ZodError } from "zod";
+import { attemptCost } from "../agent/limits.ts";
 import { activeBrowserTask, browserTaskControl } from "../browser/tasks.ts";
 import { codingFailureMessage } from "../coding/failure-messages.ts";
 import { routeDevelopment, selectDevelopment } from "../coding/telegram.ts";
@@ -1023,7 +1024,7 @@ export class Ingress {
           (a) => a.pricingUnknown && a.actual === undefined,
         ).length;
         reply(
-          `Recorded usage: $${attempts.reduce((sum, a) => sum + (a.actual ?? a.reserved), 0).toFixed(4)} including reservations. Monthly cap: ${w.settings.monthlyBudgetUsd === null ? "None (no limit)" : `$${w.settings.monthlyBudgetUsd}`}. Unknown charges remain reserved.${unpriced ? ` Prices are unavailable for ${unpriced} calls; their costs are excluded.` : ""}`,
+          `Recorded usage: $${attempts.reduce((sum, a) => sum + attemptCost(a), 0).toFixed(4)} including reservations. Monthly cap: ${w.settings.monthlyBudgetUsd === null ? "None (no limit)" : `$${w.settings.monthlyBudgetUsd}`}. Unknown charges remain reserved.${unpriced ? ` Missing token prices count as zero for ${unpriced} historical calls.` : ""}`,
         );
         break;
       }

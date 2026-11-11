@@ -102,18 +102,16 @@ export function selectedModel(
   const outputPrice = outputOverride ?? automaticPrices?.output;
   const pricingKnown = inputPrice !== undefined && outputPrice !== undefined;
   const cost = {
-    input: pricingKnown ? (inputPrice ?? 0) : 0,
-    output: pricingKnown ? (outputPrice ?? 0) : 0,
-    cacheRead: pricingKnown
-      ? pricing?.cacheRead === undefined
+    input: inputPrice ?? 0,
+    output: outputPrice ?? 0,
+    cacheRead:
+      pricing?.cacheRead === undefined
         ? (inputOverride ?? automaticPrices?.cacheRead ?? inputPrice ?? 0)
-        : pricing.cacheRead * rate
-      : 0,
-    cacheWrite: pricingKnown
-      ? pricing?.cacheWrite === undefined
+        : pricing.cacheRead * rate,
+    cacheWrite:
+      pricing?.cacheWrite === undefined
         ? (inputOverride ?? automaticPrices?.cacheWrite ?? inputPrice ?? 0)
-        : pricing.cacheWrite * rate
-      : 0,
+        : pricing.cacheWrite * rate,
   };
   const capabilities = modelCapabilities(id, options);
   return {
@@ -371,11 +369,6 @@ export class PiRunner implements AgentRunner {
         if (input.remainingBudget) {
           const budgets = await input.remainingBudget();
           const available = Math.min(budgets.run, budgets.workspace);
-          requireThat(
-            input.model.pricingKnown !== false || available === Infinity,
-            "model_pricing_required_for_budget",
-            409,
-          );
           const error =
             budgets.run <= budgets.workspace
               ? "run_budget_exhausted"

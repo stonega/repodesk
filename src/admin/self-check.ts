@@ -310,9 +310,6 @@ export class SelfCheckService {
                 reserved: amount,
                 status: "reserved",
                 at: new Date().toISOString(),
-                ...(model.pricingKnown === false
-                  ? { pricingUnknown: true }
-                  : {}),
               });
               return id;
             }),
@@ -326,7 +323,7 @@ export class SelfCheckService {
               attempt.status = ["error", "aborted"].includes(message.stopReason)
                 ? "unknown"
                 : "settled";
-              if (attempt.status === "settled" && !attempt.pricingUnknown)
+              if (attempt.status === "settled")
                 attempt.actual = Math.max(0, message.usage.cost.total);
               attempt.tokens = {
                 input: message.usage.input,

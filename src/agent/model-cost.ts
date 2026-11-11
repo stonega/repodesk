@@ -2,6 +2,7 @@ import { Type } from "typebox";
 import { z } from "zod";
 import { type Run, requireThat, type Workspace } from "../domain.ts";
 import { authorize } from "../workspaces/policy.ts";
+import { attemptCost } from "./limits.ts";
 
 export const modelCostParameters = Type.Object(
   {
@@ -77,18 +78,9 @@ export function queryModelCost(
         if (at >= month) monthlyUnpricedCalls++;
         if (at >= start) {
           unpricedCalls++;
-          const model = models.get(item.model) ?? emptyTotals();
-          for (const summary of [totals, model]) {
-            summary.calls++;
-            if (attempt.status === "settled") summary.settledCalls++;
-            else if (attempt.status === "reserved") summary.reservedCalls++;
-            else summary.unknownCalls++;
-          }
-          models.set(item.model, model);
         }
-        continue;
       }
-      const accounted = attempt.actual ?? attempt.reserved;
+      const accounted = attemptCost(attempt);
       if (at >= month) monthlyAccountedUsd += accounted;
       if (at < start) continue;
       const model = models.get(item.model) ?? emptyTotals();
@@ -130,12 +122,12 @@ export function queryModelCost(
               ? { unpricedCalls: monthlyUnpricedCalls }
               : {}),
             remainingUsd:
-              w.settings.monthlyBudgetUsd === null || monthlyUnpricedCalls > 0
+              w.settings.monthlyBudgetUsd === null
                 ? null
                 : w.settings.monthlyBudgetUsd - monthlyAccountedUsd,
           },
         }
       : {}),
-    note: "Recorded application costs, not a provider invoice. Settled costs use recorded usage and configured prices or operator reconciliation. Unpriced calls are excluded from dollar totals. Reserved and unknown amounts are not confirmed charges. Only retained accounting is included (up to 90 days); later calls, including the final answer to this query, are excluded.",
+    note: "Recorded application cost estimates use recorded usage and configured prices or operator reconciliation. Missing token prices count as zero, including historical unpriced calls without reconciled costs. Reserved and unknown amounts are pending accounting. Retained accounting covers up to 90 days and excludes later calls, including the final answer to this query.",
   };
 }

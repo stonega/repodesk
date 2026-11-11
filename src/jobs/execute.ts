@@ -263,8 +263,7 @@ export class Executor {
               a.status = "unknown";
             else {
               a.status = "settled";
-              if (!a.pricingUnknown)
-                a.actual = Math.max(0, message.usage.cost.total);
+              a.actual = Math.max(0, message.usage.cost.total);
               a.tokens = {
                 input: message.usage.input,
                 output: message.usage.output,
@@ -433,12 +432,6 @@ export class Executor {
             );
             const budgets = remainingBudgets(w, r);
             requireThat(
-              input.model.pricingKnown !== false ||
-                Math.min(budgets.run, budgets.workspace) === Infinity,
-              "model_pricing_required_for_budget",
-              409,
-            );
-            requireThat(
               Number.isFinite(amount) && amount >= 0 && amount <= budgets.run,
               "run_budget_exhausted",
               409,
@@ -458,9 +451,6 @@ export class Executor {
                   : undefined,
               reserved: amount,
               status: "reserved",
-              ...(input.model.pricingKnown === false
-                ? { pricingUnknown: true }
-                : {}),
               at: new Date().toISOString(),
             });
             return id;

@@ -238,8 +238,8 @@ export function ModelPicker({
             All overrides are optional. Leave blank to use fetched or catalog
             values. A blank context window lets the provider enforce its limit.
             Unknown models use up to {DEFAULT_MODEL_MAX_OUTPUT.toLocaleString()}{" "}
-            output tokens unless overridden. Missing prices remain unknown;
-            dollar budgets require both prices. Use 0 for a free model.
+            output tokens unless overridden. Missing token prices count as zero
+            for budgets and usage.
           </p>
           {metadata?.pricingTiers && (
             <label className="field" htmlFor={`${fieldId}-price-tier`}>
