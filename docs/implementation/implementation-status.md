@@ -1,5 +1,44 @@
 # Implementation evidence
 
+## Telegram features through ordinary chat (2026-11-11)
+
+The worker removes the previously published default, private-chat and group-chat
+command lists instead of publishing new slash-command menus. Cleanup retains
+credential-rotation checks, cancellation and Telegram retry backoff. Legacy typed
+handlers and platform-generated Start/deep-link payloads remain compatible.
+
+Executor exposes `manage_telegram` for explicit current conversational requests:
+repository pickers, personal GitHub/Google connections, task status/cancellation,
+workflow management, saved instructions, usage, settings and privacy. The adapter
+uses the existing handlers under the workspace transaction, binds the actual
+requester and retained message, rejects scheduled/forwarded/unconsumed requests,
+and checkpoints tool arguments/results to deduplicate retries. Private account
+boundaries, administrator roles and approval/account-confirmation gates remain.
+Control messages keep their original Topic. Status/cancellation does not select
+the helper run itself; a direct “Please stop” also cancels without a model call.
+
+Help and recovery text use ordinary requests. Members without a selected workspace
+receive membership-scoped selection buttons. Administrators can request a native
+group-invitation link rather than type the linking command. Telegram supplies its
+payload; the existing token, membership and group-administrator checks still apply.
+See [chat request examples](../user/commands.md), [UI preference](../design/ui-rules.md#telegram-features-use-ordinary-chat)
+and [manual acceptance](../../examples/telegram-chat-controls.md).
+
+Local verification: the full PostgreSQL-backed suite passed **1,442 tests across
+152 files**, followed by **214 focused tests across six files** after the direct-stop
+change. Follow-up coverage includes ordinary ingress → Executor →
+durable picker delivery/callback, account identity/Topic, duplicate/conflicting
+calls, revoked/private/admin boundaries, workspace selection and direct stopping.
+Biome, strict TypeScript, build and the Node runtime contract pass, including
+16 integration-startup cases with zero external startup calls. Tests use fake
+models/providers/Telegram transports. No deployment or live account/message action
+was performed. Real-model intent selection and native desktop/mobile menu and
+button rendering remain live acceptance checks; deployment of the updated worker
+is required to clear a running bot's existing menu.
+
+
+
+
 ## Immediate schedules and owner profiles (2026-11-11)
 
 Explicit Telegram schedule requests now activate immediately, without requester

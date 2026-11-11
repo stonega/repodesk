@@ -38,6 +38,7 @@ import {
   requestFailureMessage,
 } from "../telegram/feedback.ts";
 import { discardFollowup } from "../telegram/followup.ts";
+import { Ingress } from "../telegram/webhook.ts";
 import { publishWidget } from "../telegram/widgets.ts";
 import { TranscriptionService } from "../transcription/service.ts";
 import { webReaderTool } from "../web-reader/tool.ts";
@@ -55,6 +56,7 @@ export class Executor {
     private setup: SetupService,
     private runner: AgentRunner | RunnerProvider = new PiRunner(),
     private transcription = new TranscriptionService(store),
+    private chat = new Ingress(store, setup),
   ) {}
   async execute(workspaceId: string, runId: string, shutdown?: AbortSignal) {
     const deployment = await this.store.deployment();
@@ -387,7 +389,7 @@ export class Executor {
         prompt: context.prompt,
         transcript,
         tools: [
-          ...applicationTools(this.store, workspaceId, runId, fence),
+          ...applicationTools(this.store, workspaceId, runId, fence, this.chat),
           webReaderTool(this.store, workspaceId, runId, fence, guard),
           ...(claimed.searchProvider
             ? [
@@ -759,7 +761,7 @@ export class Executor {
             w,
             r,
             r.codingTaskId
-              ? "Your coding request was handed to Codex, but the chat response could not finish. Use /status in this conversation to check the task’s current outcome."
+              ? "Your coding request was handed to Codex, but the chat response could not finish. Ask for task status in this conversation to check the task’s current outcome."
               : (attachmentErrors[r.error ?? ""] ??
                   requestFailureMessage(r.error ?? "")),
           );

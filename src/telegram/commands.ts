@@ -3,29 +3,12 @@ import type { Deployment } from "../domain.ts";
 import type { SetupService } from "../setup/service.ts";
 import { TelegramError } from "./client.ts";
 
-const commonCommands = [
-  { command: "repos", description: "Choose a repository" },
-  { command: "ask", description: "Ask about your repository or team" },
-  {
-    command: "status",
-    description: "Check requests and tasks in this conversation",
-  },
-  { command: "cancel", description: "Cancel a request or task" },
-  { command: "help", description: "Show commands and help" },
+// Clear every scope published by earlier versions, including the fallback list.
+export const commandScopes = [
+  { type: "default" },
+  { type: "all_group_chats" },
+  { type: "all_private_chats" },
 ] as const;
-export const commandMenus = [
-  { scope: { type: "default" }, commands: commonCommands },
-  { scope: { type: "all_group_chats" }, commands: commonCommands },
-  {
-    scope: { type: "all_private_chats" },
-    commands: [
-      commonCommands[0],
-      { command: "github", description: "Connect your GitHub account" },
-      { command: "google", description: "Manage your Google account" },
-      ...commonCommands.slice(1),
-    ],
-  },
-];
 
 function identity(d: Deployment) {
   return d.active && !d.paused && d.bot && d.credentials.bot
@@ -33,7 +16,7 @@ function identity(d: Deployment) {
     : undefined;
 }
 
-/** Publish discovery menus once per worker/credential; command handlers still authorize every request. */
+/** Remove legacy menus once per worker/credential; chat actions authorize every request. */
 export class TelegramCommandMenu {
   private registered?: string;
   private retryAt = 0;
@@ -52,12 +35,12 @@ export class TelegramCommandMenu {
       const key = identity(deployment);
       if (!key || this.registered === key) return;
       const client = await this.setup.client(deployment);
-      for (const menu of commandMenus) {
+      for (const scope of commandScopes) {
         signal.throwIfAborted();
         if (identity(await this.store.deployment()) !== key) return;
         await client.call(
-          "setMyCommands",
-          { ...menu, language_code: "" },
+          "deleteMyCommands",
+          { scope, language_code: "" },
           {
             signal,
             timeoutMs: 10000,

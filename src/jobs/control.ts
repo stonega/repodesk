@@ -35,25 +35,46 @@ export async function deliverAccessHelp(store: Store, setup: SetupService) {
       const rejected =
         request?.status === "rejected" &&
         Date.parse(request.decidedAt ?? "") > Date.now() - 86400000;
-      const text = allowed
-        ? deployment.active
-          ? "You already have access. Send /help to get started."
-          : "RepoDesk setup is not complete yet. Ask a deployment admin to check the model settings and Telegram connection. The bot activates automatically when ready."
-        : request?.status === "pending"
-          ? "Your access request is pending. A workspace admin will review it."
-          : rejected
-            ? "Your access request was rejected. Contact your workspace admin or request again after 24 hours."
-            : workspace
-              ? "You do not have access to this workspace yet. Tap Request access to ask an admin to approve you."
-              : "This invite link is unavailable or you do not have workspace access yet. Ask your admin for a new invite link. Each link works for one Telegram account. First-time owners verify their identity from web setup.";
+      const choices =
+        !workspace && chatId === row.actor
+          ? (
+              await store.pool.query(
+                "SELECT id,data->'settings'->>'name' AS name FROM workspaces WHERE NOT (data ? 'deletion') AND EXISTS (SELECT 1 FROM jsonb_array_elements(data->'members') m WHERE m->>'id'=$1 AND m->>'active'='true') ORDER BY id",
+                [row.actor],
+              )
+            ).rows
+          : [];
+      const text = choices.length
+        ? "Choose a workspace, then tell me what you want to do."
+        : allowed
+          ? deployment.active
+            ? "You already have access. Tell me what you want to do, or ask for help."
+            : "RepoDesk setup is not complete yet. Ask a deployment admin to check the model settings and Telegram connection. The bot activates automatically when ready."
+          : request?.status === "pending"
+            ? "Your access request is pending. A workspace admin will review it."
+            : rejected
+              ? "Your access request was rejected. Contact your workspace admin or request again after 24 hours."
+              : workspace
+                ? "You do not have access to this workspace yet. Tap Request access to ask an admin to approve you."
+                : "This invite link is unavailable or you do not have workspace access yet. Ask your admin for a new invite link. Each link works for one Telegram account. First-time owners verify their identity from web setup.";
       const result = await (await setup.client()).call<{ message_id: number }>(
         "sendMessage",
         {
           chat_id: chatId,
           message_thread_id: row.topic_id ?? undefined,
           text,
-          reply_markup:
-            workspace && !allowed && request?.status !== "pending" && !rejected
+          reply_markup: choices.length
+            ? {
+                inline_keyboard: choices
+                  .slice(0, 20)
+                  .map((w) => [
+                    { text: w.name, callback_data: `workspace:${w.id}` },
+                  ]),
+              }
+            : workspace &&
+                !allowed &&
+                request?.status !== "pending" &&
+                !rejected
               ? {
                   inline_keyboard: [
                     [

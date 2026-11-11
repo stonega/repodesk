@@ -148,6 +148,12 @@ export function command(
       (match[2] && match[2].toLowerCase() !== bot.username.toLowerCase())
     )
       return;
+    if (
+      match[1]?.toLowerCase() === "start" &&
+      message.chat.type !== "private" &&
+      text.slice(entity.length).trim().startsWith("link_")
+    )
+      return { name: "link", args: text.slice(entity.length).trim().slice(5) };
     return {
       name: match[1]?.toLowerCase() ?? "",
       args: text.slice(entity.length).trim(),

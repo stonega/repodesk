@@ -6,7 +6,7 @@ RepoDesk 使用对话上下文、历史记忆和经过确认的指令帮助持�
 | --- | --- | --- |
 | 当前对话上下文 | 继续同一 Topic 或 Reply 线程 | 在原对话继续，受来源和保留期限约束 |
 | 历史记忆 | 提取已发生的讨论、偏好和未完成事项，按需回忆 | 自然语言查看、记住、忘记、关闭或开启 |
-| 持久指令 | 明确要求后续遵循的个人、工作区或任务规则 | `/remember`、`/memory` 和面板，保存需确认 |
+| 持久指令 | 明确要求后续遵循的个人、工作区或任务规则 | Ordinary chat or the panel; saving requires confirmation |
 | 技能 | 可发布的团队操作流程 | Skills 中审阅、发布、启用与版本管理 |
 
 ## 私聊和群组的边界
@@ -39,18 +39,20 @@ RepoDesk 使用对话上下文、历史记忆和经过确认的指令帮助持�
 
 ## 保存持久指令
 
-希望后续明确遵循某条规则时：
+Ask in ordinary language when you want a future rule:
 
 ```text
-/remember 回复我的周报时，先列阻塞，再列决策和待办
-/memory
-/memory edit <指令 UUID> 新的完整规则
-/memory forget <指令 UUID>
+Always put blockers first in my weekly reports
+Show my saved instructions
+Replace the weekly-report instruction with: use English and put blockers first
+Forget the weekly-report instruction
 ```
 
-`/remember` 和替换指令会提出审批，确认后生效。私聊保存个人指令，群组提出工作区指令，权限和共享范围不同。`/memory` 列出的是这些指令，不是全部自动提取的历史记忆。
-
-纠正定时任务使用 `/correct save`，详见 [定时任务](workflows.md)。
+Saving or replacing an instruction requires approval. Private chat saves a personal
+instruction; group requests propose a workspace instruction with the corresponding
+permissions. Saved instructions are distinct from automatic historical recall.
+Reply to a scheduled output and explicitly ask for a rule for future reports to
+propose a persistent workflow correction. See [workflows](workflows.md).
 
 ## 哪些人和服务能看到数据
 
@@ -63,7 +65,7 @@ RepoDesk 使用对话上下文、历史记忆和经过确认的指令帮助持�
 
 ## 保留与工作区删除
 
-管理员在工作区设置保留期限，在 **Privacy** 管理删除。`/privacy` 查看说明；有权限的管理员可在私聊使用 `/privacy delete` 提出删除，再按明确提示确认。
+Administrators configure retention in workspace settings and deletion in **Privacy**. Ask “Explain our retention policy” for details. An authorized administrator can ask “Delete this workspace” in private and then confirm the explicit deletion proposal.
 
 删除会清理本地工作区数据及关联任务内容，不会撤回 GitHub 上的提交、PR 或已送达 Telegram 消息。Code Truth 的源码索引与备份副本需要管理员另行清理，参阅 [Code Truth](code-truth.md) 与 [维护指南](maintenance.md)。
 

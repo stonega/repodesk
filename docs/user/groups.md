@@ -32,8 +32,7 @@ and message collection setting. Open the pencil icon in its **Actions** column
 to manage that group. On narrow screens, scroll the table horizontally to reach
 the remaining columns.
 
-The private `/linktoken` command remains available to verified workspace
-owner/admin members who prefer the Telegram-only flow.
+Verified workspace owner/admin members can instead ask “Help me link a Telegram group” in private chat. Open the returned invitation link and choose the group; Telegram supplies the linking payload automatically. The same group-admin and membership checks apply, without typing a command.
 
 ## 在群里提问
 
@@ -107,11 +106,10 @@ This refreshes visibility without changing your collection choice. RepoDesk cann
 read messages from before the bot joined or messages Telegram never delivered.
 
 In **Groups & Members**, open the group row's pencil icon (**Edit**) and choose
-**Disable message collection**, or send `/capture off`
-as a workspace administrator, to stop collecting future ordinary messages.
+**Disable message collection**, or ask “Disable message collection in this group” as a workspace administrator, to stop collecting future ordinary messages.
 Directed requests still work. Existing retained data follows the retention policy;
 turning collection off does not delete it. Choose **Enable message collection** or
-use `/capture on` to turn it back on. Existing groups keep their saved collection
+ask “Enable message collection in this group” to turn it back on. Existing groups keep their saved collection
 choice until you change it or relink; the new default does not override an opt-out.
 
 ## 总结与权限边界

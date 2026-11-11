@@ -170,7 +170,9 @@ test("threshold compaction keeps recent turns and freezes its summary across sub
   for (let i = 0; i < 18; i++)
     answer(w, ask(w, `turn ${i}: ${"detail ".repeat(450)}`));
   const current = ask(w, "Continue");
-  const plan = compactionPlan(w, current, input());
+  // Fit a complete bounded summary batch alongside the expanded pinned skills.
+  const compactionInput = input(60000);
+  const plan = compactionPlan(w, current, compactionInput);
   expect(plan).toBeDefined();
   if (!plan) throw Error("missing plan");
   expect(plan.summary.sourceIds).not.toContain(current.sources.at(-1)?.id);
@@ -189,7 +191,7 @@ test("threshold compaction keeps recent turns and freezes its summary across sub
   expect(JSON.parse(before.prompt).sources.length).toBeLessThan(
     current.sources.length,
   );
-  expect(compactionPlan(w, current, input())).toBeUndefined();
+  expect(compactionPlan(w, current, compactionInput)).toBeUndefined();
   answer(w, current);
   const next = ask(w, "More details");
   expect(next.contextSummary).toEqual(current.contextSummary);

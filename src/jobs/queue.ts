@@ -20,6 +20,7 @@ import type { SearchConsoleService } from "../search-console/service.ts";
 import type { SetupService } from "../setup/service.ts";
 import { TelegramCommandMenu } from "../telegram/commands.ts";
 import { TelegramPoller } from "../telegram/polling.ts";
+import { Ingress } from "../telegram/webhook.ts";
 import { TranscriptionService } from "../transcription/service.ts";
 import { tick } from "../workflows/service.ts";
 import { deliverAccessHelp } from "./control.ts";
@@ -83,7 +84,13 @@ export async function startWorker(
 ) {
   const boss = queue(url, store.log);
   await boss.start();
-  const executor = new Executor(store, setup, runner, transcription);
+  const executor = new Executor(
+    store,
+    setup,
+    runner,
+    transcription,
+    new Ingress(store, setup, githubUsers, google, searchConsole),
+  );
   const delivery = new DeliveryWorker(store, setup);
   const shutdown = new AbortController();
   const id = randomUUID();

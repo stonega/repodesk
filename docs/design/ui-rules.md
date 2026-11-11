@@ -629,25 +629,44 @@ when implementing or reviewing a change.
 - **Exceptions:** Owners can customize their App directly in GitHub settings;
   RepoDesk does not prompt for or require that customization.
 
+### Telegram features use ordinary chat
+
+- **Preference:** Remove the native slash-command menu. People ask for features
+  in ordinary language, including repository selection, GitHub/Google connections,
+  task status/cancellation, workflows, settings, usage, instructions and privacy.
+  Help and recovery messages use conversational requests.
+- **Scope:** RepoDesk's Telegram experience in private chats, linked groups and
+  Topics. Account management stays private; group delivery still depends on
+  Telegram privacy settings and mentions/replies.
+- **Source:** 2026-11-11 — the user showed the native command menu and requested
+  removing every item and supporting features through the chatbot without commands.
+  This supersedes the 2026-10-08 preference to advertise shortcuts in that menu.
+- **Acceptance:** Clear all three previously published command scopes, including
+  the default fallback, on worker activation/restart and credential replacement.
+  Ordinary requests reach the existing permission-checked services. Preserve the
+  requesting actor, workspace and Topic, deduplicate tool calls, reject forwarded
+  or historical authority and retain sign-in/account confirmation and approvals.
+  Verify delivery payloads and callbacks deterministically. Native desktop/mobile
+  rendering remains a live acceptance check; there is no web-page layout change.
+- **Exceptions:** Telegram's platform-generated Start, invitation/deep-link payloads,
+  account confirmation and approval buttons remain. Legacy typed commands continue
+  to work for compatibility but are neither advertised nor required. BotFather's
+  own setup commands are external platform controls.
+
 ### Telegram repository menus favor recent work
 
-- **Preference:** Offer `/repos` as a native inline repository picker, showing at
-  most ten active repositories. Prioritize repositories the person recently
-  mentioned, then recent repository activity. Keep the current selection visible
-  and make changing or clearing it straightforward.
-  Make `/repos` and private `/github` account linking discoverable in Telegram's
-  native command menu alongside the main conversation/task shortcuts.
+- **Preference:** When asked to choose a repository, offer an inline picker with
+  at most ten active repositories. Prioritize repositories the person recently
+  mentioned, then recent activity. Show the current selection and provide clearing.
 - **Scope:** Repository selection in Telegram, scoped to the workspace, person,
-  bot and chat/topic. Use one repository per button row so names remain readable;
-  `/repos <name>` searches connected choices beyond the first ten.
-- **Source:** 2026-10-08 — user requested improving Telegram's inline menu with
-  `/repos` and the latest ten active repositories, preferring recent mentions.
-  Later in the same task, the user also requested `/github` for connecting GitHub.
-- **Exceptions:** Show only workspace-selected repositories accessible to the
-  person; exclude archived/disabled repositories and private repositories in
-  groups. Selection supplies default context and does not grant action permission.
-  Rankings use retained personal mentions and saved GitHub activity metadata;
-  they do not imply a live GitHub fetch for each command.
+  bot and chat/topic. Use one repository per row. A repository-name request searches
+  connected choices beyond the first ten.
+- **Source:** 2026-10-08 — user requested the latest ten active repositories,
+  preferring recent mentions. 2026-11-11 — entry and search now use ordinary chat.
+- **Exceptions:** Show only selected, accessible repositories; exclude archived or
+  disabled repositories and private repositories in groups. Selection supplies
+  context and grants no action permission. Rankings use retained personal mentions
+  and saved GitHub metadata, without a live fetch for every picker.
 
 ### Workflow cards lead to dedicated details
 

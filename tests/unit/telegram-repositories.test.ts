@@ -278,7 +278,9 @@ test("selection is pinned as default context without changing original task or a
 
 test("empty/search-miss menus offer useful recovery and retention purges selection state", () => {
   const w = fixture();
-  expect(menu(w, 1, "unknown").text).toContain("Try /repos <name>");
+  expect(menu(w, 1, "unknown").text).toContain(
+    "Tell me the repository name to search",
+  );
   delete w.github;
   expect(menu(w, 2).text).toContain("Ask your workspace admin");
   w.repositorySelections = [

@@ -4,20 +4,20 @@ Implemented locally; live Telegram acceptance remains pending. Use a configured
 workspace with an active member and workspace-selected GitHub repositories.
 
 1. In a private bot Topic, mention a connected repository in a request, such as
-   `Explain example/service`. Send `/repos`: that repository should precede
+   `Explain example/service`. Ask “Help me choose a repository”: that repository should precede
    repositories with newer saved GitHub activity. At most ten repository buttons
    appear, one per row; archived/disabled repositories are absent.
 2. Click a repository. The bot confirms it for this conversation. Ask
    `Explain the architecture`: the assistant receives that repository as default
    context. Naming a different repository in the request takes precedence and
    still requires normal access. Selection alone creates no approval or coding task.
-3. Send `/repos` again. The saved selection has a checkmark and **Selected** label.
-   Use `/repos service` to search names, or **Clear selection** to remove the default.
+3. Ask “Help me choose a repository” again. The saved selection has a checkmark and **Selected** label.
+   Ask “Find the service repository” to search names, or **Clear selection** to remove the default.
 4. Switch Topics or workspaces, or use another member. Selection must not carry
    into their context. In a linked group, private repositories must not appear.
 5. Test an expired menu, an older menu after opening a new one, another person's
    button, and a repository whose access was removed. Selection must be rejected;
-   stale-menu errors tell you to send `/repos` for current choices.
+   stale-menu errors tell you to ask to choose a repository again for current choices.
 6. On Telegram desktop and mobile, inspect the ten-row menu, long repository
    names, selected and cleared states, search misses, no repositories, and errors.
    Telegram owns the native keyboard layout; deterministic tests verify payloads,

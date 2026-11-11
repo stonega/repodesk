@@ -29,8 +29,8 @@ export function repositoryMenu(
     : !available.length
       ? "No active repositories are available here. Check your GitHub access or ask your workspace admin; private repositories are available only in private chat."
       : !repositories.length
-        ? "No matching active repositories. Try /repos <name>."
-        : `Choose a repository for this conversation.\nRecently mentioned first, then latest GitHub activity.\nShowing ${repositories.length} of ${available.length} active repositories. Use /repos <name> to search.`;
+        ? "No matching active repositories. Tell me the repository name to search."
+        : `Choose a repository for this conversation.\nRecently mentioned first, then latest GitHub activity.\nShowing ${repositories.length} of ${available.length} active repositories. Tell me a repository name to search.`;
   const buttons = repositories.map((r) => [
     {
       text: `${r.id === selected?.id ? "✓ " : ""}${r.full_name}`,
@@ -93,7 +93,7 @@ export function selectRepository(w: Workspace, u: Update, botId: string) {
     "access_denied",
     403,
   );
-  const match = /^repo:(\d+):(clear|[1-9]\d*)$/.exec(c.data);
+  const match = /^repo:(-?\d+):(clear|[1-9]\d*)$/.exec(c.data);
   requireThat(match, "repository_menu_expired", 409);
   const actor = String(c.from.id),
     chatId = String(c.message.chat.id),

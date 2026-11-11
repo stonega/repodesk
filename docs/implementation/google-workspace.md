@@ -24,7 +24,7 @@ Google Cloud. Select the project that owns the saved OAuth client and choose
 **Enable** for each API. Successful sign-in and consent do not enable APIs. A
 `403` with `SERVICE_DISABLED` or `accessNotConfigured` means the affected API is
 disabled for that project: enable it, allow a few minutes for propagation, then
-retry the Gmail request or `/google properties`. Reconnecting alone does not
+retry the Gmail request or a Search Console property request. Reconnecting alone does not
 resolve a disabled API.
 
 Saving a blank secret preserves the existing secret for the same client ID.
@@ -34,13 +34,15 @@ blocks reads and new connections; it does not disconnect members from other work
 
 ## Member connection in Telegram
 
-In the bot's private chat, select the workspace when needed and send:
+In the bot's private chat, select the workspace when needed and ask:
 
-- `/google`: show your connected account/status, or offer **Connect Google account**.
-- `/google connect` (also `/google reconnect`): start fresh Google consent.
-- `/google status`: show connection status without starting sign-in.
-- `/google properties`: discover and select your Search Console properties.
-- `/google disconnect`: remove only your local connection and pending flows.
+- “Show my Google account status” to inspect the connection.
+- “Connect my Google account” or “Reconnect Google” to start fresh consent.
+- “Choose my Search Console properties” to discover and select properties.
+- “Disconnect my Google account” to remove your connection and pending flows.
+
+`manage_telegram` dispatches these requests to the same authorized control handlers.
+Legacy typed shortcuts remain accepted but no command menu is published.
 
 The consent link expires after ten minutes. Follow it in a browser, choose the
 Google account and grant all five read scopes. The callback requires no admin-panel
@@ -49,7 +51,7 @@ is yours, or **Reject**. Browser consent alone grants no runtime access. Confirm
 binds the encrypted tokens to the initiating Telegram member, workspace and bot.
 When consent starts in a private Telegram topic, the browser callback sends the
 confirmation to that same topic. Older pending flows without a saved topic keep
-their General-topic destination; start `/google connect` again to use the current topic.
+their General-topic destination; ask to reconnect Google again to use the current topic.
 Reconnect replaces only that member's connection and clears their Search Console
 selection. Disconnect does not disable the shared plugin or other members' accounts.
 Revoke provider authorization separately from Google's account connections page.
