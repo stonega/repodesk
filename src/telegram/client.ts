@@ -141,6 +141,12 @@ export class TelegramClient implements Telegram {
       throw new TelegramError("telegram_invalid_response", "unknown");
     }
     if (!body.ok) {
+      if (
+        (method === "sendMessage" || method === "sendRichMessage") &&
+        body.error_code === 400 &&
+        /^Bad Request: message thread not found$/i.test(body.description ?? "")
+      )
+        throw new TelegramError("telegram_thread_not_found", "permanent");
       // Classify only known edit failures; never persist Telegram's raw description.
       if (
         (method === "editMessageText" || method === "editMessageReplyMarkup") &&

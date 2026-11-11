@@ -2226,7 +2226,13 @@ Use this format for each preference:
   thread management, after rejecting separate new/recent conversation controls.
 - **Exceptions:** Private messages without a topic retain the existing reply-based
   compatibility behavior. Cross-topic history may be explicitly retrieved as reference;
-  it does not change the active topic or merge conversations.
+  it does not change the active topic or merge conversations. On 2026-11-10, after
+  being told Telegram rejected the private Topic and main-chat routing was the
+  workaround, the user requested "fix it". For that explicitly consenting member,
+  confirmed Topic rejections may recover ordinary replies in the same private
+  chat with a brief explanation and a receipt of the actual destination. This
+  exception does not apply to other members, groups, controls or uncertain sends;
+  it does not merge Topic history or authorize a general routing change.
 
 ### Keep discussion management inside a Topic implicit
 

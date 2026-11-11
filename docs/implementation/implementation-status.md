@@ -94,6 +94,49 @@ The isolated upstream commit preparation additionally passed **1,445 tests acros
 153 files**, lint, strict types, build and the Node runtime contract. Deployment
 uses a separately verified snapshot based on the current production source.
 
+## Standard text for private Topic recovery (2026-11-10)
+
+The explicitly opted-in main-chat recovery now uses `sendMessage` with existing
+text entities, including links. The user confirmed a plain main-chat diagnostic
+visible; this change chooses that transport for recovery without attributing the
+native Topic outage to rich formatting. The decision is persisted before sending
+and applies to rich intents queued by an older worker. Native Topic routing and
+ordinary rich replies keep their existing behavior. See
+[the recovery contract](telegram-topic-fallback.md).
+
+All 1,479 deterministic tests, lint, types, build and exact-image runtime/Compose/
+restore checks pass. Release `1794305442311-77002991` is deployed. A saved answer's
+standard-text main-chat delivery is API-confirmed without rerunning its model;
+its user-visible acceptance is pending. The independent plain diagnostic is
+user-confirmed visible. Native Topic restoration remains blocked externally.
+
+## Scoped private Topic delivery recovery (2026-11-10)
+
+Ordinary run results/failures can recover from a confirmed Telegram 400
+`message thread not found` into the same member's main private chat, after explicit
+member consent recorded by the host operator. Default routing stays Topic-bound.
+Bot-bound consent and current access are rechecked after worker restart; unknown
+sends are never replayed. Delivery receipts preserve the logical Topic and record
+the actual send destination. See [operation and boundaries](telegram-topic-fallback.md).
+
+All 1,478 deterministic tests, lint, types, build, offline runtime and exact-image
+Compose/restore checks pass. Release `1794301988625-49496411` is deployed; Telegram
+accepted the existing saved answer in the opted-in main private chat (HTTP 200),
+with its original logical Topic preserved and actual destination recorded. The
+original Topic remains rejected; missing upstream input is not recovered.
+
+## Incoming Telegram rich-message text (2026-11-10)
+
+Normalize displayed incoming rich-message content before the webhook/polling
+schema strips unknown fields. Private Topic paragraphs, formatted text, edits and
+replied-to references use the existing bounded text/entity route. Legacy text and
+captions take precedence. Hidden URLs, buttons, widgets and quoted commands or
+mentions grant no additional authority. Membership, audience, provenance and
+duplicate-update checks remain enforced. Production-composition regressions cover
+authenticated rich input through deterministic execution and Topic delivery,
+including duplicates and inactive members. Native Telegram confirmation remains
+pending; see the [incident record](../../postmortem/2026-11-10-telegram-rich-input.md).
+
 ## Telegram bot token format errors provide recovery guidance (2026-11-10)
 
 Bot-token format validation now belongs to the credentials field schema, keeping

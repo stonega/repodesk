@@ -123,3 +123,15 @@ Review Bot 额外检查 HTTPS webhook、secret、事件订阅和 GitHub delivery
 ## 升级或恢复后异常
 
 检查磁盘、迁移结果、镜像版本一致性、Compose 项目名以及是否沿用原密钥和数据卷。不要重新生成密钥、删除卷或直接回退数据库。按 [备份与恢复](maintenance.md) 核对后再恢复写入。
+
+
+## “Message thread not found” in a private Topic
+
+Telegram can reject replies to a private Topic even when a request reaches the bot.
+Ask your host operator to check the run's delivery error separately from model
+execution. If you request it, the operator can enable recovery of ordinary answers
+in your main private chat. Look in the bot's **All messages** view. Recovery uses standard text delivery and
+explains why the answer appears there. The native Topic can remain unavailable.
+This setting applies only to your current workspace and bot. It does not recover
+messages Telegram never delivered to the bot. Group replies, buttons and uncertain
+sends stay excluded. Ask the operator to disable recovery when it is no longer needed.

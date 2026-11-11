@@ -44,6 +44,59 @@ its archive listing verifies. Source archives, quality logs, image IDs and
 version remains v0.1.46; no dependency or SQL migration was added. No manual
 Telegram message, live model inference or replay of historical requests was used.
 
+## Standard text recovery deployed (2026-11-10)
+
+Bundle `1794305442311-77002991` deploys source
+`ac7abf189f0599bcdeda8ce6bd3c2e548d999dde` over
+`1794301988625-49496411`. The user confirmed a plain main-chat diagnostic visible.
+Opted-in recovery now persists standard `sendMessage` text delivery before sending,
+including rich fallback intents queued by the previous worker. Links and text
+entities are preserved. This is a conservative transport choice, not an established
+rich-format root cause or a repair of Telegram's native Topic outage.
+
+All **1,479 tests across 158 files**, lint, strict types, build and the local offline
+runtime contract pass. Exact-image startup, CPU speech, Code Truth, Compose
+readiness/configuration, migration rerun and backup/restore checks pass. All 55
+running artifacts and public/loopback assets verify. The backup is
+`backups/pre-release-1794305442311-77002991.dump` (125,821 bytes). Configuration,
+credentials, model/budget choices and persistent volumes are preserved.
+
+A previously confirmed-failed saved answer was retried through the production
+DeliveryWorker. Its original Topic returned HTTP 400; the standard-text main-chat
+send returned HTTP 200 and a confirmed remote ID. The receipt records markdown
+text delivery, logical Topic `1997139` and actual `deliveredTopicId: 0`. Model
+attempts are unchanged. User visibility confirmation of this recovered answer is
+pending; the separate plain diagnostic was confirmed visible. No sent or unknown
+answer was reset or automatically replayed.
+
+## Private Topic recovery deployed and delivered (2026-11-10)
+
+Bundle `1794301988625-49496411` deploys source
+`8b518732ec0a5d21ca7cf97705c2a6dd85f4d005` over
+`1794297677476-38110726`. After the user explicitly requested the main-chat
+workaround, an audited opt-in was enabled for the sole verified active member and
+current bot. The saved successful answer was retried through the production
+DeliveryWorker: its original Topic returned HTTP 400, and the same intent's
+main-private-chat attempt returned HTTP 200 with a confirmed remote message ID.
+The receipt is `sent`, preserves logical Topic `1997120`, records
+`deliveredTopicId: 0`, and retains one model attempt; the model was not rerun.
+The original Telegram Topic remains unavailable. This does not recover input
+Telegram never delivered. Future ordinary replies can use the scoped fallback;
+groups, controls and uncertain sends remain excluded.
+
+All **1,478 tests across 158 files**, lint, strict TypeScript, build and the local
+runtime contract pass. Exact-image checks include the 16-case offline startup
+contract with zero external startup calls, CPU speech imports, Code Truth smoke,
+Compose validation/readiness, migration rerun and backup/restore. All 55 deployed
+artifacts and public/loopback assets verify. All five services are healthy;
+configuration, credentials, persistent mounts and native Browser state are
+preserved. The protected pre-cutover dump is
+`backups/pre-release-1794301988625-49496411.dump` (122,561 bytes).
+Release and recovery receipts remain in the protected release directory. No
+frontend interaction was changed; the existing run details expose the additional
+receipt metadata. The divergent original development branch and index were not
+changed by the isolated release commit.
+
 ## Browser chat repair deployment (2026-11-02)
 
 The authorized repair promoted release `41406054824-1` from source
