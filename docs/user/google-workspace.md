@@ -21,30 +21,31 @@ pages. Check that Google Cloud has the project that owns your OAuth client selec
 then choose **Enable** for each API. Successful Google sign-in and consent do not
 enable APIs.
 
-If Gmail or `/google properties` fails with `403` and `SERVICE_DISABLED` or
+If Gmail or a Search Console property request fails with `403` and `SERVICE_DISABLED` or
 `accessNotConfigured`, enable the affected API in that project, wait a few minutes
 for the change to take effect, then retry the request. Reconnecting alone does not
 fix a disabled API.
 
 ## Connect your account in Telegram
 
-1. Select the workspace in the bot's private chat, send `/google` and choose **Connect Google account**.
+1. Select the workspace in the bot's private chat, ask “Connect my Google account”.
 2. Choose your Google account in the browser and grant the five listed read permissions.
 3. Return to Telegram, verify that the displayed account is yours and choose **Connect account**. Choose **Reject** if it is the wrong account.
-4. To use Search Console, send `/google properties`, select properties and choose **Save**.
+4. To use Search Console, ask “Choose my Search Console properties”, select properties and choose **Save**.
 
 Connection links and property selections expire after ten minutes. Browser sign-in
 still requires confirmation in Telegram; no admin-panel login is needed. Google's
 app verification, Workspace policies and test-user restrictions still apply.
 When you start in a private Telegram topic, return to that topic for confirmation.
 If an older installation sends the confirmation to General, open that topic and
-choose **Connect account** there. If the attempt expired, send `/google connect`
+choose **Connect account** there. If the attempt expired, ask “Reconnect my Google account”
 and complete both browser sign-in and Telegram confirmation again.
 
-- `/google` or `/google status`: show your account and status in the current workspace.
-- `/google connect`: connect or reconnect; select Search Console properties again afterward.
-- `/google properties`: select up to 20 of your Search Console properties across pages; **Save** commits the selection and **Cancel** discards the draft.
-- `/google disconnect`: remove your connection in the current workspace without affecting other members or workspaces.
+- Ask “Show my Google account status” to check the current connection.
+- Ask “Reconnect Google” to sign in again; select Search Console properties afterward.
+- Ask “Choose my Search Console properties” to select up to 20 across pages;
+  **Save** commits the selection and **Cancel** discards the draft.
+- Ask “Disconnect my Google account” to remove your connection in this workspace.
 
 To revoke authorization at Google, visit [Google account connections](https://myaccount.google.com/connections).
 
@@ -70,6 +71,6 @@ reused; if prompted to reuse a legacy client, open **Edit** and save once. Old
 workspace-shared accounts and service accounts no longer provide access; each
 member must connect their own account.
 
-If **Reconnect required** appears, send `/google connect`, authorize and confirm.
+If **Reconnect required** appears, ask “Reconnect my Google account”, authorize and confirm.
 If the application is disabled or incomplete, ask an administrator to check
 **Plugins → Google**.

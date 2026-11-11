@@ -21,6 +21,7 @@ import type { SetupService } from "../setup/service.ts";
 import { TelegramCommandMenu } from "../telegram/commands.ts";
 import { queuedRunFeedback } from "../telegram/feedback.ts";
 import { TelegramPoller } from "../telegram/polling.ts";
+import { Ingress } from "../telegram/webhook.ts";
 import { TranscriptionService } from "../transcription/service.ts";
 import { tick } from "../workflows/service.ts";
 import { deliverAccessHelp } from "./control.ts";
@@ -97,6 +98,7 @@ export async function startWorker(
     runner,
     runTimeoutSeconds * 1000,
     transcription,
+    new Ingress(store, setup, githubUsers, google, searchConsole),
   );
   const delivery = new DeliveryWorker(store, setup);
   const shutdown = new AbortController();

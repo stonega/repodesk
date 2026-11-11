@@ -467,13 +467,11 @@ Implemented locally, 2026-10-05. Apply `012_github_users.sql` through the normal
 migration command before starting the updated app and worker. No new dependencies
 or webhook subscriptions are required; the existing GitHub App callback URL is reused.
 
-An active workspace member sends
-`/github connect` in the bot's private chat. The bot supplies a ten-minute GitHub
+An active workspace member asks “Connect my GitHub account” in the bot's private chat. The bot supplies a ten-minute GitHub
 App authorization link with PKCE. After GitHub returns, the member must confirm the
 identified GitHub account using a button in that same Telegram account's private
 chat. Browser authorization alone never links an account. Group commands cannot
-produce authorization links. With multiple workspaces, select one using
-`/workspace <id>` first. No panel login or extra RepoDesk account is needed.
+produce authorization links. With multiple workspaces, ask to switch to the intended workspace first. No panel login or extra RepoDesk account is needed.
 
 The link records GitHub's stable numeric user ID, login and repository permission
 snapshot on the workspace member. Members & access displays these details.
@@ -494,8 +492,7 @@ Other GitHub read/issue paths retain the existing unlinked operator policy. Link
 adds the upstream boundary; disconnect never restores unrestricted repository access.
 
 The worker refreshes each account about every five minutes, in bounded batches
-independently of Telegram polling and job maintenance. `/github sync` refreshes
-immediately unless GitHub has imposed a retained rate-limit cooldown. Snapshots
+independently of Telegram polling and job maintenance. “Refresh my GitHub permissions” refreshes immediately unless GitHub has imposed a retained rate-limit cooldown. Snapshots
 older than ten minutes, workspace connection revisions that
 have changed, missing permission fields and failed API calls deny linked repository
 access. Temporary API failures keep the last confirmed snapshot as comparison data,

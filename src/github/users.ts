@@ -257,7 +257,7 @@ export class GitHubUsers {
       w,
       actor,
       actor,
-      `GitHub account ${access.login} connected. Permissions synced for ${access.repositories.length} selected repositories. Use /github sync to refresh or /github disconnect to unlink.`,
+      `GitHub account ${access.login} connected. Permissions synced for ${access.repositories.length} selected repositories. Ask me to refresh GitHub permissions or disconnect your account.`,
     );
   }
   async sync(sql: Sql, w: Workspace, actor: string) {

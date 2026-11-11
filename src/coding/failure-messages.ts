@@ -17,11 +17,11 @@ const messages: Record<string, string> = {
   github_user_access_unavailable:
     "GitHub access could not be verified. RepoDesk will retry automatically; new execution and PR publication wait until access is verified.",
   github_user_connection_required:
-    "Send /github in this bot's private chat to connect your GitHub account. Follow the authorization link, then return to the bot and confirm your account. Start again by resending your request after connecting.",
+    "Ask me to connect your GitHub account in this bot's private chat. Follow the authorization link, then return to the bot and confirm your account. Start again by resending your request after connecting.",
   github_default_branch_unavailable:
     "GitHub's default branch is unavailable. Ask the workspace operator to refresh the GitHub connection, then start a new request.",
   github_user_access_denied:
-    "The linked GitHub account does not have the required repository access. Run /github sync in your private bot chat, or reconnect with /github connect. Start a new request after access is restored.",
+    "The linked GitHub account does not have the required repository access. Ask me to refresh GitHub permissions or reconnect GitHub in your private bot chat. Start a new request after access is restored.",
   coding_conversation_failed:
     "Codex could not complete the conversation. Ask the workspace administrator to inspect the task before trying again.",
   coding_codex_failed: "The Codex process stopped before completing the task.",
@@ -59,7 +59,7 @@ const messages: Record<string, string> = {
   github_repository_not_connected:
     "This repository is not connected to the workspace. Ask the workspace operator to check its GitHub connection.",
   coding_maintainer_required:
-    "You do not have coding access to this repository. Check your repository permissions in GitHub, then run /github sync in your private bot chat.",
+    "You do not have coding access to this repository. Check your repository permissions in GitHub, then ask me to refresh GitHub permissions in your private bot chat.",
 
   coding_configuration_changed:
     "Coding settings changed during this task. Ask the workspace administrator to review them before a new request.",

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { ZodError } from "zod";
 import { activeBrowserTask, browserTaskControl } from "../browser/tasks.ts";
 import { codingFailureMessage } from "../coding/failure-messages.ts";
@@ -7,6 +8,7 @@ import type { Store } from "../db/repositories.ts";
 import {
   type Deployment,
   Fault,
+  type Run,
   requireThat,
   timezone,
   type Workspace,
@@ -57,6 +59,116 @@ export class Ingress {
     private google?: GoogleService,
     private searchConsole?: SearchConsoleService,
   ) {}
+  async chatAction(
+    sql: Sql,
+    w: Workspace,
+    run: Run,
+    callId: string,
+    action: string,
+    args: string,
+  ) {
+    const d = await this.store.deployment(sql);
+    requireThat(d.active && !d.paused && d.bot, "deployment_paused", 409);
+    const source = w.messages.find(
+      (m) =>
+        m.id ===
+        `${run.chatId === run.actor ? `${d.bot?.id}:` : ""}${run.chatId}:${run.replyTo}`,
+    );
+    requireThat(
+      !run.workflowId &&
+        !run.pendingInputs?.length &&
+        (!run.followup || run.followup.decision === "reply") &&
+        source &&
+        source.author === run.actor &&
+        source.role !== "assistant" &&
+        !source.forwarded &&
+        source.topicId === run.topicId &&
+        Date.parse(source.expiresAt) > Date.now(),
+      "chat_request_unverified",
+      403,
+    );
+    authorize(w, run.actor);
+    requireThat(
+      [
+        "help",
+        "repos",
+        "github",
+        "google",
+        "status",
+        "cancel",
+        "automations",
+        "remember",
+        "memory",
+        "usage",
+        "settings",
+        "privacy",
+        "timezone",
+        "capture",
+        "linktoken",
+        "workspace",
+        "correct",
+      ].includes(action),
+      "invalid_request",
+    );
+    if (action === "correct")
+      requireThat(args.startsWith("save "), "invalid_request");
+    if (action === "workspace") {
+      requireThat(run.chatId === run.actor, "use_private_chat", 403);
+      if (!args) {
+        const choices = await sql.query(
+          "SELECT id,data->'settings'->>'name' AS name FROM workspaces WHERE NOT (data ? 'deletion') AND EXISTS (SELECT 1 FROM jsonb_array_elements(data->'members') m WHERE m->>'id'=$1 AND m->>'active'='true') ORDER BY id",
+          [run.actor],
+        );
+        return { workspaces: choices.rows };
+      }
+      const target = await this.store.read(args, sql);
+      authorize(target, run.actor);
+      await sql.query(
+        "INSERT INTO telegram_selections(actor,workspace_id) VALUES($1,$2) ON CONFLICT(actor) DO UPDATE SET workspace_id=excluded.workspace_id",
+        [run.actor, target.id],
+      );
+      return {
+        selectedWorkspace: { id: target.id, name: target.settings.name },
+      };
+    }
+    // Negative IDs are reserved for internal controls; real updates are nonnegative.
+    // Stable per tool call, short enough for Telegram's 64-byte callback limit.
+    const updateId =
+      -createHash("sha256")
+        .update(`${run.id}:${callId}`)
+        .digest()
+        .readUIntBE(0, 6) - 1;
+    const update: Update = {
+      update_id: updateId,
+      message: {
+        message_id: Number(run.replyTo),
+        date: Math.floor(Date.now() / 1000),
+        from: { id: Number(run.actor), is_bot: false },
+        chat: {
+          id: Number(run.chatId),
+          type: run.chatId === run.actor ? "private" : "supergroup",
+        },
+        message_thread_id: run.topicId || undefined,
+        reply_to_message: run.replyAnchor
+          ? { message_id: run.replyAnchor }
+          : undefined,
+        text: `/${action}${args ? ` ${args}` : ""}`,
+        entities: [
+          { type: "bot_command", offset: 0, length: action.length + 1 },
+        ],
+      },
+    };
+    const before = new Set(w.deliveries.map((d) => d.id));
+    if (
+      !(await this.handleControl(sql, w, update, d, false, undefined, run.id))
+    )
+      await this.handleMessage(sql, w, update, d, true);
+    return {
+      delivered: w.deliveries
+        .filter((d) => !before.has(d.id))
+        .map((d) => ({ text: d.text, interactive: !!d.buttons?.length })),
+    };
+  }
   async accept(update: Update) {
     const d = await this.store.deployment();
     requireThat(d.bot, "bot_not_configured", 503);
@@ -132,7 +244,7 @@ export class Ingress {
             });
             await this.store.save(sql, workspace);
             callbackText =
-              "You already have access. Send /help to get started.";
+              "You already have access. Tell me what you want to do, or ask for help.";
           } else {
             try {
               const request = requestAccess(workspace, {
@@ -201,7 +313,7 @@ export class Ingress {
             workspace,
             actor,
             actor,
-            "You have access. Send /help to get started.",
+            "You have access. Tell me what you want to do, or ask for help.",
             {
               id: `event:${update.update_id}:access`,
               topicId: msg.message_thread_id,
@@ -333,7 +445,7 @@ export class Ingress {
         const fallback = update.callback_query.data?.startsWith("google_")
           ? "accepted" in result && result.accepted
             ? ""
-            : "This Google control expired or is unavailable. Send /google in this private chat."
+            : "This Google control expired or is unavailable. Ask me to manage your Google account in this private chat."
           : /^(?:t[rcd][cs]:|repo:)/.test(update.callback_query.data ?? "")
             ? ""
             : "Request checked. See the bot or admin panel for status.";
@@ -398,6 +510,24 @@ export class Ingress {
       u.callback_query?.message?.chat;
     const cmd = message && d.bot ? command(message, d.bot) : undefined;
     let id: string | undefined;
+    if (
+      u.callback_query?.data?.startsWith("workspace:") &&
+      actor &&
+      c?.type === "private" &&
+      String(c.id) === String(actor) &&
+      !u.callback_query.from.is_bot &&
+      !u.callback_query.message?.sender_chat
+    ) {
+      const selectedId = u.callback_query.data.slice(10);
+      requireThat(/^[0-9a-f-]{36}$/.test(selectedId), "invalid_request");
+      const selected = await this.store.read(selectedId, sql, true);
+      authorize(selected, String(actor));
+      await sql.query(
+        "INSERT INTO telegram_selections(actor,workspace_id) VALUES($1,$2) ON CONFLICT(actor) DO UPDATE SET workspace_id=excluded.workspace_id",
+        [String(actor), selected.id],
+      );
+      return selected;
+    }
     const requestedId = u.callback_query?.data?.startsWith("request_access:")
       ? u.callback_query.data.slice(15)
       : cmd?.name === "start" && cmd.args.startsWith("access_")
@@ -513,11 +643,20 @@ export class Ingress {
     d: Deployment,
     verifiedAdmin: boolean,
     visibleAll?: boolean,
+    excludeRunId?: string,
   ) {
     if (d.bot && (await selectDevelopment(sql, w, u, d.bot.id))) return true;
     if (d.bot && (await selectTaskControl(sql, w, u, d.bot.id))) return true;
     const msg = u.message;
-    const cmd = msg && d.bot ? command(msg, d.bot) : undefined;
+    let cmd = msg && d.bot ? command(msg, d.bot) : undefined;
+    // A direct stop must also work while the current model is busy or unavailable.
+    if (
+      cmd?.name === "ask" &&
+      /^(?:(?:please\s+)?(?:stop|cancel)(?:\s+(?:please|it|this|the\s+(?:task|request)))?|停止|取消)[.!。！]?$/i.test(
+        cmd.args.trim(),
+      )
+    )
+      cmd = { name: "cancel", args: "" };
     const actor = msg?.from && String(msg.from.id);
     if (msg && browserTaskControl(w, u, d, msg, cmd)) return true;
     if (
@@ -525,7 +664,7 @@ export class Ingress {
       msg &&
       cmd &&
       eligible(w, actor ?? "") &&
-      (await taskControl(sql, w, u, d.bot.id, msg, cmd))
+      (await taskControl(sql, w, u, d.bot.id, msg, cmd, excludeRunId))
     )
       return true;
     if (
@@ -572,7 +711,7 @@ export class Ingress {
         w,
         actor,
         actor,
-        `Identity verified for ${w.settings.name}. Sign in again to the panel. Timezone: ${w.settings.timezone}. Confirm with /timezone ${w.settings.timezone}.`,
+        `Identity verified for ${w.settings.name}. Sign in again to the panel. Timezone: ${w.settings.timezone}. Ask me to change it if needed.`,
       );
       return true;
     }
@@ -593,19 +732,23 @@ export class Ingress {
       if (cmd.args === "disconnect") {
         await this.githubUsers.disconnect(sql, w, actor);
         text =
-          "GitHub account disconnected. Send /github connect to authorize again.";
+          "GitHub account disconnected. Ask me to connect GitHub to authorize again.";
       } else if (cmd.args === "sync") {
         const access = await this.githubUsers.sync(sql, w, actor);
         text =
           access.status === "connected"
             ? `GitHub permissions synced for ${access.repositories.length} selected repositories.`
-            : "GitHub permissions could not be synced. Repository access is blocked. Send /github connect to authorize again.";
+            : "GitHub permissions could not be synced. Repository access is blocked. Ask me to reconnect GitHub to authorize again.";
       } else if (!cmd.args || cmd.args === "connect") {
         const url = await this.githubUsers.begin(sql, w, actor, d.bot.id);
         text = `Connect your GitHub account within 10 minutes:\n${url}\nThen return here to confirm your account.`;
       } else
-        text = "Use /github to connect, /github sync or /github disconnect.";
-      deliver(w, actor, actor, text, { id: `event:${u.update_id}:github` });
+        text =
+          "Ask me to connect GitHub, refresh your GitHub permissions or disconnect your account.";
+      deliver(w, actor, actor, text, {
+        id: `event:${u.update_id}:github`,
+        topicId: msg.message_thread_id,
+      });
       return true;
     }
     const githubCallback = u.callback_query;
@@ -732,6 +875,27 @@ export class Ingress {
     }
     if (u.callback_query) {
       const callback = u.callback_query;
+      if (callback.data?.startsWith("workspace:")) {
+        const sender = String(callback.from.id);
+        authorize(w, sender);
+        requireThat(
+          callback.message?.chat.type === "private" &&
+            String(callback.message.chat.id) === sender,
+          "use_private_chat",
+          403,
+        );
+        deliver(
+          w,
+          sender,
+          sender,
+          `Selected ${w.settings.name}. Tell me what you want to do.`,
+          {
+            topicId: callback.message.message_thread_id,
+            id: `event:${u.update_id}:workspace`,
+          },
+        );
+        return true;
+      }
       const [action, id] = callback.data?.split(":") ?? [];
       if (id && ["approve", "reject"].includes(action ?? "")) {
         const sender = String(callback.from.id);
@@ -782,6 +946,7 @@ export class Ingress {
     w: Workspace,
     u: Update,
     d: Deployment,
+    controlOnly = false,
   ) {
     const msg = u.message ?? u.edited_message;
     if (!msg || msg.from?.is_bot || msg.sender_chat || !msg.from || !d.bot)
@@ -794,7 +959,8 @@ export class Ingress {
     const text = messageText(msg);
     const chat = w.chats.find((c) => c.id === chatId && c.active);
     if (msg.chat.type !== "private" && !chat) return;
-    if (await routeDevelopment(sql, w, u, d.bot.id, msg, cmd)) return;
+    if (!controlOnly && (await routeDevelopment(sql, w, u, d.bot.id, msg, cmd)))
+      return;
     const sourceId = `${msg.chat.type === "private" ? `${d.bot.id}:` : ""}${chatId}:${msg.message_id}`;
     if (u.edited_message) {
       const previous = w.messages.find(
@@ -826,8 +992,9 @@ export class Ingress {
     const forwardAnchor =
       cmd?.name === "ask" ? privateForwardAnchor(w, msg, d.bot.id) : undefined;
     if (
-      (eligible(w, actor) && cmd) ||
-      (chat?.collection && (text || attachments.length))
+      !controlOnly &&
+      ((eligible(w, actor) && cmd) ||
+        (chat?.collection && (text || attachments.length)))
     ) {
       if (
         (text || attachments.length) &&
@@ -873,7 +1040,7 @@ export class Ingress {
       case "start":
       case "help":
         reply(
-          `RepoDesk · ${w.settings.name}\nTimezone: ${w.settings.timezone}\n/ask <request>, /repos [name], /recap, /status, /cancel [reference], /automations, /memory, /usage, /privacy\n/repos selects a repository for this chat/topic; recently mentioned repositories appear first.\nGitHub: /github (connect), /github sync, /github disconnect (private chat)\nGoogle: /google (connect/status), /google connect, /google properties, /google disconnect (private chat)\nAdmins: /linktoken, /capture on|off, /timezone <IANA>, /remember <instruction>\nIn groups, mention me or reply to start; clear follow-ups within five minutes can continue without mentioning me when Telegram delivers ordinary messages. Send photos, image files, UTF-8 text/code files or selectable-text PDFs with a caption describing your request. In private Topics, just send messages to continue the topic's conversation. Use Telegram Topics to separate conversations. While an answer is running, send additional messages to continue it. Outside Topics, standalone messages start new conversations after the answer finishes; reply to an answer or your own message to continue it. Ordinary answers do not quote a message unless a specific reference needs emphasis. For configured Codex repositories, ask for a change in your own words. Reply to a current task question to answer it directly. Other Topic messages go to the assistant, which handles conversation and review requests and passes clear code changes to the matching task; /status checks the bound task and /cancel or stop cancels it. Direct execution follows the repository's saved policy. Context contains only received retained messages. Access is managed in the admin panel. /workspace <id> selects a workspace.`,
+          `RepoDesk · ${w.settings.name}\nTimezone: ${w.settings.timezone}\nTell me what you want to do in your own words. Ask me to choose a repository, connect your GitHub or Google account, check or stop a task, manage schedules, remember an instruction, show usage, change settings or explain privacy. Account connections are private; sign-in and approval buttons appear when needed.\nIn groups, mention me or reply to me. In private Topics, send messages directly to continue; use separate Telegram Topics for separate conversations. Outside Topics, reply to a previous message to continue it. You can send additional details while I work, or use Telegram Stop. Send supported photos, recordings, text/code files or PDFs with your request. Access and shared integrations are managed in the admin panel.`,
         );
         break;
       case "workspace":
@@ -900,7 +1067,7 @@ export class Ingress {
           expiresAt: new Date(Date.now() + 600000).toISOString(),
         });
         reply(
-          `As a Telegram group admin, send \`/link ${raw}\` in the intended group within 10 minutes. Linking enables collection of received group messages; you can disable it in Group access.`,
+          `As a Telegram group admin, open this link and choose the intended group within 10 minutes:\nhttps://t.me/${d.bot.username}?startgroup=link_${raw}\nLinking enables collection of received group messages; you can disable it in Group access.`,
           undefined,
           "markdown",
         );
@@ -964,7 +1131,7 @@ export class Ingress {
                   `${f.id} · ${f.spec.name} · ${f.status} · ${f.nextAt ?? "not scheduled"}`,
               )
               .join("\n") ||
-              "No workflows. Ask me to propose a daily or weekly recap; approve its exact preview before it runs.",
+              "No workflows. Ask me to schedule a daily or weekly recap, including the time and timezone.",
           );
         break;
       }
@@ -1028,7 +1195,7 @@ export class Ingress {
               )
               .map((i) => `${i.id} (${i.scope}, v${i.version}): ${i.body}`)
               .join("\n") ||
-              "No saved instructions. Use /remember to propose one.",
+              "No saved instructions. Ask me to remember an instruction.",
           );
         break;
       }
@@ -1056,7 +1223,7 @@ export class Ingress {
           );
         } else
           reply(
-            `Messages and derived context are retained up to ${w.settings.retentionDays} days. Group collection: ${chat?.collection ? "enabled with consent" : "directed only"}. No old Telegram history. Admins can request workspace deletion in the panel or with /privacy delete in private.`,
+            `Messages and derived context are retained up to ${w.settings.retentionDays} days. Group collection: ${chat?.collection ? "enabled with consent" : "directed only"}. No old Telegram history. Admins can request workspace deletion in the panel or by asking me in private.`,
           );
         break;
       case "correct": {
@@ -1158,7 +1325,9 @@ export class Ingress {
         break;
       }
       default:
-        reply("Unknown command. Use /help.");
+        reply(
+          "Tell me what you want to do in your own words, or ask for help.",
+        );
     }
   }
 }

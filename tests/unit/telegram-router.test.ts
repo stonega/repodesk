@@ -159,3 +159,17 @@ describe("group mentions", () => {
     expect(command(m, bot)).toEqual({ name: "ask", args: `${mention} hi` });
   });
 });
+
+test("Telegram group invitation payloads link without a manually typed command", () => {
+  const m = message("/start link_invitation-token");
+  m.entities = [{ type: "bot_command", offset: 0, length: 6 }];
+  expect(command(m, bot)).toEqual({ name: "link", args: "invitation-token" });
+  m.forward_origin = origins[0];
+  expect(command(m, bot)).toBeUndefined();
+  m.forward_origin = undefined;
+  m.chat = { id: 101, type: "private" };
+  expect(command(m, bot)).toEqual({
+    name: "start",
+    args: "link_invitation-token",
+  });
+});

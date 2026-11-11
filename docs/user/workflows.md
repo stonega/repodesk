@@ -53,33 +53,27 @@ their own Telegram identity. Management actions are audited; existing schedules
 retain their original execution owner. Active membership, linked groups,
 repository access, skills and team budgets still apply.
 
-Telegram 命令：
+Ask in Telegram using ordinary language:
 
 ```text
-/automations
-/automations pause <任务 UUID>
-/automations resume <任务 UUID>
-/automations run <任务 UUID>
-/automations delete <任务 UUID>
+Show my schedules
+Pause the daily recap
+Resume the daily recap
+Run the daily recap now
+Delete the daily recap
 ```
 
-操作需要任务对应权限。暂停后不再触发新的运行；恢复已暂停任务与重新授权被撤权而挂起的任务不同，后者需要重新审批。
+Actions require permission for the selected workflow. Identify the schedule by
+name; clarify which one when several match. Pausing stops future triggers.
+Resuming a paused workflow differs from restoring revoked authorization.
 
-## 调整输出
+## Adjust output
 
-Reply 一条定时输出：
-
-```text
-/correct once 这次改成中文，并把阻塞放在最前面
-```
-
-只生成一次纠正后的结果，不修改未来规则。希望持久生效时：
-
-```text
-/correct save 后续都使用中文，先列阻塞，再列决策和待办
-```
-
-核对并批准持久纠正。未来运行使用新规则，已经执行中的任务保留开始时的版本。也可在面板管理工作流指令。
+Reply to a report: “For this answer, use English and put blockers first”. This
+changes the current answer only. To save a rule, reply: “For future reports, always
+use English and put blockers first”. Review and approve the persistent correction.
+Future runs use the new rule; existing runs keep their original version. Workflow
+instructions are also managed in the panel.
 
 ## 时间、失败和恢复
 

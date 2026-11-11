@@ -217,9 +217,11 @@ test("messages hide unknown codes and expose only verified runner stages", () =>
   );
 });
 
-test("missing GitHub connections explain the private /github flow and request retry", () => {
+test("missing GitHub connections explain the private chat flow and request retry", () => {
   const message = codingFailureMessage("github_user_connection_required");
-  expect(message).toContain("Send /github in this bot's private chat");
+  expect(message).toContain(
+    "Ask me to connect your GitHub account in this bot's private chat",
+  );
   expect(message).toContain("authorization link");
   expect(message).toContain("return to the bot and confirm your account");
   expect(message).toContain("resending your request");

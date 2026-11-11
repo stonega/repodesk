@@ -1,73 +1,48 @@
-# 命令参考
+# Chat requests
 
-`<…>` 表示需要替换的值，`[…]` 表示可选参数，发送时不带括号。UUID、任务引用和机器人用户名以实际消息或面板为准。
+RepoDesk uses ordinary conversation. The bot does not publish a slash-command menu,
+and you do not need to memorize commands. Use your own wording and language; these
+are examples. In groups, mention the bot or reply to it.
 
-## 基础命令
-
-| 命令 | 用途与条件 |
+| Goal | Example request |
 | --- | --- |
-| `/start`、`/help` | 开始使用，查看帮助和限制 |
-| `/ask <问题>` | 发起请求；私聊也可直接发送文字 |
-| `/workspace <UUID>` | 在私聊切换到自己已加入的工作区 |
-| `/repos [名称]` | 选择或搜索有权访问的仓库 |
-| `/status [引用]` | 查看当前或指定请求/任务；多个候选时选择 |
-| `/cancel [引用]` | 停止当前或指定请求/任务；多个候选时选择 |
-| `/settings` | 查看时区、保留期限和设置摘要 |
-| `/usage` | 查看记录的费用、预留金额和月度上限 |
-| `/privacy` | 查看收集、保留和删除说明 |
+| Help | “What can you do?” |
+| Choose or search repositories | “Help me choose a repository” or “Find example/app” |
+| Switch workspace | “Show my workspaces” or “Switch to the Design team” |
+| Connect GitHub | “Connect my GitHub account” in private |
+| Refresh GitHub access | “Refresh my GitHub permissions” in private |
+| Disconnect GitHub | “Disconnect my GitHub account” in private |
+| Connect/reconnect Google | “Connect my Google account” or “Reconnect Google” in private |
+| Google account status | “Which Google account is connected?” in private |
+| Search Console selection | “Choose my Search Console properties” in private |
+| Disconnect Google | “Disconnect my Google account” in private |
+| Check or stop work | “How is that task going?” or “Stop the previous task” |
+| Summarize | “Summarize this Topic's decisions and blockers” |
+| List/manage schedules | “Show my schedules”, “Pause the daily recap” or “Run it now” |
+| Create a schedule | “Every day at 09:00 Asia/Taipei, send me a PR report for example/app” |
+| Correct an answer | Reply: “For this answer, put blockers first” |
+| Save a workflow correction | Reply to its report: “For future reports, put blockers first” |
+| Save an instruction | “Always put blockers first in my weekly reports” |
+| Inspect/edit/forget instructions | “Show my saved instructions” or “Forget the weekly-report instruction” |
+| Recall controls | “What do you remember about this?” or “Disable memory here” |
+| Usage/settings | “Show recorded usage” or “What is our timezone?” |
+| Change timezone | “Change the workspace timezone to Asia/Taipei” (administrator) |
+| Link a group | “Help me link a Telegram group” in private (administrator) |
+| Group collection | “Disable message collection in this group” (administrator) |
+| Privacy | “Explain our retention policy” |
+| Workspace deletion | “Delete this workspace” in private (administrator; confirmation required) |
 
-群内可用 `/ask@your_bot 问题` 明确指定机器人，也可 @提及或 Reply。普通成员需保持活跃身份，具体工具还会检查仓库和操作权限。
+When multiple tasks, instructions or schedules match, identify the intended item
+by its name, reply to its message or use the choices the bot provides. Workspace
+selection is limited to your active memberships. With no workspace selected, the
+bot offers workspace buttons so you can get started without a command.
 
-## GitHub 账号
+Repository choices, account sign-in, **Connect account**, **Approve / Reject** and
+native **Stop** remain available. Browser sign-in alone does not connect an account.
+Normal chat does not grant extra permissions or authorize unrelated writes.
+Explicit schedule requests activate immediately; instruction and external-write
+proposals keep their existing confirmations. See [Telegram usage](telegram-experience.md),
+[GitHub](github.md), [Google](google-workspace.md) and [workflows](workflows.md).
 
-以下命令使用私聊，不在群内发送授权链接。
-
-| 命令 | 用途 |
-| --- | --- |
-| `/github`、`/github connect` | 开始连接；浏览器授权后返回 Telegram 确认账号 |
-| `/github sync` | 刷新权限；上游限流期间可能需要等待 |
-| `/github disconnect` | 断开本人 GitHub，清除有效授权并取消待处理工作 |
-
-参阅 [GitHub 指南](github.md)。
-
-## 群组与总结
-
-| 命令 | 用途与条件 |
-| --- | --- |
-| `/linktoken` | 工作区管理员在私聊获取十分钟有效的一次性关联命令 |
-| `/link <TOKEN>` | 在目标群发送；同时需要工作区和 Telegram 群管理员权限 |
-| `/capture on`、`/capture off` | 管理员开启或关闭收到的普通群消息收集 |
-| `/recap` | 总结授权范围内已接收的消息，无法读取加入前历史 |
-| `/timezone <IANA 时区>` | 管理员确认时区，如 `/timezone Asia/Taipei` |
-
-参阅 [群组与话题](groups.md)。
-
-## 定时任务与纠正
-
-| 命令 | 用途 |
-| --- | --- |
-| `/automations` | 列出当前可见的任务及状态 |
-| `/automations run <UUID>` | 手动执行，需相应权限 |
-| `/automations pause <UUID>` | 暂停任务 |
-| `/automations resume <UUID>` | 按权限和审批状态恢复任务 |
-| `/automations delete <UUID>` | 删除任务 |
-| `/correct once <要求>` | Reply 已交付回复，生成一次纠正后的输出 |
-| `/correct save <要求>` | Reply 定时输出，提出持久纠正，确认后用于后续运行 |
-
-创建任务用自然语言说明时间、时区、来源、目的地和格式，核对提案后批准。当前支持每日、每周重复。参阅 [定时任务与报告](workflows.md)。
-
-## 持久指令
-
-这里的 `/memory` 管理经过确认的指令。自动历史记忆使用 [记忆与隐私](memory-and-privacy.md) 中的自然语言请求管理。
-
-| 命令 | 用途 |
-| --- | --- |
-| `/remember <内容>` | 提出持久指令；私聊为个人范围，群组为工作区范围，需确认 |
-| `/memory` | 列出可见的已保存指令 |
-| `/memory edit <UUID> <新内容>` | 提出替换指令，需确认和相应范围权限 |
-| `/memory forget <UUID>` | 停用指令；共享指令需管理员权限 |
-| `/privacy delete` | 管理员在私聊提出工作区删除请求，再按提示确认 |
-
-## 其他入口
-
-Reply、Topic、原生 Stop 和消息按钮同样是使用入口。命令菜单只列常用项，其他命令仍可输入。发送给其他机器人的命令、机器人自己发出的消息，以及无关群消息，不会触发普通问答。
+Older typed shortcuts remain accepted for compatibility. Telegram's Start and
+invitation links may carry platform command payloads automatically.
