@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { type Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
+import { attemptCost } from "../agent/limits.ts";
 import { credentialsSchema } from "../agent/model-settings.ts";
 import type { PluginService } from "../agent/plugin-service.ts";
 import { modelCapabilities } from "../agent/runtime.ts";
@@ -1304,7 +1305,7 @@ export function adminRoutes(
         );
         return c.json({
           budget: w.settings.monthlyBudgetUsd,
-          totalUsd: attempts.reduce((n, a) => n + (a.actual ?? a.reserved), 0),
+          totalUsd: attempts.reduce((n, a) => n + attemptCost(a), 0),
           ...take(attempts.toReversed()),
         });
       }

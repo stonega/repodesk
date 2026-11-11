@@ -6,6 +6,7 @@ import { expect, type Page, type Route, test } from "@playwright/test";
 import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
 import { encrypt, hash, passwordHash } from "../../src/setup/credentials.ts";
+import { createRun } from "../../src/workspaces/service.ts";
 import { workspace } from "../fixtures.ts";
 import { chooseOption } from "./dropdown-helpers.ts";
 
@@ -83,6 +84,95 @@ async function addProvider(page: Page) {
   return catalog.providers[0].id as string;
 }
 for (const width of [1280, 390]) {
+  test(`missing token prices allow saving and show zero usage at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { w } = await fixture(page);
+    const providerId = await addProvider(page);
+    const chat = page.getByRole("region", { name: "Bot chat model" });
+    await chat.getByRole("button", { name: "Edit chat model" }).click();
+    const editor = page.getByRole("dialog", { name: "Edit chat model" });
+    await chooseOption(
+      editor.getByLabel("Model provider", { exact: true }),
+      providerId,
+    );
+    await chooseOption(
+      editor.getByLabel("Model", { exact: true }),
+      "team/custom-model",
+    );
+    await editor.getByText("Advanced model settings", { exact: true }).click();
+    await expect(editor).toContainText(
+      "Missing token prices count as zero for budgets and usage.",
+    );
+    await expect(
+      editor.getByLabel("Input price (USD / million tokens)"),
+    ).toHaveValue("");
+    await expect(
+      editor.getByLabel("Output price (USD / million tokens)"),
+    ).toHaveValue("");
+    await page.screenshot({
+      path: test.info().outputPath("zero-prices-editor.png"),
+      fullPage: true,
+    });
+    await editor.getByRole("button", { name: "Save chat model" }).click();
+    await expect(editor).toHaveCount(0);
+    await expect(chat).toContainText("team/custom-model");
+    await expect(chat.locator("input, select")).toHaveCount(0);
+    await page.screenshot({
+      path: test.info().outputPath("zero-prices-saved.png"),
+      fullPage: true,
+    });
+    const db = JSON.parse(await readFile(browserDbPath(), "utf8"));
+    const pool = database(db.url);
+    const actor = `8${w.id.replace(/\D/g, "").slice(0, 12).padEnd(12, "0")}`;
+    try {
+      await pool.query("UPDATE admins SET telegram_id=$2 WHERE id=$1", [
+        w.operatorId,
+        actor,
+      ]);
+      await new Store(pool).change(w.id, (saved) => {
+        saved.members.push({ id: actor, role: "owner", active: true });
+        saved.settings.runBudgetUsd = 1;
+        saved.settings.monthlyBudgetUsd = 1;
+        const run = createRun(
+          saved,
+          "101",
+          "hello",
+          "101",
+          0,
+          "team/custom-model",
+        );
+        run.status = "succeeded";
+        run.attempts.push({
+          id: randomUUID(),
+          at: new Date().toISOString(),
+          status: "settled",
+          reserved: 3,
+          pricingUnknown: true,
+        });
+      });
+    } finally {
+      await pool.end();
+    }
+    await page.goto(`/admin/usage?workspace=${w.id}`);
+    const usage = page.getByRole("table", { name: "Usage history" });
+    const row = usage.locator("tbody tr");
+    await expect(row).toHaveCount(1);
+    await expect(
+      page.getByRole("heading", { name: "$0.0000", exact: true }),
+    ).toBeVisible();
+    await expect(row.getByRole("cell").nth(3)).toHaveText("$0.0000");
+    await expect(row.getByRole("cell").nth(4)).toHaveText("$0.0000");
+    await expect(page.locator("#usage-note")).toContainText(
+      "Missing token prices count as zero.",
+    );
+    await expect(page.locator("body")).toHaveJSProperty("scrollWidth", width);
+    await page.screenshot({
+      path: test.info().outputPath("zero-prices-usage.png"),
+      fullPage: true,
+    });
+  });
   test(`provider drafts recover from HTML gateway errors in New and Edit at ${width}px`, async ({
     page,
   }) => {

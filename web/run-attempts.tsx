@@ -40,11 +40,11 @@ export function RunAttempts({ attempts }: { attempts: Run["attempts"] }) {
                       at: attempt.at,
                       reserved:
                         attempt.pricingUnknown && attempt.actual === undefined
-                          ? "Unknown price"
+                          ? 0
                           : attempt.reserved,
                       actual:
                         attempt.pricingUnknown && attempt.actual === undefined
-                          ? "Unknown price"
+                          ? 0
                           : attempt.actual,
                     }}
                   />

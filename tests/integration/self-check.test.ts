@@ -216,66 +216,74 @@ const url = process.env.TEST_DATABASE_URL;
     ).rejects.toMatchObject({ code: "self_check_already_submitted" });
     expect(calls).toBe(1);
   });
-  test("the agent receives only a safe snapshot, no tools, and charges the workspace budget", async () => {
-    await configured();
-    await store.change(w.id, (current) => {
-      current.settings.monthlyBudgetUsd = 1;
-      current.settings.runBudgetUsd = 0.25;
-    });
-    const service = new SelfCheckService(
-      store,
-      setup,
-      fakeRunner(async (input) => {
-        expect(input.tools).toHaveLength(0);
-        expect(input.apiKey).toBe("private-fixture-model-key");
-        expect(input.prompt).not.toContain("private-fixture");
-        expect(input.system).toContain("no action tools");
-        const id = await input.reserve(0.02);
-        await input.checkpoint(
-          {
-            role: "assistant",
-            content: [{ type: "text", text: "Okay" }],
-            api: "openai-completions",
-            provider: "openai",
-            model: "gpt-4.1-mini",
-            timestamp: Date.now(),
-            stopReason: "stop",
-            usage: {
-              input: 10,
-              output: 10,
-              cacheRead: 0,
-              cacheWrite: 0,
-              totalTokens: 20,
-              cost: {
-                input: 0.001,
-                output: 0.002,
+  test.each([0.003, 0])(
+    "the self-check keeps its safe snapshot and settles costs of %s",
+    async (actual) => {
+      await configured();
+      if (actual === 0) {
+        const d = await store.deployment();
+        d.model = "team/unpriced";
+        await store.saveDeployment(store.pool, d);
+      }
+      await store.change(w.id, (current) => {
+        current.settings.monthlyBudgetUsd = actual === 0 ? 0 : 1;
+        current.settings.runBudgetUsd = actual === 0 ? 0 : 0.25;
+      });
+      const service = new SelfCheckService(
+        store,
+        setup,
+        fakeRunner(async (input) => {
+          expect(input.tools).toHaveLength(0);
+          expect(input.apiKey).toBe("private-fixture-model-key");
+          expect(input.prompt).not.toContain("private-fixture");
+          expect(input.system).toContain("no action tools");
+          const id = await input.reserve(actual === 0 ? 0 : 0.02);
+          await input.checkpoint(
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "Okay" }],
+              api: "openai-completions",
+              provider: "openai",
+              model: input.model.id,
+              timestamp: Date.now(),
+              stopReason: "stop",
+              usage: {
+                input: 10,
+                output: 10,
                 cacheRead: 0,
                 cacheWrite: 0,
-                total: 0.003,
+                totalTokens: 20,
+                cost: {
+                  input: actual / 3,
+                  output: (actual * 2) / 3,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                  total: actual,
+                },
               },
             },
-          },
-          id,
-        );
-      }),
-    );
-    const result = await service.reply(
-      admin,
-      w.id,
-      input(),
-      new AbortController().signal,
-    );
-    expect(result.reply).toContain("Operations");
-    const saved = await store.read(w.id);
-    expect(saved.adminChecks?.[0]?.attempts[0]?.actual).toBe(0.003);
-    expect(saved.adminChecks?.[0]?.status).toBe("succeeded");
-    const budget = remainingBudgets(saved, {
-      attempts: [],
-      settings: { ...saved.settings, runBudgetUsd: null },
-    });
-    expect(budget.workspace).toBe(0.997);
-    expect(saved.deliveries).toHaveLength(0);
-  });
+            id,
+          );
+        }),
+      );
+      const result = await service.reply(
+        admin,
+        w.id,
+        input(),
+        new AbortController().signal,
+      );
+      expect(result.reply).toContain("Operations");
+      const saved = await store.read(w.id);
+      expect(saved.adminChecks?.[0]?.attempts[0]?.actual).toBe(actual);
+      expect(saved.adminChecks?.[0]?.status).toBe("succeeded");
+      const budget = remainingBudgets(saved, {
+        attempts: [],
+        settings: { ...saved.settings, runBudgetUsd: null },
+      });
+      expect(budget.workspace).toBe((actual === 0 ? 0 : 1) - actual);
+      expect(saved.deliveries).toHaveLength(0);
+    },
+  );
   test("a zero workspace budget blocks the real Pi provider dispatch but keeps basic checks available", async () => {
     await configured();
     await store.change(w.id, (current) => {

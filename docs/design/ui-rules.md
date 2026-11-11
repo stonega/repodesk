@@ -2020,15 +2020,18 @@ Use this format for each preference:
 
 - **Preference:** Make context window, maximum output and both token prices
   independently optional. Clearing a field restores automatic handling. Known
-  models use catalog metadata; distinguish unknown prices from explicit zero.
+  models use catalog metadata. Missing token prices count as zero for application
+  accounting and budget enforcement.
 - **Scope:** Model selection and advanced settings in setup and the admin panel.
 - **Source:** 2026-10-12 — user requested making all four model settings optional.
   The user clarified that the provider should handle context limits when the
   context window is blank; do not substitute an app context-window cap.
+  On 2026-11-11, the user requested treating missing token prices as zero so
+  finite dollar budgets allow those models to run.
 - **Exceptions:** Unknown models use a documented automatic output allowance,
-  not a claimed provider capability. Finite dollar budgets require known prices; missing prices
-  leave costs unavailable instead of treating the provider as free. Explicit capacity
-  overrides must leave room for input.
+  not a claimed provider capability. Available prices and operator-reconciled
+  charges continue to count toward budgets. Explicit capacity overrides must leave
+  room for input.
 
 ### Model prices have a selectable currency
 

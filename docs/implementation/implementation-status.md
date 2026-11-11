@@ -1,5 +1,37 @@
 # Implementation evidence
 
+## Missing token prices count as zero (2026-11-11)
+
+The operator requested zero-dollar accounting for missing token prices. Pi uses
+each available input, output and cache rate independently, defaulting missing
+rates to zero. Chat, background memory and admin self-check calls allow finite
+and zero-dollar budgets and record settled costs with token counts. Historical
+unpriced calls without reconciled costs count as zero for remaining budgets,
+Telegram cost queries, `/usage`, the Usage API and saved usage displays.
+Known prices and operator-reconciled charges continue to count toward budgets.
+
+The deterministic production-path regression exercises Executor, Pi, PostgreSQL
+accounting and durable delivery with finite/zero budgets, historical unpriced
+usage and duplicate execution. Memory and admin self-check regressions cover
+zero-dollar settlement. The full suite passed **1,412 tests across 151 files**,
+and the final focused memory/self-check run passed all **22 tests**. Biome,
+strict TypeScript, build and the 16-case Node startup contract passed with zero
+external startup calls. Two browser regressions passed at 1280px and 390px, with
+the advanced editor, saved model summary and historical zero-cost Usage records
+visually inspected. No dependency or SQL migration was added.
+
+The authorized VPS rollout deployed source `af5171554df3488563af403f47f58d21e30f3986`
+in bundle `1794367751621-08425833`, based on the previous production source
+`ac7abf1`. That exact release passed **1,482 tests across 158 files** and the
+two focused browser scenarios. The pinned Bun 1.3.14 build image also passed all
+50 pricing/limits/cost-summary unit tests. Exact-image startup, CPU speech imports,
+Code Truth smoke, Compose configuration/readiness, migration rerun and disposable
+backup/restore checks passed. All 55 running artifacts and public/loopback assets
+verify. Public health and readiness return HTTP 200. All five services are healthy.
+The verified pre-cutover backup is `backups/pre-release-1794367751621-08425833.dump`
+(165,882 bytes). The protected release directory retains the source, checksums,
+quality logs and deployment receipt.
+
 ## Member invitation dialog (2026-11-11)
 
 **Groups & Members → Members → New** now opens **Add member** with Telegram

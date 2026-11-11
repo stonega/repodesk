@@ -176,8 +176,8 @@ uses Pi's OpenAI-compatible Chat Completions adapter with operator-configured ba
 URL, custom model ID, encrypted key, thinking level and estimated token prices.
 Known model capacity comes from the bundled Pi catalog; custom IDs have no assumed
 context window and allow up to 16,384 output tokens unless overridden. Capacity and prices
-are independently optional overrides. Missing custom prices remain unknown and
-exclude those calls from dollar totals; finite dollar budgets require known prices.
+are independently optional overrides. Missing token prices count as zero for
+budget enforcement and usage accounting. Known rates apply independently.
 Price overrides optionally include a currency and an operator-entered `usdRate`
 (USD per currency unit). Currency defaults to USD for existing records. The runtime
 converts only entered prices, including the input override used for cache prices;

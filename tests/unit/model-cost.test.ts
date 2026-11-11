@@ -155,11 +155,11 @@ test("unlimited monthly budgets retain usage without inventing a finite remainin
   });
 });
 
-test("unpriced settled calls keep their count, block finite caps and permit verified reconciliation", () => {
+test("historical unpriced calls count as zero under finite budgets and allow verified reconciliation", () => {
   const { w, run } = fixture("303");
   const unpriced = attempt({
     pricingUnknown: true,
-    reserved: 0,
+    reserved: 2,
     actual: undefined,
   });
   run.attempts = [unpriced];
@@ -169,10 +169,8 @@ test("unpriced settled calls keep their count, block finite caps and permit veri
   expect(result.totals.calls).toBe(1);
   expect(result.totals.settledUsd).toBe(0);
   expect(result.unpricedCalls).toBe(1);
-  expect(result.monthlyBudget?.remainingUsd).toBeNull();
-  expect(() => remainingBudgets(w, run, now)).toThrow(
-    "unpriced_usage_requires_reconciliation",
-  );
+  expect(result.monthlyBudget?.remainingUsd).toBe(50);
+  expect(remainingBudgets(w, run, now)).toEqual({ run: 10, workspace: 50 });
   expect(() =>
     reconcileCharge(w, "202", run.id, unpriced.id, 3, "invoice"),
   ).toThrow("access_denied");

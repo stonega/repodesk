@@ -189,6 +189,57 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         ).toHaveLength(1);
       },
     );
+    test("missing memory model prices settle both phases at zero under a zero budget", async () => {
+      const { w, r } = await seed();
+      await store.change(w.id, (saved) => {
+        saved.settings.runBudgetUsd = 0;
+        saved.settings.monthlyBudgetUsd = 0;
+        const parent = saved.runs.find((run) => run.id === r.id);
+        if (!parent) throw Error("missing parent");
+        parent.model = "team/unpriced";
+      });
+      const runner: AgentRunner = {
+        async run(input) {
+          expect(input.model.cost).toEqual({
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+          });
+          const id = await input.reserve(0);
+          const text =
+            input.purpose === "memory_extract" ? extraction : summary(input);
+          const response = message(text);
+          response.usage.cost = {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            total: 0,
+          };
+          await input.checkpoint(response, id);
+          return {
+            text,
+            status: "succeeded",
+            turns: 1,
+            tools: 0,
+            transcript: [],
+          };
+        },
+      };
+      await new MemoryService(store, setup, runner, 0).tick(w.id);
+      const saved = await store.read(w.id);
+      expect(saved.memory?.jobs[0]?.status).toBe("done");
+      expect(saved.runs[0]?.attempts).toHaveLength(2);
+      for (const attempt of saved.runs[0]?.attempts ?? []) {
+        expect(attempt).toMatchObject({
+          status: "settled",
+          reserved: 0,
+          actual: 0,
+        });
+        expect(attempt.tokens?.input).toBe(100);
+      }
+    });
     test("concurrent workers claim the same durable job only once", async () => {
       const { w } = await seed();
       let calls = 0;

@@ -1589,57 +1589,92 @@ suite("PostgreSQL integration (isolated database)", () => {
       expect(saved?.attempts).toHaveLength(error ? 0 : 1);
     }
   });
-  test("unpriced model calls retain token usage without reporting a free charge", async () => {
-    const w = await seed();
-    const r = await store.change(w.id, (v) =>
-      createRun(v, "101", "test", "101", 0, "team/unpriced"),
-    );
-    await new Executor(store, setup, {
-      async run(input) {
-        expect(input.model.pricingKnown).toBe(false);
-        const id = await input.reserve(0);
-        await input.checkpoint(
-          {
-            role: "assistant",
-            content: [{ type: "text", text: "Done" }],
-            api: input.model.api,
-            provider: input.model.provider,
-            model: input.model.id,
-            stopReason: "stop",
-            timestamp: Date.now(),
-            usage: {
-              input: 10,
-              output: 10,
+  test("missing token prices settle at zero with finite budgets through Pi and delivery", async () => {
+    for (const budget of [1, 0]) {
+      const w = await seed();
+      const r = await store.change(w.id, (v) => {
+        v.settings.runBudgetUsd = budget;
+        v.settings.monthlyBudgetUsd = budget;
+        const previous = createRun(
+          v,
+          "101",
+          "earlier",
+          "101",
+          0,
+          "team/unpriced",
+        );
+        previous.status = "succeeded";
+        previous.attempts.push({
+          id: randomUUID(),
+          reserved: 0,
+          status: "settled",
+          pricingUnknown: true,
+          at: new Date().toISOString(),
+        });
+        return createRun(v, "101", "test", "101", 0, "team/unpriced");
+      });
+      let providerCalls = 0;
+      const runner = new PiRunner((model) => {
+        providerCalls++;
+        expect(model.cost).toEqual({
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+        });
+        const message = {
+          role: "assistant" as const,
+          content: [{ type: "text" as const, text: "Done" }],
+          api: model.api,
+          provider: model.provider,
+          model: model.id,
+          stopReason: "stop" as const,
+          timestamp: Date.now(),
+          usage: {
+            input: 10,
+            output: 10,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 20,
+            cost: {
+              input: 0,
+              output: 0,
               cacheRead: 0,
               cacheWrite: 0,
-              totalTokens: 20,
-              cost: {
-                input: 0,
-                output: 0,
-                cacheRead: 0,
-                cacheWrite: 0,
-                total: 0,
-              },
+              total: 0,
             },
           },
-          id,
-        );
-        return {
-          text: "Done",
-          status: "succeeded",
-          turns: 1,
-          tools: 0,
-          transcript: [],
         };
-      },
-    }).execute(w.id, r.id);
-    const attempt = (await store.read(w.id)).runs[0]?.attempts[0];
-    expect(attempt).toMatchObject({
-      status: "settled",
-      pricingUnknown: true,
-      tokens: { input: 10, output: 10 },
-    });
-    expect(attempt?.actual).toBeUndefined();
+        const stream = new AssistantMessageEventStream();
+        stream.push({ type: "done", reason: "stop", message });
+        stream.end(message);
+        return stream;
+      });
+      const executor = new Executor(store, setup, runner);
+      await executor.execute(w.id, r.id);
+      await executor.execute(w.id, r.id);
+      const saved = await store.read(w.id);
+      const run = saved.runs.find((run) => run.id === r.id);
+      expect(providerCalls).toBe(1);
+      expect(run?.status).toBe("succeeded");
+      expect(run?.attempts).toHaveLength(1);
+      expect(run?.attempts[0]).toMatchObject({
+        status: "settled",
+        reserved: 0,
+        actual: 0,
+        tokens: { input: 10, output: 10 },
+      });
+      const deliveries = saved.deliveries.filter((d) => d.runId === r.id);
+      expect(deliveries).toHaveLength(1);
+      await new DeliveryWorker(store, setup).send(
+        w.id,
+        deliveries[0]?.id ?? "",
+      );
+      expect(
+        (await store.read(w.id)).deliveries.find((d) => d.runId === r.id)
+          ?.state,
+      ).toBe("sent");
+    }
   });
   test("concurrent versioned settings writes cannot overwrite each other", async () => {
     const w = await seed();

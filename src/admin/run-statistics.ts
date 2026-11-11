@@ -1,3 +1,4 @@
+import { attemptCost } from "../agent/limits.ts";
 import type { Run } from "../domain.ts";
 
 export function runMessageEntries(
@@ -77,9 +78,12 @@ export function summarizeRun(
       tokens.cacheRead += attempt.tokens.cacheRead;
       tokens.cacheWrite += attempt.tokens.cacheWrite;
     }
-    if (attempt.actual !== undefined) {
+    if (
+      attempt.actual !== undefined ||
+      (attempt.pricingUnknown && attempt.status === "settled")
+    ) {
       costAttempts++;
-      cost += attempt.actual;
+      cost += attemptCost(attempt);
     }
   }
   // Pi usage separates uncached input, cache reads and cache writes.

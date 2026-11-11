@@ -22,7 +22,8 @@ OpenAI-compatible; a model ID alone never assigns an official provider's prices.
 
 All prices are **USD per million tokens**. Available context/output/price fields
 identify their source: `api`, `catalog` or `reference`. Missing prices remain
-unknown; zero is a known free rate. APIs may return only some limits or prices.
+omitted in discovery metadata. Application accounting defaults missing rates to
+zero, including with finite dollar budgets. APIs may return only some limits or prices.
 Callers store snapshots and choose refresh policy; there is no background poller
 or inference call. RepoDesk refreshes when saving a provider and pins the cached
 metadata with each chat run. Later edits never revalue historical runs.

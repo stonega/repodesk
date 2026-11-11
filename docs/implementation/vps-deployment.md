@@ -8,6 +8,30 @@ release makes it available in the panel's version indicator. A deployment
 administrator reviews its notes and starts installation explicitly.
 See [host updater installation](updates.md) for the service and panel contract.
 
+## Missing token prices count as zero, deployed (2026-11-11)
+
+Bundle `1794367751621-08425833` deploys source
+`af5171554df3488563af403f47f58d21e30f3986`, tree
+`6569737174ea5df2cb268bca0a10f99a4eb564d9`, over
+`1794305442311-77002991`. Missing model token prices now count as zero in
+reservations, settlement, remaining budgets and usage displays. Finite and
+zero-dollar budgets allow these calls. Available rates and reconciled charges
+continue to count independently.
+
+The isolated release passed lint, strict types, build, the Node runtime contract,
+**1,482 deterministic tests across 158 files**, and two desktop/mobile browser
+scenarios. The VPS builds with pinned Bun 1.3.14; its build image also passed all
+50 focused pricing, budget and summary unit tests. Exact-image startup, CPU speech,
+offline Code Truth, Compose configuration/readiness, migration rerun and disposable
+backup/restore passed. All **55 deployed artifacts** match the verified images;
+public and loopback HTML/assets verify. Public health/readiness return HTTP 200,
+and all five services are healthy.
+
+The protected backup is `backups/pre-release-1794367751621-08425833.dump`
+(**165,882 bytes**), with its archive listing verified. Source archives, quality
+logs, image IDs and `deployment-receipt.json` remain in the protected release
+directory. No dependency, SQL migration or stable GitHub release was added.
+
 ## Conversational Telegram controls deployed (2026-11-11)
 
 Operator-authorized bundle `1794386364054-96360541` deploys source

@@ -114,6 +114,16 @@ test("unreported and partial usage and charges remain distinct from known zero",
   expect(partial.attempts).toBe(2);
 });
 
+test("historical settled calls without token prices report a zero cost", () => {
+  const summary = summarizeRun(
+    run({
+      attempts: [attempt({ pricingUnknown: true })],
+    }),
+  );
+  expect(summary.cost).toBe(0);
+  expect(summary.costAttempts).toBe(1);
+});
+
 test("a queued run has a request, no usage and no cache denominator", () => {
   const summary = summarizeRun(run());
   expect(summary.messages).toBe(1);

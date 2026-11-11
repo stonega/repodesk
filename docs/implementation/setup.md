@@ -234,14 +234,13 @@ support streaming Chat Completions, tool calling, `max_completion_tokens`, and
 `store:false`. Provider-specific thinking formats are not configured by this form.
 
 Known OpenAI IDs use Pi's bundled price metadata unless you supply a price override.
-Each price is optional and can be overridden independently. Missing custom-model
-prices remain unknown; explicit zeros identify a free model. Unknown-price calls
-can run with unlimited workspace budgets, retain token counts and are excluded from
-dollar totals. A finite run/month budget requires known input and output prices
-before dispatch (`model_pricing_required_for_budget`). Unpriced historical calls
-also block finite budgets until their actual costs are reconciled. An input override
-prices cached input at that rate. Review prices when changing models/providers;
-recorded costs are estimates, not an upstream billing guarantee.
+Each price is optional and can be overridden independently. Missing token prices
+default to zero for reservations, budget enforcement and usage accounting. Models
+without prices can run with finite or zero-dollar budgets and retain token counts.
+Available prices still apply independently, including when only one rate is known.
+Historical unpriced calls without reconciled costs also count as zero. An input
+override prices cached input at that rate. Review prices when changing
+models/providers. Recorded costs are application estimates.
 
 The worker pins model capacity, endpoint, thinking level and prices at the first execution of a run.
 Later thinking/price edits apply to future runs. If an endpoint changes, unfinished
@@ -587,8 +586,8 @@ from overrides. Advanced settings support independent input/output/cache-hit/cac
 price overrides with the selected currency. A supplied input override also prices
 cache tokens at that rate unless an explicit cache override is entered. Blank
 context windows still defer enforcement to the provider. Unknown capacity uses
-the documented automatic app output allowance. Unknown prices require unlimited
-budgets. API metadata and manual overrides are pinned with each run. See the
+the documented automatic app output allowance. Missing token prices count as zero
+with finite and unlimited budgets. API metadata and manual overrides are pinned with each run. See the
 [standalone module contract](../../src/model-metadata/README.md) and
 [provider API examples](../../examples/model-providers.http). No paid model call
 is made by provider discovery. Old deployment chat settings and saved Codex keys

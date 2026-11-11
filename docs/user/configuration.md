@@ -56,7 +56,9 @@ DeepSeek、Exa 的搜索请求费用由供应商单独计费，不计入模型 t
 
 容量和价格可能来自供应商或内置目录，界面区分自动信息与手动覆盖。代理和自定义模型的实际限制可能不同，以供应商说明为准。清空上下文容量覆盖后，由供应商执行限制。
 
-价格用于应用内估算，不等同于供应商账单。缺少价格的模型可以在无限预算下记录 token；有限预算要求有可用价格。填写 `0` 表示明确的零价格。
+Prices provide application cost estimates. Missing token prices count as zero
+for budgets and usage accounting. Available rates continue to apply independently,
+and token counts remain recorded for models with finite or unlimited budgets.
 
 ## 工作区预算与保留
 
@@ -70,6 +72,9 @@ DeepSeek、Exa 的搜索请求费用由供应商单独计费，不计入模型 t
 普通聊天费用、Codex 供应商费用和 ChatGPT 账号限制分别管理。不要把聊天费用总额当作全部外部服务账单。
 
 ## 查看用量
+
+Historical unpriced calls without reconciled charges count as zero in usage totals
+and remaining budgets.
 
 面板 **Usage** 展示用量和预留费用，Telegram 的 `/usage` 提供摘要。也可以在私聊询问“本月我的模型费用是多少？”或“把今天的费用按模型拆分”。
 
