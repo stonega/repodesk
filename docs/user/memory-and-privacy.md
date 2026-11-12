@@ -54,6 +54,17 @@ permissions. Saved instructions are distinct from automatic historical recall.
 Reply to a scheduled output and explicitly ask for a rule for future reports to
 propose a persistent workflow correction. See [workflows](workflows.md).
 
+## Optional external memory with Nowledge Mem
+
+[Nowledge Mem](nowledge-mem.md) is a separate, optional connection for one selected
+member's private chat and Space. Searches send the query to that Mem server;
+returned memories can enter the model's authorized context. A direct
+`Save to Nowledge Mem: text` request sends the exact text after the colon to Mem.
+Chat transcripts are not automatically exported. Disabling internal recall,
+forgetting a local memory, disconnecting the plugin or deleting the RepoDesk
+workspace does not delete records already saved in Mem. Manage external records
+and retention in Mem itself.
+
 ## 哪些人和服务能看到数据
 
 - 群内回复对群成员可见，收集开启后可能保留非工作区成员发言。

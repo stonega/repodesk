@@ -16,6 +16,7 @@ import {
 import { repositoryDeliveryAllowed } from "../github/repository-context.ts";
 import { googleDeliveryAllowed, googleReadAllowed } from "../google/policy.ts";
 import { taskReference } from "../miniapp/auth.ts";
+import { nowledgeReadAllowed } from "../nowledge-mem/policy.ts";
 import { searchConsoleReadAllowed } from "../search-console/policy.ts";
 import type { SetupService } from "../setup/service.ts";
 import { TelegramError } from "../telegram/client.ts";
@@ -218,7 +219,8 @@ export class DeliveryWorker {
         run &&
         (!browserReadAllowed(w, run, botId) ||
           !googleReadAllowed(w, run, botId) ||
-          !searchConsoleReadAllowed(w, run, botId))
+          !searchConsoleReadAllowed(w, run, botId) ||
+          !nowledgeReadAllowed(w, run, botId))
       )
         return false;
     }

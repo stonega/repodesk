@@ -1,0 +1,36 @@
+# First sign in as the workspace's deployment operator and obtain a CSRF token.
+@origin = http://localhost:3000
+@workspace = 00000000-0000-4000-8000-000000000001
+@csrf = replace-with-session-csrf
+
+### Read the saved connection (never returns the API key)
+GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/nowledge-mem
+
+### Discover Space names after entering a reviewed Mem server and key
+POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/nowledge-mem/spaces
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"apiUrl":"https://mem.example.com","apiKey":"replace-with-private-key"}
+
+### Save disabled configuration with the actual member/Space and current revision
+PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/nowledge-mem
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"revision":0,"settings":{"enabled":false,"apiUrl":"https://mem.example.com","memberId":"101","spaceId":"default","spaceName":"Default"},"apiKey":"replace-with-private-key"}
+
+### Enable after reviewing the saved connection (use the returned revision)
+PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/nowledge-mem
+Origin: {{origin}}
+X-CSRF-Token: {{csrf}}
+Content-Type: application/json
+
+{"revision":1,"settings":{"enabled":true,"apiUrl":"https://mem.example.com","memberId":"101","spaceId":"default","spaceName":"Default"}}
+
+# Private Telegram examples:
+# Search Nowledge Mem for our database decision.
+# Save to Nowledge Mem: We use PostgreSQL for durable application state.
+# 保存到 Nowledge Mem：我們使用 PostgreSQL 儲存應用程式狀態。

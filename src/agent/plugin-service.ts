@@ -43,6 +43,9 @@ import {
 } from "../google/config.ts";
 import { googleWorkspaceExtension } from "../google/extension.ts";
 import type { GoogleService } from "../google/service.ts";
+import { nowledgeTools } from "../nowledge-mem/config.ts";
+import { nowledgeExtension } from "../nowledge-mem/extension.ts";
+import { NowledgeService } from "../nowledge-mem/service.ts";
 import { obsidianTools } from "../obsidian/config.ts";
 import { obsidianExtension } from "../obsidian/extension.ts";
 import { ObsidianService } from "../obsidian/service.ts";
@@ -79,6 +82,7 @@ export class PluginService {
     readonly google?: GoogleService,
     readonly transcription = new TranscriptionService(store),
     readonly browser = new BrowserService(store),
+    readonly nowledgeMem = new NowledgeService(store),
   ) {}
   private legacy?: Promise<PluginRecord[]>;
   private fallback(): Promise<PluginRecord[]> {
@@ -151,6 +155,7 @@ export class PluginService {
       // Reserve default built-ins even while disabled, so re-enabling is safe.
       for (const name of obsidianTools) names.add(name);
       for (const name of browserTools) names.add(name);
+      for (const name of nowledgeTools) names.add(name);
       for (const plugin of googlePlugins)
         if (workspace.plugins?.google?.google?.settings.enabled)
           names.add(googleDefinitions[plugin].tool);
@@ -372,6 +377,14 @@ export class PluginService {
     const config = workspace.plugins?.codeTruth;
     const targets = config?.enabled ? targetsFor(config, workspaceId) : [];
     const builtins = [];
+    if (workspace.plugins?.nowledgeMem?.settings.enabled)
+      builtins.push(
+        nowledgeExtension(
+          this.nowledgeMem,
+          workspaceId,
+          workspace.plugins.revision,
+        ),
+      );
     if (
       browserEnabled(workspace) &&
       !scoped.some((entry) =>
@@ -538,6 +551,16 @@ export class PluginService {
     const workspace = await this.store.read(workspaceId);
     authorizePlugins(admin, workspace);
     return new ObsidianService(this.store).configure(
+      admin,
+      workspaceId,
+      value,
+      await this.entries(workspace),
+    );
+  }
+  async configureNowledge(admin: Admin, workspaceId: string, value: unknown) {
+    const workspace = await this.store.read(workspaceId);
+    authorizePlugins(admin, workspace);
+    return this.nowledgeMem.configure(
       admin,
       workspaceId,
       value,

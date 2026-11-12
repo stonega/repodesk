@@ -400,6 +400,8 @@ export interface Run {
   googleRead?: Partial<
     Record<GooglePlugin, { revision: number; connectionId: string }>
   >;
+  nowledgeRead?: { revision: number; botId: string };
+  nowledgeSaves?: Record<string, { id: string; state: "started" | "saved" }>;
   searchConsoleRead?: {
     revision: number;
     connectionId?: string;

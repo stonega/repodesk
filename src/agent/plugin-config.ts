@@ -3,6 +3,7 @@ import type { BrowserSettings } from "../browser/config.ts";
 import type { CloudflareConfig } from "../cloudflare/config.ts";
 import type { CodeTruthSettings } from "../code-truth/config.ts";
 import type { GoogleConfig, GoogleRegistration } from "../google/config.ts";
+import type { NowledgeConfig } from "../nowledge-mem/config.ts";
 import type { ObsidianSettings } from "../obsidian/config.ts";
 import type { SearchConsoleConfig } from "../search-console/config.ts";
 import type { TranscriptionSettings } from "../transcription/config.ts";
@@ -29,6 +30,7 @@ export const pluginSaveSchema = z
 export type PluginSpec = z.infer<typeof pluginSchema>;
 export type PluginRecord = PluginSpec & { hash?: string };
 export interface PluginSettings {
+  nowledgeMem?: NowledgeConfig;
   browser?: BrowserSettings;
   transcription?: TranscriptionSettings;
   obsidian?: ObsidianSettings;
