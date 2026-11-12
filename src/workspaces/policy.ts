@@ -196,7 +196,19 @@ export function revokeWork(w: Workspace, now = new Date()) {
           )))
     ) {
       workflow.status = "suspended";
-      workflow.reason = "owner_or_skill_revoked";
+      workflow.reason = !eligible(w, workflow.owner)
+        ? "workflow_owner_revoked"
+        : !workflowSkillAvailable(w, workflow)
+          ? "workflow_skill_revoked"
+          : "github_workflow_scope_denied";
+      audit(
+        w,
+        workflow.owner,
+        "workflow.suspended",
+        workflow.id,
+        workflow.version,
+        now,
+      );
     }
   for (const run of w.runs)
     if (

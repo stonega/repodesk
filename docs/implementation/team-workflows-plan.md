@@ -34,6 +34,16 @@ private repository report there. Ad-hoc private repository reads stay in private
 chat; group scheduled reads are restricted to their approved repositories.
 Repository access and group publication permission are independent checks.
 
+Repository scopes retain their creation revision but validate against the last
+connection/selection change and each selected repository's change revision.
+Unrelated catalog refreshes do not invalidate them or fresh permission snapshots
+for unchanged repositories. Changed/removed repository IDs retain tombstones, so
+reappearance cannot restore an old scope. Confirmed permission losses cancel
+affected runs, dependent follow-ups and pending output; connection or identity
+revocation still invalidates the actor's work. Unknown historical provenance
+retains conservative cancellation. Suspension records a timestamped workspace
+audit entry and an allowlisted runtime diagnostic with tenant and related run IDs.
+
 Before proposing a schedule, the assistant compares the current chat/topic's
 existing workflows by purpose, sources, recurrence/timezone, reporting window
 and output format, including draft, active, paused and suspended records. Private

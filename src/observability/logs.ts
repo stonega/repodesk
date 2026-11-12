@@ -6,6 +6,10 @@ import { Fault } from "../domain.ts";
 // Only fixed catalog messages and explicitly allowed codes reach stdout or storage.
 // Never pass error.message, HTTP bodies, URLs, credentials or chat text to the sink.
 export const logEvents = {
+  workflow_suspended: [
+    "warn",
+    "A schedule was suspended. Inspect its safe failure code and workspace audit.",
+  ],
   app_started: ["info", "API service started."],
   app_stopping: ["info", "API service is stopping."],
   worker_started: ["info", "Background worker started."],
@@ -70,6 +74,10 @@ export const logEvents = {
 export type LogEvent = keyof typeof logEvents;
 export type LogService = "app" | "worker";
 const codes = new Set([
+  "workflow_suspended",
+  "workflow_owner_revoked",
+  "workflow_skill_revoked",
+  "github_workflow_scope_denied",
   "workflow_request_unverified",
   "approval_consumed",
   "approval_denied",

@@ -30,7 +30,7 @@ export class GitHubUsers {
     actor: string,
     repositories?: number[],
   ) {
-    invalidateGitHubWork(w, actor);
+    invalidateGitHubWork(w, actor, repositories);
     await sql.query(
       `UPDATE coding_tasks SET data=data || '{"cancelRequested":true,"error":"github_user_access_denied"}'::jsonb,updated_at=now()
        WHERE workspace_id=$1 AND data->>'state' NOT IN ('review','failed','cancelled','unknown')

@@ -35,6 +35,12 @@ reports to a group requires an active workspace owner/admin as the workflow owne
 with access to those repositories. Private read access alone does not allow group
 publication; there is no separate workflow approval step.
 
+Repository reports keep working when an unrelated repository changes or becomes
+unavailable. Changes to the report's selected repositories, the workspace GitHub
+connection, owner membership or current permissions can still suspend it. Restoring
+access does not automatically reactivate a suspended schedule. Recheck its current
+sources before saving it again; cancelled occurrences are not replayed.
+
 GitHub 元数据可以生成报告，但不表示可以持续访问任意网站或使用所有插件。Cloudflare 工具和自动长期记忆不用于这些定时运行。
 
 ## 在面板管理
