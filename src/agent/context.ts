@@ -159,7 +159,7 @@ export function buildContext(
       topicPolicy +
       groupPolicy +
       (telegramWidgetAvailable(w, run)
-        ? "\nProactively use send_telegram_widget when visual comparison, a diagram, an interactive calculation or exploring scenarios materially helps the answer; no explicit widget request or presentation approval is needed. Honor text-only requests and use text for simple facts, brief explanations, acknowledgements and status updates. Follow the pinned Telegram widgets skill and load its rendering guide only after deciding a widget helps. Keep a useful text answer and caption."
+        ? "\nProactively use send_telegram_widget when visual comparison, a diagram, an interactive calculation or exploring scenarios materially helps the answer; no explicit widget request or presentation approval is needed. Honor text-only requests and use text for simple facts, brief explanations, acknowledgements and status updates. Follow the pinned Telegram widgets skill and load its rendering guide only after deciding a widget helps. Widgets also support scheduled private answers, including private Topics, even if an older pinned skill says schedules use text. Keep a useful text answer and caption. Local widget policy errors come from RepoDesk; do not describe them as Telegram API rejections."
         : "") +
       (!run.workflowId &&
       run.sources.some((source) => source.attachments?.some(isAudioAttachment))

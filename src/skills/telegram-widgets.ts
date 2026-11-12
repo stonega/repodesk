@@ -27,7 +27,7 @@ export function telegramWidgetSpec() {
     resources: [{ path: "references/rendering.md", body: rendering }],
   });
 }
-/** Upgrade only the unchanged, application-owned original; pins stay immutable. */
+/** Upgrade unchanged application-owned presets; existing pins stay immutable. */
 function upgradeTelegramWidgetSkill(skill: Workspace["skills"][number]) {
   const description =
     "Create interactive charts, comparisons and calculators inside private Telegram messages.";
@@ -35,13 +35,24 @@ function upgradeTelegramWidgetSkill(skill: Workspace["skills"][number]) {
     "Read [the rendering guide](references/rendering.md) with load_skill and this skill's id before creating a widget. Follow its limits and example; send HTML and a useful caption with send_telegram_widget.";
   if (!skill.preset || skill.archived || skill.origin || skill.githubSource)
     return;
-  if (skill.draft.description !== description || skill.draft.body !== body)
-    return;
   const spec = telegramWidgetSpec();
-  const original = { ...spec, description, body };
+  const previous = [
+    { ...spec, description, body },
+    {
+      ...spec,
+      body: spec.body.replace(
+        "Widgets are available in private conversations and scheduled private answers, including private Topics; groups use text.",
+        "Widgets are available only in ordinary private conversations, including private Topics; groups and scheduled answers use text.",
+      ),
+    },
+  ];
   if (
-    !isDeepStrictEqual(skill.draft, original) ||
-    !isDeepStrictEqual(skill.published.at(-1), original)
+    isDeepStrictEqual(skill.draft, spec) ||
+    !previous.some(
+      (original) =>
+        isDeepStrictEqual(skill.draft, original) &&
+        isDeepStrictEqual(skill.published.at(-1), original),
+    )
   )
     return;
   skill.draft = spec;

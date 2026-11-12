@@ -12,7 +12,7 @@ import { applicationTools } from "../../src/agent/tools.ts";
 import { migrate } from "../../src/db/migrate.ts";
 import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
-import type { Run, Workspace } from "../../src/domain.ts";
+import type { Run, Workflow, Workspace } from "../../src/domain.ts";
 import { DeliveryWorker } from "../../src/jobs/delivery.ts";
 import { Executor } from "../../src/jobs/execute.ts";
 import { encrypt } from "../../src/setup/credentials.ts";
@@ -20,9 +20,13 @@ import { SetupService } from "../../src/setup/service.ts";
 import { type Telegram, TelegramError } from "../../src/telegram/client.ts";
 import { Ingress } from "../../src/telegram/webhook.ts";
 import { publishWidget } from "../../src/telegram/widgets.ts";
+import { tick } from "../../src/workflows/service.ts";
 import { createRun } from "../../src/workspaces/service.ts";
-import { originalTelegramWidgetSpec } from "../fixtures/telegram-widgets.ts";
-import { workspace } from "../fixtures.ts";
+import {
+  originalTelegramWidgetSpec,
+  proactiveTelegramWidgetSpec,
+} from "../fixtures/telegram-widgets.ts";
+import { spec, workspace } from "../fixtures.ts";
 
 const rootUrl = process.env.TEST_DATABASE_URL;
 const args = {
@@ -117,53 +121,282 @@ const args = {
         publishWidget(w, run, "999");
       });
     }
-    test("stored original presets upgrade idempotently without changing existing run pins or enablement", async () => {
-      for (const enabled of [true, false]) {
-        const preset = w.skills.find(
-          (s) => s.draft.slug === "telegram-widgets",
-        );
-        if (!preset) throw Error("preset missing");
-        preset.draft = originalTelegramWidgetSpec();
-        preset.published = [originalTelegramWidgetSpec()];
-        preset.enabled = enabled;
-        preset.version = 3;
-        const pins = structuredClone(r.skillPins);
-        await store.pool.query("UPDATE workspaces SET data=$2 WHERE id=$1", [
-          w.id,
-          JSON.stringify(w),
-        ]);
-        const updated = await store.read(w.id);
-        expect(updated.skills.find((s) => s.id === preset.id)).toMatchObject({
-          id: preset.id,
-          enabled,
-          version: 4,
-          published: [originalTelegramWidgetSpec(), expect.anything()],
-        });
-        expect(updated.runs[0]?.skillPins).toEqual(pins);
-        await store.change(w.id, (current) => {
-          const next = createRun(
-            current,
-            "101",
-            "Compare these plans",
-            "101",
-            7,
-            "gpt-4.1-mini",
-            { botId: "999" },
-          );
-          expect(next.skillPins.find((p) => p.id === preset.id)?.version).toBe(
-            enabled ? 2 : undefined,
-          );
-        });
-        const restarted = await new Store(store.pool).read(w.id);
+    async function scheduledAnswer(
+      topicId = 7,
+      skillId?: string,
+      actor = "101",
+    ) {
+      const now = new Date();
+      const workflowId = randomUUID();
+      const next = await store.change(w.id, (current) => {
+        // A schedule must not depend on retaining the interactive setup thread.
+        current.runs = [];
+        current.messages = [];
+        current.threads = [];
+        current.deliveries = [];
+        const workflow: Workflow = {
+          id: workflowId,
+          version: 1,
+          owner: actor,
+          status: "active",
+          spec: {
+            ...spec(current),
+            chatId: actor,
+            topicId,
+            skillId,
+            task: "Report the weather in a compact widget",
+            format: "Short widget with a useful text caption",
+          },
+          skillVersion: skillId ? 1 : undefined,
+          versions: [],
+          nextAt: now.toISOString(),
+        };
+        current.workflows.push(workflow);
+        tick(current, "gpt-4.1-mini", now);
+        tick(current, "gpt-4.1-mini", now);
         expect(
-          restarted.skills.find((s) => s.id === preset.id)?.published,
-        ).toHaveLength(2);
-        expect(restarted.skills.find((s) => s.id === preset.id)?.version).toBe(
-          4,
-        );
-        expect(restarted.runs[0]?.skillPins).toEqual(pins);
-      }
+          current.occurrences.filter((o) => o.workflowId === workflowId),
+        ).toHaveLength(1);
+        const next = current.runs.at(-1);
+        if (!next) throw Error("missing scheduled run");
+        return next;
+      });
+      expect(next.threadId).toBeUndefined();
+      const currentStore = new Store(store.pool);
+      const runner: AgentRunner = {
+        async run(input) {
+          expect(input.system).toContain("already-active workflow");
+          expect(input.system).toContain(
+            "Proactively use send_telegram_widget",
+          );
+          expect(input.system).toContain(
+            "do not describe them as Telegram API rejections",
+          );
+          expect(input.system).toContain(
+            "even if an older pinned skill says schedules use text",
+          );
+          expect(JSON.parse(input.prompt).sources).toEqual([]);
+          expect(input.tools.some((t) => t.name === "propose_workflow")).toBe(
+            false,
+          );
+          const guide = input.tools.find((t) => t.name === "load_skill");
+          const widget = input.tools.find(
+            (t) => t.name === "send_telegram_widget",
+          );
+          const skill = (await currentStore.read(w.id)).skills.find(
+            (s) => s.draft.slug === "telegram-widgets",
+          );
+          if (!guide || !widget || !skill)
+            throw Error("missing scheduled widget tools");
+          const loaded = await guide.execute("guide", {
+            id: skill.id,
+            path: "references/rendering.md",
+          });
+          expect(JSON.stringify(loaded.content)).toContain(
+            "Telegram widget rendering",
+          );
+          const staged = await widget.execute("widget", args);
+          expect(await widget.execute("widget", args)).toEqual(staged);
+          expect(
+            (await currentStore.read(w.id)).deliveries.some((d) => d.widget),
+          ).toBe(false);
+          return {
+            text: args.caption,
+            status: "succeeded",
+            turns: 1,
+            tools: 2,
+            transcript: [],
+          };
+        },
+      };
+      const executor = new Executor(currentStore, setup, runner);
+      await executor.execute(w.id, next.id);
+      await executor.execute(w.id, next.id);
+      const saved = await currentStore.read(w.id);
+      expect(saved.runs.at(-1)?.status).toBe("succeeded");
+      expect(saved.deliveries.filter((d) => d.widget)).toHaveLength(1);
+      r = next;
+      return workflowId;
+    }
+    test.each([0, 7])(
+      "scheduled private destination %i sends one widget after dispatch, execution and restart",
+      async (topicId) => {
+        await scheduledAnswer(topicId);
+        const worker = new DeliveryWorker(new Store(store.pool), setup);
+        await Promise.all([worker.send(w.id, id()), worker.send(w.id, id())]);
+        await worker.send(w.id, id());
+        expect(calls).toHaveLength(1);
+        expect(calls[0]).toMatchObject({
+          method: "sendWidget",
+          params: {
+            chat_id: "101",
+            message_thread_id: topicId || undefined,
+            html: args.html,
+            caption: args.caption,
+            allow_queries: false,
+            is_shared: false,
+            protect_content: true,
+          },
+        });
+        expect(calls[0]?.params.reply_parameters).toBeUndefined();
+        expect(
+          (await store.read(w.id)).deliveries.find((d) => d.id === id())?.state,
+        ).toBe("sent");
+      },
+    );
+    test("scheduled presentation works alongside a separately pinned procedure", async () => {
+      await scheduledAnswer(7, w.skills[0]?.id);
+      await new DeliveryWorker(store, setup).send(w.id, id());
+      expect(calls.map((c) => c.method)).toEqual(["sendWidget"]);
     });
+    test("ordinary members can receive their scheduled private Topic widgets", async () => {
+      await scheduledAnswer(7, undefined, "202");
+      await new DeliveryWorker(store, setup).send(w.id, id());
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toMatchObject({
+        method: "sendWidget",
+        params: { chat_id: "202", message_thread_id: 7 },
+      });
+    });
+    test("an existing workflow keeps its old widget skill version while application guidance enables scheduled delivery", async () => {
+      const widget = w.skills.find((s) => s.draft.slug === "telegram-widgets");
+      if (!widget) throw Error("missing preset");
+      widget.draft = proactiveTelegramWidgetSpec();
+      widget.published = [proactiveTelegramWidgetSpec()];
+      await store.pool.query("UPDATE workspaces SET data=$2 WHERE id=$1", [
+        w.id,
+        JSON.stringify(w),
+      ]);
+      await scheduledAnswer(7, widget.id);
+      const current = await store.read(w.id);
+      expect(current.runs.at(-1)?.skillPins).toEqual([
+        { id: widget.id, version: 1 },
+      ]);
+      expect(
+        current.skills.find((s) => s.id === widget.id)?.published,
+      ).toHaveLength(2);
+      await new DeliveryWorker(store, setup).send(w.id, id());
+      expect(calls.map((c) => c.method)).toEqual(["sendWidget"]);
+    });
+    test("scheduled widget delivery rechecks saved workflow and bot after execution", async () => {
+      const baseline = await store.read(w.id);
+      for (const mutate of [
+        (f: Workflow) => {
+          f.status = "paused";
+        },
+        (f: Workflow) => {
+          f.status = "deleted";
+        },
+        (f: Workflow) => {
+          f.version++;
+        },
+        (f: Workflow) => {
+          f.owner = "202";
+        },
+        (f: Workflow) => {
+          f.spec.chatId = "202";
+        },
+        (f: Workflow) => {
+          f.spec.topicId = 8;
+        },
+      ]) {
+        await store.save(store.pool, structuredClone(baseline));
+        const workflowId = await scheduledAnswer();
+        await store.change(w.id, (current) => {
+          const f = current.workflows.find((f) => f.id === workflowId);
+          if (!f) throw Error("workflow missing");
+          mutate(f);
+        });
+        await new DeliveryWorker(store, setup).send(w.id, id());
+        expect(
+          (await store.read(w.id)).deliveries.find((d) => d.id === id())?.state,
+        ).toBe("cancelled");
+      }
+      await store.save(store.pool, baseline);
+      await scheduledAnswer();
+      const deployment = await store.deployment();
+      if (deployment.bot) deployment.bot.id = "1000";
+      await store.saveDeployment(store.pool, deployment);
+      await new DeliveryWorker(store, setup).send(w.id, id());
+      expect(
+        (await store.read(w.id)).deliveries.find((d) => d.id === id())?.state,
+      ).toBe("cancelled");
+      expect(calls).toHaveLength(0);
+    });
+    test("scheduled widget rejection preserves its Topic for caption fallback and uncertain sends stay unreplayed", async () => {
+      const baseline = await store.read(w.id);
+      await scheduledAnswer();
+      failure = new TelegramError("telegram_destination_rejected", "permanent");
+      const worker = new DeliveryWorker(store, setup);
+      await worker.send(w.id, id());
+      await worker.send(w.id, id());
+      expect(calls.map((c) => c.method)).toEqual(["sendWidget", "sendMessage"]);
+      expect(calls[1]?.params).toMatchObject({
+        chat_id: "101",
+        message_thread_id: 7,
+        text: args.caption,
+      });
+      await store.save(store.pool, baseline);
+      calls = [];
+      failure = new TelegramError("telegram_outcome_unknown", "unknown");
+      await scheduledAnswer();
+      await worker.send(w.id, id());
+      await worker.send(w.id, id());
+      expect(calls.map((c) => c.method)).toEqual(["sendWidget"]);
+      expect(
+        (await store.read(w.id)).deliveries.find((d) => d.id === id())?.state,
+      ).toBe("delivery_unknown");
+    });
+    test.each([originalTelegramWidgetSpec, proactiveTelegramWidgetSpec])(
+      "stored previous presets upgrade idempotently without changing existing run pins or enablement: %p",
+      async (previousSpec) => {
+        for (const enabled of [true, false]) {
+          const preset = w.skills.find(
+            (s) => s.draft.slug === "telegram-widgets",
+          );
+          if (!preset) throw Error("preset missing");
+          preset.draft = previousSpec();
+          preset.published = [previousSpec()];
+          preset.enabled = enabled;
+          preset.version = 3;
+          const pins = structuredClone(r.skillPins);
+          await store.pool.query("UPDATE workspaces SET data=$2 WHERE id=$1", [
+            w.id,
+            JSON.stringify(w),
+          ]);
+          const updated = await store.read(w.id);
+          expect(updated.skills.find((s) => s.id === preset.id)).toMatchObject({
+            id: preset.id,
+            enabled,
+            version: 4,
+            published: [previousSpec(), expect.anything()],
+          });
+          expect(updated.runs[0]?.skillPins).toEqual(pins);
+          await store.change(w.id, (current) => {
+            const next = createRun(
+              current,
+              "101",
+              "Compare these plans",
+              "101",
+              7,
+              "gpt-4.1-mini",
+              { botId: "999" },
+            );
+            expect(
+              next.skillPins.find((p) => p.id === preset.id)?.version,
+            ).toBe(enabled ? 2 : undefined);
+          });
+          const restarted = await new Store(store.pool).read(w.id);
+          expect(
+            restarted.skills.find((s) => s.id === preset.id)?.published,
+          ).toHaveLength(2);
+          expect(
+            restarted.skills.find((s) => s.id === preset.id)?.version,
+          ).toBe(4);
+          expect(restarted.runs[0]?.skillPins).toEqual(pins);
+        }
+      },
+    );
     test("duplicate concurrent calls, restart and duplicate dispatch send exactly one widget to the bound private Topic", async () => {
       await Promise.all([
         tool().execute("widget", args),

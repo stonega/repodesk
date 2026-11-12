@@ -128,6 +128,21 @@ export function createRun(
     "skill_unavailable",
     409,
   );
+  // Presentation is available alongside the workflow's selected procedure. Only
+  // new private occurrences pin the enabled built-in; saved versions stay intact.
+  if (workflow && chatId === actor) {
+    const widget = w.skills.find(
+      (s) =>
+        s.preset &&
+        !s.origin &&
+        !s.githubSource &&
+        s.enabled &&
+        !s.archived &&
+        s.published.at(-1)?.slug === "telegram-widgets",
+    );
+    if (widget && !pins.some((p) => p.id === widget.id))
+      pins.push({ id: widget.id, version: widget.published.length });
+  }
   const now = options.now ?? new Date();
   const privateChat = chatId === actor && !options.workflowId;
   const selected = privateChat

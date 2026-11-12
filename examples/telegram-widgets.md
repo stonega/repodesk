@@ -34,7 +34,10 @@ not an exact HTML layout:
 4. "Hello", "What is 2 + 2?", and "What is the status of my last task?" should
    receive ordinary text without a widget. Status still requires available evidence.
 5. Repeat the plan comparison with "Text only." Expect no widget.
-6. Repeat the cost question in a group and as a scheduled task. Expect text.
+6. Repeat the cost question in a group. Expect text. In a private Topic, save a
+   daily task that requests a compact widget, then use Run now. Expect one widget
+   in that same Topic and useful text. Repeat outside Topics. Existing schedules
+   should work without recreation; disabled presets must prevent widget use.
 7. On a workspace with the original preset, confirm the updated instructions
    appear once and disabled settings stay disabled. A fresh enabled run pins the
    new snapshot; existing run/workflow pins retain their old version.

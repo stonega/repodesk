@@ -29,15 +29,29 @@ export const widgetParameters = Type.Object(
 
 /** The application fixes the audience and disables bot requests and sharing. */
 function widgetBot(w: Workspace, r: Run) {
+  requireThat(r.chatId === r.actor, "widget_private_chat_required", 403);
+  if (r.workflowId) {
+    const workflow = w.workflows.find((f) => f.id === r.workflowId);
+    requireThat(
+      workflow?.status === "active" &&
+        workflow.version === r.workflowVersion &&
+        workflow.owner === r.actor &&
+        workflow.spec.chatId === r.chatId &&
+        workflow.spec.topicId === r.topicId,
+      "widget_workflow_changed",
+      403,
+    );
+    // Scheduled runs have no conversation thread. The first staged widget binds
+    // the current deployment bot; subsequent calls and delivery retain that pin.
+    return r.widget?.botId;
+  }
   const thread = w.threads?.find((t) => t.id === r.threadId);
   requireThat(
-    !r.workflowId &&
-      r.chatId === r.actor &&
-      thread?.botId &&
+    thread?.botId &&
       thread.actor === r.actor &&
       thread.chatId === r.chatId &&
       (thread.topicId ?? 0) === r.topicId,
-    "widget_private_chat_required",
+    "widget_private_thread_required",
     403,
   );
   return thread.botId;
@@ -87,8 +101,8 @@ export function stageWidget(
   botId?: string,
 ) {
   const value = authorizeWidget(w, r, args);
-  authorizeWidgetBot(w, r, botId);
-  r.widget = { ...value, botId: widgetBot(w, r), requestMessageId: r.replyTo };
+  const currentBot = authorizeWidgetBot(w, r, botId);
+  r.widget = { ...value, botId: currentBot, requestMessageId: r.replyTo };
   return {
     status: "staged",
     guidance:
@@ -96,7 +110,13 @@ export function stageWidget(
   };
 }
 export function authorizeWidgetBot(w: Workspace, r: Run, botId?: string) {
-  requireThat(widgetBot(w, r) === botId, "widget_bot_changed", 403);
+  const expected = widgetBot(w, r);
+  requireThat(
+    botId && (!expected || expected === botId),
+    "widget_bot_changed",
+    403,
+  );
+  return botId;
 }
 export function publishWidget(w: Workspace, r: Run, botId?: string) {
   if (

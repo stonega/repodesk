@@ -64,6 +64,7 @@ const workflowTools = new Set([
   "query_model_cost",
   "query_work_handoff",
   "read_skill_source",
+  "send_telegram_widget",
 ]);
 export function applicationTools(
   store: Store,
@@ -125,7 +126,7 @@ export function applicationTools(
             (name === "react_to_message" && !r.workflowId && !!r.threadId) ||
             (!!r.workflowId && name === "read_chat_context") ||
             (!!r.workflowId &&
-              !r.skillPins.length &&
+              !w.workflows.find((f) => f.id === r.workflowId)?.spec.skillId &&
               ["read_chat_context", "query_model_cost"].includes(name)) ||
             (["query_memories", "manage_memory"].includes(name) &&
               !!r.threadId &&
@@ -297,7 +298,7 @@ export function applicationTools(
       : []),
     bind(
       "send_telegram_widget",
-      "Stage one self-contained interactive HTML widget for this private conversation. Load the Telegram widgets skill rendering guide first. Requires a useful plain-text caption. Inline CSS/JS only, max 32 KiB HTML and 4 KiB zlib; no network, inputs, bot callbacks, sharing or wallet. Publishes with a successful answer; staging does not confirm delivery. Destination is fixed by the application.",
+      "Stage one self-contained interactive HTML widget for this private conversation or scheduled private answer, including private Topics. Load the Telegram widgets skill rendering guide first. Requires a useful plain-text caption. Inline CSS/JS only, max 32 KiB HTML and 4 KiB zlib; no network, inputs, bot callbacks, sharing or wallet. Publishes with a successful answer; staging does not confirm delivery. Destination is fixed by the application. Local policy errors are RepoDesk refusals, not Telegram API rejections.",
       widgetParameters,
       async (w, r, a, sql) => {
         const deployment = await store.deployment(sql);
