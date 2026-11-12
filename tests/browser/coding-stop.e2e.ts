@@ -204,7 +204,9 @@ for (const width of [1280, 390]) {
       .getByRole("row")
       .filter({ hasText: "Implementation fixture task" });
     await expect(stopped).toContainText("Stopped");
-    await expect(stopped).toContainText("/github sync");
+    await expect(stopped).toContainText("refresh GitHub permissions");
+    await expect(stopped).toContainText("private bot chat");
+    await expect(stopped).not.toContainText("/github");
     await expect(stopped).not.toContainText("couldn’t finish this task");
     expect(
       await page.evaluate(
