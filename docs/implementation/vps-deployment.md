@@ -8,6 +8,46 @@ release makes it available in the panel's version indicator. A deployment
 administrator reviews its notes and starts installation explicitly.
 See [host updater installation](updates.md) for the service and panel contract.
 
+## Scoped repository schedule fix deployed (2026-11-12)
+
+Operator-authorized bundle `1794469596569-79773357` deploys source
+`b6ab2b9531bd3ea9a30e2c5eab9cabc0a5b46a1b` over `1794386364054-96360541`.
+It applies main fix `64113d3a962dd6347a0e111e147cffd44e29e1f9` to the preserved
+production source `41b179b93d88411437aab6c39cdb86dc45341c62`. The exact source is
+retained on `deploy/scoped-workflow-repositories-20261112` and in the protected
+host archive. Unrelated repository changes no longer invalidate a scheduled
+report's unchanged sources or cancel its queued output. Confirmed revocation,
+connection generations, selected-repository tombstones and current authorization
+remain enforced; suspension diagnostics retain safe tenant/run context.
+
+The main source passed **1,500 tests across 159 files**; the production source
+passed **1,503 tests across 160 files**, with Bun 1.3.14. Lint, strict types,
+builds and the Node runtime contract pass. The exact VPS images pass all 16
+integration-startup cases with zero external startup calls, CPU transcription
+imports, offline Code Truth, Compose configuration/readiness, migration rerun
+and disposable backup/restore. All five production services are healthy.
+All **55 deployed artifacts**, public/loopback health/readiness and declared
+frontend assets verify. Previously audited unused CDN aliases remain separately
+recorded; current HTML asset URLs match the verified image.
+
+Configuration, credentials, persistent mounts, PostgreSQL identity and the native
+Browser installation are preserved. Its **813 files** and app/worker headed bridge
+checks pass. The verified protected backup is
+`backups/pre-release-1794469596569-79773357.dump` (**533,250 bytes**). Source,
+quality records, immutable image identities and the deployment receipt remain
+under the release directory. Package version remains v0.1.46; no dependency,
+SQL migration or stable release was added.
+
+After a read-only recovery dry run, an audited Store transaction rechecked the
+specific Wallshader schedule's current membership, repository scope, destination
+and skill availability through the production lifecycle service. The owning
+deployment operator paused/resumed that record and cleared its historical reason.
+It is **active**, still version 1, next due **2026-11-13T00:00:00Z**
+(08:00 Asia/Taipei). Its original repository pin remains valid under the corrected
+scoped check. Historical runs/deliveries and occurrence records are unchanged;
+today's cancelled run was not replayed. No manual Telegram send or live model
+call was performed. See [the incident record](../../postmortem/2026-11-12-workflow-global-repository-revision.md).
+
 ## Missing token prices count as zero, deployed (2026-11-11)
 
 Bundle `1794367751621-08425833` deploys source

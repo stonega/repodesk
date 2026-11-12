@@ -1,5 +1,32 @@
 # Implementation evidence
 
+## Scoped repository schedules (2026-11-12)
+
+Unrelated repository metadata changes no longer suspend a report or cancel its
+queued run and pending output. Read scopes and fresh permission snapshots check
+the connection generation and selected repositories' change revisions. Removed
+IDs retain revocation tombstones; current membership, repository permissions and
+group-publication checks remain enforced. Coding/verified write actions retain
+their current-global-revision permission-sync requirement.
+
+Confirmed permission losses target affected assistant work and dependent output,
+while connection/identity changes retain full actor revocation. Unknown historical
+provenance remains conservative. Suspensions now have specific saved causes,
+timestamped audit entries and safe runtime diagnostics with tenant/run context.
+
+Lint, strict types, builds and the offline runtime contract pass. All **1,500 main
+tests** and **1,503 preserved-production tests** pass with Bun 1.3.14 and isolated
+PostgreSQL. Regression coverage includes ordinary-member schedules, unrelated and
+selected repository removal, revoked/stale access, connection/owner changes,
+restart, duplicate dispatch and dependent output. No dependency or migration was
+added. See [the incident record](../../postmortem/2026-11-12-workflow-global-repository-revision.md).
+
+Deployed as bundle `1794469596569-79773357` over the preserved production source.
+Exact-image startup/Compose/restore checks and all 55 deployed artifacts verify;
+all five services are healthy. The reported Wallshader schedule was revalidated
+and restored to active, next due November 13 at 08:00 Asia/Taipei. Its cancelled
+occurrence was not replayed. See [deployment evidence](vps-deployment.md#scoped-repository-schedule-fix-deployed-2026-11-12).
+
 ## Optional Nowledge Mem plugin (2026-11-12)
 
 **Plugins → Nowledge Mem** now configures an optional built-in adapter for one
