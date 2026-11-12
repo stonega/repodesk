@@ -94,8 +94,11 @@ the tested image by its immutable local image ID; the registry path below uses
 a manifest digest instead. Host provisioning and a live deployment remain
 separate operator steps.
 
-Run the four required commands, real PostgreSQL integration tests, browser tests,
-and `bun run test:runtime`. CI repeats these and builds/smokes the Docker image.
+Run the four required commands, real PostgreSQL integration tests, browser tests
+selected by the procedure below, and `bun run test:runtime`. Publishing a release
+does not by itself require all browser tests. When enabled, the existing Verify
+workflow runs its configured quality, database, full browser and container jobs;
+the local selection policy does not change or bypass that workflow.
 The Bun, Node and PostgreSQL base images are pinned by digest in Docker/Compose.
 Publish the resulting application image to your registry and deploy its immutable
 `@sha256:` digest through `APP_IMAGE`, then use `docker compose up --no-build -d`.
@@ -105,6 +108,45 @@ On the host, provision an HTTPS reverse proxy, private PostgreSQL storage, separ
 secret/backup storage and a responsible operator. Set explicit retention and budgets.
 Run migrations once before API/worker startup; Compose enforces this dependency.
 Roll forward migrations rather than reverting an image against an incompatible schema.
+
+### Select browser tests from the change
+
+Source: the owner's 2026-11-12 request during v0.1.48 preparation to avoid running
+every browser test for each release. This is the local/contributor release policy;
+automatic CI test selection is not implemented.
+
+1. Identify the candidate commit and a verified baseline, with the checks and
+   environment that establish that baseline. Compare every intervening change,
+   including dependency, configuration, fixture and generated-asset changes.
+   Neither the previous release nor `HEAD^` is automatically a verified baseline.
+2. Map changes to user behavior and dependencies. Include callers, shared
+   components, API consumers, authorization boundaries and fixture interactions;
+   selecting only tests whose filenames resemble changed files is insufficient.
+   Use CodeGraph for structural impact and inspect the relevant test contracts.
+3. Run the smallest set that covers those affected behaviors. Reuse earlier
+   passing results only for unchanged relevant code, dependencies and configuration.
+   Expand when failures expose a wider dependency, the environment has changed,
+   evidence is missing, or the affected scope cannot be established.
+4. Record the baseline and candidate SHAs, changed areas, chosen test files or
+   filters and reasons, results, reused evidence and remaining unverified scope.
+   An interrupted full run may supply individual passing results, but cannot be
+   reported as a full-suite pass. Do not repeat unrelated passing suites without
+   a new change, failure or unresolved concern.
+
+| Change | Browser coverage |
+| --- | --- |
+| Version metadata only, on already verified functional code | Version display and release/update flows, such as `tests/browser/application-update.e2e.ts` |
+| Documentation only, with no runtime or generated UI effect | No browser tests; check affected links/examples and documentation consistency |
+| One screen or workflow | Its user journeys and dependent consumers, including affected saved/editor, pending/error and desktop/mobile behavior |
+| Shared components, authentication, permissions, routing or fixtures | All affected consumers and boundaries; broaden to the full suite if the impact cannot be bounded |
+| Broad high-risk changes, unknown impact, periodic regression or an explicit full-run request | Full browser suite |
+
+Keep the four required implementation checks, deterministic permission/replay
+regressions, the exact-image integration-startup contract and applicable
+migration/backup/restore checks. This policy changes browser selection; it does
+not waive those gates or the independent Verify requirement for panel updates.
+Keep periodic full regression separate from routine release preparation unless
+the change's impact calls for it.
 
 ## Integration startup release gate
 

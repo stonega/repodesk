@@ -42,6 +42,26 @@ and runnable examples when workflows or interfaces change.
 For deployment changes, also build and smoke-test the Docker image and validate
 `docker compose config`. Bun manages dependencies/builds/tests; Node runs the service.
 
+### Browser test selection
+
+For local work and release preparation, run browser tests related to the changes
+since a documented verified baseline, including affected dependencies and shared
+flows. Publishing a release alone does not require a full browser run. Reuse
+earlier results only when the relevant code, dependencies and configuration remain
+unchanged; do not choose `HEAD^` as the baseline without that evidence.
+
+For a version-only change, check version display and release/update flows. For
+documentation-only changes without runtime or generated UI effects, browser tests
+are unnecessary. Expand coverage for shared components, authentication,
+permissions, routing, fixtures or other cross-cutting changes. Run the full suite
+when impact cannot be bounded, for broad high-risk changes, periodic regression,
+or an explicit request. Keep mandatory non-browser and exact-image release gates.
+Record the baseline, selected tests, reasons, reused evidence and unverified scope;
+never report a partial or interrupted run as a full pass.
+
+Source: owner request during v0.1.48 release preparation, 2026-11-12. Follow the
+[release test-selection procedure](docs/implementation/release-runbook.md#select-browser-tests-from-the-change).
+
 ### Branch integration and release source
 
 - Treat `origin/main` as the shared source of truth. Before starting or integrating
