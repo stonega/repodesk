@@ -13,6 +13,16 @@ preview and Stop control. Longer coding tasks need a small number of factual sta
 updates. Application state determines these notices; a model's claim alone cannot
 establish that execution started, checks passed, or a PR was published.
 
+## Ordinary chat queue correction (2026-10-28)
+
+Ordinary interactive chat requests now stay silent while queued, for both typed
+and voice messages. No delayed queued acknowledgement or Status/Cancel keyboard
+is generated. Pending notices saved by older releases are rejected at delivery.
+Native thinking previews/Stop and explicit `/status` and `/cancel` remain available.
+This supersedes the long-private-queue-notice behavior described in the historical
+implementation notes below. Codex task progress, questions and outcomes retain
+their existing controls and delivery rules.
+
 ## Active conversation input and selective replies (2026-10-30)
 
 New same-actor interactive input can join a running Pi request without a separate
@@ -22,8 +32,8 @@ acknowledges each together with its user-message checkpoint. A pending message
 blocks stale tool preflight, and publication checks the queue again under the same
 lock. Text, supported attachments, speech and private forwarded references retain
 their source and authorization boundaries. Internal classification/summary passes
-cannot consume conversational input. The existing deadline and dollar budgets
-cover all turns. No dependency or SQL migration is added.
+cannot consume conversational input. Dollar budgets cover all turns; ordinary
+assistant execution has no total time limit. No dependency or SQL migration is added.
 
 Plain final answers no longer set a native reply target. An explicit authorized
 source citation can select a human message in the same bot/chat/Topic. Controls,

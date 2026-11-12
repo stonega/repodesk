@@ -25,7 +25,6 @@ import { restoreBrowserPause } from "../browser/pause.ts";
 import { developmentStatus } from "../coding/feedback.ts";
 import { codingTaskContext } from "../coding/task-context.ts";
 import { taskGet } from "../coding/task-store.ts";
-import { DEFAULT_RUN_TIMEOUT_SECONDS } from "../config.ts";
 import type { Store } from "../db/repositories.ts";
 import { Fault, requireThat } from "../domain.ts";
 import type { SearchPin } from "../search/config.ts";
@@ -39,6 +38,7 @@ import {
   requestFailureMessage,
 } from "../telegram/feedback.ts";
 import { discardFollowup } from "../telegram/followup.ts";
+import { Ingress } from "../telegram/webhook.ts";
 import { publishWidget } from "../telegram/widgets.ts";
 import { TranscriptionService } from "../transcription/service.ts";
 import { webReaderTool } from "../web-reader/tool.ts";
@@ -55,8 +55,8 @@ export class Executor {
     private store: Store,
     private setup: SetupService,
     private runner: AgentRunner | RunnerProvider = new PiRunner(),
-    private timeoutMs = DEFAULT_RUN_TIMEOUT_SECONDS * 1000,
     private transcription = new TranscriptionService(store),
+    private chat = new Ingress(store, setup),
   ) {}
   async execute(workspaceId: string, runId: string, shutdown?: AbortSignal) {
     const deployment = await this.store.deployment();
@@ -189,10 +189,8 @@ export class Executor {
     if (!claimed) return;
     const fence = claimed.fence;
     const controller = new AbortController();
-    const deadline = AbortSignal.timeout(this.timeoutMs);
     const signal = AbortSignal.any([
       controller.signal,
-      deadline,
       ...(shutdown ? [shutdown] : []),
     ]);
     let handedOff = !!claimed.codingTaskId;
@@ -267,8 +265,7 @@ export class Executor {
               a.status = "unknown";
             else {
               a.status = "settled";
-              if (!a.pricingUnknown)
-                a.actual = Math.max(0, message.usage.cost.total);
+              a.actual = Math.max(0, message.usage.cost.total);
               a.tokens = {
                 input: message.usage.input,
                 output: message.usage.output,
@@ -369,7 +366,7 @@ export class Executor {
         tail?.role === "assistant" &&
         tail.stopReason === "stop" &&
         !claimed.pendingInputs?.length;
-      if (!completed) await draft?.start();
+      if (!completed && !claimed.workflowActivation) await draft?.start();
       const input: AgentInput = {
         cacheKey: claimed.threadId
           ? createHash("sha256")
@@ -392,7 +389,14 @@ export class Executor {
         prompt: context.prompt,
         transcript,
         tools: [
-          ...applicationTools(this.store, workspaceId, runId, fence),
+          ...applicationTools(
+            this.store,
+            workspaceId,
+            runId,
+            fence,
+            this.chat,
+            claimed.workflowId ? "workflow" : "interactive",
+          ),
           webReaderTool(this.store, workspaceId, runId, fence, guard),
           ...(claimed.searchProvider
             ? [
@@ -437,12 +441,6 @@ export class Executor {
             );
             const budgets = remainingBudgets(w, r);
             requireThat(
-              input.model.pricingKnown !== false ||
-                Math.min(budgets.run, budgets.workspace) === Infinity,
-              "model_pricing_required_for_budget",
-              409,
-            );
-            requireThat(
               Number.isFinite(amount) && amount >= 0 && amount <= budgets.run,
               "run_budget_exhausted",
               409,
@@ -462,15 +460,14 @@ export class Executor {
                   : undefined,
               reserved: amount,
               status: "reserved",
-              ...(input.model.pricingKnown === false
-                ? { pricingUnknown: true }
-                : {}),
               at: new Date().toISOString(),
             });
             return id;
           }),
         shouldPause: async () => {
           const w = await this.store.read(workspaceId);
+          if (w.runs.find((run) => run.id === runId)?.workflowActivation)
+            return "completed";
           return (
             !!w.runs.find((run) => run.id === runId)?.browserWait ||
             w.approvals.some((a) => a.runId === runId && !a.decision)
@@ -567,7 +564,7 @@ export class Executor {
         input.system = context.system;
         input.prompt = context.prompt;
       }
-      if (!completed && !transcript.length) {
+      if (!completed && !transcript.length && !claimed.workflowId) {
         const attachments = await loadAttachments(
           claimed,
           deployment.bot?.id,
@@ -594,17 +591,27 @@ export class Executor {
             "model_images_unsupported",
           );
         input.images = attachments.images;
+        if (attachments.requestText) {
+          const prompt = JSON.parse(input.prompt);
+          prompt.request = attachments.requestText;
+          input.prompt = JSON.stringify(prompt);
+        }
         input.prompt += attachments.prompt;
       }
-      let result = completed
+      let result = claimed.workflowActivation
         ? {
-            text: tail.content
-              .filter((c) => c.type === "text")
-              .map((c) => c.text)
-              .join("\n"),
+            text: claimed.workflowActivation.text,
             status: "succeeded" as const,
           }
-        : await runner.run(input);
+        : completed
+          ? {
+              text: tail.content
+                .filter((c) => c.type === "text")
+                .map((c) => c.text)
+                .join("\n"),
+              status: "succeeded" as const,
+            }
+          : await runner.run(input);
       while (true) {
         await guard();
         const finished = await this.store.change(
@@ -619,7 +626,8 @@ export class Executor {
             // Ingress and final publication share this lock. Input received after
             // Pi's last steering poll must be answered before committing the result.
             if (r.pendingInputs?.length) return false;
-            if (result.text) validateSources(result.text, r);
+            const activation = r.workflowActivation;
+            if (result.text && !activation) validateSources(result.text, r);
             const proposals = w.approvals.some(
               (a) =>
                 !a.decision &&
@@ -630,18 +638,23 @@ export class Executor {
             const task = r.codingTaskId
               ? await taskGet(sql, w.id, r.codingTaskId)
               : undefined;
-            const text = handoff
-              ? task?.state === "queued" && !task.cancelRequested && !task.error
-                ? `Your coding request for ${task.payload.repository} has been queued for Codex. Task updates will appear in this conversation.`
-                : task
-                  ? developmentStatus(task)
-                  : "Task status is unavailable."
-              : result.text.trim()
-                ? result.text
-                : "";
+            const text = activation
+              ? activation.text
+              : handoff
+                ? task?.state === "queued" &&
+                  !task.cancelRequested &&
+                  !task.error
+                  ? `Your coding request for ${task.payload.repository} has been queued for Codex. Task updates will appear in this conversation.`
+                  : task
+                    ? developmentStatus(task)
+                    : "Task status is unavailable."
+                : result.text.trim()
+                  ? result.text
+                  : "";
             const browserWaiting = !!r.browserWait;
-            r.status =
-              proposals || browserWaiting
+            r.status = activation
+              ? "succeeded"
+              : proposals || browserWaiting
                 ? "awaiting_approval"
                 : handoff
                   ? "succeeded"
@@ -649,7 +662,7 @@ export class Executor {
                     ? result.status
                     : "partial";
             r.error =
-              proposals || browserWaiting || handoff
+              activation || proposals || browserWaiting || handoff
                 ? undefined
                 : "reason" in result
                   ? result.reason
@@ -667,7 +680,7 @@ export class Executor {
             publishWidget(w, r, deployment.bot?.id);
             if (!browserWaiting && !handoff && (text || !proposals)) {
               const response = text
-                ? `${text.slice(0, 2700)}${result.status === "partial" ? `\n\n${requestFailureMessage(r.error ?? "incomplete_response")}` : ""}`
+                ? `${text.slice(0, 2700)}${result.status === "partial" && !activation ? `\n\n${requestFailureMessage(r.error ?? "incomplete_response")}` : ""}`
                 : requestFailureMessage(r.error ?? "empty_response");
               deliver(
                 w,
@@ -700,28 +713,45 @@ export class Executor {
     } catch (error) {
       // AbortSignal.any preserves the first reason, even if another source aborts later.
       const failure = signal.aborted
-        ? deadline.aborted && signal.reason === deadline.reason
-          ? new Fault("run_timeout", 504)
-          : shutdown?.aborted && signal.reason === shutdown.reason
-            ? new Fault("worker_shutdown", 503)
-            : signal.reason instanceof Fault
-              ? signal.reason
-              : new Fault("cancelled", 409)
+        ? shutdown?.aborted && signal.reason === shutdown.reason
+          ? new Fault("worker_shutdown", 503)
+          : signal.reason instanceof Fault
+            ? signal.reason
+            : new Fault("cancelled", 409)
         : error;
-      const timedOut =
-        failure instanceof Fault && failure.code === "run_timeout";
-      this.store.log.write("run_failed", {
-        error: failure,
-        workspaceId,
-        runId,
-      });
       await this.store.change(workspaceId, (w) => {
         const r = w.runs.find((r) => r.id === runId);
         if (!r || r.fence !== fence) return;
         for (const a of r.attempts)
           if (a.status === "reserved") a.status = "unknown";
-        r.status =
-          r.cancelled || (signal.aborted && !timedOut) ? "cancelled" : "failed";
+        if (r.workflowActivation && !r.cancelled && runAllowed(w, r)) {
+          this.store.log.write("workflow_activation_recovered", {
+            error: failure,
+            workspaceId,
+            runId,
+          });
+          // Creation committed before interruption; publish its saved outcome
+          // without replaying the tool or claiming the active schedule failed.
+          r.status = "succeeded";
+          r.error = undefined;
+          r.result = r.workflowActivation.text;
+          r.finishedAt = new Date().toISOString();
+          r.leaseUntil = undefined;
+          recordThreadAnswer(w, r);
+          deliver(w, r.actor, r.chatId, r.workflowActivation.text, {
+            id: `run:${r.id}:result`,
+            topicId: r.topicId,
+            runId: r.id,
+          });
+          audit(w, r.actor, "run.succeeded", r.id);
+          return;
+        }
+        this.store.log.write("run_failed", {
+          error: failure,
+          workspaceId,
+          runId,
+        });
+        r.status = r.cancelled || signal.aborted ? "cancelled" : "failed";
         r.error = r.cancelled
           ? "cancelled"
           : failure instanceof Fault
@@ -738,7 +768,7 @@ export class Executor {
             w,
             r,
             r.codingTaskId
-              ? "Your coding request was handed to Codex, but the chat response could not finish. Use /status in this conversation to check the task’s current outcome."
+              ? "Your coding request was handed to Codex, but the chat response could not finish. Ask for task status in this conversation to check its current outcome."
               : (attachmentErrors[r.error ?? ""] ??
                   requestFailureMessage(r.error ?? "")),
           );

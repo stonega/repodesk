@@ -19,12 +19,16 @@ The setup page is visible before login and asks only for a username and password
 The first successful submission creates the deployment administrator and a session.
 The server locks the deployment row and atomically checks its unclaimed state,
 creates the account and marks it claimed; concurrent requests cannot create two
-initial administrators. Initialized deployments reject further claims. Complete
-first setup before exposing a fresh deployment beyond localhost, because anyone
-who can reach an unclaimed deployment can submit the first account.
+initial administrators. Initialized deployments reject further claims. A fresh
+deployment serves this form at its configured site URL on the first visit.
+Administrator creation must not require an SSH tunnel, shell activation command,
+proxy maintenance gate or pre-generated account.
 
 Updated 2026-09-27 following the user's request to remove bootstrap tokens and keep
 first setup to username and password only.
+Clarified 2026-11-10: the operator creates the first administrator directly in the
+web UI when opening a clean deployment; host-side setup gates are not part of
+this flow.
 
 New GitHub App registrations suggest `repodesk`, preselect Review Bot's PR/comment
 events and enable the operator-specific webhook on public HTTPS deployments.

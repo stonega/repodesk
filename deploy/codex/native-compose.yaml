@@ -1,0 +1,15 @@
+# Merge ONLY with the base compose.yaml, without a container-runner overlay.
+# Bind the host service to Docker's host-gateway address first (see runner guide).
+services:
+  app:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      CODEX_RUNNER_URL: http://host.docker.internal:3020
+      CODEX_RUNNER_TOKEN: ${CODEX_RUNNER_TOKEN:?Set CODEX_RUNNER_TOKEN}
+  worker:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      CODEX_RUNNER_URL: http://host.docker.internal:3020
+      CODEX_RUNNER_TOKEN: ${CODEX_RUNNER_TOKEN:?Set CODEX_RUNNER_TOKEN}

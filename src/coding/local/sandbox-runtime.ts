@@ -62,7 +62,7 @@ const recordSchema = z.object({
   volume: volumeSchema,
   mode: z.enum(["prepare", "setup", "implement", "check", "export", "publish"]),
   authVolume: volumeSchema.optional(),
-  backend: z.literal("opensandbox"),
+  backend: z.enum(["opensandbox", "native"]),
   sealedEnv: z.string().optional(),
   state: z.enum(["created", "starting", "started", "exited"]),
   sandboxId: z.string().optional(),
@@ -81,10 +81,20 @@ export class SandboxTaskRuntime implements TaskRuntime {
     private driver: SandboxDriver,
   ) {
     this.root =
-      settings.CODEX_SANDBOX_ROOT ??
-      join(settings.CODEX_RUNNER_STATE, "sandbox-data");
-    this.hostRoot = settings.CODEX_SANDBOX_HOST_ROOT ?? this.root;
-    this.metadata = join(settings.CODEX_RUNNER_STATE, "sandbox-runtime");
+      settings.CODEX_CONTAINER_ENGINE === "native"
+        ? join(settings.CODEX_RUNNER_STATE, "native-data")
+        : (settings.CODEX_SANDBOX_ROOT ??
+          join(settings.CODEX_RUNNER_STATE, "sandbox-data"));
+    this.hostRoot =
+      settings.CODEX_CONTAINER_ENGINE === "native"
+        ? this.root
+        : (settings.CODEX_SANDBOX_HOST_ROOT ?? this.root);
+    this.metadata = join(
+      settings.CODEX_RUNNER_STATE,
+      settings.CODEX_CONTAINER_ENGINE === "native"
+        ? "native-runtime"
+        : "sandbox-runtime",
+    );
   }
   private async initialize() {
     for (const path of [
@@ -120,7 +130,8 @@ export class SandboxTaskRuntime implements TaskRuntime {
   }
   async ready() {
     requireThat(
-      [0, 1000].includes(process.getuid?.() ?? -1),
+      this.settings.CODEX_CONTAINER_ENGINE === "native" ||
+        [0, 1000].includes(process.getuid?.() ?? -1),
       "coding_sandbox_supervisor_uid_invalid",
       503,
     );
@@ -132,7 +143,11 @@ export class SandboxTaskRuntime implements TaskRuntime {
     const path = this.volume(name);
     await mkdir(path, { recursive: true, mode: 0o700 });
     // A dedicated unprivileged supervisor may own storage instead of root.
-    if (process.getuid?.() === 0) await chown(path, 1000, 1000);
+    if (
+      process.getuid?.() === 0 &&
+      this.settings.CODEX_CONTAINER_ENGINE !== "native"
+    )
+      await chown(path, 1000, 1000);
     await chmod(path, 0o700);
   }
   async create(spec: TaskSpec) {

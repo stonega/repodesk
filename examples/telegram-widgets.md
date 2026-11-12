@@ -17,6 +17,32 @@ transports and never send live messages.
    essential meaning must remain in the caption/text on older clients. Check that
    switching Topics and returning does not imply local preview changes were saved.
 
+## Automatic selection quality
+
+Use these ordinary requests with a real model on the test deployment. They do
+not require an explicit widget request. Check useful selection and accurate data,
+not an exact HTML layout:
+
+1. "Compare these three plans: Basic USD 10/month for 1 seat; Team USD 25/month
+   for 3 seats; Pro USD 60/month for 10 seats." Expect a useful visual comparison
+   when it improves the answer, with a concise text recommendation.
+2. "How does the cost change if we double the team? We have 3 seats at USD 10
+   each." Expect a local calculator or scenario comparison with correct totals.
+3. "Explain how these three services exchange events: API sends to the queue,
+   worker consumes the queue, worker writes results to the API." Expect a diagram
+   when it improves understanding, with an independently useful text explanation.
+4. "Hello", "What is 2 + 2?", and "What is the status of my last task?" should
+   receive ordinary text without a widget. Status still requires available evidence.
+5. Repeat the plan comparison with "Text only." Expect no widget.
+6. Repeat the cost question in a group and as a scheduled task. Expect text.
+7. On a workspace with the original preset, confirm the updated instructions
+   appear once and disabled settings stay disabled. A fresh enabled run pins the
+   new snapshot; existing run/workflow pins retain their old version.
+
+Deterministic tests check eligibility, preset updates and production prompt/tool
+wiring with fake models. Actual model selection and native Telegram rendering
+remain manual staging checks; no live model or message is needed for the tests.
+
 Deterministic checks:
 
 ```sh

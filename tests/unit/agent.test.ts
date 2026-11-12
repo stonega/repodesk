@@ -619,6 +619,18 @@ test("compatible endpoint receives the custom model, key and exact thinking leve
 
 test("optional prices remain unknown for custom models and catalog overrides stay isolated", () => {
   expect(selectedModel("team/custom").pricingKnown).toBe(false);
+  expect(selectedModel("team/custom").cost).toEqual({
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+  });
+  expect(
+    selectedModel("team/custom", { modelPricing: { input: 2 } }).cost,
+  ).toEqual({ input: 2, output: 0, cacheRead: 2, cacheWrite: 2 });
+  expect(
+    selectedModel("team/custom", { modelPricing: { output: 3 } }).cost,
+  ).toEqual({ input: 0, output: 3, cacheRead: 0, cacheWrite: 0 });
   const custom = selectedModel("team/custom", {
     modelPricing: { input: 0, output: 0 },
     modelLimits: { contextWindow: 128000, maxOutputTokens: 16000 },
@@ -682,12 +694,14 @@ test("currency conversion applies only to entered prices, including cache and ze
   expect(selectedModel("gpt-4.1-mini").cost).toEqual(catalog.cost);
 });
 
-test("unpriced custom models run without dollar caps but finite budgets reject before dispatch", async () => {
+test("missing token prices count as zero with unlimited, finite and zero budgets", async () => {
   for (const budgets of [
     { run: Infinity, workspace: Infinity },
     { run: 1, workspace: Infinity },
     { run: Infinity, workspace: 1 },
     { run: 0, workspace: Infinity },
+    { run: Infinity, workspace: 0 },
+    { run: 0, workspace: 0 },
   ]) {
     let sent = 0;
     let reserved = 0;
@@ -699,23 +713,16 @@ test("unpriced custom models run without dollar caps but finite budgets reject b
       input({
         model: selectedModel("team/unpriced"),
         remainingBudget: async () => budgets,
-        reserve: async () => {
+        reserve: async (amount) => {
+          expect(amount).toBe(0);
           reserved++;
           return "attempt";
         },
       }),
     );
-    if (budgets.run === Infinity && budgets.workspace === Infinity) {
-      expect((await promise).text).toBe("Done");
-      expect(sent).toBe(1);
-      expect(reserved).toBe(1);
-    } else {
-      await expect(promise).rejects.toThrow(
-        "model_pricing_required_for_budget",
-      );
-      expect(sent).toBe(0);
-      expect(reserved).toBe(0);
-    }
+    expect((await promise).text).toBe("Done");
+    expect(sent).toBe(1);
+    expect(reserved).toBe(1);
   }
 });
 test("model capacity and explicit input limits reject before reservation or dispatch", async () => {

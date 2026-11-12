@@ -453,6 +453,14 @@ when implementing or reviewing a change.
   universal text description and removing the Repository ID input because users
   should not enter internal IDs. Default-branch indexing is the implementation
   choice supporting removal of branch settings.
+- **Source update:** 2026-10-29 — user requested removing **Save Code Truth**
+  and moving its API request to the repository dialog's **Confirm** action.
+- **Acceptance:** Confirm saves New/Edit directly and closes only after success.
+  Failed requests preserve the open editor and entered values with an in-dialog
+  error; pending saves lock fields, submission and dismissal. Cancel makes no
+  request. Repository removal saves directly and retains the saved card on failure.
+  Show saved repository summaries without a page-level save form or footer gap.
+  Verify persistence, enablement, loading/empty/error states and desktop/mobile layouts.
 - **Exceptions:** Internal MCP target/snapshot identifiers remain part of the
   service protocol and code provenance, outside the repository editor.
 
@@ -532,6 +540,19 @@ when implementing or reviewing a change.
   their specific explanations. A gateway error alone does not establish a
   provider-side outage or a particular firewall/routing cause.
 
+### Telegram token errors explain the expected credential
+
+- **Preference:** Explain malformed Telegram bot tokens with BotFather guidance
+  and an example of the expected token format, rather than a bare API error code.
+- **Scope:** The Telegram setup step and Manage Telegram bot dialog.
+- **Source:** 2026-11-10 — the user submitted a model-key-shaped value as a bot
+  token, received `invalid_request` and requested a clearer error message.
+- **Acceptance:** Keep the draft and recovery controls available after a failed
+  save. Show the validation message beside the relevant form or inside its dialog
+  at desktop and mobile widths. Never echo the submitted credential in the error.
+- **Exceptions:** A malformed token must be rejected before contacting Telegram;
+  a well-formed token still requires the existing upstream identity verification.
+
 ### Provider types supply automatic model information
 
 - **Preference:** Check the provider type and fetch model prices and context
@@ -580,25 +601,44 @@ when implementing or reviewing a change.
 - **Exceptions:** Owners can customize their App directly in GitHub settings;
   RepoDesk does not prompt for or require that customization.
 
+### Telegram features use ordinary chat
+
+- **Preference:** Remove the native slash-command menu. People ask for features
+  in ordinary language, including repository selection, GitHub/Google connections,
+  task status/cancellation, workflows, settings, usage, instructions and privacy.
+  Help and recovery messages use conversational requests.
+- **Scope:** RepoDesk's Telegram experience in private chats, linked groups and
+  Topics. Account management stays private; group delivery still depends on
+  Telegram privacy settings and mentions/replies.
+- **Source:** 2026-11-11 — the user showed the native command menu and requested
+  removing every item and supporting features through the chatbot without commands.
+  This supersedes the 2026-10-08 preference to advertise shortcuts in that menu.
+- **Acceptance:** Clear all three previously published command scopes, including
+  the default fallback, on worker activation/restart and credential replacement.
+  Ordinary requests reach the existing permission-checked services. Preserve the
+  requesting actor, workspace and Topic, deduplicate tool calls, reject forwarded
+  or historical authority and retain sign-in/account confirmation and approvals.
+  Verify delivery payloads and callbacks deterministically. Native desktop/mobile
+  rendering remains a live acceptance check; there is no web-page layout change.
+- **Exceptions:** Telegram's platform-generated Start, invitation/deep-link payloads,
+  account confirmation and approval buttons remain. Legacy typed commands continue
+  to work for compatibility but are neither advertised nor required. BotFather's
+  own setup commands are external platform controls.
+
 ### Telegram repository menus favor recent work
 
-- **Preference:** Offer `/repos` as a native inline repository picker, showing at
-  most ten active repositories. Prioritize repositories the person recently
-  mentioned, then recent repository activity. Keep the current selection visible
-  and make changing or clearing it straightforward.
-  Make `/repos` and private `/github` account linking discoverable in Telegram's
-  native command menu alongside the main conversation/task shortcuts.
+- **Preference:** When asked to choose a repository, offer an inline picker with
+  at most ten active repositories. Prioritize repositories the person recently
+  mentioned, then recent activity. Show the current selection and provide clearing.
 - **Scope:** Repository selection in Telegram, scoped to the workspace, person,
-  bot and chat/topic. Use one repository per button row so names remain readable;
-  `/repos <name>` searches connected choices beyond the first ten.
-- **Source:** 2026-10-08 — user requested improving Telegram's inline menu with
-  `/repos` and the latest ten active repositories, preferring recent mentions.
-  Later in the same task, the user also requested `/github` for connecting GitHub.
-- **Exceptions:** Show only workspace-selected repositories accessible to the
-  person; exclude archived/disabled repositories and private repositories in
-  groups. Selection supplies default context and does not grant action permission.
-  Rankings use retained personal mentions and saved GitHub activity metadata;
-  they do not imply a live GitHub fetch for each command.
+  bot and chat/topic. Use one repository per row. A repository-name request searches
+  connected choices beyond the first ten.
+- **Source:** 2026-10-08 — user requested the latest ten active repositories,
+  preferring recent mentions. 2026-11-11 — entry and search now use ordinary chat.
+- **Exceptions:** Show only selected, accessible repositories; exclude archived or
+  disabled repositories and private repositories in groups. Selection supplies
+  context and grants no action permission. Rankings use retained personal mentions
+  and saved GitHub metadata, without a live fetch for every picker.
 
 ### Workflow cards lead to dedicated details
 
@@ -610,27 +650,59 @@ when implementing or reviewing a change.
 - **Source:** 2026-10-08 — user requested improving card content, adding a workflow
   detail page and updating related APIs, with a screenshot of the workflows page.
   The labeled summary layout is the implementation choice for that request.
+- **Source update:** 2026-11-11 — the user requested user information on each
+  workflow card. Show the execution owner's saved Telegram name, username and
+  numeric ID in both list and detail summaries, reusing the shared Telegram
+  identity display. Missing profile fields fall back to the numeric identity.
 - **Exceptions:** Workspace boundaries still apply. Display recurrence previews
   as previews when a workflow is not active.
 
-### Panel administrators manage workflows without Telegram linking
+### Workflow editing belongs to the linked owner
 
-- **Preference:** Treat authorized panel administrators as workflow managers.
-  Show full saved workflow details and New, Edit, approval and lifecycle actions
-  without requiring their personal Telegram identity to be linked.
+- **Preference:** Only the workflow's owner can edit its saved definition,
+  including when the requester is a panel administrator or deployment operator.
+  Show Edit only when the signed-in account's verified Telegram identity matches
+  that owner. Authorized administrators can still inspect saved workflow details.
 - **Scope:** Workflow lists, details and modal editors, including deployment
   operators before Telegram linking. This does not change Telegram command access.
 - **Source:** 2026-10-21 — user rejected the read-only workflow notice because
   the web panel is for administrators who already have management permission.
-- **Acceptance:** At desktop and mobile widths, an unlinked administrator can
-  open details, create/edit in modals, approve and control schedules. Remove the
-  read-only notice and its spacing. Keep saved summaries separate from editors,
-  pending locks, retained failed drafts and actionable errors.
-- **Exceptions:** Execution still uses an active Telegram member's permissions.
+- **Source update:** 2026-11-11 — the user requested editing existing workflows
+  only by their owners and explicitly confirmed that this includes web panel
+  administrators. This supersedes the earlier administrator editing exception.
+- **Acceptance:** At desktop and mobile widths, linked owners can open the
+  existing modal editor and save exact versioned updates. Other owners and
+  unlinked administrators have no Edit action on lists or details; details explain
+  the ownership requirement. Forged or stale direct API edits fail on the server.
+  Saved summaries remain separate from editors, with no empty action wrappers
+  or spacing after Edit is hidden. Retain pending locks, failed drafts, keyboard
+  dismissal/focus return and actionable errors. Inspect populated, loading,
+  empty, pending and denied-save states.
+- **Source update:** 2026-11-11 — the user clarified that workflows do not need
+  administrator approval. Panel Save applies the exact edited schedule directly,
+  with no separate preview/approve step or workflow approval queue. The user subsequently chose immediate activation from explicit Telegram requests;
+  send a confirmation with time and destination, with no approval buttons. Ask
+  only when essential schedule information is missing.
+- **Exceptions:** This preference changes definition editing; existing
+  administrator inspection and lifecycle permissions remain separate. Execution
+  still uses an active Telegram member's permissions.
   Existing workflows retain that owner. New private schedules use their active
   recipient; new group schedules use the linked administrator's membership or
   an active workspace owner/admin. Destinations, repositories, versions, skills
   and team budgets are rechecked through the existing execution policy.
+
+### Scheduled workflows omit creation in the web panel
+
+- **Preference:** Remove the Add workflow action and schedule creation dialog
+  from the web panel. Keep saved workflow summaries, details, modal editing
+  and lifecycle actions available. Panel edits save directly.
+- **Scope:** Scheduled workflows in the admin web app, on desktop and mobile.
+- **Source:** 2026-11-05 — user requested removing Add new workflow from the web UI.
+  This supersedes the creation action in the earlier panel-management preference.
+- **Acceptance:** Loading, populated, empty and failed list states have no creation
+  action or form. Remove the empty heading action wrapper; failed loads retain
+  Try again. Editing retains pending locks and failed drafts.
+- **Exceptions:** Telegram proposals and the workflow creation API remain available.
 
 ### Workflow budgets follow team settings
 
@@ -1010,8 +1082,8 @@ when implementing or reviewing a change.
 - **Source:** 2026-10-05 — user requested consistent plugin details based on the
   Codex screenshot and an Enable toggle to the right of the title.
 - **Exceptions:** Market discovery entries have no Enable switch. New file-plugin
-  registration can set its initial enabled state; repository drafts retain their
-  explicit save step.
+  registration can set its initial enabled state. Code Truth repository dialogs
+  save on Confirm; its Enable switch remains independent.
 
 ### Dialog support actions use secondary buttons
 
@@ -1851,8 +1923,8 @@ when implementing or reviewing a change.
 - **Exceptions:** Sign-in/bootstrap, policy forms,
   workspace creation in the setup wizard, approval decisions and
   recovery controls outside Operations stay on their pages. Field editing
-  within a modal may remain inline. Applying repository changes edits
-  a draft; the existing Save Code Truth step persists it. GitHub confirmation
+  within a modal may remain inline. Code Truth repository changes save through
+  the modal's Confirm action. GitHub confirmation
   still takes place on GitHub. The policy-form exception does not cover saved
   repository policy records on plugin detail pages, including Review Bot.
 
@@ -1938,15 +2010,18 @@ Use this format for each preference:
 
 - **Preference:** Make context window, maximum output and both token prices
   independently optional. Clearing a field restores automatic handling. Known
-  models use catalog metadata; distinguish unknown prices from explicit zero.
+  models use catalog metadata. Missing token prices count as zero for application
+  accounting and budget enforcement.
 - **Scope:** Model selection and advanced settings in setup and the admin panel.
 - **Source:** 2026-10-12 — user requested making all four model settings optional.
   The user clarified that the provider should handle context limits when the
   context window is blank; do not substitute an app context-window cap.
+  On 2026-11-11, the user requested treating missing token prices as zero so
+  finite dollar budgets allow those models to run.
 - **Exceptions:** Unknown models use a documented automatic output allowance,
-  not a claimed provider capability. Finite dollar budgets require known prices; missing prices
-  leave costs unavailable instead of treating the provider as free. Explicit capacity
-  overrides must leave room for input.
+  not a claimed provider capability. Available prices and operator-reconciled
+  charges continue to count toward budgets. Explicit capacity overrides must leave
+  room for input.
 
 ### Model prices have a selectable currency
 
@@ -2021,6 +2096,26 @@ Use this format for each preference:
   Codex handoffs, scheduled workflows and control commands keep their existing
   lifecycles. Unaddressed group traffic still needs its existing follow-up gate.
   Explicit reply anchors and native Topics retain their routing authority.
+
+### Voice messages continue the conversation as text
+
+- **Preference:** Respond to the meaning of a voice message as naturally as typed
+  text. Do not announce receipt, quote its transcript or diagnose audio support
+  unless the person asks. Ordinary chat requests have no automatic queued message,
+  including after a long wait; retain native thinking/Stop and explicit commands.
+- **Scope:** Interactive Telegram voice notes, audio messages and audio documents
+  in private chats and addressed group conversations. The queue rule also applies
+  to typed chat requests. Codex task progress keeps its existing behavior.
+- **Source:** 2026-10-28 — user reported slow, inaccurate audio tests and showed
+  an unwanted queued acknowledgement and transcript-first reply.
+- **Acceptance:** The current spoken text reaches the model as the current request;
+  earlier recordings remain clearly attributed context. Two consecutive recordings
+  yield ordinary replies with no automatic transcript or queue acknowledgement.
+  Keep cancellation, duplicate-update protection and source authorization intact.
+- **Exceptions:** Explicit requests to transcribe, quote or troubleshoot audio may
+  discuss the recording. Unreadable/no-speech inputs still need an actionable error.
+  Forwarded recordings remain references; speech alone does not authorize writes.
+  Native desktop/mobile Telegram rendering requires live acceptance.
 
 ### Telegram feels like a warm work buddy
 
@@ -2128,13 +2223,14 @@ Use this format for each preference:
   detailed cause in the user-facing reply.
   2026-10-18 — user showed a missing-GitHub-connection reply and requested clear
   instructions to connect the account through `/github`.
-- **Exceptions:** Keep short private replies on native thinking previews without
-  an extra immediate queued acknowledgement. Unaddressed group traffic stays
-  silent. Revocation and destination policy can prevent a notification. Unknown
+- **Exceptions:** Keep ordinary private replies on native thinking previews without
+  an automatic queued acknowledgement, including long waits (2026-10-28).
+  Unaddressed group traffic stays silent. Revocation and destination policy can
+  prevent a notification. Unknown
   remote outcomes require truthful uncertainty rather than a success or stopped
   claim. Execution quotas remain governed by the existing Codex preference.
   Native Stop remains the control for private streaming answers. Explicit commands
-  remain available; long private queue notices also offer inline task controls.
+  remain available; ordinary chat requests do not send queue notices.
   A confirmed deleted/uneditable progress message may be replaced once. An unknown
   original send must be reconciled before a replacement; retries of edits target
   the already-known message.
@@ -2205,11 +2301,21 @@ Use this format for each preference:
 
 - **Preference:** Ask only for username and password when creating the first
   administrator. Do not require a bootstrap token, host command or confirmation field.
+  Opening a clean deployment at its configured site URL must show this form
+  directly, without an SSH tunnel or a separate host-side publication step.
 - **Scope:** Unclaimed deployment setup at `/setup`; retain the atomic server-side
   first-account restriction and existing sign-in protections.
 - **Source:** 2026-09-27 — user requested removing the Bootstrap token and asking
   only for username and password on first setup.
-- **Exceptions:** None recorded.
+- **Source update:** 2026-11-10 — user reaffirmed that first-open administrator
+  creation happens in the web UI after an SSH-only gate was added to a clean VPS
+  deployment. The gate was removed from the deployment.
+- **Acceptance:** On a fresh deployment, the public site opens `/setup` with only
+  Username, Password and Create administrator. No maintenance page, generated
+  administrator or shell command is required to reach or submit the form.
+  Keep the existing first-account transaction and sign-in behavior.
+- **Exceptions:** Operators may use SSH forwarding for private/local testing;
+  it is optional and must not become an onboarding prerequisite.
 
 ### Admin site domains are configured in the panel
 
@@ -2321,8 +2427,8 @@ Use this format for each preference:
 
 ### Codex runtime is configurable in the admin panel
 
-- **Preference:** Allow the deployment operator to select Docker
-  or OpenSandbox from the Codex details page, with an option to
+- **Preference:** Allow the deployment operator to select Docker,
+  OpenSandbox or Native VPS from the Codex details page, with an option to
   follow the environment-variable default. Show the effective runtime and source
   as saved values; edit in the shared modal. Clearly identify deployment-wide scope.
 - **Scope:** Codex runtime configuration on desktop and mobile. Host services,
@@ -2332,5 +2438,8 @@ Use this format for each preference:
   environment-variable selection; the user subsequently removed microsandbox
   from scope after the VPS prerequisite check, then explicitly requested removal
   of Podman support.
+- **Source update:** 2026-11-11 — user requested an option to use the Codex CLI
+  installed directly on the VPS. Native VPS keeps the same saved summary/modal
+  editor and explains the service user’s host access before selection is saved.
 - **Exceptions:** An unavailable runner cannot accept a saved panel selection.
   Switching the effective engine waits until retained task environments are cleaned.

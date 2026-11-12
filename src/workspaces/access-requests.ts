@@ -92,7 +92,7 @@ export function decideAccessRequest(
         w,
         request.actor,
         request.chatId,
-        `Access approved for Telegram user ${request.actor}. You can now use the bot. Send /help to get started.`,
+        `Access approved for Telegram user ${request.actor}. You can now use the bot. Tell me what you want to do, or ask for help.`,
         { id: `access:${request.id}:approved`, topicId: request.topicId },
       );
   }

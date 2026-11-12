@@ -165,7 +165,11 @@ async function api<T>(
   };
   if (!response.ok)
     throw new ApiError(
-      githubAccountError[data.error] ??
+      (method === "PUT" &&
+      path.includes("/workflows/") &&
+      data.error === "owner_required"
+        ? "Only the workflow owner can edit this schedule. Link the panel account to the owner's Telegram identity."
+        : githubAccountError[data.error]) ??
         (data.error === "preset_skill_read_only"
           ? "Preset skills are read-only. Only enable and disable are available."
           : response.status === 409 && data.error === "version_conflict"
@@ -182,9 +186,10 @@ async function api<T>(
                     ? "Webhook mode requires a public HTTPS address. For local use, set TELEGRAM_TRANSPORT=polling and restart the app and worker."
                     : data.issues?.length
                       ? data.issues
-                          .map(
-                            (issue: { path: string; message: string }) =>
-                              `${issue.path}: ${issue.message}`,
+                          .map((issue: { path: string; message: string }) =>
+                            issue.path === "botToken"
+                              ? issue.message
+                              : `${issue.path}: ${issue.message}`,
                           )
                           .join(" ")
                       : (data.error ?? "Request failed")),
@@ -2399,47 +2404,20 @@ function WorkflowsPage({
     `/api/admin/workspaces/${id}/skills`,
   );
   const [editing, setEditing] = useState<Workflow>();
-  const [creating, setCreating] = useState(false);
   const closeEditor = () => {
-    setCreating(false);
     setEditing(undefined);
   };
-  const [proposal, setProposal] = useState<unknown>();
-  const initial = {
-    name: "Friday team recap",
-    task: "Summarize decisions, blockers and next steps with source IDs.",
-    chatId: "",
-    topicId: 0,
-    recurrence: {
-      frequency: "weekly",
-      hour: 17,
-      minute: 0,
-      weekday: 5,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    },
-    format: "Decisions, blockers, next steps",
-    windowDays: 7,
-  };
+  const toast = useToast();
   return (
     <Page
       title={workflowId ? "Workflow details" : "Scheduled workflows"}
       description="Daily and weekly schedules use the displayed timezone. Late runs over five minutes are skipped; daylight-saving gaps are skipped and repeated times run once."
       actions={
-        <>
-          {!workflowId && (
-            <IconButton
-              icon="add"
-              label="Add workflow"
-              disabled={!data}
-              onClick={() => setCreating(true)}
-            />
-          )}
-          {error && (
-            <Action loading={loading} onClick={async () => reload()}>
-              Try again
-            </Action>
-          )}
-        </>
+        error && (
+          <Action loading={loading} onClick={async () => reload()}>
+            Try again
+          </Action>
+        )
       }
     >
       {error && (
@@ -2483,12 +2461,14 @@ function WorkflowsPage({
               </h2>
               <span className="pill">{f.status}</span>
             </div>
-            <IconButton
-              icon="edit"
-              label="Edit proposal"
-              type="button"
-              onClick={() => setEditing(f)}
-            />
+            {f.canEdit && (
+              <IconButton
+                icon="edit"
+                label="Edit"
+                type="button"
+                onClick={() => setEditing(f)}
+              />
+            )}
           </div>
           <WorkflowSummary
             workflow={{
@@ -2500,6 +2480,9 @@ function WorkflowsPage({
           />
           {workflowId && (
             <>
+              {!f.canEdit && (
+                <p>Only the linked workflow owner can edit this schedule.</p>
+              )}
               <h3>Task</h3>
               <p className="workflow-text">{f.spec.task}</p>
               <h3>Output format</h3>
@@ -2550,7 +2533,13 @@ function WorkflowsPage({
             </p>
           )}
           <div className="row">
-            {(["run", "pause", "resume", "delete"] as const).map((action) => (
+            {(
+              [
+                ...(f.status === "active" ? (["run", "pause"] as const) : []),
+                ...(f.status === "paused" ? (["resume"] as const) : []),
+                "delete",
+              ] as const
+            ).map((action) => (
               <Action
                 icon={
                   (
@@ -2580,23 +2569,19 @@ function WorkflowsPage({
           </div>
         </section>
       ))}
-      {data && (creating || editing) && (
-        <Modal
-          title={editing ? `Edit ${editing.spec.name}` : "Propose a schedule"}
-          onClose={closeEditor}
-        >
+      {data && editing && (
+        <Modal title={`Edit ${editing.spec.name}`} onClose={closeEditor}>
           <p>
             Use a linked group ID or an active member’s Telegram ID for private
-            delivery. Existing workflows keep their execution owner; new group
-            schedules use your linked membership or the workspace owner/admin.
-            Editing requires a new approval.
+            delivery. Existing workflows keep their execution owner. Saving
+            applies the updated schedule immediately.
           </p>
           <RecordForm
             fields={prefixFields(
-              editing ? "spec." : "",
+              "spec.",
               workflowFields(skills.data?.items ?? [], [
                 ...repositorySources.repositories,
-                ...(editing?.spec.github?.repositoryIds
+                ...(editing.spec.github?.repositoryIds
                   .filter(
                     (repoId) =>
                       !repositorySources.repositories.some(
@@ -2609,24 +2594,17 @@ function WorkflowsPage({
                   })) ?? []),
               ]),
             )}
-            value={
-              editing
-                ? {
-                    version: editing.version,
-                    spec: {
-                      ...workflowSchema.parse(editing.spec),
-                      repositoryIds: editing.spec.github?.repositoryIds ?? [],
-                    },
-                  }
-                : { ...initial, repositoryIds: [] }
-            }
-            label="Preview approval proposal"
+            value={{
+              version: editing.version,
+              spec: {
+                ...workflowSchema.parse(editing.spec),
+                repositoryIds: editing.spec.github?.repositoryIds ?? [],
+              },
+            }}
+            label="Save"
             save={async (value) => {
               const record = value as Record<string, unknown>;
-              const spec = (editing ? record.spec : record) as Record<
-                string,
-                unknown
-              >;
+              const spec = record.spec as Record<string, unknown>;
               const repositoryIds = spec.repositoryIds as number[];
               delete spec.repositoryIds;
               if (repositoryIds?.length)
@@ -2635,24 +2613,18 @@ function WorkflowsPage({
                   repositoryIds,
                 };
               else delete spec.github;
-              const result = await api(
-                `/api/admin/workspaces/${id}/workflows${editing ? `/${editing.id}` : ""}`,
-                editing ? "PUT" : "POST",
+              await api(
+                `/api/admin/workspaces/${id}/workflows/${editing.id}`,
+                "PUT",
                 value,
               );
-              setProposal(result);
+              toast("Workflow saved.");
               closeEditor();
               reload();
             }}
           />
         </Modal>
       )}
-      {proposal !== undefined && (
-        <section className="card" aria-label="Created workflow proposal">
-          <DataDetails value={proposal} />
-        </section>
-      )}
-      {data && <ApprovalList id={id} reloadParent={reload} refreshKey={data} />}
     </Page>
   );
 }

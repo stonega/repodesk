@@ -319,3 +319,23 @@ test("blank optional Compose profile values retain environment fallbacks", () =>
     runnerSettings.parse({ ...settings, OPENSANDBOX_URL: "not-a-url" }),
   ).toThrow();
 });
+
+for (const selection of ["native", "opensandbox"] as const) {
+  test(`${selection} selection persists, blocks retained tasks and keeps failed probes unchanged`, async () => {
+    const f = await fixture();
+    await f.supervisor.start(f.input);
+    await expect(
+      f.supervisor.runtimeSave({ revision: 0, selection }),
+    ).rejects.toThrow("coding_runtime_in_use");
+    await f.supervisor.erase(f.input.workspaceId, f.input.taskId);
+    await f.supervisor.runtimeSave({ revision: 0, selection });
+    const restarted = new RunnerSupervisor({ ...f.env }, undefined, f.factory);
+    await restarted.initialize();
+    expect((await restarted.runtimeStatus()).engine).toBe(selection);
+    f.fail();
+    await expect(
+      restarted.runtimeSave({ revision: 1, selection: "docker" }),
+    ).rejects.toThrow("coding_runtime_unavailable");
+    expect((await restarted.runtimeStatus()).engine).toBe(selection);
+  });
+}

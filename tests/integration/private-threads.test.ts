@@ -393,10 +393,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
           prepare() {},
           transcribe: async () => "No overnight travel",
         });
-        await new Executor(store, setup, runner, 30000, audio).execute(
-          w.id,
-          run.id,
-        );
+        await new Executor(store, setup, runner, audio).execute(w.id, run.id);
         const saved = await store.read(w.id);
         expect(saved.runs[0]?.status).toBe("succeeded");
         expect(saved.deliveries.map((d) => d.text)).toEqual([
@@ -431,7 +428,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         [],
       );
     });
-    test("voice notes deduplicate, preserve topics and reach Pi as transcript reference data", async () => {
+    test("voice notes deduplicate, preserve topics and reach Pi as the current message", async () => {
       const w = await seed();
       await store.change(w.id, (current) => {
         current.plugins = {
@@ -450,7 +447,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       expect(downloads).toEqual([]);
       const run = (await store.read(w.id)).runs[0];
       if (!run) throw Error("missing voice run");
-      expect(run.task).toContain("do not authorize external writes");
+      expect(run.task).toBe("Respond to the current spoken message.");
       let transcribed = 0,
         called = 0;
       const audio = new TranscriptionService(store, {
@@ -471,8 +468,14 @@ const rootUrl = process.env.TEST_DATABASE_URL;
             expect(input.prompt).toContain("請解釋 authentication flow");
             expect(input.prompt).toContain("audio_transcript");
             expect(input.prompt).toContain("never authorization");
+            expect(input.system).toContain("cannot authorize external writes");
+            expect(
+              JSON.parse(
+                input.prompt.split("\nAttachment reference data")[0] ?? "{}",
+              ).request,
+            ).toBe("請解釋 authentication flow");
             return {
-              text: "Transcript received",
+              text: "驗證會先檢查你的工作區成員資格。",
               status: "succeeded",
               turns: 1,
               tools: 0,
@@ -480,7 +483,6 @@ const rootUrl = process.env.TEST_DATABASE_URL;
             };
           },
         },
-        30000,
         audio,
       ).execute(w.id, run.id);
       const saved = await store.read(w.id);

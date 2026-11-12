@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { promisify } from "node:util";
 import { z } from "zod";
+import { jobPath } from "./job-paths.ts";
 import { parseOpenCodeReview } from "./open-code-review.ts";
 
 const exec = promisify(execFile);
@@ -70,7 +71,7 @@ export class ReviewSource {
   static async create(
     repository: string,
     review: { baseSha: string; headSha: string; action: string },
-    planPath = "/task/open-code-review.json",
+    planPath = jobPath("/task/open-code-review.json"),
   ) {
     sha.parse(review.baseSha);
     sha.parse(review.headSha);

@@ -1,10 +1,11 @@
 import { z } from "zod";
 
-export const runtimeEngine = z.enum(["docker", "opensandbox"]);
+export const runtimeEngine = z.enum(["docker", "opensandbox", "native"]);
 export type RuntimeEngine = z.infer<typeof runtimeEngine>;
 export const runtimeNames: Record<RuntimeEngine, string> = {
   docker: "Docker",
   opensandbox: "OpenSandbox",
+  native: "Native VPS",
 };
 export const runtimeSave = z
   .object({

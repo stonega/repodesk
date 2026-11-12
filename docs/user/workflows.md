@@ -18,14 +18,18 @@
 目的、来源和时间安排相同的任务会提示已有任务及其状态，包括草稿、暂停或挂起的任务。
 相似但有差异时，会先确认是否确实需要另建任务；确认重复建立后才会继续提出新提案。
 
-机器人展示提案。确认以下内容后，由请求本人在十五分钟内点击 **Approve**：
+When the recurrence, local time and timezone are clear, the bot creates an active
+schedule immediately. No requester or administrator approval button is required.
+The confirmation shows the schedule, destination and next execution times. Missing
+essential details are clarified before creation.
 
-- 谁负责此任务。
-- 读取哪个群、Topic 或仓库，以及时间范围。
-- 输出到哪里，哪些人会看到。
-- 时区、格式和接下来的三个执行时间；预算统一遵循团队设置。
-
-**Reject** 放弃，过期后重新提出。时间或接收位置不清楚时，先补充信息。定时任务的创建与日常聊天不同，描述需求不代表已经激活。
+To change an existing schedule, describe the change in the same conversation,
+for example, “Change my daily weather report to include AQI; keep 08:00
+Asia/Taipei.” The bot updates your existing workflow and confirms the replacement.
+It keeps one schedule, retains version history and cancels queued output from the
+old version. Editing a paused schedule keeps it paused. A stale version or a
+change to another owner's schedule, chat or Topic is rejected. Use the panel or
+the commands below to pause or delete a schedule.
 
 ## 定期 GitHub 报告
 
@@ -33,45 +37,60 @@
 
 > 每天 09:00 Asia/Taipei 给我一份 example/app 的 PR 报告，列出待审查、已合并和阻塞项，附链接。
 
-工作区需先 [连接 GitHub](github.md)。报告会固定批准的仓库来源与目的地。私人仓库信息发送到群组时，需要工作区管理员检查并批准其披露范围；不要直接把私聊读取权限当作群分享许可。
+工作区需先 [连接 GitHub](github.md)。Reports pin their repository sources and destination. Publishing private-repository
+reports to a group requires an active workspace owner/admin as the workflow owner
+with access to those repositories. Private read access alone does not allow group
+publication; there is no separate workflow approval step.
 
 GitHub 元数据可以生成报告，但不表示可以持续访问任意网站或使用所有插件。Cloudflare 工具和自动长期记忆不用于这些定时运行。
 
 ## 在面板管理
 
-打开 **Workflows**，可以创建、查看、编辑、审批和暂停任务。修改会使用版本化提案，核对新的时间与范围后再批准。多个管理员同时修改导致保存冲突时，先重新加载核对。
+Open **Workflows** to view, edit and pause existing schedules. Each card shows the
+owner's Telegram name, username and ID when available. Create new
+schedules by describing the request in Telegram; the web panel has no creation
+action. Explicit Telegram requests activate immediately when the recurrence, time
+and timezone are clear; no requester or administrator approval is required. In the
+panel, **Edit → Save** applies the updated schedule immediately. If the saved
+version changes before you save, reload and review before retrying.
+Editing a paused schedule keeps it paused until you choose **Resume**.
 
-面板管理员可以管理工作区内所有任务，无需先绑定自己的 Telegram 身份。管理员操作会记录在审计中；已有任务仍使用原所有者的执行权限。新私聊任务使用接收成员的身份，新群组任务使用已绑定的管理员身份，未绑定时使用活跃的工作区 owner/admin。工作区需有活跃的执行成员；群组关联、仓库访问、技能和团队预算检查仍然适用。
+Only the workflow owner can edit its definition, including in the web panel.
+Link the panel account to that owner's Telegram identity to use **Edit**. An
+administrator role does not grant permission to edit another person's workflow.
+Other authorized administrators can inspect details and use their existing
+lifecycle controls. Management actions are audited; active membership, linked
+groups, repository access, skills and team budgets still apply.
 
-Telegram 命令：
-
-```text
-/automations
-/automations pause <任务 UUID>
-/automations resume <任务 UUID>
-/automations run <任务 UUID>
-/automations delete <任务 UUID>
-```
-
-操作需要任务对应权限。暂停后不再触发新的运行；恢复已暂停任务与重新授权被撤权而挂起的任务不同，后者需要重新审批。
-
-## 调整输出
-
-Reply 一条定时输出：
+Ask in Telegram using ordinary language:
 
 ```text
-/correct once 这次改成中文，并把阻塞放在最前面
+Show my schedules
+Pause the daily recap
+Resume the daily recap
+Run the daily recap now
+Delete the daily recap
 ```
 
-只生成一次纠正后的结果，不修改未来规则。希望持久生效时：
+Actions require permission for the selected workflow. Identify the schedule by
+name; clarify which one when several match. Pausing stops future triggers.
+Resuming a paused workflow differs from restoring revoked authorization.
 
-```text
-/correct save 后续都使用中文，先列阻塞，再列决策和待办
-```
+## Adjust output
 
-核对并批准持久纠正。未来运行使用新规则，已经执行中的任务保留开始时的版本。也可在面板管理工作流指令。
+Reply to a report: “For this answer, use English and put blockers first”. This
+changes the current answer only. To save a rule, reply: “For future reports, always
+use English and put blockers first”. Review and approve the persistent correction.
+Future runs use the new rule; existing runs keep their original version. Workflow
+instructions are also managed in the panel.
 
 ## 时间、失败和恢复
+
+Each scheduled or **Run now** invocation carries out the saved task once. It does
+not treat earlier setup messages as a new request to create or edit a schedule.
+Conversation history is read only when the task needs it, such as a chat recap;
+weather and similar live-data tasks start from their saved instructions. Earlier
+confirmations and chat requests cannot authorize another workflow or saved rule.
 
 - 使用 IANA 时区，例如 `Asia/Taipei`，不要只写可能有歧义的“周五下午”。涉及夏令时时核对显示的执行时间。
 - 延迟超过五分钟的计划会跳过，恢复服务后不会集中补发大量过期输出。

@@ -40,7 +40,7 @@ export class DeviceAuth {
   }
   constructor(
     private settings: RunnerSettings,
-    private binary = "codex",
+    private binary?: string,
   ) {}
   private home(workspaceId: string) {
     return join(
@@ -210,11 +210,18 @@ export class DeviceAuth {
       { mode: 0o600 },
     );
     this.failed.delete(workspaceId);
-    const child = spawn(this.binary, ["login", "--device-auth"], {
-      env: { PATH: process.env.PATH, HOME: "/tmp", CODEX_HOME: home },
-      stdio: ["pipe", "pipe", "pipe"],
-      detached: process.platform !== "win32",
-    });
+    const child = spawn(
+      this.binary ??
+        (this.settings.CODEX_CONTAINER_ENGINE === "native"
+          ? this.settings.CODEX_NATIVE_CODEX_BIN
+          : "codex"),
+      ["login", "--device-auth"],
+      {
+        env: { PATH: process.env.PATH, HOME: "/tmp", CODEX_HOME: home },
+        stdio: ["pipe", "pipe", "pipe"],
+        detached: process.platform !== "win32",
+      },
+    );
     const closed = new Promise<void>((resolve) => {
       child.once("close", resolve);
       child.once("error", resolve);

@@ -5,7 +5,6 @@ import { codingStatusLabel, runnerStage } from "../../src/coding/feedback.ts";
 import {
   clearProgress,
   type Progress,
-  queuedRunFeedback,
   recordProgress,
 } from "../../src/telegram/feedback.ts";
 import {
@@ -149,29 +148,6 @@ test("repair cycles reuse confirmed progress after a restart without new Telegra
   expect(w.deliveries.filter((d) => !d.editOf)).toHaveLength(1);
 });
 
-test("only retained authorized private queue waits receive a delayed queue notice", () => {
-  const w = workspace(),
-    at = new Date();
-  const r = createRun(w, "101", "hello", "101", 3, "gpt-4.1-mini", { now: at });
-  createRun(w, "101", "group question", "-100100", 3, "gpt-4.1-mini", {
-    now: at,
-  });
-  queuedRunFeedback(w, at.getTime() + 29000);
-  expect(w.deliveries).toHaveLength(0);
-  queuedRunFeedback(w, at.getTime() + 31000);
-  queuedRunFeedback(w, at.getTime() + 60000);
-  expect(w.deliveries).toHaveLength(1);
-  expect(w.deliveries[0]?.feedback).toMatchObject({ owner: "run", id: r.id });
-  expect(w.deliveries[0]?.text).not.toMatch(/\/status|\/cancel/);
-  expect(w.deliveries[0]?.buttons?.[0]?.map((b) => b.text)).toEqual([
-    "Status",
-    "Cancel",
-  ]);
-  r.status = "running";
-  clearProgress(w, "run", r.id);
-  expect(w.deliveries[0]?.state).toBe("cancelled");
-});
-
 test("a repeated cancellation does not claim an active executor has stopped", () => {
   const w = workspace();
   const r = createRun(w, "101", "hello", "101", 3, "gpt-4.1-mini");
@@ -217,9 +193,11 @@ test("messages hide unknown codes and expose only verified runner stages", () =>
   );
 });
 
-test("missing GitHub connections explain the private /github flow and request retry", () => {
+test("missing GitHub connections explain the private chat flow and request retry", () => {
   const message = codingFailureMessage("github_user_connection_required");
-  expect(message).toContain("Send /github in this bot's private chat");
+  expect(message).toContain(
+    "Ask me to connect your GitHub account in this bot's private chat",
+  );
   expect(message).toContain("authorization link");
   expect(message).toContain("return to the bot and confirm your account");
   expect(message).toContain("resending your request");

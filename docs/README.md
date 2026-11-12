@@ -29,10 +29,12 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Telegram image and attachment input](implementation/telegram-attachments.md) | Implemented formats, download controls, media budgets and limits |
 | [Native Telegram reactions](implementation/telegram-reactions.md) | Optional conversational emoji reactions, scoped message targeting and durable delivery |
 | [Telegram widgets](implementation/telegram-widgets.md) | Bundled interactive HTML skill, private Topics, durable delivery and caption fallback |
+| [Telegram chat controls](../examples/telegram-chat-controls.md) | Command-free requests, account controls and native-menu acceptance |
 | [Telegram platform constraints](reference/telegram-platform.md) | What changes when Slack becomes Telegram |
 | [Private conversation threads](design/private-threads.md) | Native Topics, discussion memory, cache-aware compaction and private history |
 | [Group conversations](design/group-conversations.md) | Per-user continuity, shared discussions and natural follow-up triggering |
 | [Long-term memory](design/long-term-memory.md) | Scoped private/shared recall, background extraction, user controls and retention |
+| [Source grounded memory plan](implementation/decision-memory-plan.md) | Proposed decision cases, scoped preference revisions, correction and Codex recall |
 | [Architecture](design/architecture.md) | Implemented local pilot and production boundaries |
 | [Admin panel](design/admin-panel.md) | P0 configuration screens, permissions, APIs and acceptance criteria |
 | [UI rules](design/ui-rules.md) | User design preferences, their scope, and how to apply and maintain them |

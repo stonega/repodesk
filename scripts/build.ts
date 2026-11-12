@@ -8,6 +8,7 @@ const backend = await Bun.build({
     "src/web-reader/web-reader-extract.ts",
     "src/coding/local/runner-server.ts",
     "src/coding/local/job.ts",
+    "src/coding/local/native-phase.ts",
     "src/browser/browser-host.ts",
     "src/browser/browser-host-worker.ts",
     "scripts/browser-host-smoke.ts",

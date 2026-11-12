@@ -135,6 +135,7 @@ export function sweep(w: Workspace, now = new Date()) {
         r.transcript = [];
         r.result = undefined;
         delete r.widget;
+        delete r.workflowActivation;
         for (const d of w.deliveries) {
           if (d.runId !== r.id || !d.widget) continue;
           delete d.widget;
@@ -192,6 +193,7 @@ export function sweep(w: Workspace, now = new Date()) {
       r.transcript = [];
       r.result = undefined;
       delete r.widget;
+      delete r.workflowActivation;
       r.tools = {};
       delete r.contextSummary;
       delete r.compaction;

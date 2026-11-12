@@ -10,8 +10,14 @@ import type { Run, Workspace } from "../../src/domain.ts";
 import { GitHubApp } from "../../src/github/app.ts";
 import { githubExtension } from "../../src/github/extension.ts";
 import { GitHubMetadata } from "../../src/github/metadata.ts";
-import { decide, proposeWorkflow, tick } from "../../src/workflows/service.ts";
+import {
+  activateWorkflow,
+  decide,
+  proposeWorkflow,
+  tick,
+} from "../../src/workflows/service.ts";
 import { runAllowed } from "../../src/workspaces/policy.ts";
+import { createRun } from "../../src/workspaces/service.ts";
 import { spec } from "../fixtures.ts";
 import { githubFixtureConfig } from "../github-fixture.ts";
 import {
@@ -344,10 +350,295 @@ const url = process.env.TEST_DATABASE_URL;
       ).toBe("00:00");
       expect(result.complete).toBe(true);
     });
-    test("free-form schedule proposals and runs survive persistence without a skill or extra tool grants", async () => {
+    test.each([
+      ["other owner", "owner_required"],
+      ["other topic", "workflow_destination_denied"],
+      ["other chat", "workflow_destination_denied"],
+      ["deleted", "not_found"],
+      ["other workspace", "not_found"],
+      ["stale version", "version_conflict"],
+      ["missing version", "workflow_version_required"],
+      ["missing id", "workflow_version_required"],
+      ["historical request", "workflow_request_unverified"],
+      ["permission revoked", "github_workflow_scope_denied"],
+    ])(
+      "schedule updates reject %s without changing either workflow",
+      async (scenario, code) => {
+        const w = teamWorkspace();
+        const { workflow } = activateWorkflow(w, "101", {
+          ...spec(w),
+          chatId: "101",
+          topicId: 7,
+          skillId: undefined,
+        });
+        if (scenario === "other topic") workflow.spec.topicId = 8;
+        if (scenario === "other chat") workflow.spec.chatId = "-100100";
+        if (scenario === "deleted") workflow.status = "deleted";
+        const actor = scenario === "other owner" ? "202" : "101";
+        const r = requestRun(
+          w,
+          actor,
+          actor,
+          7,
+          "Change the existing recap to a widget.",
+        );
+        await seed(w, r);
+        const before = await store.read(w.id);
+        const tool = fixtureValue(
+          applicationTools(store, w.id, r.id, 1).find(
+            (t) => t.name === "propose_workflow",
+          ),
+        );
+        const foreign = activateWorkflow(teamWorkspace(), "101", {
+          ...spec(w),
+          skillId: undefined,
+        }).workflow;
+        const args = {
+          requestQuote:
+            scenario === "historical request"
+              ? "A previous scheduling request"
+              : r.task,
+          workflowId:
+            scenario === "missing id"
+              ? undefined
+              : scenario === "other workspace"
+                ? foreign.id
+                : workflow.id,
+          expectedVersion:
+            scenario === "missing version"
+              ? undefined
+              : scenario === "stale version"
+                ? 2
+                : 1,
+          name: workflow.spec.name,
+          task: workflow.spec.task,
+          format: "Widget",
+          ...workflow.spec.recurrence,
+          windowDays: 7,
+          repositoryIds: scenario === "permission revoked" ? [9999] : undefined,
+        };
+        await expect(tool.execute("update", args)).rejects.toThrow(code);
+        const after = await store.read(w.id);
+        expect(after.workflows).toEqual(before.workflows);
+        expect(after.approvals).toEqual(before.approvals);
+        expect(
+          after.runs.find((run) => run.id === r.id)?.workflowActivation,
+        ).toBeUndefined();
+      },
+    );
+
+    test.each(["101", "202", "303"])(
+      "Telegram actor %s can edit their own group workflow but cannot edit a teammate's",
+      async (actor) => {
+        const w = teamWorkspace();
+        const otherActor = actor === "202" ? "101" : "202";
+        const input = { ...spec(w), topicId: 7, skillId: undefined };
+        const own = activateWorkflow(w, actor, input).workflow;
+        const other = activateWorkflow(w, otherActor, input).workflow;
+        const r = createRun(
+          w,
+          actor,
+          "Change my recap to a widget and keep the existing schedule.",
+          input.chatId,
+          input.topicId,
+          "gpt-4.1-mini",
+          { botId: "999" },
+        );
+        r.status = "running";
+        r.fence = 1;
+        await seed(w, r);
+        const tool = fixtureValue(
+          applicationTools(store, w.id, r.id, 1).find(
+            (t) => t.name === "propose_workflow",
+          ),
+        );
+        const args = {
+          requestQuote: r.task,
+          workflowId: other.id,
+          expectedVersion: other.version,
+          name: input.name,
+          task: input.task,
+          format: "Widget",
+          ...input.recurrence,
+          windowDays: 7,
+        };
+        const before = await store.read(w.id);
+        await expect(
+          tool.execute("edit-teammate", { ...args, owner: otherActor }),
+        ).rejects.toThrow("owner_required");
+        expect((await store.read(w.id)).workflows).toEqual(before.workflows);
+        await tool.execute("edit-own", {
+          ...args,
+          workflowId: own.id,
+          expectedVersion: own.version,
+        });
+        const after = await store.read(w.id);
+        expect(after.workflows).toHaveLength(2);
+        expect(after.workflows.find((f) => f.id === own.id)).toMatchObject({
+          owner: actor,
+          version: 2,
+          status: "active",
+          spec: { format: "Widget" },
+        });
+        expect(after.workflows.find((f) => f.id === other.id)).toEqual(
+          before.workflows.find((f) => f.id === other.id),
+        );
+      },
+    );
+
+    test("updating a paused schedule preserves its pause and binds duplicate calls to the exact update", async () => {
+      const w = teamWorkspace();
+      const { workflow } = activateWorkflow(w, "101", {
+        ...spec(w),
+        chatId: "101",
+        skillId: undefined,
+      });
+      workflow.status = "paused";
+      workflow.nextAt = undefined;
+      const r = requestRun(
+        w,
+        "101",
+        "101",
+        0,
+        "Change the paused recap's format to a widget.",
+      );
+      await seed(w, r);
+      const tool = fixtureValue(
+        applicationTools(store, w.id, r.id, 1).find(
+          (t) => t.name === "propose_workflow",
+        ),
+      );
+      const args = {
+        requestQuote: r.task,
+        workflowId: workflow.id,
+        expectedVersion: 1,
+        name: workflow.spec.name,
+        task: workflow.spec.task,
+        format: "Widget",
+        ...workflow.spec.recurrence,
+        windowDays: 7,
+      };
+      await tool.execute("update", args);
+      await tool.execute("update", args);
+      await expect(
+        tool.execute("update", { ...args, expectedVersion: 2 }),
+      ).rejects.toThrow("tool_call_conflict");
+      const saved = await store.read(w.id);
+      expect(saved.workflows).toHaveLength(1);
+      expect(saved.workflows[0]).toMatchObject({
+        id: workflow.id,
+        version: 2,
+        status: "paused",
+        spec: { format: "Widget" },
+      });
+      expect(saved.workflows[0]?.nextAt).toBeUndefined();
+      expect(
+        saved.runs.find((run) => run.id === r.id)?.workflowActivation?.text,
+      ).toContain("Schedule updated (paused)");
+      tick(saved, "gpt-4.1-mini", new Date(Date.now() + 86400000));
+      expect(saved.occurrences).toHaveLength(0);
+    });
+
+    test.each([false, true])(
+      "workflow history remains readable while management is denied even with a legacy grant (pinned=%s)",
+      async (pinned) => {
+        const w = teamWorkspace();
+        const management = [
+          "propose_workflow",
+          "propose_instruction",
+          "propose_skill",
+          "manage_memory",
+          "record_discussion",
+        ];
+        const skill = fixtureValue(w.skills[0]);
+        for (const version of skill.published)
+          version.tools = [
+            "read_instructions",
+            "propose_workflow",
+            "propose_instruction",
+            "propose_skill",
+          ];
+        const prior = requestRun(
+          w,
+          "101",
+          "101",
+          7,
+          "Create a daily recap; save the setup instructions",
+        );
+        prior.status = "succeeded";
+        const f = activateWorkflow(w, "101", {
+          ...spec(w),
+          chatId: "101",
+          topicId: 7,
+          skillId: pinned ? skill.id : undefined,
+        }).workflow;
+        const run = createRun(w, "101", f.spec.task, "101", 7, "gpt-4.1-mini", {
+          workflowId: f.id,
+        });
+        run.status = "running";
+        run.fence = 1;
+        run.tools["blocked-propose_workflow"] = {
+          name: "propose_workflow",
+          state: "done",
+          arguments: {},
+          result: {
+            content: [{ type: "text", text: '{"status":"active"}' }],
+            details: {},
+          },
+        };
+        await seed(w, run);
+        const legacy = applicationTools(store, w.id, run.id, 1);
+        const exposed = applicationTools(
+          store,
+          w.id,
+          run.id,
+          1,
+          undefined,
+          "workflow",
+        );
+        expect(exposed.some((tool) => management.includes(tool.name))).toBe(
+          false,
+        );
+        const before = await store.read(w.id);
+        for (const name of management)
+          await expect(
+            fixtureValue(legacy.find((t) => t.name === name)).execute(
+              `blocked-${name}`,
+              {},
+            ),
+          ).rejects.toThrow("workflow_tool_denied");
+        expect((await store.read(w.id)).workflows).toEqual(before.workflows);
+        expect((await store.read(w.id)).approvals).toEqual(before.approvals);
+        expect((await store.read(w.id)).deliveries).toEqual(before.deliveries);
+        const result = await fixtureValue(
+          exposed.find((t) => t.name === "read_chat_context"),
+        ).execute("read-history", {});
+        const reference = JSON.parse(
+          String(
+            result.content[0]?.type === "text"
+              ? result.content[0].text
+              : "null",
+          ),
+        );
+        expect(reference.historicalReference).toBe(true);
+        expect(
+          reference.sources.some((s: { text: string }) =>
+            s.text.includes("Create a daily recap"),
+          ),
+        ).toBe(true);
+      },
+    );
+
+    test("free-form schedules activate immediately and survive persistence without a skill or extra tool grants", async () => {
       const w = teamWorkspace();
       w.settings.runBudgetUsd = 25;
-      const r = requestRun(w);
+      const r = requestRun(
+        w,
+        "101",
+        "101",
+        0,
+        "Remind me to take a break daily at 9 AM Asia/Taipei",
+      );
       for (const skill of w.skills)
         for (const version of skill.published)
           version.tools = ["read_chat_context"];
@@ -358,6 +649,7 @@ const url = process.env.TEST_DATABASE_URL;
         ),
       );
       const args = {
+        requestQuote: r.task,
         name: "Daily reminder",
         task: "Remind me to take a break",
         frequency: "daily",
@@ -369,18 +661,22 @@ const url = process.env.TEST_DATABASE_URL;
       };
       await tool.execute("schedule", args);
       await tool.execute("schedule", args);
+      await expect(
+        tool.execute("schedule", { ...args, hour: 10 }),
+      ).rejects.toThrow("tool_call_conflict");
       const restart = new Store(store.pool);
       const proposed = await restart.read(w.id);
       expect(proposed.workflows).toHaveLength(1);
       expect(proposed.approvals).toHaveLength(1);
-      expect(proposed.deliveries).toHaveLength(1);
+      expect(proposed.approvals[0]?.decision).toBe("approved");
+      expect(proposed.workflows[0]?.status).toBe("active");
+      expect(proposed.deliveries).toHaveLength(0);
       expect(proposed.workflows[0]?.spec.skillId).toBeUndefined();
       expect(proposed.workflows[0]?.spec).not.toHaveProperty("budgetUsd");
-      expect(proposed.deliveries[0]?.text).toContain(
+      expect(proposed.runs[0]?.workflowActivation?.text).toContain(
         "Budget: follows team settings",
       );
       await restart.change(w.id, (current) => {
-        decide(current, "101", fixtureValue(proposed.approvals[0]).id, true);
         current.skills = [];
         current.settings.runBudgetUsd = null;
         fixtureValue(current.runs.find((run) => run.id === r.id)).status =
@@ -421,7 +717,7 @@ const url = process.env.TEST_DATABASE_URL;
           body: "New rule",
           scope: "workspace",
         }),
-      ).rejects.toThrow("tool_not_granted");
+      ).rejects.toThrow("workflow_tool_denied");
       await restart.change(w.id, (current) => {
         fixtureValue(
           current.members.find((member) => member.id === "101"),

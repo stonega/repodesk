@@ -134,6 +134,7 @@ export async function taskControl(
   botId: string,
   msg: Message,
   cmd: { name: string; args: string },
+  excludeRunId?: string,
 ) {
   if (
     !["status", "cancel"].includes(cmd.name) ||
@@ -161,6 +162,7 @@ export async function taskControl(
       return false;
     }
     const t = target.value;
+    if (target.kind === "r" && t.id === excludeRunId) return false;
     if (target.kind === "d" && target.value.botId !== botId) return false;
     if (cmd.args) return t.id === cmd.args;
     if (t.chatId !== chatId || t.topicId !== topicId) return false;
@@ -200,14 +202,17 @@ export async function taskControl(
   );
   if (!candidates.length) {
     const runs = visibleRuns(w, actor)
-      .filter((r) => r.chatId === chatId && r.topicId === topicId)
+      .filter(
+        (r) =>
+          r.chatId === chatId && r.topicId === topicId && r.id !== excludeRunId,
+      )
       .slice(-5);
     deliver(
       w,
       actor,
       chatId,
       cmd.args || replyId
-        ? "I couldn’t find an accessible task or request for that reference. Use /status in its conversation."
+        ? "I couldn’t find an accessible task or request for that reference. Ask for task status in its conversation."
         : stop
           ? "There is no active task or request in this conversation."
           : runs.map(runStatus).join("\n\n") ||
@@ -267,7 +272,7 @@ export async function selectTaskControl(
   );
   const [action, id, updateId] = c.data.split(":");
   requireThat(
-    id && /^[0-9a-f-]{36}$/.test(id) && updateId && /^\d+$/.test(updateId),
+    id && /^[0-9a-f-]{36}$/.test(id) && updateId && /^-?\d+$/.test(updateId),
     "invalid_request",
   );
   const actor = String(c.from.id),

@@ -176,8 +176,8 @@ uses Pi's OpenAI-compatible Chat Completions adapter with operator-configured ba
 URL, custom model ID, encrypted key, thinking level and estimated token prices.
 Known model capacity comes from the bundled Pi catalog; custom IDs have no assumed
 context window and allow up to 16,384 output tokens unless overridden. Capacity and prices
-are independently optional overrides. Missing custom prices remain unknown and
-exclude those calls from dollar totals; finite dollar budgets require known prices.
+are independently optional overrides. Missing token prices count as zero for
+budget enforcement and usage accounting. Known rates apply independently.
 Price overrides optionally include a currency and an operator-entered `usdRate`
 (USD per currency unit). Currency defaults to USD for existing records. The runtime
 converts only entered prices, including the input override used for cache prices;
@@ -236,18 +236,24 @@ cannot prove a claim follows from its citation. Thinking blocks are never persis
 
 Per-call reservations precede dispatch and reconcile completed usage. Provider retries
 are disabled. The worker checks cancellation every second and between tool/model
-steps, with configurable run deadlines (five minutes by default), model capacity and
-optional budget limits, with no fixed model-call or tool-call quota. Workspace run
+steps, with model capacity and optional budget limits, without a total execution
+deadline or fixed model-call or tool-call quota. Workspace run
 and monthly budgets default to `null` (unlimited); zero permits only zero-cost
 requests. Workflow runs inherit these team settings without a separate budget.
-`RUN_TIMEOUT_SECONDS` accepts 1–1800
-seconds. New queue jobs expire 60 seconds after the configured run deadline; the
-120-second conversation lease is renewed by the one-second guard. Deadline expiry
-is recorded as `failed (run_timeout)`, distinct from user cancellation and worker
-shutdown. Unknown provider usage remains reserved after any interruption. Skills request capabilities from the application registry; extension tools require
+`RUN_TIMEOUT_SECONDS` is retired and ignored in older environments. The queue
+acknowledges each run wakeup before assistant execution starts; its finite dispatch
+expiry does not bound the assistant's lifetime. A worker tracks at most three
+executions and drains them on shutdown. The 120-second conversation lease is
+renewed by the one-second guard. The transactional outbox recovers acknowledged
+wakeups after a crash, including a crash before claiming the run. Live leases
+prevent redispatch, and uncertain provider attempts still stop for reconciliation.
+Cancellation, current authorization and shutdown can interrupt execution;
+`run_timeout` remains a historical diagnostic. Unknown provider usage remains
+reserved after any interruption. Skills request capabilities from the application registry; extension tools require
 separate explicit operator grants. Extension configurations are pinned on runs and
-extension tool outcomes use durable reservations without automatic unknown replay. Proposals cannot
-activate schedules or persistent instructions.
+extension tool outcomes use durable reservations without automatic unknown replay.
+Instruction proposals require their existing approval before becoming persistent
+instructions. Explicit schedule requests use immediate, application-owned activation.
 
 Approvals hash canonical JSON so persistence key ordering cannot change their identity.
 They bind actor, version, payload and 15-minute expiry. Approval transactions activate
@@ -255,6 +261,27 @@ the exact draft once. The worker pauses after a proposal without holding a human
 Promise. Incomplete batches are reconciled from atomic stored tool outcomes; missing
 outcomes stop with an explicit recovery error. Unknown model attempts remain reserved
 and are not replayed automatically. Completed transcript boundaries can resume.
+
+Explicit Telegram schedule requests activate immediately when recurrence, time
+and timezone are clear. No requester or administrator approval step is required.
+An explicit panel save authorizes and activates the exact workflow version in one
+transaction. The Telegram tool quotes the current authenticated request, records
+a durable activation outcome, and stops Pi before another model call. Executor
+recovery confirms a committed activation without replaying it or sending a false
+failure notice. Activation confirmation content follows run erasure/retention.
+Telegram revisions supply the existing workflow ID and expected version to the
+same tool. Updates validate ownership and the current chat/Topic, reuse the
+workflow identity, retain immutable spec versions and cancel queued work/output
+from the previous version in the activation transaction. Paused workflows remain
+paused. The durable confirmation distinguishes updates from new activations.
+Workflow definition edits are owner-only across Telegram and the web panel.
+Panel accounts must be linked to the active workflow owner's verified Telegram
+identity; administrator/operator authority does not permit another owner's edit.
+List/detail projections expose a server-derived edit capability, while the
+transaction independently checks current ownership before changing the spec.
+The panel displays saved owner profiles and does not queue workflow proposals for administrator approval. Repeat Telegram
+decisions report the existing outcome without applying another decision; private
+confirmations retain the original Topic.
 
 Daily/weekly recurrence uses Temporal in IANA zones. Nonexistent local times skip;
 repeated local times use the earlier instant. Scheduler previews and execution share
@@ -265,6 +292,21 @@ Runs without a skill can read their approved chat context and scoped model costs
 alongside independently authorized application/extension tools. Scheduling grants
 no new connector access or external writes. Pause, owner removal, selected-skill
 disable and deletion block dependent execution.
+
+Each workflow invocation uses a dedicated execution prompt with its pinned ID
+and version. The saved task and format drive this occurrence; setup messages,
+conversation summaries and schedule-comparison metadata are absent from its
+initial prompt. Historical attachments are not downloaded automatically. Chat
+recaps can explicitly read the run's retained, authorized source snapshot through
+`read_chat_context`, marked as historical reference rather than a new request.
+The snapshot's permission and retention checks remain enforced.
+
+Workflow invocations expose only read-only application tools, alongside integration
+tools subject to their own current authorization checks. Schedule/instruction/skill proposals, conversation
+controls and memory writes are unavailable. Every application tool invocation
+also checks the persisted workflow marker before cached-result replay, so legacy
+published skill grants or stale tool references cannot enable management writes.
+Manual run-now invocations use the same execution boundary as scheduled ticks.
 
 Delivery is independent of generation. An intent is marked `sending` before calling
 Telegram; a lost reply becomes `delivery_unknown`, never an automatic resend. 429

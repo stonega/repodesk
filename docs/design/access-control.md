@@ -35,8 +35,11 @@ metadata; names and usernames never enroll users or change authorization.
 Workspace owners/admins manage membership and roles. The password-authenticated
 deployment operator may manage configuration and membership in workspaces they
 created before linking Telegram. Authorized panel admins can inspect full workflows
-and create, edit, approve and control them across owners without linking their
-personal Telegram identity. Workflow execution retains an active member's identity
+and use their existing creation, approval and lifecycle controls without linking
+their personal Telegram identity. Editing an existing workflow's definition
+requires the verified Telegram identity of its current owner, even for panel
+administrators and deployment operators. A role, display name or client-supplied
+owner ID cannot substitute for that identity. Workflow execution retains an active member's identity
 and its data/destination permissions; panel actions audit the manager separately.
 Group management also permits the owning deployment operator to issue group-link
 commands, inspect visibility, manage collection and unlink without a personal

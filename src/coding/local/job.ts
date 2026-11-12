@@ -1,4 +1,4 @@
-// Fixed entrypoint for disposable containers. Never imported by the bot worker.
+// Fixed entrypoint for task phases. Never imported by the bot worker.
 import { constants } from "node:fs";
 import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 import { z } from "zod";
@@ -14,6 +14,7 @@ import { CodexConversationError } from "./conversation-failure.ts";
 import { watchInterruption } from "./interruption.ts";
 import { JobTaskChannel } from "./job-channel.ts";
 import { jobCommand as command } from "./job-command.ts";
+import { jobPath } from "./job-paths.ts";
 import {
   prepareReferenceCheckouts,
   verifyReferenceCheckouts,
@@ -36,7 +37,7 @@ const jobSchema = localStart
     verificationCommands: verificationCommands.optional(),
   });
 type Job = z.infer<typeof jobSchema>;
-const repo = "/task/repo";
+const repo = jobPath("/task/repo");
 const gitEnv = {
   PATH: process.env.PATH,
   HOME: "/tmp",
@@ -75,12 +76,12 @@ async function clone(job: Job) {
         `https://github.com/${job.payload.repository}.git`,
         repo,
       ],
-      "/task",
+      jobPath("/task"),
       true,
     );
   } catch (error) {
     await writeFile(
-      "/task/failure-code",
+      jobPath("/task/failure-code"),
       checkoutFailureCode(error, branch, job.payload.baseBranch),
     );
     throw new Error("coding_checkout_failed");
@@ -93,7 +94,10 @@ async function clone(job: Job) {
       true,
     );
     if ((await git(["rev-parse", "FETCH_HEAD"])).trim() !== review.headSha) {
-      await writeFile("/task/failure-code", "coding_remote_head_changed");
+      await writeFile(
+        jobPath("/task/failure-code"),
+        "coding_remote_head_changed",
+      );
       throw new Error("coding_remote_head_changed");
     }
     await git(["cat-file", "-e", `${review.baseSha}^{commit}`]);
@@ -108,16 +112,22 @@ async function clone(job: Job) {
   return sha;
 }
 async function setup(job: Job) {
-  const env = { ...gitEnv, HOME: "/task/home" };
+  const env = { ...gitEnv, HOME: jobPath("/task/home") };
   await mkdir(env.HOME, { recursive: true });
   if (job.development?.review?.action === "review") {
     try {
       const plan = await prepareOpenCodeReview(job.development.review, (args) =>
         command("ocr", args, { cwd: repo, env }),
       );
-      await writeFile("/task/open-code-review.json", JSON.stringify(plan));
+      await writeFile(
+        jobPath("/task/open-code-review.json"),
+        JSON.stringify(plan),
+      );
     } catch {
-      await writeFile("/task/failure-code", "coding_review_preparation_failed");
+      await writeFile(
+        jobPath("/task/failure-code"),
+        "coding_review_preparation_failed",
+      );
       throw new Error("coding_review_preparation_failed");
     }
   }
@@ -125,23 +135,25 @@ async function setup(job: Job) {
 async function implement(job: Job) {
   if (!job.baseSha || !job.config) throw new Error("coding_job_invalid");
   const codexHome =
-    job.payload.authMode === "device_code" ? "/auth" : "/task/codex";
+    job.payload.authMode === "device_code"
+      ? jobPath("/auth")
+      : jobPath("/task/codex");
   await mkdir(codexHome, { recursive: true });
   await writeFile(`${codexHome}/config.toml`, job.config, { mode: 0o600 });
-  const env = { ...gitEnv, HOME: "/task/home", CODEX_HOME: codexHome };
+  const env = { ...gitEnv, HOME: jobPath("/task/home"), CODEX_HOME: codexHome };
   await mkdir(env.HOME, { recursive: true });
   // A resumed execution must not reuse the prior failure marker.
-  await rm("/task/failure-code", { force: true });
-  await rm("/task/auth-failure.json", { force: true });
-  await rm("/task/conversation-failure.json", { force: true });
-  await rm("/task/native-transcript.jsonl", { force: true });
+  await rm(jobPath("/task/failure-code"), { force: true });
+  await rm(jobPath("/task/auth-failure.json"), { force: true });
+  await rm(jobPath("/task/conversation-failure.json"), { force: true });
+  await rm(jobPath("/task/native-transcript.jsonl"), { force: true });
   const channel =
     process.env.CODEX_TASK_CHANNEL_URL && process.env.CODEX_TASK_CHANNEL_TOKEN
       ? new JobTaskChannel(
           process.env.CODEX_TASK_CHANNEL_URL,
           process.env.CODEX_TASK_CHANNEL_TOKEN,
           fetch,
-          "/task/native-transcript.jsonl",
+          jobPath("/task/native-transcript.jsonl"),
           process.env.CODEX_TASK_BROWSER_ENABLED === "true",
         )
       : undefined;
@@ -149,27 +161,30 @@ async function implement(job: Job) {
   if (channel)
     try {
       channelThread = (
-        await readFile("/task/repodesk-channel-thread", "utf8")
+        await readFile(jobPath("/task/repodesk-channel-thread"), "utf8")
       ).trim();
     } catch {
       /* Older work volumes reconstruct from durable task context. */
     }
   let diagnostics: string | undefined;
   try {
-    diagnostics = (await readFile("/task/check-diagnostics", "utf8")).slice(
-      0,
-      12000,
-    );
+    diagnostics = (
+      await readFile(jobPath("/task/check-diagnostics"), "utf8")
+    ).slice(0, 12000);
   } catch {}
   let turn: Awaited<ReturnType<typeof runConversation>>;
   try {
     let reviewSource: ReviewSource | undefined;
     if (job.development.review && job.development.mode !== "work") {
       try {
-        reviewSource = await ReviewSource.create(repo, job.development.review);
+        reviewSource = await ReviewSource.create(
+          repo,
+          job.development.review,
+          jobPath("/task/open-code-review.json"),
+        );
       } catch {
         await writeFile(
-          "/task/failure-code",
+          jobPath("/task/failure-code"),
           "coding_review_preparation_failed",
         );
         throw Error("coding_review_preparation_failed");
@@ -179,6 +194,7 @@ async function implement(job: Job) {
       channel,
       reviewSource,
       cwd: repo,
+      binary: process.env.REPODESK_CODEX_BIN,
       env: {
         ...env,
         ...(job.payload.authMode === "provider_key"
@@ -196,7 +212,11 @@ async function implement(job: Job) {
           job.development,
           diagnostics,
           job.verificationCommands,
-          { repository: job.payload.repository, baseSha: job.baseSha },
+          {
+            repository: job.payload.repository,
+            baseSha: job.baseSha,
+            taskRoot: jobPath("/task"),
+          },
         ) +
         (job.development.media?.prompt ?? ""),
       images: job.development.media?.images,
@@ -217,17 +237,20 @@ async function implement(job: Job) {
       error instanceof CodexAuthError
     ) {
       await writeFile(
-        "/task/auth-failure.json",
+        jobPath("/task/auth-failure.json"),
         JSON.stringify({
           threadId: error.threadId,
           tokens: error.tokens,
           usageUnknown: error.usageUnknown,
         }),
       );
-      await writeFile("/task/failure-code", "coding_device_auth_required");
+      await writeFile(
+        jobPath("/task/failure-code"),
+        "coding_device_auth_required",
+      );
     } else if (error instanceof CodexConversationError) {
       await writeFile(
-        "/task/conversation-failure.json",
+        jobPath("/task/conversation-failure.json"),
         JSON.stringify({
           code: error.code,
           threadId: error.threadId,
@@ -237,19 +260,19 @@ async function implement(job: Job) {
         }),
         { mode: 0o600 },
       );
-      await writeFile("/task/failure-code", error.code);
+      await writeFile(jobPath("/task/failure-code"), error.code);
     }
     throw error;
   }
-  await writeFile("/task/conversation.json", JSON.stringify(turn));
+  await writeFile(jobPath("/task/conversation.json"), JSON.stringify(turn));
   if (channel)
-    await writeFile("/task/repodesk-channel-thread", turn.threadId, {
+    await writeFile(jobPath("/task/repodesk-channel-thread"), turn.threadId, {
       mode: 0o600,
     });
-  await writeFile("/task/thread-id", turn.threadId);
+  await writeFile(jobPath("/task/thread-id"), turn.threadId);
   await git(["add", "--all"]);
   await writeFile(
-    "/task/result.patch",
+    jobPath("/task/result.patch"),
     await git([
       "diff",
       "--cached",
@@ -263,7 +286,7 @@ async function implement(job: Job) {
 
 async function check(job: Job) {
   if (!job.baseSha) throw new Error("coding_base_invalid");
-  const env = { ...gitEnv, HOME: "/task/home" };
+  const env = { ...gitEnv, HOME: jobPath("/task/home") };
   try {
     await verifyReferenceCheckouts(job.development.referenceSources ?? []);
     for (const check of verificationCommands.parse(job.verificationCommands))
@@ -289,8 +312,8 @@ async function check(job: Job) {
       )
       .replace(/https?:\/\/[^\s/@]+:[^\s/@]+@/g, "https://[redacted]@");
     if (job.development)
-      await writeFile("/task/check-diagnostics", safe.slice(0, 12000));
-    await writeFile("/task/failure-code", "coding_check_failed");
+      await writeFile(jobPath("/task/check-diagnostics"), safe.slice(0, 12000));
+    await writeFile(jobPath("/task/failure-code"), "coding_check_failed");
     throw new Error("coding_check_failed");
   }
   await git(["add", "--all"]);
@@ -303,16 +326,16 @@ async function check(job: Job) {
     job.baseSha,
   ]);
   if (!patch && !job.development?.pr) {
-    await writeFile("/task/failure-code", "coding_patch_empty");
+    await writeFile(jobPath("/task/failure-code"), "coding_patch_empty");
     throw new Error("coding_patch_empty");
   }
-  await writeFile("/task/result.patch", patch);
+  await writeFile(jobPath("/task/result.patch"), patch);
 }
 async function publish(job: Job) {
   if (!job.baseSha) throw new Error("coding_base_invalid");
   await clone(job);
-  if ((await readFile("/input/patch", "utf8")).length)
-    await git(["apply", "--index", "/input/patch"]);
+  if ((await readFile(jobPath("/input/patch"), "utf8")).length)
+    await git(["apply", "--index", jobPath("/input/patch")]);
   if (await git(["diff", "--cached", "--name-only", "--", ".github"]))
     throw new Error("coding_workflow_change_denied");
   const branch =
@@ -326,7 +349,10 @@ async function publish(job: Job) {
       .trim()
       .split(/\s+/)[0];
     if (remote !== job.development.pr.headSha) {
-      await writeFile("/task/failure-code", "coding_remote_head_changed");
+      await writeFile(
+        jobPath("/task/failure-code"),
+        "coding_remote_head_changed",
+      );
       throw new Error("coding_remote_head_changed");
     }
   }
@@ -351,7 +377,7 @@ async function publish(job: Job) {
       publishedSha,
     ]);
   await writeFile(
-    "/task/publication-intent.json",
+    jobPath("/task/publication-intent.json"),
     JSON.stringify({ publishedSha }),
   );
   if (diff) {
@@ -371,7 +397,10 @@ async function publish(job: Job) {
         output.includes("[rejected]") &&
         /\((?:non-fast-forward|fetch first|stale info)\)/.test(output)
       )
-        await writeFile("/task/failure-code", "coding_remote_head_changed");
+        await writeFile(
+          jobPath("/task/failure-code"),
+          "coding_remote_head_changed",
+        );
       throw error;
     }
   }
@@ -387,13 +416,14 @@ async function publish(job: Job) {
         process.env.GITHUB_TOKEN ?? "",
       );
     await writeFile(
-      "/task/publication.json",
+      jobPath("/task/publication.json"),
       JSON.stringify({ prUrl: job.development.pr.url, publishedSha }),
     );
     return;
   }
-  const result = JSON.parse(await readFile("/input/conversation.json", "utf8"))
-    .result as { title: string; body: string };
+  const result = JSON.parse(
+    await readFile(jobPath("/input/conversation.json"), "utf8"),
+  ).result as { title: string; body: string };
   const response = await fetch(
     `https://api.github.com/repos/${job.payload.repository}/pulls`,
     {
@@ -420,7 +450,7 @@ async function publish(job: Job) {
     .object({ number: z.number().int().positive(), draft: z.literal(false) })
     .parse(await response.json());
   await writeFile(
-    "/task/publication.json",
+    jobPath("/task/publication.json"),
     JSON.stringify({
       prUrl: `https://github.com/${job.payload.repository}/pull/${pr.number}`,
       publishedSha,
@@ -430,7 +460,7 @@ async function publish(job: Job) {
 // The export container is trusted code with no credentials and a read-only task volume.
 async function exportPatch() {
   const file = await open(
-    "/task/result.patch",
+    jobPath("/task/result.patch"),
     constants.O_RDONLY | constants.O_NOFOLLOW,
   );
   try {
@@ -441,7 +471,7 @@ async function exportPatch() {
     let threadId: string | undefined;
     try {
       const thread = await open(
-        "/task/thread-id",
+        jobPath("/task/thread-id"),
         constants.O_RDONLY | constants.O_NOFOLLOW,
       );
       try {
@@ -464,15 +494,19 @@ try {
   if (mode === "export") await exportPatch();
   else {
     const job = jobSchema.parse(
-      JSON.parse(await readFile("/input/job.json", "utf8")),
+      JSON.parse(await readFile(jobPath("/input/job.json"), "utf8")),
     );
-    await rm("/task/interruption.json", { force: true });
-    await rm("/task/failure-code", { force: true });
-    watchInterruption(job.executionId, mode);
+    await rm(jobPath("/task/interruption.json"), { force: true });
+    await rm(jobPath("/task/failure-code"), { force: true });
+    watchInterruption(
+      job.executionId,
+      mode,
+      jobPath("/task/interruption.json"),
+    );
     if (mode === "prepare") {
       // No implementation can have started in this phase; discard a partial clone.
       if (job.recoveryId) await rm(repo, { recursive: true, force: true });
-      await writeFile("/task/base-sha", await clone(job));
+      await writeFile(jobPath("/task/base-sha"), await clone(job));
       try {
         await prepareReferenceCheckouts(
           job.development.referenceSources ?? [],
@@ -480,14 +514,14 @@ try {
         );
       } catch {
         await writeFile(
-          "/task/failure-code",
+          jobPath("/task/failure-code"),
           "coding_reference_source_unavailable",
         );
         throw Error("coding_reference_source_unavailable");
       }
       try {
-        if ((await readFile("/input/checkpoint.patch", "utf8")).length)
-          await git(["apply", "--index", "/input/checkpoint.patch"]);
+        if ((await readFile(jobPath("/input/checkpoint.patch"), "utf8")).length)
+          await git(["apply", "--index", jobPath("/input/checkpoint.patch")]);
       } catch (error) {
         if (
           !(
@@ -507,6 +541,6 @@ try {
   }
 } catch {
   // Do not print child errors, repository output or credential-bearing commands.
-  process.stderr.write("Coding container failed.\n");
+  process.stderr.write("Coding task failed.\n");
   process.exitCode = 1;
 }

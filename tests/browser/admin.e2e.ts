@@ -133,6 +133,33 @@ test.describe
       await expect(page.getByRole("alert")).toContainText(
         "Enter a bot token to continue.",
       );
+      const invalidBotToken = "sk-fixture-model-provider-key";
+      const setupBotToken = page.getByLabel(/Bot token/);
+      await setupBotToken.fill(invalidBotToken);
+      await page
+        .getByRole("button", { name: "Continue to GitHub App" })
+        .click();
+      await expect(page.getByRole("alert")).toContainText(
+        "Enter a Telegram bot token from @BotFather",
+      );
+      await expect(page.getByRole("alert")).toContainText("123456789:ABC...");
+      await expect(page.getByRole("alert")).not.toContainText(invalidBotToken);
+      await expect(setupBotToken).toHaveValue(invalidBotToken);
+      await expect(
+        page.getByRole("button", { name: "Continue to GitHub App" }),
+      ).toBeEnabled();
+      for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        await expect(page.locator("body")).toHaveJSProperty(
+          "scrollWidth",
+          width,
+        );
+        await page.screenshot({
+          path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/telegram-token-setup-error-${width}.png`,
+          fullPage: true,
+        });
+      }
+      await page.setViewportSize({ width: 1280, height: 720 });
       await page
         .getByLabel(/Bot token/)
         .fill("999:fake-token-that-is-never-sent-to-Telegram");
@@ -192,7 +219,7 @@ test.describe
       await expect(page.getByText("No scheduled workflows yet.")).toBeVisible();
       await expect(
         page.getByRole("button", { name: "Add workflow" }),
-      ).toBeVisible();
+      ).toHaveCount(0);
       await page.goto("/admin");
       const botCard = page.getByRole("region", { name: "Telegram bot" });
       const githubCard = page.getByRole("region", { name: "GitHub" });
@@ -209,6 +236,33 @@ test.describe
       const replacementToken = botDialog.getByLabel("New bot token");
       await expect(replacementToken).toHaveAttribute("type", "text");
       await expect(replacementToken).toHaveValue("");
+      await replacementToken.fill(invalidBotToken);
+      await botDialog.getByRole("button", { name: "Save token" }).click();
+      await expect(botDialog.getByRole("alert")).toContainText(
+        "Enter a Telegram bot token from @BotFather",
+      );
+      await expect(botDialog.getByRole("alert")).toContainText(
+        "123456789:ABC...",
+      );
+      await expect(botDialog.getByRole("alert")).not.toContainText(
+        invalidBotToken,
+      );
+      await expect(replacementToken).toHaveValue(invalidBotToken);
+      await expect(
+        botDialog.getByRole("button", { name: "Save token" }),
+      ).toBeEnabled();
+      await expect(botCard).toContainText("@fixture_bot");
+      for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        await botDialog
+          .getByRole("button", { name: "Save token" })
+          .scrollIntoViewIfNeeded();
+        await page.screenshot({
+          path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/telegram-token-dialog-error-${width}.png`,
+          fullPage: true,
+        });
+      }
+      await page.setViewportSize({ width: 1280, height: 720 });
       await replacementToken.fill(
         "999:fake-token-that-is-never-sent-to-Telegram",
       );
@@ -1102,26 +1156,24 @@ test.describe
         .fill("Web application source and shared components.");
       await page
         .getByRole("dialog", { name: "Add repository", exact: true })
-        .getByRole("button", { name: "Apply repository" })
+        .getByRole("button", { name: "Confirm", exact: true })
         .click();
+      await expect(repositoryDialog).toHaveCount(0);
       await card
         .getByRole("switch", { name: "Enable Code Truth", exact: true })
         .click();
       await expect(
         card.getByRole("switch", { name: "Enable Code Truth" }),
       ).toBeEnabled();
-      const savedBeforeRepositories = await page.request.get(
+      const savedRepositories = await page.request.get(
         `/api/admin/workspaces/${workspaceId}/plugins/code-truth`,
       );
       expect(
-        (await savedBeforeRepositories.json()).settings.repositories,
-      ).toHaveLength(0);
+        (await savedRepositories.json()).settings.repositories,
+      ).toHaveLength(1);
       await expect(
         card.getByRole("heading", { name: "deepxfinance/web", exact: true }),
       ).toBeVisible();
-      await card
-        .getByRole("button", { name: "Save Code Truth", exact: true })
-        .click();
       await expect(page.locator(".toast").getByRole("status")).toContainText(
         "Code Truth saved",
       );
@@ -1191,11 +1243,9 @@ test.describe
       await card
         .getByRole("button", { name: "Remove repository 1", exact: true })
         .click();
+      await expect(card.getByText("No repositories configured.")).toBeVisible();
       await card
         .getByRole("switch", { name: "Enable Code Truth", exact: true })
-        .click();
-      await card
-        .getByRole("button", { name: "Save Code Truth", exact: true })
         .click();
       await expect(page.locator(".toast").getByRole("status")).toContainText(
         "Code Truth saved",
@@ -1320,10 +1370,13 @@ test.describe
         .getByRole("dialog", { name: "Add repository", exact: true })
         .getByLabel("GitHub repository URL")
         .fill("https://github.com/example/isolated");
-      await page.getByRole("button", { name: "Apply repository" }).click();
-      await truth
-        .getByRole("button", { name: "Save Code Truth", exact: true })
+      await page
+        .getByRole("dialog", { name: "Add repository", exact: true })
+        .getByRole("button", { name: "Confirm", exact: true })
         .click();
+      await expect(
+        page.getByRole("dialog", { name: "Add repository", exact: true }),
+      ).toHaveCount(0);
       await expect(page.locator(".toast").getByRole("status")).toContainText(
         "Code Truth saved",
       );
@@ -1976,7 +2029,6 @@ test.describe
       ).toBeVisible();
       for (const [path, label, title] of [
         ["members", "Add member", "Add member"],
-        ["workflows", "Add workflow", "Propose a schedule"],
         ["skills", "Add skill", "Create skill"],
         ["skills", "Import skill", "Import SKILL.md"],
         ["instructions", "Add instruction", "Propose an instruction"],
@@ -2397,7 +2449,7 @@ test.describe
         await pool.end();
       }
     });
-    test("structured forms preserve versions, drafts, and safe approval previews", async ({
+    test("workflow editors preserve versions and failed drafts when saving directly", async ({
       page,
     }) => {
       await page.goto("/admin/workflows");
@@ -2416,9 +2468,7 @@ test.describe
           exact: true,
         }),
       });
-      await card
-        .getByRole("button", { name: "Edit proposal", exact: true })
-        .click();
+      await card.getByRole("button", { name: "Edit", exact: true }).click();
       const dialog = page.getByRole("dialog", {
         name: "Edit Browser weekly recap",
       });
@@ -2449,9 +2499,7 @@ test.describe
           });
         },
       );
-      await dialog
-        .getByRole("button", { name: "Preview approval proposal" })
-        .click();
+      await dialog.getByRole("button", { name: "Save", exact: true }).click();
       await expect(
         dialog.getByRole("button", { name: "Cancel", exact: true }),
       ).toBeDisabled();

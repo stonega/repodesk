@@ -5,7 +5,7 @@ import type { SetupService } from "../../src/setup/service.ts";
 import type { Telegram } from "../../src/telegram/client.ts";
 import { TelegramError } from "../../src/telegram/client.ts";
 import {
-  commandMenus,
+  commandScopes,
   TelegramCommandMenu,
 } from "../../src/telegram/commands.ts";
 
@@ -50,33 +50,29 @@ function fixture() {
   };
 }
 
-test("private menus include /github linking; shared menus expose only usable group shortcuts", async () => {
+test("clears every previously published scope and fallback without publishing commands", async () => {
   const f = fixture();
   await f.menu.sync(f.signal);
   expect(f.calls.map((c) => c.method)).toEqual([
-    "setMyCommands",
-    "setMyCommands",
-    "setMyCommands",
+    "deleteMyCommands",
+    "deleteMyCommands",
+    "deleteMyCommands",
   ]);
-  for (const menu of commandMenus) {
-    expect(menu.commands.some((c) => c?.command === "repos")).toBe(true);
-    expect(menu.commands.some((c) => c?.command === "github")).toBe(
-      menu.scope.type === "all_private_chats",
-    );
-    expect(
-      menu.commands.every(
-        (c) =>
-          c && /^[a-z_]{1,32}$/.test(c.command) && c.description.length <= 256,
-      ),
-    ).toBe(true);
-  }
+  expect(f.calls.map((c) => c.params)).toEqual(
+    commandScopes.map((scope) => ({ scope, language_code: "" })),
+  );
+  expect(commandScopes.map((scope) => scope.type)).toEqual([
+    "default",
+    "all_group_chats",
+    "all_private_chats",
+  ]);
   await f.menu.sync(f.signal);
   f.deployment.version++;
   await f.menu.sync(f.signal);
   expect(f.calls).toHaveLength(3);
 });
 
-test("activation and credential rotation control menu publication", async () => {
+test("activation and credential rotation control menu cleanup", async () => {
   const f = fixture();
   f.deployment.active = false;
   await f.menu.sync(f.signal);
@@ -92,7 +88,7 @@ test("activation and credential rotation control menu publication", async () => 
   expect(f.calls).toHaveLength(6);
 });
 
-test("failed registrations retry after Telegram backoff without blocking the worker", async () => {
+test("failed deletions retry after Telegram backoff without blocking the worker", async () => {
   const f = fixture();
   f.onCall(() => {
     throw new TelegramError("telegram_rate_limited", "retry", 120);
@@ -107,7 +103,7 @@ test("failed registrations retry after Telegram backoff without blocking the wor
   expect(f.calls).toHaveLength(4);
 });
 
-test("credential changes during publication stop old-client writes and retry the new identity", async () => {
+test("credential changes during cleanup stop old-client writes and retry the new identity", async () => {
   const f = fixture();
   f.onCall(() => {
     f.deployment.credentials.bot = "rotated";

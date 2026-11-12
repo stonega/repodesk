@@ -155,7 +155,7 @@ export function createApp(
       );
     } catch {
       return c.text(
-        "Google sign-in did not complete or the link expired. Return to Telegram and send /google connect to try again.",
+        "Google sign-in did not complete or the link expired. Return to Telegram and ask me to reconnect Google to try again.",
         409,
       );
     }
@@ -214,6 +214,7 @@ export function createApp(
         "missedRunMinutes",
         "paused",
         "version",
+        "botToken",
         "model",
         "modelLimits",
         "contextWindow",

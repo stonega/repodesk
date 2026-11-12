@@ -5,7 +5,6 @@ import type { BrowserService } from "../browser/service.ts";
 import type { CloudflareService } from "../cloudflare/service.ts";
 import type { CodingService } from "../coding/service.ts";
 import { pruneDevelopment } from "../coding/tasks.ts";
-import { DEFAULT_RUN_TIMEOUT_SECONDS } from "../config.ts";
 import { transaction } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import type { GitHubIssues } from "../github/issues.ts";
@@ -19,14 +18,15 @@ import type { ReviewExecutor } from "../review-bot/executor.ts";
 import type { SearchConsoleService } from "../search-console/service.ts";
 import type { SetupService } from "../setup/service.ts";
 import { TelegramCommandMenu } from "../telegram/commands.ts";
-import { queuedRunFeedback } from "../telegram/feedback.ts";
 import { TelegramPoller } from "../telegram/polling.ts";
+import { Ingress } from "../telegram/webhook.ts";
 import { TranscriptionService } from "../transcription/service.ts";
 import { tick } from "../workflows/service.ts";
 import { deliverAccessHelp } from "./control.ts";
 import { DeliveryWorker } from "./delivery.ts";
 import { Executor } from "./execute.ts";
 import { recoverJobs } from "./recovery.ts";
+import { RunWorker } from "./runs.ts";
 
 export interface JobData {
   workspaceId: string;
@@ -42,11 +42,7 @@ export function queue(
   });
   return boss;
 }
-export async function dispatch(
-  store: Store,
-  boss: PgBoss,
-  runTimeoutSeconds = DEFAULT_RUN_TIMEOUT_SECONDS,
-) {
+export async function dispatch(store: Store, boss: PgBoss) {
   return transaction(store.pool, async (sql) => {
     const rows = await sql.query(
       "SELECT id,kind,workspace_id,target_id FROM outbox WHERE dispatched_at IS NULL ORDER BY created_at LIMIT 50 FOR UPDATE SKIP LOCKED",
@@ -58,9 +54,6 @@ export async function dispatch(
         { workspaceId: row.workspace_id, targetId: row.target_id },
         {
           id: row.id,
-          ...(row.kind === "run"
-            ? { expireInSeconds: runTimeoutSeconds + 60 }
-            : {}),
           db: { executeSql: (text, values) => sql.query(text, values) },
         },
       );
@@ -77,7 +70,6 @@ export async function startWorker(
   setup: SetupService,
   url: string,
   runner?: AgentRunner | RunnerProvider,
-  runTimeoutSeconds = DEFAULT_RUN_TIMEOUT_SECONDS,
   githubIssues?: GitHubIssues,
   coding?: CodingService,
   githubUsers?: GitHubUsers,
@@ -95,26 +87,19 @@ export async function startWorker(
     store,
     setup,
     runner,
-    runTimeoutSeconds * 1000,
     transcription,
+    new Ingress(store, setup, githubUsers, google, searchConsole),
   );
   const delivery = new DeliveryWorker(store, setup);
   const shutdown = new AbortController();
   const id = randomUUID();
   const commandMenu = new TelegramCommandMenu(store, setup);
   const memories = new MemoryService(store, setup);
-  await boss.work<JobData>(
-    "run",
-    { localConcurrency: 3, pollingIntervalSeconds: 1 },
-    async (jobs) => {
-      for (const job of jobs)
-        await executor.execute(
-          job.data.workspaceId,
-          job.data.targetId,
-          shutdown.signal,
-        );
-    },
-  );
+  const runs = new RunWorker(store, boss, executor, shutdown.signal);
+  const runTick = () =>
+    runs.poll().catch((error) => {
+      store.log.write("worker_maintenance_failed", { error });
+    });
   await boss.work<JobData>(
     "delivery",
     { localConcurrency: 2, pollingIntervalSeconds: 1 },
@@ -171,7 +156,6 @@ export async function startWorker(
           }
           if (d.active && !d.paused) {
             tick(w, d.model);
-            queuedRunFeedback(w);
           }
         });
         // Durable rate-limit retries and ambiguous-send detection do not rely on queue retry timing.
@@ -232,7 +216,7 @@ export async function startWorker(
       }
       await deliverAccessHelp(store, setup);
       await recoverJobs(store, boss);
-      await dispatch(store, boss, runTimeoutSeconds);
+      await dispatch(store, boss);
       await store.pool.query(
         "INSERT INTO worker_heartbeats(id,at) VALUES($1,now()) ON CONFLICT(id) DO UPDATE SET at=now()",
         [id],
@@ -255,6 +239,8 @@ export async function startWorker(
     }
   };
   await maintain();
+  await runTick();
+  const runTimer = setInterval(() => void runTick(), 1000);
   const polling =
     setup.telegramTransport === "polling"
       ? new TelegramPoller(
@@ -348,6 +334,7 @@ export async function startWorker(
   memoryTick();
   const memoryTimer = setInterval(memoryTick, 60000);
   return async () => {
+    clearInterval(runTimer);
     clearInterval(memoryTimer);
     clearInterval(timer);
     clearInterval(codingTimer);
@@ -355,6 +342,7 @@ export async function startWorker(
     clearInterval(menuTimer);
     clearInterval(reviewTimer);
     shutdown.abort();
+    await runs.drain();
     await reviewBusy;
     await Promise.all([polling, boss.stop({ graceful: true, timeout: 10000 })]);
     await Promise.all([codingBusy, githubBusy, menuBusy, memoryBusy]);

@@ -19,6 +19,7 @@ import { RuntimeLogger } from "./observability/logs.ts";
 import { ReviewExecutor } from "./review-bot/executor.ts";
 import { SearchConsoleService } from "./search-console/service.ts";
 import { SetupService } from "./setup/service.ts";
+import { qwenRuntime } from "./transcription/runtime.ts";
 
 const cfg = config();
 const pool = database(cfg.DATABASE_URL);
@@ -60,7 +61,6 @@ const stop = await startWorker(
   ),
   cfg.DATABASE_URL,
   (deployment, workspaceId) => plugins.runner(deployment, workspaceId),
-  cfg.RUN_TIMEOUT_SECONDS,
   new GitHubIssues(store, githubApps),
   new CodingService(
     store,
@@ -94,6 +94,7 @@ async function shutdown() {
   stopping = true;
   log.write("worker_stopping");
   await stop();
+  qwenRuntime.close();
   await log.close();
   await pool.end();
 }

@@ -25,19 +25,19 @@ GitHub 的 **Authorized GitHub Apps** 仅表示身份授权；**Installed GitHub
 
 ## 成员：验证自己的账号
 
-1. 先加入工作区，在机器人私聊发送 `/github` 或 `/github connect`。
+1. Join the workspace, then ask “Connect my GitHub account” in the bot's private chat.
 2. 打开授权链接，在 GitHub 确认账号和授权。
 3. 返回原 Telegram 私聊，核对显示的 GitHub 登录名并点击 **Connect account**。
 
-仅浏览器授权不会完成绑定。无需另建面板账号。多工作区先使用 `/workspace <UUID>` 选择目标；同一 GitHub 身份在一个工作区只能关联一个成员。
+仅浏览器授权不会完成绑定。无需另建面板账号。With multiple workspaces, ask to switch to the intended workspace first；同一 GitHub 身份在一个工作区只能关联一个成员。
 
-`/github sync` 手动刷新权限；worker 也会定期刷新。`/github disconnect` 清除本人连接和有效授权，并取消待处理工作，不会恢复更宽的仓库访问。
+Ask “Refresh my GitHub permissions” to sync immediately; the worker also refreshes periodically. Ask “Disconnect my GitHub account” to remove your connection and invalidate pending work. Disconnecting does not restore wider access.
 
 连接后的读取需要 GitHub 读权限，Codex 需要已验证的写权限。GitHub admin 身份不会提升工作区角色，管理员代选的 GitHub 资料也不能替代本人验证。
 
 ## 查询仓库、Issue 和 PR
 
-发送 `/repos` 选择默认仓库，或每次写出 `owner/repository`。
+Ask “Help me choose a repository”, or name `owner/repository` in each request.
 
 - “列出 example/app 本周合并的 PR，附日期和链接。”
 - “example/app 的 Issue #42 现在是什么状态？”
@@ -68,3 +68,13 @@ Codex 创建 PR 不代表授权合并。使用消息上的 **Review / Merge** �
 ## 开发与审查
 
 [Codex](codex.md) 用于实现修改并生成 PR；[Review Bot](review-bot.md) 用于自动审查和同一 PR 上的明确修复。它们均需额外启用。权限失败见 [排障指南](troubleshooting.md)。
+
+### Codex execution environment
+
+Deployment operators can select Docker, OpenSandbox or **Native VPS** under
+**Plugins → Codex → Runtime → Edit**. Native VPS uses the Codex CLI and development
+tools installed on a dedicated host and executes trusted repositories with its
+service user's permissions. It requires a prepared host service; saving the option
+does not install it. Provider/ChatGPT sign-in, repository permissions, progress,
+Stop and PR publication use the existing Codex settings and task flow. Docker
+remains the default. Runtime changes wait for retained tasks to be cleaned up.

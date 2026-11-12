@@ -452,7 +452,7 @@ export class GoogleService {
     delete user.flow;
     revokeWork(w);
     return accept
-      ? "Google account connected. You can read your Docs, Sheets, Drive and Gmail here. Send /google properties to choose your Search Console properties."
+      ? "Google account connected. You can read your Docs, Sheets, Drive and Gmail here. Ask me to choose your Search Console properties."
       : "Google account connection rejected.";
   }
   disconnect(w: Workspace, actor: string) {

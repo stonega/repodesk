@@ -79,7 +79,7 @@ export async function googleControl(
     if (cmd.args === "disconnect") {
       google.disconnect(w, actor);
       text =
-        "Your Google account is disconnected from this workspace. Send /google to connect again. Revoke provider access separately in your Google account settings.";
+        "Your Google account is disconnected from this workspace. Ask me to connect Google again. Revoke provider access separately in your Google account settings.";
     } else if (cmd.args === "properties") {
       requireThat(search, "google_not_configured", 409);
       await search.properties(w, actor, d.bot.id);
@@ -99,9 +99,9 @@ export async function googleControl(
             : user.connection.refresh
               ? "Refreshing connection"
               : "Connected";
-        text = `Google · ${w.settings.name}\n${state}: ${user.connection.account}\n${w.plugins?.google?.google?.settings.enabled ? "Plugin enabled" : "Plugin disabled by the administrator"}\nSearch Console: ${user.siteUrls.length} selected properties\n/google connect — connect or reconnect\n/google properties — choose Search Console properties\n/google disconnect — disconnect your account`;
+        text = `Google · ${w.settings.name}\n${state}: ${user.connection.account}\n${w.plugins?.google?.google?.settings.enabled ? "Plugin enabled" : "Plugin disabled by the administrator"}\nSearch Console: ${user.siteUrls.length} selected properties\nAsk me to reconnect, choose Search Console properties or disconnect your account.`;
       } else if (cmd.args === "status")
-        text = `No Google account connected in ${w.settings.name}. Send /google to connect.`;
+        text = `No Google account connected in ${w.settings.name}. Ask me to connect Google.`;
       else {
         const url = await google.begin(
           w,
@@ -114,7 +114,7 @@ export async function googleControl(
       }
     } else
       text =
-        "Use /google to connect or view status, /google connect to reconnect, /google properties to select Search Console properties, or /google disconnect.";
+        "Ask me to connect Google, show account status, reconnect, choose Search Console properties or disconnect.";
   } else {
     requireThat(
       d.active && !d.paused && !w.settings.paused,

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { isDeepStrictEqual } from "node:util";
 import { parse } from "yaml";
 import { skillSchema, type Workspace } from "../domain.ts";
 
@@ -26,14 +27,37 @@ export function telegramWidgetSpec() {
     resources: [{ path: "references/rendering.md", body: rendering }],
   });
 }
-/** Existing tenants get the new preset once; disabled records and slug collisions win. */
-export function ensureTelegramWidgetSkill(w: Workspace) {
+/** Upgrade only the unchanged, application-owned original; pins stay immutable. */
+function upgradeTelegramWidgetSkill(skill: Workspace["skills"][number]) {
+  const description =
+    "Create interactive charts, comparisons and calculators inside private Telegram messages.";
+  const body =
+    "Read [the rendering guide](references/rendering.md) with load_skill and this skill's id before creating a widget. Follow its limits and example; send HTML and a useful caption with send_telegram_widget.";
+  if (!skill.preset || skill.archived || skill.origin || skill.githubSource)
+    return;
+  if (skill.draft.description !== description || skill.draft.body !== body)
+    return;
+  const spec = telegramWidgetSpec();
+  const original = { ...spec, description, body };
   if (
-    w.deletion ||
-    w.skills.length >= 100 ||
-    w.skills.some((s) => s.draft.slug === "telegram-widgets")
+    !isDeepStrictEqual(skill.draft, original) ||
+    !isDeepStrictEqual(skill.published.at(-1), original)
   )
     return;
+  skill.draft = spec;
+  skill.published.push(structuredClone(spec));
+  skill.version++;
+}
+
+/** Existing tenants get the preset and approved updates while preserving disablement. */
+export function ensureTelegramWidgetSkill(w: Workspace) {
+  if (w.deletion) return;
+  const existing = w.skills.find((s) => s.draft.slug === "telegram-widgets");
+  if (existing) {
+    upgradeTelegramWidgetSkill(existing);
+    return;
+  }
+  if (w.skills.length >= 100) return;
   const spec = telegramWidgetSpec();
   const hash = createHash("sha256")
     .update(`repodesk:telegram-widgets:${w.id}`)

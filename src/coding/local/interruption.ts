@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
+import { jobPath } from "./job-paths.ts";
 import type { TaskState } from "./task-runtime.ts";
 
 export const interruptedJob = z.object({
@@ -24,7 +25,7 @@ export async function hostBootId() {
 export function watchInterruption(
   executionId: string | undefined,
   phase: string | undefined,
-  path = "/task/interruption.json",
+  path = jobPath("/task/interruption.json"),
 ) {
   const marker = interruptedJob.safeParse({ executionId, phase });
   if (!marker.success) return;

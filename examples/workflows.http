@@ -1,33 +1,48 @@
 # Sign in as the workspace deployment operator or a linked workspace owner/admin.
 # All authorized panel admins can inspect and manage full workspace workflows,
 # including deployment operators without a personal Telegram link.
-# Workflow runs use team per-run/monthly budgets; proposals omit budgetUsd.
+# Editing an existing definition requires the owner's verified Telegram identity.
+# An admin/operator editing another owner's workflow receives 403 owner_required.
+# Workflow runs use team per-run/monthly budgets. Panel saves apply immediately.
 @origin = http://localhost:3000
 @workspaceId = REPLACE_WITH_WORKSPACE_UUID
 @workflowId = REPLACE_WITH_WORKFLOW_UUID
 @session = REPLACE_WITH_SESSION
 @csrf = REPLACE_WITH_CSRF
-@approvalId = REPLACE_WITH_APPROVAL_UUID
 
 ### List full workflows (100 per page) with current repository choices.
 GET {{origin}}/api/admin/workspaces/{{workspaceId}}/workflows?offset=0
 Cookie: repodesk_session={{session}}
 
 ### Fetch one workflow: { mode, workflow, repositorySources }.
-# Both modes include the spec and saved versions. Missing/deleted records return
+# Both modes include the spec, saved versions and ownerProfile (id/name/username).
+# canEdit is true only for the active owner linked to the authenticated account.
+# Missing/deleted records return
 # 404; foreign workspaces remain denied.
 # `next` contains recurrence previews, including when the workflow is not active.
 GET {{origin}}/api/admin/workspaces/{{workspaceId}}/workflows/{{workflowId}}
 Cookie: repodesk_session={{session}}
 
-### Approve an exact workflow proposal as a panel admin, across workflow owners.
-POST {{origin}}/api/admin/workspaces/{{workspaceId}}/approvals/{{approvalId}}
+### Save an exact workflow version directly. No separate approval is needed.
+# Sign in as the linked owner; version conflicts return 409 without changing it.
+PUT {{origin}}/api/admin/workspaces/{{workspaceId}}/workflows/{{workflowId}}
 Cookie: repodesk_session={{session}}
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
-{ "approve": true }
+{
+  "version": 1,
+  "spec": {
+    "name": "Daily reminder",
+    "task": "Remind me to review today's tasks",
+    "chatId": "REPLACE_WITH_ACTIVE_OWNER_TELEGRAM_ID",
+    "topicId": 0,
+    "recurrence": { "frequency": "daily", "hour": 8, "minute": 0, "timezone": "Asia/Taipei" },
+    "format": "Plain text",
+    "windowDays": 1
+  }
+}
 
 ### Control a workflow; pause/resume/delete/run retain its execution owner.
 POST {{origin}}/api/admin/workspaces/{{workspaceId}}/workflows/{{workflowId}}/action

@@ -8,6 +8,24 @@ a stable workspace-local ID, and persist it on their next change. Existing slug
 collisions, disablement and full catalogs are preserved; existing run pins do not
 gain new grants. New workspaces include it with the other starter presets.
 
+The assistant proactively chooses a widget when a visual comparison, diagram,
+interactive calculation or scenario exploration materially helps the answer. A
+request does not need to mention widgets, interactivity or charts. Simple facts,
+brief explanations, acknowledgements, status updates and text-only requests use
+text. Selection is a model judgment from the conversation, without a keyword
+router or a separate presentation approval. The main prompt reinforces this only
+for an authorized run with a matching private bot thread and a pinned widget
+skill granting the tool and its rendering guide. The guide is loaded after the
+assistant decides a widget helps; it is not included in every prompt.
+
+On workspace reads, the unchanged, application-owned original preset receives a
+new immutable published snapshot and a revision increment. Its ID and enabled
+state are preserved, including when the catalog is full. Existing runs and
+workflows keep their exact pins; future runs use the latest enabled snapshot.
+Custom slug collisions, changed instructions, imported/conversation-created
+skills, archived records and deleting workspaces are not upgraded. Repeated reads
+are idempotent, and the snapshot is persisted on the next workspace change.
+
 The skill's Markdown and supporting guide are bundled into `dist/telegram-widgets`
 by the build. No external dependency, service lookup or BotFather setup is needed.
 Registration is local; the production startup fixture includes the tool and preset
@@ -50,6 +68,11 @@ These are distinct from Telegram's broader platform support.
 Deterministic coverage checks ingress, executor, staging and delivery with fake
 Telegram/model transports, plus grants, duplicate events/calls, tenant/Topic/bot
 boundaries, source removal, retries, uncertainty, encryption and preset upgrades.
+Prompt coverage checks private eligibility, current grants, text-only/simple-answer
+guidance and on-demand rendering instructions. Production Store coverage checks
+upgrade persistence and unchanged old pins; ingress/executor coverage uses an
+ordinary cost question without an explicit widget request. The fake model proves
+prompt/tool wiring and delivery, not real-model selection quality.
 Browser coverage exercises the guide's real HTML example at 320/430px in light/dark
 and the saved preset at desktop/mobile widths. A browser does not emulate
 Telegram's restricted rendering profile. Native desktop/mobile Telegram behavior

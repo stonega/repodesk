@@ -8,7 +8,11 @@ rollout. See [task history and setup](telegram-mini-app.md) for capture boundari
 recovery, retention and live client acceptance.
 
 Codex implementation runs approved repository tasks in isolated Docker or
-OpenSandbox environments. The bot uses Pi for Telegram conversation; the coding service owns
+OpenSandbox environments, or in the optional Native VPS host service using the
+installed CLI. Native VPS requires trusted repositories and a dedicated,
+unprivileged host user; it provides no container isolation. See
+[native setup](codex-runner.md#native-vps-installed-codex-cli).
+The bot uses Pi for Telegram conversation; the coding service owns
 authorization, task state, conversation and publication. Setup and deterministic
 tests do not start a coding task, connect an account or send a message. A live
 provider-key GitHub/Codex VPS run and an isolated OpenSandbox repeat passed in the

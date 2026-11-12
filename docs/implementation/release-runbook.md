@@ -56,8 +56,9 @@ Use only your dedicated staging bot/group and explicit model spend cap.
    must create one run. Link a group as both workspace and Telegram administrator.
 4. With explicit visibility/collection consent, add representative source messages.
    Request a recap. Confirm references, gaps, topic and group/private boundaries.
-5. Propose Friday recurrence. Inspect next three instants and approve once; replay
-   the callback and verify no second activation.
+5. Request a Friday schedule with a clear time and timezone. Verify immediate
+   activation and one confirmation with the next three instants. Replay the
+   update and verify no second schedule or confirmation.
 6. Reply `/correct save Put blockers first`, approve, then restart app and worker.
 7. Observe one scheduled recap using the pinned workflow/skill and corrected
    instruction. Inspect generation, usage and delivery separately in the panel.
@@ -91,11 +92,10 @@ volume with `docker compose down -v`.
 - **Unknown delivery:** inspect Telegram. In Runs, resolve as sent with the observed
   remote message ID or abandon without resending. Neither option issues another send.
   Create an explicit new run only if you intend another publication.
-- **Run timeout:** `failed (run_timeout)` means the worker reached
-  `RUN_TIMEOUT_SECONDS` (300 seconds by default), not that the user cancelled it.
-  Review provider latency and reasoning settings; if needed, increase the bounded
-  deadline and redeploy after pending work drains. Provider billing still needs
-  reconciliation when the attempt is unknown. Do not blindly replay it.
+- **Historical run timeout:** `failed (run_timeout)` records the execution limit
+  used by an older release. Ordinary runs no longer have a total time limit, and
+  `RUN_TIMEOUT_SECONDS` is ignored. Deploying the change does not replay old failed
+  runs. Provider billing still needs reconciliation when an attempt is unknown.
 - **Unknown charge:** inspect provider billing. Record the actual charge and a billing
   reference in the run's reconciliation control. The unknown reservation persists until
   then. Retention purges content without erasing current budget accounting.

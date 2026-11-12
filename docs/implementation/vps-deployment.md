@@ -2,10 +2,584 @@
 
 RepoDesk now installs approved GitHub releases through a host-side updater.
 The previous `.github/workflows/deploy.yml` is removed. GitHub Actions verifies
-code; it does not transfer images or deploy to the VPS. Publishing a stable
+code; the standard release workflow does not transfer images or deploy to the VPS.
+Explicit operator-authorized exceptions are recorded below. Publishing a stable
 release makes it available in the panel's version indicator. A deployment
 administrator reviews its notes and starts installation explicitly.
 See [host updater installation](updates.md) for the service and panel contract.
+
+## Conversational Telegram controls deployed (2026-11-11)
+
+Operator-authorized bundle `1794386364054-96360541` deploys source
+`41b179b93d88411437aab6c39cdb86dc45341c62` over `1794371404708-33447708`, preserving
+existing production fixes. The feature commit `bf644bb978827ed20066f6581d0c1a133eee11fd` is on
+`main`; the exact production source is retained on
+`deploy/telegram-chat-controls-20261111`.
+
+The bot no longer advertises slash-command menus. Ordinary chat requests reach
+repository selection, account connections, task controls, workflow management,
+instructions, settings, usage and privacy through the existing authorized services.
+Read-only Telegram API verification after cutover confirms empty lists for the
+**default**, **all private chats** and **all group chats** scopes. The previous
+lists contained five, seven and five entries respectively. No manual user message
+or live model request was used. Native client appearance and real-model phrasing
+remain live acceptance checks.
+
+The isolated main tree passed **1,454 tests**; the preserved production source
+passed **1,496 tests across 159 files**.
+Biome, strict types, build, the Node runtime contract and pinned-Bun control checks
+pass. One pre-existing Browser expiration assertion failed during the first
+concurrent suite; its isolated retry and final full rerun both pass. Exact VPS
+images pass 16 integration-startup cases with zero external startup calls, CPU
+speech imports, offline Code Truth, Compose readiness/configuration, migration
+rerun and disposable backup/restore.
+
+All five services are healthy; public/loopback health, readiness and frontend
+artifacts verify. **55 deployed artifacts** match the
+verified images. The existing unused bare JavaScript cache alias remains separately
+audited; current HTML asset URLs match. Configuration, credentials, persistent
+mounts, PostgreSQL identity and the native Browser installation are preserved.
+The protected backup `backups/pre-release-1794386364054-96360541.dump` is
+**231,489 bytes** and its archive listing verifies. Source,
+image identities, checks, menu results and the deployment receipt remain under the
+protected release directory. No dependency, migration or stable release was added.
+
+## Immediate schedules and workflow owners deployed (2026-11-11)
+
+The operator-authorized release `1794371404708-33447708` deploys source
+`d1ee70db29d5114764f9027796f03a28f79417d0` over `1794367751621-08425833`. It incorporates
+main commits `776d96c` and `dffb66b`, retaining the existing production fixes.
+Explicit Telegram requests now activate schedules immediately and receive one
+application-owned confirmation. Cards/details show the owner's saved Telegram
+name, username and ID. Panel saves apply directly and preserve paused state.
+Legacy repeated controls report their saved outcome; interrupted activation does
+not replay creation or report a false failure.
+
+The production-based source passed **1,487 deterministic tests across 158 files**,
+**29 admin/workflow browser scenarios**, lint, strict types, build and the local
+Node runtime contract. The pinned Bun 1.3.14 build image passed all **40 focused
+workflow, agent and diagnostic tests**. Exact-image startup passed 16 integration
+cases with zero external startup calls. CPU speech imports, offline Code Truth,
+Compose readiness/configuration, migration rerun and disposable backup/restore
+also passed. A stale browser expectation for Add workflow was corrected before
+cutover; the passing final evidence is retained with the initial check logs.
+
+All **55 deployed artifacts** and the public/loopback HTML
+and frontend assets match the verified images. Public health and readiness return
+HTTP 200. All five stack services are healthy. The HTML's versioned JavaScript
+URL matches the release. Cloudflare retains the previous file at the unused bare
+`/assets/app.js` alias; its cache headers and prior-release hash are audited
+separately in the receipt. No CDN configuration was changed. The native Browser package's
+**813 files** remain unchanged, and headed
+bridge checks pass from app and worker. Configuration, credentials, persistent
+mounts and PostgreSQL identity are preserved.
+
+The protected backup `backups/pre-release-1794371404708-33447708.dump` is **197,234 bytes** and
+its archive listing verifies. Source archives, quality logs, image IDs and
+`deployment-receipt.json` remain under the protected release directory. Package
+version remains v0.1.46; no dependency or SQL migration was added. No manual
+Telegram message, live model inference or replay of historical requests was used.
+
+## Missing token prices count as zero, deployed (2026-11-11)
+
+Bundle `1794367751621-08425833` deploys source
+`af5171554df3488563af403f47f58d21e30f3986`, tree
+`6569737174ea5df2cb268bca0a10f99a4eb564d9`, over
+`1794305442311-77002991`. Missing model token prices now count as zero in
+reservations, settlement, remaining budgets and usage displays. Finite and
+zero-dollar budgets allow these calls. Available rates and reconciled charges
+continue to count independently.
+
+The isolated release passed lint, strict types, build, the Node runtime contract,
+**1,482 deterministic tests across 158 files**, and two desktop/mobile browser
+scenarios. The VPS builds with pinned Bun 1.3.14; its build image also passed all
+50 focused pricing, budget and summary unit tests. Exact-image startup, CPU speech,
+offline Code Truth, Compose configuration/readiness, migration rerun and disposable
+backup/restore passed. All **55 deployed artifacts** match the verified images;
+public and loopback HTML/assets verify. Public health/readiness return HTTP 200,
+and all five services are healthy.
+
+The protected backup is `backups/pre-release-1794367751621-08425833.dump`
+(**165,882 bytes**), with its archive listing verified. Source archives, quality
+logs, image IDs and `deployment-receipt.json` remain in the protected release
+directory. No dependency, SQL migration or stable GitHub release was added.
+
+## Standard text recovery deployed (2026-11-10)
+
+Bundle `1794305442311-77002991` deploys source
+`ac7abf189f0599bcdeda8ce6bd3c2e548d999dde` over
+`1794301988625-49496411`. The user confirmed a plain main-chat diagnostic visible.
+Opted-in recovery now persists standard `sendMessage` text delivery before sending,
+including rich fallback intents queued by the previous worker. Links and text
+entities are preserved. This is a conservative transport choice, not an established
+rich-format root cause or a repair of Telegram's native Topic outage.
+
+All **1,479 tests across 158 files**, lint, strict types, build and the local offline
+runtime contract pass. Exact-image startup, CPU speech, Code Truth, Compose
+readiness/configuration, migration rerun and backup/restore checks pass. All 55
+running artifacts and public/loopback assets verify. The backup is
+`backups/pre-release-1794305442311-77002991.dump` (125,821 bytes). Configuration,
+credentials, model/budget choices and persistent volumes are preserved.
+
+A previously confirmed-failed saved answer was retried through the production
+DeliveryWorker. Its original Topic returned HTTP 400; the standard-text main-chat
+send returned HTTP 200 and a confirmed remote ID. The receipt records markdown
+text delivery, logical Topic `1997139` and actual `deliveredTopicId: 0`. Model
+attempts are unchanged. User visibility confirmation of this recovered answer is
+pending; the separate plain diagnostic was confirmed visible. No sent or unknown
+answer was reset or automatically replayed.
+
+## Private Topic recovery deployed and delivered (2026-11-10)
+
+Bundle `1794301988625-49496411` deploys source
+`8b518732ec0a5d21ca7cf97705c2a6dd85f4d005` over
+`1794297677476-38110726`. After the user explicitly requested the main-chat
+workaround, an audited opt-in was enabled for the sole verified active member and
+current bot. The saved successful answer was retried through the production
+DeliveryWorker: its original Topic returned HTTP 400, and the same intent's
+main-private-chat attempt returned HTTP 200 with a confirmed remote message ID.
+The receipt is `sent`, preserves logical Topic `1997120`, records
+`deliveredTopicId: 0`, and retains one model attempt; the model was not rerun.
+The original Telegram Topic remains unavailable. This does not recover input
+Telegram never delivered. Future ordinary replies can use the scoped fallback;
+groups, controls and uncertain sends remain excluded.
+
+All **1,478 tests across 158 files**, lint, strict TypeScript, build and the local
+runtime contract pass. Exact-image checks include the 16-case offline startup
+contract with zero external startup calls, CPU speech imports, Code Truth smoke,
+Compose validation/readiness, migration rerun and backup/restore. All 55 deployed
+artifacts and public/loopback assets verify. All five services are healthy;
+configuration, credentials, persistent mounts and native Browser state are
+preserved. The protected pre-cutover dump is
+`backups/pre-release-1794301988625-49496411.dump` (122,561 bytes).
+Release and recovery receipts remain in the protected release directory. No
+frontend interaction was changed; the existing run details expose the additional
+receipt metadata. The divergent original development branch and index were not
+changed by the isolated release commit.
+
+## Private-message input correction and live blockers (2026-11-10)
+
+Bundle `1794297677476-38110726` deploys source `80946f23a8133930cf3468b255f31df760d5c3cf`
+over `1794293889220-29767507`. It adds bounded normalization of incoming Telegram
+rich-message text and production-composition regression coverage. All 1,466 tests,
+lint, strict types, build, the 16-case offline startup contract, Code Truth smoke,
+disposable Compose readiness, migration rerun and backup/restore checks pass.
+All 55 deployed application/supervisor/task artifacts and public/loopback assets
+verify. All five containers and native services remain healthy. Configuration,
+credentials, memberships and persistent volumes are preserved. The protected
+pre-cutover dump is `backups/pre-release-1794297677476-38110726.dump` (115,569 bytes).
+
+Live private input creates a run, but native chat is **not restored**. Initially,
+unknown model prices and the saved per-request dollar budget stopped execution
+with `model_pricing_required_for_budget`; the pricing endpoint returns HTTP 401.
+The operator explicitly chose to remove that budget, and the audited update
+preserves all other settings. Telegram still rejects the original Topic's error
+reply with `message thread not found`, consistent with the upstream private-topic
+issue. Replies are not silently rerouted outside their Topic. See the
+[incident and live evidence](../../postmortem/2026-11-10-telegram-rich-input.md).
+
+## Telegram widgets and merged application features deployed (2026-11-10)
+
+The operator-authorized cutover deployed bundle `1794293889220-29767507` to
+`13.140.242.169`, retaining `https://dev.stonegate.me` and package v0.1.46.
+Source snapshot `2b05a41e3e65ff11ddf04ebd5fce495468182b7e`, tree
+`40d1da4e05875b6f4c3c006590def7e5ee804fa8`, applies the merged GitHub coding
+follow-up, Telegram widget and bot-token guidance commits (`a297667`, `c2a55f7`
+and `f7b8272`) to the previous production source `44a76df`. The existing Browser,
+worker, audio and provider fixes remain present. The divergent development
+working tree was not deployed; its branch and index remain unchanged.
+
+Lint, strict TypeScript, build, the local Node runtime contract and **1,458
+deterministic tests across 156 files** pass. All **30 focused browser scenarios**
+pass for administration, first-run/token recovery, presets and widgets. The exact
+production app image passes all 16 startup cases with zero external startup
+calls. CPU speech imports, the offline Code Truth real-index/MCP smoke, Codex CLI
+checks, disposable Compose readiness, migration rerun and backup/restore pass.
+
+The app, supervisor and task images overlay the source-built artifacts on their
+previous production runtime images. Their filesystem layer prefixes and runtime
+configuration match the previous images. No dependency, SQL migration or native
+Browser update was added. All **55 application/supervisor/task artifacts** match
+the verified images. Public and loopback health, readiness, admin, Mini App and
+packaged frontend assets verify, including served asset hashes. An independent
+workstation check also returns public health `ok` and readiness `ready`.
+
+Both coding and Browser checkpoint checks pass. The protected pre-cutover backup
+is `backups/pre-release-1794293889220-29767507.dump` (**111,117 bytes**), with its
+archive listing verified. All five application-stack containers are healthy;
+configuration, credentials, persistent mounts and the PostgreSQL container are
+preserved. The unchanged native Browser package verifies all 813 files, and
+synthetic headed Browser checks pass from both running app and worker containers.
+
+Preparation failures and corrected checks remain in the protected bundle. An
+initial image overlay used an unsupported image-ID reference in `FROM`; the
+corrected build uses verified local tags and confirms the inherited layer and
+configuration identities. The first cutover preflight also incorrectly required
+a Browser token for the migration service. It stopped before changing running
+services; the corrected check permits that intentionally absent optional setting.
+The same verified final images then completed cutover. Source archives, quality
+logs and `deployment-receipt.json` remain under the release directory. No stable
+GitHub release, account connection, webhook registration, live model call or
+manual Telegram message was performed. Native Telegram widget rendering and
+real-model widget quality remain staging checks.
+
+## Operator-requested clean reset (2026-11-10)
+
+The operator requested removal of deployment data on `13.140.242.169`. The
+`repodesk` stack was stopped and all five project volumes were removed and
+recreated: PostgreSQL, coding-runner state, Code Truth authentication/indexes and
+speech model storage. Saved Browser profiles and their generated system accounts,
+Browser runtime journals, update history, the prior database backup and
+`/root/repodesk-admin-login` were removed. Database, encryption, coding-runner and
+Browser secrets were regenerated. No data backup was retained for this reset.
+SSH access, installed software, the verified release images and HTTPS certificates
+were preserved. No other VPS was changed.
+
+The unchanged v0.1.46 source snapshot `44a76df` remains deployed. All five
+containers are healthy; Browser, updater and Caddy are active. The exact app image
+again passes its 16-case runtime contract with zero external startup calls, and
+Code Truth's offline real-index/MCP smoke passes. Migrations initialize the new
+database with **zero administrators, workspaces and sessions**, 22 migrations and
+`claimed=false`. Bot/model credentials and provider configuration are empty.
+The backup directory and Browser profiles are empty. Verification is recorded in
+the protected release's `clean-reset-receipt.json`; it supersedes the initial
+installation receipt and its now-deleted administrator/backup references.
+
+An SSH-only proxy gate was initially added during the reset. The operator
+clarified that first-open administrator creation belongs in the web UI, so that
+gate and `/opt/repodesk/publish-after-setup` were removed on the same day.
+`PUBLIC_ORIGIN=https://dev.stonegate.me` and Caddy's normal reverse proxy were
+restored, and app/worker were recreated with the configured public origin.
+
+Open `https://dev.stonegate.me/` to reach `/setup` and choose the first
+administrator's username and password directly in the web UI. This follows the
+[first-run design](../design/first-run-setup.md#entry-and-ownership). No generated
+administrator, SSH tunnel or publication command is required. Public HTTPS
+health/readiness, setup and setup-status endpoints return HTTP 200. The focused
+first-visit browser journey passes against a disposable database, and its
+administrator form was inspected at 1280px and 390px. A live browser check through
+the local network forwarding did not complete; public HTTPS responses were
+verified independently. Lint and documentation whitespace checks pass.
+No webhook, account connection, model call or Telegram send was performed during
+this reset.
+
+## Fresh installation on the Seattle VPS (2026-11-09)
+
+At the operator's request, RepoDesk was installed fresh on `13.140.242.169`
+(Ubuntu 24.04, x86_64). No database, credentials, accounts or profiles were
+migrated from the previous VPS. SSH permits public-key authentication only.
+
+The checksum-verified production source snapshot `44a76df8e8f6ee54a42bf7a83b1d9eaddbc586e1`
+(package v0.1.46, bundle `1794210552528-53347667`) was built on the new host.
+The existing development working tree was not deployed. App, supervisor, task,
+Code Truth and native Browser packages were built from that snapshot. New database
+credentials, encryption key, runner token and Browser token remain protected on
+the host under `/opt/repodesk` and `/etc/repodesk`.
+
+Lint, strict types, build and **1,432 deterministic tests across 154 files** pass.
+The exact app image passes all 16 integration-startup cases with zero external
+startup calls. CPU speech imports, offline Code Truth real-index/MCP checks and
+the supervisor/task CLI checks pass. The real headed Browser smoke and private
+app/worker-to-host Browser checks pass. Its initial test invocation used the
+root-only release directory, preventing the unprivileged worker from reading
+its package; rerunning from the installed, correctly readable package passed.
+The failed fixture log is retained. No application correction was necessary.
+
+Merged Compose configuration and secret access validate. App, worker, PostgreSQL,
+Code Truth and the coding runner are healthy; Browser, updater and Caddy systemd
+services are active and enabled. App, worker and supervisor each match all 25
+built files, the task artifact matches its build, and all 813 native Browser
+package files verify. Only the app's loopback port is published by Compose.
+
+The fresh database contains 22 migrations, one deployment administrator and no
+workspaces. Administrator login/logout and unauthenticated access checks pass;
+the generated login is stored in root-only `/root/repodesk-admin-login` (mode 600).
+Migration rerun and a disposable restore of
+`backups/fresh-install-1794210552528-53347667.dump` (**91,902 bytes**) pass.
+The protected bundle contains build/check logs and `deployment-receipt.json`.
+Use `/opt/repodesk/compose` for operations against its pinned release images.
+
+`PUBLIC_ORIGIN` and Caddy target `https://dev.stonegate.me`. **Public DNS cutover
+and HTTPS verification remain pending:** the available DNS credential cannot
+access the `stonegate.me` zone, and browser access is unavailable. Update the
+hostname's A record to `13.140.242.169`, then verify certificate issuance, public
+health/readiness and served assets before reporting public availability.
+Loopback health/readiness, admin, Mini App and packaged frontend assets verify.
+No account connection, webhook registration, live model inference or Telegram
+message was performed.
+
+## Provider error dialog deployment (2026-11-09)
+
+The operator-authorized cutover deployed bundle `1794210552528-53347667`, replacing
+`41965848447-1` (package v0.1.46). Source snapshot
+`44a76df8e8f6ee54a42bf7a83b1d9eaddbc586e1`, tree
+`e357402f6ad9927b02d0dd44eef76fe92d7aa6b4`, applies provider-error commit
+`df2126e` to the previous production source
+`726a45ab26885f17bd0236c967a87461f820f0f3`. Existing production fixes remain present.
+Provider saves show readable model-fetch errors and recovery guidance for HTML
+502/503/504 responses, retain drafts, and keep API-key rejection distinct.
+
+The verified build artifacts were overlaid on the existing app, supervisor and
+task runtime images. Root filesystem layer prefixes and runtime configuration
+match their prior images, preserving installed Node, Pi, Codex and CPU speech
+dependencies. No dependency, migration, native Browser update or stable release
+was added. Code Truth's source/image and the installed Browser package are unchanged.
+
+Local verification passed lint, strict types, build, the Node runtime contract,
+**1,432 deterministic tests across 154 files** and **35 provider/session browser
+scenarios**. Exact-image startup passed all 16 plugin cases with zero external
+calls, CPU speech imports, offline Code Truth, native Codex dynamic tools,
+disposable Compose readiness, migration rerun and backup/restore checks.
+
+Both Browser/Codex checkpoint checks passed before cutover. The protected backup
+is `backups/pre-release-1794210552528-53347667.dump` (**3,207,499 bytes**), with
+its archive listing verified. All **51 application/supervisor/task artifacts**
+and public/loopback pages and frontend assets match the verified build. App,
+worker, supervisor and Code Truth are healthy. Configuration, credentials,
+persistent mounts, PostgreSQL and the three Actions runners are preserved.
+Synthetic headed Browser checks passed from both running app and worker containers.
+
+An initial offline Codex proof stopped before cutover because its copied fixture
+was not readable by the container's node user. The fixture was made readable and
+the exact check passed before resuming with the same verified images. The initial
+failure and corrected verification logs remain in the protected bundle alongside
+source archives, checksums and `deployment-receipt.json`. No live model inference,
+account connection or manual Telegram message was performed.
+
+## Browser website consent retry correction (2026-11-02)
+
+The authorized cutover deployed release `1793614570991-61029298`, replacing
+`1793607782072-26985359`. Source snapshot
+`c0ef7f8e6eef34675b0c234f2dfeb4f45b5eb4d6` applies the runtime fix and regression
+from main commit `3a4d5aaa19c578364eae56bdeb9dd743e9a04e38` to the previous
+production source `14d28d05e60b91a646f061c0062803466791fae3`. Its tree is
+`ffb31b3b1d457cff09428bacf257f320e6bdcd52`. An interrupted navigation no longer
+requests another website approval for an already allowed origin. The original
+uncertain operation receipt remains protected against replay.
+
+The snapshot passes lint, strict types, build, the Node runtime contract and all
+**1,388 deterministic tests across 152 files**. Exact VPS images pass all 16
+startup cases with zero external calls, CPU speech imports, offline Code Truth,
+Compose readiness, migration rerun and disposable backup/restore. All **51 build
+artifacts**, public/loopback pages and frontend assets match the verified images.
+
+Browser and coding checkpoints passed before cutover. The protected backup is
+`/opt/repodesk/backups/pre-release-1793614570991-61029298.dump`
+(**2,870,142 bytes**), with its archive listing verified. Application, worker,
+runner, Code Truth and PostgreSQL are healthy. Configuration, credentials,
+persistent mounts, PostgreSQL and the three Actions runners are preserved.
+
+The native Browser package remains unchanged; all 813 packaged files match.
+Synthetic checks from both running app and worker containers confirm headed
+Browser access as UID 1000, private profiles, plugin-revision fencing and cleanup.
+No external website, live account, model or manual Telegram message was used.
+Historical runs and member website decisions were not rewritten. Source archives,
+checksums, verification logs and `deployment-receipt.json` remain in the protected
+release directory. No dependency, migration or stable GitHub release was added;
+the original working tree and local main history were preserved.
+
+## Ordinary assistant execution deadline removal (2026-11-02)
+
+The operator-authorized cutover deployed source commit
+`14d28d05e60b91a646f061c0062803466791fae3`, tree
+`acc0b5cef7f12b8647acf05eafa6a4103a87376e`, in bundle
+`1793607782072-26985359` (package v0.1.46), replacing `41406054824-1`.
+The isolated snapshot starts from the previous production source
+`895d0e6925be87d49e300815783bcfdefb1c516b` and adds only the ordinary
+assistant deadline correction. Existing Browser fixes remain deployed. No
+dependency, SQL migration, native Browser update or stable release was added.
+
+Ordinary assistant runs no longer have a total execution deadline. Queue wakeups
+are acknowledged before execution, while fenced leases, current authorization,
+cancellation, budgets and three local execution slots remain. The new worker
+ignores legacy `RUN_TIMEOUT_SECONDS` environment values. The incident run retains
+its historical failed status and seven attempts; deployment did not replay it.
+
+The exact source passed lint, strict types, build, the Node runtime contract and
+**1,354 tests across 147 files** with disposable PostgreSQL. App, supervisor and
+task images were built on the VPS; the unchanged Code Truth image was reused.
+Exact-image runtime checks passed all 16 plugin-startup cases with zero external
+startup calls. CPU speech imports, offline Code Truth, Compose readiness,
+migration rerun and disposable backup/restore passed before cutover. All 25 app
+build artifacts match the locally verified snapshot.
+
+Both coding checkpoints and the Browser checkpoints passed. The protected backup
+is `backups/pre-release-1793607782072-26985359.dump` (**2,500,838 bytes**), and its
+archive listing is verified. All **51 application/supervisor/task artifacts**
+match the tested images. Public and loopback health, readiness, admin, Mini App
+and frontend assets return HTTP 200 with matching hashes, allowing only the
+existing Cloudflare analytics insertion.
+
+App, worker, runner, Code Truth and PostgreSQL are healthy. Configuration,
+credentials, persistent mounts, PostgreSQL and all three Actions runner identities
+are preserved. The native Browser service remains active with its previous
+verified manifest and unchanged source. No live Telegram/model test or account
+connection was performed. Source, checksums, logs and `deployment-receipt.json`
+remain in the release bundle. The original index and main branch are unchanged.
+
+An initial preflight rejected a missing Codex Compose overlay before any writer
+was stopped. The overlay was copied from the current release; the same verified
+images passed the repeated preflight and cutover. The initial failure and corrected
+packaging checksums remain in the bundle.
+
+## Default-enabled host Browser deployment (2026-10-31)
+
+The explicitly authorized rollout retained `https://dev.stonegate.me` and promoted
+release `41170079370-1` (package v0.1.46), replacing `1793266373668-15413800`.
+Application images use source `a601557577e0145a6b9b07488e028b3feaab3fc3`, tree
+`08bf94a2884b10bbdd8b5560ffbaa448fc648db6`. Native host code uses
+`350dfe7fdbf6e8cb93e75d7c4ab572516b608cc4`; deployment composition/preflight fixes
+use `8663584f2886f6a775b5e7b8a173f8e877b03467`. The immutable, tested images were
+reused for the final cutover. Source archives, protected logs and the verification
+receipt remain in the release directories. The normal host-updater path is unchanged.
+
+The Browser built-in defaults to enabled and keeps explicit Disable settings.
+API/worker/database remain in Docker. A systemd host service runs sandboxed headed
+Google Chrome `156.0.8078.79`, with separate Linux identities, displays and profiles
+for each workspace/user. Its private Node `v24.21.0` runtime does not replace the
+host's global tools. The authenticated Unix socket and application token are the
+only Browser additions to API/worker mounts; profiles and the host key stay private.
+
+Local validation passes lint, strict types, build, the Node startup contract and
+**1,365 tests across 148 files** with a 15-second deadline. The exact VPS application
+image passes 16 offline startup cases with zero external calls. Disposable migration,
+backup/restore, speech imports, Code Truth and native Codex dynamic-tool checks pass.
+The headed package, unprivileged installer access and Node/Ubuntu nft compatibility
+checks pass. Previously verified Browser/Mini App UI scenarios are unchanged by the
+operational corrections.
+
+The production receipt verifies **51 application/supervisor/job artifacts** and
+public/loopback HTML and assets, including the existing Cloudflare analytics
+insertion. API, worker, runner, Code Truth, PostgreSQL and the native Browser service
+are healthy. Restarting the host service preserves the socket directory inode;
+both existing API and worker mounts successfully invoke headed Browser afterward.
+Unsigned member and Codex Browser requests return HTTP 401. The existing Telegram
+main Mini App is configured; no real site login or test Telegram/model call was used.
+
+The final protected backup is
+`/opt/repodesk/backups/pre-release-41170079370-1.dump` (**2,093,924 bytes**), and its
+archive listing is verified. Migration `022_browser_profiles.sql` is applied.
+Configuration, credentials, existing volumes, PostgreSQL and all three CI runners
+are preserved. The original index and local main branch were not changed.
+
+The first cutover in `41166151438-1` failed because deployment packaging shadowed
+inherited encryption-key mounts. Recovery restored the prior release before the
+successful fresh cutover. The failed attempt's backup and logs remain available.
+The deployment script now probes migration, API and worker secret readability
+before stopping writers; regressions cover missing API and worker mounts. See the
+[incident and prevention record](../../postmortem/2026-10-31-browser-deployment-secret-mount.md)
+and [successful deployment run](https://github.com/stonega/repodesk/actions/runs/41170079370).
+
+## Private forwarded reference deployment (2026-10-29)
+
+The operator-authorized cutover deployed the forwarding fix `fd388cb` on top of
+the existing audio runtime, using snapshot
+`d5057efc946938ceecdd8f1f4a7b34a3adf9861f`, source tree
+`4d9cc7d5cea168ae3181d6468eec4e6aeb6042d7`, in bundle
+`1793266373668-15413800` (package v0.1.46). It replaces
+`1793168496847-42554913`. The snapshot differs from the previously deployed
+`a5d505cc6ed3661a859046c8d17dd75cfd94ee9d` only by the forwarding commit's nine
+files, preserving the deployed audio improvements. No dependency or migration
+was added.
+
+All 569 tracked runtime, build and test inputs match the workspace verified with
+**1,267 tests across 136 files**. Isolated lint, strict types and build passed.
+The local Node 24 image passed all 16 integration-startup cases with zero external
+startup calls. All four images built on the VPS from the checksummed archive;
+the app's 22 build files match the locally tested image. All ten core speech
+package versions match the previous deployment. Exact-image runtime contracts,
+CPU speech imports, offline Code Truth catalog/index/MCP checks, Codex CLI checks,
+disposable Compose configuration/readiness, migration rerun and backup/restore
+passed before production cutover.
+
+Both coding checkpoint checks passed. The protected backup is
+`backups/pre-release-1793266373668-15413800.dump` (**1,951,767 bytes**), with its
+archive listing verified. All 45 deployed application/supervisor/task artifacts
+match the tested images. App, worker, runner, Code Truth and PostgreSQL are healthy.
+Public and loopback health, readiness and admin return HTTP 200; public HTML and
+all seven frontend assets match the build, allowing the existing Cloudflare
+analytics insertion. A separate local probe also passed all three public routes
+with the deployment verifier's user agent; the default Python user agent was
+rejected with HTTP 403.
+
+Configuration, credentials, persistent mounts, PostgreSQL and all three CI runner
+identities were preserved. Source, build/check logs and `deployment-receipt.json`
+remain in the protected release bundle. Native Telegram acceptance of the reported
+forwarding-dialog flow and its actual topic IDs remains pending.
+
+## Audio conversation deployment (2026-10-28)
+
+The operator-authorized manual source-snapshot cutover deployed
+`a5d505cc6ed3661a859046c8d17dd75cfd94ee9d`, source tree
+`d589729fabbd5bb8f104be3dd0e9899f1c2a3f83`, based on
+`c46520778866474020f4236f5f551d8b4a000ab1`, in bundle
+`1793168496847-42554913` (package v0.1.46). It replaces
+`1793084755463-19144425` and includes natural voice replies,
+suppression of ordinary chat queue notices, warm speech-process reuse, recent
+transcript caching and incomplete-decoding rejection. No dependency or migration
+was added.
+
+All four images built on the VPS from the checksummed source archive. The app's
+22 packaged build files match the locally tested image, which passed lint, strict
+types, build and **1,232 tests across 135 files**. The exact Node 24 image passed
+all 16 integration-startup cases with zero external startup calls. CPU speech
+imports, offline Code Truth catalog/index/MCP checks, supervisor/task CLI checks,
+disposable Compose readiness, migration rerun and backup/restore passed. The VPS's
+ten core speech-package versions match the locally tested image.
+
+Both coding checkpoint checks passed. The protected backup is
+`backups/pre-release-1793168496847-42554913.dump`
+(**1,927,221 bytes**), with its archive listing verified.
+All 45 packaged application/supervisor/task artifacts and the worker image match
+the verified build. Public and loopback health, readiness and admin return HTTP
+200; all seven frontend assets match their expected hashes. The origin HTML is
+byte-identical to the image. Public HTML matches after allowing only the observed
+Cloudflare analytics insertion. The initial overly strict public-HTML check and
+its corrected verifier/log remain in the bundle; no further service cutover was
+needed.
+
+App, worker, runner, Code Truth and PostgreSQL are healthy, and the existing speech
+model cache reports Ready. Configuration, credentials, persistent mounts,
+PostgreSQL and all three CI runner identities were preserved. Source, image
+metadata, verification evidence, the HTML-check correction and
+`deployment-receipt.json` remain in the protected bundle. This manual snapshot
+cutover is separate from publishing a stable GitHub release. Live transcription
+accuracy for the reported recording and native Telegram desktop/mobile behavior
+remain acceptance checks.
+
+## Groups table deployment (2026-10-27)
+
+The operator-authorized committed-source cutover deployed
+`c46520778866474020f4236f5f551d8b4a000ab1`, source tree
+`a9287ffcd398b9b5399989c134b58540a5e8949c`, in bundle
+`1793084755463-19144425` (package v0.1.46), replacing
+`1793081723134-56518479`. Groups now uses the Members table layout with per-row
+Edit dialogs and readable mobile empty-state guidance.
+
+The retained local evidence includes lint, strict types, build, **1,229 tests
+across 135 files**, **52 browser scenarios** and the final 14 affected browser
+reruns. Four images were built on the VPS from the checksummed committed archive.
+The exact Node 24 app image passed all 16 combined integration-startup cases with
+zero external startup calls. CPU speech imports, offline Code Truth real-index/MCP
+and catalog checks, supervisor CA/task CLI checks, disposable Compose cutover,
+migration rerun and backup/restore passed. The first restore rehearsal used the
+empty pre-installation fixture backup; a post-migration backup passed the corrected
+rehearsal before production cutover.
+
+Both coding checkpoint checks passed. The protected backup is
+`backups/pre-release-1793084755463-19144425.dump` (1,906,895 bytes), with its archive
+listing verified. All 48 application artifacts match the deployed app, worker
+and supervisor; all 22 built dist files and the task image match the locally
+tested build. Public admin HTML and all seven frontend assets match their tested
+hashes. App, worker, runner, Code Truth and PostgreSQL are healthy; public and
+loopback health, readiness and admin return HTTP 200.
+
+Configuration, credentials, persistent mounts, PostgreSQL and all three CI runner
+identities were preserved. The updater and cleanup timer remain active. Source,
+verification logs and the deployment receipt remain in the release bundle. SSH
+monitoring recovered through a temporary task-specific proxy after the normal
+proxy route failed. No manual Telegram message, model call or account connection
+was performed; no dependency or migration was added.
 
 ## Code Truth startup isolation deployment (2026-10-27)
 
@@ -39,6 +613,36 @@ image archive was removed after success. A transient SSH drop interrupted the
 upload, which resumed and passed the complete checksum check before import.
 No manual Telegram message, model call, run replay or account connection was
 performed. No dependency or migration was added by this fix.
+
+## Matching Groups card and Skills cleanup deployment (2026-10-26)
+
+The operator-authorized manual archive cutover deployed clean commit
+`6438d74523d349dd46145996e8d71aba4064df1f`, source tree
+`599ca09bd5c993ecb70876816e72195e15d237fa`, in bundle
+`1793000844503-81693002` (package v0.1.44), replacing
+`1792979946288-50707140`. Groups now shares the Members card layout, including
+the heading, New action and padding, with an unboxed saved summary. This also
+deploys the Skills policy-test UI cleanup from `824abaa`.
+
+The retained lint, strict TypeScript, build and Node runtime checks,
+**1,193 deterministic tests** and **47 browser scenarios** cover the same
+committed source.
+Four images were freshly built; all 48 application artifacts match the tested
+source/build. Exact-image Node 24, CPU transcription, offline Code Truth
+real-index/MCP, supervisor CA and task CLI checks passed. The local guarded
+Compose cutover, migration rerun and backup/restore rehearsal passed after an
+initial fresh-database initialization race; both attempts remain in the logs.
+
+Production verified source/archive checksums and both durable coding checkpoints,
+then verified `backups/pre-release-1793000844503-81693002.dump` before migrations.
+App, worker, runner and Code Truth are healthy. Runtime configuration, secrets,
+named volumes, PostgreSQL and all three Actions runner identities were preserved;
+the updater and cleanup timer remain active. Public and loopback health,
+readiness and admin return HTTP 200. Public HTML references the tested frontend,
+and all seven public asset hashes match. A transient local proxy timeout was
+followed by successful direct public verification and separate proxy/VPS probes.
+Source, verification logs and receipts remain in the bundle; the imported image
+archive was removed after success. No dependency or migration changed.
 
 ## Workspace and Google guide deployment (2026-10-26)
 
@@ -125,8 +729,10 @@ labels through host policy. The cutover verifies secret access before stopping
 writers. Configure encrypted off-host backups and retention separately.
 
 Route host HTTPS to the app's loopback port (default `127.0.0.1:3000`). PostgreSQL
-and the updater have no public ports. Use an SSH tunnel to claim a new `/setup`
-before opening public access, then configure and activate the bot separately.
+and the updater have no public ports. Serve a new deployment's `/setup` through
+the configured site URL so its operator creates the first administrator in the
+web UI, then configures and activates the bot separately. SSH forwarding is
+optional for private/local testing.
 Installation never registers webhooks, connects accounts or sends Telegram messages.
 
 A first installation can use the documented Compose setup and Docker Codex

@@ -39,8 +39,13 @@ existing workflows by purpose, sources, recurrence/timezone, reporting window
 and output format, including draft, active, paused and suspended records. Private
 context includes only the actor's own workflows; group context includes workflows
 shared with that same Topic. Equivalent requests should identify the existing
-workflow instead of creating a duplicate; similar requests with differences ask
-whether a separate workflow is intended. An intentional duplicate requires an
+workflow instead of creating a duplicate. Explicit revisions use `propose_workflow`
+with `workflowId` and `expectedVersion` to update the owned workflow in place.
+The tool checks the current request, ownership, chat/Topic and version, preserves
+paused state and confirms the committed update without another model call.
+Current records include owner and version for this purpose. Clarify similar
+requests only when the target or intent to create a separate schedule is unclear.
+An intentional duplicate requires an
 explicit current confirmation after the match is explained. This is prompt
 guidance using current scoped records, not a transactional uniqueness constraint.
 Existing approval, ownership and lifecycle authorization checks still apply.

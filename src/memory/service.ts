@@ -165,12 +165,6 @@ export class MemoryService {
             const { parent, saved } = current(w);
             const budgets = remainingBudgets(w, parent);
             requireThat(
-              input.model.pricingKnown !== false ||
-                Math.min(budgets.run, budgets.workspace) === Infinity,
-              "model_pricing_required_for_budget",
-              409,
-            );
-            requireThat(
               Number.isFinite(amount) &&
                 amount >= 0 &&
                 amount <= Math.min(budgets.run, budgets.workspace),
@@ -185,9 +179,6 @@ export class MemoryService {
               reserved: amount,
               status: "reserved",
               at: new Date().toISOString(),
-              ...(input.model.pricingKnown === false
-                ? { pricingUnknown: true }
-                : {}),
             });
             saved.attemptIds.push(id);
             return id;
@@ -201,7 +192,7 @@ export class MemoryService {
               a.status = ["error", "aborted"].includes(message.stopReason)
                 ? "unknown"
                 : "settled";
-              if (!a.pricingUnknown && a.status === "settled")
+              if (a.status === "settled")
                 a.actual = Math.max(0, message.usage.cost.total);
               a.tokens = {
                 input: message.usage.input,

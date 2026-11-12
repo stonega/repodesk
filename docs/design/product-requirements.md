@@ -130,19 +130,37 @@ destination, owner, instructions, allowed tools and approval policy. Scheduled a
 manually triggered workflow runs use the team's per-run and monthly budgets.
 
 - Show a readable preview and next three execution times; require activation.
+- Explicit Telegram schedule requests activate immediately without approval.
+  Explicit panel saves activate the exact version in one action; cards show the
+  owner's saved Telegram name, username and ID.
 - Confirm ambiguous dates/timezones. Store an IANA timezone and explicitly define
   daylight-saving behavior rather than silently converting to a fixed UTC time.
 - Provide list, inspect, run-now, edit, pause, resume and delete actions.
+- An explicit Telegram revision updates the owned schedule in the same chat/Topic
+  with an expected version, replacing the previous spec without a second schedule.
+  Preserve paused state and cancel queued old work/output atomically.
+- Only the verified current owner can edit a workflow definition, including in
+  the web panel. An administrator/operator role cannot override ownership. The
+  panel hides Edit for other owners and unlinked identities; the API rejects
+  forged direct edits without changing the workflow, versions or audit.
 - Every run references the workflow version that produced it.
+- Workflow invocations execute their saved task once in a dedicated execution
+  context, without replaying setup conversations. History is explicitly readable
+  as authorized source data for recaps. Scheduled and run-now invocations cannot
+  create/edit workflows or persist instructions, skills or memory, including
+  through legacy tool grants.
 - Corrections modify future runs; an in-flight run keeps its starting version.
 - Recheck permissions, owner validity, connector grants and budget at execution.
 - Use a unique occurrence key to prevent duplicate runs after retries.
 - Default missed-run policy: skip stale occurrences, notify owner, do not flood a
   chat with historical catch-up outputs. Make the threshold a documented setting.
 
-Acceptance: a rejected draft never runs; repeated approval is harmless; paused
+Acceptance: an explicit request activates once without approval; duplicate events
+create no extra schedule or confirmation; legacy repeated approval is harmless; paused
 workflows do not enqueue new work; permission loss blocks execution; timezone/DST
 fixtures match the preview; scheduler retries cannot double-publish a report.
+Updates retain one workflow and its version history; stale, deleted, other-owner
+and other-destination targets cannot change existing schedules.
 
 ## F05 — Approvals and action policy (P0)
 

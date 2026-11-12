@@ -208,7 +208,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       ]);
       const missing = await open(w, "/repos missing");
       expect(missing.d.buttons).toBeUndefined();
-      expect(missing.d.text).toContain("Try /repos");
+      expect(missing.d.text).toContain("Tell me the repository name to search");
     });
 
     test("repository removal before delivery cancels the menu; changes before click require fresh choices", async () => {
@@ -231,7 +231,9 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       });
       await ingress.accept(callback(d));
       expect((await store.read(fresh.id)).repositorySelections).toBeUndefined();
-      expect(calls.at(-1)?.params.text).toContain("Send /repos");
+      expect(calls.at(-1)?.params.text).toContain(
+        "Ask me to choose a repository again",
+      );
     });
 
     test("non-members and paused workspaces cannot open a repository picker", async () => {

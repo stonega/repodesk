@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
-import type { Skill, Workflow } from "../../src/domain.ts";
+import type { MemberWorkflow } from "../../src/admin/workflow-view.ts";
+import type { Skill } from "../../src/domain.ts";
 import { memoryReferences } from "../../src/workspaces/conversation-memory.ts";
 import { spec } from "../fixtures.ts";
 import {
@@ -32,10 +33,12 @@ async function fixture(page: Page, noSkill = false, unlinked = false) {
   };
   w.skills.push(draft);
   if (noSkill) w.skills = [];
-  const workflow: Workflow & { next: string[] } = {
+  const workflow: MemberWorkflow = {
     id: "repository-report",
     version: 1,
     owner: "101",
+    canEdit: !unlinked,
+    ownerProfile: { id: "101", name: "Taylor Example", username: "taylor" },
     status: "active",
     spec: {
       ...spec(w),
@@ -63,21 +66,18 @@ async function fixture(page: Page, noSkill = false, unlinked = false) {
   await page.route("**/api/**", async (route) => {
     const req = route.request(),
       path = new URL(req.url()).pathname;
-    if (req.method() === "POST" && path.endsWith("/workflows")) {
-      workflow.spec = req.postDataJSON();
-      workflow.skillVersion = undefined;
-      workflow.status = "draft";
-      saved = { version: 1, spec: workflow.spec };
-      await route.fulfill({ json: { workflow, approval: {} } });
-      return;
-    }
     if (
       req.method() === "POST" &&
       path.endsWith("/workflows/repository-report/action")
     ) {
       const input = req.postDataJSON();
       expect(input.version).toBe(workflow.version);
-      workflow.status = input.action === "delete" ? "deleted" : "paused";
+      workflow.status =
+        input.action === "delete"
+          ? "deleted"
+          : input.action === "resume"
+            ? "active"
+            : "paused";
       await route.fulfill({ json: workflow });
       return;
     }
@@ -101,8 +101,12 @@ async function fixture(page: Page, noSkill = false, unlinked = false) {
       req.method() === "PUT" &&
       path.endsWith("/workflows/repository-report")
     ) {
-      saved = req.postDataJSON();
-      await route.fulfill({ json: { workflow, approval: {} } });
+      const input = req.postDataJSON();
+      saved = input;
+      workflow.spec = input.spec;
+      if (workflow.status !== "paused") workflow.status = "active";
+      workflow.version++;
+      await route.fulfill({ json: { workflow, next: workflow.next } });
       return;
     }
     if (
@@ -162,7 +166,7 @@ test("repository schedule editing preserves selections and submits numeric sourc
   const f = await fixture(page);
   await page.goto(`/admin/workflows?workspace=${f.w.id}`);
   await expect(page.getByText("Repositories: example/private")).toBeVisible();
-  await page.getByRole("button", { name: "Edit proposal" }).click();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Edit Repository report" });
   await expect(
     dialog.getByRole("checkbox", { name: "example/private" }),
@@ -172,10 +176,15 @@ test("repository schedule editing preserves selections and submits numeric sourc
   await expect(skill).toHaveText(f.w.skills[0]?.draft.name as string);
   await skill.click();
   await page.getByRole("option", { name: "No skill", exact: true }).click();
-  await dialog
-    .getByRole("button", { name: "Preview approval proposal" })
-    .click();
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
   await expect(dialog).toHaveCount(0);
+  await expect(
+    page.getByText("Workflow saved.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".workflow-card .pill")).toHaveText("active");
+  await expect(
+    page.getByRole("button", { name: "Approve exact proposal" }),
+  ).toHaveCount(0);
   expect(f.saved()?.spec.github).toEqual({
     revision: 2,
     repositoryIds: [7001, 7002],
@@ -185,11 +194,127 @@ test("repository schedule editing preserves selections and submits numeric sourc
 });
 
 for (const width of [1280, 390]) {
-  test(`unlinked admins manage free-form schedules in modals and retain drafts on failure at ${width}px`, async ({
+  for (const theme of ["light", "dark"]) {
+    test(`workflow cards show owner profiles without an admin approval step at ${width}px in ${theme}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.addInitScript(
+        (value) => localStorage.setItem("repodesk.theme", value),
+        theme,
+      );
+      const f = await fixture(page, true, true);
+      let approvalRequests = 0;
+      page.on("request", (request) => {
+        if (new URL(request.url()).pathname.endsWith("/approvals"))
+          approvalRequests++;
+      });
+      await page.goto(`/admin/workflows?workspace=${f.w.id}`);
+      const card = page.locator(".workflow-card");
+      await expect(
+        card.getByText("Taylor Example", { exact: true }),
+      ).toBeVisible();
+      await expect(card.getByRole("link", { name: "@taylor" })).toHaveAttribute(
+        "href",
+        "https://t.me/taylor",
+      );
+      await expect(card.getByText("ID 101", { exact: true })).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: "Awaiting your approval" }),
+      ).toHaveCount(0);
+      await expect(card.locator("input, textarea, select, form")).toHaveCount(
+        0,
+      );
+      await page.screenshot({
+        path: `test-results/workflow-owner-${theme}-${width}.png`,
+        fullPage: true,
+      });
+      await card
+        .getByRole("link", { name: "Repository report", exact: true })
+        .click();
+      await expect(card.getByText("ID 101", { exact: true })).toBeVisible();
+      expect(approvalRequests).toBe(0);
+      f.workflow.ownerProfile = undefined;
+      await page.reload();
+      await expect(
+        card.getByText("Telegram user", { exact: true }),
+      ).toBeVisible();
+      await expect(card.getByText("ID 101", { exact: true })).toBeVisible();
+      await expect(card.getByRole("link", { name: "@taylor" })).toHaveCount(0);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      ).toBe(true);
+      await page.screenshot({
+        path: `test-results/workflow-owner-fallback-${theme}-${width}.png`,
+        fullPage: true,
+      });
+    });
+  }
+
+  test(`scheduled workflows omit creation while loading, unavailable and empty at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
-    const f = await fixture(page, true, true);
+    const f = await fixture(page);
+    f.workflow.status = "deleted";
+    let finishLoading: (() => void) | undefined;
+    let fail = true;
+    await page.route("**/api/admin/workspaces/*/workflows?*", async (route) => {
+      if (!fail) return route.fallback();
+      await new Promise<void>((resolve) => {
+        finishLoading = resolve;
+      });
+      await route.fulfill({ status: 503, json: { error: "unavailable" } });
+    });
+    await page.goto(`/admin/workflows?workspace=${f.w.id}`);
+    await expect.poll(() => !!finishLoading).toBe(true);
+    await expect(
+      page.getByRole("heading", { name: "Scheduled workflows" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Add workflow" }),
+    ).toHaveCount(0);
+    await expect(page.locator(".page-actions")).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.screenshot({
+      path: `test-results/workflow-list-loading-${width}.png`,
+      fullPage: true,
+    });
+    finishLoading?.();
+    await expect(page.getByRole("alert")).toHaveText("unavailable");
+    await expect(
+      page.getByRole("button", { name: "Add workflow" }),
+    ).toHaveCount(0);
+    await page.screenshot({
+      path: `test-results/workflow-list-error-${width}.png`,
+      fullPage: true,
+    });
+    fail = false;
+    await page.getByRole("button", { name: "Try again", exact: true }).click();
+    await expect(page.getByText("No scheduled workflows yet.")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Add workflow" }),
+    ).toHaveCount(0);
+    await expect(page.locator(".page-actions")).toHaveCount(0);
+    await expect(page.locator("main form")).toHaveCount(0);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: `test-results/workflow-list-empty-${width}.png`,
+      fullPage: true,
+    });
+  });
+
+  test(`linked owners edit free-form schedules in modals and retain drafts on failure at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const f = await fixture(page, true);
     let finishLoading: (() => void) | undefined;
     let loading = true;
     await page.route(
@@ -221,7 +346,7 @@ for (const width of [1280, 390]) {
       path: `test-results/workflow-no-skill-detail-${width}.png`,
       fullPage: true,
     });
-    await page.getByRole("button", { name: "Edit proposal" }).click();
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
     const edit = page.getByRole("dialog", { name: "Edit Repository report" });
     await expect(edit.getByLabel("Budget per run (USD)")).toHaveCount(0);
     await expect(
@@ -243,8 +368,12 @@ for (const width of [1280, 390]) {
       path: `test-results/workflow-list-${width}.png`,
       fullPage: true,
     });
-    await page.getByRole("button", { name: "Add workflow" }).click();
-    const dialog = page.getByRole("dialog", { name: "Propose a schedule" });
+    await expect(
+      page.getByRole("button", { name: "Add workflow" }),
+    ).toHaveCount(0);
+    await expect(page.locator(".page-actions")).toHaveCount(0);
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Edit Repository report" });
     await expect(dialog.getByLabel("Budget per run (USD)")).toHaveCount(0);
     await expect(
       dialog.getByRole("combobox", { name: "Skill", exact: true }),
@@ -256,13 +385,20 @@ for (const width of [1280, 390]) {
     await dialog.getByLabel("Destination chat ID").fill("101");
     let finish: (() => void) | undefined;
     let fail = true;
-    await page.route("**/api/admin/workspaces/*/workflows", async (route) => {
-      if (route.request().method() !== "POST" || !fail) return route.fallback();
-      await new Promise<void>((resolve) => {
-        finish = resolve;
-      });
-      await route.fulfill({ status: 409, json: { error: "version_conflict" } });
-    });
+    await page.route(
+      "**/api/admin/workspaces/*/workflows/repository-report",
+      async (route) => {
+        if (route.request().method() !== "PUT" || !fail)
+          return route.fallback();
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        await route.fulfill({
+          status: 409,
+          json: { error: "version_conflict" },
+        });
+      },
+    );
     await dialog
       .getByRole("combobox", { name: "Skill", exact: true })
       .scrollIntoViewIfNeeded();
@@ -270,9 +406,7 @@ for (const width of [1280, 390]) {
       path: `test-results/workflow-no-skill-editor-${width}.png`,
       fullPage: true,
     });
-    await dialog
-      .getByRole("button", { name: "Preview approval proposal" })
-      .click();
+    await dialog.getByRole("button", { name: "Save", exact: true }).click();
     await expect(
       dialog.getByRole("button", { name: "Saving…" }),
     ).toBeDisabled();
@@ -297,9 +431,7 @@ for (const width of [1280, 390]) {
       fullPage: true,
     });
     fail = false;
-    await dialog
-      .getByRole("button", { name: "Preview approval proposal" })
-      .click();
+    await dialog.getByRole("button", { name: "Save", exact: true }).click();
     await expect(dialog).toHaveCount(0);
     expect(f.saved()?.spec.skillId).toBeUndefined();
     expect(f.saved()?.spec).not.toHaveProperty("budgetUsd");
@@ -420,7 +552,7 @@ test("workflow cards link to readable details with local times and retain list p
     path: "test-results/workflow-detail-mobile.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "Edit proposal" }).click();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
   await expect(
     page.getByRole("dialog").getByRole("checkbox", { name: "example/private" }),
   ).toBeChecked();
@@ -443,7 +575,103 @@ test("workflow cards link to readable details with local times and retain list p
   await expect(page.getByText("No scheduled workflows yet.")).toBeVisible();
 });
 
-test("unlinked admins see full workflow details and controls and recover from unavailable records", async ({
+for (const width of [1280, 390]) {
+  for (const access of ["other-owner", "unlinked"] as const) {
+    test(`${access} administrators cannot open workflow editors at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      const f = await fixture(page, false, access === "unlinked");
+      f.workflow.canEdit = false;
+      if (access === "other-owner") {
+        f.workflow.owner = "202";
+        f.workflow.ownerProfile = { id: "202", name: "Another owner" };
+      }
+      for (const theme of ["light", "dark"]) {
+        await page.goto(`/admin/workflows?workspace=${f.w.id}`);
+        await page.evaluate(
+          (theme) => localStorage.setItem("repodesk.theme", theme),
+          theme,
+        );
+        await page.reload();
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+        await expect(page.locator(".workflow-card")).toHaveCount(1);
+        await expect(
+          page.getByRole("button", { name: "Edit", exact: true }),
+        ).toHaveCount(0);
+        await expect(page.locator(".workflow-card form")).toHaveCount(0);
+        await page
+          .getByRole("link", { name: "Repository report", exact: true })
+          .click();
+        await expect(
+          page.getByText(
+            "Only the linked workflow owner can edit this schedule.",
+          ),
+        ).toBeVisible();
+        await expect(
+          page.getByRole("button", { name: "Edit", exact: true }),
+        ).toHaveCount(0);
+        await expect(page.getByRole("dialog")).toHaveCount(0);
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        ).toBe(true);
+        await page.screenshot({
+          path: `test-results/workflow-${access}-${theme}-${width}.png`,
+          fullPage: true,
+        });
+      }
+      expect(f.saved()).toBeUndefined();
+    });
+  }
+
+  test(`a denied workflow edit retains the owner's draft at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const f = await fixture(page);
+    await page.route(
+      "**/api/admin/workspaces/*/workflows/repository-report",
+      async (route) => {
+        if (route.request().method() === "PUT")
+          await route.fulfill({
+            status: 403,
+            json: { error: "owner_required" },
+          });
+        else await route.fallback();
+      },
+    );
+    await page.goto(`/admin/workflows?workspace=${f.w.id}`);
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog
+      .getByLabel("Task", { exact: true })
+      .fill("Keep this unsaved revision");
+    await dialog.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(dialog.getByRole("alert")).toContainText(
+      "Only the workflow owner can edit this schedule.",
+    );
+    await expect(dialog.getByLabel("Task", { exact: true })).toHaveValue(
+      "Keep this unsaved revision",
+    );
+    await expect(
+      dialog.getByRole("button", { name: "Save", exact: true }),
+    ).toBeEnabled();
+    await dialog
+      .getByRole("button", { name: "Cancel", exact: true })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: `test-results/workflow-ownership-denied-${width}.png`,
+      fullPage: true,
+    });
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(f.saved()).toBeUndefined();
+  });
+}
+
+test("unlinked admins inspect workflow details without an editor and recover from unavailable records", async ({
   page,
 }) => {
   const f = await fixture(page, false, true);
@@ -470,10 +698,13 @@ test("unlinked admins see full workflow details and controls and recover from un
     page.getByRole("heading", { name: "Task", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Edit proposal" }),
+    page.getByRole("button", { name: "Edit", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Only the linked workflow owner can edit this schedule."),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "pause", exact: true }),
+    page.getByRole("button", { name: "resume", exact: true }),
   ).toBeVisible();
   await expect(page.locator(".workflow-card form")).toHaveCount(0);
   await page.screenshot({
@@ -483,31 +714,15 @@ test("unlinked admins see full workflow details and controls and recover from un
   await page.setViewportSize({ width: 390, height: 844 });
   const card = page.locator(".workflow-card");
   const bounds = await card.boundingBox();
-  const editBounds = await card
-    .getByRole("button", { name: "Edit proposal" })
-    .boundingBox();
   expect(bounds).not.toBeNull();
-  expect(editBounds).not.toBeNull();
-  if (bounds && editBounds) {
-    expect(editBounds.x + editBounds.width).toBeGreaterThan(
-      bounds.x + bounds.width - 30,
-    );
-    expect(editBounds.y).toBeLessThan(bounds.y + 32);
-  }
+  await expect(
+    card.getByRole("button", { name: "Edit", exact: true }),
+  ).toHaveCount(0);
   await page.screenshot({
     path: "test-results/workflow-operator-detail-mobile.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "Edit proposal" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog.getByLabel("Task", { exact: true })).toHaveValue(
-    "Recap the team",
-  );
-  await page.keyboard.press("Escape");
-  await expect(dialog).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Edit proposal" }),
-  ).toBeFocused();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   unavailable = true;
   await page.reload();
   await expect(page.getByRole("alert")).toContainText(
@@ -525,36 +740,15 @@ test("unlinked admins see full workflow details and controls and recover from un
     page.getByRole("heading", { name: f.workflow.spec.name }),
   ).toBeVisible();
   await expect(page.getByText("Every Friday at 09:00")).toBeVisible();
-  let approved = false;
-  f.workflow.status = "draft";
-  await page.route("**/api/admin/workspaces/*/approvals**", async (route) => {
-    if (route.request().method() === "POST") {
-      expect(route.request().postDataJSON()).toEqual({ approve: true });
-      approved = true;
-      f.workflow.status = "active";
-      await route.fulfill({ json: { decision: "approved" } });
-    } else {
-      await route.fulfill({
-        json: {
-          items: approved
-            ? []
-            : [
-                {
-                  id: "pending-workflow",
-                  actor: "101",
-                  kind: "workflow",
-                  version: 1,
-                  payload: { spec: f.workflow.spec, owner: "101" },
-                  expiresAt: "2030-01-01T00:00:00Z",
-                },
-              ],
-        },
-      });
-    }
-  });
-  await page.reload();
-  await page.getByRole("button", { name: "Approve exact proposal" }).click();
-  await expect(page.getByText("No pending proposals.")).toBeVisible();
+  await page.getByRole("button", { name: "resume", exact: true }).click();
   await expect(page.locator(".workflow-card .pill")).toHaveText("active");
-  expect(approved).toBe(true);
+  await expect(
+    page.getByRole("button", { name: "resume", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "pause", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Approve exact proposal" }),
+  ).toHaveCount(0);
 });

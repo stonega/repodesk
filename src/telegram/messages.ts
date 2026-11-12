@@ -32,27 +32,39 @@ export const ongoingStageMessage = (stage: string) =>
   ongoingStages[stage] ?? "I’m still on it. I’ll keep you posted.";
 
 const failures: Record<string, string> = {
+  chat_request_unverified:
+    "Please send the request directly in this conversation so I can act on it.",
+  workflow_request_unverified:
+    "Please send the schedule request directly, including its recurrence, time and timezone.",
+  approval_consumed: "This proposal has already been decided.",
+  approval_denied: "Only the requester can confirm this proposal.",
+  approval_expired:
+    "This proposal expired. Ask for a new proposal and confirm it within 15 minutes.",
+  approval_changed:
+    "This proposal changed. Review and confirm the current proposal.",
+  approval_stale:
+    "This proposal was replaced. Review and confirm the current proposal.",
   google_not_configured:
     "Google is not enabled or configured for this workspace. Ask the administrator to configure Plugins → Google in the panel.",
   google_not_connected:
-    "Connect your own Google account with /google in this private chat, complete sign-in, confirm the account here, then retry.",
+    "Ask me to connect your Google account in this private chat, complete sign-in, confirm the account here, then retry.",
   google_reconnect_required:
-    "Your Google connection needs sign-in again. Send /google connect in this private chat, complete sign-in and confirm the account here, then retry.",
+    "Your Google connection needs sign-in again. Ask me to reconnect Google in this private chat, complete sign-in and confirm the account here, then retry.",
   google_refresh_pending:
-    "Your Google connection is refreshing. Try again shortly; if it remains unavailable, send /google connect.",
+    "Your Google connection is refreshing. Try again shortly; if it remains unavailable, ask me to reconnect Google.",
   google_authorization_expired:
-    "This Google connection request expired or changed. Send /google connect to start again.",
+    "This Google connection request expired or changed. Ask me to connect Google again.",
   google_properties_expired:
-    "This Search Console selection expired or changed. Send /google properties to open it again.",
+    "This Search Console selection expired or changed. Ask me to choose Search Console properties again.",
   google_property_limit:
     "Select at most 20 Search Console properties. Deselect one before adding another.",
   google_connection_changed:
-    "Your Google connection changed. Send /google to check its status, then retry.",
+    "Your Google connection changed. Ask me to check your Google account status, then retry.",
   search_console_property_denied:
-    "That Search Console property is not available in your current selection. Send /google properties to check your access and selection.",
+    "That Search Console property is not available in your current selection. Ask me to check your Search Console properties.",
   use_private_chat: "Open the bot’s private chat to manage your account.",
   repository_menu_expired:
-    "This repository menu has expired or access changed. Send /repos to open the current choices.",
+    "This repository menu has expired or access changed. Ask me to choose a repository again.",
   empty_response:
     "I didn’t get an answer back from the model. Your administrator can check the model connection if this keeps happening.",
   incomplete_response:
@@ -60,9 +72,9 @@ const failures: Record<string, string> = {
   worker_shutdown:
     "The server interrupted this request during a restart. Ask the administrator to inspect its outcome before trying again.",
   invalid_command_arguments:
-    "I couldn’t understand those command arguments. Use /help to check the command format.",
+    "I couldn’t understand that request. Tell me what you want to do, or ask for help.",
   not_found:
-    "I couldn’t find an accessible task or request. Use /status in its conversation.",
+    "I couldn’t find an accessible task or request. Ask for task status in its conversation.",
   access_denied:
     "This action is not available with your current access. Ask the workspace administrator to review your access.",
   run_timeout:

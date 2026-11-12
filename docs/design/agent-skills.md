@@ -151,6 +151,15 @@ policy restriction: prevent new loads/steps and suspend dependent scheduled work
 reporting why. Do not silently substitute another skill. In-flight calls may finish;
 check current restrictions before subsequent tools and delivery.
 
+The bundled **Telegram widgets** preset proactively selects useful visual
+comparisons, diagrams, local calculations and scenario exploration in eligible
+private conversations. Users need not request a widget explicitly; text-only
+requests and simple answers retain text. The assistant loads the rendering guide
+only after deciding a widget helps. Application-owned updates to the unchanged
+original preset append an immutable snapshot without changing enabled settings,
+custom skills or existing run/workflow pins. See [widget behavior and upgrade
+boundaries](../implementation/telegram-widgets.md).
+
 Imports accept one Markdown file or an HTTPS `github.com` repository, folder
 (`tree`) or `SKILL.md` (`blob`) link. GitHub discovery lists every matching file
 under that scope, including invalid files. Discovery rows show only a selection

@@ -173,14 +173,16 @@ test("group history compacts and source edits invalidate frozen memory", () => {
   for (let i = 0; i < 18; i++)
     answer(w, ask(w, "101", `turn ${i} ${"detail ".repeat(450)}`));
   const r = ask(w, "101", "继续");
-  const plan = compactionPlan(w, r, {
+  // Fit a complete bounded summary batch alongside the expanded pinned skills.
+  const compactionInput = {
     model: {
       ...selectedModel("gpt-4.1-mini"),
-      contextWindow: 50000,
+      contextWindow: 60000,
       maxTokens: 4000,
     },
     tools: [],
-  } as unknown as AgentInput);
+  } as unknown as AgentInput;
+  const plan = compactionPlan(w, r, compactionInput);
   expect(plan).toBeDefined();
   if (!plan) throw Error("plan");
   const thread = w.threads?.[0];
@@ -190,16 +192,7 @@ test("group history compacts and source edits invalidate frozen memory", () => {
   r.compaction = { ...plan, state: "done", summary: thread.summary };
   refreshThreadContext(w, r);
   expect(r.contextSummary?.text).toBe("frozen group summary");
-  expect(
-    compactionPlan(w, r, {
-      model: {
-        ...selectedModel("gpt-4.1-mini"),
-        contextWindow: 50000,
-        maxTokens: 4000,
-      },
-      tools: [],
-    } as unknown as AgentInput),
-  ).toBeUndefined();
+  expect(compactionPlan(w, r, compactionInput)).toBeUndefined();
   const source = w.messages.find((s) => plan.summary.sourceIds.includes(s.id));
   if (source) source.text = "edited";
   sweep(w);

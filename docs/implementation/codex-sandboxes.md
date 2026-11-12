@@ -1,6 +1,6 @@
 # Alternative Codex sandboxes and benchmarks
 
-RepoDesk supports deployment-selected `docker` and `opensandbox`
+RepoDesk supports deployment-selected `docker`, `opensandbox` and `native`
 execution through the same task supervisor. Operators can also choose a runtime
 in **Plugins → Codex → Runtime → Edit**. This is a deployment-wide setting, separate
 from workspace workflow settings. Workspace settings and
@@ -10,6 +10,9 @@ Podman and microsandbox execution support have been removed; the old wire value
 remains only for persisted approval/protocol compatibility. The shipped VPS
 overlay continues to select Docker. This change does not switch
 or deploy an existing installation.
+
+Native VPS executes the installed CLI in a dedicated Linux host service. It is
+explicitly opt-in and has no container isolation. See [native host setup](codex-runner.md#native-vps-installed-codex-cli). Docker remains the release default.
 
 ## Admin-panel selection
 
