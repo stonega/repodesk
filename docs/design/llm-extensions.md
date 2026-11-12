@@ -190,6 +190,16 @@ Read [Pi extension documentation](https://github.com/earendil-works/pi/blob/main
 and [SDK loading documentation](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/sdk.md)
 for upstream behavior. The table above defines this application's supported subset.
 
+## Predefined Nowledge Mem
+
+The optional built-in Nowledge Mem plugin provides private memory list/search/read
+and exact-content saves explicitly authorized by the current human message. An
+operator configures one member, server and Space per workspace; the key is encrypted.
+Application services check current membership, private destination, bot identity,
+plugin revision and durable save receipts. It does not install the terminal Pi
+connector or export local session files. Registration never contacts Mem.
+See [setup, upstream review and boundaries](../implementation/nowledge-mem.md).
+
 ## Predefined Code Truth
 
 The Plugins page includes a built-in Code Truth extension backed by a private local MCP service. Operators configure GitHub repository URLs and optional descriptions for the selected workspace. Internal IDs are generated automatically, and indexing follows each repository’s default GitHub branch. Its named Pi factory registers eight read-only MCP tools and loads the companion skill. The shared registry revision, run digest, guards and durable tool ledger apply. See [local service setup and boundaries](../implementation/code-truth.md) and [source provenance](../../services/code-truth/UPSTREAM.md).

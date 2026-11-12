@@ -37,6 +37,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Admin panel](design/admin-panel.md) | P0 configuration screens, permissions, APIs and acceptance criteria |
 | [UI rules](design/ui-rules.md) | User design preferences, their scope, and how to apply and maintain them |
 | [First-run setup](design/first-run-setup.md) | Initial admin creation, bot onboarding, secrets and activation |
+| [Nowledge Mem](implementation/nowledge-mem.md) | Optional private memory recall and explicit saves through a scoped built-in adapter |
 | [LLM extensions / plugins](design/llm-extensions.md) | Existing Pi extension loading, headless compatibility, grants and recovery |
 | [Obsidian organization notes](implementation/obsidian.md) | Default-enabled managed vault, native note formats, shared access and import/export |
 | [Shared host browser](implementation/browser.md) | Default-enabled Browser plugin, private headed sessions, shared consumers and secure input |

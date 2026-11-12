@@ -6,6 +6,7 @@ import type { CloudflarePage } from "../src/cloudflare/config.ts";
 import type { CodeTruthPage } from "../src/code-truth/config.ts";
 import type { CodingPage } from "../src/coding/config.ts";
 import { type GooglePage, googlePlugins } from "../src/google/config.ts";
+import type { NowledgePage } from "../src/nowledge-mem/config.ts";
 import type { ObsidianPage } from "../src/obsidian/config.ts";
 import type { ReviewPage } from "../src/review-bot/config.ts";
 import type { TranscriptionPage } from "../src/transcription/config.ts";
@@ -17,6 +18,7 @@ import { GitHubConnection } from "./github.tsx";
 import { Google } from "./google.tsx";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
+import { NowledgeMem } from "./nowledge-mem.tsx";
 import { Obsidian } from "./obsidian.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
 import { ReviewBot } from "./review-bot.tsx";
@@ -122,6 +124,7 @@ export function Plugins({
     obsidian?: boolean;
     transcription?: boolean;
     browser?: boolean;
+    nowledgeMem?: boolean;
   }>({});
   const path = (suffix = "") =>
     `/admin/plugins${suffix}?workspace=${encodeURIComponent(workspaceId)}`;
@@ -154,6 +157,7 @@ export function Plugins({
     if (
       view === "catalog" ||
       (view === "installed" &&
+        pluginId !== "nowledge-mem" &&
         pluginId !== "browser" &&
         pluginId !== "transcription" &&
         pluginId !== "obsidian" &&
@@ -179,6 +183,7 @@ export function Plugins({
       request<CloudflarePage>(`${endpoint}/cloudflare`),
       request<ObsidianPage>(`${endpoint}/obsidian`),
       request<BrowserPluginPage>(`${endpoint}/browser`),
+      request<NowledgePage>(`${endpoint}/nowledge-mem`),
     ]).then(
       ([
         transcription,
@@ -189,9 +194,14 @@ export function Plugins({
         cloudflare,
         obsidian,
         browser,
+        nowledge,
       ]) => {
         if (!active) return;
         setBuiltIns({
+          nowledgeMem:
+            nowledge.status === "fulfilled"
+              ? nowledge.value.settings?.enabled
+              : undefined,
           browser:
             browser.status === "fulfilled"
               ? browser.value.settings?.enabled
@@ -288,7 +298,8 @@ export function Plugins({
             Manage installed extensions for this workspace.
           </p>
         </header>
-      ) : (pluginId !== "browser" &&
+      ) : (pluginId !== "nowledge-mem" &&
+          pluginId !== "browser" &&
           pluginId !== "transcription" &&
           pluginId !== "obsidian" &&
           pluginId !== "google" &&
@@ -360,6 +371,18 @@ export function Plugins({
             </p>
           )}
           <div className="plugin-catalog-grid">
+            <PluginCard
+              to={path("/nowledge-mem")}
+              name="Nowledge Mem"
+              summary="Search and save private cross-tool knowledge."
+              status={
+                builtIns.nowledgeMem === undefined
+                  ? "Checking…"
+                  : builtIns.nowledgeMem
+                    ? "Enabled"
+                    : "Disabled"
+              }
+            />
             <PluginCard
               to={path("/browser")}
               name="Browser"
@@ -468,6 +491,14 @@ export function Plugins({
           </div>
         </section>
       )}
+      {view === "installed" && pluginId === "nowledge-mem" && (
+        <NowledgeMem
+          key={workspaceId}
+          request={request}
+          workspaceId={workspaceId}
+          backTo={path()}
+        />
+      )}
       {view === "installed" && pluginId === "browser" && (
         <BrowserPlugin
           key={workspaceId}
@@ -527,6 +558,7 @@ export function Plugins({
         <Coding request={request} workspaceId={workspaceId} backTo={path()} />
       )}
       {view === "installed" &&
+        pluginId !== "nowledge-mem" &&
         pluginId !== "browser" &&
         pluginId !== "transcription" &&
         pluginId !== "obsidian" &&

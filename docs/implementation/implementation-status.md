@@ -1,5 +1,32 @@
 # Implementation evidence
 
+## Optional Nowledge Mem plugin (2026-11-12)
+
+**Plugins → Nowledge Mem** now configures an optional built-in adapter for one
+member's private Telegram memory list/search/read and exact-content saves to a
+selected Mem Space. The operator's modal discovers Space names, stores the API key
+encrypted, shows saved summaries and provides an independent title switch.
+The headless adapter uses the documented REST API; it does not install the terminal
+Pi package, inject remote Rules or automatically capture chat transcripts.
+
+Every tool checks current tenant/member, private destination, interactive run,
+fence, bot identity and plugin revision. External saves require a direct current
+human command such as `Save to Nowledge Mem: text`; forwarded commands cannot
+provide consent. Durable receipts prevent duplicate sends and leave unknown write
+outcomes reserved. Private evidence is rechecked transitively for retained answers,
+handoffs and delivery. Missing Mem infrastructure cannot block unrelated chat.
+
+Validation: `bun run check`, `bun run typecheck`, `bun test` and `bun run build`
+pass, with **1,477 deterministic tests** using disposable PostgreSQL. Coverage
+includes the production Pi factory, configuration authorization, concurrent saves
+and receipt recovery. The packaged Node runtime contract passes all 16 combined
+production startup cases with zero external startup calls.
+Six focused browser scenarios pass at 1280px/390px, including both themes for
+Nowledge Mem, with saved/editor, loading/empty, pending and error screenshots
+visually reviewed. See [upstream review, setup and boundaries](nowledge-mem.md).
+Live Mem/Telegram acceptance requires operator-provided credentials. No external
+account connection, live memory save or deployment was performed.
+
 ## Member invitation dialog (2026-11-11)
 
 **Groups & Members → Members → New** now opens **Add member** with Telegram

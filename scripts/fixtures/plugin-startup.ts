@@ -16,6 +16,7 @@ import { Store } from "../../src/db/repositories.ts";
 import { type Deployment, Fault, settingsSchema } from "../../src/domain.ts";
 import { GitHubApps } from "../../src/github/registry.ts";
 import { GoogleService } from "../../src/google/service.ts";
+import { NowledgeService } from "../../src/nowledge-mem/service.ts";
 import { RuntimeLogger } from "../../src/observability/logs.ts";
 import { SearchConsoleService } from "../../src/search-console/service.ts";
 import {
@@ -122,6 +123,19 @@ export async function verifyPluginStartup() {
             clientSecret: "synthetic",
           },
         },
+        nowledgeMem: {
+          settings: {
+            enabled: true,
+            apiUrl: "https://unused.invalid",
+            memberId: mode === "denied" ? "303" : "101",
+            spaceId: "default",
+            spaceName: "Default",
+          },
+          credential: ["missing_service", "disconnected"].includes(mode)
+            ? undefined
+            : "synthetic-unreadable",
+          botId: mode === "stale_revision" ? "old-bot" : "999",
+        },
         cloudflare: { settings: { ...emptyCloudflare, enabled: true } },
         codeTruth: {
           enabled: true,
@@ -186,6 +200,7 @@ export async function verifyPluginStartup() {
             throw new Error("Optional Browser credential read during startup");
           },
         ),
+        new NowledgeService(store, key, forbidden),
       );
       const model = selectedModel("gpt-4.1-mini");
       const input: AgentInput = {
@@ -232,6 +247,8 @@ export async function verifyPluginStartup() {
             "query_google_docs",
             "query_search_console",
             "query_cloudflare",
+            "query_nowledge_mem",
+            "save_nowledge_mem",
             "start_development_task",
             "propose_github_issue",
             ...codeTruthTools,

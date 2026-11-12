@@ -3614,6 +3614,17 @@ button.skill-source-name {
   }
 }
 
+.nowledge-fields {
+  display: grid;
+  gap: 1rem;
+}
+fieldset.nowledge-fields > * {
+  margin: 0;
+}
+.nowledge-fields > button {
+  justify-self: start;
+}
+
 .transcription-card {
   display: flex;
   flex-direction: column;

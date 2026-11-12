@@ -872,6 +872,32 @@ export function adminRoutes(
       ),
     );
   });
+  app.get("/api/admin/workspaces/:id/plugins/nowledge-mem", async (c) =>
+    c.json(
+      await plugins.nowledgeMem.view(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+      ),
+    ),
+  );
+  app.put("/api/admin/workspaces/:id/plugins/nowledge-mem", async (c) =>
+    c.json(
+      await plugins.configureNowledge(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+        await c.req.json(),
+      ),
+    ),
+  );
+  app.post("/api/admin/workspaces/:id/plugins/nowledge-mem/spaces", async (c) =>
+    c.json(
+      await plugins.nowledgeMem.spaces(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+        await c.req.json(),
+      ),
+    ),
+  );
   app.get("/api/admin/workspaces/:id/plugins/browser", async (c) =>
     c.json(
       await plugins.browser.view(

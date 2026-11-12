@@ -14,6 +14,7 @@ import { GitHubApps } from "./github/registry.ts";
 import { GitHubUsers } from "./github/users.ts";
 import { GoogleService } from "./google/service.ts";
 import { startWorker } from "./jobs/queue.ts";
+import { NowledgeService } from "./nowledge-mem/service.ts";
 import { RuntimeLogger } from "./observability/logs.ts";
 import { ReviewExecutor } from "./review-bot/executor.ts";
 import { SearchConsoleService } from "./search-console/service.ts";
@@ -46,6 +47,7 @@ const plugins = new PluginService(
   google,
   undefined,
   browserRuntime(store, cfg.ENCRYPTION_KEY, cfg),
+  new NowledgeService(store, cfg.ENCRYPTION_KEY),
 );
 const stop = await startWorker(
   store,

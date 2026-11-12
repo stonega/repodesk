@@ -52,6 +52,17 @@ RepoDesk 使用对话上下文、历史记忆和经过确认的指令帮助持�
 
 纠正定时任务使用 `/correct save`，详见 [定时任务](workflows.md)。
 
+## Optional external memory with Nowledge Mem
+
+[Nowledge Mem](nowledge-mem.md) is a separate, optional connection for one selected
+member's private chat and Space. Searches send the query to that Mem server;
+returned memories can enter the model's authorized context. A direct
+`Save to Nowledge Mem: text` request sends the exact text after the colon to Mem.
+Chat transcripts are not automatically exported. Disabling internal recall,
+forgetting a local memory, disconnecting the plugin or deleting the RepoDesk
+workspace does not delete records already saved in Mem. Manage external records
+and retention in Mem itself.
+
 ## 哪些人和服务能看到数据
 
 - 群内回复对群成员可见，收集开启后可能保留非工作区成员发言。
