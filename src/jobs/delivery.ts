@@ -15,6 +15,7 @@ import {
 } from "../domain.ts";
 import { repositoryDeliveryAllowed } from "../github/repository-context.ts";
 import { googleDeliveryAllowed, googleReadAllowed } from "../google/policy.ts";
+import { referenceMemoryValid } from "../memory/state.ts";
 import { taskReference } from "../miniapp/auth.ts";
 import { nowledgeReadAllowed } from "../nowledge-mem/policy.ts";
 import { searchConsoleReadAllowed } from "../search-console/policy.ts";
@@ -112,6 +113,25 @@ export class DeliveryWorker {
     d: Delivery,
     sql: Sql = this.store.pool,
   ) {
+    if (d.repositoryMemory) {
+      try {
+        const task = await taskGet(sql, w.id, d.repositoryMemory.taskId);
+        checkDevelopment(w, task, d.actor, false, true);
+        if (
+          task.contentRemoved ||
+          task.botId !== (await this.store.deployment(sql)).bot?.id ||
+          task.chatId !== d.chatId ||
+          task.topicId !== d.topicId ||
+          !referenceMemoryValid(w, d.repositoryMemory.refs, d.actor, task.botId)
+        ) {
+          d.text = "";
+          d.buttons = undefined;
+          return false;
+        }
+      } catch {
+        return false;
+      }
+    }
     if (d.browserTaskState) {
       const run = w.runs.find((r) => r.id === d.runId);
       const expected = d.browserTaskState;

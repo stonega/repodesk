@@ -408,6 +408,7 @@ export interface Run {
     selectionRevision?: number;
   };
   handoffRead?: {
+    memory?: Omit<MemoryContext, "text">;
     references: MemoryReferences;
     runIds?: string[];
     chatIds: string[];
@@ -527,6 +528,7 @@ export interface TelegramWidget {
   requestMessageId?: number;
 }
 export interface Delivery {
+  repositoryMemory?: { taskId: string; refs: Omit<MemoryContext, "text"> };
   browserTaskState?: {
     refresh?: boolean;
     status: Run["status"];
@@ -608,6 +610,7 @@ export interface Audit {
   version?: number;
 }
 export interface Workspace {
+  repositoryTasks?: import("./coding/objective.ts").RepositoryTaskSettings;
   /** Revocation counters only. Personal sites, credentials and grants live separately. */
   browserEpochs?: Record<string, number>;
   obsidian?: import("./obsidian/config.ts").VaultState;

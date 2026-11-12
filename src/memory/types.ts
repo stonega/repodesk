@@ -22,6 +22,27 @@ export interface MemoryEntry extends MemoryReferences {
 export interface MemoryContext extends MemoryReferences {
   entryIds: string[];
   text: string;
+  preferences?: { id: string; revision: number; referenceOnly?: boolean }[];
+}
+export interface PreferenceEntry extends MemoryEntry {
+  createdAt?: string;
+  previousRevision?: number;
+  correctionActor?: string;
+  correctionSourceId?: string;
+  preferenceId: string;
+  revision: number;
+  status: "candidate" | "active_reference" | "superseded" | "disputed";
+  evidence: "explicit" | "repeated" | "single_observation";
+  applicability: { repositoryId?: number; domain?: string; taskId?: string };
+  exceptions: string[];
+}
+export interface DecisionCase extends MemoryEntry {
+  taskId: string;
+  inputRevision: number;
+  inputKind: "request" | "answer" | "followup";
+  evidence: "authored_input";
+  questionId?: string;
+  expiresAt: string;
 }
 export interface MemoryJob extends MemoryReferences {
   id: string;
@@ -43,6 +64,17 @@ export interface MemoryJob extends MemoryReferences {
   at: string;
 }
 export interface MemoryState {
+  preferenceReceipts?: {
+    sourceId: string;
+    preferenceId: string;
+    revision: number;
+  }[];
+  preferences?: PreferenceEntry[];
+  cases?: DecisionCase[];
+  preferenceSettings?: {
+    derive: boolean;
+    recall: "off" | "pi" | "pi_and_coding";
+  };
   entries: MemoryEntry[];
   jobs: MemoryJob[];
   checkpoints: { threadId: string; sourceHash: string; at: string }[];

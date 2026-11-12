@@ -38,7 +38,20 @@ export function codingStatusLabel(task: {
   phase?: string;
   pr?: unknown;
   error?: string;
+  release?: DevelopmentTask["release"];
 }) {
+  if (task.release && !task.cancelRequested && task.state === "review")
+    return {
+      prepared: "Release prepared",
+      waiting_ci: "Waiting for release CI",
+      waiting_merge: "Waiting for release PR merge",
+      publishing: "Publishing release",
+      published: task.release.prepared.proposal.draft
+        ? "Draft release ready"
+        : "Release published",
+      blocked: "Release blocked",
+      unknown: "Release outcome uncertain",
+    }[task.release.state];
   if (
     ["working", "running", "publishing", "queued", "auth_required"].includes(
       task.state,
@@ -105,6 +118,8 @@ function active(task: {
     : "Waiting for the runner to confirm the current stage.";
 }
 export function developmentStatus(task: DevelopmentTask) {
+  if (task.release && task.state === "review" && !task.cancelRequested)
+    return `${task.payload.repository}: ${codingStatusLabel(task)}${task.release.url ? `\n${task.release.url}` : ""}${task.release.error ? `\n${codingFailureMessage(task.release.error)}` : ""}`;
   if (task.error === "github_user_access_unavailable" && !task.cancelRequested)
     return `${task.payload.repository}: ${codingFailureMessage(task.error, task.payload)}${task.pr ? `\n${task.pr.url}` : ""}`;
   const labels: Record<DevelopmentTask["state"], string> = {

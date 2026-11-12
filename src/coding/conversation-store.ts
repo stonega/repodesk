@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { Sql } from "../db/pool.ts";
 import { type Run, requireThat, type Workspace } from "../domain.ts";
+import { mergeMemoryReferences } from "../memory/state.ts";
 import { runAllowed } from "../workspaces/policy.ts";
 import { type TaskExchange, taskMessage } from "./conversation.ts";
 import { type DevelopmentTask, developmentStopped } from "./development.ts";
+import { trackTaskMemory } from "./memory.ts";
 import { taskSave } from "./task-store.ts";
 import { checkDevelopment } from "./tasks.ts";
 
@@ -58,6 +60,7 @@ export function conversationAudience(
     "access_denied",
     403,
   );
+  trackTaskMemory(w, run, task);
 }
 export function exchangeSourcesPresent(w: Workspace, exchange: TaskExchange) {
   return (
@@ -125,6 +128,12 @@ export async function askTask(
     state: "queued",
     createdAt: new Date().toISOString(),
   };
+  task.referenceMemory = mergeMemoryReferences(
+    w,
+    task.referenceMemory,
+    run.memoryContext,
+    run.handoffRead?.memory,
+  );
   requireThat(
     exchangeSourcesPresent(w, exchange),
     "coding_current_request_required",

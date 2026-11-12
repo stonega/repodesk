@@ -3,6 +3,7 @@ import type { Run, Workspace } from "../domain.ts";
 import { memoryReferences } from "../workspaces/conversation-memory.ts";
 import type { DevelopmentInput } from "./development.ts";
 import { developmentInputPresent } from "./input-sources.ts";
+import { trackTaskMemory } from "./memory.ts";
 import { taskList } from "./task-store.ts";
 import { checkDevelopment } from "./tasks.ts";
 
@@ -93,10 +94,32 @@ export async function codingTaskContext(
     )
       continue;
     for (const original of originals) sourceIds.add(original.id);
+    for (const id of [
+      ...(task.memory?.sourceIds ?? []),
+      ...(task.referenceMemory?.sourceIds ?? []),
+    ])
+      sourceIds.add(id);
+    trackTaskMemory(w, run, task);
     run.browserRead ??= task.browserRead;
     repositoryIds.add(task.payload.repositoryId);
     snapshots.push({
       taskId: task.id,
+      objective: task.objective?.kind ?? "development",
+      release: task.release
+        ? {
+            state: task.release.state,
+            version: task.release.prepared.proposal.tag,
+            url: task.release.url,
+            blocker: task.release.error,
+            targetSha: task.release.prepared.targetSha,
+            procedures: task.release.prepared.procedures,
+            unsupported: task.release.prepared.proposal.unsupported,
+            assets: task.release.prepared.assets.map(({ name, digest }) => ({
+              name,
+              digest,
+            })),
+          }
+        : undefined,
       repository: task.payload.repository,
       baseBranch: task.payload.baseBranch,
       referenceSources: task.referenceSources?.map((source) => ({

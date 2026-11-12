@@ -1,5 +1,12 @@
 # Continuous Codex tasks
 
+The same task engine now supports repository investigation and release by default
+objectives, including verified empty-patch preparation, CI/merge waits and
+application-owned GitHub release effects. Optional preference packs are rebuilt
+under current access on each execution. See [repository tasks](repository-tasks.md)
+for implementation boundaries and [user requests](../user/repository-tasks.md)
+for setup. These additions retain separate live pilot gates.
+
 Task messages offer **View conversation**, opening a read-only Telegram Mini App
 with retained original inputs, Codex messages and expandable activity. It follows
 Telegram theme and viewport settings and rechecks the viewer's task/audience

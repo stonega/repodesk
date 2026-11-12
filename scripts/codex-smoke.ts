@@ -1,6 +1,6 @@
 // Deterministic container-engine smoke: fake Codex + local Git fixture, no remote calls.
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,6 +42,7 @@ const checkoutKey = taskKey(workspaceId, checkoutTaskId);
 const deviceTaskId = randomUUID();
 const deviceKey = taskKey(workspaceId, deviceTaskId);
 const developmentIds = [
+  randomUUID(),
   randomUUID(),
   randomUUID(),
   randomUUID(),
@@ -191,6 +192,11 @@ if(args.includes('clone')) {
  git(['init','--initial-branch=develop','/task/repo']);
  writeFileSync('/task/repo/README.md','old\\n');
  git(['-C','/task/repo','add','README.md']);
+ if(job.development?.objective?.kind==='release') {
+  writeFileSync('/task/repo/RELEASE.md','Build dist/release.txt and publish its exact bytes.');
+  writeFileSync('/task/repo/.gitignore','dist/');
+  git(['-C','/task/repo','add','RELEASE.md','.gitignore']);
+ }
  git(['-C','/task/repo','-c','user.name=Smoke','-c','user.email=smoke@example.invalid','commit','-m','fixture']);
  if(job.development?.pr) {
    writeFileSync('/task/repo/README.md','fixed\\n');
@@ -261,12 +267,18 @@ if(process.argv[2]==='app-server') {
    }
    if(text.includes('Auth pause fixture')&&fs.readFileSync('/task/repo/README.md','utf8')!=='auth-partial\\n')process.exit(7);
 
-   if(!intake) {
+   const releaseTask=JSON.parse(fs.readFileSync('/input/job.json','utf8')).development?.objective?.kind==='release';
+   if(!intake&&!releaseTask) {
     if(answer&&!text.includes('Followup fixture')&&fs.readFileSync('/task/repo/README.md','utf8')!=='partial\\n')process.exit(6);
     fs.writeFileSync('/task/repo/README.md',question?'partial\\n':text.includes('Repair fixture')&&!text.includes('Verification checks failed.')?'broken\\n':'fixed\\n');
    }
    if(text.includes('Followup fixture'))fs.writeFileSync('/task/repo/extra.txt','updated\\n');
    const result={status:intake?'intent':question?'needs_input':'completed',intent:'implement',evidenceRevision:1,evidence:'Fixture',publishRequested:true,summary:'Fixture checked.',question:question?'Keep page one for empty results?':null,title:'Smoke fix',body:'Local smoke checks passed.',verificationCommands:intake||question?[]:text.includes('Verification checks failed.')?['true']:text.includes('Exhaust fixture')?['false']:['test -z "$CODEX_TASK_TOKEN" && test -z "$GITHUB_TOKEN" && test "$(cat README.md)" = fixed']};
+   if(releaseTask) {
+    fs.mkdirSync('/task/repo/dist',{recursive:true});fs.writeFileSync('/task/repo/dist/release.txt','verified release bytes');
+    result.verificationCommands=['test -z "$CODEX_TASK_TOKEN" && test -z "$GITHUB_TOKEN" && test -f dist/release.txt'];
+    result.release={tag:'v1.2.0',name:'v1.2.0',body:'Fixture release',draft:false,prerelease:false,procedures:['RELEASE.md'],assets:[{path:'dist/release.txt',name:'release.txt'}],ciRequired:false,unsupported:[]};
+   }
    if(JSON.parse(fs.readFileSync('/input/job.json','utf8')).payload.body==='Malformed result fixture')result.summary='';
    send({id:r.id,result:{turn:{id:'smoke-turn'}}});send({method:'turn/started',params:{threadId:'smoke-thread',turn:{id:'smoke-turn'}}});
 if(JSON.parse(fs.readFileSync('/input/job.json','utf8')).payload.body==='Parallel fixture') {
@@ -440,7 +452,7 @@ process.exit(16);
         status.threadId
       )
         throw Error(
-          "Missing base branch did not retain its safe preparation failure",
+          `Missing base branch did not retain its safe preparation failure: ${status.error} / ${status.phase}`,
         );
       break;
     }
@@ -855,6 +867,52 @@ process.exit(16);
     ).transcript
   )
     throw Error("Task erasure retained transcript content");
+  if ((await request("/tasks/capabilities")).repositoryTasks !== 1)
+    throw Error("Repository task protocol capability missing");
+  await request("/tasks", {
+    ...input,
+    taskId: developmentIds[12],
+    development: {
+      ...input.development,
+      objective: {
+        kind: "release",
+        version: "v1.2.0",
+        procedure: "RELEASE.md",
+      },
+      context: "Release fixture",
+    },
+  });
+  const release = await waitFor(developmentIds[12], "ready");
+  if (
+    !release.checkPassed ||
+    release.hasChanges ||
+    !release.release ||
+    release.release.targetSha !== release.baseSha ||
+    release.release.procedures[0]?.digest !==
+      createHash("sha256")
+        .update("Build dist/release.txt and publish its exact bytes.")
+        .digest("hex") ||
+    Buffer.from(release.release.assets[0]?.data ?? "", "base64").toString() !==
+      "verified release bytes"
+  )
+    throw Error(
+      `Credential-free release export mismatch: ${JSON.stringify({ checkPassed: release.checkPassed, hasChanges: release.hasChanges, base: release.baseSha, prepared: release.release, proposed: release.result?.release })}`,
+    );
+  await restartSupervisor();
+  const recoveredRelease = await waitFor(developmentIds[12], "ready");
+  if (
+    JSON.stringify(recoveredRelease.release) !== JSON.stringify(release.release)
+  )
+    throw Error("Prepared release did not survive supervisor restart");
+  await request(`/tasks/${workspaceId}/${developmentIds[12]}/erase`, {});
+  if (
+    (
+      (await request(
+        `/tasks/${workspaceId}/${developmentIds[12]}`,
+      )) as LocalStatus
+    ).release
+  )
+    throw Error("Erasure retained prepared release content");
   await request("/tasks", {
     ...input,
     taskId: developmentIds[0],
@@ -1127,7 +1185,7 @@ process.exit(16);
   for (const id of developmentIds)
     await request(`/tasks/${workspaceId}/${id}/erase`, {});
   console.log(
-    `${engineName} smoke passed: missing base branch/restart, parallel tasks/capacity/restart, provider/device tasks, live conversation/receipts/restart, question checkpoint/reconstruction, deployment checkpoint/restart, repeated repair, fresh/same-PR publication, remote-head fencing, device continuation, auth expiry/restart/reconnect, usage, erasure and cancellation.`,
+    `${engineName} smoke passed: missing base branch/restart, parallel tasks/capacity/restart, provider/device tasks, live conversation/receipts/restart, verified empty-patch release/export/restart/erasure, question checkpoint/reconstruction, deployment checkpoint/restart, repeated repair, fresh/same-PR publication, remote-head fencing, device continuation, auth expiry/restart/reconnect, usage, erasure and cancellation.`,
   );
 } catch (error) {
   for (const task of [

@@ -7,7 +7,14 @@ import {
   validMemory,
 } from "../workspaces/conversation-memory.ts";
 import { retainedSource } from "../workspaces/threads.ts";
-import type { MemoryEntry, MemoryScope, MemoryState } from "./types.ts";
+import { preferenceContextValid, preferencePack } from "./preferences.ts";
+import { preferenceSettings } from "./settings.ts";
+import type {
+  MemoryContext,
+  MemoryEntry,
+  MemoryScope,
+  MemoryState,
+} from "./types.ts";
 
 export const hashMemory = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -127,7 +134,10 @@ export function readableMemories(w: Workspace, r: Run, now = Date.now()) {
     return [];
   const key = scopeKey(scope);
   const sources = scopeSources(w, scope, now, r.actor);
-  return (w.memory?.entries ?? [])
+  return [
+    ...(w.memory?.entries ?? []),
+    ...(preferenceSettings(w).recall !== "off" ? (w.memory?.cases ?? []) : []),
+  ]
     .filter((e) => scopeKey(e.scope) === key && validMemory(e, sources))
     .sort(
       (a, b) =>
@@ -145,10 +155,13 @@ export function memoryInputHash(entries: MemoryEntry[]) {
 }
 export function memoryContextValid(w: Workspace, r: Run, history = false) {
   if (!r.memoryContext) return true;
+  if (!preferenceContextValid(w, r.memoryContext, r.actor)) return false;
   if (history)
     return (
       r.memoryContext.entryIds.every((id) =>
-        w.memory?.entries.some((e) => e.id === id),
+        [...(w.memory?.entries ?? []), ...(w.memory?.cases ?? [])].some(
+          (e) => e.id === id,
+        ),
       ) && validMemory(r.memoryContext, w.messages)
     );
   const scope = memoryScope(w, r);
@@ -159,11 +172,73 @@ export function memoryContextValid(w: Workspace, r: Run, history = false) {
     validMemory(r.memoryContext, scopeSources(w, scope, Date.now(), r.actor))
   );
 }
+
+/** Already-authorized task/handoff reads may span the owner's conversations. */
+export function referenceMemoryValid(
+  w: Workspace,
+  context: Omit<MemoryContext, "text"> | undefined,
+  actor: string,
+  botId?: string,
+) {
+  if (!context) return true;
+  if (!preferenceContextValid(w, { ...context, text: "" }, actor)) return false;
+  const entries = [
+    ...(w.memory?.entries ?? []),
+    ...(w.memory?.cases ?? []),
+  ].filter((e) => context.entryIds.includes(e.id));
+  if (
+    entries.length !== new Set(context.entryIds).size ||
+    entries.some(
+      (e) =>
+        (botId !== undefined && e.scope.botId !== botId) ||
+        (e.scope.kind === "private" && e.scope.actor !== actor) ||
+        !entryValid(w, e, Date.now(), actor),
+    )
+  )
+    return false;
+  const preferences = (w.memory?.preferences ?? []).filter((p) =>
+    context.preferences?.some(
+      (ref) => ref.id === p.preferenceId && ref.revision === p.revision,
+    ),
+  );
+  if (botId !== undefined && preferences.some((p) => p.scope.botId !== botId))
+    return false;
+  const ids = new Set([...entries, ...preferences].flatMap((e) => e.sourceIds));
+  return validMemory(
+    context,
+    w.messages.filter((s) => ids.has(s.id)),
+  );
+}
+
+/** Carries dependency metadata only; callers have checked each context before merging. */
+export function mergeMemoryReferences(
+  w: Workspace,
+  ...contexts: (Omit<MemoryContext, "text"> | undefined)[]
+): MemoryContext | undefined {
+  const selected = contexts.filter(
+    (c): c is Omit<MemoryContext, "text"> => !!c,
+  );
+  if (!selected.length) return;
+  const ids = new Set(selected.flatMap((c) => c.sourceIds));
+  return {
+    text: "",
+    entryIds: [...new Set(selected.flatMap((c) => c.entryIds))],
+    preferences: [
+      ...new Map(
+        selected
+          .flatMap((c) => c.preferences ?? [])
+          .map((p) => [`${p.id}:${p.revision}:${!!p.referenceOnly}`, p]),
+      ).values(),
+    ],
+    ...memoryReferences(w.messages.filter((s) => ids.has(s.id))),
+  };
+}
 export function attachMemoryContext(w: Workspace, r: Run) {
   if (r.transcript.length) return;
   const entries = readableMemories(w, r);
+  const preference = preferencePack(w, r);
   if (!entries.length) {
-    delete r.memoryContext;
+    r.memoryContext = preference;
     return;
   }
   const scope = memoryScope(w, r) as MemoryScope;
@@ -176,7 +251,7 @@ export function attachMemoryContext(w: Workspace, r: Run) {
     ? entries.filter((e) => index.entryIds.includes(e.id))
     : entries.slice(0, 8);
   if (!selected.length) {
-    delete r.memoryContext;
+    r.memoryContext = preference;
     return;
   }
   const ids = new Set(selected.flatMap((e) => e.sourceIds));
@@ -189,6 +264,26 @@ export function attachMemoryContext(w: Workspace, r: Run) {
         .join("\n"),
     ...memoryReferences(scopeSources(w, scope).filter((s) => ids.has(s.id))),
   };
+  if (preference) {
+    if (
+      Buffer.byteLength(`${r.memoryContext.text}\n${preference.text}`) > 24000
+    ) {
+      r.memoryContext = preference;
+      return;
+    }
+    r.memoryContext.preferences = preference.preferences;
+    r.memoryContext.text = `${preference.text}\n${r.memoryContext.text}`;
+    const dependencies = new Set([
+      ...r.memoryContext.sourceIds,
+      ...preference.sourceIds,
+    ]);
+    Object.assign(
+      r.memoryContext,
+      memoryReferences(
+        scopeSources(w, scope).filter((s) => dependencies.has(s.id)),
+      ),
+    );
+  }
 }
 export function memoryDependencies(w: Workspace, r: Run): Source[] {
   const ids = new Set(r.memoryContext?.sourceIds);
@@ -204,6 +299,12 @@ export function pruneMemories(w: Workspace, now = Date.now()) {
   // Disabled scopes retain their records, but cannot contribute context or work.
   const disabled = state.disabled;
   state.disabled = [];
+  state.preferences = state.preferences?.filter((e) =>
+    validMemory(e, scopeSources(w, e.scope, now)),
+  );
+  state.cases = state.cases?.filter((e) =>
+    validMemory(e, scopeSources(w, e.scope, now)),
+  );
   const sourcesByScope = new Map<string, Source[]>();
   state.entries = state.entries
     .filter((e) => {
@@ -222,6 +323,9 @@ export function pruneMemories(w: Workspace, now = Date.now()) {
   state.disabled = disabled;
   const retained = new Set(
     w.messages.filter((s) => retainedSource(w, s, now)).map((s) => s.id),
+  );
+  state.preferenceReceipts = state.preferenceReceipts?.filter((r) =>
+    retained.has(r.sourceId),
   );
   state.forgotten = state.forgotten
     .map((f) => ({

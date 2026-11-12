@@ -250,6 +250,8 @@ export async function verifyPluginStartup() {
             "query_nowledge_mem",
             "save_nowledge_mem",
             "start_development_task",
+            "configure_repository_tasks",
+            "manage_preference",
             "propose_github_issue",
             ...codeTruthTools,
           ])

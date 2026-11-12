@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { Pool } from "pg";
 import { ExtensionCatalog } from "../../src/agent/extensions.ts";
@@ -21,11 +21,18 @@ import type {
   LocalStart,
   LocalStatus,
 } from "../../src/coding/local/protocol.ts";
+import type { RepositoryObjective } from "../../src/coding/objective.ts";
 import { codingTaskContext } from "../../src/coding/task-context.ts";
-import { taskGet, taskInputs, taskSave } from "../../src/coding/task-store.ts";
+import {
+  taskEvent,
+  taskGet,
+  taskInputs,
+  taskSave,
+} from "../../src/coding/task-store.ts";
 import {
   appendDevelopment,
   cancelDevelopment,
+  changeObjective,
   checkDevelopment,
   correctDevelopmentRepository,
   notifyDevelopment,
@@ -51,7 +58,11 @@ import { RepositorySync } from "../../src/github/repository-sync.ts";
 import { GitHubUsers } from "../../src/github/users.ts";
 import { DeliveryWorker } from "../../src/jobs/delivery.ts";
 import { Executor } from "../../src/jobs/execute.ts";
+import { managePreference } from "../../src/memory/preferences.ts";
+import { memoryState } from "../../src/memory/state.ts";
 import { taskReference } from "../../src/miniapp/auth.ts";
+import { sweep } from "../../src/privacy/service.ts";
+import type { PreparedRelease } from "../../src/releases/types.ts";
 import { encrypt } from "../../src/setup/credentials.ts";
 import type { SetupService } from "../../src/setup/service.ts";
 import type { AudioTranscriber } from "../../src/telegram/attachments.ts";
@@ -100,6 +111,25 @@ const url = process.env.TEST_DATABASE_URL;
     await root.end();
   });
   const original = "Fix pagination and open a draft PR";
+  const releaseText =
+    "Release example/workspace v1.2.0 following docs/release.md";
+  const preparedVersion = (): PreparedRelease => ({
+    proposal: {
+      tag: "v1.2.0",
+      name: "v1.2.0",
+      body: "Verified changes",
+      draft: false,
+      prerelease: false,
+      procedures: ["docs/release.md"],
+      assets: [],
+      ciRequired: false,
+      unsupported: [],
+    },
+    targetSha: "a".repeat(40),
+    inputRevision: 1,
+    procedures: [{ path: "docs/release.md", digest: "c".repeat(64) }],
+    assets: [],
+  });
   const image = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEUlEQVR4nGP4z8DwnwEEQAwAG/ID/U0/Ov8AAAAASUVORK5CYII=",
     "base64",
@@ -125,11 +155,665 @@ const url = process.env.TEST_DATABASE_URL;
     verificationCommands: ["bun test"],
     ...patch,
   });
+  async function releaseFixture(
+    text = releaseText,
+    mode: "ok" | "lost" | "missing" = "ok",
+  ) {
+    const f = await fixture(text, "101", undefined, undefined, {
+      kind: "release",
+      version: "v1.2.0",
+      procedure: "docs/release.md",
+    });
+    const writes: string[] = [];
+    let tag: string | undefined;
+    let release: Record<string, unknown> | undefined;
+    const assets: Record<string, unknown>[] = [];
+    let ci = "pending";
+    f.releaseTransport(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/git/ref/heads/develop"))
+        return Response.json({ object: { sha: "a".repeat(40) } });
+      if (
+        url.pathname.includes("/commits/") &&
+        url.pathname.endsWith("/status")
+      )
+        return Response.json({
+          state:
+            ci === "passed"
+              ? "success"
+              : ci === "failed"
+                ? "failure"
+                : "pending",
+          total_count: 1,
+        });
+      if (url.pathname.endsWith("/check-runs"))
+        return Response.json({
+          total_count: 1,
+          check_runs: [
+            {
+              head_sha: "a".repeat(40),
+              status: ci === "pending" ? "in_progress" : "completed",
+              conclusion:
+                ci === "passed"
+                  ? "success"
+                  : ci === "failed"
+                    ? "failure"
+                    : null,
+            },
+          ],
+        });
+      if (url.pathname.endsWith("/git/ref/tags/v1.2.0"))
+        return tag
+          ? Response.json({ object: { sha: tag, type: "commit" } })
+          : new Response(null, { status: 404 });
+      if (url.pathname.endsWith("/git/refs")) {
+        writes.push("tag");
+        tag = JSON.parse(String(init?.body)).sha;
+        return Response.json(
+          { object: { sha: tag, type: "commit" } },
+          { status: 201 },
+        );
+      }
+      if (url.pathname.endsWith("/releases/tags/v1.2.0"))
+        return release
+          ? Response.json(release)
+          : new Response(null, { status: 404 });
+      if (url.pathname.endsWith("/releases") && init?.method === "POST") {
+        writes.push("release");
+        if (mode !== "missing")
+          release = {
+            ...JSON.parse(String(init.body)),
+            id: 77,
+            html_url:
+              "https://github.com/example/workspace/releases/tag/v1.2.0",
+          };
+        if (mode !== "ok")
+          throw Error("raw upstream error must remain private");
+        return Response.json(release, { status: 201 });
+      }
+      if (url.pathname.endsWith("/releases/77/assets")) {
+        if (init?.method === "POST") {
+          const bytes = Buffer.from(init.body as Uint8Array);
+          writes.push("asset");
+          assets.push({
+            id: 88,
+            name: url.searchParams.get("name"),
+            size: bytes.length,
+            digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+            state: "uploaded",
+            browser_download_url:
+              "https://github.com/example/workspace/releases/download/v1.2.0/asset.txt",
+          });
+        }
+        return Response.json(init?.method === "POST" ? assets.at(-1) : assets);
+      }
+    });
+    await f.tick();
+    await f.tick({
+      state: "succeeded",
+      result: result({ evidence: text }),
+      tokens: 1,
+    });
+    await f.tick();
+    return {
+      ...f,
+      writes,
+      passCI: () => {
+        ci = "passed";
+      },
+      failCI: () => {
+        ci = "failed";
+      },
+    };
+  }
+
+  test("release preparation, fresh executor and application effects share one durable task", async () => {
+    const f = await releaseFixture();
+    const p = preparedVersion();
+    const prepared = await f.tick({
+      state: "ready",
+      checkPassed: true,
+      hasChanges: false,
+      tokens: 2,
+      release: p,
+      result: result({
+        status: "completed",
+        evidence: releaseText,
+        release: p.proposal,
+      }),
+    });
+    expect(prepared.release?.state).toBe("prepared");
+    expect(f.publications).toEqual([]);
+    expect(f.cancels).toHaveLength(1);
+    const complete = await f.tick();
+    expect(complete.release?.state).toBe("published");
+    expect(complete.release?.url).toContain("/releases/tag/v1.2.0");
+    await f.tick();
+    expect(f.writes).toEqual(["tag", "release"]);
+    expect(
+      (
+        await store.pool.query(
+          "SELECT state FROM repository_release_actions WHERE workspace_id=$1",
+          [f.w.id],
+        )
+      ).rows.every((r) => r.state === "confirmed"),
+    ).toBe(true);
+  });
+  test.each(["lost", "missing"] as const)(
+    "an uncertain release response is inspected without replay: %s",
+    async (mode) => {
+      const f = await releaseFixture(releaseText, mode);
+      const p = preparedVersion();
+      await f.tick({
+        state: "ready",
+        checkPassed: true,
+        hasChanges: false,
+        release: p,
+        result: result({
+          status: "completed",
+          evidence: releaseText,
+          release: p.proposal,
+        }),
+      });
+      expect((await f.tick()).release?.state).toBe("unknown");
+      expect((await f.tick()).release?.state).toBe(
+        mode === "lost" ? "published" : "unknown",
+      );
+      expect(f.writes).toEqual(["tag", "release"]);
+    },
+  );
+  test("CI waiting releases Codex and resumes effects on the exact target without another model turn", async () => {
+    const f = await releaseFixture();
+    const p = preparedVersion();
+    p.proposal.ciRequired = true;
+    await f.tick({
+      state: "ready",
+      checkPassed: true,
+      hasChanges: false,
+      release: p,
+      result: result({
+        status: "completed",
+        evidence: releaseText,
+        release: p.proposal,
+      }),
+    });
+    expect((await f.tick()).release?.state).toBe("waiting_ci");
+    expect(f.writes).toEqual([]);
+    f.passCI();
+    expect((await f.tick()).release?.state).toBe("published");
+    expect(f.starts).toHaveLength(2);
+  });
+  test("preparation-only instructions never grant external release authority", async () => {
+    const f = await releaseFixture(
+      "Prepare release example/workspace v1.2.0 following docs/release.md",
+    );
+    const p = preparedVersion();
+    await f.tick({
+      state: "ready",
+      checkPassed: true,
+      hasChanges: false,
+      release: p,
+      result: result({ status: "completed", release: p.proposal }),
+    });
+    expect((await f.tick()).release?.state).toBe("prepared");
+    expect(f.writes).toEqual([]);
+  });
+  test.each([
+    ["draft", false],
+    ["prerelease", false],
+    ["draft", true],
+  ] as const)(
+    "release flag %s needs current channel consent: %s",
+    async (flag, requested) => {
+      const f = await releaseFixture(
+        releaseText + (requested ? " as a draft" : ""),
+      );
+      const p = preparedVersion();
+      p.proposal[flag] = true;
+      await f.tick({
+        state: "ready",
+        checkPassed: true,
+        hasChanges: false,
+        release: p,
+        result: result({ status: "completed", release: p.proposal }),
+      });
+      const outcome = await f.tick();
+      expect(outcome.release?.state).toBe(requested ? "published" : "blocked");
+      expect(f.writes).toEqual(requested ? ["tag", "release"] : []);
+      if (requested)
+        expect(
+          (await store.read(f.w.id)).deliveries.some((d) =>
+            d.text.includes("Draft release created"),
+          ),
+        ).toBe(true);
+    },
+  );
+  test("concurrent workers verify exact asset bytes once and a second task cannot claim the version", async () => {
+    const f = await releaseFixture();
+    const p = preparedVersion();
+    const bytes = Buffer.from("verified artifact");
+    p.proposal.assets = [{ path: "dist/asset.txt", name: "asset.txt" }];
+    p.assets = [
+      {
+        name: "asset.txt",
+        data: bytes.toString("base64"),
+        digest: createHash("sha256").update(bytes).digest("hex"),
+      },
+    ];
+    await f.tick({
+      state: "ready",
+      checkPassed: true,
+      hasChanges: false,
+      release: p,
+      result: result({ status: "completed", release: p.proposal }),
+    });
+    await Promise.all([
+      f.executor().advance(f.w.id, f.task.id),
+      f.executor().advance(f.w.id, f.task.id),
+    ]);
+    expect((await f.read()).release?.state).toBe("published");
+    expect(f.writes).toEqual(["tag", "release", "asset"]);
+    const next = await followup(f.w.id, releaseText);
+    const other = await store.change(f.w.id, async (w, sql) => {
+      const t = await startDevelopment(
+        sql,
+        w,
+        next.run.id,
+        "101",
+        7001,
+        [next.source.id],
+        "999",
+        "",
+        { kind: "release", version: "v1.2.0" },
+      );
+      t.state = "review";
+      t.release = {
+        revision: t.revision,
+        prepared: p,
+        state: "prepared",
+        publishAuthorized: true,
+      };
+      await taskSave(sql, t);
+      return t;
+    });
+    await f.executor().advance(f.w.id, other.id);
+    const conflict = await taskGet(store.pool, f.w.id, other.id);
+    expect(conflict.release?.state).toBe("blocked");
+    expect(conflict.release?.error).toBe("coding_release_target_conflict");
+    expect(f.writes).toEqual(["tag", "release", "asset"]);
+  });
+  test("failed CI returns the same goal to Codex once and unchanged failure cannot spin or publish", async () => {
+    const f = await releaseFixture();
+    const p = preparedVersion();
+    p.proposal.ciRequired = true;
+    const ready: LocalStatus = {
+      state: "ready",
+      checkPassed: true,
+      hasChanges: false,
+      release: p,
+      result: result({ status: "completed", release: p.proposal }),
+    };
+    await f.tick(ready);
+    f.failCI();
+    expect((await f.tick()).state).toBe("queued");
+    await f.tick();
+    expect(f.starts).toHaveLength(3);
+    await f.tick(ready);
+    expect((await f.tick()).release?.error).toBe("coding_release_ci_failed");
+    expect(f.writes).toEqual([]);
+  });
+  test("source erasure removes release content but retains content-free effect tombstones", async () => {
+    const f = await releaseFixture();
+    const p = preparedVersion();
+    await f.tick({
+      state: "ready",
+      checkPassed: true,
+      hasChanges: false,
+      release: p,
+      result: result({ status: "completed", release: p.proposal }),
+    });
+    expect((await f.tick()).release?.state).toBe("published");
+    await store.change(f.w.id, async (w, sql) => {
+      present(w.messages.find((s) => s.id === f.source.id)).expiresAt =
+        new Date(0).toISOString();
+      await pruneDevelopment(sql, w);
+    });
+    const removed = await f.read();
+    expect(removed.contentRemoved).toBe(true);
+    expect(removed.release).toBeUndefined();
+    const receipts = (
+      await store.pool.query(
+        "SELECT state,data,target_hash,payload_hash FROM repository_release_actions WHERE workspace_id=$1 AND task_id=$2",
+        [f.w.id, f.task.id],
+      )
+    ).rows;
+    expect(receipts).toHaveLength(2);
+    expect(
+      receipts.every(
+        (r) =>
+          r.state === "confirmed" &&
+          JSON.stringify(r.data) === "{}" &&
+          r.target_hash.length === 64 &&
+          r.payload_hash.length === 64,
+      ),
+    ).toBe(true);
+    await f.executor().advance(f.w.id, f.task.id);
+    expect(
+      (
+        await store.pool.query(
+          "SELECT 1 FROM coding_tasks WHERE workspace_id=$1 AND id=$2",
+          [f.w.id, f.task.id],
+        )
+      ).rowCount,
+    ).toBe(0);
+    expect(
+      (
+        await store.pool.query(
+          "SELECT 1 FROM repository_release_actions WHERE workspace_id=$1 AND task_id=$2",
+          [f.w.id, f.task.id],
+        )
+      ).rowCount,
+    ).toBe(2);
+    expect(f.writes).toEqual(["tag", "release"]);
+  });
+  test("unsupported procedures are explicit blockers and cannot report a complete release", async () => {
+    const f = await releaseFixture();
+    const p = preparedVersion();
+    p.proposal.unsupported = ["npm publish"];
+    await f.tick({
+      state: "ready",
+      checkPassed: true,
+      hasChanges: false,
+      release: p,
+      result: result({ status: "completed", release: p.proposal }),
+    });
+    const blocked = await f.tick();
+    expect(blocked.release?.state).toBe("blocked");
+    expect(blocked.release?.error).toBe("coding_release_unsupported_step");
+    expect(f.writes).toEqual([]);
+  });
+  test("a prepared release cannot cross a capability revocation or changed trusted manifest", async () => {
+    const f = await releaseFixture();
+    const p = preparedVersion();
+    await f.tick({
+      state: "ready",
+      checkPassed: true,
+      hasChanges: false,
+      release: p,
+      result: result({ status: "completed", release: p.proposal }),
+    });
+    await store.change(f.w.id, (w) => {
+      w.repositoryTasks = {
+        revision: 1,
+        repositories: [
+          { repositoryId: 7001, investigation: true, release: false },
+        ],
+      };
+    });
+    expect((await f.tick()).state).toBe("cancelled");
+    expect(f.writes).toEqual([]);
+    const other = await releaseFixture();
+    const mismatched = preparedVersion();
+    const proposed = {
+      ...mismatched.proposal,
+      body: "Different notes than the verified export",
+    };
+    const rejected = await other.tick({
+      state: "ready",
+      checkPassed: true,
+      hasChanges: false,
+      release: mismatched,
+      result: result({ status: "completed", release: proposed }),
+    });
+    expect(rejected.state).not.toBe("review");
+    expect(other.writes).toEqual([]);
+  });
+  test("a release prerequisite waits without a Codex process and re-prepares after the exact PR merges", async () => {
+    const f = await releaseFixture();
+    const p = preparedVersion();
+    await f.tick({
+      state: "ready",
+      checkPassed: true,
+      hasChanges: false,
+      release: p,
+      result: result({ status: "completed", release: p.proposal }),
+    });
+    await store.change(f.w.id, async (_w, sql) => {
+      const t = await f.read();
+      present(t.release).state = "waiting_merge";
+      present(t.release).pr = { number: 43, headSha: "b".repeat(40) };
+      await taskSave(sql, t);
+    });
+    let merged = false;
+    f.releaseTransport(async (input) => {
+      if (String(input).endsWith("/pulls/43"))
+        return Response.json({
+          state: merged ? "closed" : "open",
+          merged,
+          merge_commit_sha: merged ? "c".repeat(40) : null,
+          head: { sha: "b".repeat(40) },
+          base: { ref: "develop", repo: { full_name: "example/workspace" } },
+        });
+    });
+    expect((await f.tick()).release?.state).toBe("waiting_merge");
+    expect(f.starts).toHaveLength(2);
+    merged = true;
+    const resumed = await f.tick();
+    expect(resumed.state).toBe("queued");
+    expect(resumed.release).toBeUndefined();
+    expect(f.writes).toEqual([]);
+    await f.tick();
+    expect(f.starts).toHaveLength(3);
+  });
+  test("new repository objectives fail closed on an old runner without changing legacy dispatch", async () => {
+    const f = await releaseFixture();
+    f.runner.capabilities = undefined;
+    await f.append("Please continue this release");
+    await f.tick();
+    const failed = await f.tick();
+    expect(failed.state).toBe("failed");
+    expect(failed.error).toBe("coding_runner_protocol_required");
+    expect(f.starts).toHaveLength(2);
+    expect(f.writes).toEqual([]);
+  });
+  test("an objective change retains original inputs and task identity while discarding the old interpretation grant", async () => {
+    const f = await fixture(original, "101", undefined, (w) => {
+      w.repositoryTasks = {
+        revision: 1,
+        repositories: [
+          { repositoryId: 7001, investigation: true, release: true },
+        ],
+      };
+    });
+    const next = await followup(f.w.id, releaseText);
+    await store.change(f.w.id, async (w, sql) => {
+      const t = await f.read();
+      await appendDevelopment(
+        sql,
+        w,
+        t,
+        "101",
+        next.source,
+        "release-objective",
+      );
+      await changeObjective(sql, w, t, next.source, {
+        kind: "release",
+        version: "v1.2.0",
+        procedure: "docs/release.md",
+      });
+    });
+    await f.tick();
+    const t = await f.read();
+    expect(t.id).toBe(f.task.id);
+    expect(t.objective?.kind).toBe("release");
+    expect(t.canPublish).toBe(false);
+    expect(t.canImplement).toBe(false);
+    expect(f.starts[0]?.development.mode).toBe("intake");
+    expect((await taskInputs(store.pool, t)).map((i) => i.text)).toEqual([
+      original,
+      releaseText,
+    ]);
+  });
+  test("forgetting a coding preference fences the old attempt, removes derived copies and refreshes the same task", async () => {
+    let preferenceId = "";
+    const f = await fixture(original, "101", undefined, (w) => {
+      const run = createRun(
+        w,
+        "101",
+        "Remember preference: Keep diagnostic reports concise",
+        "101",
+        3,
+        "gpt-4.1-mini",
+        { replyTo: 9, botId: "999" },
+      );
+      run.status = "running";
+      const source = present(
+        w.messages.find((s) => s.runId === run.id && s.role === "user"),
+      );
+      const saved = managePreference(w, run, {
+        action: "remember",
+        sourceId: source.id,
+      }) as { preferenceId: string };
+      preferenceId = saved.preferenceId;
+      memoryState(w).preferenceSettings = {
+        derive: true,
+        recall: "pi_and_coding",
+      };
+    });
+    await f.tick();
+    expect(f.starts[0]?.development.memory).toContain("diagnostic reports");
+    const exchange = await f.ask("Why were diagnostic reports concise?");
+    const attempt = present((await f.read()).attemptId);
+    let delivery = "";
+    let statusRunId = "";
+    await store.change(f.w.id, async (w, sql) => {
+      const t = await f.read();
+      const statusRun = createRun(
+        w,
+        "101",
+        "Status?",
+        "101",
+        3,
+        "gpt-4.1-mini",
+        { replyTo: 11, botId: "999" },
+      );
+      statusRun.status = "running";
+      statusRun.memoryContext = undefined;
+      await codingTaskContext(sql, w, statusRun, "999");
+      statusRunId = statusRun.id;
+      expect(
+        statusRun.handoffRead?.memory?.preferences?.some(
+          (p) => p.id === preferenceId,
+        ),
+      ).toBe(true);
+      expect(runAllowed(w, statusRun)).toBe(true);
+      statusRun.result = "Derived diagnostic report";
+      delivery = present(
+        notifyDevelopment(w, t, "Derived diagnostic reports", "memory-derived"),
+      );
+      await taskEvent(sql, t, "transcript:item:memory-derived", {
+        text: "Derived diagnostic reports",
+        attemptId: attempt,
+      });
+      await taskEvent(sql, t, "answer:memory-derived", {
+        question: "Derived diagnostic report",
+      });
+      const run = createRun(
+        w,
+        "101",
+        `Forget preference ${preferenceId}`,
+        "101",
+        3,
+        "gpt-4.1-mini",
+        { replyTo: 12, botId: "999" },
+      );
+      run.status = "running";
+      const source = present(
+        w.messages.find((s) => s.runId === run.id && s.role === "user"),
+      );
+      managePreference(w, run, {
+        action: "forget",
+        sourceId: source.id,
+        preferenceId,
+        expectedRevision: 1,
+      });
+      expect(
+        runAllowed(w, present(w.runs.find((r) => r.id === statusRunId))),
+      ).toBe(false);
+      sweep(w);
+      expect(w.runs.find((r) => r.id === statusRunId)?.result).toBeUndefined();
+      await pruneDevelopment(sql, w);
+    });
+    const old = (await store.read(f.w.id)).deliveries.find(
+      (d) => d.id === delivery,
+    );
+    expect(old?.state).toBe("cancelled");
+    expect(old?.text).toBe("");
+    expect(
+      (await taskExchanges(store.pool, f.task)).find(
+        (m) => m.id === exchange.id,
+      ),
+    ).toMatchObject({ state: "cancelled", question: "[reference removed]" });
+    expect(
+      (
+        await store.pool.query(
+          "SELECT 1 FROM coding_task_events WHERE workspace_id=$1 AND id='answer:memory-derived'",
+          [f.w.id],
+        )
+      ).rowCount,
+    ).toBe(0);
+    await f.tick();
+    expect(f.erases).toContain(attempt);
+    expect((await f.read()).state).toBe("queued");
+    expect(
+      (
+        await store.pool.query(
+          "SELECT 1 FROM coding_task_events WHERE workspace_id=$1 AND id='transcript:item:memory-derived'",
+          [f.w.id],
+        )
+      ).rowCount,
+    ).toBe(0);
+    await f.tick();
+    expect(f.starts).toHaveLength(2);
+    expect(f.starts[1]?.development.memory ?? "").not.toContain(
+      "diagnostic reports",
+    );
+    expect((await f.read()).memory?.preferences ?? []).toEqual([]);
+    expect((await f.read()).id).toBe(f.task.id);
+    expect((await taskInputs(store.pool, f.task))[0]?.text).toBe(original);
+  });
+  test("an investigation objective remains read-only even if intake proposes implementation", async () => {
+    const f = await fixture(
+      "Use Codex to explain this repository",
+      "101",
+      undefined,
+      (w) => {
+        w.repositoryTasks = {
+          revision: 1,
+          repositories: [
+            { repositoryId: 7001, investigation: true, release: false },
+          ],
+        };
+      },
+      { kind: "investigation" },
+    );
+    await f.tick();
+    const classified = await f.tick({
+      state: "succeeded",
+      result: result({ evidence: "Use Codex to explain this repository" }),
+      tokens: 1,
+    });
+    expect(classified.canImplement).toBe(false);
+    await f.tick();
+    expect(f.starts[1]?.development.mode).toBe("analysis");
+    expect(f.publications).toEqual([]);
+  });
   async function fixture(
     text = original,
     chatId = "101",
     attachments?: Source["attachments"],
     configure?: (w: Workspace) => void,
+    objective?: RepositoryObjective,
   ) {
     const w = workspace();
     w.operatorId = operator;
@@ -170,7 +854,17 @@ const url = process.env.TEST_DATABASE_URL;
       [w.id, operator, JSON.stringify(w)],
     );
     const task = await store.change(w.id, (current, sql) =>
-      startDevelopment(sql, current, run.id, "101", 7001, [source.id], "999"),
+      startDevelopment(
+        sql,
+        current,
+        run.id,
+        "101",
+        7001,
+        [source.id],
+        "999",
+        "",
+        objective,
+      ),
     );
     const starts: LocalStart[] = [],
       publications: string[] = [],
@@ -178,6 +872,9 @@ const url = process.env.TEST_DATABASE_URL;
       erases: string[] = [];
     let status: LocalStatus = { state: "running" };
     const runner: LocalRunner = {
+      async capabilities() {
+        return { repositoryTasks: 1 };
+      },
       async start(input) {
         starts.push(input);
       },
@@ -205,10 +902,18 @@ const url = process.env.TEST_DATABASE_URL;
     const downloads: string[] = [];
     let downloadError: string | undefined;
     let confirmUnknown = false;
+    let releaseTransport:
+      | ((
+          input: RequestInfo | URL,
+          init?: RequestInit,
+        ) => Promise<Response | undefined>)
+      | undefined;
     let publicationDraft = false;
     let remoteHead = "b".repeat(40),
       closed = false;
     const app = new GitHubApp(githubFixtureConfig, (async (input, init) => {
+      const releaseResponse = await releaseTransport?.(input, init);
+      if (releaseResponse) return releaseResponse;
       if (String(input).endsWith("/access_tokens")) {
         tokenRequests.push(JSON.parse(String(init?.body)));
         await onToken?.();
@@ -275,6 +980,7 @@ const url = process.env.TEST_DATABASE_URL;
       await store.change(w.id, async (_w, sql) => {
         const t = await read();
         t.nextPollAt = undefined;
+        if (t.release) t.release.nextPollAt = undefined;
         t.leaseUntil = undefined;
         await taskSave(sql, t);
       });
@@ -312,6 +1018,9 @@ const url = process.env.TEST_DATABASE_URL;
       cancels,
       erases,
       runner,
+      releaseTransport: (transport: NonNullable<typeof releaseTransport>) => {
+        releaseTransport = transport;
+      },
       read,
       tick,
       append,

@@ -65,12 +65,8 @@ export function containerArgs(
     "--volume",
     `${volume}:/task${mode === "export" ? ":ro" : ""}`,
     ...(authVolume ? ["--volume", `${authVolume}:/auth`] : []),
-    ...(mode !== "export"
-      ? [
-          "--volume",
-          `${name.replace(/-(prepare|setup|implement|check|publish)$/, "")}-input:/input:ro`,
-        ]
-      : []),
+    "--volume",
+    `${name.replace(/-(prepare|setup|implement|check|export|publish)$/, "")}-input:/input:ro`,
     ...Object.keys(env).flatMap((key) => ["--env", key]),
     settings.CODEX_RUNNER_IMAGE,
     mode,

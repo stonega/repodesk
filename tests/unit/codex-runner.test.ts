@@ -45,6 +45,7 @@ test("task media survives runner restart and is scrubbed with task erasure", asy
     mode: "intake",
     context: "",
     media,
+    memory: "Private preference context",
     inputs: [
       {
         revision: 1,
@@ -58,6 +59,30 @@ test("task media survives runner restart and is scrubbed with task erasure", asy
   };
   await f.supervisor.start(f.input);
   expect(JSON.parse(f.jobInputs[0] ?? "{}").development.media).toEqual(media);
+  const release = {
+    proposal: {
+      tag: "v1.2.0",
+      name: "v1.2.0",
+      body: "Private prepared release content",
+      draft: false,
+      prerelease: false,
+      procedures: ["RELEASE.md"],
+      assets: [],
+      ciRequired: false,
+      unsupported: [],
+    },
+    targetSha: "c".repeat(40),
+    procedures: [{ path: "RELEASE.md", digest: "d".repeat(64) }],
+    assets: [],
+    inputRevision: 1,
+  };
+  const savedPath = join(
+    f.settings.CODEX_RUNNER_STATE,
+    `${taskKey(f.input.workspaceId, f.input.taskId)}.json`,
+  );
+  const saved = JSON.parse(await readFile(savedPath, "utf8"));
+  saved.release = release;
+  await writeFile(savedPath, JSON.stringify(saved));
   const restarted = new RunnerSupervisor(f.settings, f.engine);
   await restarted.initialize();
   await restarted.start(f.input);
@@ -72,6 +97,8 @@ test("task media survives runner restart and is scrubbed with task erasure", asy
   );
   expect(state).not.toContain(media.images[0]?.data ?? "");
   expect(JSON.parse(state).input.development).toBeUndefined();
+  expect(state).not.toContain(release.proposal.body);
+  expect(state).not.toContain("Private preference context");
   const g = await fixture();
 
   g.input.development = f.input.development;
@@ -82,6 +109,7 @@ test("task media survives runner restart and is scrubbed with task erasure", asy
   );
   const expired = JSON.parse(await readFile(path, "utf8"));
   expired.state = "succeeded";
+  expired.release = release;
   expired.finishedAt = Date.now() - 48 * 3600000;
   await writeFile(path, JSON.stringify(expired));
   const cleaner = new RunnerSupervisor(g.settings, g.engine);
@@ -90,6 +118,8 @@ test("task media survives runner restart and is scrubbed with task erasure", asy
   const tombstone = await readFile(path, "utf8");
   expect(tombstone).not.toContain(media.images[0]?.data ?? "");
   expect(JSON.parse(tombstone).input.development.media).toBeUndefined();
+  expect(tombstone).not.toContain(release.proposal.body);
+  expect(tombstone).not.toContain("Private preference context");
   await new RunnerSupervisor(g.settings, g.engine).initialize();
 });
 async function fixture(
@@ -2406,6 +2436,18 @@ test("Docker task arguments preserve isolation without Podman-only flags", async
   expect(args).not.toContain("--http-proxy=false");
   expect(args.join(" ")).not.toContain("docker.sock");
   expect(args).not.toContain("temporary-task-token");
+  const key = taskKey(f.input.workspaceId, f.input.taskId);
+  const exporting = containerArgs(
+    settings,
+    `${key}-export`,
+    `${key}-work`,
+    "export",
+  );
+  expect(exporting).toContain(`${key}-input:/input:ro`);
+  expect(exporting).toContain(`${key}-work:/task:ro`);
+  expect(exporting).toContain("--network=none");
+  expect(exporting).not.toContain("CODEX_TASK_TOKEN");
+  expect(exporting).not.toContain("task-auth:/auth");
 });
 test("runner readiness requires the task image and network, while liveness remains independent", async () => {
   const f = await fixture();

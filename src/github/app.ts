@@ -2,6 +2,7 @@ import { createHash, sign } from "node:crypto";
 import { z } from "zod";
 import type { Config } from "../config.ts";
 import { Fault, requireThat } from "../domain.ts";
+import { ReleaseGitHub } from "../releases/github.ts";
 
 export interface GitHubAppConfig {
   id: number;
@@ -66,6 +67,9 @@ export interface GitHubInstallation {
   account: string;
 }
 export class GitHubApp {
+  releaseClient(repository: string, token: string) {
+    return new ReleaseGitHub(repository, token, this.transport);
+  }
   constructor(
     readonly config: GitHubAppConfig,
     private transport: typeof fetch = fetch,
@@ -391,6 +395,8 @@ export class GitHubApp {
       | "pulls_read"
       | "pulls_write"
       | "merge"
+      | "release"
+      | "release_read"
       | "review" = "contents",
   ) {
     requireThat(
@@ -404,23 +410,27 @@ export class GitHubApp {
       {
         repository_ids: repositoryIds,
         permissions:
-          permission === "review"
-            ? { pull_requests: "write", issues: "write" }
-            : permission === "pulls_write"
-              ? { pull_requests: "write" }
-              : permission === "merge"
-                ? { contents: "write", pull_requests: "read" }
-                : permission === "issues_read"
-                  ? { issues: "read" }
-                  : permission === "pulls_read"
-                    ? { pull_requests: "read" }
-                    : permission === "issues"
-                      ? { issues: "write" }
-                      : permission === "publish"
-                        ? { contents: "write", pull_requests: "write" }
-                        : permission === "coding_read"
-                          ? { contents: "read", pull_requests: "read" }
-                          : { contents: "read" },
+          permission === "release"
+            ? { contents: "write" }
+            : permission === "release_read"
+              ? { contents: "read", checks: "read", statuses: "read" }
+              : permission === "review"
+                ? { pull_requests: "write", issues: "write" }
+                : permission === "pulls_write"
+                  ? { pull_requests: "write" }
+                  : permission === "merge"
+                    ? { contents: "write", pull_requests: "read" }
+                    : permission === "issues_read"
+                      ? { issues: "read" }
+                      : permission === "pulls_read"
+                        ? { pull_requests: "read" }
+                        : permission === "issues"
+                          ? { issues: "write" }
+                          : permission === "publish"
+                            ? { contents: "write", pull_requests: "write" }
+                            : permission === "coding_read"
+                              ? { contents: "read", pull_requests: "read" }
+                              : { contents: "read" },
       },
     );
     return z

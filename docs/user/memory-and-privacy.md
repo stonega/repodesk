@@ -1,5 +1,8 @@
 # 记忆与隐私
 
+For revisioned reference preferences, optional Pi/Codex recall, corrections and
+candidate learning, see [source-grounded preferences](preference-memory.md).
+
 RepoDesk 使用对话上下文、历史记忆和经过确认的指令帮助持续协作。它们的用途与删除方式不同。
 
 | 类型 | 用途 | 管理方式 |

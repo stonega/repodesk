@@ -9,6 +9,11 @@ import {
   type Workspace,
   workflowSchema,
 } from "../domain.ts";
+import {
+  authorizePreferenceMutation,
+  managePreference,
+  preferenceParameters,
+} from "../memory/preferences.ts";
 import { memoryScope, scopeKey } from "../memory/state.ts";
 import {
   authorizeMemoryMutation,
@@ -127,7 +132,9 @@ export function applicationTools(
             (!!r.workflowId &&
               !r.skillPins.length &&
               ["read_chat_context", "query_model_cost"].includes(name)) ||
-            (["query_memories", "manage_memory"].includes(name) &&
+            (["query_memories", "manage_memory", "manage_preference"].includes(
+              name,
+            ) &&
               !!r.threadId &&
               !r.workflowId) ||
             ([
@@ -338,6 +345,16 @@ export function applicationTools(
       memoryMutationParameters,
       manageMemory,
       authorizeMemoryMutation,
+    ),
+    bind(
+      "manage_preference",
+      "Manage source-grounded reference preferences, never instructions or permissions. Direct commands only: Remember preference: text; Correct preference pref:ID: text; Add preference exception pref:ID: text; Accept preference pref:ID; Forget preference pref:ID. Supply the current sourceId and exact expectedRevision for changes. Repository/domain restrictions must occur in the human text. Owner/admin can use Configure preference learning: derive=true recall=pi_and_coding (or pi/off). No inferred preference becomes a default without explicit acceptance.",
+      preferenceParameters,
+      managePreference,
+      (w, r, a) => {
+        authorizePreferenceMutation(w, r, a);
+        return a;
+      },
     ),
     bind(
       "query_work_handoff",

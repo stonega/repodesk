@@ -7,6 +7,7 @@ import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
 import { claimMemoryJob } from "../../src/memory/planner.ts";
 import { MemoryService } from "../../src/memory/service.ts";
+import { preferenceSettings } from "../../src/memory/settings.ts";
 import { memoryState } from "../../src/memory/state.ts";
 import { queryMemories } from "../../src/memory/tools.ts";
 import { sweep } from "../../src/privacy/service.ts";
@@ -139,6 +140,47 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       );
       return { w, r };
     }
+    test("default preference extraction uses the existing accounted call and persists only a scoped candidate", async () => {
+      const { w } = await seed();
+      let calls = 0;
+      const runner: AgentRunner = {
+        async run(input) {
+          calls++;
+          if (input.purpose === "memory_extract") {
+            const sourceId = JSON.parse(input.prompt).messages.find(
+              (m: { role: string }) => m.role === "user",
+            ).id;
+            return finish(
+              input,
+              JSON.stringify({
+                ...JSON.parse(extraction),
+                preferences: [
+                  {
+                    statement: "Taipei was selected for this project's backups",
+                    sourceIds: [sourceId],
+                  },
+                ],
+              }),
+            );
+          }
+          return finish(input, summary(input));
+        },
+      };
+      const service = new MemoryService(store, setup, runner, 0);
+      await service.tick(w.id);
+      await service.tick(w.id);
+      const saved = await new Store(store.pool).read(w.id);
+      expect(calls).toBe(2);
+      expect(saved.memory?.preferences).toHaveLength(1);
+      expect(saved.memory?.preferences?.[0]?.status).toBe("candidate");
+      expect(saved.memory?.preferences?.[0]?.applicability.taskId).toBeTruthy();
+      expect(saved.instructions).toEqual([]);
+      expect(saved.memory?.preferenceSettings).toBeUndefined();
+      expect(preferenceSettings(saved)).toEqual({
+        derive: true,
+        recall: "pi_and_coding",
+      });
+    });
     test.each([false, true])(
       "two-stage %s recall persists, uses separate checkpoints and accounts for both calls",
       async (group) => {

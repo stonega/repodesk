@@ -4,6 +4,9 @@
 
 普通聊天可用并不表示 Codex 已准备好。管理员需要配置执行环境、模型认证和 GitHub 连接，成员需要验证 GitHub 写权限。
 
+For investigations and version releases using internal repository guides,
+see [repository investigations and releases](repository-tasks.md).
+
 ## 管理员：准备执行环境
 
 下面适用于 [快速开始](get-started.md) 的源码 Compose 部署，使用 Docker runner。如果已经使用 RepoDesk 的专用 VPS 更新器部署了 runner，先检查现有服务，不要再启动一套。

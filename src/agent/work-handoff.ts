@@ -11,6 +11,7 @@ import type {
   DevelopmentTask,
 } from "../coding/development.ts";
 import { developmentInputPresent } from "../coding/input-sources.ts";
+import { trackTaskMemory } from "../coding/memory.ts";
 import { checkDevelopment } from "../coding/tasks.ts";
 import type { Sql } from "../db/pool.ts";
 import {
@@ -137,6 +138,8 @@ function developmentEntries(
       task.contentRemoved ||
       Date.parse(task.createdAt) <= cutoff ||
       !readable(w, r, task.actor, task.chatId, task.topicId) ||
+      ((task.memory || task.referenceMemory) &&
+        task.botId !== w.threads?.find((t) => t.id === r.threadId)?.botId) ||
       !allowed(() => checkDevelopment(w, task, r.actor, false, true))
     )
       continue;
@@ -334,6 +337,9 @@ export function workHandoff(
     matches = matches.slice(index + 1);
   }
   const selected = matches.slice(0, q.limit);
+  for (const task of tasks)
+    if (selected.some((e) => e.id === `development:${task.id}`))
+      trackTaskMemory(w, r, task);
   for (const entry of selected) {
     r.browserRead ??= entry.browserRead;
     const source = entry.runId
@@ -352,6 +358,7 @@ export function workHandoff(
         previous?.references.sourceIds.includes(s.id),
     );
     r.handoffRead = {
+      ...previous,
       references: memoryReferences(all),
       runIds: [
         ...new Set([

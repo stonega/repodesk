@@ -324,6 +324,14 @@ verification prevents publication. Old command overrides are discarded; migratio
 
 ## Lifecycle and recovery
 
+Repository objective protocol version 1 is advertised through authenticated
+`GET /tasks/capabilities`; application and supervisor must be upgraded together
+before enabling new investigation/release objectives. A trusted credential-free
+export phase reads checked release files and returns their digests and bounded
+asset bytes. A prepared release or CI/merge wait survives process exit and
+supervisor restart; it does not keep a Codex process alive. See
+[repository tasks](repository-tasks.md) for manifests, waits and recovery.
+
 Each approved task gets a tenant-scoped name, private work volume, checkout and
 Codex thread. The supervisor permits four active tasks by default, shared across
 workspaces and repositories. Set `CODEX_RUNNER_CONCURRENCY` (1–32) in the deployment

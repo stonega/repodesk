@@ -14,7 +14,7 @@ import {
 } from "../github/metadata-policy.ts";
 import { repositoryAccess } from "../github/user-access.ts";
 import { googleReadAllowed } from "../google/policy.ts";
-import { memoryContextValid } from "../memory/state.ts";
+import { memoryContextValid, referenceMemoryValid } from "../memory/state.ts";
 import { nowledgeReadAllowed } from "../nowledge-mem/policy.ts";
 import { obsidianReadAllowed } from "../obsidian/policy.ts";
 import { searchConsoleReadAllowed } from "../search-console/policy.ts";
@@ -104,7 +104,13 @@ function allowedRun(
     searchConsoleReadAllowed(w, run) &&
     nowledgeReadAllowed(w, run) &&
     (!run.handoffRead ||
-      (validMemory(run.handoffRead.references, w.messages) &&
+      (referenceMemoryValid(
+        w,
+        run.handoffRead.memory,
+        run.actor,
+        w.threads?.find((t) => t.id === run.threadId)?.botId,
+      ) &&
+        validMemory(run.handoffRead.references, w.messages) &&
         run.handoffRead.chatIds.every(
           (id) =>
             id === run.actor || w.chats.some((c) => c.id === id && c.active),

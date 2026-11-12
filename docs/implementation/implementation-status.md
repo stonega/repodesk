@@ -1,5 +1,57 @@
 # Implementation evidence
 
+## Repository tasks, release effects and preference memory (2026-11-12)
+
+The existing continuous task engine now supports investigation and release
+objectives. Pi preserves original requests; Codex reads repository instructions
+and prepares/checks work; application services retain authorization, waits and
+external effects. Tasks survive process exit and reconstruction. A release may
+produce a verified empty patch, wait for its exact PR/commit/CI, and continue
+without keeping Codex running. New objectives require supervisor protocol v1.
+
+Trusted credential-free export reads actual guide/asset files, with path and size
+bounds and SHA-256 digests. Migration 023 adds a tenant-scoped release action
+ledger. Tags, GitHub Releases and assets use exact target/payload checks,
+reservations and readback; uncertain writes cannot be blindly replayed. Current
+version/channel decisions fence earlier requests and draft-PR instructions.
+Preparation-only requests and unsupported registry/deployment procedures never
+gain release authority. Confirmed partial effects survive failure and Stop.
+
+Source-linked decision cases and revisioned preferences retain authors, scope,
+applicability and exceptions. Explicit mutation uses current human text;
+tool-free extraction can only infer candidates. Optional Pi/Codex packs recheck
+source dependencies and revisions. Correction/forgetting invalidates delayed
+output, transcripts and runner checkpoints before fresh execution. Retention
+removes memory/release content while retaining content-free replay tombstones.
+Investigation/release objectives, preference derivation and Pi/Codex preference
+recall default to enabled, per the owner's 2026-11-12 instruction. Missing settings
+on existing workspaces use these defaults; explicit disables remain effective. No dependency
+or separately deployed service was added.
+
+Validation: **1,603 tests across 166 files pass** with Bun 1.3.14 and isolated
+PostgreSQL. Biome, strict TypeScript and the production build pass; Biome retains
+nine existing warnings in the unrelated incident diagnostic script. Targeted
+regressions additionally exercise enabled defaults for missing/legacy settings,
+preserved explicit disables, transitive Pi/task memory invalidation, speaker/bot
+boundaries and JSONB-stable configuration replay. Default-enabled production
+startup remains covered by all 16 cases with zero external requests. Twelve existing
+Codex runtime browser scenarios pass at desktop/mobile widths.
+
+The application image passes the 16-case production factory contract with zero
+external startup calls. Docker job/supervisor smoke passes the real pinned CLI
+sandbox and OCR probes plus fake-service release export, empty-patch verification,
+restart, erasure and existing coding/auth/publication journeys. App/worker HTTP
+readiness, repeated migrations, backup/restore, Compose configuration and the
+regenerated Code Truth catalog/service smoke also pass.
+
+See [implementation and operations](repository-tasks.md),
+[release requests](../user/repository-tasks.md),
+[preference controls](../user/preference-memory.md) and
+[deterministic examples](../../examples/repository-tasks.md).
+Live model interpretation, Telegram/GitHub pilot acceptance and production
+rollout remain P5 gates. No deployment, real release, account connection or live
+model/Telegram request was performed in this implementation.
+
 ## Outstanding branch consolidation (2026-11-12)
 
 The outstanding local and remote branch histories, the three local-main commits

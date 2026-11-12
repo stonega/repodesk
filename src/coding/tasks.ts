@@ -7,6 +7,8 @@ import {
   type Source,
   type Workspace,
 } from "../domain.ts";
+import { recordDecisionCase } from "../memory/preferences.ts";
+import { mergeMemoryReferences } from "../memory/state.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import { clearProgress, deliverTaskProgress } from "../telegram/feedback.ts";
 import { pullRequestButtons, taskButtons } from "../telegram/task-buttons.ts";
@@ -23,6 +25,15 @@ import {
   developmentPolicy,
   developmentStopped,
 } from "./development.ts";
+import { taskMemoryValid } from "./memory.ts";
+import {
+  objectiveAllowed,
+  type RepositoryObjective,
+  releaseInstruction,
+  releasePreparation,
+  repositoryObjective,
+  versionMentioned,
+} from "./objective.ts";
 import { checkCodingPayload, codingDestination } from "./policy.ts";
 import { checkReferenceSources } from "./reference-sources.ts";
 import { requireRepositoryTarget } from "./repository-target.ts";
@@ -54,6 +65,8 @@ export function checkDevelopment(
     403,
   );
   checkCodingPayload(w, task.actor, task.payload);
+  objectiveAllowed(w, task.payload.repositoryId, task.objective);
+  requireThat(taskMemoryValid(w, task), "coding_memory_revoked", 409);
   if (actor !== task.actor) checkCodingPayload(w, actor, task.payload);
   checkReferenceSources(
     w,
@@ -155,6 +168,11 @@ export function notifyDevelopment(
   const notification = w.deliveries.find((item) => item.id === deliveryId);
   if (notification && task.browserRead)
     notification.browserRead = task.browserRead;
+  const memory = mergeMemoryReferences(w, task.memory, task.referenceMemory);
+  if (notification && memory) {
+    const { text: _text, ...refs } = memory;
+    notification.repositoryMemory = { taskId: task.id, refs };
+  }
   return deliveryId;
 }
 
@@ -167,6 +185,7 @@ export async function startDevelopment(
   sourceIds: string[],
   botId: string,
   targetRepository = "",
+  objective?: RepositoryObjective,
 ) {
   const run = w.runs.find((r) => r.id === runId);
   requireThat(run, "not_found", 404);
@@ -180,6 +199,31 @@ export async function startDevelopment(
       (s.runId === run.id || s.id.endsWith(`:${run.replyTo}`)),
   );
   requireThat(source, "coding_current_request_required", 409);
+  if (objective) {
+    objective = repositoryObjective.parse(objective);
+    objectiveAllowed(w, repositoryId, objective);
+    requireThat(
+      objective.kind !== "release" ||
+        releaseInstruction(source.text) ||
+        releasePreparation(source.text),
+      "coding_release_intent_required",
+      403,
+    );
+    requireThat(
+      objective.kind !== "release" ||
+        !objective.version ||
+        versionMentioned(source.text, objective.version),
+      "coding_release_version_required",
+      403,
+    );
+    requireThat(
+      objective.kind !== "release" ||
+        !objective.procedure ||
+        source.text.includes(objective.procedure),
+      "coding_release_procedure_required",
+      403,
+    );
+  }
   requireRepositoryTarget(
     w,
     repositoryId,
@@ -225,6 +269,7 @@ export async function startDevelopment(
   });
   const at = new Date().toISOString();
   const task: DevelopmentTask = {
+    ...(objective ? { objective } : {}),
     ...(run.browserRead ? { browserRead: run.browserRead } : {}),
     id: randomUUID(),
     workspaceId: w.id,
@@ -293,6 +338,7 @@ export async function startDevelopment(
   });
   run.codingTaskId = task.id;
   audit(w, actor, "coding.development_started", task.id);
+  recordDecisionCase(w, source, task.id);
   notifyDevelopment(
     w,
     task,
@@ -565,6 +611,11 @@ export async function appendDevelopment(
       input,
       question: task.question,
     });
+  recordDecisionCase(w, source, task.id, {
+    revision: input.revision,
+    kind: input.kind,
+    questionId: answering ? task.question?.id : undefined,
+  });
   if (["review", "waiting"].includes(task.state)) {
     task.state = "queued";
     task.phase = answering && task.canImplement ? "work" : "intake";
@@ -573,6 +624,65 @@ export async function appendDevelopment(
   await taskSave(sql, task);
   audit(w, actor, "coding.input_recorded", task.id, task.revision);
   return task;
+}
+
+export async function changeObjective(
+  sql: Sql,
+  w: Workspace,
+  task: DevelopmentTask,
+  source: Source,
+  value: unknown,
+) {
+  const objective = repositoryObjective.parse(value);
+  objectiveAllowed(w, task.payload.repositoryId, objective);
+  requireThat(
+    objective.kind !== "release" ||
+      releaseInstruction(source.text) ||
+      releasePreparation(source.text),
+    "coding_release_intent_required",
+    403,
+  );
+  requireThat(
+    objective.kind !== "release" ||
+      !objective.version ||
+      versionMentioned(source.text, objective.version),
+    "coding_release_version_required",
+    403,
+  );
+  requireThat(
+    objective.kind !== "release" ||
+      !objective.procedure ||
+      source.text.includes(objective.procedure),
+    "coding_release_procedure_required",
+    403,
+  );
+  requireThat(
+    !task.release || !["unknown", "publishing"].includes(task.release.state),
+    "coding_release_action_pending",
+    409,
+  );
+  const input = (await taskInputs(sql, task)).find(
+    (i) => i.sourceId === source.id && i.actor === source.author,
+  );
+  requireThat(input, "coding_source_required", 403);
+  if (task.pendingObjective?.sourceId === source.id)
+    requireThat(
+      fingerprint(task.pendingObjective.objective) === fingerprint(objective),
+      "coding_objective_conflict",
+      409,
+    );
+  task.pendingObjective = {
+    objective,
+    sourceId: source.id,
+    revision: input.revision,
+  };
+  await taskEvent(sql, task, `objective:${input.revision}`, {
+    objective,
+    sourceId: source.id,
+    actor: source.author,
+    priorPr: task.pr,
+  });
+  await taskSave(sql, task);
 }
 
 export async function cancelDevelopment(
@@ -632,9 +742,53 @@ export async function cancelRequest(
   return cancelRun(w, actor, id);
 }
 
+/** Remove derived local copies while preserving authenticated inputs and effect receipts. */
+export async function scrubTaskMemory(
+  sql: Sql,
+  w: Workspace,
+  task: DevelopmentTask,
+) {
+  task.result = undefined;
+  task.question = undefined;
+  task.threadId = undefined;
+  task.previousAttemptId = undefined;
+  for (const d of w.deliveries)
+    if (d.repositoryMemory?.taskId === task.id) {
+      d.text = "";
+      d.buttons = undefined;
+      if (["pending", "sending"].includes(d.state)) d.state = "cancelled";
+      delete d.repositoryMemory;
+    }
+  await sql.query(
+    "UPDATE coding_task_attempts SET data='{}' WHERE workspace_id=$1 AND task_id=$2",
+    [w.id, task.id],
+  );
+  await sql.query(
+    "DELETE FROM coding_task_events WHERE workspace_id=$1 AND task_id=$2 AND (id='context' OR id LIKE 'answer:%' OR id LIKE 'transcript:%' OR id LIKE 'conversation:progress:%' OR id LIKE 'question:%' OR id LIKE 'blocker:%' OR id LIKE 'release-prepared:%')",
+    [w.id, task.id],
+  );
+  await sql.query(
+    "UPDATE coding_task_events SET data=(data - 'answer' - 'answeredAt' - 'answerRecordedAt' - 'start' - 'lease' - 'leaseUntil') || '{\"question\":\"[reference removed]\",\"state\":\"cancelled\",\"cleanup\":false}'::jsonb WHERE workspace_id=$1 AND task_id=$2 AND id LIKE 'conversation:message:%'",
+    [w.id, task.id],
+  );
+  if (task.release) {
+    task.release.prepared.proposal.body = "";
+    task.release.prepared.proposal.name = task.release.prepared.proposal.tag;
+    task.release.prepared.assets = [];
+    task.release.prepared.proposal.assets = [];
+  }
+}
+
 export async function pruneDevelopment(sql: Sql, w: Workspace) {
   const cutoff = Date.now() - w.settings.retentionDays * 86400000;
   for (const task of await taskList(sql, w.id)) {
+    if ((task.memory || task.referenceMemory) && !taskMemoryValid(w, task)) {
+      await scrubTaskMemory(sql, w, task);
+      task.memory = undefined;
+      task.referenceMemory = undefined;
+      task.memoryInvalidated = true;
+      await taskSave(sql, task);
+    }
     const inputs = await taskInputs(sql, task);
     const references =
       (
@@ -680,6 +834,12 @@ export async function pruneDevelopment(sql: Sql, w: Workspace) {
     task.payload.title = "[removed]";
     task.payload.body = "[removed]";
     task.result = undefined;
+    task.release = undefined;
+    task.memory = undefined;
+    task.referenceMemory = undefined;
+    task.pendingObjective = undefined;
+    task.objective = undefined;
+    task.releasePrerequisite = undefined;
     task.referenceSources = undefined;
     task.pullBinding = undefined;
     task.question = undefined;
@@ -689,6 +849,10 @@ export async function pruneDevelopment(sql: Sql, w: Workspace) {
     task.leaseUntil = undefined;
     task.nextPollAt = undefined;
     await taskSave(sql, task);
+    await sql.query(
+      "UPDATE repository_release_actions SET data='{}' WHERE workspace_id=$1 AND task_id=$2",
+      [w.id, task.id],
+    );
     for (const table of [
       "coding_task_inputs",
       "coding_task_grants",

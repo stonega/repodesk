@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { type Approval, requireThat, type Workspace } from "../domain.ts";
-import { memoryContextValid, pruneMemories } from "../memory/state.ts";
+import {
+  memoryContextValid,
+  pruneMemories,
+  referenceMemoryValid,
+} from "../memory/state.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import { pruneSkillSources } from "../skills/proposals.ts";
 import { discardFollowup } from "../telegram/followup.ts";
@@ -43,6 +47,7 @@ export function sweep(w: Workspace, now = new Date()) {
     delete w.github;
     delete w.repositorySelections;
     delete w.coding;
+    delete w.repositoryTasks;
     delete w.chatModel;
     delete w.memory;
     delete w.obsidian;
@@ -125,6 +130,12 @@ export function sweep(w: Workspace, now = new Date()) {
         r.sources.some((s) => !retained.has(s.id)) ||
         (r.contextSummary && !validMemory(r.contextSummary, w.messages)) ||
         !memoryContextValid(w, r, true) ||
+        !referenceMemoryValid(
+          w,
+          r.handoffRead?.memory,
+          r.actor,
+          w.threads?.find((t) => t.id === r.threadId)?.botId,
+        ) ||
         (r.handoffRead && !validMemory(r.handoffRead.references, w.messages)) ||
         (r.followup?.references &&
           !validMemory(r.followup.references, w.messages))

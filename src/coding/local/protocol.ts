@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { codingBrowserBridge } from "../../browser/capability.ts";
 import { runtimeProviderSchema } from "../../models/config.ts";
+import { preparedRelease } from "../../releases/types.ts";
 import { codingPayload } from "../config.ts";
 import {
   type TaskMessage,
@@ -37,6 +38,7 @@ export const localRecovery = z
   .strict();
 export type LocalRecovery = z.infer<typeof localRecovery>;
 export const localStatus = z.object({
+  release: preparedRelease.optional(),
   transcript: transcriptPage.optional(),
   conversation: taskConversation.optional(),
   state: z.enum([
@@ -99,6 +101,7 @@ export interface LocalDeviceAuth {
   deviceLogout(workspaceId: string): Promise<DeviceAuthStatus>;
 }
 export interface LocalRunner {
+  capabilities?(): Promise<{ repositoryTasks: number }>;
   message?(
     workspaceId: string,
     taskId: string,

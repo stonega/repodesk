@@ -14,11 +14,17 @@ import {
   taskExchanges,
 } from "./conversation-store.ts";
 import { developmentStatus } from "./feedback.ts";
+import { taskMemoryValid, trackTaskMemory } from "./memory.ts";
+import {
+  configureRepositoryTasks,
+  type RepositoryObjective,
+} from "./objective.ts";
 import { requireRepositoryTarget } from "./repository-target.ts";
 import { taskGet } from "./task-store.ts";
 import {
   appendDevelopment,
   cancelDevelopment,
+  changeObjective,
   checkDevelopment,
   correctDevelopmentRepository,
   startDevelopment,
@@ -40,6 +46,7 @@ export function codingExtension(
     version: "1",
     path: "<inline:codex-coding>",
     tools: [
+      "configure_repository_tasks",
       "start_development_task",
       "send_development_input",
       "ask_development_task",
@@ -107,12 +114,62 @@ export function codingExtension(
           };
         });
       };
+      pi.registerTool({
+        name: "configure_repository_tasks",
+        label: "Configure repository objectives",
+        description:
+          "Owner/admin only. Investigation and release objectives are enabled by default for selected repositories. Override them with the current exact human command: Configure repository tasks: owner/repo investigation=true release=true. Set either to false to disable it; configuration does not authorize a release. No upstream startup calls.",
+        parameters: Type.Object(
+          {
+            sourceId: Type.String(),
+            repositoryId: Type.Integer(),
+            investigation: Type.Boolean(),
+            release: Type.Boolean(),
+          },
+          { additionalProperties: false },
+        ),
+        execute: async (_id, args) =>
+          operate((w) => {
+            const run = w.runs.find((r) => r.id === input.runId);
+            requireThat(run, "run_revoked", 403);
+            return configureRepositoryTasks(
+              w,
+              run,
+              args as {
+                sourceId: string;
+                repositoryId: number;
+                investigation: boolean;
+                release: boolean;
+              },
+            );
+          }),
+      });
       if (targets.length)
         pi.registerTool({
           name: "start_development_task",
           label: "Start continuous Codex task",
-          description: `Start a coding task for a clear implementation/fix request or an explicit request to use Codex. Website browsing, sign-in and browser automation belong to the current Pi conversation using Browser tools; they do not by themselves require a separate Codex task. Handle ordinary conversation, explanations, status and PR review with the assistant's available read tools. An existing task in this topic does not authorize another Codex turn. Use query_work_handoff to resolve an existing task before starting new work; send_development_input continues changes to that task/PR and can correct an unchanged task's repository. Relay the authenticated GitHub collaborator's ORIGINAL received message. Codex owns technical decisions and necessary product questions within the coding task. Do not write a technical plan or issue body. Distinguish the repository to MODIFY from repositories supplying documentation, examples or other reference material. The application can prepare commit-pinned references from other workspace-selected repositories named in authenticated task inputs when every contributor has verified read access. Do not claim pinning is unavailable or propose an unpinned fallback without checking the actual task state. Missing source/environment prerequisites are application blockers, not requests for another user confirmation. For 'add docs to product-land using https://github.com/acme/product/blob/main/docs/README.md', resolve product-land to the connected landing repository; the linked product docs are a reference source. Quote the target name in targetRepository and match its repositoryId. Resolve an unambiguous abbreviation against accessible repositories; ask one plain-language target question only if it remains ambiguous. A target validation failure creates no task: correct the selection rather than retrying the same wrong ID. Source IDs must include this run's request. If github_user_connection_required is returned, use manage_telegram to start their GitHub connection in this bot's private chat when they request it. They follow the authorization link, return to confirm the account, then resend their coding request. For a group request, ask them to connect GitHub in private using ordinary language. Accessible repositories: ${JSON.stringify(accessibleTargets)}.`,
+          description: `Start a repository task for implementation, an explicit Codex investigation, or an engineering release/prepare-release request. Use objective.kind=release for repository release procedures and objective.kind=investigation for read-only technical work; these objectives are available by default for selected repositories unless explicitly disabled. Codex reads project release instructions itself; Pi does not invent the procedure. Website browsing, sign-in and browser automation belong to the current Pi conversation using Browser tools; they do not by themselves require a separate Codex task. Handle ordinary conversation, explanations, status and PR review with the assistant's available read tools. An existing task in this topic does not authorize another Codex turn. Use query_work_handoff to resolve an existing task before starting new work; send_development_input continues changes to that task/PR and can correct an unchanged task's repository. Relay the authenticated GitHub collaborator's ORIGINAL received message. Codex owns technical decisions and necessary product questions within the coding task. Do not write a technical plan or issue body. Distinguish the repository to MODIFY from repositories supplying documentation, examples or other reference material. The application can prepare commit-pinned references from other workspace-selected repositories named in authenticated task inputs when every contributor has verified read access. Do not claim pinning is unavailable or propose an unpinned fallback without checking the actual task state. Missing source/environment prerequisites are application blockers, not requests for another user confirmation. For 'add docs to product-land using https://github.com/acme/product/blob/main/docs/README.md', resolve product-land to the connected landing repository; the linked product docs are a reference source. Quote the target name in targetRepository and match its repositoryId. Resolve an unambiguous abbreviation against accessible repositories; ask one plain-language target question only if it remains ambiguous. A target validation failure creates no task: correct the selection rather than retrying the same wrong ID. Source IDs must include this run's request. If github_user_connection_required is returned, use manage_telegram to start their GitHub connection in this bot's private chat when they request it. They follow the authorization link, return to confirm the account, then resend their coding request. For a group request, ask them to connect GitHub in private using ordinary language. Accessible repositories: ${JSON.stringify(accessibleTargets)}.`,
           parameters: Type.Object({
+            objective: Type.Optional(
+              Type.Union([
+                Type.Object(
+                  { kind: Type.Literal("development") },
+                  { additionalProperties: false },
+                ),
+                Type.Object(
+                  { kind: Type.Literal("investigation") },
+                  { additionalProperties: false },
+                ),
+                Type.Object(
+                  {
+                    kind: Type.Literal("release"),
+                    version: Type.Optional(Type.String()),
+                    procedure: Type.Optional(Type.String()),
+                  },
+                  { additionalProperties: false },
+                ),
+              ]),
+            ),
             repositoryId: Type.Integer(),
             targetRepository: Type.String({
               maxLength: 300,
@@ -134,6 +191,7 @@ export function codingExtension(
                 args.sourceIds as string[],
                 deployment.bot.id,
                 String(args.targetRepository ?? ""),
+                args.objective as RepositoryObjective | undefined,
               );
               return {
                 taskId: task.id,
@@ -151,9 +209,23 @@ export function codingExtension(
         name: "send_development_input",
         label: "Relay original Codex task input",
         description:
-          "Continue an existing coding task only for a clear request to change its code, an answer to its pending question, or an explicit request to use Codex. Resolve the task with query_work_handoff or development_task_status. Compare its repository with the human's MODIFY target, keeping documentation/reference repositories separate. If the human explicitly corrects a wrongly bound target, pass the corrected repositoryId and quote it in targetRepository: the application atomically replaces only an idle task with confirmed no changes or PR, retains original requirements, and rechecks permissions. Never send a repository correction as an ordinary answer to the wrong checkout. If coding_repository_replacement_unsafe is returned, explain that existing work or uncertain state must be inspected; do not cancel/recreate or bypass this safeguard. A shared topic, request to review a PR, explanation or acknowledgement alone must not resume coding. For 'what does checkout mean?' read the task state and explain its actual blocker in plain language. Preserve the received authenticated message verbatim; Codex handles technical choices within the task.",
+          "Continue an existing repository task for a clear engineering follow-up, an explicit release objective transition, an answer to its pending question, or an explicit request to use Codex. Resolve the task with query_work_handoff or development_task_status. Compare its repository with the human's MODIFY target, keeping documentation/reference repositories separate. If the human explicitly corrects a wrongly bound target, pass the corrected repositoryId and quote it in targetRepository: the application atomically replaces only an idle task with confirmed no changes or PR, retains original requirements, and rechecks permissions. Never send a repository correction as an ordinary answer to the wrong checkout. If coding_repository_replacement_unsafe is returned, explain that existing work or uncertain state must be inspected; do not cancel/recreate or bypass this safeguard. A shared topic, request to review a PR, explanation or acknowledgement alone must not resume coding. For 'what does checkout mean?' read the task state and explain its actual blocker in plain language. Preserve the received authenticated message verbatim; Codex handles technical choices within the task.",
         parameters: Type.Object({
           taskId: Type.String(),
+          objective: Type.Optional(
+            Type.Object(
+              {
+                kind: Type.Union([
+                  Type.Literal("development"),
+                  Type.Literal("investigation"),
+                  Type.Literal("release"),
+                ]),
+                version: Type.Optional(Type.String()),
+                procedure: Type.Optional(Type.String()),
+              },
+              { additionalProperties: false },
+            ),
+          ),
           sourceId: Type.String(),
           repositoryId: Type.Integer({
             description:
@@ -216,6 +288,8 @@ export function codingExtension(
               );
             }
             run.codingTaskId = task.id;
+            if (args.objective)
+              await changeObjective(sql, w, task, source, args.objective);
             return {
               taskId: task.id,
               revision: task.revision,
@@ -332,12 +406,14 @@ export function codingExtension(
                 403,
               );
               run.browserRead ??= task.browserRead;
+              const memoryCurrent = taskMemoryValid(w, task);
+              if (memoryCurrent) trackTaskMemory(w, run, task);
               return {
                 taskId: task.id,
                 state: task.state,
                 repository: task.payload.repository,
                 baseBranch: task.payload.baseBranch,
-                summary: task.result?.summary,
+                summary: memoryCurrent ? task.result?.summary : undefined,
                 hasChanges: task.hasChanges,
                 replacesTaskId: task.replacesTaskId,
                 replacementTaskId: task.replacementTaskId,
@@ -345,7 +421,7 @@ export function codingExtension(
                 consumedRevision: task.consumedRevision,
                 readRevision: task.readRevision ?? 0,
                 verifiedRevision: task.verifiedRevision,
-                question: task.question?.text,
+                question: memoryCurrent ? task.question?.text : undefined,
                 pr: task.pr?.url,
                 error: task.error,
               };

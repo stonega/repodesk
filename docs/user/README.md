@@ -27,6 +27,7 @@ RepoDesk 是一个自托管的 Telegram AI 助手，让你在聊天中查询 Git
 | [定时任务与报告](workflows.md) | 创建定期总结或仓库报告，调整输出和暂停任务 |
 | [技能与可复用流程](skills.md) | 保存、导入、发布和启用团队技能 |
 | [记忆与隐私](memory-and-privacy.md) | 管理历史记忆、持久指令和数据保留 |
+| [Preference memory](preference-memory.md) | Manage scoped preference recall, inspect evidence, correct and forget revisions |
 
 ## GitHub 与集成
 
@@ -35,6 +36,7 @@ RepoDesk 是一个自托管的 Telegram AI 助手，让你在聊天中查询 Git
 | [连接和使用 GitHub](github.md) | 连接仓库和个人账号，查询 PR，创建 Issue，确认 PR 操作 |
 | [代码问答：Code Truth](code-truth.md) | 为选定仓库建立源码索引，获取带代码位置的回答 |
 | [Codex 开发任务](codex.md) | 配置执行环境，发起修改，补充需求并查看 PR |
+| [Repository investigations and releases](repository-tasks.md) | Enable repository objectives, prepare versions and publish supported GitHub artifacts |
 | [自动代码审查：Review Bot](review-bot.md) | 自动审查 PR，在 GitHub 评论中提问或请求修复 |
 | [Google](google-workspace.md) | 配置共用 Web application，由成员在 Telegram 连接自己的 Google 账号 |
 | [Nowledge Mem](nowledge-mem.md) | Search private cross-tool knowledge and save explicitly requested text |

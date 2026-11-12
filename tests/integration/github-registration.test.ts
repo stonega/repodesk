@@ -548,6 +548,8 @@ const url = process.env.TEST_DATABASE_URL;
       { permissions: { ...permissions, actions: "write" } },
       { permissions: { ...permissions, workflows: "write" } },
       { permissions: { ...permissions, members: "write" } },
+      { permissions: { ...permissions, checks: "write" } },
+      { permissions: { ...permissions, statuses: "write" } },
       { owner: { login: "wrong-org" } },
       { pem: "not-a-private-key" },
       { webhook_secret: undefined },
@@ -566,6 +568,27 @@ const url = process.env.TEST_DATABASE_URL;
       ).rejects.toMatchObject({ code: "github_registration_failed" });
     }
     expect(await apps.get(admin.id)).toBeUndefined();
+  });
+  test("release CI read scopes are optional and accepted without accepting broader writes", async () => {
+    const upstream = githubTransport();
+    const registry = new GitHubApps(store, key, undefined, (async (
+      url,
+      init,
+    ) => {
+      const res = await upstream(url, init);
+      const data = (await res.json()) as {
+        permissions: Record<string, string>;
+      };
+      return Response.json({
+        ...data,
+        permissions: { ...data.permissions, checks: "read", statuses: "read" },
+      });
+    }) as typeof fetch);
+    const converted = await registry.convert(
+      "fixture-manifest-code",
+      "example",
+    );
+    expect(converted.id).toBeTruthy();
   });
   test("registered credentials power subsequent OAuth and worker Code Truth without restart", async () => {
     await service.registrationResult(

@@ -12,6 +12,7 @@ import { GitHubRateLimitError } from "../github/app.ts";
 import type { GitHubApps } from "../github/registry.ts";
 import { githubAccessPending } from "../github/user-access.ts";
 import { ModelProviders } from "../models/service.ts";
+import { RepositoryReleases, releasePayloadHash } from "../releases/service.ts";
 import { reviewDestination } from "../review-bot/policy.ts";
 import { decrypt, fingerprint } from "../setup/credentials.ts";
 import {
@@ -46,6 +47,12 @@ import type {
   LocalRunner,
   LocalStatus,
 } from "./local/protocol.ts";
+import { taskMemory, taskMemoryValid } from "./memory.ts";
+import {
+  releaseInstruction,
+  releasePreparation,
+  releaseVersionAuthorized,
+} from "./objective.ts";
 import {
   checkReferenceSources,
   pinReferenceSources,
@@ -58,7 +65,11 @@ import {
   taskList,
   taskSave,
 } from "./task-store.ts";
-import { checkDevelopment, notifyDevelopment } from "./tasks.ts";
+import {
+  checkDevelopment,
+  notifyDevelopment,
+  scrubTaskMemory,
+} from "./tasks.ts";
 import { captureRunnerStatus } from "./transcript-store.ts";
 
 const reason = (e: unknown) =>
@@ -81,6 +92,9 @@ export class DevelopmentExecutor {
         !task.conversationPending &&
         !task.conversationAttemptId &&
         !task.contentRemoved &&
+        !task.memory &&
+        !task.referenceMemory &&
+        !task.memoryInvalidated &&
         !task.cleanupAttemptId
       )
         continue;
@@ -89,6 +103,7 @@ export class DevelopmentExecutor {
   }
   private async allowed(w: Workspace, sql: Sql, task: DevelopmentTask) {
     checkDevelopment(w, task);
+    requireThat(taskMemoryValid(w, task), "coding_memory_revoked", 409);
     requireThat(!w.settings.paused, "coding_workspace_paused", 409);
     const deployment = await this.store.deployment(sql);
     requireThat(
@@ -164,12 +179,34 @@ export class DevelopmentExecutor {
     return { token, app, githubContext };
   }
   async advance(workspaceId: string, id: string) {
-    await new TaskConversationExecutor(
-      this.store,
-      this.apps,
-      this.runner,
-      this.key,
-    ).advance(workspaceId, id);
+    const refreshing = await this.store.change(workspaceId, async (w, sql) => {
+      const task = await taskGet(sql, workspaceId, id);
+      if (
+        (!task.memory && !task.referenceMemory && !task.memoryInvalidated) ||
+        taskMemoryValid(w, task)
+      )
+        return false;
+      task.memoryInvalidated = true;
+      await scrubTaskMemory(sql, w, task);
+      await taskSave(sql, task);
+      return true;
+    });
+    if (
+      !refreshing &&
+      (await new RepositoryReleases(this.store, this.apps).advance(
+        workspaceId,
+        id,
+        (w, sql, task) => this.allowed(w, sql, task),
+      ))
+    )
+      return;
+    if (!refreshing)
+      await new TaskConversationExecutor(
+        this.store,
+        this.apps,
+        this.runner,
+        this.key,
+      ).advance(workspaceId, id);
     await this.advanceTask(workspaceId, id);
   }
   private async referenceToken(task: DevelopmentTask, app: GitHubApp) {
@@ -221,11 +258,40 @@ export class DevelopmentExecutor {
     const lease = randomUUID();
     const task = await this.store.change(workspaceId, async (w, sql) => {
       const t = await taskGet(sql, workspaceId, id);
-      if (t.conversationAttemptId && !t.cancelRequested && !t.contentRemoved)
+      if (
+        t.pendingObjective &&
+        t.state === "queued" &&
+        !t.attemptId &&
+        !t.cleanupAttemptId
+      ) {
+        if (t.pendingObjective.objective.kind === "release" && t.pr) {
+          t.releasePrerequisite = {
+            number: t.pr.number,
+            headSha: t.pr.headSha,
+          };
+          t.pr = undefined;
+          t.pullBinding = undefined;
+        }
+        t.objective = t.pendingObjective.objective;
+        t.pendingObjective = undefined;
+        t.phase = "intake";
+        t.canImplement = false;
+        t.canPublish = false;
+        t.release = undefined;
+        t.threadId = undefined;
+        t.previousAttemptId = undefined;
+      }
+      if (
+        t.conversationAttemptId &&
+        !t.cancelRequested &&
+        !t.contentRemoved &&
+        !t.memoryInvalidated
+      )
         return;
       if (
         (developmentStopped(t.state) &&
           !t.contentRemoved &&
+          !t.memoryInvalidated &&
           !t.cleanupAttemptId) ||
         Date.parse(t.leaseUntil ?? "1970-01-01") > Date.now() ||
         Date.parse(t.nextPollAt ?? "1970-01-01") > Date.now()
@@ -236,6 +302,7 @@ export class DevelopmentExecutor {
       // Completed artifacts remain history. Follow-ups reauthorize in appendDevelopment.
       if (
         t.state === "review" &&
+        !t.memoryInvalidated &&
         !t.cancelRequested &&
         !t.contentRemoved &&
         !t.cleanupAttemptId
@@ -252,12 +319,16 @@ export class DevelopmentExecutor {
           )
             t.error = undefined;
         } catch (error) {
-          if (githubAccessPending(error)) {
-            await this.holdAccess(w, sql, t, error);
-            return;
+          if (reason(error) === "coding_memory_revoked") {
+            t.memoryInvalidated = true;
+          } else {
+            if (githubAccessPending(error)) {
+              await this.holdAccess(w, sql, t, error);
+              return;
+            }
+            t.cancelRequested = true;
+            t.error = reason(error);
           }
-          t.cancelRequested = true;
-          t.error = reason(error);
         }
       }
       if (
@@ -283,7 +354,8 @@ export class DevelopmentExecutor {
         t.cancelRequested &&
         !t.attemptId &&
         !t.contentRemoved &&
-        !t.cleanupAttemptId
+        !t.cleanupAttemptId &&
+        !t.memoryInvalidated
       ) {
         t.state = "cancelled";
         clearProgress(w, "development", t.id);
@@ -301,7 +373,8 @@ export class DevelopmentExecutor {
       if (
         !t.cancelRequested &&
         !t.cleanupAttemptId &&
-        ["review", "waiting"].includes(t.state)
+        ["review", "waiting"].includes(t.state) &&
+        !t.memoryInvalidated
       )
         return;
       t.lease = lease;
@@ -314,6 +387,7 @@ export class DevelopmentExecutor {
     let recovering = false;
     try {
       requireThat(this.runner, "coding_runner_not_configured", 409);
+      if (task.memoryInvalidated) throw new Fault("coding_memory_revoked", 409);
       if (task.contentRemoved) {
         requireThat(this.runner.erase, "coding_runner_cleanup_required", 503);
         const attempts = await this.store.pool.query(
@@ -382,6 +456,13 @@ export class DevelopmentExecutor {
         return;
       }
       if (task.state === "queued") {
+        if (task.objective && task.objective.kind !== "development")
+          requireThat(
+            this.runner.capabilities &&
+              (await this.runner.capabilities()).repositoryTasks >= 1,
+            "coding_runner_protocol_required",
+            409,
+          );
         if (task.payload.authMode === "device_code") {
           const device = this.runner as LocalRunner & Partial<LocalDeviceAuth>;
           requireThat(
@@ -447,7 +528,10 @@ export class DevelopmentExecutor {
                 [workspaceId, id],
               )
             ).rows;
+            t.memory = taskMemory(w, t);
             const run: DevelopmentRun = {
+              ...(t.objective ? { objective: t.objective } : {}),
+              memory: t.memory?.text,
               taskId: t.id,
               revision: t.revision,
               mode: t.phase,
@@ -740,6 +824,8 @@ export class DevelopmentExecutor {
             await this.allowed(w, sql, t);
             await this.settle(sql, t, status);
             t.pr = pr;
+            if (t.release?.state === "waiting_merge")
+              t.release.pr = { number: pr.number, headSha: pr.headSha };
             t.pullBinding = {
               installationId: t.payload.installationId,
               repositoryId: t.payload.repositoryId,
@@ -801,6 +887,8 @@ export class DevelopmentExecutor {
             branch: t.pr?.branch ?? `codex/repodesk-${t.id}`,
             headSha: status.publishedSha,
           };
+          if (t.release?.state === "waiting_merge" && t.pr)
+            t.release.pr = { number: t.pr.number, headSha: t.pr.headSha };
           t.pullBinding = {
             installationId: t.payload.installationId,
             repositoryId: t.payload.repositoryId,
@@ -888,7 +976,9 @@ export class DevelopmentExecutor {
                 `question:${t.question.id}`,
               );
             } else {
-              t.canImplement = result.intent === "implement";
+              t.canImplement =
+                result.intent === "implement" &&
+                t.objective?.kind !== "investigation";
               t.canPublish =
                 t.canImplement &&
                 (result.publishRequested ||
@@ -936,6 +1026,60 @@ export class DevelopmentExecutor {
       });
     } catch (error) {
       const code = reason(error);
+      if (code === "coding_memory_revoked") {
+        const attempts = (
+          await this.store.pool.query(
+            "SELECT id FROM coding_task_attempts WHERE workspace_id=$1 AND task_id=$2",
+            [workspaceId, id],
+          )
+        ).rows;
+        if (attempts.length) {
+          requireThat(
+            this.runner?.erase,
+            "coding_memory_cleanup_required",
+            409,
+          );
+          for (const attempt of attempts)
+            await this.runner.erase(workspaceId, attempt.id);
+        }
+        await this.update(task, lease, async (w, sql, t) => {
+          const uncertain =
+            t.state === "publishing" ||
+            t.release?.state === "unknown" ||
+            !!(
+              await sql.query(
+                "SELECT 1 FROM repository_release_actions WHERE workspace_id=$1 AND task_id=$2 AND state IN ('dispatched','unknown') LIMIT 1",
+                [workspaceId, id],
+              )
+            ).rowCount;
+          const complete =
+            t.state === "review" &&
+            (!t.release || t.release.state === "published");
+          await finishAttempt(sql, t, "unknown");
+          await scrubTaskMemory(sql, w, t);
+          t.memory = undefined;
+          t.referenceMemory = undefined;
+          t.memoryInvalidated = undefined;
+          t.result = undefined;
+          t.threadId = undefined;
+          t.previousAttemptId = undefined;
+          t.attemptId = undefined;
+          t.conversationAttemptId = undefined;
+          t.conversationPending = false;
+          if (!complete) t.release = undefined;
+          if (task.attemptId) t.usageUnknown = true;
+          t.state = uncertain
+            ? "unknown"
+            : t.cancelRequested
+              ? "cancelled"
+              : complete
+                ? "review"
+                : "queued";
+          t.phase = "intake";
+          if (uncertain) t.error = "coding_publication_unknown";
+        });
+        return;
+      }
       if (task.contentRemoved) {
         await this.update(task, lease, async (_w, _sql, t) => {
           t.error = code;
@@ -1266,6 +1410,99 @@ export class DevelopmentExecutor {
       409,
     );
     let publish = false;
+    if (task.objective?.kind === "release") {
+      requireThat(
+        status.release &&
+          status.release.inputRevision === task.consumedRevision &&
+          status.result?.release,
+        "coding_release_manifest_required",
+        409,
+      );
+      requireThat(
+        status.release &&
+          status.result?.release &&
+          releasePayloadHash(status.release) ===
+            releasePayloadHash({
+              ...status.release,
+              proposal: status.result.release,
+            }),
+        "coding_release_manifest_required",
+        409,
+      );
+      const procedure = task.objective.procedure;
+      if (procedure)
+        requireThat(
+          status.release?.procedures.some((p) => p.path === procedure),
+          "coding_release_procedure_required",
+          409,
+        );
+      await this.update(
+        task,
+        lease,
+        async (w, sql, t) => {
+          await this.allowed(w, sql, t);
+          if (t.revision !== t.consumedRevision) return;
+          const inputs = await taskInputs(sql, t);
+          const authorization = inputs
+            .filter(
+              (i) => releaseInstruction(i.text) || releasePreparation(i.text),
+            )
+            .at(-1);
+          if (authorization && releaseInstruction(authorization.text))
+            requireThat(
+              releaseVersionAuthorized(
+                inputs,
+                status.release?.proposal.tag ?? "",
+              ),
+              "coding_release_version_required",
+              403,
+            );
+          t.release = {
+            revision: t.consumedRevision,
+            prepared: status.release as NonNullable<typeof status.release>,
+            state:
+              status.hasChanges || t.releasePrerequisite
+                ? "waiting_merge"
+                : "prepared",
+            pr: t.releasePrerequisite,
+            publishAuthorized:
+              !!authorization && releaseInstruction(authorization.text),
+          };
+          if (t.release.publishAuthorized)
+            await taskEvent(sql, t, `release-grant:${t.consumedRevision}`, {
+              actor: authorization?.actor,
+              sourceId: authorization?.sourceId,
+              revision: t.consumedRevision,
+              operations: ["tag", "release", "upload"],
+              tag: status.release?.proposal.tag,
+              repositoryId: t.payload.repositoryId,
+            });
+          await taskEvent(sql, t, `release-prepared:${t.consumedRevision}`, {
+            targetSha: status.release?.targetSha,
+            tag: status.release?.proposal.tag,
+          });
+          if (!status.hasChanges) {
+            await this.settle(sql, t, status);
+            t.result = status.result;
+            t.verifiedRevision = t.consumedRevision;
+            t.state = "review";
+            t.cleanupAttemptId = t.attemptId;
+            t.attemptId = undefined;
+            await this.notice(
+              w,
+              t,
+              "Release prepared and verified; publication has not yet been confirmed.",
+              `release-prepared:${t.fence}`,
+            );
+          }
+        },
+        false,
+      );
+      if (!status.hasChanges) {
+        await this.releaseCheckpoint(task, lease, task.attemptId);
+        return;
+      }
+    }
     const credentials = task.canPublish
       ? await this.token(task, "publish")
       : undefined;

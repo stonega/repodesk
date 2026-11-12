@@ -1,6 +1,12 @@
-# Source grounded memory implementation plan
+# Source grounded memory workstream
 
-Date: 2026-11-12. Status: **proposed; implementation has not started**.
+Date: 2026-11-12. Status: **implemented locally; live evaluation pending**.
+Delivery order: P2 in the [repository task plan](repository-task-plan.md), after
+its durable task and source contracts; final evaluation joins P5.
+See [current implementation](repository-tasks.md#memory-and-erasure) and
+[user controls](../user/preference-memory.md). Derivation and preference recall
+are enabled by default and independently configurable. The design below records the accepted contract rather
+than evidence of a live deployment.
 
 Extend RepoDesk's existing historical memory so that a user's decisions and
 corrections can improve later coding work. Every recalled preference must have
@@ -10,8 +16,10 @@ permission to implement, publish, merge, deploy or change persistent instruction
 
 This plan follows the owner's discussion of noop and the agreed principles:
 **traceable sources, explicit scope and correctability**. It covers internal memory
-and its handoff to continuous Codex tasks. Task decomposition, multi-machine
-scheduling and automatic decision answering are separate work.
+and its handoff to continuous repository tasks, including development and release
+preparation. The parent plan owns Pi/Codex/application responsibilities, process
+lifetimes, release authorization and external actions. Task decomposition,
+multi-machine scheduling and automatic decision answering are separate work.
 
 ## Existing implementation
 
@@ -31,10 +39,10 @@ establish the current baseline:
   remember, forget, enable and disable requests. Explicit notes preserve the
   user's message rather than a model-generated rule.
 
-Existing records can summarize preferences, but their schema has no distinct
+Before this work, historical records could summarize preferences, but their schema had no distinct
 decision case, preference revision or explicit applicability fields. Historical
-recall is documented separately from the coding runner. This plan makes those
-contracts explicit and connects them without replacing existing memory.
+recall was documented separately from the coding runner. The implementation now
+makes those contracts explicit and connects them without replacing existing memory.
 
 Approved instructions and skills keep their current management and approval
 contracts. Scheduled workflows remain outside historical recall. The optional
@@ -226,7 +234,7 @@ precedence over memory; application authorization is enforced independently.
 Answering “why did you choose this?” can cite the retained source rather than
 presenting a generated preference as something the user explicitly said.
 
-For continuous coding tasks:
+For continuous repository tasks:
 
 - Resolve memory against the confirmed modification target and originating
   Telegram audience. Follow-up GitHub inputs retain their independent provenance
@@ -250,6 +258,13 @@ Before asking a product question, Codex may use a directly applicable preference
 to make an ordinary choice within the existing task grant. A material unresolved
 conflict still needs a question. This release does not let a background judge
 answer a durable question as the user or expand task authority.
+
+Release tasks receive the same eligible pack after repository/audience checks.
+They must read the current pinned release procedure on every new release. A
+remembered channel preference or prior release decision cannot replace that
+procedure, select an old target/version or authorize tag, Release, registry or
+deployment effects. Confirmed publication receipts are outcome evidence, not
+proof of a user's general preference.
 
 ## Corrections forgetting and retention
 
@@ -292,6 +307,9 @@ and workspace/run/task identifiers, never preference text or private sources.
 M0 precedes M1; M1 precedes M2 and M3. M4 begins after the complete correction-to-coding journey
 works locally. Each phase should be independently reviewable; no new built-in
 integration or deployment surface is required.
+
+These are memory-local milestones. Their M0–M3 delivery belongs to parent phase
+P2; M4 joins P5. The parent plan's P0/P1 task and source contracts come first.
 
 ## Implementation areas
 
@@ -350,10 +368,12 @@ connections, Telegram messages and deployment require their own explicit scope.
 ## Rollout and recovery
 
 Use a workspace switch for preference derivation and a recall target setting with
-`off`, `pi` and `pi_and_coding` values. Both default off; existing historical recall
-retains its current setting. Enable M1 controls first, then inspect candidate
-output with recall off, then enable Pi recall and finally coding recall in a
-pilot workspace.
+`off`, `pi` and `pi_and_coding` values. Derivation defaults to enabled and recall
+to `pi_and_coding`, following the owner's 2026-11-12 request for default availability.
+Missing settings on existing workspaces use these defaults; explicit saved
+settings and historical scope disable controls are preserved. Candidate status,
+source validation and explicit acceptance remain unchanged. Operators can use
+`recall=off` or `recall=pi` when isolating a pilot or investigating a problem.
 
 Turning derivation or recall off immediately fences the corresponding new work.
 Correction, listing and forgetting remain available. Disabling recall invalidates

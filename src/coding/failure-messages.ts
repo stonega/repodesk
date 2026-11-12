@@ -2,6 +2,22 @@ import { attachmentErrors } from "../telegram/attachments.ts";
 import type { CodingPayload } from "./config.ts";
 
 const messages: Record<string, string> = {
+  coding_runner_protocol_required:
+    "The runner must be updated before this repository objective can start.",
+  coding_objective_disabled:
+    "This repository objective is disabled. Ask a workspace administrator to enable it.",
+  coding_release_unsupported_step:
+    "The repository procedure requires an unsupported release step. Prepared work is retained; publication is incomplete.",
+  coding_release_target_changed:
+    "The release target changed after verification. Recheck the target and prepare the release again.",
+  coding_release_outcome_unknown:
+    "The release outcome is uncertain. Existing remote results will be inspected before any further action; an uncertain write is not repeated.",
+  coding_release_ci_failed:
+    "The release checks failed. Inspect and repair them before publication.",
+  coding_release_draft_not_requested:
+    "The prepared draft does not match the requested publication. Clarify the intended release state.",
+  coding_release_channel_not_requested:
+    "The prepared prerelease does not match the requested release channel. Clarify the intended channel.",
   coding_github_source_changed:
     "A GitHub instruction was edited, deleted, became inaccessible or no longer belongs to this PR. Further execution and publication have stopped; inspect the task before making a new request.",
   coding_github_source_unavailable:

@@ -2,6 +2,7 @@
 import { constants } from "node:fs";
 import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 import { z } from "zod";
+import { exportRelease } from "../../releases/prepare.ts";
 import {
   developmentPrompt,
   developmentSchema,
@@ -325,7 +326,11 @@ async function check(job: Job) {
     "--no-textconv",
     job.baseSha,
   ]);
-  if (!patch && !job.development?.pr) {
+  if (
+    !patch &&
+    !job.development?.pr &&
+    job.development.objective?.kind !== "release"
+  ) {
     await writeFile(jobPath("/task/failure-code"), "coding_patch_empty");
     throw new Error("coding_patch_empty");
   }
@@ -484,7 +489,16 @@ async function exportPatch() {
         await thread.close();
       }
     } catch {}
-    process.stdout.write(JSON.stringify({ patch, threadId }));
+    let release: Awaited<ReturnType<typeof exportRelease>> | undefined;
+    let releaseInput: string | undefined;
+    try {
+      releaseInput = await readFile(jobPath("/input/release.json"), "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    if (releaseInput)
+      release = await exportRelease(repo, JSON.parse(releaseInput));
+    process.stdout.write(JSON.stringify({ patch, threadId, release }));
   } finally {
     await file.close();
   }

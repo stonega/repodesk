@@ -93,6 +93,9 @@ export function runnerApp(
     );
     await next();
   });
+  app.get("/tasks/capabilities", async (c) =>
+    c.json(await supervisor.capabilities()),
+  );
   app.use("/device-auth/*", async (c, next) => {
     requireThat(
       equal(

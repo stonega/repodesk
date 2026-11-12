@@ -125,8 +125,11 @@ export class GitHubApps {
         400,
       );
       requireThat(
-        Object.keys(data.permissions).length ===
-          Object.keys(githubAppPermissions).length &&
+        Object.entries(data.permissions).every(
+          ([name, level]) =>
+            name in githubAppPermissions ||
+            (["checks", "statuses"].includes(name) && level === "read"),
+        ) &&
           Object.entries(githubAppPermissions).every(
             ([name, level]) => data.permissions[name] === level,
           ),

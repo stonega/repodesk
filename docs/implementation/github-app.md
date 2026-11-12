@@ -250,6 +250,13 @@ the selected repository and operation; Code Truth receives only source-read toke
 
 ## Update an existing App for Codex and PR actions
 
+Repository releases use a separate application-owned Contents-write token
+for version tags, GitHub Releases and bounded assets. Procedures requiring remote
+CI additionally need Checks and Commit statuses **read** permissions, approved by
+the GitHub App administrator/installation. Registration accepts these optional
+read scopes without silently widening the default manifest. Existing PR grants
+do not authorize a release. See [repository-task effects](repository-tasks.md).
+
 Changing RepoDesk's new-App manifest does not update Apps already registered on
 GitHub. For an existing App, open its **Permissions & events → Repository
 permissions** and set Contents and Pull requests to **Read and write**, retaining

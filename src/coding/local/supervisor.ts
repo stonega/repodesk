@@ -11,6 +11,7 @@ import {
 import { join } from "node:path";
 import { z } from "zod";
 import { Fault, requireThat } from "../../domain.ts";
+import { preparedRelease } from "../../releases/types.ts";
 import {
   decrypt,
   encrypt,
@@ -117,6 +118,9 @@ export const taskKey = (workspaceId: string, taskId: string) => {
 };
 
 export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
+  async capabilities() {
+    return { repositoryTasks: 1 };
+  }
   readonly device: DeviceAuth;
   private records = new Map<string, Record>();
   private erased = new Set<string>();
@@ -307,6 +311,7 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
       hasChanges: r.hasChanges,
       repairCount: r.repairs,
       recoveryId: r.recoveryId,
+      release: r.release,
     };
   }
   private volume(r: Record, mode: string) {
@@ -447,6 +452,20 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
         );
       if (mode === "publish")
         await this.copyInput(this.path(r, "patch"), `${name}:/input/patch`);
+    }
+    if (mode === "export" && r.phase === "check" && r.result?.release) {
+      const file = this.path(r, "release-input");
+      await writeFile(
+        file,
+        JSON.stringify({
+          proposal: r.result.release,
+          targetSha: r.baseSha,
+          inputRevision: r.input.development?.revision,
+        }),
+        { mode: 0o644 },
+      );
+      await this.copyInput(file, `${name}:/input/release.json`);
+      await rm(file);
     }
     return this.engine.start(name, mode === "export");
   }
@@ -1028,6 +1047,7 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
     const artifact = z
       .object({
         patch: z.string().max(5 * 1024 * 1024),
+        release: preparedRelease.optional(),
         threadId: z
           .string()
           .regex(/^[a-zA-Z0-9-]{1,100}$/)
@@ -1041,6 +1061,7 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
     );
     await writeFile(this.path(r, "patch"), artifact.patch, { mode: 0o600 });
     r.hasChanges = artifact.patch.length > 0;
+    r.release = artifact.release;
     r.threadId = artifact.threadId ?? r.threadId;
   }
   async publish(workspaceId: string, taskId: string, token: string) {
@@ -1279,11 +1300,13 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
         "conversation",
         "auth",
         "transcript",
+        "release-input",
       ])
         await rm(this.path(r, suffix), { force: true });
       r.cleaned = true;
       r.proxyToken = "";
       r.result = undefined;
+      r.release = undefined;
       r.resultIssues = undefined;
       r.verificationCommands = undefined;
       r.threadId = undefined;
@@ -1378,6 +1401,7 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
             "input",
             "conversation",
             "transcript",
+            "release-input",
           ])
             await rm(this.path(r, suffix), { force: true });
           // Keep a small tombstone so delayed duplicate requests cannot replay the task.
@@ -1390,6 +1414,7 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
           r.input.payload.body = "[expired]";
           r.input.payload.title = "[expired]";
           delete r.result;
+          delete r.release;
           delete r.input.messages;
           delete r.conversation;
           delete r.verificationCommands;
@@ -1397,6 +1422,8 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
             r.input.development.inputs = [];
             r.input.development.context = "";
             delete r.input.development.media;
+            delete r.input.development.memory;
+            delete r.input.development.objective;
           }
           await this.save(r);
         }

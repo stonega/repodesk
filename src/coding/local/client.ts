@@ -116,6 +116,10 @@ export class LocalRunnerClient
   async start(input: LocalStart) {
     await this.request("/tasks", input);
   }
+  async capabilities() {
+    const result = await this.request("/tasks/capabilities");
+    return { repositoryTasks: Number(result.repositoryTasks) || 0 };
+  }
   async message(workspaceId: string, taskId: string, input: TaskMessage) {
     await this.request(`${this.path(workspaceId, taskId)}/messages`, input);
   }

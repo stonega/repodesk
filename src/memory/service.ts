@@ -20,6 +20,11 @@ import {
 import { eligible } from "../workspaces/policy.ts";
 import { claimMemoryJob, MEMORY_IDLE_MS, MEMORY_LEASE_MS } from "./planner.ts";
 import {
+  derivePreferenceCandidates,
+  preferenceCandidates,
+} from "./preferences.ts";
+import { preferenceSettings } from "./settings.ts";
+import {
   memoryInputHash,
   memoryState,
   readableMemories,
@@ -33,7 +38,11 @@ import {
 import type { MemoryJob } from "./types.ts";
 
 const extractionSchema = z
-  .object({ title: z.string().max(100), summary: z.string().max(4000) })
+  .object({
+    title: z.string().max(100),
+    summary: z.string().max(4000),
+    preferences: preferenceCandidates.optional(),
+  })
   .strict();
 const indexSchema = z
   .object({
@@ -249,19 +258,25 @@ export class MemoryService {
         const sources = scopeSources(w, job.scope).filter((s) => ids.has(s.id));
         const output = extractionSchema.parse(
           JSON.parse(
-            await complete(extractionPolicy, {
-              scope: job.scope.kind,
-              previousSummary: w.memory?.entries.find(
-                (e) => e.id === `thread:${job.threadId}`,
-              )?.summary,
-              messages: sources.map((s) => ({
-                id: s.id,
-                author: s.author,
-                role: s.role,
-                at: s.at,
-                text: s.text,
-              })),
-            }),
+            await complete(
+              extractionPolicy +
+                (preferenceSettings(w).derive
+                  ? " You may additionally return preferences: [{statement,sourceIds}] with at most four evidence-linked hypotheses. Use only supplied human source IDs. Preserve scope, uncertainty and exceptions; a single choice is not a general rule. These remain candidates, never authority."
+                  : ""),
+              {
+                scope: job.scope.kind,
+                previousSummary: w.memory?.entries.find(
+                  (e) => e.id === `thread:${job.threadId}`,
+                )?.summary,
+                messages: sources.map((s) => ({
+                  id: s.id,
+                  author: s.author,
+                  role: s.role,
+                  at: s.at,
+                  text: s.text,
+                })),
+              },
+            ),
           ),
         );
         requireThat(
@@ -274,6 +289,12 @@ export class MemoryService {
         await this.store.change(workspaceId, (w) => {
           const { saved } = current(w);
           const state = memoryState(w);
+          derivePreferenceCandidates(
+            w,
+            w.runs.find((r) => r.id === job.runId) as Run,
+            output.preferences ?? [],
+            sources,
+          );
           if (output.summary.trim()) {
             const entry = {
               id: `thread:${job.threadId}`,
@@ -300,7 +321,14 @@ export class MemoryService {
             state.entries = [
               ...state.entries.filter((e) => e.id !== entry.id),
               entry,
-            ].slice(-256);
+            ].slice(
+              -Math.max(
+                1,
+                256 -
+                  (state.preferences?.length ?? 0) -
+                  (state.cases?.length ?? 0),
+              ),
+            );
           } else
             state.entries = state.entries.filter(
               (e) => e.id !== `thread:${job.threadId}`,
