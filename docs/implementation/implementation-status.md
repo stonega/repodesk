@@ -406,6 +406,42 @@ startup cases and zero external startup calls. Tests use fake models and Telegra
 transports; real-model selection and native rendering remain staging checks. No
 deployment or live Telegram/model call was performed.
 
+## GitHub fixes continue the original Telegram coding task (2026-11-01)
+
+Confirmed PR publication now records an installation/repository/PR/branch binding.
+With Review Bot requests and fixes enabled, an explicit fix from the original
+requester's verified GitHub account appends a deduplicated input revision to the
+same durable development task. Codex intake determines its implementation grant;
+the existing attempt fences, verification and same-PR publication rules apply.
+Read-only comments, other collaborators and unbound historical PRs retain Review
+Bot routing. A stopped bound task cannot be revived through GitHub.
+
+GitHub inputs retain their author, full-body fingerprint, fix-policy revision and
+expiry separately from Telegram messages. Source reads happen outside workspace
+transactions; current membership, fix policy and Review Bot routing ownership are
+checked again at execution/publication. Changed, inaccessible or foreign-PR
+sources stop work; transient source failures retry the same task without duplicate
+execution. Inline replies supply their parent review as reference data. No private
+Telegram result or question is automatically posted to GitHub. Status, delivery
+and Mini App history retain the original Telegram audience, and source erasure
+removes the external inputs with the task. No dependency or SQL migration was added.
+Publication also requires the current work phase: a previous revision's grant
+cannot publish a new follow-up while its intake is still pending.
+
+The deterministic journey covers Telegram task creation and confirmed publication,
+signed GitHub follow-up, executor reconstruction, same-PR update, original-audience
+delivery intents, Pi task context and the Mini App history API. It also covers
+duplicates, revoked sources/permissions, policy changes during source verification,
+routing ownership changes, outages, inline references, fallback routing and erasure.
+Validation on an isolated commit snapshot excluding unrelated working changes
+passed Biome, strict TypeScript, build, **1,373 tests across 148 files** with
+disposable PostgreSQL and a 15-second deadline, including **40 Review Bot
+integration tests**. The built Node runtime contract passed all 16 plugin-startup
+cases with zero external startup calls. Documentation links and whitespace checks
+passed.
+Live model interpretation, webhook delivery and native Telegram acceptance remain
+pilot checks. See [the repeatable journey](../../examples/cross-channel-coding.md).
+
 ## Telegram bot token format errors provide recovery guidance (2026-11-10)
 
 Bot-token format validation now belongs to the credentials field schema, keeping
@@ -609,42 +645,6 @@ files. Bundle `1793607782072-26985359` passed backup, checkpoint, exact-image,
 51-artifact and public HTTP verification; existing Browser code and persistent
 state are preserved. Historical failed runs were not replayed. See the
 [incident](../../postmortem/2026-11-02-assistant-run-timeout.md).
-
-## GitHub fixes continue the original Telegram coding task (2026-11-01)
-
-Confirmed PR publication now records an installation/repository/PR/branch binding.
-With Review Bot requests and fixes enabled, an explicit fix from the original
-requester's verified GitHub account appends a deduplicated input revision to the
-same durable development task. Codex intake determines its implementation grant;
-the existing attempt fences, verification and same-PR publication rules apply.
-Read-only comments, other collaborators and unbound historical PRs retain Review
-Bot routing. A stopped bound task cannot be revived through GitHub.
-
-GitHub inputs retain their author, full-body fingerprint, fix-policy revision and
-expiry separately from Telegram messages. Source reads happen outside workspace
-transactions; current membership, fix policy and Review Bot routing ownership are
-checked again at execution/publication. Changed, inaccessible or foreign-PR
-sources stop work; transient source failures retry the same task without duplicate
-execution. Inline replies supply their parent review as reference data. No private
-Telegram result or question is automatically posted to GitHub. Status, delivery
-and Mini App history retain the original Telegram audience, and source erasure
-removes the external inputs with the task. No dependency or SQL migration was added.
-Publication also requires the current work phase: a previous revision's grant
-cannot publish a new follow-up while its intake is still pending.
-
-The deterministic journey covers Telegram task creation and confirmed publication,
-signed GitHub follow-up, executor reconstruction, same-PR update, original-audience
-delivery intents, Pi task context and the Mini App history API. It also covers
-duplicates, revoked sources/permissions, policy changes during source verification,
-routing ownership changes, outages, inline references, fallback routing and erasure.
-Validation on an isolated commit snapshot excluding unrelated working changes
-passed Biome, strict TypeScript, build, **1,373 tests across 148 files** with
-disposable PostgreSQL and a 15-second deadline, including **40 Review Bot
-integration tests**. The built Node runtime contract passed all 16 plugin-startup
-cases with zero external startup calls. Documentation links and whitespace checks
-passed.
-Live model interpretation, webhook delivery and native Telegram acceptance remain
-pilot checks. See [the repeatable journey](../../examples/cross-channel-coding.md).
 
 ## Remembered Browser websites and Pi-led execution (2026-11-01)
 
