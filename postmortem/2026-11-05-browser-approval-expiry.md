@@ -1,6 +1,6 @@
 # Private Browser approval expired without terminal feedback
 
-Date: 2026-11-05. Status: verified correction awaiting VPS rollout.
+Date: 2026-11-05. Status: corrected, deployed and verified on the VPS.
 
 The reported private Topic contains run `f9d34008-8b08-4b76-a4e4-004617018c89`
 and follow-up `42f6a487-189c-4fd7-8e8c-2cdf57fb7afb`, in workspace
@@ -68,3 +68,32 @@ were restored without a database restore. Regressions now cover service-name
 recovery, retained original host backups, receipt stream separation and production
 source ancestry. The corrected native probe passes, and later verification is
 read-only. Original run outcomes and unknown provider usage remain preserved.
+
+## Verified production outcome
+
+Release `41965848447-1` deployed source
+`726a45ab26885f17bd0236c967a87461f820f0f3` over the live Browser correction.
+[The guarded rollout succeeded](https://github.com/stonega/repodesk/actions/runs/41965848447).
+Lint, strict TypeScript, build, all **1,431 deterministic tests across 154 files**
+and the Node startup contract pass. The exact images also pass the 16 startup
+cases with zero external startup calls, CPU speech imports, offline Code Truth,
+Compose configuration/readiness, migration rerun and disposable backup/restore.
+
+All **51 deployed artifacts**, public/loopback pages and assets match the verified
+images. App, worker, Codex supervisor and Code Truth are healthy. The native host
+is reused unchanged; headed UID-1000, private-profile, permission, redirect and
+verified-download probes pass, including access from both running writers.
+Configuration, credentials, persistent mounts, PostgreSQL and the Actions runner
+identities are preserved. The protected pre-release backup is **3,157,334 bytes**,
+and its archive listing is verified. No production database restore, manual
+Telegram message or model request was used as a deployment probe, and terminal
+runs were not automatically replayed.
+
+The original expired Browser attempt can be selected by replying to its approval
+message with an authenticated continuation; new required decisions remain fresh.
+The later cancelled attempt and its unknown model usage retain their history.
+Native Telegram desktop/mobile visual acceptance remains a separate user check.
+
+[Post-cutover observation](https://github.com/stonega/repodesk/actions/runs/41967182945)
+recorded eight successful readiness checks across 35 seconds. Heartbeat age stayed
+between **2.61 and 4.51 seconds**, below the former 30-second false-outage window.
