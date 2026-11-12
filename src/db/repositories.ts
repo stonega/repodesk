@@ -84,12 +84,30 @@ export class Store {
     id: string,
     action: (workspace: Workspace, sql: Sql) => T | Promise<T>,
   ) {
-    return transaction(this.pool, async (sql) => {
+    const changed = await transaction(this.pool, async (sql) => {
       const workspace = await this.read(id, sql, true);
+      const active = new Set(
+        workspace.workflows
+          .filter((f) => f.status === "active")
+          .map((f) => f.id),
+      );
       const result = await action(workspace, sql);
       await this.save(sql, workspace);
-      return result;
+      const suspended = workspace.workflows
+        .filter((f) => active.has(f.id) && f.status === "suspended")
+        .map((f) => ({
+          reason: f.reason,
+          runId: workspace.runs.findLast((r) => r.workflowId === f.id)?.id,
+        }));
+      return { result, suspended };
     });
+    for (const suspension of changed.suspended)
+      this.log.write("workflow_suspended", {
+        workspaceId: id,
+        runId: suspension.runId,
+        error: new Fault(suspension.reason ?? "workflow_suspended"),
+      });
+    return changed.result;
   }
   async all(): Promise<Workspace[]> {
     return (

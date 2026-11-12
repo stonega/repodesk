@@ -13,6 +13,21 @@ export type GitHubConnection = {
 };
 export const githubConnectionRevision = (connection: GitHubConnection) =>
   connection.connectionRevision ?? connection.revision;
+/** A catalog refresh only invalidates scopes containing a changed repository. */
+export function githubRepositoryScopeCurrent(
+  connection: GitHubConnection | undefined,
+  revision: number,
+  repositoryIds: number[],
+) {
+  return (
+    !!connection?.installationId &&
+    revision >= githubConnectionRevision(connection) &&
+    revision <= connection.revision &&
+    repositoryIds.every(
+      (id) => revision >= (connection.repositoryRevisions?.[id] ?? 0),
+    )
+  );
+}
 export interface GitHubPage {
   configured: boolean;
   canRegister?: boolean;

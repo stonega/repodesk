@@ -4,6 +4,7 @@ import {
   requireThat,
   type Workspace,
 } from "../domain.ts";
+import { githubRepositoryScopeCurrent } from "./config.ts";
 import { repositoryAccess } from "./user-access.ts";
 
 export function repositorySourcesAllowed(
@@ -12,8 +13,11 @@ export function repositorySourcesAllowed(
   scope: RepositorySources,
 ) {
   return (
-    !!w.github?.installationId &&
-    w.github.revision === scope.revision &&
+    githubRepositoryScopeCurrent(
+      w.github,
+      scope.revision,
+      scope.repositoryIds,
+    ) &&
     scope.repositoryIds.every(
       (id) =>
         w.github?.repositories.some((r) => r.id === id) &&
