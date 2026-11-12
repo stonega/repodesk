@@ -68,7 +68,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Local Code Truth](implementation/code-truth.md) | Predefined source-query extension, local MCP service and repository configuration |
 | [Setup](implementation/setup.md) | Local commands, validation, and configuration |
 | [Implementation evidence](implementation/implementation-status.md) | Verified behavior and remaining live release gates |
-| [Release runbook](implementation/release-runbook.md) | Staging demonstration, backup/restore and recovery |
+| [Release runbook](implementation/release-runbook.md) | Branch integration, release-source checks, staging, backup/restore and recovery |
 | [VPS release deployment](implementation/vps-deployment.md) | Host provisioning, local release builds, protected cutover and failure recovery |
 | [Panel updates](implementation/updates.md) | Automatic release checks, version indicator, changelog modal and host updater installation |
 | [Self-hosted Actions runner](implementation/self-hosted-runner.md) | VPS runner installation, separate CI Docker daemon, registration and operations |

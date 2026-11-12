@@ -42,6 +42,35 @@ and runnable examples when workflows or interfaces change.
 For deployment changes, also build and smoke-test the Docker image and validate
 `docker compose config`. Bun manages dependencies/builds/tests; Node runs the service.
 
+### Branch integration and release source
+
+- Treat `origin/main` as the shared source of truth. Before starting or integrating
+  work, fetch the remote and inspect the current branch, dirty files, worktrees and
+  divergence. A push from another worktree does not update this worktree's `main`.
+- Base new work on current remote main in a task branch. Preserve unrelated edits
+  and local-only commits before reconciling a stale checkout; use an isolated
+  worktree when necessary. Never discard them to make a pull or merge succeed.
+- When integration/push is in scope, verify the result against freshly fetched
+  remote main and confirm the push before reporting it integrated. Otherwise,
+  explicitly report that the work remains local or on an unmerged branch.
+- Audit history and patch equivalence separately. Deduplicate local/remote copies
+  and shared commits. Squash, cherry-pick and rewritten commits can leave old
+  branches marked unmerged; inspect their remaining changes before merging or
+  deleting them. Resolve conflicts by behavior and chronology, not a blanket
+  choice of either branch.
+- Normal releases must use a clean, tested, immutable commit already reachable
+  from `origin/main`, including application, service and deployment-script fixes.
+  Do not build the next release by continually adding fixes to an old production
+  snapshot. Preserve live configuration and state through the release procedure.
+- For an authorized emergency release outside main, record the exact source,
+  reason, validation, return-to-main owner and deadline. Reconcile every correction
+  into main before the next normal release; report the incident as awaiting that
+  reconciliation until it is verified. Rollback may use a previously verified
+  immutable artifact without creating a new development baseline.
+
+Follow the [source-lineage and integration checklist](docs/implementation/release-runbook.md#source-lineage-and-branch-integration)
+and the [2026-11-12 branch-divergence postmortem](postmortem/2026-11-12-branch-and-release-source-divergence.md).
+
 ### Integration reliability
 
 Built-in tool registration must use bundled definitions and local application state.

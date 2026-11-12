@@ -1,5 +1,6 @@
 # Postmortems
 
+- [2026-11-12: Branch and production-source histories diverged](2026-11-12-branch-and-release-source-divergence.md)
 - [2026-11-10: Private Topic recovery uses standard text](2026-11-10-topic-recovery-text-transport.md)
 - [2026-11-10: Native Topic repair attempts and visibility](2026-11-10-native-topic-repair-attempts.md)
 - [2026-11-10: Private Topic root-cause investigation](2026-11-10-private-topic-root-cause-investigation.md)

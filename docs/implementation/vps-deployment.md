@@ -8,6 +8,14 @@ release makes it available in the panel's version indicator. A deployment
 administrator reviews its notes and starts installation explicitly.
 See [host updater installation](updates.md) for the service and panel contract.
 
+Before preparing any new release, follow the
+[source-lineage and branch-integration checks](release-runbook.md#source-lineage-and-branch-integration).
+Normal release artifacts must come from a clean, tested commit already on
+`origin/main`. The deployment entries below preserve historical evidence,
+including earlier production-based snapshots; they do not establish that pattern
+as the baseline for new work. Emergency exceptions require a recorded
+return-to-main owner/deadline and reconciliation before the next normal release.
+
 ## Scoped repository schedule fix deployed (2026-11-12)
 
 Operator-authorized bundle `1794469596569-79773357` deploys source

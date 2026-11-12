@@ -4,6 +4,88 @@ The local release checks are implemented. Do not treat them as evidence of a liv
 Telegram/model pilot. No host deployment or webhook registration was performed while
 implementing the repository.
 
+## Source lineage and branch integration
+
+`origin/main` is the shared development and normal-release baseline. This policy
+was added after the [2026-11-12 branch and release-source divergence](../../postmortem/2026-11-12-branch-and-release-source-divergence.md).
+The following are contributor/operator checks; they are not an automated
+deployment guard.
+
+Before beginning a task or integrating completed work, inspect the checkout:
+
+```sh
+git fetch origin --prune
+git status --short --branch
+git worktree list
+git rev-list --left-right --count origin/main...HEAD
+git log --oneline origin/main..HEAD
+git branch -a --no-merged origin/main
+```
+
+The divergence counts are remote-only commits first and local-only commits
+second. A task branch can legitimately have local-only work. A local `main`
+with both counts nonzero needs reconciliation before further main-line work;
+fetching or pushing from another worktree does not advance its local branch.
+Back up dirty files, untracked task files and local-only commits before integration.
+Keep unrelated edits intact and use an isolated worktree if needed. Start new task
+branches from current remote main instead of extending a stale local `main`.
+
+An unmerged branch count describes history, not the number of missing features.
+Deduplicate local/remote copies, exclude intentional backup/archive references
+and account for shared commit chains. For each remaining branch, inspect
+`git cherry -v origin/main BRANCH` and its actual changes. A `-` marks a
+patch-equivalent upstream commit; a `+` means no equivalent patch was found.
+Combined or squash commits can require manual comparison even when `+` remains.
+Record the destination commit for equivalent or superseded work; branch names
+and matching commit subjects alone do not establish equivalence. Preserve useful
+incident history without restoring superseded code or deployment baselines.
+
+When integration/push is part of the task, finish with these checks:
+
+1. Reconcile against freshly fetched `origin/main` and resolve conflicts according
+   to current behavior, documented preferences and later fixes. Do not blanket
+   accept one side of a conflicting branch.
+2. Run the checks required for the affected code and exact release artifacts.
+   Use the declared Bun version and CI timeout settings for comparable results.
+3. Push without rewriting shared history. If remote main advances first,
+   integrate it and repeat the validation affected by that integration.
+4. Verify the pushed commit and local/remote state. Verify original branch tips
+   are ancestors when preserving their history; for squash/cherry-pick integration,
+   retain the reviewed source-to-destination mapping instead. Do not delete a
+   branch solely because of a history flag or claim unpushed work is integrated.
+
+Before packaging a normal release, use a clean checkout of the exact chosen
+commit. Run each check successfully before proceeding:
+
+```sh
+git fetch origin --prune
+test -z "$(git status --porcelain)"
+release_commit=$(git rev-parse HEAD)
+git merge-base --is-ancestor "$release_commit" origin/main
+git rev-parse "$release_commit"
+git rev-parse "${release_commit}^{tree}"
+```
+
+The clean-tree test and ancestry check must both exit zero. An ancestry status of
+1 means the commit is outside remote main; other nonzero statuses are errors.
+Record the full commit/tree IDs with artifact hashes or image IDs and validation
+results. Build, test and deploy those exact artifacts. Application, optional
+service, migration and deployment-script corrections all belong in this main
+baseline. Preserve live secrets, configuration, mounts and database state through
+the existing backup/migration procedure; carrying forward old source code is not
+the mechanism for preserving them.
+
+During an authorized emergency cutover from a non-main commit, record the exact
+source, reason for the exception, verification evidence, return-to-main owner and
+deadline. Reconcile the complete correction into main before the next normal
+release and record its destination commit. Until then, the incident remains open
+for source reconciliation. A rollback can use a previously verified immutable
+artifact; subsequent development still starts from reconciled main.
+
+Git references: [commit ancestry](https://git-scm.com/docs/git-merge-base),
+[divergence counts](https://git-scm.com/docs/git-rev-list) and
+[patch equivalence](https://git-scm.com/docs/git-cherry).
+
 ## Build and local release checks
 
 For automated deployment of stable GitHub Releases to a custom VPS, see
