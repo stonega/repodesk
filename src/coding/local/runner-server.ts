@@ -218,7 +218,13 @@ if (import.meta.main) {
   const supervisor = new RunnerSupervisor(settings);
   await supervisor.initialize();
   const app = runnerApp(supervisor);
-  const server = serve({ fetch: app.fetch, hostname: "0.0.0.0", port: 3020 });
+  const server = serve({
+    fetch: app.fetch,
+    hostname:
+      process.env.CODEX_RUNNER_LISTEN_HOST ??
+      (settings.CODEX_CONTAINER_ENGINE === "native" ? "127.0.0.1" : "0.0.0.0"),
+    port: 3020,
+  });
   let sweeping = false;
   const timer = setInterval(() => {
     if (sweeping) return;

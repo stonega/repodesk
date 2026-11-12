@@ -177,7 +177,10 @@ const rootUrl = process.env.TEST_DATABASE_URL;
           };
         },
       };
-      await new Executor(store, setup, runner).execute(w.id, r.id);
+      await new Executor(store, setup, runner, undefined, ingress).execute(
+        w.id,
+        r.id,
+      );
       let current = await store.read(w.id);
       const picker = current.deliveries.find((d) => d.repositoryMenu);
       if (!picker) throw Error("Missing picker");

@@ -7,8 +7,8 @@ and follow task erasure. Raw reasoning and protocol streams remain excluded.
 
 The optional OpenSandbox backend uses the same supervisor protocol.
 See [alternative sandboxes and benchmarks](codex-sandboxes.md) for setup and
-verification boundaries. Docker is the default runtime; OpenSandbox is the only
-optional runtime. Podman support was removed on 2026-10-17 at the user's request.
+verification boundaries. Docker is the default runtime; OpenSandbox and Native VPS are
+optional runtimes. Podman support was removed on 2026-10-17 at the user's request.
 Older Podman deployments must drain tasks and explicitly migrate their data/images
 before using Docker. Never point Docker at retained Podman task state or assume
 the two engines share volumes. No automatic migration or running-service cutover
@@ -23,7 +23,8 @@ start isolated containers when authorized.
 The Codex detail page and configuration dialog explain automatic VPS startup and
 link here for recovery. **Enabled** records workspace policy;
 it does not mean a runner is installed, reachable or authenticated. Both sign-in
-methods require the supervisor and a prebuilt task image.
+methods require the supervisor. Container runtimes need a prebuilt task image;
+Native VPS needs the installed CLI and host development tools.
 
 ## Configure the deployment
 
@@ -65,6 +66,69 @@ open dialogs can use **Recheck connection**. No runner setup fields or commands 
 required in the panel. Manual deployments can merge the Docker overlay with the
 base Compose file, specifying the two prebuilt images and a stable private token.
 See [VPS deployment](vps-deployment.md) for release and recovery details.
+
+### Native VPS (installed Codex CLI)
+
+Choose **Native VPS** to run the installed Codex CLI directly on a dedicated Linux
+VPS. Docker remains the default. The host supervisor must run as a non-root service
+user with `CODEX_NATIVE_ENABLED=true`; readiness rejects root and known container
+environments. Selecting Native VPS inside the shipped Docker supervisor cannot
+turn that container into a host runner.
+
+Tasks use the service user's filesystem, process and network access. Private task
+checkouts and fresh process environments are organizational boundaries, **not
+security isolation between tenants or repositories**. Use trusted code on a
+dedicated machine. Container CPU/memory and egress restrictions do not apply to
+this runtime. Systemd can constrain the whole service if required.
+
+1. Prepare a checkout at `/opt/repodesk`, install dependencies with
+   `bun install --frozen-lockfile`, then run `bun run build`. Keep the checkout and
+   `node_modules` readable by the service user. Use Node 24, Git, Bash, Bun and
+   the installed Codex CLI. The tested container protocol baseline is Codex
+   **0.155.1**; validate the protocol proofs before upgrading it. PR reviews also
+   require Open Code Review CLI **1.12.12**. Install repository-specific tools on
+   the host, making their binaries available in the service's `PATH`.
+2. Create a dedicated `repodesk-codex` system user/group. Install
+   `deploy/codex/native.env.example` as `/etc/repodesk/codex-native.env`, mode 600.
+   Set the installed executable path and a private management token. The supplied
+   `native.service` uses `/usr/bin/node`; adjust it to the Node 24 installation.
+3. Install `deploy/codex/native.service` as
+   `/etc/systemd/system/repodesk-codex.service`, then use `systemctl daemon-reload`
+   and `systemctl enable --now repodesk-codex`. The service creates its private
+   state directory and restarts after host reboot. Health is available at
+   `http://127.0.0.1:3020/readyz`. Readiness checks are offline CLI/tool probes.
+4. For native app/worker processes, set `CODEX_RUNNER_URL=http://127.0.0.1:3020`
+   and the same `CODEX_RUNNER_TOKEN`. For Docker app/worker processes, merge the
+   base `compose.yaml` with `deploy/codex/native-compose.yaml`, **without** either
+   container-runner overlay. Bind `CODEX_RUNNER_LISTEN_HOST` to Docker's host-gateway
+   address (obtain the bridge gateway from `docker network inspect bridge`),
+   permit access only from the application network, and set
+   `CODEX_RUNNER_PROXY_URL` to that same reachable address. The proxy and channel
+   are called by host jobs, so they must resolve from the host. Keep port 3020
+   private. The automatic VPS release script still installs the Docker overlay;
+   native installations must use this manual deployment path instead.
+5. Use **Plugins → Codex → Runtime → Edit → Native VPS**, or follow the environment
+   default. Configure provider or ChatGPT sign-in through the existing Codex
+   configuration dialog. The runner uses application-managed, workspace-scoped
+   credentials; it never imports the operator's host login or `.codex` directory.
+
+Drain and clean all retained task records before switching a runtime. Changing to
+a different supervisor requires moving its state and management token together;
+never share a writable state directory between two live supervisors. The panel
+probes readiness before saving and retains the current selection if it fails.
+
+Native preparation, setup, implementation, checks, export and publication use the
+same authorization and verification contracts as containers. Only preparation
+and publication receive their respective GitHub tokens; only implementation gets
+the model proxy token or temporary account cache. This prevents accidental
+environment inheritance, not deliberate credential access by trusted host code.
+Each phase runs in a tracked process group, with host boot ID and process start
+time fencing Stop against reused PIDs. Confirmed completion and Stop terminate
+remaining group processes. Supervisor restart reconnects to tracked phases;
+uncertain launches/publication are never replayed. The standard interruption,
+retention and erasure machinery owns recovery and removes task directories.
+Processes that deliberately detach into another session are outside this task
+process group; the systemd service control group cleans them at service shutdown.
 
 ### Local Docker application stack
 

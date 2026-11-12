@@ -236,15 +236,20 @@ cannot prove a claim follows from its citation. Thinking blocks are never persis
 
 Per-call reservations precede dispatch and reconcile completed usage. Provider retries
 are disabled. The worker checks cancellation every second and between tool/model
-steps, with configurable run deadlines (five minutes by default), model capacity and
-optional budget limits, with no fixed model-call or tool-call quota. Workspace run
+steps, with model capacity and optional budget limits, without a total execution
+deadline or fixed model-call or tool-call quota. Workspace run
 and monthly budgets default to `null` (unlimited); zero permits only zero-cost
 requests. Workflow runs inherit these team settings without a separate budget.
-`RUN_TIMEOUT_SECONDS` accepts 1–1800
-seconds. New queue jobs expire 60 seconds after the configured run deadline; the
-120-second conversation lease is renewed by the one-second guard. Deadline expiry
-is recorded as `failed (run_timeout)`, distinct from user cancellation and worker
-shutdown. Unknown provider usage remains reserved after any interruption. Skills request capabilities from the application registry; extension tools require
+`RUN_TIMEOUT_SECONDS` is retired and ignored in older environments. The queue
+acknowledges each run wakeup before assistant execution starts; its finite dispatch
+expiry does not bound the assistant's lifetime. A worker tracks at most three
+executions and drains them on shutdown. The 120-second conversation lease is
+renewed by the one-second guard. The transactional outbox recovers acknowledged
+wakeups after a crash, including a crash before claiming the run. Live leases
+prevent redispatch, and uncertain provider attempts still stop for reconciliation.
+Cancellation, current authorization and shutdown can interrupt execution;
+`run_timeout` remains a historical diagnostic. Unknown provider usage remains
+reserved after any interruption. Skills request capabilities from the application registry; extension tools require
 separate explicit operator grants. Extension configurations are pinned on runs and
 extension tool outcomes use durable reservations without automatic unknown replay.
 Instruction proposals require their existing approval before becoming persistent
@@ -264,6 +269,16 @@ transaction. The Telegram tool quotes the current authenticated request, records
 a durable activation outcome, and stops Pi before another model call. Executor
 recovery confirms a committed activation without replaying it or sending a false
 failure notice. Activation confirmation content follows run erasure/retention.
+Telegram revisions supply the existing workflow ID and expected version to the
+same tool. Updates validate ownership and the current chat/Topic, reuse the
+workflow identity, retain immutable spec versions and cancel queued work/output
+from the previous version in the activation transaction. Paused workflows remain
+paused. The durable confirmation distinguishes updates from new activations.
+Workflow definition edits are owner-only across Telegram and the web panel.
+Panel accounts must be linked to the active workflow owner's verified Telegram
+identity; administrator/operator authority does not permit another owner's edit.
+List/detail projections expose a server-derived edit capability, while the
+transaction independently checks current ownership before changing the spec.
 The panel displays saved owner profiles and does not queue workflow proposals for administrator approval. Repeat Telegram
 decisions report the existing outcome without applying another decision; private
 confirmations retain the original Topic.
@@ -277,6 +292,21 @@ Runs without a skill can read their approved chat context and scoped model costs
 alongside independently authorized application/extension tools. Scheduling grants
 no new connector access or external writes. Pause, owner removal, selected-skill
 disable and deletion block dependent execution.
+
+Each workflow invocation uses a dedicated execution prompt with its pinned ID
+and version. The saved task and format drive this occurrence; setup messages,
+conversation summaries and schedule-comparison metadata are absent from its
+initial prompt. Historical attachments are not downloaded automatically. Chat
+recaps can explicitly read the run's retained, authorized source snapshot through
+`read_chat_context`, marked as historical reference rather than a new request.
+The snapshot's permission and retention checks remain enforced.
+
+Workflow invocations expose only read-only application tools, alongside integration
+tools subject to their own current authorization checks. Schedule/instruction/skill proposals, conversation
+controls and memory writes are unavailable. Every application tool invocation
+also checks the persisted workflow marker before cached-result replay, so legacy
+published skill grants or stale tool references cannot enable management writes.
+Manual run-now invocations use the same execution boundary as scheduled ticks.
 
 Delivery is independent of generation. An intent is marked `sending` before calling
 Telegram; a lost reply becomes `delivery_unknown`, never an automatic resend. 429

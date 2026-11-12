@@ -132,6 +132,12 @@ and passes after the fix.
 The isolated commit on the latest `main` also passes lint, strict TypeScript,
 build, the Node runtime contract and all 1,384 tests across 150 files.
 
+VPS release `1793614570991-61029298` deploys this runtime correction over the
+previous production snapshot while preserving its existing features. The exact
+snapshot passes 1,388 tests; app and worker both pass live headed Browser
+connection checks with synthetic private profiles. The native Browser package
+and saved member decisions remain unchanged. See [deployment evidence](vps-deployment.md#browser-website-consent-retry-correction-2026-11-02).
+
 ## Remembered websites and Pi continuity (2026-11-01)
 
 Website decisions now save exact-origin permissions in the encrypted owner

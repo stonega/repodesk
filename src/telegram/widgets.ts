@@ -8,6 +8,7 @@ import {
   type Workspace,
 } from "../domain.ts";
 import { fingerprint } from "../setup/credentials.ts";
+import { runAllowed } from "../workspaces/policy.ts";
 import { deliver } from "../workspaces/service.ts";
 
 const argumentsSchema = z.strictObject({
@@ -40,6 +41,29 @@ function widgetBot(w: Workspace, r: Run) {
     403,
   );
   return thread.botId;
+}
+/** Prompt guidance uses the same private audience and current run restrictions as tools. */
+export function telegramWidgetAvailable(w: Workspace, r: Run) {
+  if (!runAllowed(w, r)) return false;
+  try {
+    widgetBot(w, r);
+  } catch {
+    return false;
+  }
+  return r.skillPins.some((pin) => {
+    const skill = w.skills.find((s) => s.id === pin.id);
+    const spec = skill?.published[pin.version - 1];
+    return (
+      skill?.enabled &&
+      !skill.archived &&
+      spec?.slug === "telegram-widgets" &&
+      spec.tools.includes("send_telegram_widget") &&
+      spec.tools.includes("load_skill") &&
+      spec.resources?.some(
+        (resource) => resource.path === "references/rendering.md",
+      )
+    );
+  });
 }
 export function authorizeWidget(
   w: Workspace,

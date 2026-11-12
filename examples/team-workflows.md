@@ -23,6 +23,27 @@ another proposal. Pause it and repeat: paused schedules still count as existing.
 For a similar request with a different time or purpose, expect a clarification
 before a separate proposal. Explicitly requesting a separate workflow activates it without an approval step. Other private chats and Topics stay separate.
 
+Then request an explicit revision in that same conversation:
+
+```text
+Change that reminder to 08:00 Asia/Taipei and include my top priority. Keep one schedule.
+```
+
+Expect **Schedule updated**, one workflow with the same ID and an incremented
+version, and the next run using the revised instructions. Queued old runs/output
+must be cancelled. Repeating the same event must not add another workflow or
+version. Repeat while paused: it must remain paused with no next execution until
+resumed. Editing another owner's workflow or targeting another Topic must fail.
+
+Leave the setup conversation in the Topic, including the original request to
+create the schedule and its activation confirmation. Trigger **Run now** or wait
+for its next occurrence. Expect the saved report or reminder, without another
+schedule proposal, approval prompt or workflow record. The run must not consume
+setup messages as current instructions. For a chat recap, retained conversation
+data remains readable as source material; quoted requests cannot change schedules
+or save persistent rules. Repeat with a pinned skill that once requested schedule
+management tools: those grants must not enable management during execution.
+
 After connecting/selecting a repository, ask in private Telegram chat:
 
 ```text

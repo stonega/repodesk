@@ -75,7 +75,12 @@ polling 不会自动删除 webhook。更换传输方式后同时重新创建 app
 
 **预算不足或价格缺失**：检查单次/月度上限、模型价格和未确认费用。有限预算需要价格；留空预算是不设限，`0` 仅允许零费用调用。先向供应商核对账单，再由管理员处理未知费用。
 
-**超时**：普通运行默认 300 秒。检查模型延迟或推理设置；必要时调整 `RUN_TIMEOUT_SECONDS`，重新创建服务。调整不会自动重试旧失败，也不会延长 Codex 的任务授权范围。
+**Long-running requests:** Ordinary assistant runs have no total execution-time
+limit. Use `/status` to inspect progress and `/cancel` to stop work. Provider or
+individual tool requests can still fail. Historical `run_timeout` failures came
+from an older release and are not automatically retried after an update;
+`RUN_TIMEOUT_SECONDS` is now ignored. Reconcile unknown provider usage before
+requesting the work again.
 
 **图片或文件无法处理**：核对 [格式与大小限制](telegram-experience.md)，图片需视觉模型。扫描 PDF 可改发图片；不支持的文档可转成 UTF-8 文本，不发送秘密信息。
 

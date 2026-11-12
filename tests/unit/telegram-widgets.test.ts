@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
+import { buildContext } from "../../src/agent/context.ts";
 import { applicationTools } from "../../src/agent/tools.ts";
 import {
   decodeBrowserWorkspace,
@@ -15,9 +16,11 @@ import {
   authorizeWidget,
   publishWidget,
   stageWidget,
+  telegramWidgetAvailable,
   widgetDeliveryAllowed,
 } from "../../src/telegram/widgets.ts";
 import { createRun } from "../../src/workspaces/service.ts";
+import { originalTelegramWidgetSpec } from "../fixtures/telegram-widgets.ts";
 import { workspace } from "../fixtures.ts";
 
 function required<T>(value: T | undefined): T {
@@ -63,6 +66,101 @@ function tool(
   if (!found) throw Error("widget tool missing");
   return found;
 }
+test("private answers receive proactive selection guidance and load rendering details on demand", () => {
+  const { w, r } = fixture();
+  for (const task of [
+    "Compare these three plans",
+    "How does the cost change if we double the team?",
+    "Hello",
+    "What is 2 + 2? Text only.",
+  ]) {
+    r.task = task;
+    const context = buildContext(w, r);
+    expect(JSON.parse(context.prompt).request).toBe(task);
+    expect(context.system).toContain("Proactively use send_telegram_widget");
+    expect(context.system).toContain("Honor text-only requests");
+    expect(context.system).toContain("use text for simple facts");
+    expect(context.system).not.toContain("## Observable design checks");
+  }
+});
+test("proactive selection guidance requires a private bot thread and an authorized pinned widget guide", () => {
+  const { w, r } = fixture();
+  expect(telegramWidgetAvailable(w, r)).toBe(true);
+  for (const mutate of [
+    (_w: Workspace, r: Run) => {
+      r.workflowId = "scheduled";
+    },
+    (_w: Workspace, r: Run) => {
+      r.chatId = "-100100";
+    },
+    (_w: Workspace, r: Run) => {
+      r.threadId = undefined;
+    },
+    (_w: Workspace, r: Run) => {
+      r.actor = "202";
+    },
+    (_w: Workspace, r: Run) => {
+      r.topicId = 8;
+    },
+    (_w: Workspace, r: Run) => {
+      r.skillPins = [];
+    },
+    (w: Workspace) => {
+      w.settings.paused = true;
+    },
+    (w: Workspace) => {
+      required(w.members[0]).active = false;
+    },
+    (w: Workspace) => {
+      required(w.threads?.[0]).botId = undefined;
+    },
+    (w: Workspace) => {
+      required(
+        w.skills.find((s) => s.draft.slug === "telegram-widgets"),
+      ).enabled = false;
+    },
+    (w: Workspace) => {
+      required(
+        w.skills.find((s) => s.draft.slug === "telegram-widgets"),
+      ).archived = true;
+    },
+    (w: Workspace) => {
+      const spec = required(
+        w.skills.find((s) => s.draft.slug === "telegram-widgets")?.published[0],
+      );
+      spec.tools = spec.tools.filter((t) => t !== "send_telegram_widget");
+    },
+    (w: Workspace) => {
+      required(
+        w.skills.find((s) => s.draft.slug === "telegram-widgets")?.published[0],
+      ).resources = [];
+    },
+  ]) {
+    const copy = structuredClone({ w, r });
+    mutate(copy.w, copy.r);
+    expect(telegramWidgetAvailable(copy.w, copy.r)).toBe(false);
+  }
+  const group = fixture("-100100");
+  expect(buildContext(group.w, group.r).system).not.toContain(
+    "Proactively use send_telegram_widget",
+  );
+  const preset = required(
+    w.skills.find((s) => s.draft.slug === "telegram-widgets"),
+  );
+  changeSkill(w, "101", preset.id, preset.version, "disable");
+  const next = createRun(
+    w,
+    "101",
+    "Compare these plans",
+    "101",
+    7,
+    "gpt-4.1-mini",
+    { botId: "999" },
+  );
+  expect(buildContext(w, next).system).not.toContain(
+    "Proactively use send_telegram_widget",
+  );
+});
 test("widget calls stage once, replay durably and publish only with a successful answer", async () => {
   const { w, r } = fixture();
   const t = tool(w, r);
@@ -239,6 +337,84 @@ test("preset upgrade is stable and preserves disablement, collisions and existin
   preset.preset = false;
   ensureTelegramWidgetSkill(w);
   expect(w.skills.at(-1)).toBe(preset);
+});
+test("original presets upgrade once at catalog capacity, preserving disablement, versions and run pins", () => {
+  for (const enabled of [true, false]) {
+    const w = workspace();
+    const preset = required(
+      w.skills.find((s) => s.draft.slug === "telegram-widgets"),
+    );
+    const original = originalTelegramWidgetSpec();
+    preset.draft = structuredClone(original);
+    preset.published = [structuredClone(original)];
+    const old = createRun(w, "101", "Compare plans", "101", 7, "gpt-4.1-mini", {
+      botId: "999",
+    });
+    const pins = structuredClone(old.skillPins);
+    preset.enabled = enabled;
+    const revision = preset.version;
+    while (w.skills.length < 100) {
+      const copy = structuredClone(required(w.skills[0]));
+      copy.id = randomUUID();
+      copy.draft.slug = `extra-${w.skills.length}`;
+      w.skills.push(copy);
+    }
+    ensureTelegramWidgetSkill(w);
+    expect(preset.enabled).toBe(enabled);
+    expect(preset.version).toBe(revision + 1);
+    expect(preset.published).toHaveLength(2);
+    expect(preset.published[0]).toEqual(original);
+    expect(preset.draft.body).toContain("The user does not need to say");
+    expect(old.skillPins).toEqual(pins);
+    if (enabled) {
+      expect(
+        buildContext(w, old).skills.find((s) => s.id === preset.id)?.content,
+      ).toContain(original.body);
+      const next = createRun(
+        w,
+        "101",
+        "Compare plans",
+        "101",
+        7,
+        "gpt-4.1-mini",
+        { botId: "999" },
+      );
+      expect(next.skillPins.find((p) => p.id === preset.id)?.version).toBe(2);
+    }
+    ensureTelegramWidgetSkill(w);
+    expect(preset.published).toHaveLength(2);
+    expect(preset.version).toBe(revision + 1);
+  }
+});
+test("automatic preset updates preserve custom collisions, changed instructions and archived records", () => {
+  for (const mutate of [
+    (skill: Workspace["skills"][number]) => {
+      skill.preset = false;
+    },
+    (skill: Workspace["skills"][number]) => {
+      skill.preset = undefined;
+    },
+    (skill: Workspace["skills"][number]) => {
+      skill.archived = true;
+    },
+    (skill: Workspace["skills"][number]) => {
+      skill.draft.body += " Custom instructions.";
+    },
+    (skill: Workspace["skills"][number]) => {
+      required(skill.published[0]).tools = [];
+    },
+  ]) {
+    const w = workspace();
+    const preset = required(
+      w.skills.find((s) => s.draft.slug === "telegram-widgets"),
+    );
+    preset.draft = originalTelegramWidgetSpec();
+    preset.published = [originalTelegramWidgetSpec()];
+    mutate(preset);
+    const before = structuredClone(w.skills);
+    ensureTelegramWidgetSkill(w);
+    expect(w.skills).toEqual(before);
+  }
 });
 test("private Browser widget contents are encrypted with runs and deliveries and erased with sources", () => {
   const { w, r } = fixture();

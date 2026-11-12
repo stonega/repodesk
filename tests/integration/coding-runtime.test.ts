@@ -172,4 +172,30 @@ const url = process.env.TEST_DATABASE_URL;
       store.pool.query = original;
     }
   });
+  test("native selection uses the operator authorization and audit contract", async () => {
+    const response = await request("PUT", { revision: 2, selection: "native" });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      selection: "native",
+      engine: "native",
+      revision: 3,
+    });
+    expect(
+      (
+        await store.pool.query(
+          "SELECT target FROM operator_audit WHERE action='coding.runtime_selected' AND target='native'",
+        )
+      ).rowCount,
+    ).toBe(1);
+    const denied = await request(
+      "PUT",
+      { revision: 3, selection: "docker" },
+      { cookie: `repodesk_session=${member.raw}`, "x-csrf-token": member.csrf },
+    );
+    expect(denied.status).toBe(403);
+    expect(await (await request()).json()).toMatchObject({
+      engine: "native",
+      revision: 3,
+    });
+  });
 });

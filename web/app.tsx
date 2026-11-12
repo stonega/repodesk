@@ -165,7 +165,11 @@ async function api<T>(
   };
   if (!response.ok)
     throw new ApiError(
-      githubAccountError[data.error] ??
+      (method === "PUT" &&
+      path.includes("/workflows/") &&
+      data.error === "owner_required"
+        ? "Only the workflow owner can edit this schedule. Link the panel account to the owner's Telegram identity."
+        : githubAccountError[data.error]) ??
         (data.error === "preset_skill_read_only"
           ? "Preset skills are read-only. Only enable and disable are available."
           : response.status === 409 && data.error === "version_conflict"
@@ -2457,12 +2461,14 @@ function WorkflowsPage({
               </h2>
               <span className="pill">{f.status}</span>
             </div>
-            <IconButton
-              icon="edit"
-              label="Edit"
-              type="button"
-              onClick={() => setEditing(f)}
-            />
+            {f.canEdit && (
+              <IconButton
+                icon="edit"
+                label="Edit"
+                type="button"
+                onClick={() => setEditing(f)}
+              />
+            )}
           </div>
           <WorkflowSummary
             workflow={{
@@ -2474,6 +2480,9 @@ function WorkflowsPage({
           />
           {workflowId && (
             <>
+              {!f.canEdit && (
+                <p>Only the linked workflow owner can edit this schedule.</p>
+              )}
               <h3>Task</h3>
               <p className="workflow-text">{f.spec.task}</p>
               <h3>Output format</h3>

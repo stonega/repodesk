@@ -13,6 +13,17 @@ import { spec } from "../fixtures.ts";
 import { fixtureValue, teamWorkspace } from "../team-workflows-fixture.ts";
 
 describe("panel workflow management", () => {
+  test("edit capability requires the active current owner and defaults to denied", () => {
+    const w = teamWorkspace();
+    const { workflow } = proposeWorkflow(w, "303", spec(w));
+    expect(workflowView(w, workflow).canEdit).toBe(false);
+    expect(workflowView(w, workflow, w.operatorId).canEdit).toBe(false);
+    expect(workflowView(w, workflow, "101").canEdit).toBe(false);
+    expect(workflowView(w, workflow, "303").canEdit).toBe(true);
+    fixtureValue(w.members.find((m) => m.id === "303")).active = false;
+    expect(workflowView(w, workflow, "303").canEdit).toBe(false);
+  });
+
   test("workflow summaries expose only the current owner's display profile", () => {
     const w = teamWorkspace();
     const owner = fixtureValue(w.members.find((m) => m.id === "202"));
@@ -65,15 +76,27 @@ describe("panel workflow management", () => {
       "test-model",
       w.operatorId,
     );
+    expect(() =>
+      saveManagedWorkflow(
+        w,
+        "202",
+        {
+          ...result.workflow.spec,
+          task: "Updated while paused",
+        },
+        w.operatorId,
+        result.workflow.id,
+        1,
+      ),
+    ).toThrow("owner_required");
+    const own = saveManagedWorkflow(w, "101", spec(w), "101").workflow;
+    workflowAction(w, "101", own.id, "pause", 1, "test-model");
     const edited = saveManagedWorkflow(
       w,
-      "202",
-      {
-        ...result.workflow.spec,
-        task: "Updated while paused",
-      },
-      w.operatorId,
-      result.workflow.id,
+      "101",
+      { ...own.spec, task: "Updated while paused" },
+      "101",
+      own.id,
       1,
     );
     expect(edited.workflow).toMatchObject({ status: "paused", version: 2 });
@@ -119,53 +142,25 @@ describe("panel workflow management", () => {
     expect(w.runs[0]?.status).toBe("cancelled");
   });
 
-  test("admin edits of another owner's private workflow preserve that owner and require fresh approval", () => {
+  test("panel administrators cannot edit another owner's workflow through the proposal service", () => {
     const w = teamWorkspace();
     const proposal = proposeWorkflow(w, "202", { ...spec(w), chatId: "202" });
     decide(w, "303", proposal.approval.id, true, new Date(), "303");
-    const edited = proposeWorkflow(
-      w,
-      "202",
-      { ...proposal.workflow.spec, task: "Updated" },
-      new Date(),
-      proposal.workflow.id,
-      1,
-      "303",
-    );
-    expect(edited.workflow).toMatchObject({
-      owner: "202",
-      version: 2,
-      status: "draft",
-    });
-    expect(() =>
-      workflowAction(
-        w,
-        "202",
-        edited.workflow.id,
-        "run",
-        2,
-        "test-model",
-        "303",
-      ),
-    ).toThrow("workflow_inactive");
-    expect(() =>
-      decide(w, "303", proposal.approval.id, true, new Date(), "303"),
-    ).toThrow("approval_consumed");
-    decide(w, "303", edited.approval.id, true, new Date(), "303");
-    expect(
-      workflowAction(
-        w,
-        "202",
-        edited.workflow.id,
-        "run",
-        2,
-        "test-model",
-        "303",
-      ),
-    ).toMatchObject({ actor: "202", chatId: "202" });
-    expect(
-      w.audit.findLast((a) => a.action === "workflow.proposed")?.actor,
-    ).toBe("303");
+    const before = structuredClone(proposal.workflow);
+    for (const manager of ["101", "303", w.operatorId])
+      expect(() =>
+        proposeWorkflow(
+          w,
+          "202",
+          { ...proposal.workflow.spec, task: "Updated" },
+          new Date(),
+          proposal.workflow.id,
+          1,
+          manager,
+        ),
+      ).toThrow("owner_required");
+    expect(proposal.workflow).toEqual(before);
+    expect(w.approvals).toHaveLength(1);
   });
 
   test("member and foreign managers cannot act as administrators", () => {

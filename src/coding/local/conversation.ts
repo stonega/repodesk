@@ -25,6 +25,7 @@ import {
   conversationPrompt,
   type JobTaskChannel,
 } from "./job-channel.ts";
+import { jobPath } from "./job-paths.ts";
 import { type ReviewSource, reviewSourceTools } from "./review-source.ts";
 
 /** Private JSONL client. Only completed turns cross the durable application boundary. */
@@ -352,16 +353,16 @@ export async function runConversation(options: {
                 : {}),
               filesystem: {
                 ":root": "read",
-                "/auth": "deny",
-                "/task/codex": "deny",
-                "/task/home/.codex": "deny",
+                [jobPath("/auth")]: "deny",
+                [jobPath("/task/codex")]: "deny",
+                [jobPath("/task/home/.codex")]: "deny",
                 "/proc": "deny",
               },
               shell_environment_policy: {
                 inherit: "none",
                 set: {
                   PATH: "/usr/local/bin:/usr/bin:/bin",
-                  HOME: "/task/home",
+                  HOME: options.env.HOME ?? "/task/home",
                   LANG: "C.UTF-8",
                 },
               },

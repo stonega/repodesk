@@ -21,6 +21,7 @@ import { type Telegram, TelegramError } from "../../src/telegram/client.ts";
 import { Ingress } from "../../src/telegram/webhook.ts";
 import { publishWidget } from "../../src/telegram/widgets.ts";
 import { createRun } from "../../src/workspaces/service.ts";
+import { originalTelegramWidgetSpec } from "../fixtures/telegram-widgets.ts";
 import { workspace } from "../fixtures.ts";
 
 const rootUrl = process.env.TEST_DATABASE_URL;
@@ -116,6 +117,53 @@ const args = {
         publishWidget(w, run, "999");
       });
     }
+    test("stored original presets upgrade idempotently without changing existing run pins or enablement", async () => {
+      for (const enabled of [true, false]) {
+        const preset = w.skills.find(
+          (s) => s.draft.slug === "telegram-widgets",
+        );
+        if (!preset) throw Error("preset missing");
+        preset.draft = originalTelegramWidgetSpec();
+        preset.published = [originalTelegramWidgetSpec()];
+        preset.enabled = enabled;
+        preset.version = 3;
+        const pins = structuredClone(r.skillPins);
+        await store.pool.query("UPDATE workspaces SET data=$2 WHERE id=$1", [
+          w.id,
+          JSON.stringify(w),
+        ]);
+        const updated = await store.read(w.id);
+        expect(updated.skills.find((s) => s.id === preset.id)).toMatchObject({
+          id: preset.id,
+          enabled,
+          version: 4,
+          published: [originalTelegramWidgetSpec(), expect.anything()],
+        });
+        expect(updated.runs[0]?.skillPins).toEqual(pins);
+        await store.change(w.id, (current) => {
+          const next = createRun(
+            current,
+            "101",
+            "Compare these plans",
+            "101",
+            7,
+            "gpt-4.1-mini",
+            { botId: "999" },
+          );
+          expect(next.skillPins.find((p) => p.id === preset.id)?.version).toBe(
+            enabled ? 2 : undefined,
+          );
+        });
+        const restarted = await new Store(store.pool).read(w.id);
+        expect(
+          restarted.skills.find((s) => s.id === preset.id)?.published,
+        ).toHaveLength(2);
+        expect(restarted.skills.find((s) => s.id === preset.id)?.version).toBe(
+          4,
+        );
+        expect(restarted.runs[0]?.skillPins).toEqual(pins);
+      }
+    });
     test("duplicate concurrent calls, restart and duplicate dispatch send exactly one widget to the bound private Topic", async () => {
       await Promise.all([
         tool().execute("widget", args),
@@ -161,7 +209,7 @@ const args = {
           from: { id: 101, is_bot: false },
           chat: { id: 101, type: "private" as const },
           message_thread_id: 7,
-          text: "Make an interactive estimate",
+          text: "How does the cost change if we double the team? Use 3 seats at USD 10 per seat.",
         },
       };
       const ingress = new Ingress(store, setup);
@@ -171,6 +219,21 @@ const args = {
       if (!next) throw Error("missing ingress run");
       const runner: AgentRunner = {
         async run(input) {
+          expect(input.system).toContain(
+            "Proactively use send_telegram_widget",
+          );
+          const guide = input.tools.find((t) => t.name === "load_skill");
+          const skill = w.skills.find(
+            (s) => s.draft.slug === "telegram-widgets",
+          );
+          if (!guide || !skill) throw Error("missing widget guide");
+          const loaded = await guide.execute("guide", {
+            id: skill.id,
+            path: "references/rendering.md",
+          });
+          expect(JSON.stringify(loaded.content)).toContain(
+            "Telegram widget rendering",
+          );
           const t = input.tools.find((t) => t.name === "send_telegram_widget");
           if (!t) throw Error("missing widget tool");
           await t.execute("widget", args);
@@ -181,7 +244,7 @@ const args = {
             text: args.caption,
             status: "succeeded",
             turns: 1,
-            tools: 1,
+            tools: 2,
             transcript: [],
           };
         },

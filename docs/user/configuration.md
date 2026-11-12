@@ -93,13 +93,16 @@ and remaining budgets.
 | `APP_PORT` | `3000`，宿主机回环监听端口 |
 | `ENCRYPTION_KEY_FILE` | `./secrets/encryption-key`，Compose 使用的加密密钥文件 |
 | `TELEGRAM_TRANSPORT` | `webhook`；快速开始使用 `polling` |
-| `RUN_TIMEOUT_SECONDS` | `300`，普通助手单次时限，范围 `1–1800` 秒 |
 | `COMPOSE_FILE` | 基础文件和可选服务叠加文件 |
 | `CODEX_RUNNER_CONCURRENCY` | `4`，runner 并发任务数，范围 `1–32` |
 | `CODEX_RUNNER_CPUS` | `2`，Codex 任务 CPU 设置 |
 | `CODEX_RUNNER_MEMORY_MB` | `4096`，Codex 任务内存设置 |
 | `CODEX_RUNNER_RETENTION_HOURS` | `24`，runner 工作数据保留设置 |
 
-修改 `.env` 后使用 `docker compose up -d` 重新创建受影响服务；单纯 `restart` 不会加载新的容器环境。`RUN_TIMEOUT_SECONDS` 不是 Codex 持续任务的总时长上限。
+After changing `.env`, recreate affected services with `docker compose up -d`;
+`restart` does not load new container environment values. Ordinary assistant runs
+have no total execution-time limit. The retired `RUN_TIMEOUT_SECONDS` variable is
+ignored. Cancellation, permissions, configured spending budgets and upstream
+service limits still apply.
 
 完整配置见 [Code Truth](code-truth.md)、[Codex](codex.md) 和 [维护指南](maintenance.md)。

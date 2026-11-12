@@ -36,7 +36,7 @@ Member pagination and search do not paginate or hide the workspace's linked grou
 | Workspace settings | Saved team currency with a focused Edit dialog, workspace activity status and Pause/Resume action; Settings follows Plugins in the sidebar | Currency defaults to USD and guides assistant responses when no currency is specified; explicit source currencies and USD budget/usage accounting are preserved. Versioned saves preserve other configuration and show conflicts. Pause requires confirmation and is absent from the Overview team editor. |
 | Bot settings | Display label, timezone, base instructions, response style, directed-response mode, pause switch | Validated form, versioned save, audit entry, saved/effective version shown. |
 | Model settings | Operator-configured model/search providers and bot chat model, search selection, thinking level, optional capacity and token prices; saved summaries and modal editors | Successful model setup activates automatically when prerequisites are ready, without a separate activation card. Invalid settings rejected locally; provider capabilities require evaluation. Runs pin provider/selection versions and endpoint/thinking/prices at first execution; configuration changes stop old runs. |
-| Workflows | All authorized panel admins, including unlinked deployment operators, can inspect owner profiles and full details, save edits, pause/resume, run now and delete | Panel Save applies the exact version immediately without a separate admin approval. Explicit Telegram requests activate schedules immediately. Preserve execution ownership, versions, destination/repository checks and team budgets. |
+| Workflows | Authorized panel admins inspect owner profiles and details and use lifecycle controls; only the linked workflow owner can edit its definition | Server-enforced owner identity and expected version govern Save, including for administrators. Apply exact edits immediately without a separate approval. Explicit Telegram requests activate schedules immediately. Preserve execution ownership, destination/repository checks and team budgets. |
 | Plugins | Compact Installed catalog with Markets hidden; dedicated detail pages for Code Truth, Codex and registered file extensions; operator-managed version/path/tool editing, enable/disable/remove, file status and revision conflicts | Database-backed settings reach workers without restart; settings and revisions isolated per workspace; existing direct market detail routes remain discovery links and no code executes on API reads/saves. |
 | GitHub | Manage GitHub modal for guided App creation, workspace OAuth, installation/repository selection and connected repository links, opened on Overview without navigation; GitHub callbacks return to Plugins; disconnect API | Manifest state bound to operator/session/workspace; encrypted operator App credentials; one-use PKCE OAuth; verify user installation/repository access; installation tokens limited to selected repositories and Contents read. |
 | Agent skills | Direct create/import/edit saves, test, enable/disable, settings and reviewed GitHub updates; recommend GitHub for history | Permission-bounded skills; pinned workflow versions; disabling blocks dependent execution. |
@@ -418,9 +418,11 @@ saves preserve entered values and show errors inside the dialog; saves in progre
 disable dismissal and repeated submission. Dialogs scroll within a mobile viewport.
 Primary and Cancel buttons share one action row, with Cancel immediately after
 the primary action in visual and keyboard order. Narrow layouts wrap in that order.
-Repository and network dialogs apply to a local Code Truth draft; **Save Code Truth**
-still persists the configuration. Creating workflows/instructions still produces
-an approval proposal, and creating a GitHub App still requires GitHub confirmation.
+Code Truth repository dialogs save through **Confirm**, close after success and
+retain entered values with an in-dialog error on failure. Repository removal saves
+immediately and retains the saved card on failure. Editing workflows or creating
+instructions still produces an approval proposal, and creating a GitHub App still
+requires GitHub confirmation.
 
 Test unauthorized/expired sessions, role downgrades, forged workspace IDs, cross-tenant
 reads, stale saves, credential redaction and CSRF. Test admin scheduling and Telegram
@@ -446,7 +448,7 @@ the owner's Telegram name/username/ID, the explicit schedule timezone and the ne
 team's per-run and monthly budget settings; workflows have no separate budget.
 The web panel has no Add workflow action or creation dialog; new schedules are
 requested through Telegram or saved through the API. Existing schedules remain
-editable in a modal. Save applies the exact version immediately and shows a toast;
+editable by their linked owners in a modal. Save applies the exact version immediately and shows a toast;
 there is no separate administrator approval or workflow approval list. Telegram
 requests activate immediately and receive an application-owned confirmation.
 The name links to `/admin/workflows/:workflowId?workspace=:id&offset=:offset`;
@@ -459,13 +461,19 @@ states and retry; draft/paused/suspended times are labeled schedule previews.
 
 `GET /api/admin/workspaces/:id/workflows/:workflowId` returns
 `{ mode, workflow, repositorySources }`. Both operator and member modes include
-the full workflow, `ownerProfile: { id, name?, username? }` and current accessible
+the full workflow, `ownerProfile: { id, name?, username? }`, a server-derived
+`canEdit` flag and current accessible
 repository choices. Profiles come only from the same workspace's saved member
 metadata; unavailable names/usernames fall back to the numeric owner ID. Authorized panel
 admins see every non-deleted workflow in their workspace. Workflow proposals are
 excluded from the panel approval list. Missing or deleted workflow IDs return 404;
 foreign workspace access is denied. The list API likewise returns full workflows
-in both modes. Recurrence previews do not
+in both modes. `canEdit` is true only for the active owner identified by the
+authenticated account's Telegram link; administrator/operator status does not
+override ownership. Hide Edit when it is false. PUT independently rechecks the
+current owner under the workspace lock and returns 403 `owner_required` for
+another owner's or an unlinked account's edit, without changing versions or audit.
+Recurrence previews do not
 guarantee dispatch, which still depends on workspace and workflow policy.
 Panel changes are audited under the manager; execution retains the workflow owner.
 Workflow POST and PUT return `{ workflow, next }` after the exact payload passes
@@ -474,7 +482,8 @@ editing a paused workflow preserves its paused state. No follow-up
 approval request is needed; internal authorization records remain auditable.
 New private schedules use the active recipient as owner; new group schedules use
 the linked administrator or an active workspace owner/admin. No personal Telegram
-link is required for panel management. A workspace with no active execution member
+link is required for inspection or lifecycle controls; definition editing requires
+the owner's verified Telegram link. A workspace with no active execution member
 must enroll one before creating a schedule. Other approval kinds retain their
 actor-specific boundaries.
 See [workflow API examples](../../examples/workflows.http).
@@ -526,10 +535,10 @@ no registration. See [VPS deployment](../implementation/vps-deployment.md#custom
 Installed plugin pages use a shared title row with an Enable switch at the right,
 compact configuration summaries, and separate repository and operational cards
 where applicable. The switch saves independently with the current revision and
-shows failures without changing the saved state. Code Truth repository edits
-remain a local draft until **Save Code Truth**; toggling enablement preserves
-that draft and saves only the previously saved repositories. Codex configuration
-uses one primary **Save configuration** action; sign-in, disconnect and connection
+shows failures without changing the saved state. Code Truth repository dialogs
+persist New/Edit through **Confirm**; there is no page-level save step. Toggling
+enablement preserves saved repositories. Codex configuration uses one primary
+**Save configuration** action; sign-in, disconnect and connection
 recheck actions use secondary buttons.
 
 ## Host browser and secure input (proposed, 2026-10-30)

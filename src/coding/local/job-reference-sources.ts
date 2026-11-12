@@ -2,6 +2,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { ReferenceSource } from "../reference-sources.ts";
 import { jobCommand } from "./job-command.ts";
+import { jobPath } from "./job-paths.ts";
 
 const gitEnv = () => ({
   PATH: process.env.PATH,
@@ -17,7 +18,7 @@ type Command = typeof jobCommand;
 export async function prepareReferenceCheckouts(
   sources: ReferenceSource[],
   token: string | undefined,
-  root = "/task/references",
+  root = jobPath("/task/references"),
   command: Command = jobCommand,
 ) {
   await rm(root, { recursive: true, force: true });
@@ -74,7 +75,7 @@ export async function prepareReferenceCheckouts(
 
 export async function verifyReferenceCheckouts(
   sources: ReferenceSource[],
-  root = "/task/references",
+  root = jobPath("/task/references"),
   command: Command = jobCommand,
 ) {
   for (const source of sources) {

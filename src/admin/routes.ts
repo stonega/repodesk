@@ -1253,7 +1253,9 @@ export function adminRoutes(
           ...take(
             w.workflows
               .filter((f) => f.status !== "deleted")
-              .map((f) => workflowView(w, f)),
+              .map((f) =>
+                workflowView(w, f, c.get("session").admin.telegramId),
+              ),
           ),
         });
       case "approvals":
@@ -1534,7 +1536,7 @@ export function adminRoutes(
     requireThat(workflow, "not_found", 404);
     return c.json({
       mode: operatorView ? "operator" : "member",
-      workflow: workflowView(w, workflow),
+      workflow: workflowView(w, workflow, c.get("session").admin.telegramId),
       repositorySources: workflowRepositories(w, actor),
     });
   });
@@ -1561,6 +1563,8 @@ export function adminRoutes(
           actor,
           c.req.param("workflow"),
           input.version,
+          new Date(),
+          c.get("session").admin.telegramId ?? actor,
         ),
       ),
     );

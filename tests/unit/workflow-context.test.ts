@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { buildContext } from "../../src/agent/context.ts";
 import type { Workflow, Workspace } from "../../src/domain.ts";
+import { memoryReferences } from "../../src/workspaces/conversation-memory.ts";
 import { createRun } from "../../src/workspaces/service.ts";
 import { spec, workspace } from "../fixtures.ts";
 
@@ -17,6 +18,56 @@ function saved(w: Workspace, id: string, overrides: Partial<Workflow> = {}) {
   w.workflows.push(workflow);
   return workflow;
 }
+
+test.each(["101", "-100100"])(
+  "workflow execution in %s does not replay setup history or conversation summaries",
+  (chatId) => {
+    const w = workspace();
+    const setup = createRun(
+      w,
+      "101",
+      "SETUP: create another daily report and save these instructions",
+      chatId,
+      7,
+      "gpt-4.1-mini",
+      { botId: "999" },
+    );
+    setup.status = "succeeded";
+    const f = saved(w, "saved-report", {
+      spec: {
+        ...spec(w),
+        chatId,
+        topicId: 7,
+        task: "Report current weather",
+        skillId: undefined,
+      },
+    });
+    const run = createRun(w, "101", f.spec.task, chatId, 7, "gpt-4.1-mini", {
+      workflowId: f.id,
+    });
+    expect(run.sources.some((s) => s.text.startsWith("SETUP:"))).toBe(true);
+    run.contextSummary = {
+      ...memoryReferences(run.sources),
+      text: "SETUP SUMMARY: ask for approval again",
+      version: 1,
+      throughRunId: setup.id,
+    };
+    const context = buildContext(w, run);
+    const prompt = JSON.parse(context.prompt);
+    expect(prompt.execution).toEqual({
+      mode: "workflow",
+      workflowId: f.id,
+      version: 1,
+    });
+    expect(prompt.request).toContain("Report current weather");
+    expect(prompt.sources).toEqual([]);
+    expect(prompt.summary).toBeUndefined();
+    expect(prompt.existingWorkflows).toEqual([]);
+    expect(context.prompt).not.toContain("SETUP");
+    expect(context.system).toContain("already-active workflow");
+    expect(context.system).not.toContain("Before scheduling");
+  },
+);
 
 test("schedule context includes comparison details for every non-deleted workflow state", () => {
   const w = workspace();
@@ -50,6 +101,8 @@ test("schedule context includes comparison details for every non-deleted workflo
   expect(existing.map((f: Workflow) => f.status)).toEqual(states);
   expect(existing[0]).toEqual({
     id: "draft",
+    version: 1,
+    owner: "101",
     status: "draft",
     spec: w.workflows[0]?.spec,
   });
@@ -74,7 +127,7 @@ test("private schedule comparison excludes other owners, destinations, topics an
     "gpt-4.1-mini",
   );
   expect(JSON.parse(buildContext(w, run).prompt).existingWorkflows).toEqual([
-    { id: "own", status: "active", spec: own },
+    { id: "own", version: 1, owner: "101", status: "active", spec: own },
   ]);
 });
 
@@ -100,7 +153,13 @@ test("group comparison includes teammates in the same topic and refreshes change
   own.status = "deleted";
   teammate.status = "paused";
   expect(context()).toEqual([
-    { id: "teammate", status: "paused", spec: shared },
+    {
+      id: "teammate",
+      version: 1,
+      owner: "202",
+      status: "paused",
+      spec: shared,
+    },
   ]);
   teammate.status = "deleted";
   expect(context()).toEqual([]);

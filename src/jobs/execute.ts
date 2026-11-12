@@ -25,7 +25,6 @@ import { restoreBrowserPause } from "../browser/pause.ts";
 import { developmentStatus } from "../coding/feedback.ts";
 import { codingTaskContext } from "../coding/task-context.ts";
 import { taskGet } from "../coding/task-store.ts";
-import { DEFAULT_RUN_TIMEOUT_SECONDS } from "../config.ts";
 import type { Store } from "../db/repositories.ts";
 import { Fault, requireThat } from "../domain.ts";
 import type { SearchPin } from "../search/config.ts";
@@ -56,7 +55,6 @@ export class Executor {
     private store: Store,
     private setup: SetupService,
     private runner: AgentRunner | RunnerProvider = new PiRunner(),
-    private timeoutMs = DEFAULT_RUN_TIMEOUT_SECONDS * 1000,
     private transcription = new TranscriptionService(store),
     private chat = new Ingress(store, setup),
   ) {}
@@ -191,10 +189,8 @@ export class Executor {
     if (!claimed) return;
     const fence = claimed.fence;
     const controller = new AbortController();
-    const deadline = AbortSignal.timeout(this.timeoutMs);
     const signal = AbortSignal.any([
       controller.signal,
-      deadline,
       ...(shutdown ? [shutdown] : []),
     ]);
     let handedOff = !!claimed.codingTaskId;
@@ -393,7 +389,14 @@ export class Executor {
         prompt: context.prompt,
         transcript,
         tools: [
-          ...applicationTools(this.store, workspaceId, runId, fence, this.chat),
+          ...applicationTools(
+            this.store,
+            workspaceId,
+            runId,
+            fence,
+            this.chat,
+            claimed.workflowId ? "workflow" : "interactive",
+          ),
           webReaderTool(this.store, workspaceId, runId, fence, guard),
           ...(claimed.searchProvider
             ? [
@@ -561,7 +564,7 @@ export class Executor {
         input.system = context.system;
         input.prompt = context.prompt;
       }
-      if (!completed && !transcript.length) {
+      if (!completed && !transcript.length && !claimed.workflowId) {
         const attachments = await loadAttachments(
           claimed,
           deployment.bot?.id,
@@ -588,6 +591,11 @@ export class Executor {
             "model_images_unsupported",
           );
         input.images = attachments.images;
+        if (attachments.requestText) {
+          const prompt = JSON.parse(input.prompt);
+          prompt.request = attachments.requestText;
+          input.prompt = JSON.stringify(prompt);
+        }
         input.prompt += attachments.prompt;
       }
       let result = claimed.workflowActivation
@@ -705,16 +713,12 @@ export class Executor {
     } catch (error) {
       // AbortSignal.any preserves the first reason, even if another source aborts later.
       const failure = signal.aborted
-        ? deadline.aborted && signal.reason === deadline.reason
-          ? new Fault("run_timeout", 504)
-          : shutdown?.aborted && signal.reason === shutdown.reason
-            ? new Fault("worker_shutdown", 503)
-            : signal.reason instanceof Fault
-              ? signal.reason
-              : new Fault("cancelled", 409)
+        ? shutdown?.aborted && signal.reason === shutdown.reason
+          ? new Fault("worker_shutdown", 503)
+          : signal.reason instanceof Fault
+            ? signal.reason
+            : new Fault("cancelled", 409)
         : error;
-      const timedOut =
-        failure instanceof Fault && failure.code === "run_timeout";
       await this.store.change(workspaceId, (w) => {
         const r = w.runs.find((r) => r.id === runId);
         if (!r || r.fence !== fence) return;
@@ -747,8 +751,7 @@ export class Executor {
           workspaceId,
           runId,
         });
-        r.status =
-          r.cancelled || (signal.aborted && !timedOut) ? "cancelled" : "failed";
+        r.status = r.cancelled || signal.aborted ? "cancelled" : "failed";
         r.error = r.cancelled
           ? "cancelled"
           : failure instanceof Fault
@@ -765,7 +768,7 @@ export class Executor {
             w,
             r,
             r.codingTaskId
-              ? "Your coding request was handed to Codex, but the chat response could not finish. Ask for task status in this conversation to check the task’s current outcome."
+              ? "Your coding request was handed to Codex, but the chat response could not finish. Ask for task status in this conversation to check its current outcome."
               : (attachmentErrors[r.error ?? ""] ??
                   requestFailureMessage(r.error ?? "")),
           );

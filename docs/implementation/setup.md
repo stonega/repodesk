@@ -35,8 +35,9 @@ Open `http://localhost:3000/setup`. Create the first administrator with a userna
 and a password of at least 12 characters. No bootstrap token or host command is
 needed. Concurrent requests cannot create two initial admins, and setup cannot be
 claimed again after account creation. There is no default password. Setup progress
-persists in PostgreSQL. Complete first setup before exposing a fresh deployment
-beyond localhost: the first successful submission establishes its administrator.
+persists in PostgreSQL. For a public deployment, open `/setup` at the configured
+HTTPS site URL and create the administrator directly in the web UI. SSH forwarding
+and a host-side publication step are not required.
 See [the setup API example](../../examples/setup.http) for the equivalent request.
 
 The authenticated setup wizard guides you through Workspace, Model, Telegram bot
@@ -297,22 +298,25 @@ zero-cost requests. Existing explicit dollar budgets remain configured until edi
 Model calls per run has been removed; older clients' `maxTurns` is discarded and
 migration `018_remove_model_call_limit.sql` removes current saved overrides. Historical
 run snapshots remain audit evidence and no longer impose call quotas. Ordinary
-assistant requests have no fixed model-call or tool-call quota. Set
-`RUN_TIMEOUT_SECONDS` in `.env` (default 300, range 1–1800)
-and redeploy to change the total wall-time allowance per execution. Reasoning
-models can need more than the previous 90 seconds. Queue expiry is set 60 seconds
-beyond this limit. Existing queued jobs retain their original queue expiry; let
-pending work drain before increasing the deadline. Timeouts report `run_timeout`;
-shutdown reports `worker_shutdown`, while explicit user cancellation remains
-`cancelled`. An interrupted request with unconfirmed usage keeps its reservation
-until billing reconciliation; raising the deadline does not retry old failures. Concurrent reservations can still exhaust the remaining
+assistant requests have no fixed model-call, tool-call or total execution-time
+limit. `RUN_TIMEOUT_SECONDS` has been removed; old environment values are ignored.
+The queue only dispatches durable runs and acknowledges each wakeup before
+execution. Existing queued jobs' expiry therefore applies only to dispatch, not
+to assistant execution. Up to three executions run concurrently per worker;
+one-second authorization/cancellation checks renew their 120-second leases.
+An acknowledged wakeup is recovered through the outbox after a crash, while
+uncertain provider attempts stop for reconciliation. Shutdown reports
+`worker_shutdown`, and explicit user cancellation remains `cancelled`.
+Historical `run_timeout` failures are not automatically retried. An interrupted
+request with unconfirmed usage keeps its reservation until billing reconciliation.
+Concurrent reservations can still exhaust the remaining
 budget between estimating output and reserving it; the final transaction prevents
 overspend before dispatch.
 
 The form reports individual invalid fields; API validation includes safe `issues`
 with field paths and messages, never submitted values. Runtime logs preserve
-`input_budget_exceeded`, `model_output_limit_exceeded`, `model_context_limit_exceeded`
-and `model_pricing_required_for_budget`. Changes apply to new runs; failed runs are not retried
+`input_budget_exceeded`, `model_output_limit_exceeded` and `model_context_limit_exceeded`.
+Changes apply to new runs; failed runs are not retried
 automatically. Large outputs still use the existing Telegram reply truncation; this
 change does not introduce long-message delivery or remove the response-length prompt.
 

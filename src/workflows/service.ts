@@ -34,9 +34,15 @@ export function proposeWorkflow(
   id?: string,
   expectedVersion?: number,
   manager?: string,
+  editorIdentity = manager,
 ) {
   if (manager) authorize(w, manager, true);
   authorize(w, actor);
+  requireThat(
+    !id || !manager || editorIdentity === actor,
+    "owner_required",
+    403,
+  );
   const spec = workflowSchema.parse(input);
   audience(w, actor, spec.chatId);
   requireThat(
@@ -108,13 +114,40 @@ export function activateWorkflow(
   w: Workspace,
   actor: string,
   input: WorkflowSpec,
+  existing?: { id: string; version: number },
 ) {
-  const result = proposeWorkflow(w, actor, input);
+  authorize(w, actor);
+  const previous = existing
+    ? w.workflows.find((f) => f.id === existing.id)
+    : undefined;
+  if (existing) {
+    requireThat(previous && previous.status !== "deleted", "not_found", 404);
+    requireThat(previous.owner === actor, "owner_required", 403);
+    requireThat(
+      previous.spec.chatId === input.chatId &&
+        previous.spec.topicId === input.topicId,
+      "workflow_destination_denied",
+      403,
+    );
+  }
+  const paused = previous?.status === "paused";
+  const result = proposeWorkflow(
+    w,
+    actor,
+    input,
+    new Date(),
+    existing?.id,
+    existing?.version,
+  );
   decide(w, actor, result.approval.id, true);
-  return { workflow: result.workflow, next: result.next };
+  if (paused) {
+    result.workflow.status = "paused";
+    result.workflow.nextAt = undefined;
+  }
+  return { workflow: result.workflow, next: paused ? [] : result.next };
 }
 
-/** An explicit panel save authorizes this exact version without a second review. */
+/** The manager authorizes panel access; editorIdentity comes from the verified session link. */
 export function saveManagedWorkflow(
   w: Workspace,
   owner: string,
@@ -123,6 +156,7 @@ export function saveManagedWorkflow(
   id?: string,
   expectedVersion?: number,
   now = new Date(),
+  editorIdentity = manager,
 ) {
   const paused =
     id && w.workflows.find((f) => f.id === id)?.status === "paused";
@@ -134,6 +168,7 @@ export function saveManagedWorkflow(
     id,
     expectedVersion,
     manager,
+    editorIdentity,
   );
   decide(w, manager, result.approval.id, true, now, manager);
   if (paused) {

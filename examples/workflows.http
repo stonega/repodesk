@@ -1,6 +1,8 @@
 # Sign in as the workspace deployment operator or a linked workspace owner/admin.
 # All authorized panel admins can inspect and manage full workspace workflows,
 # including deployment operators without a personal Telegram link.
+# Editing an existing definition requires the owner's verified Telegram identity.
+# An admin/operator editing another owner's workflow receives 403 owner_required.
 # Workflow runs use team per-run/monthly budgets. Panel saves apply immediately.
 @origin = http://localhost:3000
 @workspaceId = REPLACE_WITH_WORKSPACE_UUID
@@ -14,6 +16,7 @@ Cookie: repodesk_session={{session}}
 
 ### Fetch one workflow: { mode, workflow, repositorySources }.
 # Both modes include the spec, saved versions and ownerProfile (id/name/username).
+# canEdit is true only for the active owner linked to the authenticated account.
 # Missing/deleted records return
 # 404; foreign workspaces remain denied.
 # `next` contains recurrence previews, including when the workflow is not active.
@@ -21,6 +24,7 @@ GET {{origin}}/api/admin/workspaces/{{workspaceId}}/workflows/{{workflowId}}
 Cookie: repodesk_session={{session}}
 
 ### Save an exact workflow version directly. No separate approval is needed.
+# Sign in as the linked owner; version conflicts return 409 without changing it.
 PUT {{origin}}/api/admin/workspaces/{{workspaceId}}/workflows/{{workflowId}}
 Cookie: repodesk_session={{session}}
 Origin: {{origin}}

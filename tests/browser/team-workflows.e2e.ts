@@ -37,6 +37,7 @@ async function fixture(page: Page, noSkill = false, unlinked = false) {
     id: "repository-report",
     version: 1,
     owner: "101",
+    canEdit: !unlinked,
     ownerProfile: { id: "101", name: "Taylor Example", username: "taylor" },
     status: "active",
     spec: {
@@ -309,11 +310,11 @@ for (const width of [1280, 390]) {
     });
   });
 
-  test(`unlinked admins manage free-form schedules in modals and retain drafts on failure at ${width}px`, async ({
+  test(`linked owners edit free-form schedules in modals and retain drafts on failure at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
-    const f = await fixture(page, true, true);
+    const f = await fixture(page, true);
     let finishLoading: (() => void) | undefined;
     let loading = true;
     await page.route(
@@ -574,7 +575,103 @@ test("workflow cards link to readable details with local times and retain list p
   await expect(page.getByText("No scheduled workflows yet.")).toBeVisible();
 });
 
-test("unlinked admins see full workflow details and controls and recover from unavailable records", async ({
+for (const width of [1280, 390]) {
+  for (const access of ["other-owner", "unlinked"] as const) {
+    test(`${access} administrators cannot open workflow editors at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      const f = await fixture(page, false, access === "unlinked");
+      f.workflow.canEdit = false;
+      if (access === "other-owner") {
+        f.workflow.owner = "202";
+        f.workflow.ownerProfile = { id: "202", name: "Another owner" };
+      }
+      for (const theme of ["light", "dark"]) {
+        await page.goto(`/admin/workflows?workspace=${f.w.id}`);
+        await page.evaluate(
+          (theme) => localStorage.setItem("repodesk.theme", theme),
+          theme,
+        );
+        await page.reload();
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+        await expect(page.locator(".workflow-card")).toHaveCount(1);
+        await expect(
+          page.getByRole("button", { name: "Edit", exact: true }),
+        ).toHaveCount(0);
+        await expect(page.locator(".workflow-card form")).toHaveCount(0);
+        await page
+          .getByRole("link", { name: "Repository report", exact: true })
+          .click();
+        await expect(
+          page.getByText(
+            "Only the linked workflow owner can edit this schedule.",
+          ),
+        ).toBeVisible();
+        await expect(
+          page.getByRole("button", { name: "Edit", exact: true }),
+        ).toHaveCount(0);
+        await expect(page.getByRole("dialog")).toHaveCount(0);
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        ).toBe(true);
+        await page.screenshot({
+          path: `test-results/workflow-${access}-${theme}-${width}.png`,
+          fullPage: true,
+        });
+      }
+      expect(f.saved()).toBeUndefined();
+    });
+  }
+
+  test(`a denied workflow edit retains the owner's draft at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const f = await fixture(page);
+    await page.route(
+      "**/api/admin/workspaces/*/workflows/repository-report",
+      async (route) => {
+        if (route.request().method() === "PUT")
+          await route.fulfill({
+            status: 403,
+            json: { error: "owner_required" },
+          });
+        else await route.fallback();
+      },
+    );
+    await page.goto(`/admin/workflows?workspace=${f.w.id}`);
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog
+      .getByLabel("Task", { exact: true })
+      .fill("Keep this unsaved revision");
+    await dialog.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(dialog.getByRole("alert")).toContainText(
+      "Only the workflow owner can edit this schedule.",
+    );
+    await expect(dialog.getByLabel("Task", { exact: true })).toHaveValue(
+      "Keep this unsaved revision",
+    );
+    await expect(
+      dialog.getByRole("button", { name: "Save", exact: true }),
+    ).toBeEnabled();
+    await dialog
+      .getByRole("button", { name: "Cancel", exact: true })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: `test-results/workflow-ownership-denied-${width}.png`,
+      fullPage: true,
+    });
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(f.saved()).toBeUndefined();
+  });
+}
+
+test("unlinked admins inspect workflow details without an editor and recover from unavailable records", async ({
   page,
 }) => {
   const f = await fixture(page, false, true);
@@ -602,6 +699,9 @@ test("unlinked admins see full workflow details and controls and recover from un
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Edit", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Only the linked workflow owner can edit this schedule."),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "resume", exact: true }),
@@ -614,31 +714,15 @@ test("unlinked admins see full workflow details and controls and recover from un
   await page.setViewportSize({ width: 390, height: 844 });
   const card = page.locator(".workflow-card");
   const bounds = await card.boundingBox();
-  const editBounds = await card
-    .getByRole("button", { name: "Edit", exact: true })
-    .boundingBox();
   expect(bounds).not.toBeNull();
-  expect(editBounds).not.toBeNull();
-  if (bounds && editBounds) {
-    expect(editBounds.x + editBounds.width).toBeGreaterThan(
-      bounds.x + bounds.width - 30,
-    );
-    expect(editBounds.y).toBeLessThan(bounds.y + 32);
-  }
+  await expect(
+    card.getByRole("button", { name: "Edit", exact: true }),
+  ).toHaveCount(0);
   await page.screenshot({
     path: "test-results/workflow-operator-detail-mobile.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "Edit", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog.getByLabel("Task", { exact: true })).toHaveValue(
-    "Recap the team",
-  );
-  await page.keyboard.press("Escape");
-  await expect(dialog).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Edit", exact: true }),
-  ).toBeFocused();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   unavailable = true;
   await page.reload();
   await expect(page.getByRole("alert")).toContainText(

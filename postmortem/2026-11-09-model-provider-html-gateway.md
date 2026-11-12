@@ -90,3 +90,23 @@ Follow-up validation passed all 21 focused metadata/provider tests, repository
 lint, strict TypeScript and the production build. The user reported having neither
 an alternate API endpoint nor an outbound proxy. Restoring the direct route remains
 an external provider/VPS network investigation.
+
+## Authorized VPS deployment
+
+The user subsequently requested deployment. Bundle `1794210552528-53347667`
+deployed source `44a76df8e8f6ee54a42bf7a83b1d9eaddbc586e1`, applying only provider
+commit `df2126e` to the existing production source `726a45a`. Existing production
+features and installed runtime dependencies were preserved by verified artifact
+overlays. The exact app image passed all 16 integration-startup cases with zero
+external calls; 1,432 deterministic tests, 35 browser scenarios, native Codex,
+Code Truth and disposable database/restore checks passed.
+
+An unreadable offline verification fixture stopped the first preparation attempt
+before live services changed. Its file permissions were corrected, the proof
+passed and the same verified images were resumed through both checkpoint checks,
+protected backup, migrations and readiness. The 3,207,499-byte backup archive and
+all 51 deployed artifacts verified. Public and loopback pages/assets match the
+verified build; services are healthy. Configuration, credentials, volumes,
+PostgreSQL, Actions runners and the native Browser installation were preserved.
+This deployment changes error reporting and does not configure a provider network
+route. No live inference, account connection or manual Telegram send was performed.

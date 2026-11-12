@@ -26,7 +26,7 @@ const messages: Record<string, string> = {
   coding_runtime_not_configured:
     "The selected runtime needs host configuration. Ask the deployment operator to prepare it using the runner guide.",
   coding_runtime_unavailable:
-    "The selected runtime did not pass its connection, host or image checks. The current runtime is unchanged.",
+    "The selected runtime did not pass its readiness checks. Native VPS requires an enabled, unprivileged host service and installed Codex CLI. The current runtime is unchanged.",
   coding_runtime_version_conflict:
     "The runtime changed in another session. Close and reopen this editor to review the current selection.",
   coding_runtime_control_unavailable:
@@ -157,6 +157,12 @@ export function CodingRuntime({ request }: { request: Request }) {
           The panel selection survives runner restarts. Choose Follow
           environment variable to use the deployment default.
         </p>
+        {data?.engine === "native" && (
+          <p className="muted">
+            Tasks use the VPS service user’s permissions. Use trusted
+            repositories on a dedicated host.
+          </p>
+        )}
       </section>
       {editing && data && (
         <Modal
@@ -199,6 +205,16 @@ export function CodingRuntime({ request }: { request: Request }) {
                 ))}
               </Select>
             </label>
+            {(draft === "native" ||
+              (draft === "environment" &&
+                data.environmentDefault === "native")) && (
+              <p className="notice">
+                Native VPS uses the installed Codex CLI and host development
+                tools. Tasks run with the service user’s host access, without
+                container isolation. A dedicated, unprivileged host service must
+                be prepared first.
+              </p>
+            )}
             <p className="muted">
               Switching waits until tasks and retained checkpoints are cleaned
               up. Account sign-in and workspace permissions stay in their

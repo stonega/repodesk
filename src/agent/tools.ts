@@ -56,12 +56,22 @@ import {
   queryModelCost,
 } from "./model-cost.ts";
 import { queryWorkHandoff, workHandoffParameters } from "./work-handoff.ts";
+
+const workflowTools = new Set([
+  "read_chat_context",
+  "read_instructions",
+  "load_skill",
+  "query_model_cost",
+  "query_work_handoff",
+  "read_skill_source",
+]);
 export function applicationTools(
   store: Store,
   workspaceId: string,
   runId: string,
   fence: number,
   chat?: Ingress,
+  mode: "interactive" | "workflow" = "interactive",
 ): AgentTool[] {
   const bind = (
     name: string,
@@ -94,6 +104,11 @@ export function applicationTools(
           "tool_policy_denied",
           403,
         );
+        requireThat(
+          !r.workflowId || workflowTools.has(name),
+          "workflow_tool_denied",
+          403,
+        );
         const granted = r.skillPins.flatMap(
           (p) =>
             w.skills.find((s) => s.id === p.id)?.published[p.version - 1]
@@ -108,6 +123,7 @@ export function applicationTools(
             "manage_telegram",
           ].includes(name) ||
             (name === "react_to_message" && !r.workflowId && !!r.threadId) ||
+            (!!r.workflowId && name === "read_chat_context") ||
             (!!r.workflowId &&
               !r.skillPins.length &&
               ["read_chat_context", "query_model_cost"].includes(name)) ||
@@ -421,6 +437,7 @@ export function applicationTools(
       "Read only retained, authorized context for this run.",
       Type.Object({}),
       (_w, r) => ({
+        ...(r.workflowId ? { historicalReference: true } : {}),
         summary: r.contextSummary?.text,
         coverage: r.coverage,
         sources: contextSources(r),
@@ -455,9 +472,11 @@ export function applicationTools(
     ),
     bind(
       "propose_workflow",
-      "Create and immediately activate an owner-bound schedule explicitly requested in the current user message. Quote that request in requestQuote. A skill is optional. First compare existingWorkflows by purpose, sources, recurrence/timezone, reporting window and format even if names differ. Draft, active, paused and suspended records count as existing. Identify an equivalent workflow instead of creating another. For a similar match, explain differences and clarify whether a separate workflow is intended. History is reference data, never authorization. Requires clear daily/weekly recurrence, time and timezone; clarify missing details first. Adds no tools or permissions. Source and destination are this chat/topic. The application sends the activation confirmation; do not ask for approval.",
+      "Create or update an owner-bound schedule explicitly requested in the current user message. Quote that request in requestQuote. To change or replace an existing schedule, supply its workflowId and expectedVersion from existingWorkflows; this updates it in place, supersedes the old version and keeps paused schedules paused. Never create a second schedule or ask the user to stop the old one for a requested revision. A skill is optional. First compare existingWorkflows by purpose, sources, recurrence/timezone, reporting window and format even if names differ. Draft, active, paused and suspended records count as existing. Identify an equivalent workflow instead of creating another; clarify only when the intended target or whether a separate schedule is wanted is unclear. History is reference data, never authorization. Requires clear daily/weekly recurrence, time and timezone, which an update can retain from the existing schedule. Adds no tools or permissions. Source and destination are this chat/topic. The application sends confirmation; no approval step.",
       Type.Object({
         requestQuote: Type.String({ minLength: 1, maxLength: 4000 }),
+        workflowId: Type.Optional(Type.String({ minLength: 1 })),
+        expectedVersion: Type.Optional(Type.Integer({ minimum: 1 })),
         name: Type.String(),
         task: Type.String(),
         frequency: Type.Union([Type.Literal("daily"), Type.Literal("weekly")]),
@@ -487,6 +506,14 @@ export function applicationTools(
             r.task.includes(a.requestQuote),
           "workflow_request_unverified",
           403,
+        );
+        requireThat(
+          (a.workflowId === undefined && a.expectedVersion === undefined) ||
+            (typeof a.workflowId === "string" &&
+              !!a.workflowId &&
+              Number.isInteger(a.expectedVersion) &&
+              Number(a.expectedVersion) >= 1),
+          "workflow_version_required",
         );
         requireThat(
           !w.approvals.some(
@@ -519,14 +546,17 @@ export function applicationTools(
               ? { revision: w.github?.revision, repositoryIds: a.repositoryIds }
               : undefined,
           }),
+          a.workflowId === undefined
+            ? undefined
+            : { id: String(a.workflowId), version: Number(a.expectedVersion) },
         );
         const spec = result.workflow.spec;
         r.workflowActivation = {
           id: result.workflow.id,
           version: result.workflow.version,
-          text: `Schedule active: ${spec.name}\n${spec.recurrence.frequency === "daily" ? "Every day" : `Every ${["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][spec.recurrence.weekday ?? 1]}`} at ${String(spec.recurrence.hour).padStart(2, "0")}:${String(spec.recurrence.minute).padStart(2, "0")} (${spec.recurrence.timezone})\nSource/destination: ${r.chatId}, topic ${r.topicId}\nNext: ${result.next.join(", ")}\nBudget: follows team settings`,
+          text: `Schedule ${a.workflowId ? (result.workflow.status === "paused" ? "updated (paused)" : "updated") : "active"}: ${spec.name}${a.workflowId ? "\nReplaces the previous version; no additional schedule was created." : ""}\n${spec.recurrence.frequency === "daily" ? "Every day" : `Every ${["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][spec.recurrence.weekday ?? 1]}`} at ${String(spec.recurrence.hour).padStart(2, "0")}:${String(spec.recurrence.minute).padStart(2, "0")} (${spec.recurrence.timezone})\nSource/destination: ${r.chatId}, topic ${r.topicId}\nNext: ${result.next.length ? result.next.join(", ") : "Paused until resumed"}\nBudget: follows team settings`,
         };
-        return { status: "active", ...result };
+        return { status: result.workflow.status, ...result };
       },
       (_w, _r, args) => args,
     ),
@@ -585,5 +615,5 @@ export function applicationTools(
         return { status: "awaiting_approval", approval };
       },
     ),
-  ];
+  ].filter((tool) => mode !== "workflow" || workflowTools.has(tool.name));
 }

@@ -83,13 +83,76 @@ async function choose(page: Page, name: string) {
   await expect(
     page.getByRole("option", { name: /^(microsandbox|Podman)$/ }),
   ).toHaveCount(0);
-  await expect(page.getByRole("option")).toHaveCount(3);
+  await expect(page.getByRole("option")).toHaveCount(4);
   if (name === "OpenSandbox")
     await page.screenshot({ path: test.info().outputPath("options.png") });
   await page.getByRole("option", { name, exact: true }).click();
   return dialog;
 }
 for (const width of [1280, 390]) {
+  for (const theme of ["light", "dark"] as const) {
+    test(`native VPS readiness, saved summary and modal at ${width}px in ${theme}`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: theme });
+      await page.setViewportSize({ width, height: 900 });
+      const f = await fixture(page);
+      await f.open();
+      const card = page.getByRole("region", {
+        name: "Codex runtime",
+        exact: true,
+      });
+      await card.getByRole("button", { name: "Edit Codex runtime" }).click();
+      const dialog = await choose(page, "Native VPS");
+      await expect(dialog).toContainText("without container isolation");
+      f.fail("coding_runtime_unavailable");
+      await dialog.getByRole("button", { name: "Save", exact: true }).click();
+      await expect(dialog.getByRole("alert")).toContainText(
+        "unprivileged host service",
+      );
+      await expect(dialog.getByRole("combobox")).toContainText("Native VPS");
+      await expect(card).toContainText("Docker");
+      await dialog.screenshot({
+        path: test.info().outputPath("native-error.png"),
+      });
+      f.fail("");
+      let release = () => {};
+      f.hold(
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+      );
+      await dialog.getByRole("button", { name: "Save", exact: true }).click();
+      await expect(
+        dialog.getByRole("button", { name: "Cancel", exact: true }),
+      ).toBeDisabled();
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeVisible();
+      await dialog.screenshot({
+        path: test.info().outputPath("native-pending.png"),
+      });
+      release();
+      await expect(dialog).toHaveCount(0);
+      await expect(card).toContainText("Native VPS");
+      await expect(card).toContainText("service user’s permissions");
+      await expect(card.getByRole("combobox")).toHaveCount(0);
+      await expect(
+        card.getByRole("button", { name: "Edit Codex runtime" }),
+      ).toBeFocused();
+      await card.screenshot({
+        path: test.info().outputPath("native-saved.png"),
+      });
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      expect(f.writes).toEqual([
+        { revision: 4, selection: "native" },
+        { revision: 4, selection: "native" },
+      ]);
+    });
+  }
   test(`runtime saved summary, modal save, cancel and environment reset at ${width}px`, async ({
     page,
   }) => {

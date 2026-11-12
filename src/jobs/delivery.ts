@@ -237,10 +237,8 @@ export class DeliveryWorker {
         return false;
       if (d.id.endsWith(":requested") && r.stopConfirmed) return false;
     }
-    if (d.feedback?.owner === "run")
-      return w.runs.some(
-        (r) => r.id === d.feedback?.id && r.status === "queued" && !r.cancelled,
-      );
+    // Old queued chat notices must also stay silent after an upgrade.
+    if (d.feedback?.owner === "run") return false;
     if (d.feedback?.owner === "development") {
       try {
         const t = await taskGet(sql, w.id, d.feedback.id);

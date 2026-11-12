@@ -79,9 +79,10 @@ const taskFailures: Record<string, string> = {
 function RunnerSetupNotice() {
   return (
     <p className="muted">
-      VPS releases automatically start and maintain the Codex runner. Enable
-      this plugin, then connect your account. If the runner is unavailable,
-      check the deployment status and recheck the connection.{" "}
+      Docker VPS releases automatically start and maintain the Codex runner.
+      Native VPS requires a prepared host service. Enable this plugin, then
+      connect your account. If the runner is unavailable, check the deployment
+      status and recheck the connection.{" "}
       <a
         href="https://github.com/stonega/repodesk/blob/main/docs/implementation/codex-runner.md#configure-the-deployment"
         target="_blank"
@@ -316,8 +317,8 @@ export function Coding({
           <div>
             <h2>Configuration</h2>
             <p className="muted">
-              Repository policy controls coding work in isolated local
-              containers.
+              Repository policy controls coding work in the selected execution
+              environment.
             </p>
           </div>
           <IconButton

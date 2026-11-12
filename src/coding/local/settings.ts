@@ -12,6 +12,15 @@ const optionalSetting = <T extends z.ZodType>(schema: T) =>
 
 export const runnerSettings = z.object({
   CODEX_CONTAINER_ENGINE: runtimeEngine.default("docker"),
+  CODEX_NATIVE_ENABLED: z.enum(["true", "false"]).default("false"),
+  CODEX_NATIVE_CODEX_BIN: z
+    .string()
+    .min(1)
+    .refine(
+      (value) => isAbsolute(value) || /^[A-Za-z0-9._-]+$/.test(value),
+      "Use an absolute executable path or a command name",
+    )
+    .default("codex"),
   CODEX_DOCKER_IMAGE: optionalSetting(z.string().min(1)),
   CODEX_OPENSANDBOX_IMAGE: optionalSetting(z.string().min(1)),
   CODEX_DOCKER_HOST: optionalSetting(z.string().startsWith("unix://")),
@@ -116,7 +125,7 @@ export function codexConfig(
     'model_provider = "proxy"',
     `model_reasoning_effort = ${quote(provider?.reasoningEffort ?? settings.CODEX_REASONING_EFFORT)}`,
     'approval_policy = "never"',
-    // The outer container is the execution boundary; nested sandboxes vary by host.
+    // The selected runtime owns the execution boundary, including explicit host access.
     'sandbox_mode = "danger-full-access"',
     "[model_providers.proxy]",
     `name = ${quote(provider?.name ?? settings.CODEX_PROVIDER_NAME)}`,

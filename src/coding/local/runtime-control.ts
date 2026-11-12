@@ -52,6 +52,7 @@ export class RuntimeSelection {
     const image = {
       docker: base.CODEX_DOCKER_IMAGE,
       opensandbox: base.CODEX_OPENSANDBOX_IMAGE,
+      native: undefined,
     }[engine];
     // OpenSandbox needs the execd-compatible root-USER image, unlike OCI jobs.
     if (engine === "opensandbox" && engine !== this.defaultEngine && !image)

@@ -21,8 +21,15 @@
 When the recurrence, local time and timezone are clear, the bot creates an active
 schedule immediately. No requester or administrator approval button is required.
 The confirmation shows the schedule, destination and next execution times. Missing
-essential details are clarified before creation. Use the panel or the commands
-below to pause, edit or delete an active schedule.
+essential details are clarified before creation.
+
+To change an existing schedule, describe the change in the same conversation,
+for example, “Change my daily weather report to include AQI; keep 08:00
+Asia/Taipei.” The bot updates your existing workflow and confirms the replacement.
+It keeps one schedule, retains version history and cancels queued output from the
+old version. Editing a paused schedule keeps it paused. A stale version or a
+change to another owner's schedule, chat or Topic is rejected. Use the panel or
+the commands below to pause or delete a schedule.
 
 ## 定期 GitHub 报告
 
@@ -50,14 +57,16 @@ owner's Telegram name, username and ID when available. Create new
 schedules by describing the request in Telegram; the web panel has no creation
 action. Explicit Telegram requests activate immediately when the recurrence, time
 and timezone are clear; no requester or administrator approval is required. In the
-panel, **Edit → Save** applies the updated schedule immediately. If another
-administrator changes the schedule first, reload and review before retrying.
+panel, **Edit → Save** applies the updated schedule immediately. If the saved
+version changes before you save, reload and review before retrying.
 Editing a paused schedule keeps it paused until you choose **Resume**.
 
-Panel administrators can manage all schedules in their workspace without linking
-their own Telegram identity. Management actions are audited; existing schedules
-retain their original execution owner. Active membership, linked groups,
-repository access, skills and team budgets still apply.
+Only the workflow owner can edit its definition, including in the web panel.
+Link the panel account to that owner's Telegram identity to use **Edit**. An
+administrator role does not grant permission to edit another person's workflow.
+Other authorized administrators can inspect details and use their existing
+lifecycle controls. Management actions are audited; active membership, linked
+groups, repository access, skills and team budgets still apply.
 
 Ask in Telegram using ordinary language:
 
@@ -82,6 +91,12 @@ Future runs use the new rule; existing runs keep their original version. Workflo
 instructions are also managed in the panel.
 
 ## 时间、失败和恢复
+
+Each scheduled or **Run now** invocation carries out the saved task once. It does
+not treat earlier setup messages as a new request to create or edit a schedule.
+Conversation history is read only when the task needs it, such as a chat recap;
+weather and similar live-data tasks start from their saved instructions. Earlier
+confirmations and chat requests cannot authorize another workflow or saved rule.
 
 - 使用 IANA 时区，例如 `Asia/Taipei`，不要只写可能有歧义的“周五下午”。涉及夏令时时核对显示的执行时间。
 - 延迟超过五分钟的计划会跳过，恢复服务后不会集中补发大量过期输出。

@@ -60,12 +60,17 @@ export type WorkflowMetadata = Pick<
   next: string[];
 };
 export type MemberWorkflow = Workflow &
-  Pick<WorkflowMetadata, "ownerProfile"> & { next: string[] };
+  Pick<WorkflowMetadata, "ownerProfile"> & { next: string[]; canEdit: boolean };
 
-export function workflowView(w: Workspace, workflow: Workflow): MemberWorkflow {
+export function workflowView(
+  w: Workspace,
+  workflow: Workflow,
+  actor?: string,
+): MemberWorkflow {
   const owner = membersWithProfiles(w).find((m) => m.id === workflow.owner);
   return {
     ...workflow,
+    canEdit: workflow.owner === actor && eligible(w, actor),
     ownerProfile: {
       id: workflow.owner,
       name: owner?.name,

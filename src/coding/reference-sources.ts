@@ -20,8 +20,10 @@ export const referenceSource = z.object({
   revision: z.number().int().positive(),
 });
 export type ReferenceSource = z.infer<typeof referenceSource>;
-export const referencePath = (source: Pick<ReferenceSource, "repositoryId">) =>
-  `/task/references/${source.repositoryId}`;
+export const referencePath = (
+  source: Pick<ReferenceSource, "repositoryId">,
+  root = "/task",
+) => `${root}/references/${source.repositoryId}`;
 
 export function checkReferenceSources(
   w: Workspace,

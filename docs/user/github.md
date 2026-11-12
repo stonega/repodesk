@@ -68,3 +68,13 @@ Codex 创建 PR 不代表授权合并。使用消息上的 **Review / Merge** �
 ## 开发与审查
 
 [Codex](codex.md) 用于实现修改并生成 PR；[Review Bot](review-bot.md) 用于自动审查和同一 PR 上的明确修复。它们均需额外启用。权限失败见 [排障指南](troubleshooting.md)。
+
+### Codex execution environment
+
+Deployment operators can select Docker, OpenSandbox or **Native VPS** under
+**Plugins → Codex → Runtime → Edit**. Native VPS uses the Codex CLI and development
+tools installed on a dedicated host and executes trusted repositories with its
+service user's permissions. It requires a prepared host service; saving the option
+does not install it. Provider/ChatGPT sign-in, repository permissions, progress,
+Stop and PR publication use the existing Codex settings and task flow. Docker
+remains the default. Runtime changes wait for retained tasks to be cleaned up.

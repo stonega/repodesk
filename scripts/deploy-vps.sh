@@ -110,8 +110,10 @@ if [[ -f "$release_dir/codex-compose.yaml" ]]; then
 fi
 "${compose[@]}" config --quiet
 # Check the actual runtime user's secret access, including host SELinux labels.
-"${compose[@]}" run --rm --no-deps --pull never -T --entrypoint node migrate -e \
-  "require('fs').accessSync(process.env.ENCRYPTION_KEY_FILE,require('fs').constants.R_OK)"
+for service in migrate app worker; do
+  "${compose[@]}" run --rm --no-deps --pull never -T --entrypoint node "$service" -e \
+    "require('fs').accessSync(process.env.ENCRYPTION_KEY_FILE,require('fs').constants.R_OK)"
+done
 # Pull only the pinned database image, before stopping any writers.
 "${compose[@]}" pull postgres
 

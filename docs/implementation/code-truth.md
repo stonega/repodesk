@@ -15,6 +15,12 @@ Pi factory rechecks its guard and current target scope before querying source.
 Existing ready snapshots remain usable during background synchronization. This
 adds no startup lookup, dependency, migration or service protocol change.
 
+Repository dialogs persist changes through **Confirm** and close after the request
+succeeds. Failed saves keep the entered URL and description open for correction
+or retry; Cancel discards them. Pending saves lock fields and dismissal. Removing
+a repository saves immediately, retaining its saved card if the request fails.
+The title's Enable switch saves independently; no page-level save is required.
+
 ## Standard Docker deployment
 
 The base `compose.yaml` includes Code Truth. `docker compose up --build -d`

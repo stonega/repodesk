@@ -106,6 +106,73 @@ scenarios** passed across invites, member/GitHub editing, groups, shared URL cop
 and administration. Desktop (1280px) and mobile (390px) screenshots were inspected
 in both themes, with loading, refresh, error, missing-bot and pending-approval
 states also reviewed. No live Telegram/GitHub action or deployment was performed.
+
+## Optional native VPS Codex runner (2026-11-11)
+
+Codex runtime selection now includes **Native VPS**, alongside Docker (the default)
+and OpenSandbox. The operator-only saved summary/modal retains revision, readiness,
+audit and retained-task gates. The native driver runs the installed CLI through
+`app-server` in a dedicated non-root Linux service, with explicit host enablement,
+private per-task paths and fresh phase environments. No host account cache is
+imported. Workspace authentication, current repository grants, continuous task
+state, fixed verification, publication reservations and erasure keep their existing
+application contracts. Host execution is for trusted repositories: task directories
+and clean environments do not provide tenant, filesystem, network or resource
+isolation. Container supervisors cannot pass native readiness.
+
+Native process groups persist boot/start identities before execution begins.
+Restart inspection does not launch work again, Stop fences reused PIDs, and phase
+cleanup waits for tracked group processes to stop. Uncertain process identities
+fail closed. The service and Docker-app connection examples are under
+`deploy/codex/native*`; automatic VPS release deployment still selects Docker.
+See [native setup](codex-runner.md#native-vps-installed-codex-cli).
+
+Local verification includes **90 focused tests** through runtime, supervisor,
+HTTP authorization and account contracts, including an actual job entrypoint with
+fake installed CLI, local Git patch checks and export. **12 browser tests** pass;
+desktop/mobile and both themes were visually inspected for saved/editor,
+pending/error and unavailable states. Biome, strict TypeScript, build, Node runtime
+contract, Docker supervisor build/image contract and Compose validation pass.
+The full PostgreSQL suite recorded **1,460 passes and one unrelated failure** in
+the scheduled personality policy assertion (`tests/unit/soul.test.ts`), in an area
+already modified before this task. Real VPS service installation, native account
+sign-in and a live model/GitHub task remain acceptance checks. No deployment,
+account connection or external message was performed.
+
+
+## Isolated workflow execution context (2026-11-11)
+
+Scheduled and manual run-now invocations now receive a dedicated execution prompt
+with the pinned workflow ID/version and saved task/format. Recent setup messages,
+conversation summaries, schedule-comparison records and historical attachments
+are not automatically included in that model input. Approved instructions and
+pinned skills remain subject to application policy. Chat recaps can explicitly
+read their frozen, authorized source snapshot through `read_chat_context`, which
+marks the result as historical reference. Retention and source revocation still
+apply; no additional history, integration access or write authority is granted.
+
+The production factory exposes only read-only application tools for workflow
+invocations. A separate check against the persisted workflow marker rejects
+management tools before cached-result replay, even when an older published skill
+grants those tools or a stale tool reference is invoked. Current integration
+authorization checks continue to govern integration tools. This prevents an
+invocation from creating/editing another workflow or persisting instructions,
+skills, memory or conversation controls in response to setup history.
+
+Deterministic coverage includes private/group setup history and legacy summaries,
+explicit recap reads with and without a skill pin, denied legacy grants and
+cached management outcomes, plus scheduler → Executor → Pi → Store → delivery
+with duplicate ticks/execution and one unchanged workflow. Fake model and
+Telegram transports make no live calls. This change remains local pending rollout;
+no deployment or live schedule invocation was performed.
+
+Validation passes **1,462 deterministic tests across 153 files**, including 95
+focused context/policy/system checks. Biome, strict TypeScript, build and the Node
+runtime contract pass, including 16 startup cases with zero external startup
+calls. An unrelated native-runtime test failed once in the broad run; its isolated
+suite and the complete rerun passed. No dependency or migration was added. Real
+model task selection and live Telegram rendering remain pilot checks.
+
 ## Conversational Telegram controls deployed (2026-11-11)
 
 Bundle `1794386364054-96360541` deploys production source
@@ -118,6 +185,38 @@ read-only live Telegram verification confirms all three published command scopes
 are empty. Native rendering and real-model intent selection remain acceptance
 checks. See [deployment evidence](vps-deployment.md#conversational-telegram-controls-deployed-2026-11-11).
 
+
+## Owner-only workflow editing (2026-11-11)
+
+The current owner can update an existing schedule through Telegram or the web
+panel. The user explicitly extended owner-only definition edits to panel
+administrators and deployment operators. Panel Save now rejects another owner's
+or an unlinked identity's edit before mutation, including through the shared
+proposal service. Authenticated list/detail projections expose `canEdit` only
+for the active linked owner; cards/details hide Edit otherwise. Saved details
+stay readable, and the owner editor retains modal display separation, pending
+locks, version checks and failed drafts. Ownership-denied saves explain the
+identity requirement. Existing administrator inspection and lifecycle controls
+remain separate from definition editing.
+
+The Telegram path reuses one workflow identity and its history; workspace
+owner/admin roles do not bypass its ownership check. Deterministic regressions
+cover ordinary members, workspace admins/owners, unlinked panel accounts,
+direct API attempts, unchanged state/audit on denial and successful own edits.
+UI coverage checks lists/details and retained denied drafts at 1280px and 390px,
+with owner restrictions in both themes. This change is local pending rollout;
+no deployment, live model call or Telegram message was performed.
+
+Validation passes **1,448 deterministic tests across 152 files** and **35 admin
+and workflow browser scenarios**. The final workflow render pass also passes all
+18 scenarios. Desktop/mobile owner and non-owner summaries, editors,
+loading/empty/read errors, pending saves and retained denied/conflicting drafts
+were visually inspected; owner restrictions were inspected in both themes.
+Biome, strict TypeScript, build and the Node runtime contract pass, including 16
+startup cases with zero external startup calls. No dependency or migration was
+added. The panel's workspace authority and its linked editor identity remain
+separate, so an authorized operator linked to an ordinary active member can edit
+that member's own workflow without borrowing another member's identity.
 
 ## Telegram features through ordinary chat (2026-11-11)
 
@@ -156,7 +255,32 @@ button rendering remain live acceptance checks; deployment of the updated worker
 is required to clear a running bot's existing menu.
 
 
+## Telegram workflow revisions and duplicate repair (2026-11-11)
 
+The Telegram schedule tool now accepts an existing workflow ID and expected
+version for explicit revisions. Scoped context supplies owner/version metadata;
+the prompt uses in-place updates for requested changes. The service checks
+ownership, current chat/Topic, version and permissions, retains one workflow and
+its spec history, and cancels queued old work/output in the same transaction.
+Paused workflows stay paused. Durable confirmations identify updates and keep
+the existing interruption/replay protection.
+
+The reported production duplicate was repaired separately through the existing
+workflow lifecycle service: the old text report is deleted, and the Widget report
+remains active at 08:00 Asia/Taipei, next due 2026-11-12T00:00:00Z. The general
+code correction remains local pending rollout. No Telegram message or live model
+call was made. See the [incident and repair evidence](../../postmortem/2026-11-11-workflow-replacement-duplicate.md).
+
+All **1,443 deterministic tests across 152 files** pass. Focused validation passes
+all 82 schedule/context/system checks, including the
+production Executor/Pi/Store/DeliveryWorker path, repeated execution and scheduler
+ticks, old-output cancellation, paused updates and rejected stale, deleted,
+other-owner, other-workspace, other-chat/Topic, historical and denied-source
+requests without partial changes. Biome, strict TypeScript, build and the Node
+runtime contract pass, including 16 startup cases with zero external startup
+calls. An initial full run hit the independent plain-Stop control regression;
+that suite passed in isolation and the full rerun passed. No dependency or
+migration was added.
 
 ## Immediate workflow activation deployed (2026-11-11)
 
@@ -199,7 +323,7 @@ have specific recovery messages and safe workspace/run diagnostics. See the
 [VPS investigation](../../postmortem/2026-11-11-workflow-approval-feedback.md): the
 reported schedule was active; older logs do not establish the exact later error.
 
-Initial development verification: **1,422 deterministic tests across 151 files**, **29 admin/workflow
+Verification: **1,422 deterministic tests across 151 files**, **29 admin/workflow
 browser scenarios**, Biome, strict TypeScript, build and the Node runtime contract
 pass, including 16 integration-startup cases with zero external startup calls.
 The final focused activation/recovery and agent checks pass. Desktop/mobile
@@ -256,6 +380,32 @@ authenticated rich input through deterministic execution and Topic delivery,
 including duplicates and inactive members. Native Telegram confirmation remains
 pending; see the [incident record](../../postmortem/2026-11-10-telegram-rich-input.md).
 
+## Proactive Telegram widget selection (2026-11-11)
+
+The default Telegram widgets preset and eligible private-run prompt now direct
+the model to choose useful visual comparisons, diagrams, local calculators and
+scenario exploration without an explicit widget request. Simple answers and
+text-only requests use text; rendering instructions load only after selection.
+Current run restrictions, private bot-thread identity and the pinned skill's
+tool/guide availability gate the reminder. Existing delivery permissions remain.
+
+Unchanged application-owned original presets receive one new immutable snapshot
+on workspace read and persist it on the next change. Updates preserve IDs,
+disablement, full catalogs and old run/workflow pins; custom collisions, edited
+instructions, imported skills and archived/deleting records are left intact.
+See [implementation details](telegram-widgets.md) and the expanded
+[manual selection scenarios](../../examples/telegram-widgets.md).
+
+Validation: all **1,417 tests across 151 files** passed with disposable PostgreSQL,
+including all 19 focused widget tests, production Store upgrade/restart and
+ordinary cost-question ingress/executor coverage. The larger pinned instructions
+required more headroom in two compaction fixtures; both still assert initial
+compaction and no immediate repeat after a completed batch. Repository-wide
+Biome, strict TypeScript, build and the Node runtime contract passed, with 16
+startup cases and zero external startup calls. Tests use fake models and Telegram
+transports; real-model selection and native rendering remain staging checks. No
+deployment or live Telegram/model call was performed.
+
 ## Telegram bot token format errors provide recovery guidance (2026-11-10)
 
 Bot-token format validation now belongs to the credentials field schema, keeping
@@ -275,7 +425,8 @@ error states were visually inspected at 1280px and 390px; the saved bot summary
 remains unchanged while an invalid replacement is rejected.
 
 Validation: lint, strict TypeScript, build, the Node runtime contract (16 startup
-cases, zero external startup calls), the full deterministic suite, and the focused first-visit browser journey pass. No dependency or SQL
+cases, zero external startup calls), all **1,409 deterministic tests across 151
+files**, and the focused first-visit browser journey pass. No dependency or SQL
 migration was added. This correction is local; it has not been deployed to the VPS.
 
 ## Telegram widget tool and bundled preset (2026-11-10)
@@ -350,8 +501,28 @@ The VPS outbound IPv4 address was verified as 169.58.58.71. Follow-up validation
 passed 21 focused metadata/provider tests (including connect-timeout New/Edit
 failures), lint, strict types and the build.
 See the [incident record](../../postmortem/2026-11-09-model-provider-html-gateway.md).
-No deployment, network/configuration change, model inference, account connection
-or Telegram send was performed.
+The subsequent operator-authorized deployment installed bundle
+`1794210552528-53347667` from production-based snapshot `44a76df`. It preserves
+existing production fixes and runtime dependencies. All 1,432 deterministic tests,
+35 browser scenarios, exact-image startup and disposable Compose/restore checks
+passed; the protected backup and 51 deployed artifacts verified. Services are
+healthy and configuration, credentials and persistent mounts are preserved.
+See the [deployment record](vps-deployment.md#provider-error-dialog-deployment-2026-11-09).
+No network settings changed, and no model inference, account connection or manual
+Telegram send was performed.
+
+## Scheduled workflows omit web creation (2026-11-05)
+
+Removed the Add workflow action, creation dialog and creation-only state from
+Scheduled workflows. Existing saved summaries, details, modal editing, approvals
+and lifecycle controls remain available. New schedules can still be proposed
+through Telegram or the API. The heading has no empty action wrapper.
+
+Validation: lint, strict TypeScript, the production build and all 1,392 deterministic
+tests passed with disposable PostgreSQL. All 25 workflow and admin browser scenarios
+passed. Desktop (1280px) and mobile (390px) screenshots
+were inspected for populated, loading, empty and failed lists, plus editing,
+pending saves and retained drafts after save failures.
 
 ## Browser status and continuation retain the original task (2026-11-04)
 
@@ -413,6 +584,31 @@ images, native redirect/cookie/routine-action/submission gates, public assets,
 backup and existing API/worker Browser connections pass. Real website consent and
 cookie choices remain member decisions. See [deployment evidence](vps-deployment.md)
 and the [incident](../../postmortem/2026-11-02-browser-partitioned-cookie.md).
+
+## Ordinary assistant runs have no total execution deadline (2026-11-02)
+
+The 300-second executor deadline and `RUN_TIMEOUT_SECONDS` setting are removed;
+older environment values are ignored. Queue wakeups are acknowledged before
+execution, so pg-boss dispatch expiry no longer bounds assistant runtime. Three
+local execution slots, renewable fenced leases, cancellation, authorization,
+spending budgets and shutdown interruption remain. The durable outbox recovers
+acknowledged wakeups after a crash; uncertain provider attempts stop for
+reconciliation. Historical terminal runs are not automatically retried.
+
+Deterministic regressions cover long analysis, duplicate dispatch, live leases,
+acknowledgement/claim crashes, unknown provider usage, concurrency, cancellation,
+revocation and shutdown through the production dispatch/Executor composition.
+Biome, strict TypeScript, build and **1,352 tests across 144 files** passed with
+disposable PostgreSQL and a 15-second test deadline. All seven new dispatch/run
+regressions passed. The built Node runtime and exact Docker image passed all 16
+plugin-startup cases with zero external startup calls. Compose configuration,
+image migrations, HTTP health/readiness/admin checks, worker heartbeat and clean
+app/worker shutdown passed. The authorized VPS rollout used isolated snapshot
+`14d28d0` on the previous production source, with 1,354 passing tests across 147
+files. Bundle `1793607782072-26985359` passed backup, checkpoint, exact-image,
+51-artifact and public HTTP verification; existing Browser code and persistent
+state are preserved. Historical failed runs were not replayed. See the
+[incident](../../postmortem/2026-11-02-assistant-run-timeout.md).
 
 ## GitHub fixes continue the original Telegram coding task (2026-11-01)
 
@@ -484,7 +680,6 @@ migration beyond the Browser baseline below. The coordinated application/native 
 `41406054824-1`, as recorded above. Live Telegram/model/site-account acceptance
 remains separate from synthetic deployment probes. See [implementation details](browser.md).
 
-
 Commit-only validation on `main` excludes unrelated working changes and passes
 1,363 deterministic tests, lint, strict types, build, 17 Browser/catalog scenarios
 and the offline Node 24 application-image runtime contract. The source commit
@@ -527,7 +722,6 @@ in the [deployment incident](../../postmortem/2026-10-31-browser-deployment-secr
 See [deployment evidence](vps-deployment.md), [implementation details](browser.md),
 [member workflow](../user/browser.md) and [host setup](../user/browser-host.md).
 
-
 ## Active Telegram input and selective reply quotations (2026-10-30)
 
 Interactive messages received during generation can now join the same actor's
@@ -558,6 +752,24 @@ desktop/mobile rendering and model judgment about quotation remain live acceptan
 checks. See [the behavior contract](../design/private-threads.md) and
 [repeatable examples](../../examples/private-threads.md).
 
+## Code Truth repository dialogs save directly (2026-10-29)
+
+Removed the separate **Save Code Truth** button and page-level repository draft.
+New/Edit dialogs now send the versioned settings request through **Confirm** and
+close only after success. Failed saves retain the URL and description with an
+in-dialog error; pending saves disable fields, duplicate submission and dismissal.
+Cancel sends no request. Repository removal saves immediately and retains the
+saved card on failure; enablement continues to save independently.
+
+Updated the UI preference, admin contract, setup guides, API example and browser
+journeys. Desktop/mobile screenshots were inspected for saved summaries, empty
+and loading states, editors, pending requests and recoverable errors, including
+card spacing after removing the save footer. No dependency or migration was added.
+
+Validation passed `bun run check`, `bun run typecheck`, `bun test` (**1,267 tests
+across 136 files** with disposable PostgreSQL), `bun run build`, and **27 browser
+scenarios** covering Code Truth, shared repository cards and web administration.
+
 ## Private forwarded messages retain their accompanying notes (2026-10-29)
 
 Outside native Topics, an adjacent forwarded message and its note now share a
@@ -586,6 +798,61 @@ reported forwarding dialog and its actual incoming topic IDs remains pending. Se
 [incident analysis](../../postmortem/2026-10-29-private-forward-note.md) and
 [repeatable examples](../../examples/private-threads.md).
 
+The operator-authorized VPS cutover subsequently deployed this fix in bundle
+`1793266373668-15413800`, using snapshot `d5057ef` on top of the already deployed
+audio improvements. Exact-image and disposable Compose checks passed; the protected
+backup verified, all 45 packaged artifacts match, and services plus public/loopback
+health, readiness and admin checks are healthy. Configuration, credentials,
+persistent mounts, PostgreSQL and CI runner identities were preserved. See the
+[deployment record](vps-deployment.md#private-forwarded-reference-deployment-2026-10-29).
+
+## Natural voice replies and faster consecutive recordings (2026-10-28)
+
+Voice-only messages and audio documents now supply their current spoken text as
+Pi's current request. Conversation guidance answers their meaning naturally,
+without unsolicited transcript quotes or audio-support diagnostics. Current and
+earlier recordings retain separate source attribution. Ordinary interactive chats
+no longer create delayed queued acknowledgements; delivery also rejects pending
+notices from older releases. Explicit status/cancel commands, native thinking/Stop
+and Codex task progress remain available. Recorded speech retains its existing
+reference-only boundary for external actions.
+
+The local speech bridge now reuses a lazily loaded model across sequential
+requests, releases it after 60 idle seconds and kills it on active cancellation.
+Cancelling a waiter cannot interrupt another inference. A 32-entry, tenant- and
+enablement-scoped transcript cache expires after five minutes or retention,
+whichever is shorter; source and policy checks still run on reuse. Duration-based
+256–2,048-token decode budgets reject unfinished generation rather than passing
+truncated speech to the assistant. No dependency or SQL migration was added.
+
+Validation: lint, strict types, build, **1,232 tests across 135 files**, the Node
+runtime contract and the rebuilt Node 24 image's 16 integration-startup cases
+passed. Compose configuration validates. Production ingress/execution/delivery
+fixtures cover consecutive recordings, duplicate updates, caption preservation,
+source attribution, stale queued notices, explicit controls and tenant/generation
+cache isolation. Standard-library Python fixtures cover stream framing, session
+reuse and token-limit failures; process tests cover UTF-8, warm reuse, crashes and
+isolated cancellation.
+
+An offline CPU smoke using public Qwen samples preserved the old transcripts:
+15.05-second English audio took 22.40 seconds with the old per-request process and
+8.44 seconds warm; 4.2-second Mandarin took 14.06 seconds old and 2.02 seconds warm.
+The new cold English path still took 18.05 seconds. The exact image's bundled
+bridge also decoded Mandarin Ogg/Opus in 2.04 seconds warm with the same transcript.
+These are single local measurements, not VPS latency guarantees or proof of
+accuracy on the reported recording. Native Telegram desktop/mobile rendering and
+real-model reply tone remain live acceptance checks.
+
+The subsequent operator-authorized VPS cutover deployed this snapshot in bundle
+`1793168496847-42554913` (v0.1.46). Exact-image and disposable
+restore checks passed; all services are healthy and the existing speech model is
+Ready. The protected production backup verified, all 45 packaged artifacts match,
+and public/loopback readiness and all seven frontend assets verify. Configuration,
+credentials, persistent mounts, PostgreSQL and CI runner identities were preserved.
+See the [deployment record](vps-deployment.md#audio-conversation-deployment-2026-10-28).
+See [transcription](transcription.md), [audio usage](../user/audio.md) and the
+[runnable journey](../../examples/telegram-audio.md).
+
 ## Groups uses the Members table layout (2026-10-27)
 
 Saved groups now appear in a table with Group (name and ID), Status, Visibility,
@@ -601,8 +868,16 @@ scenarios** passed across admin, group linking and Groups & Members; 14 affected
 scenarios passed again after the mobile empty-state correction. Saved, editor,
 loading, empty, pending and error screenshots were inspected at 1280px and 390px
 in both themes. Coverage includes keyboard scrolling, row actions, focus return,
-long/unnamed groups and full-list loading beyond 100 groups. No dependency,
-migration, live Telegram call or deployment was added.
+long/unnamed groups and full-list loading beyond 100 groups. No dependency or
+migration was added. These local checks used deterministic transports.
+
+The subsequent operator-authorized VPS cutover deployed `c465207` in bundle
+`1793084755463-19144425`. Exact-image integration-startup and offline service
+checks, disposable migrations/restore and the protected production backup passed.
+All services are healthy; deployed application files, public HTML and all seven
+frontend assets match the tested build. Configuration, credentials, persistent
+mounts, PostgreSQL and CI runner identities were preserved. See the
+[deployment record](vps-deployment.md#groups-table-deployment-2026-10-27).
 
 ## Obsidian writes for every active member (2026-10-27)
 
@@ -749,7 +1024,15 @@ the combined page. The card regression first failed against the old built UI.
 Coverage checks matching surfaces, header/action placement, first/last content
 padding, absence of nested cards, independent loading/error recovery and modal
 focus/pending behavior. Saved, loading, empty, error and dialog screenshots were
-inspected at 1280px and 390px across both themes. This UI change is verified locally.
+inspected at 1280px and 390px across both themes. These initial checks ran locally.
+
+The operator-authorized VPS rollout subsequently deployed commit `6438d74` in
+bundle `1793000844503-81693002`, including the Skills UI cleanup from `824abaa`.
+Four fresh images passed runtime and Compose/backup/restore checks; the deployed
+application artifacts and public frontend match the tested build. Services are
+healthy, the protected backup verified, and configuration, volumes, PostgreSQL
+and CI runner identities were preserved. See the
+[deployment record](vps-deployment.md#matching-groups-card-and-skills-cleanup-deployment-2026-10-26).
 
 ## VPS deployment of the workspace and Google updates (2026-10-26)
 

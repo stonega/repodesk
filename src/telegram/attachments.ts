@@ -17,6 +17,7 @@ const MAX_TEXT_CHARS = 32000;
 const MAX_PDF_PAGES = 40;
 const MAX_RUN_BYTES = 10 * 1024 * 1024;
 const MAX_RUN_ATTACHMENTS = 4;
+export const audioMessageRequest = "Respond to the current spoken message.";
 
 export function messageText(message: Message) {
   const text = referenceText(message);
@@ -252,7 +253,8 @@ export async function loadAttachments(
   signal: AbortSignal,
   transcribe?: AudioTranscriber,
 ) {
-  return loadSourceAttachments(
+  const currentAudio: string[] = [];
+  const loaded = await loadSourceAttachments(
     contextSources(run),
     (source) =>
       source.runId === run.id || source.id.endsWith(`:${run.replyTo}`),
@@ -261,7 +263,14 @@ export async function loadAttachments(
     guard,
     signal,
     transcribe,
+    (text) => currentAudio.push(text),
   );
+  return {
+    images: loaded.images,
+    prompt: loaded.prompt,
+    requestText:
+      run.task === audioMessageRequest ? currentAudio.join("\n") : undefined,
+  };
 }
 
 export async function loadSourceAttachments(
@@ -272,10 +281,12 @@ export async function loadSourceAttachments(
   guard: () => Promise<void>,
   signal: AbortSignal,
   transcribe?: AudioTranscriber,
+  onCurrentAudio?: (text: string) => void,
 ) {
   const images: ImageContent[] = [];
   const content: {
     sourceId: string;
+    current: boolean;
     name?: string;
     text?: string;
     imageIndex?: number;
@@ -327,9 +338,12 @@ export async function loadSourceAttachments(
           transcribe,
         );
         await guard();
+        if (current(source) && isAudioAttachment(attachment) && decoded.text)
+          onCurrentAudio?.(decoded.text);
         if (decoded.image) images.push(decoded.image);
         content.push({
           sourceId: source.id,
+          current: current(source),
           name: attachment.name,
           text: decoded.text,
           ...(isAudioAttachment(attachment)
@@ -348,6 +362,7 @@ export async function loadSourceAttachments(
         if (current(source)) throw error;
         content.push({
           sourceId: source.id,
+          current: current(source),
           name: attachment.name,
           unavailable:
             attachmentErrors[error.code] ?? "Earlier attachment unavailable.",
