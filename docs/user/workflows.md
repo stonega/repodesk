@@ -92,6 +92,10 @@ instructions are also managed in the panel.
 
 ## 时间、失败和恢复
 
+Private scheduled answers, including private Topics, can include [interactive
+widgets](widgets.md) when the Telegram widgets preset is enabled. Save the desired
+format in the task; group answers use text.
+
 Each scheduled or **Run now** invocation carries out the saved task once. It does
 not treat earlier setup messages as a new request to create or edit a schedule.
 Conversation history is read only when the task needs it, such as a chat recap;

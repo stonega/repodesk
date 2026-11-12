@@ -376,7 +376,7 @@ export interface Run {
   /** A concurrent assistant turn may observe this Browser task, never take it over. */
   browserObserverOf?: string;
   browserTask?: true;
-  /** Staged presentation; published only with a successful interactive answer. */
+  /** Staged presentation; published only with a successful private answer. */
   widget?: TelegramWidget;
   browserSealed?: string;
   browserRead?: BrowserReadStamp;

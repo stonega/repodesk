@@ -18,8 +18,11 @@ Buttons change the local view or calculation. These previews are not saved and
 may reset when the widget leaves the screen. They cannot submit actions, refresh
 live services, authorize changes or make payments.
 
-Widgets currently work only in private chats, including private Topics. Group and
-scheduled answers use text. Widget messages are protected from forwarding. The
+Widgets currently work only in private chats, including private Topics. Scheduled
+private answers can also use widgets; include the desired widget format in the saved
+task. New occurrences use the enabled built-in widget preset alongside any selected
+skill. Existing schedules do not need to be recreated. Group answers use text.
+Widget messages are protected from forwarding. The
 caption and ordinary reply keep the answer useful on clients without widget
 support. A rejected widget can fall back to its caption; an uncertain delivery
 is not automatically resent.

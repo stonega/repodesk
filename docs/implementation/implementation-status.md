@@ -28,8 +28,9 @@ recall default to enabled, per the owner's 2026-11-12 instruction. Missing setti
 on existing workspaces use these defaults; explicit disables remain effective. No dependency
 or separately deployed service was added.
 
-Validation: **1,603 tests across 166 files pass** with Bun 1.3.14 and isolated
-PostgreSQL. Biome, strict TypeScript and the production build pass; Biome retains
+Validation after integrating the scheduled private widget changes from main:
+**1,618 tests across 166 files pass** with Bun 1.3.14 and isolated PostgreSQL.
+Biome, strict TypeScript and the production build pass; Biome retains
 nine existing warnings in the unrelated incident diagnostic script. Targeted
 regressions additionally exercise enabled defaults for missing/legacy settings,
 preserved explicit disables, transitive Pi/task memory invalidation, speaker/bot
@@ -51,6 +52,34 @@ See [implementation and operations](repository-tasks.md),
 Live model interpretation, Telegram/GitHub pilot acceptance and production
 rollout remain P5 gates. No deployment, real release, account connection or live
 model/Telegram request was performed in this implementation.
+
+## Scheduled private Telegram widgets (2026-11-12)
+
+Scheduled answers can now stage and deliver HTML widgets to their saved private
+chat or private Topic. New private occurrences pin the enabled built-in widget
+preset alongside the selected procedure; saved workflow versions and old run pins
+remain unchanged. Known unchanged presets upgrade once while preserving custom
+content, disablement and immutable history. Application guidance overrides the
+obsolete schedule restriction in old widget pins and distinguishes local policy
+errors from Telegram API rejections.
+
+The tool requires the current active workflow version, owner and exact saved
+private destination. It binds the deployment bot when first staged, rechecks it
+on replay, revision, publication and delivery, and preserves the existing safe
+caption fallback and uncertain-delivery rules. Group widgets remain denied;
+free-form workflows retain their original cost-query access and cannot acquire
+write capabilities from presentation support. No dependency or migration was added.
+
+Validation: all **1,569 tests across 163 files** pass with disposable PostgreSQL
+and Bun 1.3.14, including **60 focused widget/workflow tests**.
+Coverage follows dispatch, application tools, Executor, Store restart and durable
+DeliveryWorker, including ordinary members, both private destination types,
+selected/old skill versions, duplicate events, changed workflows, bot rotation,
+Topic-preserving caption fallback and uncertain sends. Biome, strict TypeScript,
+production build and the 16-case offline Node startup contract pass with zero
+external startup calls. No live Telegram/model call or deployment was performed.
+See [implementation](telegram-widgets.md) and the
+[incident analysis](../../postmortem/2026-11-12-scheduled-private-widgets.md).
 
 ## Outstanding branch consolidation (2026-11-12)
 

@@ -8,7 +8,7 @@ import {
   encodeBrowserWorkspace,
 } from "../../src/browser/storage.ts";
 import type { Store } from "../../src/db/repositories.ts";
-import type { Run, Workspace } from "../../src/domain.ts";
+import type { Run, Workflow, Workspace } from "../../src/domain.ts";
 import { sweep } from "../../src/privacy/service.ts";
 import { changeSkill } from "../../src/skills/catalog.ts";
 import { ensureTelegramWidgetSkill } from "../../src/skills/telegram-widgets.ts";
@@ -19,9 +19,14 @@ import {
   telegramWidgetAvailable,
   widgetDeliveryAllowed,
 } from "../../src/telegram/widgets.ts";
+import { tick } from "../../src/workflows/service.ts";
+import { memoryReferences } from "../../src/workspaces/conversation-memory.ts";
 import { createRun } from "../../src/workspaces/service.ts";
-import { originalTelegramWidgetSpec } from "../fixtures/telegram-widgets.ts";
-import { workspace } from "../fixtures.ts";
+import {
+  originalTelegramWidgetSpec,
+  proactiveTelegramWidgetSpec,
+} from "../fixtures/telegram-widgets.ts";
+import { spec, workspace } from "../fixtures.ts";
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw Error("Missing fixture");
@@ -46,12 +51,37 @@ function fixture(chatId = "101") {
   r.fence = 1;
   return { w, r };
 }
+function scheduledFixture(topicId = 7, chatId = "101") {
+  const w = workspace();
+  const f: Workflow = {
+    id: randomUUID(),
+    owner: "101",
+    version: 1,
+    status: "active" as const,
+    spec: {
+      ...spec(w),
+      chatId,
+      topicId,
+      skillId: undefined,
+      task: "Report current weather as a compact widget",
+    },
+    versions: [],
+    nextAt: new Date().toISOString(),
+  };
+  w.workflows.push(f);
+  tick(w, "gpt-4.1-mini");
+  const r = required(w.runs.at(-1));
+  r.status = "running";
+  r.fence = 1;
+  return { w, r, f };
+}
 function tool(
   w: Workspace,
   r: Run,
   deployment = { active: true, paused: false, bot: { id: "999" } },
   workspaceId = w.id,
   fence = r.fence,
+  name = "send_telegram_widget",
 ) {
   const store = {
     change: async (id: string, action: (w: Workspace) => unknown) => {
@@ -60,10 +90,15 @@ function tool(
     },
     deployment: async () => deployment,
   } as Store;
-  const found = applicationTools(store, workspaceId, r.id, fence).find(
-    (t) => t.name === "send_telegram_widget",
-  );
-  if (!found) throw Error("widget tool missing");
+  const found = applicationTools(
+    store,
+    workspaceId,
+    r.id,
+    fence,
+    undefined,
+    r.workflowId ? "workflow" : "interactive",
+  ).find((t) => t.name === name);
+  if (!found) throw Error(`tool missing: ${name}`);
   return found;
 }
 test("private answers receive proactive selection guidance and load rendering details on demand", () => {
@@ -213,29 +248,227 @@ test("widget tool validates UTF-8 and compressed limits, NUL, dimensions and mod
     authorizeWidget(w, r, { ...args, html: "a".repeat(32768) }),
   ).not.toThrow();
 });
-test("widgets reject groups, schedules, absent threads and rotated bots", async () => {
+test("widgets reject groups, invalid workflows, absent threads and rotated bots", async () => {
   const group = fixture("-100100");
   expect(() => stageWidget(group.w, group.r, args, "999")).toThrow(
     "widget_private_chat_required",
   );
-  for (const patch of [
-    { workflowId: "scheduled" },
-    { threadId: undefined },
-    { actor: "202" },
-    { topicId: 8 },
-  ]) {
+  for (const patch of [{ threadId: undefined }, { topicId: 8 }]) {
     const { w, r } = fixture();
     Object.assign(r, patch);
     expect(() => stageWidget(w, r, args, "999")).toThrow(
-      "widget_private_chat_required",
+      "widget_private_thread_required",
     );
   }
+  const invalid = fixture();
+  invalid.r.workflowId = "missing";
+  expect(() => stageWidget(invalid.w, invalid.r, args, "999")).toThrow(
+    "widget_workflow_changed",
+  );
   const { w, r } = fixture();
   const deployment = { active: true, paused: false, bot: { id: "999" } };
   const t = tool(w, r, deployment);
   await t.execute("widget", args);
   deployment.bot.id = "1000";
   await expect(t.execute("widget", args)).rejects.toThrow("widget_bot_changed");
+});
+test.each([0, 7])(
+  "scheduled private destination %i stages and publishes once without a conversation thread",
+  async (topicId) => {
+    const { w, r } = scheduledFixture(topicId);
+    expect(r.threadId).toBeUndefined();
+    expect(telegramWidgetAvailable(w, r)).toBe(true);
+    expect(buildContext(w, r).system).toContain(
+      "Proactively use send_telegram_widget",
+    );
+    const deployment = { active: true, paused: false, bot: { id: "999" } };
+    const t = tool(w, r, deployment);
+    const first = await t.execute("widget", args);
+    expect(await t.execute("widget", args)).toEqual(first);
+    expect(w.deliveries).toHaveLength(0);
+    deployment.bot.id = "1000";
+    await expect(t.execute("widget", args)).rejects.toThrow(
+      "widget_bot_changed",
+    );
+    await expect(t.execute("revision", args)).rejects.toThrow(
+      "widget_bot_changed",
+    );
+    deployment.bot.id = "999";
+    r.status = "succeeded";
+    publishWidget(w, r, "999");
+    publishWidget(w, r, "999");
+    expect(w.deliveries).toHaveLength(1);
+    const d = required(w.deliveries[0]);
+    expect(d).toMatchObject({
+      chatId: "101",
+      topicId,
+      botId: "999",
+      text: args.caption,
+    });
+    expect(d.replyTo).toBeUndefined();
+    expect(widgetDeliveryAllowed(w, d, "999")).toBe(true);
+    expect(widgetDeliveryAllowed(w, d, "1000")).toBe(false);
+  },
+);
+test("private schedules add the enabled built-in presentation skill without changing selected versions or old pins", () => {
+  for (const selection of ["none", "other", "widget"] as const) {
+    const { w, r, f } = scheduledFixture();
+    const widget = required(
+      w.skills.find((s) => s.draft.slug === "telegram-widgets"),
+    );
+    const selected = selection === "widget" ? widget : required(w.skills[0]);
+    f.spec.skillId = selection === "none" ? undefined : selected.id;
+    Object.assign(f, { skillVersion: 1 });
+    widget.published.push(structuredClone(widget.draft));
+    const originalPins = structuredClone(r.skillPins);
+    const next = createRun(w, "101", f.spec.task, "101", 7, "gpt-4.1-mini", {
+      workflowId: f.id,
+    });
+    expect(next.skillPins.filter((p) => p.id === widget.id)).toEqual([
+      { id: widget.id, version: selection === "widget" ? 1 : 2 },
+    ]);
+    if (selection === "other")
+      expect(next.skillPins).toContainEqual({ id: selected.id, version: 1 });
+    expect(r.skillPins).toEqual(originalPins);
+  }
+  for (const mutate of [
+    (w: Workspace) => {
+      required(
+        w.skills.find((s) => s.draft.slug === "telegram-widgets"),
+      ).enabled = false;
+    },
+    (w: Workspace) => {
+      required(
+        w.skills.find((s) => s.draft.slug === "telegram-widgets"),
+      ).archived = true;
+    },
+    (w: Workspace) => {
+      required(
+        w.skills.find((s) => s.draft.slug === "telegram-widgets"),
+      ).preset = false;
+    },
+    (w: Workspace) => {
+      required(
+        w.skills.find((s) => s.draft.slug === "telegram-widgets"),
+      ).origin = {
+        runId: "imported",
+        actor: "101",
+        sharedAt: new Date().toISOString(),
+        references: memoryReferences([]),
+      };
+    },
+    (w: Workspace) => {
+      required(
+        w.skills.find((s) => s.draft.slug === "telegram-widgets"),
+      ).githubSource = {
+        repository: "example/skills",
+        ref: "main",
+        path: "telegram-widgets/SKILL.md",
+        commit: "a".repeat(40),
+        blobSha: "b".repeat(40),
+        draftHash: "c".repeat(64),
+        importedAt: new Date().toISOString(),
+        access: "public",
+      };
+    },
+    (w: Workspace) => {
+      w.skills = w.skills.filter((s) => s.draft.slug !== "telegram-widgets");
+    },
+  ]) {
+    const { w, f } = scheduledFixture();
+    mutate(w);
+    const next = createRun(w, "101", f.spec.task, "101", 7, "gpt-4.1-mini", {
+      workflowId: f.id,
+    });
+    expect(next.skillPins).toEqual([]);
+    expect(telegramWidgetAvailable(w, next)).toBe(false);
+  }
+  const group = scheduledFixture(7, "-100100");
+  expect(group.r.skillPins).toEqual([]);
+  expect(() => stageWidget(group.w, group.r, args, "999")).toThrow(
+    "widget_private_chat_required",
+  );
+});
+test("scheduled widgets recheck owner, workflow version, status and exact saved destination", async () => {
+  for (const mutate of [
+    (w: Workspace) => {
+      required(w.workflows[0]).owner = "202";
+    },
+    (w: Workspace) => {
+      required(w.workflows[0]).version++;
+    },
+    (w: Workspace) => {
+      required(w.workflows[0]).status = "paused";
+    },
+    (w: Workspace) => {
+      required(w.workflows[0]).spec.chatId = "202";
+    },
+    (w: Workspace) => {
+      required(w.workflows[0]).spec.topicId = 8;
+    },
+    (w: Workspace) => {
+      w.workflows = [];
+    },
+  ]) {
+    const { w, r } = scheduledFixture();
+    await tool(w, r).execute("widget", args);
+    r.status = "succeeded";
+    publishWidget(w, r, "999");
+    const d = required(w.deliveries[0]);
+    mutate(w);
+    expect(widgetDeliveryAllowed(w, d, "999")).toBe(false);
+    r.status = "running";
+    await expect(tool(w, r).execute("widget", args)).rejects.toThrow();
+  }
+  for (const mutate of [
+    (w: Workspace) => {
+      required(w.members[0]).active = false;
+    },
+    (w: Workspace) => {
+      w.settings.paused = true;
+    },
+    (w: Workspace) => {
+      required(
+        w.skills.find((s) => s.draft.slug === "telegram-widgets"),
+      ).enabled = false;
+    },
+    (_w: Workspace, r: Run) => {
+      r.cancelled = true;
+    },
+    (_w: Workspace, r: Run) => {
+      r.skillPins = [];
+    },
+  ]) {
+    const { w, r } = scheduledFixture();
+    mutate(w, r);
+    await expect(tool(w, r).execute("widget", args)).rejects.toThrow();
+    expect(r.widget).toBeUndefined();
+  }
+});
+test("supplementary presentation pins retain free-form cost access without granting it to selected procedures", async () => {
+  const { w, r, f } = scheduledFixture();
+  expect(r.skillPins).toHaveLength(1);
+  await expect(
+    tool(w, r, undefined, w.id, r.fence, "query_model_cost").execute("cost", {
+      scope: "self",
+    }),
+  ).resolves.toBeDefined();
+  f.spec.skillId = r.skillPins[0]?.id;
+  f.skillVersion = 1;
+  const selected = createRun(w, "101", f.spec.task, "101", 7, "gpt-4.1-mini", {
+    workflowId: f.id,
+  });
+  selected.status = "running";
+  await expect(
+    tool(
+      w,
+      selected,
+      undefined,
+      w.id,
+      selected.fence,
+      "query_model_cost",
+    ).execute("cost", {}),
+  ).rejects.toThrow("tool_not_granted");
 });
 test("widget grants, membership, tenant, fence, cancellation and changed call arguments are enforced", async () => {
   for (const mutate of [
@@ -338,54 +571,65 @@ test("preset upgrade is stable and preserves disablement, collisions and existin
   ensureTelegramWidgetSkill(w);
   expect(w.skills.at(-1)).toBe(preset);
 });
-test("original presets upgrade once at catalog capacity, preserving disablement, versions and run pins", () => {
-  for (const enabled of [true, false]) {
-    const w = workspace();
-    const preset = required(
-      w.skills.find((s) => s.draft.slug === "telegram-widgets"),
-    );
-    const original = originalTelegramWidgetSpec();
-    preset.draft = structuredClone(original);
-    preset.published = [structuredClone(original)];
-    const old = createRun(w, "101", "Compare plans", "101", 7, "gpt-4.1-mini", {
-      botId: "999",
-    });
-    const pins = structuredClone(old.skillPins);
-    preset.enabled = enabled;
-    const revision = preset.version;
-    while (w.skills.length < 100) {
-      const copy = structuredClone(required(w.skills[0]));
-      copy.id = randomUUID();
-      copy.draft.slug = `extra-${w.skills.length}`;
-      w.skills.push(copy);
-    }
-    ensureTelegramWidgetSkill(w);
-    expect(preset.enabled).toBe(enabled);
-    expect(preset.version).toBe(revision + 1);
-    expect(preset.published).toHaveLength(2);
-    expect(preset.published[0]).toEqual(original);
-    expect(preset.draft.body).toContain("The user does not need to say");
-    expect(old.skillPins).toEqual(pins);
-    if (enabled) {
-      expect(
-        buildContext(w, old).skills.find((s) => s.id === preset.id)?.content,
-      ).toContain(original.body);
-      const next = createRun(
+test.each([originalTelegramWidgetSpec, proactiveTelegramWidgetSpec])(
+  "previous presets upgrade once at catalog capacity, preserving disablement, versions and run pins: %p",
+  (previousSpec) => {
+    for (const enabled of [true, false]) {
+      const w = workspace();
+      const preset = required(
+        w.skills.find((s) => s.draft.slug === "telegram-widgets"),
+      );
+      const original = previousSpec();
+      preset.draft = structuredClone(original);
+      preset.published = [structuredClone(original)];
+      const old = createRun(
         w,
         "101",
         "Compare plans",
         "101",
         7,
         "gpt-4.1-mini",
-        { botId: "999" },
+        {
+          botId: "999",
+        },
       );
-      expect(next.skillPins.find((p) => p.id === preset.id)?.version).toBe(2);
+      const pins = structuredClone(old.skillPins);
+      preset.enabled = enabled;
+      const revision = preset.version;
+      while (w.skills.length < 100) {
+        const copy = structuredClone(required(w.skills[0]));
+        copy.id = randomUUID();
+        copy.draft.slug = `extra-${w.skills.length}`;
+        w.skills.push(copy);
+      }
+      ensureTelegramWidgetSkill(w);
+      expect(preset.enabled).toBe(enabled);
+      expect(preset.version).toBe(revision + 1);
+      expect(preset.published).toHaveLength(2);
+      expect(preset.published[0]).toEqual(original);
+      expect(preset.draft.body).toContain("The user does not need to say");
+      expect(old.skillPins).toEqual(pins);
+      if (enabled) {
+        expect(
+          buildContext(w, old).skills.find((s) => s.id === preset.id)?.content,
+        ).toContain(original.body);
+        const next = createRun(
+          w,
+          "101",
+          "Compare plans",
+          "101",
+          7,
+          "gpt-4.1-mini",
+          { botId: "999" },
+        );
+        expect(next.skillPins.find((p) => p.id === preset.id)?.version).toBe(2);
+      }
+      ensureTelegramWidgetSkill(w);
+      expect(preset.published).toHaveLength(2);
+      expect(preset.version).toBe(revision + 1);
     }
-    ensureTelegramWidgetSkill(w);
-    expect(preset.published).toHaveLength(2);
-    expect(preset.version).toBe(revision + 1);
-  }
-});
+  },
+);
 test("automatic preset updates preserve custom collisions, changed instructions and archived records", () => {
   for (const mutate of [
     (skill: Workspace["skills"][number]) => {
