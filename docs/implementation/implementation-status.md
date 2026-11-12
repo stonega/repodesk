@@ -1,5 +1,25 @@
 # Implementation evidence
 
+## Outstanding branch consolidation (2026-11-12)
+
+The outstanding local and remote branch histories, the three local-main commits
+and the previously uncommitted workspace changes are consolidated on main.
+All original branch tips are ancestors of the integration result. Equivalent
+patches and superseded deployment snapshots retain the later implementation;
+the download investigation remains available beside current chat diagnostics as
+`deploy/browser-operator/download-diagnostic.py`. Local backup references preserve
+the original workspace snapshot.
+
+Validation: **1,554 tests across 163 files pass** with Bun 1.3.14 and isolated
+PostgreSQL, using the CI 30-second timeout. Biome, strict TypeScript, production
+build and the Node runtime contract pass. **36 browser scenarios** pass for
+workflow ownership, Code Truth saved summaries/modal editors and native runtime
+settings at desktop/mobile widths; screenshots were inspected. The built Docker
+image passes all 16 integration-startup cases with zero external startup calls,
+migration and app/worker HTTP readiness checks; Compose configuration and changed
+Python syntax also pass. No production cutover or live Telegram/model request was
+performed during this consolidation.
+
 ## Scoped repository schedules (2026-11-12)
 
 Unrelated repository metadata changes no longer suspend a report or cancel its
