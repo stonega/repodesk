@@ -6,6 +6,28 @@ tokens for Code Truth, preconfigured authenticated Review Bot webhook intake on
 public HTTPS deployments, plus Telegram issue drafts with explicit approval and
 repository-scoped issue submission and approved PR merge/close actions. No personal token is accepted by the web panel.
 
+## Repository statistics
+
+`query_github_metadata` accepts `{ "repositoryId": 7001, "kind": "repository" }`
+for current star, fork and watcher totals. It calls `GET /repos/{owner}/{repo}`
+using a short-lived installation token scoped to that repository with only
+Metadata read permission. The existing App manifest already requests this grant.
+The response includes a canonical repository URL and retrieval time. Watchers use
+`subscribers_count`; GitHub's `watchers_count` is an alias for stars.
+
+Interactive requests and saved repository workflows use the same integration.
+Active membership, selected repositories, current member access and workflow
+sources are checked before token creation, after token creation and after the
+response. Queued output retains the repository dependency for delivery checks.
+No browser session, new connection, dependency or migration is required.
+Repository queries reject issue/PR filters. Upstream failures, invalid counters
+and mismatched repository identities fail rather than becoming zero counts.
+These are current totals; the integration does not collect historical snapshots
+or calculate daily changes.
+
+Reference: [GitHub Get a repository](https://docs.github.com/en/rest/repos/repos#get-a-repository),
+checked 2026-11-13.
+
 ## Create the App from the panel
 
 1. During first-run setup, click **Connect GitHub**. Setup creates a private,

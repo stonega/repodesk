@@ -387,6 +387,7 @@ export class GitHubApp {
     installationId: number,
     repositoryIds: number[],
     permission:
+      | "metadata"
       | "contents"
       | "issues"
       | "publish"
@@ -410,27 +411,29 @@ export class GitHubApp {
       {
         repository_ids: repositoryIds,
         permissions:
-          permission === "release"
-            ? { contents: "write" }
-            : permission === "release_read"
-              ? { contents: "read", checks: "read", statuses: "read" }
-              : permission === "review"
-                ? { pull_requests: "write", issues: "write" }
-                : permission === "pulls_write"
-                  ? { pull_requests: "write" }
-                  : permission === "merge"
-                    ? { contents: "write", pull_requests: "read" }
-                    : permission === "issues_read"
-                      ? { issues: "read" }
-                      : permission === "pulls_read"
-                        ? { pull_requests: "read" }
-                        : permission === "issues"
-                          ? { issues: "write" }
-                          : permission === "publish"
-                            ? { contents: "write", pull_requests: "write" }
-                            : permission === "coding_read"
-                              ? { contents: "read", pull_requests: "read" }
-                              : { contents: "read" },
+          permission === "metadata"
+            ? { metadata: "read" }
+            : permission === "release"
+              ? { contents: "write" }
+              : permission === "release_read"
+                ? { contents: "read", checks: "read", statuses: "read" }
+                : permission === "review"
+                  ? { pull_requests: "write", issues: "write" }
+                  : permission === "pulls_write"
+                    ? { pull_requests: "write" }
+                    : permission === "merge"
+                      ? { contents: "write", pull_requests: "read" }
+                      : permission === "issues_read"
+                        ? { issues: "read" }
+                        : permission === "pulls_read"
+                          ? { pull_requests: "read" }
+                          : permission === "issues"
+                            ? { issues: "write" }
+                            : permission === "publish"
+                              ? { contents: "write", pull_requests: "write" }
+                              : permission === "coding_read"
+                                ? { contents: "read", pull_requests: "read" }
+                                : { contents: "read" },
       },
     );
     return z
@@ -510,6 +513,23 @@ export class GitHubApp {
     return this.request(
       `https://api.github.com/repos/${repository}${path ? `/${path}` : ""}`,
       token,
+    );
+  }
+  async repositoryStatistics(
+    token: string,
+    repository: string,
+    signal: AbortSignal,
+  ) {
+    requireThat(
+      /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository),
+      "github_repository_not_connected",
+      409,
+    );
+    return this.request(
+      `https://api.github.com/repos/${repository}`,
+      token,
+      undefined,
+      signal,
     );
   }
   async repositoryMetadata(

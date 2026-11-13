@@ -1,5 +1,49 @@
 # Implementation evidence
 
+## Authenticated repository statistics for schedules (2026-11-13)
+
+The existing `query_github_metadata` tool now accepts `kind: repository` to read
+current stars, forks and notification subscribers through the connected GitHub
+App. Tokens request only Metadata read permission for the selected repository.
+Responses verify repository identity and safe nonnegative counters and include
+a canonical URL and retrieval time. Existing actor, repository, workflow-source
+and delivery checks remain enforced. Instructions name this query for ordinary
+requests and schedules; a current total does not establish a historical delta.
+No dependency, SQL migration, browser policy or UI change was added.
+
+Validation with Bun 1.3.14 and disposable PostgreSQL passes all **27 new
+regressions**, lint, strict types, build and the Node runtime contract, including
+**16 production-startup cases with zero external startup calls**. The full run
+completed with **1,644 passes and one failure across 167 files**. Its unchanged
+native-runtime supervisor test reported `coding_runner_unavailable`; all six
+native-runtime tests pass on an isolated retry. This is not a full-suite pass.
+Lint retains nine existing warnings in the unrelated incident diagnostic script.
+
+Change selection uses baseline `0424ce9`: only the GitHub API/tool path, its
+bundled instructions, startup assertions, deterministic tests and documentation
+changed. No browser test is selected because browser-facing UI, routes,
+dependencies, configuration and fixtures are unchanged; no prior browser result
+is reused. The production-composition regression exercises scheduled private
+Topics, an ordinary member, dispatch/execution/delivery duplicates, Store restart
+and revoked delivery access with fake GitHub, model and Telegram transports.
+Native Telegram/model acceptance and production deployment remain unverified.
+No live send, schedule mutation, historical replay or deployment was performed.
+See [the incident](../../postmortem/2026-11-13-scheduled-github-repository-statistics.md)
+and [runnable examples](../../examples/team-workflows.md#current-repository-stars-forks-and-watchers).
+
+PR integration follow-up: CI quality, container verification and browser shard 1
+pass on `0b50795`. Browser shard 2 records 206 passes and four failures in the
+unchanged preset-card test: its total expanded-height cap excludes the documented
+exception for complete long instructions. Preset data and UI source match main.
+The regression now checks compact settings and wrapped tools separately from
+complete, vertically and horizontally unclipped instruction text, while retaining
+keyboard, toggle/error and editor-boundary checks. All nine focused preset
+browser scenarios pass; expanded widget previews were inspected at 1280px and
+375px in light/dark themes. Main independently corrected the same test in
+`5b77390`; integration preserves that newer test unchanged. No product UI or
+preference rule was changed. CI must
+pass on the updated head before merge; the earlier full browser run is not a pass.
+
 ## Repository tasks, release effects and preference memory (2026-11-12)
 
 The existing continuous task engine now supports investigation and release

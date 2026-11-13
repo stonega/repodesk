@@ -26,7 +26,7 @@ export function githubExtension(
   const skill = readFileSync("skills/repodesk-github/SKILL.md", "utf8");
   return {
     id: "github",
-    version: "5",
+    version: "6",
     path: "<inline:github>",
     tools: [
       "find_connected_repository",
@@ -38,9 +38,13 @@ export function githubExtension(
     ],
     execution: "read-only",
     enabled: true,
+    toolErrorCodes: [
+      "github_repository_response_invalid",
+      "github_repository_response_mismatch",
+    ],
     workspaces: [workspaceId],
     hash: fingerprint({
-      version: 5,
+      version: 6,
       connection,
       metadata: !!metadata,
       pullRequests: !!pullRequests,
@@ -116,11 +120,15 @@ export function githubExtension(
           name: "query_github_metadata",
           label: "Read GitHub status",
           description:
-            "Read current PR/issue metadata from a connected repository. No writes. Resolve repositoryId with find_connected_repository. For code comparisons, changed files, patches and review records use query_github_pull_request. state merged uses merged_at; issues exclude PRs. Supply ISO since/until for time windows and follow nextPage until complete; disclose incomplete coverage if stopped. number reads one item; bodyTruncated discloses a bounded description excerpt. Private repository ad-hoc queries require private chat; group schedules may read only their approved repository sources. Metadata does not prove CI, review approval or user impact.",
+            "Read connected GitHub repository metadata with the App. Resolve repositoryId with find_connected_repository. kind repository returns current stars, forks and watchers (notification subscribers), a URL and retrieval time; use only repositoryId and kind, including for scheduled reports. PR/issue options number/state/since/until/page apply only to pulls/issues; follow nextPage and disclose incomplete coverage. state merged uses merged_at; issues exclude PRs; bodyTruncated marks bounded descriptions. Use query_github_pull_request for code, patches and reviews. Private ad-hoc reads require private chat; group schedules read only approved sources. No writes; counts do not establish historical changes, CI or user impact.",
           parameters: Type.Object(
             {
               repositoryId: Type.Integer({ minimum: 1 }),
-              kind: Type.Union([Type.Literal("pulls"), Type.Literal("issues")]),
+              kind: Type.Union([
+                Type.Literal("repository"),
+                Type.Literal("pulls"),
+                Type.Literal("issues"),
+              ]),
               number: Type.Optional(Type.Integer({ minimum: 1 })),
               state: Type.Optional(
                 Type.Union([
@@ -137,7 +145,9 @@ export function githubExtension(
             { additionalProperties: false },
           ),
           execute: async (_callId, args, signal) => {
-            const result = await metadata.read(
+            const result = await metadata[
+              args.kind === "repository" ? "repository" : "read"
+            ](
               workspaceId,
               input.runId,
               args,

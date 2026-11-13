@@ -73,6 +73,30 @@ Apps may require an owner to approve permissions in GitHub. Reports cite item UR
 and retrieval time, follow bounded paging, and disclose incomplete coverage.
 Requested reviewers are pending requests, not proof of approval or CI success.
 
+### Current repository stars, forks and watchers
+
+After connecting the repository, send either request in private Telegram chat:
+
+```text
+Show example/project's current stars, forks and watchers. Include its link and retrieval time.
+Every day at 08:00 Asia/Taipei, report example/project's current stars, forks and watchers here.
+```
+
+The assistant resolves the selected repository with `find_connected_repository`
+and calls the existing `query_github_metadata` tool with:
+
+```json
+{ "repositoryId": 7001, "kind": "repository" }
+```
+
+Use the actual connected repository ID. Repository queries accept only these two
+fields; issue/PR pagination and time filters do not apply. The result contains
+`repository`, `repositoryId`, `kind`, `url`, `retrievedAt`, `stars`, `forks`,
+`watchers` and `coverage`. Watchers are notification subscribers, not GitHub's
+star-count alias `watchers_count`. Historical snapshots and daily deltas are not
+provided. Metadata read permission suffices; credentials stay inside the service.
+The existing workflow source and delivery guards apply, including private Topics.
+
 ## Save a conversation as a team skill
 
 After a successful assistant investigation in the same chat:

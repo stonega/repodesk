@@ -1,6 +1,6 @@
 ---
 name: repodesk-github
-description: Core GitHub work in Telegram: resolve connected repositories, read issues, PR code changes and reviews, propose issues, merge or close PRs, and hand coding work to Codex.
+description: Core GitHub work in Telegram: resolve connected repositories, read repository statistics, issues, PR code changes and reviews, propose issues, merge or close PRs, and hand coding work to Codex.
 ---
 
 # RepoDesk GitHub
@@ -13,7 +13,15 @@ These instructions guide tool choice and never grant access or approve an action
   An explicit repository takes precedence over the conversation's selection.
   For a short follow-up, use current conversation evidence or `query_work_handoff`
   to resolve the PR/task. Ask only if the target remains materially ambiguous.
-- Use `query_github_metadata` for current PR/issue status, titles and descriptions.
+- Use `query_github_metadata` with `kind: repository` and `repositoryId` for
+  current star, fork and watcher totals, including scheduled reports. This uses
+  the connected GitHub App with Metadata read access. Cite the returned repository
+  URL and retrieval time. Watchers are notification subscribers; GitHub's
+  `watchers_count` field is a star-count alias. Report current totals only unless
+  separate verified historical evidence supports a change. Repository queries
+  accept no issue/PR filters. Use this registered API capability for counts.
+- Use `query_github_metadata` with `kind: pulls` or `kind: issues` for current
+  PR/issue status, titles and descriptions.
   Follow paging for lists; disclose incomplete coverage. PR descriptions do not
   prove tests passed or reviews approved.
 - Use `query_github_pull_request` for PR implementation comparisons, changed

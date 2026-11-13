@@ -27,6 +27,19 @@ export const metadataQuery = z
     (q) => !q.since || !q.until || Date.parse(q.since) < Date.parse(q.until),
   );
 const person = z.object({ login: z.string() });
+const repositoryQuery = z
+  .object({
+    repositoryId: z.number().int().positive().safe(),
+    kind: z.literal("repository"),
+  })
+  .strict();
+const repositoryStatistics = z.object({
+  id: z.number().int().positive().safe(),
+  full_name: z.string(),
+  stargazers_count: z.number().int().nonnegative().safe(),
+  forks_count: z.number().int().nonnegative().safe(),
+  subscribers_count: z.number().int().nonnegative().safe(),
+});
 const item = z.object({
   number: z.number().int().positive(),
   title: z.string(),
@@ -54,7 +67,7 @@ export class GitHubMetadata {
     workspaceId: string,
     runId: string,
     repositoryId: number,
-    permission: "pulls_read" | "issues_read",
+    permission: "metadata" | "pulls_read" | "issues_read",
     signal: AbortSignal,
     guard: () => Promise<void>,
   ) {
@@ -122,6 +135,46 @@ export class GitHubMetadata {
       guard,
     );
     return readPullRequestDetails(reader, q, signal);
+  }
+  async repository(
+    workspaceId: string,
+    runId: string,
+    value: unknown,
+    signal: AbortSignal,
+    guard: () => Promise<void>,
+  ) {
+    const q = repositoryQuery.parse(value);
+    const { scope, app, token, check } = await this.reader(
+      workspaceId,
+      runId,
+      q.repositoryId,
+      "metadata",
+      signal,
+      guard,
+    );
+    const raw = await app.repositoryStatistics(token, scope.repository, signal);
+    await check();
+    const parsed = repositoryStatistics.safeParse(raw);
+    requireThat(parsed.success, "github_repository_response_invalid", 502);
+    const repository = parsed.data;
+    requireThat(
+      repository.id === q.repositoryId &&
+        repository.full_name.toLowerCase() === scope.repository.toLowerCase(),
+      "github_repository_response_mismatch",
+      502,
+    );
+    return {
+      repository: scope.repository,
+      repositoryId: q.repositoryId,
+      kind: q.kind,
+      url: `https://github.com/${scope.repository}`,
+      retrievedAt: new Date().toISOString(),
+      stars: repository.stargazers_count,
+      forks: repository.forks_count,
+      watchers: repository.subscribers_count,
+      coverage:
+        "Current repository totals at retrieval. Watchers are notification subscribers. Historical counts and daily changes are not provided.",
+    };
   }
   async read(
     workspaceId: string,

@@ -37,6 +37,12 @@ the commands below to pause or delete a schedule.
 
 > 每天 09:00 Asia/Taipei 给我一份 example/app 的 PR 报告，列出待审查、已合并和阻塞项，附链接。
 
+You can also request: “Every day at 08:00 Asia/Taipei, report example/app's
+current stars, forks and watchers here, with its link and retrieval time.”
+The connected GitHub App reads these totals through the API. Watchers are
+notification subscribers. The report does not infer daily changes from a
+single current count.
+
 工作区需先 [连接 GitHub](github.md)。Reports pin their repository sources and destination. Publishing private-repository
 reports to a group requires an active workspace owner/admin as the workflow owner
 with access to those repositories. Private read access alone does not allow group
