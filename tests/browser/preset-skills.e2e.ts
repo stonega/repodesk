@@ -77,6 +77,11 @@ for (const width of [1280, 375]) {
         const instructions = card.locator(".prose").first();
         await expect(instructions).toBeVisible();
         await expect(instructions).toHaveText(spec.body);
+        expect(
+          await instructions.evaluate(
+            (element) => element.scrollHeight <= element.clientHeight + 1,
+          ),
+        ).toBe(true);
         await expect(card.getByLabel("Settings")).toContainText(
           "Maximum words",
         );
