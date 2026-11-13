@@ -67,9 +67,6 @@ Source: owner request during v0.1.48 release preparation, 2026-11-12. Follow the
 - Treat `origin/main` as the shared source of truth. Before starting or integrating
   work, fetch the remote and inspect the current branch, dirty files, worktrees and
   divergence. A push from another worktree does not update this worktree's `main`.
-- Base new work on current remote main in a task branch. Preserve unrelated edits
-  and local-only commits before reconciling a stale checkout; use an isolated
-  worktree when necessary. Never discard them to make a pull or merge succeed.
 - When integration/push is in scope, verify the result against freshly fetched
   remote main and confirm the push before reporting it integrated. Otherwise,
   explicitly report that the work remains local or on an unmerged branch.
