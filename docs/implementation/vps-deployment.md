@@ -16,6 +16,38 @@ including earlier production-based snapshots; they do not establish that pattern
 as the baseline for new work. Emergency exceptions require a recorded
 return-to-main owner/deadline and reconciliation before the next normal release.
 
+## Verified v0.1.49 update recovered (2026-11-13)
+
+The failed v0.1.48 panel update was caused by disabled Verify and offline CI
+runners. Verify is enabled again and the three isolated permanent runners are
+healthy on the current VPS. The verified patch release
+[v0.1.49](https://github.com/stonega/repodesk/releases/tag/v0.1.49) installs
+immutable main-reachable source `5b77390cfa49232b926f633b939e7f0fb3722068`, tree
+`8a51bdea3c3763b555f54413cf134a86fccad162`. Later main changes are not included.
+Its complete [Verify run](https://github.com/stonega/repodesk/actions/runs/43365035671)
+passed **1,589 deterministic tests and 450 browser scenarios**, quality/build,
+exact-image runtime contract, Code Truth and Compose backup/restore checks.
+
+The operator-authorized root recovery used the unchanged host updater and its
+protected installer after checking exact release verification, the current
+deployment and an idle update queue. Fresh request
+`7793435b-96ed-450e-aed0-258806503e1a` succeeded at 05:15 UTC. Bundle
+`1794546698145-81474502` replaces `1794469596569-79773357`; app and worker report
+v0.1.49 and image
+`sha256:80da45b54676a7ac06f9a7153d53a9050e693a013c3709d9cb346f61dcfb32c1`.
+App, worker, Codex supervisor and Code Truth image IDs match the verified bundle.
+All production services are healthy, public readiness passes, and the updater
+service is active with a fresh heartbeat. Configuration and persistent state
+were retained through the existing checkpoint/backup/migration procedure.
+
+The protected backup is
+`backups/pre-release-1794546698145-81474502.dump` (622,285 bytes, mode 0600),
+with its archive listing verified. The root operator intent and receipt are
+retained under `updates/manual/`, alongside the ordinary updater result and log.
+No previous failed request was replayed. See the
+[incident record](../../postmortem/2026-11-13-missing-release-verification.md)
+for the CI restoration, fixture regressions and exact recovery audit.
+
 ## Scoped repository schedule fix deployed (2026-11-12)
 
 Operator-authorized bundle `1794469596569-79773357` deploys source

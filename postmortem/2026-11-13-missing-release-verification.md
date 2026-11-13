@@ -1,6 +1,6 @@
 # Missing release verification — 2026-11-13
 
-Status: CI restored; v0.1.49 patch verification in progress.
+Status: recovered; verified v0.1.49 deployed on 2026-11-13 at 05:15 UTC.
 
 ## Impact and evidence
 
@@ -97,7 +97,52 @@ Local browser selection compares v0.1.49 with main/release commit `0424ce9`:
 only native host observations, fake-CLI/browser tests, documentation and version
 metadata change. The update and preset scenarios cover the affected contracts;
 this focused pass does not claim that v0.1.48's broader browser scope was verified.
-The new release's own Verify run must still pass its complete configured
-quality/database, browser and container jobs before publication. Record its final
-result and the live production guard check here before marking this incident
-recovered.
+The new release's complete push-triggered
+[Verify run 43365035671](https://github.com/stonega/repodesk/actions/runs/43365035671)
+passed for immutable commit `5b77390cfa49232b926f633b939e7f0fb3722068`:
+**1,589 deterministic tests, 450 browser scenarios** (240 and 210 in the two
+shards), quality/type/build checks and the container job. The exact application
+image passed the 16-case offline startup contract with zero external calls;
+Code Truth smoke, Compose migration/readiness and disposable backup/restore
+rehearsal passed. The final aggregate check succeeded. This complete run replaces
+the earlier focused browser evidence as the release gate.
+
+## Publication and production recovery
+
+The candidate commit was already reachable from freshly fetched `origin/main`.
+Its tree is `8a51bdea3c3763b555f54413cf134a86fccad162`. The installed production
+updater's unchanged `requireVerifiedCommit` accepted that exact source before
+[v0.1.49 was published](https://github.com/stonega/repodesk/releases/tag/v0.1.49).
+The v0.1.48 tag and failed requests remain historical records; neither was
+rewritten or replayed. Later main changes were excluded from this tested release.
+
+The operator's request to fix the failed update authorized a fresh root-operated
+installation. A one-shot helper pinned the repository, release fingerprint,
+source commit and existing updater hashes, checked the unchanged v0.1.46
+deployment and idle update queue, and recorded an SSH operator intent. It stopped
+the idle updater daemon to prevent competing panel requests, then used its
+existing `processRequest` / `installRelease` path and storage lock. It did not
+fabricate a panel-admin session or database actor. Before protected cutover it
+rechecked the original deployment and queue. The ordinary installer retained
+source verification, exact-image checks, coding checkpoints, database backup,
+migrations and readiness gates.
+
+Fresh request `7793435b-96ed-450e-aed0-258806503e1a` succeeded at
+`2026-11-13T05:15:23.154Z`, installing bundle `1794546698145-81474502` over
+`1794469596569-79773357`. The protected operator receipt is
+`/opt/repodesk/updates/manual/7793435b-96ed-450e-aed0-258806503e1a.receipt.json`;
+the durable updater result also records `succeeded`. App and worker report
+v0.1.49 and use image
+`sha256:80da45b54676a7ac06f9a7153d53a9050e693a013c3709d9cb346f61dcfb32c1`.
+Their actual image IDs, the Codex supervisor and Code Truth IDs match the
+verified release bundle. All production services are healthy, public readiness
+passes, and the updater daemon restarted with a fresh heartbeat. All three
+permanent CI runners are online.
+
+The pre-migration backup is
+`/opt/repodesk/backups/pre-release-1794546698145-81474502.dump`
+(622,285 bytes, mode 0600); its PostgreSQL archive listing validates. Temporary
+local runner registrations, proxy forwarding, containers/volumes and the isolated
+test database were removed. No live model request or manual Telegram send was
+used for this recovery. Production browser appearance was not visually checked;
+the complete deterministic browser suite is the UI verification evidence.
