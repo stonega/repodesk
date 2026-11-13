@@ -55,6 +55,17 @@ script warnings. Browser tests are not selected for this API/tool-only change
 against baseline `0424ce9`; UI/routes/configuration/dependencies are unchanged,
 and no previous browser result is reused.
 
+During PR integration, the complete browser run exposed a stale preset-preview
+height assertion already present in main. It limited complete expanded
+instructions to the old short-preset height. CI browser shard 2 recorded 206
+passes and four such failures; shard 1, quality and containers passed. The
+follow-up test preserves compact collapsed summaries and preview chrome while
+asserting that expanded instructions retain their entire saved text. All nine
+focused preset scenarios pass, with desktop/mobile and both themes inspected.
+No product UI or preset content changed. This passing focused result does not
+turn the earlier interrupted/failed whole workflow into a full pass; the updated
+PR head requires fresh CI verification before merge.
+
 No schedule mutation, live model/Telegram request, historical replay or production
 deployment is part of this local correction.
 

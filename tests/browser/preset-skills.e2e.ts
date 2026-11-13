@@ -66,12 +66,17 @@ for (const width of [1280, 375]) {
             "input, textarea, select, .skill-card-meta, .skill-card-footer",
           ),
         ).toHaveCount(0);
+        expect((await card.boundingBox())?.height).toBeLessThan(
+          width > 640 ? 450 : 700,
+        );
         await card
           .getByText("Preview instructions & dependent schedules", {
             exact: true,
           })
           .click();
-        await expect(card.locator(".prose").first()).toBeVisible();
+        const instructions = card.locator(".prose").first();
+        await expect(instructions).toBeVisible();
+        await expect(instructions).toHaveText(spec.body);
         await expect(card.getByLabel("Settings")).toContainText(
           "Maximum words",
         );
@@ -83,9 +88,13 @@ for (const width of [1280, 375]) {
         await expect(tools.getByRole("listitem")).toHaveText(spec.tools);
         const toolsBounds = await tools.boundingBox();
         expect(toolsBounds?.height).toBeLessThan(width > 640 ? 90 : 160);
+        // Bound preview chrome without truncating longer saved instructions.
         // Supporting guides add their own collapsed disclosure row.
         const guideRow = spec.resources?.length ? 80 : 0;
-        expect((await card.boundingBox())?.height).toBeLessThan(
+        const cardHeight = (await card.boundingBox())?.height ?? 0;
+        const instructionHeight =
+          (await instructions.boundingBox())?.height ?? 0;
+        expect(cardHeight - instructionHeight).toBeLessThan(
           (width > 640 ? 450 : 700) + guideRow,
         );
         if (spec.resources?.length) {
@@ -109,6 +118,10 @@ for (const width of [1280, 375]) {
         await expect(
           card.getByText("No dependent workflows", { exact: true }),
         ).toBeVisible();
+        if (spec.slug === "telegram-widgets")
+          await card.screenshot({
+            path: test.info().outputPath("widget-preset-preview.png"),
+          });
         await expectTopRightAction(card, card.getByRole("button"));
         const toggle = card.locator(".skill-card-preview > summary");
         expect((await toggle.boundingBox())?.height).toBeGreaterThanOrEqual(44);

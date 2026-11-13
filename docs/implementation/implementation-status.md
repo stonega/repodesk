@@ -31,6 +31,17 @@ No live send, schedule mutation, historical replay or deployment was performed.
 See [the incident](../../postmortem/2026-11-13-scheduled-github-repository-statistics.md)
 and [runnable examples](../../examples/team-workflows.md#current-repository-stars-forks-and-watchers).
 
+PR integration follow-up: CI quality, container verification and browser shard 1
+pass on `0b50795`. Browser shard 2 records 206 passes and four failures in the
+unchanged preset-card test: its total expanded-height cap excludes the documented
+exception for complete long instructions. Preset data and UI source match main.
+The regression now checks compact collapsed cards and bounded preview chrome
+separately from full instruction text, while retaining wrapped-tool, settings,
+keyboard, toggle/error and editor-boundary checks. All nine focused preset
+browser scenarios pass; expanded widget previews were inspected at 1280px and
+375px in light/dark themes. No product UI or preference rule was changed. CI must
+pass on the updated head before merge; the earlier full browser run is not a pass.
+
 ## Repository tasks, release effects and preference memory (2026-11-12)
 
 The existing continuous task engine now supports investigation and release
