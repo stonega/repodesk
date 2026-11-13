@@ -50,6 +50,10 @@ import { obsidianTools } from "../obsidian/config.ts";
 import { obsidianExtension } from "../obsidian/extension.ts";
 import { ObsidianService } from "../obsidian/service.ts";
 import { obsidianEnabled, obsidianGeneration } from "../obsidian/vault.ts";
+import {
+  type PluginPackageOptions,
+  PluginPackages,
+} from "../plugins/package-service.ts";
 import { searchConsoleTool } from "../search-console/config.ts";
 import type { SearchConsoleService } from "../search-console/service.ts";
 import { TranscriptionService } from "../transcription/service.ts";
@@ -72,6 +76,7 @@ function authorizePlugins(admin: Admin, workspace: Workspace) {
 }
 
 export class PluginService {
+  readonly packages: PluginPackages;
   constructor(
     private store: Store,
     private manifestPath?: string,
@@ -83,7 +88,12 @@ export class PluginService {
     readonly transcription = new TranscriptionService(store),
     readonly browser = new BrowserService(store),
     readonly nowledgeMem = new NowledgeService(store),
-  ) {}
+    packageOptions: PluginPackageOptions = {},
+  ) {
+    this.packages = new PluginPackages(store, packageOptions, githubApp, (w) =>
+      this.entries(w),
+    );
+  }
   private legacy?: Promise<PluginRecord[]>;
   private fallback(): Promise<PluginRecord[]> {
     this.legacy ??= this.manifestPath
@@ -121,6 +131,7 @@ export class PluginService {
           ? "manifest"
           : "empty",
       notice,
+      packageCatalog: this.packages.catalog(workspace),
       entries: await Promise.all(
         entries.map(async ({ hash, ...entry }) => ({
           ...entry,
@@ -152,6 +163,10 @@ export class PluginService {
       );
       const builtin = prior?.codeTruth;
       const names = new Set<string>(TOOLS);
+      for (const pkg of prior?.packages ?? [])
+        if (pkg.enabled)
+          for (const tool of pkg.manifest.tools)
+            names.add(`rdp_${pkg.source.repositoryId}_${tool.name}`);
       // Reserve default built-ins even while disabled, so re-enabling is safe.
       for (const name of obsidianTools) names.add(name);
       for (const name of browserTools) names.add(name);
@@ -376,7 +391,7 @@ export class PluginService {
     );
     const config = workspace.plugins?.codeTruth;
     const targets = config?.enabled ? targetsFor(config, workspaceId) : [];
-    const builtins = [];
+    const builtins = this.packages.extensions(workspace);
     if (workspace.plugins?.nowledgeMem?.settings.enabled)
       builtins.push(
         nowledgeExtension(

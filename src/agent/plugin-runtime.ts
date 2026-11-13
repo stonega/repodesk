@@ -6,6 +6,7 @@ import type { Store } from "../db/repositories.ts";
 import type { GitHubApps } from "../github/registry.ts";
 import { GoogleService } from "../google/service.ts";
 import { NowledgeService } from "../nowledge-mem/service.ts";
+import { packageRuntime } from "../plugins/runtime.ts";
 import { SearchConsoleService } from "../search-console/service.ts";
 import { PluginService } from "./plugin-service.ts";
 
@@ -34,5 +35,6 @@ export function pluginRuntime(store: Store, cfg: Config, github: GitHubApps) {
     undefined,
     browserRuntime(store, cfg.ENCRYPTION_KEY, cfg),
     new NowledgeService(store, cfg.ENCRYPTION_KEY),
+    packageRuntime(cfg),
   );
 }

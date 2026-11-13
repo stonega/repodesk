@@ -81,6 +81,7 @@ import { MemberGitHub } from "./member-github.tsx";
 import { CreateModal, Modal, ModalActions, ModalPending } from "./modal.tsx";
 import { ModelProvidersPanel } from "./model-providers.tsx";
 import { Pagination } from "./pagination.tsx";
+import { PackageDetail } from "./plugin-packages.tsx";
 import { Plugins } from "./plugins.tsx";
 import { prefixFields, RecordForm } from "./record-form.tsx";
 import { RunAttempts } from "./run-attempts.tsx";
@@ -4499,6 +4500,27 @@ function Shell() {
                 current.admin.operator ? (
                   chosen ? (
                     <Plugins key={chosen} request={api} workspaceId={chosen} />
+                  ) : (
+                    <Setup />
+                  )
+                ) : (
+                  <Page title="Operator access required">
+                    <p>Plugins can be managed by deployment operators.</p>
+                  </Page>
+                )
+              }
+            />
+            <Route
+              path="/admin/plugins/packages/:repositoryId"
+              element={
+                current.admin.operator ? (
+                  chosen ? (
+                    <PackageDetail
+                      key={chosen}
+                      request={api}
+                      workspaceId={chosen}
+                      actor={current.admin.telegramId}
+                    />
                   ) : (
                     <Setup />
                   )

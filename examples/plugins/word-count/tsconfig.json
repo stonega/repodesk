@@ -1,0 +1,9 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@repodesk/plugin-sdk": ["../../../sdk/plugin/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

@@ -5,6 +5,7 @@ const backend = await Bun.build({
   entrypoints: [
     "src/server.ts",
     "src/worker.ts",
+    "src/plugins/plugin-supervisor.ts",
     "src/web-reader/web-reader-extract.ts",
     "src/coding/local/runner-server.ts",
     "src/coding/local/job.ts",
@@ -26,6 +27,15 @@ const backend = await Bun.build({
 });
 if (!backend.success)
   throw new AggregateError(backend.logs, "Backend build failed");
+const pluginJob = await Bun.build({
+  entrypoints: ["src/plugins/sandbox-job.ts"],
+  outdir: "dist",
+  naming: "plugin-job.mjs",
+  target: "node",
+  format: "esm",
+});
+if (!pluginJob.success)
+  throw new AggregateError(pluginJob.logs, "Plugin sandbox build failed");
 await cp("src/agent/SOUL.md", "dist/SOUL.md");
 await cp("src/skills/telegram-widgets", "dist/telegram-widgets", {
   recursive: true,

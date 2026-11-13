@@ -373,6 +373,10 @@ export interface BrowserReadStamp {
   botId: string;
 }
 export interface Run {
+  packageRead?: {
+    revision: number;
+    installations: Record<string, { digest: string; generation: number }>;
+  };
   /** A concurrent assistant turn may observe this Browser task, never take it over. */
   browserObserverOf?: string;
   browserTask?: true;
@@ -610,6 +614,7 @@ export interface Audit {
   version?: number;
 }
 export interface Workspace {
+  pluginPackagePreviews?: import("./plugins/package-config.ts").PackagePreview[];
   repositoryTasks?: import("./coding/objective.ts").RepositoryTaskSettings;
   /** Revocation counters only. Personal sites, credentials and grants live separately. */
   browserEpochs?: Record<string, number>;

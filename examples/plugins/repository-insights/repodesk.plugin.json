@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "id": "repository-insights",
+  "name": "Repository insights",
+  "description": "Read current counters for an authorized GitHub repository.",
+  "version": "0.1.0",
+  "apiVersion": "1",
+  "license": "MIT",
+  "repository": "https://github.com/example/repodesk-repository-insights",
+  "publisher": {
+    "name": "Example"
+  },
+  "runtime": {
+    "type": "node-sandbox",
+    "entry": "dist/plugin.mjs"
+  },
+  "capabilities": [
+    "github.metadata.read"
+  ],
+  "settingsSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "tools": [
+    {
+      "name": "repository_summary",
+      "title": "Repository summary",
+      "description": "Read current stars, forks and subscribers. Cannot infer historical changes.",
+      "effect": "read",
+      "capabilities": [
+        "github.metadata.read"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repositoryId": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "repositoryId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "stars": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "forks": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "subscribers": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fetchedAt": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "url",
+          "stars",
+          "forks",
+          "subscribers",
+          "fetchedAt"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "skills": [
+    {
+      "path": "skills/repository-summary/SKILL.md"
+    }
+  ]
+}

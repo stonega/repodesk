@@ -21,6 +21,7 @@ import { Modal, ModalActions } from "./modal.tsx";
 import { NowledgeMem } from "./nowledge-mem.tsx";
 import { Obsidian } from "./obsidian.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
+import { PackageSourceModal } from "./plugin-packages.tsx";
 import { ReviewBot } from "./review-bot.tsx";
 import { SkeletonRows } from "./skeleton.tsx";
 import { ErrorToast, useToast } from "./toast.tsx";
@@ -115,6 +116,8 @@ export function Plugins({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string>();
+  const [choosingSource, setChoosingSource] = useState(false);
+  const [installingPackage, setInstallingPackage] = useState(false);
   const [builtIns, setBuiltIns] = useState<{
     codeTruth?: boolean;
     codex?: boolean;
@@ -348,7 +351,7 @@ export function Plugins({
               type="button"
               disabled={!data || loading || busy}
               onClick={() => {
-                setEditing("__new");
+                setChoosingSource(true);
                 setError("");
               }}
             />
@@ -485,6 +488,15 @@ export function Plugins({
                 to={path(`/file/${encodeURIComponent(entry.id)}`)}
                 name={entry.id}
                 summary="Local Pi extension"
+                status={entry.enabled ? "Enabled" : "Disabled"}
+              />
+            ))}
+            {data?.packageCatalog?.entries.map((entry) => (
+              <PluginCard
+                key={`github-${entry.source.repositoryId}`}
+                to={path(`/packages/${entry.source.repositoryId}`)}
+                name={entry.manifest.name}
+                summary={entry.manifest.description}
                 status={entry.enabled ? "Enabled" : "Disabled"}
               />
             ))}
@@ -764,6 +776,47 @@ export function Plugins({
             <Link to={path()}>Back to Plugins</Link>
           </section>
         ))}
+      {data && choosingSource && (
+        <Modal title="New plugin" onClose={() => setChoosingSource(false)}>
+          <div className="package-form">
+            <p>Choose how to install this plugin.</p>
+            <button
+              type="button"
+              disabled={!data.packageCatalog?.configured}
+              onClick={() => {
+                setChoosingSource(false);
+                setInstallingPackage(true);
+              }}
+            >
+              GitHub repository
+            </button>
+            {!data.packageCatalog?.configured && (
+              <p className="muted">
+                GitHub package storage is not configured for this deployment.
+              </p>
+            )}
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setChoosingSource(false);
+                setEditing("__new");
+              }}
+            >
+              Local file
+            </button>
+            <ModalActions>{null}</ModalActions>
+          </div>
+        </Modal>
+      )}
+      {data && installingPackage && (
+        <PackageSourceModal
+          request={request}
+          workspaceId={workspaceId}
+          onClose={() => setInstallingPackage(false)}
+          saved={() => void load()}
+        />
+      )}
       {data && editing !== undefined && (
         <Modal
           title={

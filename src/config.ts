@@ -23,6 +23,10 @@ const schema = z.object({
   QWEN_ASR_PYTHON: z.string().min(1).optional(),
   QWEN_ASR_DIRECTORY: z.string().startsWith("/").optional(),
   PI_EXTENSIONS_FILE: z.string().trim().min(1).optional(),
+  PLUGIN_PACKAGES_DIRECTORY: z.string().startsWith("/").optional(),
+  PLUGIN_RUNNER_URL: z.string().url().optional(),
+  PLUGIN_RUNNER_TOKEN: z.string().min(32).optional(),
+  PLUGIN_RUNNER_TOKEN_FILE: z.string().startsWith("/").optional(),
   UPDATES_GITHUB_REPOSITORY: z
     .string()
     .regex(/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/)

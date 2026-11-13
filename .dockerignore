@@ -18,6 +18,9 @@
 !scripts/fixtures/
 !scripts/fixtures/plugin-startup.ts
 !scripts/fixtures/browser-network.ts
+!sdk/
+!sdk/plugin/
+!sdk/plugin/index.ts
 !deploy/
 !deploy/browser/
 !deploy/browser/package.ts

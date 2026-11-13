@@ -2527,6 +2527,35 @@ input.plugin-toggle-input:disabled {
   gap: 14px 24px;
   margin: 0;
 }
+.package-form,
+.package-detail > .card,
+.package-history {
+  display: grid;
+  gap: 16px;
+}
+.package-form > p,
+.package-form > h3,
+.package-detail > .card > p,
+.package-detail > .card > .plugin-card-heading {
+  margin: 0;
+}
+.package-digest,
+.package-diff {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.package-diff {
+  max-height: 22rem;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.package-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
 .plugin-summary + .row {
   margin-top: 20px;
 }

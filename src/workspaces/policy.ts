@@ -17,6 +17,7 @@ import { googleReadAllowed } from "../google/policy.ts";
 import { memoryContextValid, referenceMemoryValid } from "../memory/state.ts";
 import { nowledgeReadAllowed } from "../nowledge-mem/policy.ts";
 import { obsidianReadAllowed } from "../obsidian/policy.ts";
+import { packageReadAllowed } from "../plugins/package-policy.ts";
 import { searchConsoleReadAllowed } from "../search-console/policy.ts";
 import { validMemory } from "./conversation-memory.ts";
 export function eligible(w: Workspace, actor: string, admin = false) {
@@ -94,6 +95,7 @@ function allowedRun(
   }
   const result =
     eligible(w, run.actor) &&
+    packageReadAllowed(w, run) &&
     browserReadAllowed(w, run) &&
     !w.settings.paused &&
     !run.cancelled &&

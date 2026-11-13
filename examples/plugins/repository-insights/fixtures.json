@@ -1,0 +1,12 @@
+{
+  "grants": ["github.metadata.read"],
+  "responses": {
+    "{\"method\":\"github.repository.get\",\"params\":{\"repositoryId\":123}}": {
+      "url": "https://github.com/example/repository",
+      "stars": 10,
+      "forks": 2,
+      "subscribers": 3,
+      "fetchedAt": "2026-11-13T00:00:00.000Z"
+    }
+  }
+}

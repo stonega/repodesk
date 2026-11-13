@@ -12,7 +12,10 @@
     "verbatimModuleSyntax": true,
     "noUncheckedIndexedAccess": true,
     "noFallthroughCasesInSwitch": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@repodesk/plugin-sdk": ["./sdk/plugin/index.ts"]
+    }
   },
   "include": [
     "src/**/*.ts",

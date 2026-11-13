@@ -57,7 +57,13 @@
     "evaluate": "node dist/evaluate.js",
     "test:runtime": "node dist/runtime-contract.js",
     "benchmark:sandboxes": "bun scripts/sandbox-benchmark.ts",
-    "register:webhook": "node dist/register-webhook.js"
+    "register:webhook": "node dist/register-webhook.js",
+    "plugin:generate": "bun scripts/plugin-cli.ts generate",
+    "plugin:build": "bun scripts/plugin-cli.ts build",
+    "plugin:validate": "bun scripts/plugin-cli.ts validate",
+    "plugin:run": "bun scripts/plugin-cli.ts run",
+    "plugin:schema": "bun scripts/plugin-cli.ts schema",
+    "test:plugins": "bun test tests/unit/plugin-packages.test.ts tests/unit/plugin-protocol.test.ts"
   },
   "engines": {
     "node": ">=22.19.0"

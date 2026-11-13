@@ -9,6 +9,7 @@ COPY tsconfig.json ./
 COPY src ./src
 COPY web ./web
 COPY scripts ./scripts
+COPY sdk ./sdk
 COPY services/code-truth/src/tool-catalog.ts ./services/code-truth/src/tool-catalog.ts
 RUN bun run build
 FROM node:24-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS runtime-base
@@ -78,6 +79,19 @@ ENTRYPOINT ["node", "/opt/deepx/job.js"]
 # The trusted execd starts as root; the adapter launches every repository job as UID 1000.
 FROM codex-job AS codex-opensandbox-job
 USER root
+
+# This image contains no application dependencies, configuration or credentials.
+FROM runtime-base AS plugin-supervisor
+COPY --from=docker-client /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=dependencies /app/node_modules ./node_modules
+COPY --from=build /app/dist/plugin-supervisor.js ./dist/plugin-supervisor.js
+CMD ["node", "dist/plugin-supervisor.js"]
+
+FROM runtime-base AS plugin-job
+WORKDIR /opt/repodesk-plugin
+COPY --from=build --chown=node:node /app/dist/plugin-job.mjs ./job.mjs
+USER node
+ENTRYPOINT ["node", "/opt/repodesk-plugin/job.mjs"]
 
 # Preserve the ordinary app as the default build target.
 FROM runtime AS app

@@ -112,6 +112,7 @@ import {
   runtimeSave,
 } from "../coding/runtime-config.ts";
 import type { GitHubService } from "../github/service.ts";
+import { packageFault } from "../plugins/package-service.ts";
 import type { ReleaseUpdates } from "../updates/releases.ts";
 
 export function adminRoutes(
@@ -1006,6 +1007,120 @@ export function adminRoutes(
         await c.req.json(),
       ),
     ),
+  );
+  const packageCall = async <T>(action: () => Promise<T>): Promise<T> => {
+    try {
+      return await action();
+    } catch (error) {
+      return packageFault(error);
+    }
+  };
+  const packageRepositoryId = (id: string) =>
+    z.coerce.number().int().positive().safe().parse(id);
+  app.get("/api/admin/workspaces/:id/plugin-packages", async (c) =>
+    c.json(
+      await packageCall(() =>
+        plugins.packages.view(
+          c.get("session").admin,
+          validId(c.req.param("id")),
+        ),
+      ),
+    ),
+  );
+  app.post("/api/admin/workspaces/:id/plugin-packages/previews", async (c) => {
+    const value = await c.req.json();
+    return c.json(
+      await packageCall(() =>
+        plugins.packages.preview(
+          c.get("session").admin,
+          validId(c.req.param("id")),
+          value,
+          c.req.raw.signal,
+        ),
+      ),
+    );
+  });
+  app.post("/api/admin/workspaces/:id/plugin-packages", async (c) => {
+    const value = await c.req.json();
+    return c.json(
+      await packageCall(() =>
+        plugins.packages.apply(
+          c.get("session").admin,
+          validId(c.req.param("id")),
+          value,
+        ),
+      ),
+    );
+  });
+  app.get(
+    "/api/admin/workspaces/:id/plugin-packages/:repositoryId",
+    async (c) => {
+      const view = await packageCall(() =>
+        plugins.packages.view(
+          c.get("session").admin,
+          validId(c.req.param("id")),
+        ),
+      );
+      const entry = view.entries.find(
+        (p) =>
+          p.source.repositoryId ===
+          packageRepositoryId(c.req.param("repositoryId")),
+      );
+      requireThat(entry, "plugin_not_found", 404);
+      return c.json({
+        revision: view.revision,
+        runnerConfigured: view.runnerConfigured,
+        entry,
+      });
+    },
+  );
+  app.patch(
+    "/api/admin/workspaces/:id/plugin-packages/:repositoryId",
+    async (c) => {
+      const value = await c.req.json();
+      return c.json(
+        await packageCall(() =>
+          plugins.packages.update(
+            c.get("session").admin,
+            validId(c.req.param("id")),
+            packageRepositoryId(c.req.param("repositoryId")),
+            value,
+          ),
+        ),
+      );
+    },
+  );
+  app.delete(
+    "/api/admin/workspaces/:id/plugin-packages/:repositoryId",
+    async (c) => {
+      const value = await c.req.json();
+      return c.json(
+        await packageCall(() =>
+          plugins.packages.remove(
+            c.get("session").admin,
+            validId(c.req.param("id")),
+            packageRepositoryId(c.req.param("repositoryId")),
+            value,
+          ),
+        ),
+      );
+    },
+  );
+  app.post(
+    "/api/admin/workspaces/:id/plugin-packages/:repositoryId/connections",
+    async (c) => {
+      const value = await c.req.json();
+      return c.json(
+        await packageCall(() =>
+          plugins.packages.connect(
+            c.get("session").admin,
+            validId(c.req.param("id")),
+            packageRepositoryId(c.req.param("repositoryId")),
+            value,
+          ),
+        ),
+      );
+    },
   );
   app.get("/api/admin/workspaces/:id/plugins", async (c) =>
     c.json(

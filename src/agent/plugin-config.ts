@@ -30,6 +30,7 @@ export const pluginSaveSchema = z
 export type PluginSpec = z.infer<typeof pluginSchema>;
 export type PluginRecord = PluginSpec & { hash?: string };
 export interface PluginSettings {
+  packages?: import("../plugins/package-config.ts").PackageInstallation[];
   nowledgeMem?: NowledgeConfig;
   browser?: BrowserSettings;
   transcription?: TranscriptionSettings;
@@ -42,6 +43,7 @@ export interface PluginSettings {
   searchConsole?: SearchConsoleConfig;
 }
 export interface PluginPage {
+  packageCatalog?: import("../plugins/package-config.ts").PackageCatalog;
   revision: number;
   source: "panel" | "manifest" | "empty";
   notice?: string;
