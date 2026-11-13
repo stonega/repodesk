@@ -59,8 +59,10 @@ During PR integration, the complete browser run exposed a stale preset-preview
 height assertion already present in main. It limited complete expanded
 instructions to the old short-preset height. CI browser shard 2 recorded 206
 passes and four such failures; shard 1, quality and containers passed. The
-follow-up test preserves compact collapsed summaries and preview chrome while
-asserting that expanded instructions retain their entire saved text. All nine
+follow-up test bounds settings and tool layout while asserting that expanded
+instructions retain their entire saved text without vertical or horizontal
+clipping. Main independently supplies this correction in `5b77390`; integration
+preserves that newer test unchanged. All nine
 focused preset scenarios pass, with desktop/mobile and both themes inspected.
 No product UI or preset content changed. This passing focused result does not
 turn the earlier interrupted/failed whole workflow into a full pass; the updated
