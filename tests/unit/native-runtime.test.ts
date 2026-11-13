@@ -31,6 +31,12 @@ import {
 
 const dirs: string[] = [];
 const supervisors: RunnerSupervisor[] = [];
+// Exercise real process phases with a fake CLI, independently of the CI host.
+const nativeHost = {
+  platform: "linux" as const,
+  getuid: () => 1000,
+  exists: () => false,
+};
 afterEach(async () => {
   for (const s of supervisors.splice(0)) await s.sweep().catch(() => {});
   for (const dir of dirs.splice(0))
@@ -88,7 +94,7 @@ else {
   const runtime = () =>
     new SandboxTaskRuntime(
       settings,
-      new NativeDriver(settings, { phase, job }),
+      new NativeDriver(settings, { phase, job }, nativeHost),
     );
   const supervisor = new RunnerSupervisor(settings, runtime());
   supervisors.push(supervisor);
@@ -265,9 +271,42 @@ test("native execution requires explicit operator enablement and usable CLI file
     new NativeDriver(
       { ...f.settings, CODEX_NATIVE_CODEX_BIN: "/nonexistent/codex" },
       { phase: join(f.dir, "phase.mjs"), job: join(f.dir, "job.mjs") },
+      nativeHost,
     ).ready(),
   ).rejects.toThrow();
 });
+
+test.each([
+  { name: "non-Linux", host: { ...nativeHost, platform: "darwin" as const } },
+  { name: "root", host: { ...nativeHost, getuid: () => 0 } },
+  {
+    name: "Docker",
+    host: { ...nativeHost, exists: (path: unknown) => path === "/.dockerenv" },
+  },
+  {
+    name: "Podman",
+    host: {
+      ...nativeHost,
+      exists: (path: unknown) => path === "/run/.containerenv",
+    },
+  },
+])(
+  "native host restrictions reject $name before executing a CLI",
+  async ({ host }) => {
+    const settings = runnerSettings.parse({
+      CODEX_RUNNER_TOKEN: randomUUID(),
+      CODEX_NATIVE_ENABLED: "true",
+      CODEX_NATIVE_CODEX_BIN: "/nonexistent/codex",
+    });
+    await expect(
+      new NativeDriver(
+        settings,
+        { phase: "/nonexistent/phase", job: "/nonexistent/job" },
+        host,
+      ).ready(),
+    ).rejects.toThrow("coding_native_host_required");
+  },
+);
 
 test("the production native job invokes the installed CLI, checks its patch and exports it without remote calls", async () => {
   const f = await fixture();
@@ -301,7 +340,7 @@ rl.on('line',line=>{
   );
   await writeFile(
     f.settings.CODEX_NATIVE_CODEX_BIN,
-    `#!/bin/sh\nexec /usr/bin/node '${server}' "$@"\n`,
+    `#!/bin/sh\nexec node '${server}' "$@"\n`,
   );
   const runtime = f.runtime(),
     key = taskKey(f.input.workspaceId, f.input.taskId);

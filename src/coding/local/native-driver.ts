@@ -38,6 +38,11 @@ export class NativeDriver implements SandboxDriver {
       phase: fileURLToPath(new URL("./native-phase.js", import.meta.url)),
       job: fileURLToPath(new URL("./job.js", import.meta.url)),
     },
+    private host = {
+      platform: process.platform,
+      getuid: process.getuid,
+      exists: existsSync,
+    },
   ) {
     this.root = resolve(settings.CODEX_RUNNER_STATE, "native-processes");
   }
@@ -54,10 +59,10 @@ export class NativeDriver implements SandboxDriver {
       409,
     );
     requireThat(
-      process.platform === "linux" &&
-        process.getuid?.() !== 0 &&
-        !existsSync("/.dockerenv") &&
-        !existsSync("/run/.containerenv"),
+      this.host.platform === "linux" &&
+        this.host.getuid?.() !== 0 &&
+        !this.host.exists("/.dockerenv") &&
+        !this.host.exists("/run/.containerenv"),
       "coding_native_host_required",
       503,
     );

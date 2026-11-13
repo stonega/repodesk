@@ -99,6 +99,11 @@ selected by the procedure below, and `bun run test:runtime`. Publishing a releas
 does not by itself require all browser tests. When enabled, the existing Verify
 workflow runs its configured quality, database, full browser and container jobs;
 the local selection policy does not change or bypass that workflow.
+Before publishing a stable release, confirm Verify is enabled, its required
+self-hosted runners are online, and the exact candidate commit has a successful
+push-triggered Verify run. Local test results and a published tag do not satisfy
+the panel updater's independent GitHub check. See
+[release verification recovery](updates.md#recover-missing-release-verification).
 The Bun, Node and PostgreSQL base images are pinned by digest in Docker/Compose.
 Publish the resulting application image to your registry and deploy its immutable
 `@sha256:` digest through `APP_IMAGE`, then use `docker compose up --no-build -d`.

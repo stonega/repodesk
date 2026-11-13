@@ -77,6 +77,56 @@ Credentials never enter requests, browser responses or ordinary app logs.
 
 ## Update and recovery
 
+### Recover missing release verification
+
+`verification_failed` can mean the exact release commit has no successful Verify
+run, or the updater could not read GitHub's release/verification API. Check the
+protected host log and GitHub response before assuming a test failed. A manually
+disabled workflow creates no runs; offline self-hosted runners leave jobs queued.
+Neither condition is repaired by clicking **Retry update** repeatedly.
+
+For the configured repository, confirm `.github/workflows/check.yml` is active
+and the required runners are online. Use the current host in
+[debugging](debugging.md#vps-access), rather than a historical deployment address,
+and follow the [runner guide](self-hosted-runner.md). Confirm existing runners are
+idle before replacing or restarting them. Restore CI without changing the
+published release tag, skipping verification or replaying the failed update file.
+
+Re-enabling Verify does not verify pushes that occurred while it was disabled.
+If the release commit has no run, push a new recovery branch pointing to that
+exact commit; the existing `push` trigger runs the release's own workflow:
+
+```sh
+git fetch origin --tags
+release_commit=$(git rev-parse 'v0.1.48^{commit}') # Use the requested release tag.
+git merge-base --is-ancestor "$release_commit" origin/main
+git push origin "$release_commit:refs/heads/verify/v0.1.48-recovery"
+```
+
+Use an unused branch name for each recovery. Wait for the entire Verify workflow
+to succeed. A manual dispatch, a PR check, another commit's success or selected
+local tests cannot satisfy the current host guard, which requires `event=push`
+and the exact release SHA. Check through the production verification function
+before publishing the release or retrying installation:
+
+```sh
+node --input-type=module -e '
+  import { requireVerifiedCommit } from "./scripts/update-host.mjs";
+  await requireVerifiedCommit({
+    repository: "stonega/repodesk", commit: process.argv[1],
+  }, process.env.UPDATES_GITHUB_TOKEN);
+  console.log("Release verification passed.");
+' "$release_commit"
+```
+
+Use the configured repository/token for a fork or private source; never print the
+token. Once this check passes, use the panel's **Retry update** action to create a
+fresh audited request. Release verification alone does not install the release.
+The [2026-11-13 incident](../../postmortem/2026-11-13-missing-release-verification.md)
+records this failure mode.
+
+### Installation and retry behavior
+
 Only authenticated deployment operators can queue installations. Existing session,
 origin and CSRF checks apply; workspace accounts can review notes. The server
 rechecks release ID, notes fingerprint and tag commit before saving a reservation,
