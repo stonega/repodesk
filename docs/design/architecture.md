@@ -15,6 +15,17 @@ Compose runs `app`, `worker`, a one-shot `migrate` service, and PostgreSQL 17.
 Only the API port is exposed, on loopback; production HTTPS terminates at the host proxy.
 Bun manages packages/builds/tests. Node 24 runs the application.
 
+Interactive and scheduled chatbot prompts begin with shared confidentiality and
+instruction-boundary rules before personality, approved instructions and pinned
+skills. They direct the model to decline extraction of hidden runtime instructions
+(including transformed or partial disclosure and tool-mediated exfiltration), treat
+retrieved content and historical context as reference data, and continue separable
+legitimate work. Public capability explanations and authorized inspection of
+user-managed instructions or skills remain allowed. These are model instructions;
+authorization, approval and tenant boundaries remain enforced by application
+services, and deterministic prompt checks do not establish live-model resistance
+to every injection.
+
 Model delivery intents explicitly select Markdown formatting. The `marked` lexer
 parses model output; a bounded renderer produces plain text with Telegram UTF-16
 message entities, preserving code and literal HTML without using a parse mode.

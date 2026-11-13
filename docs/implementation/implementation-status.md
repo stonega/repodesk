@@ -1,5 +1,38 @@
 # Implementation evidence
 
+## Chatbot prompt confidentiality (2026-11-13)
+
+Private, group and scheduled runs now prepend shared security instructions before
+personality, approved instructions and pinned skills. The prompt covers direct,
+partial and transformed extraction, authority impersonation, injected reference
+content and disclosure through tools or delegated tasks. It permits high-level
+capability explanations, authorized inspection of user-managed instructions/skills
+and analysis of suspicious content, and directs the model to continue separable
+legitimate work after declining extraction. Application authorization is unchanged.
+
+Four deterministic regressions check prompt ordering across all three run types
+and preservation of suspicious source text as reference data. These checks verify
+assembly and do not demonstrate live-model resistance to every injection.
+
+Verification uses an isolated `569f754` snapshot plus this patch, Bun 1.3.14 and
+disposable PostgreSQL. Lint (nine existing incident-script warnings), strict
+types, build and the Node runtime contract pass, including zero external startup
+calls. The full test run records **1,715 passes, eight Docker-gated skips and one
+template import error** because the template's separately declared SDK dependency
+was not installed in the snapshot. After a frozen-lockfile install scoped to
+`templates/plugin`, that test and the four prompt regressions pass (**five tests**).
+The full suite is not repeated after template-only dependency preparation;
+application source and root dependencies remain unchanged. This is not a single
+successful full-suite run.
+
+Change selection starts from clean, freshly fetched main `44f32bd`; concurrent
+GitHub plugin work subsequently advances this checkout to `569f754`, preserving
+the prompt edits. This task changes only chatbot prompt text, deterministic
+context tests and documentation. No browser test is selected for the prompt
+change and no pre-change test result is reused; browser coverage for the separate
+plugin work belongs to its verification ledger. Live model behavior, Telegram
+delivery and deployment remain unverified for the prompt change.
+
 ## GitHub repository plugin preview (2026-11-13)
 
 Implemented locally on the Pi 1.5.2 source: versioned manifest/semantic validation,
