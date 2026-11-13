@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "id": "word-count",
+  "name": "Word count",
+  "description": "Count whitespace-separated words without I/O.",
+  "version": "0.1.0",
+  "apiVersion": "1",
+  "license": "MIT",
+  "repository": "https://github.com/example/repodesk-word-count",
+  "publisher": {
+    "name": "Example"
+  },
+  "runtime": {
+    "type": "node-sandbox",
+    "entry": "dist/plugin.mjs"
+  },
+  "capabilities": [],
+  "settingsSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "tools": [
+    {
+      "name": "count_words",
+      "title": "Count words",
+      "description": "Count whitespace-separated words in supplied text.",
+      "effect": "compute",
+      "capabilities": [],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 12000
+          }
+        },
+        "required": ["text"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["count"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "skills": []
+}

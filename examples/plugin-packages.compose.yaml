@@ -1,0 +1,70 @@
+# Opt-in: docker compose -f compose.yaml -f examples/plugin-packages.compose.yaml ...
+# Build plugin-job separately and set PLUGIN_RUNNER_IMAGE to its immutable image ID/digest.
+services:
+  app:
+    environment:
+      PLUGIN_PACKAGES_DIRECTORY: /var/lib/repodesk-plugins
+      PLUGIN_RUNNER_URL: http://plugin-runner:3030
+      PLUGIN_RUNNER_TOKEN_FILE: /run/plugin-runner/token
+    volumes:
+      - plugin_packages:/var/lib/repodesk-plugins
+      - plugin_runner_auth:/run/plugin-runner:ro
+    depends_on:
+      plugin-runner-token:
+        condition: service_completed_successfully
+  worker:
+    environment:
+      PLUGIN_PACKAGES_DIRECTORY: /var/lib/repodesk-plugins
+      PLUGIN_RUNNER_URL: http://plugin-runner:3030
+      PLUGIN_RUNNER_TOKEN_FILE: /run/plugin-runner/token
+    volumes:
+      - plugin_packages:/var/lib/repodesk-plugins
+      - plugin_runner_auth:/run/plugin-runner:ro
+    depends_on:
+      plugin-runner-token:
+        condition: service_completed_successfully
+  plugin-runner-token:
+    image: ${APP_IMAGE:-deepx-agent:local}
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cap_add: [CHOWN, FOWNER]
+    command: [node, dist/plugin-runner-token.js]
+    healthcheck:
+      disable: true
+    restart: "no"
+    volumes:
+      - plugin_runner_auth:/run/plugin-runner
+      - plugin_packages:/var/lib/repodesk-plugins
+  plugin-runner:
+    build:
+      context: .
+      target: plugin-supervisor
+    image: ${PLUGIN_SUPERVISOR_IMAGE:-repodesk-plugin-supervisor:local}
+    init: true
+    environment:
+      PORT: "3030"
+      PLUGIN_RUNNER_TOKEN_FILE: /run/plugin-runner/token
+      PLUGIN_RUNNER_IMAGE: ${PLUGIN_RUNNER_IMAGE:?Set immutable PLUGIN_RUNNER_IMAGE}
+    volumes:
+      - plugin_runner_auth:/run/plugin-runner:ro
+      - ${PLUGIN_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+    read_only: true
+    tmpfs: [/tmp:rw,noexec,nosuid,nodev,size=16777216]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    stop_grace_period: 40s
+    depends_on:
+      plugin-runner-token:
+        condition: service_completed_successfully
+    # Private service, with no host port. Only this supervisor receives Docker.
+    healthcheck:
+      test: [CMD, node, -e, "const fs=require('fs');fetch('http://127.0.0.1:3030/healthz',{headers:{authorization:'Bearer '+fs.readFileSync('/run/plugin-runner/token','utf8').trim()}}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+volumes:
+  plugin_packages:
+  plugin_runner_auth:

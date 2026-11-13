@@ -1,5 +1,6 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { promisify } from "node:util";
 import {
   assertJson,
   type Capability,
@@ -42,6 +43,42 @@ export interface PluginSandbox {
   invoke(input: SandboxInvocation): Promise<ToolResult>;
 }
 
+const dockerExec = promisify(execFile);
+/** Reap only our expired, labelled task containers after supervisor interruption. */
+export async function reapPluginSandboxes(now = Date.now()): Promise<number> {
+  const { stdout } = await dockerExec(
+    "docker",
+    ["ps", "-aq", "--filter", "label=repodesk.plugin-sandbox=true"],
+    { timeout: 5000, maxBuffer: 65536 },
+  );
+  const ids = stdout
+    .trim()
+    .split(/\s+/)
+    .filter((id) => /^[a-f0-9]{12,64}$/.test(id))
+    .slice(0, 64);
+  let removed = 0;
+  for (const id of ids) {
+    const { stdout: deadline } = await dockerExec(
+      "docker",
+      [
+        "inspect",
+        "--format",
+        '{{index .Config.Labels "repodesk.plugin-deadline"}}',
+        id,
+      ],
+      { timeout: 5000, maxBuffer: 1024 },
+    );
+    if (/^\d+$/.test(deadline.trim()) && Number(deadline.trim()) < now) {
+      await dockerExec("docker", ["rm", "-f", id], {
+        timeout: 5000,
+        maxBuffer: 1024,
+      });
+      removed++;
+    }
+  }
+  return removed;
+}
+
 /** Trusted supervisor only. Never construct this in the ordinary app/worker. */
 export class DockerPluginSandbox implements PluginSandbox {
   private active = 0;
@@ -79,6 +116,11 @@ export class DockerPluginSandbox implements PluginSandbox {
         ? { DOCKER_HOST: process.env.DOCKER_HOST }
         : {}),
     };
+    const deadlineController = new AbortController();
+    const activeSignal = AbortSignal.any([
+      input.signal,
+      deadlineController.signal,
+    ]);
     let running: ReturnType<typeof spawn> | undefined;
     try {
       return await new Promise<ToolResult>((resolve, reject) => {
@@ -98,10 +140,10 @@ export class DockerPluginSandbox implements PluginSandbox {
           else reject(new PluginError("plugin_outcome_unknown"));
         };
         const abort = () => finish(new PluginError("plugin_cancelled"));
-        const timer = setTimeout(
-          () => finish(new PluginError("plugin_timeout")),
-          timeout,
-        );
+        const timer = setTimeout(() => {
+          deadlineController.abort();
+          finish(new PluginError("plugin_timeout"));
+        }, timeout);
         input.signal.addEventListener("abort", abort, { once: true });
         if (input.signal.aborted) {
           abort();
@@ -118,6 +160,8 @@ export class DockerPluginSandbox implements PluginSandbox {
             name,
             "--label",
             "repodesk.plugin-sandbox=true",
+            "--label",
+            `repodesk.plugin-deadline=${Date.now() + timeout + 10000}`,
             "--network",
             "none",
             "--read-only",
@@ -207,7 +251,7 @@ export class DockerPluginSandbox implements PluginSandbox {
                   await input.guard();
                   input.signal.throwIfAborted();
                   try {
-                    const result = await input.broker(request, input.signal);
+                    const result = await input.broker(request, activeSignal);
                     await input.guard();
                     input.signal.throwIfAborted();
                     assertJson(result, limits.result);
@@ -273,6 +317,7 @@ export class DockerPluginSandbox implements PluginSandbox {
         }
       });
     } finally {
+      deadlineController.abort();
       // Docker removes the whole resource group, including malicious descendants.
       const cleanup = spawn("docker", ["rm", "-f", name], {
         env: environment,

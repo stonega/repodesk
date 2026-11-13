@@ -116,3 +116,15 @@ test("bounded ZIP extraction rejects traversal, multiple roots, links and expans
     "plugin_package_invalid",
   );
 });
+
+test("actual inflation cannot exceed forged ZIP size declarations", () => {
+  const archive = Buffer.from(
+    zipSync({ "root/bomb.txt": new Uint8Array(4 * 1024 * 1024) }),
+  );
+  const end = archive.length - 22;
+  const central = archive.readUInt32LE(end + 16);
+  const local = archive.readUInt32LE(central + 42);
+  archive.writeUInt32LE(1, central + 24);
+  archive.writeUInt32LE(1, local + 22);
+  expect(() => unpackGitHubZip(archive)).toThrow("plugin_package_invalid");
+});

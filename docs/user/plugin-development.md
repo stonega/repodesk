@@ -1,362 +1,240 @@
-# Plugin development
+# Develop a GitHub plugin
 
-Build a custom tool as a Pi extension file, keep its source in a GitHub repository,
-and give a reviewed version to a RepoDesk deployment operator for installation.
-One repository can contain one plugin with several tools and optional instruction
-skills. This guide walks through a small word-count plugin.
+RepoDesk's repository plugin profile is a **read-only preview**. One GitHub
+repository contains one plugin. Authors supply a manifest, source and a committed
+Node ESM bundle. Operators review an immutable commit before installing the plugin
+into a workspace. Installation, updates and rollbacks leave it disabled until an
+operator explicitly enables it.
 
-RepoDesk currently registers **local files**. The panel does not clone GitHub
-repositories, install npm packages or run build scripts. There is no published
-RepoDesk plugin SDK or supported `repodesk.plugin.json` installation format.
-GitHub hosts your source and releases; the operator installs the reviewed file.
+This profile is separate from [trusted local Pi extensions](local-plugins.md).
+The preview SDK is supplied with the template; no npm publication is required.
+Public SDK publication and an official hosted GitHub template are release steps.
 
-File plugins run inside the worker process with its operating-system permissions.
-Install trusted, reviewed code only. The `read-only` registration records that
-review; it does not enforce filesystem or network isolation. Use file plugins for
-pure computation or reviewed read-only operations. External writes belong in
-application services that enforce actor, scope, destination, approval and recovery.
+## Start from the supplied template
 
-## Before you start
-
-You need Bun for authoring and a test RepoDesk deployment whose operator can mount
-files and manage **Workspace → Plugins**. Workspace administrators and ordinary
-members cannot register executable plugins.
-
-The example uses Bun **1.3.14**, Pi **1.5.2** and TypeBox **1.3.7**. Match the Pi
-types to the version used by your target deployment. Upstream Pi supports features
-outside RepoDesk's headless subset; use the compatibility section below when
-choosing APIs. Bun builds and tests the plugin; Node runs it in RepoDesk.
-
-For reusable instructions without executable code, use a [skill](skills.md).
-Skills can request existing tools but cannot install or authorize a new tool.
-
-## 1. Create the repository
-
-Use a small layout:
-
-```text
-repodesk-word-count/
-├── src/index.ts
-├── tests/word-count.test.ts
-├── package.json
-├── bun.lock
-├── tsconfig.json
-├── biome.json
-├── dist/plugin.mjs
-├── README.md
-├── CHANGELOG.md
-└── LICENSE
-```
-
-Create `package.json`:
-
-```json
-{
-  "name": "repodesk-word-count",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "packageManager": "bun@1.3.14",
-  "scripts": {
-    "check": "biome check src tests",
-    "typecheck": "tsc --noEmit",
-    "test": "bun test",
-    "build": "bun build ./src/index.ts --target node --format esm --outfile ./dist/plugin.mjs"
-  },
-  "dependencies": {
-    "typebox": "1.3.7"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "2.5.14",
-    "@earendil-works/pi-coding-agent": "1.5.2",
-    "@types/bun": "1.4.2",
-    "typescript": "5.9.3"
-  }
-}
-```
-
-The Pi import below is type-only; the bundle does not include another Pi runtime.
-TypeBox is a runtime dependency bundled into the output. Keep runtime dependencies
-explicit and inspect the generated file before sharing it. Avoid native addons,
-dynamic imports or external files in this first plugin so the single bundle is
-the complete runtime artifact.
-
-Create `tsconfig.json`:
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2023",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "types": ["bun"],
-    "strict": true,
-    "noEmit": true,
-    "skipLibCheck": true,
-    "verbatimModuleSyntax": true,
-    "allowImportingTsExtensions": true
-  },
-  "include": ["src/**/*.ts", "tests/**/*.ts"]
-}
-```
-
-Create `biome.json`:
-
-```json
-{
-  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
-  "formatter": { "indentStyle": "space" }
-}
-```
-
-Run `bun install` once and commit the generated `bun.lock`. Subsequent clean
-checkouts and CI should use `bun install --frozen-lockfile`. Keep credentials,
-private inputs, `node_modules/` and local deployment settings out of Git.
-
-## 2. Implement the tool
-
-Create `src/index.ts`:
-
-```typescript
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
-
-export function countWords(text: string): number {
-  return text.trim().split(/\s+/).filter(Boolean).length;
-}
-
-export default function (pi: ExtensionAPI) {
-  pi.registerTool({
-    name: "count_words",
-    label: "Count words",
-    description:
-      "Count whitespace-separated words in supplied text. No external I/O.",
-    parameters: Type.Object(
-      { text: Type.String({ maxLength: 12000 }) },
-      { additionalProperties: false },
-    ),
-    async execute(_callId, params, signal) {
-      signal?.throwIfAborted();
-      const count = countWords(params.text);
-      return {
-        content: [{ type: "text", text: String(count) }],
-        details: { count },
-      };
-    },
-  });
-}
-```
-
-The default export is a factory receiving Pi's `ExtensionAPI`. Register tools
-synchronously during factory initialization, with stable unique names, a useful
-description and bounded parameter schemas. The operator must declare every
-registered name when installing the plugin.
-
-`execute(callId, params, signal, onUpdate, context)` receives validated arguments
-and returns `content` and `details`. `content` is the model-facing result; keep both
-fields small and free of credentials or unrelated private data. Honor cancellation
-and bound any read-only I/O. TypeBox schemas are validated through Pi Schema;
-TypeBox-only refinements, codecs and custom registered formats are not evaluated.
-Enforce any additional semantic checks in the tool itself.
-
-This example counts whitespace-separated tokens. It does not perform linguistic
-word segmentation for languages without spaces.
-
-## 3. Test and build
-
-Create `tests/word-count.test.ts`:
-
-```typescript
-import { expect, test } from "bun:test";
-import { countWords } from "../src/index.ts";
-
-test("counts words separated by spaces", () => {
-  expect(countWords("one two three")).toBe(3);
-});
-
-test("handles repeated whitespace", () => {
-  expect(countWords("  one\n\ttwo  ")).toBe(2);
-});
-
-test("handles empty input", () => {
-  expect(countWords("")).toBe(0);
-  expect(countWords(" \n\t ")).toBe(0);
-});
-```
-
-Run these commands in the plugin repository:
+Copy the complete `templates/plugin/` directory from your RepoDesk distribution to
+an empty repository, including hidden files. It is an independent author package;
+you can move it outside the RepoDesk checkout. Use Bun **1.3.14**:
 
 ```sh
+bun install --frozen-lockfile
+bun run generate
 bun run check
 bun run typecheck
 bun test
 bun run build
-node --check dist/plugin.mjs
+bun run validate
+bun run example
 ```
 
-The build targets Node and bundles dependencies into `dist/plugin.mjs`. Keep the
-output readable for operator review. Do not use Bun-only runtime APIs in handlers.
-These unit tests check counting behavior; installation and a test bot run still
-need verification against the target RepoDesk version.
-
-Commit the source and lockfile, tag the reviewed version and provide the generated
-bundle through the repository or a GitHub release. In the README record:
-
-- Purpose, exact registered tool names and input/output limits.
-- Compatible RepoDesk/Pi versions and the required Bun version.
-- Build/test commands, runtime dependencies and any data sent to external services.
-- Source commit, package version and how the operator can obtain the reviewed bundle.
-
-The package version helps release tracking. RepoDesk uses the version entered in
-the plugin registration and does not read it automatically from `package.json`.
-
-## 4. Install in a test workspace
-
-The deployment operator reviews the source, dependency changes and actual bundle,
-then copies the bundle into a versioned deployment directory, for example:
+Set `repository`, `publisher`, `id`, `name` and `description` in
+`repodesk.plugin.json`. The repository field must be the HTTPS GitHub repository
+root. Set the same SemVer version in the manifest and `package.json`.
 
 ```text
-extensions/word-count/0.1.0/plugin.mjs
+repodesk.plugin.json          Manifest and schema authority
+package.json / bun.lock       Pinned author tooling
+src/index.ts                 Handler implementation
+src/generated/contract.ts    Generated input, output and settings types
+dist/plugin.mjs              Committed self-contained Node ESM executable
+.repodesk/                   Preview SDK, CLI, schema and third-party notices
+input.json / fixtures.json   Trusted offline example inputs/responses
+README.md / LICENSE          Required review and license information
+tests/                       Offline deterministic author tests
+.github/workflows/check.yml  Validation and bundle rebuild check
 ```
 
-For Docker Compose, save the following as `compose.plugins.yaml` beside the base
-`compose.yaml`:
+The CLI builds `src/index.ts` into the manifest's `runtime.entry`. It never
+installs runtime dependencies on the platform. Bundle any author dependencies into
+that entrypoint. Keep the generated types and executable in Git. The CI example
+rebuilds them with the pinned compiler and fails on drift.
 
-```yaml
-services:
-  app:
-    volumes:
-      - ./extensions:/app/extensions:ro
-  worker:
-    volumes:
-      - ./extensions:/app/extensions:ro
+The `example` command imports **trusted local code with your developer account's
+permissions**. Its output identifies it as an offline harness without OS isolation.
+Use it only with code you trust. Fixture broker responses make no service calls;
+production execution uses the restricted runner instead.
+
+## Implement a handler
+
+The template contains a working word counter:
+
+```ts
+import { definePlugin } from "@repodesk/plugin-sdk";
+import type { Contract, Settings } from "./generated/contract.ts";
+
+export default definePlugin<Contract, Settings>({
+  tools: {
+    async count_words({ text }, context) {
+      context.signal.throwIfAborted();
+      const count = text.trim().split(/\s+/).filter(Boolean).length;
+      return {
+        content: [{ type: "text", text: String(count) }],
+        structuredContent: { count },
+      };
+    },
+  },
+});
 ```
 
-Both services need the same readable file at the same absolute container path.
-The container's `node` user must be able to traverse the directories and read the
-bundle. A read-only mount protects the package files from modification through
-that mount; the plugin still runs with the worker's other permissions.
+Export only a plugin definition with the exact handlers declared in `tools`.
+Missing or additional handlers fail at invocation. Module import must stay quick
+and free of I/O. There are no activation hooks, routes, background callbacks,
+storage APIs, shell helpers or interactive Pi UI methods in this SDK.
 
-In the existing deployment directory, preserve the original Compose project name,
-environment and all other override files. Add this override to that same command
-set. For a deployment using only the base file, the commands are:
+The host exposes tools as `rdp_<numeric GitHub repository ID>_<local tool name>`.
+Local names use lowercase letters, numbers and underscores, starting with a letter,
+with at most 32 characters. Authors use local names in their code and guides;
+the host owns the numeric prefix. Copying another repository's manifest ID does
+not copy its installation identity.
 
-```sh
-docker compose -f compose.yaml -f compose.plugins.yaml config --quiet
-docker compose -f compose.yaml -f compose.plugins.yaml up -d app worker
+## Manifest contract
+
+The template includes `.repodesk/sdk/plugin/manifest.schema.json`. The CLI's
+semantic validator also checks schema limits, paths, capability relationships and
+linked guide files. Installing a plugin never imports its code or executes
+package scripts.
+
+Required fields are `schemaVersion: 1`, preview `apiVersion: "1"`, identity and
+license information, `runtime`, `capabilities`, `settingsSchema`, `tools` and
+`skills` (an empty array is valid). Unknown fields, API versions, capabilities and
+schema keywords fail closed. Use `metadata` for optional string metadata.
+
+Each tool declares a title, description, `effect` (`compute` or `read`), capability
+ceiling, `inputSchema` and `outputSchema`. The latter describes `structuredContent`.
+Both roots must be objects. The supported JSON Schema subset has:
+
+- Types: object, array, string, integer, number, boolean and null.
+- Objects: declared properties, required names and `additionalProperties: false`.
+- Arrays: `items`, `minItems` and a required bounded `maxItems`.
+- Scalars: enums, defaults, string length and numeric minimum/maximum.
+- Descriptions and titles. No `$ref`, remote schemas, combinators or coercion.
+
+Settings use a flat object of scalar fields or bounded scalar arrays. The panel
+renders these as ordinary controls. Optional `settingsUi` labels, help and order
+may refer only to declared settings. Keep secrets out of settings; use connections.
+`generate` derives TypeScript from the manifest, so edit the manifest first and
+regenerate before changing handler signatures.
+
+The CLI returns fixed `plugin_manifest_invalid` or `plugin_package_invalid` errors
+for unsupported contracts or incomplete packages. It does not print private
+exceptions, input or credentials. Check the machine schema, required inventory,
+version agreement and linked paths when diagnosing these errors.
+
+## Read through host capabilities
+
+Declarations limit what a tool can request. They do not grant resource access.
+Operators grant requested capabilities separately, and every broker call checks
+the current member, workspace, run and connection policy again.
+
+| Capability | Author API | Current access requirements |
+| --- | --- | --- |
+| `github.metadata.read` | `context.github.getRepository({ repositoryId })` | Selected workspace repository and invoking member's current verified GitHub read permission |
+| `http.read` | `context.http.request(connectionId, { path, query })` | Declared exact destination/path/query keys and an explicit current connection binding |
+
+GitHub reads return `url`, `stars`, `forks`, `subscribers` and `fetchedAt`.
+The `examples/plugins/repository-insights/` package in the distribution demonstrates
+this API with fixture responses. GitHub installation-source access is independent
+of permission to read repository data during a conversation.
+
+HTTP connections declare a local ID, display name, `member` or `workspace` scope,
+`none` or `bearer` authentication, and approved request rules. For example:
+
+```json
+{
+  "id": "reports",
+  "name": "Reports",
+  "scope": "workspace",
+  "auth": { "type": "bearer" },
+  "requests": [{
+    "origin": "https://reports.example.com",
+    "paths": ["/v1/summary"],
+    "queryKeys": ["project"]
+  }]
+}
 ```
 
-Adding the mount recreates the affected containers. Use a test deployment or the
-maintenance process described in [Backup, upgrades and recovery](maintenance.md).
-Continue including the plugin override in later deployment commands. The dedicated
-VPS panel updater does not preserve arbitrary custom Compose overrides; plan plugin
-mounts and upgrades with the deployment operator.
+The preview supports HTTPS GET on port 443 with exact paths and query-key
+allowlists. Paths cannot overlap within a connection. Redirects, arbitrary headers,
+encoded traversal and private/local network addresses are rejected. DNS results
+are checked and the request pins an approved public address. Responses contain
+only HTTP status and bounded JSON, with no upstream headers or cookies.
 
-In the panel, select the test workspace and open **Plugins → New**. Register:
+Bearer tokens stay encrypted on the host and are sent only to the approved
+service. Authors never receive them. An approved endpoint can receive tool
+arguments through query values; explain that disclosure in the plugin README and
+request review. Do not describe arbitrary GET endpoints as safe merely because
+the transport is read-only; select service endpoints intended for reads.
 
-| Setting | Example |
+A workspace connection lists the allowed members and group destinations explicitly;
+private-only is the default. A personal connection belongs to the verified linked
+panel member and works only in that member's private conversations. This preview
+does not supply a Telegram connection-setup Mini App for members without a linked
+panel account. Operators can configure workspace bindings for selected members.
+
+## Companion guides
+
+Declare a guide as `{"path":"skills/<slug>/SKILL.md"}` in `skills`. Its YAML
+frontmatter requires `name` and `description`; optional `allowed-tools` contains
+only this plugin's local tool names or the host's `load_guide` name. Other supported
+frontmatter fields are license, compatibility and string metadata.
+
+Use relative Markdown/text links inside that guide directory for supporting
+resources. The host stores only approved linked files, exposes its own authorized
+`rdp_<repositoryId>_load_guide` tool, and rewrites local tool references when serving
+the guide. Guide text is external data and grants no permission. `load_guide` is
+reserved when guides are present; author tools are then limited to 31.
+
+## Runtime and limits
+
+The private supervisor creates a fresh container per tool call. The plugin has
+no app credentials, host mounts, Docker socket or direct network. Its root is
+read-only; temporary scratch space is discarded after the call. The worker
+communicates with the private supervisor and remains responsible for current
+application authorization.
+
+| Limit | Preview default |
 | --- | --- |
-| ID | `word-count` |
-| Version | `0.1.0` |
-| File path | `/app/extensions/word-count/0.1.0/plugin.mjs` |
-| Tool names | `count_words` |
-| Execution | `read-only` |
+| Invocation, including module import | 30 seconds |
+| Bundle | 5 MiB |
+| GitHub archive / expanded repository | 10 MiB / 32 MiB, up to 512 files |
+| Manifest / tool input / settings | 64 KiB each |
+| Tool result / protocol frame | 256 KiB each |
+| Broker requests per invocation | 10 |
+| HTTP read | 10 seconds, 100,000 response bytes |
+| Sandbox | 256 MiB memory, 1 CPU, 32 PIDs, 16 MiB scratch |
+| Supervisor | 4 concurrent invocations |
+| Guide | 16 KiB main file, 32 linked resources, 256 KiB total per guide |
 
-New panel registrations default to disabled. Save the reviewed registration and
-enable it for the selected workspace. File verification establishes readability
-and content identity, not runtime compatibility. No restart is needed for panel
-registration or enablement once the mount is present.
+Respect `context.signal`; keep results concise and include source URLs/timestamps
+when reporting fetched facts. Use only fixed declared `diagnosticCodes` with
+`context.diagnostics.emit`. Never emit raw private input, tokens or exceptions.
+These containers share the operator's kernel; operators must maintain the host
+and trusted Docker supervisor. See [operator setup](plugin-administration.md).
 
-From an active member's private test conversation, ask:
+Typical invocation errors are `plugin_input_invalid`, `plugin_settings_invalid`,
+`plugin_result_invalid`, `plugin_permission_denied`, `plugin_connection_required`,
+`plugin_timeout`, `plugin_cancelled`, `plugin_unavailable`,
+`plugin_protocol_invalid`, `plugin_execution_failed` and `plugin_outcome_unknown`.
+An uncertain call is never automatically repeated. Completed results are reused
+only while the saved installation and current run policy still permit it.
 
-```text
-Use count_words to count the words in: one two three
-```
+## Publish and install a version
 
-Check the run record for an actual `count_words` call and result `3`; a natural
-language answer alone does not prove that the plugin ran. Test cancellation and
-disablement before sharing it more widely. Avoid logging private test messages.
+1. Run author checks, build, validate and review the committed executable.
+2. Commit the entire required inventory and source. Create a stable `vX.Y.Z` tag
+   matching both versions; push it without moving a previously published tag.
+3. The operator opens Plugins → New → GitHub repository, enters the repository
+   root and optionally a version tag or full 40-character commit, and previews it.
+4. Review numeric repository/publisher identity, commit, bundle, capabilities and
+   any external data destinations. Install, configure, grant and enable explicitly.
 
-## Compatibility and access
+With no ref, the installer checks up to 100 returned tags and the 20 highest stable
+`vX.Y.Z` candidates for a supported manifest. If the tag listing reaches its bound,
+specify a ref explicitly. Prerelease/build-metadata tags require an explicit ref.
+Nested repository URLs, branches and short commit hashes are unsupported.
 
-RepoDesk supports a headless subset of Pi's extension API:
-
-| API | Supported behavior |
-| --- | --- |
-| `pi.registerTool` | Static registration during factory initialization; declared tools execute sequentially |
-| `before_agent_start` | Can replace the system prompt; custom-message injection is unsupported |
-| `context` | Can replace supported conversational messages; application-owned system instructions and tools remain protected |
-| `tool_call` | Can veto a validated call; cannot mutate its input |
-| `tool_result` | Observation only; cannot replace or mutate results |
-| `session_start`, `agent_start`, `agent_end`, `session_shutdown` | Per-invocation lifecycle notifications, including continuations |
-| `getActiveTools`, `getAllTools`, `getThinkingLevel` | Read the bound run configuration after loading |
-| `registerFlag`, `getFlag`, `pi.events` | In-memory defaults and events; no command-line overrides or durable event queue |
-
-The context has `hasUI: false`, `mode: "print"`, a temporary working directory and
-cancellation/model metadata. Terminal UI, commands, shortcuts, session management,
-provider/model switching, message injection, dynamic registration and nested tool
-execution through `context.tools` or `context.executeTool` are unsupported. Do not
-use `pi.exec`, ambient credentials, direct Telegram sends or filesystem side effects.
-An upstream Pi extension must be reviewed against these limits before installation.
-
-Keep workspace-specific state inside the factory. RepoDesk creates it for each
-invocation, but Node and imported modules can cache module globals. A module global
-must never hold tenant data, conversation contents or another member's credentials.
-Do not treat model-supplied workspace/user IDs as authorization.
-
-Enabled file-plugin tools are available to eligible actors in their granted
-workspace, independently of skill tool declarations. Registration grants are
-workspace-wide, not a per-member secret boundary. Do not add private account
-credentials to the file or use them for every workspace member. Service/account
-access needs current application-managed authorization. The optional
-[Browser integration](browser.md) also requires an explicit grant and the current
-member's private browser permissions.
-
-Optional network, credential and service checks belong inside an authorized tool
-invocation. Importing the file or registering tools must not contact external
-services or fail because an optional connection is unavailable.
-
-## Update, disable and remove
-
-To update, build and review a new version, place it at a new versioned path, and
-save the new path/version in the panel. Keep the previous artifact until the
-operator no longer needs it for diagnosis or a reviewed replacement. Do not
-overwrite enabled code and expect RepoDesk to accept changed bytes automatically.
-
-Entry-file hashes are checked before loading. Imported dependencies are not
-recursively hashed; bundling keeps this example's executable dependencies in the
-reviewed entry file. If you deploy unbundled dependencies, review and version them
-explicitly and restart workers after dependency changes to clear module caches.
-
-Plugin configuration changes can stop the affected workspace's in-flight work at
-the next guard. Existing runs pin their catalog and do not silently continue with
-new code. Disablement blocks subsequent guarded work; it cannot undo an operation
-already sent upstream. Removing the registration leaves the installed files intact.
-
-A completed duplicate call can reuse its saved result. A started call whose outcome
-is unknown is not automatically replayed. Honor cancellation, do not add hidden
-retry loops, and inspect the original run before starting replacement work.
-
-## Troubleshooting
-
-| Symptom | Check |
-| --- | --- |
-| Cannot register or edit a plugin | Use the deployment operator account for its own active workspace |
-| File unavailable | Check the absolute container path, mounts on both services and file/directory permissions |
-| File changed | Review the new bytes, update the plugin version and save the reviewed registration |
-| Tool absent | Check the selected workspace, enablement, declared names and factory registration |
-| Tool collision | Choose a name distinct from built-ins and every other enabled plugin |
-| Plugin loads in Pi but fails in RepoDesk | Remove unsupported APIs, dynamic registration or top-level service checks |
-| Tool execution fails | Inspect the run's fixed diagnostic code and reproduce with synthetic input in tests |
-| Old run stops after an update | Review its state; new configuration does not replace its pinned catalog |
-
-File-plugin errors are deliberately sanitized. Raw exceptions, credentials and
-private messages must stay out of routine logs and model results. Use deterministic
-fixtures for debugging and share only redacted diagnostics. For deployment or
-delivery failures, see [Troubleshooting](troubleshooting.md).
-
-For upstream API and build details, consult the
-[Pi extension reference for 1.5.2](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/docs/extensions.md),
-[Bun bundler reference](https://bun.sh/docs/bundler) and
-[Docker Compose multiple-file reference](https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/).
-RepoDesk's supported subset above governs compatibility with this application.
+Updates are manual previews. Reusing a published version with different installed
+contents is rejected. Rollback is a fresh reviewed installation of a retained
+version at its immutable commit; it does not restore historical grants or secrets.
+Disabling, updating, removing or changing connections invalidates dependent work.
+See [plugin administration](plugin-administration.md) for setup and recovery.

@@ -22,3 +22,5 @@ services/code-truth/data/
 /data/qwen-asr/
 
 __pycache__/
+
+!templates/plugin/dist/

@@ -43,6 +43,7 @@ try {
     const output = resolve(directory, manifest.runtime.entry);
     const result = await Bun.build({
       entrypoints: [resolve(directory, "src/index.ts")],
+      root: resolve(directory),
       target: "node",
       format: "esm",
       outdir: dirname(output),

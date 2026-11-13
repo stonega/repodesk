@@ -1,19 +1,36 @@
 # GitHub plugin delivery plan
 
-Status: **proposed implementation plan, updated 2026-11-13**. Research, a contract
-draft and a [current file-plugin developer guide](../user/plugin-development.md)
-are available. The GitHub installer, isolated runner, new SDK/CLI and executable
-template repository have not been implemented. All P0–P6 completion criteria below
-are future requirements, not verification results. See the
-[RFC](../design/github-plugins.md) and [source review](../research/plugin-ecosystems-2026-11-13.md).
-Current working behavior remains in [LLM extensions](../design/llm-extensions.md).
+Status: **read-only preview implemented locally; pilot/publication gates open,
+2026-11-13**. The implementation is on `feat/github-plugin-system`, based on
+`origin/main` `44f32bd` (Pi 1.5.2). No live Telegram/GitHub connection, production
+deployment, hosted template creation or npm publication is performed by this work.
+See the [RFC](../design/github-plugins.md), [developer guide](../user/plugin-development.md)
+and [operator guide](../user/plugin-administration.md).
+
+## Delivery ledger
+
+| Slice | Local delivery | Evidence / remaining acceptance |
+| --- | --- | --- |
+| P0 | Strict manifest/schema subset, SDK, generated types, CLI and two bundled examples | Deterministic contract/guide/protocol tests; portable template checked from an independent temporary directory |
+| P1 | Private supervisor, HTTP client, bounded JSON-RPC, immutable networkless per-call Docker job, deadline/cancel cleanup and expiry sweep | Exact-image fixtures exercise both plugins, host/network/filesystem denial, bounded resource configuration and interrupted-job cleanup; daemon outage remains an operator recovery boundary |
+| P2 | Fixed-endpoint GitHub source resolution, numeric repository/owner identity, tag recheck, bounded ZIP extraction, private tenant cache | Public/private source transports, hostile archives, moved identities/tags and corrupted cache use deterministic fixtures |
+| P3 | Workspace records and authenticated APIs, persisted previews, disabled install, revision-bound apply/settings/grants/connections, manual updates and fresh rollback, removal/collection | Disposable PostgreSQL tests cover operator/CSRF/tenant, restart/idempotency/revision, encryption and invalidation |
+| P4 | Static Pi adapter and current GitHub/HTTP broker, existing durable result ledger and run policy pins | Production Pi/Executor with fixture model, result reuse/uncertain-call denial and revocation; both startup compositions include enabled packages with zero optional startup I/O |
+| P5 | Installed catalog/details/modal editors, source review, connection summaries, independent template/CI, developer/operator guides | Focused browser desktop/mobile scenarios and author commands; official hosted template and npm releases remain unpublished |
+| P6 | Local release-check assets and opt-in Compose overlay | Production deployment, two independently authored remote repositories, real Telegram/service pilot and operational acceptance remain explicit release gates |
+
+The implemented preview makes the complete local install-to-call path reviewable.
+It does not establish stable API 1 or claim independent-author/live pilot acceptance.
+Detailed commands, source/image identities, selected browser baseline and test
+results are recorded in [verification](github-plugins-verification.md).
 
 ## Delivery boundaries
 
 Keep the standalone application and its existing PostgreSQL policy/durable-run
 services. A restricted execution runner is justified by a distinct trust boundary;
 it does not require turning the whole application into a plugin framework.
-No new runtime dependency or deployment change is made by this documentation work.
+The optional supervisor has its own deployment trust boundary. Existing dependencies
+are reused; the author template pins its own development tools.
 
 Initial acceptance: an independent author copies a GitHub template, implements a
 read-only handler, commits the bundle and tags a release. An operator pastes the
@@ -49,9 +66,10 @@ background callbacks remain outside both milestones.
 
 ## Source preparation
 
-At planning time, fetched `origin/main` and this worktree's HEAD are `4bde2fc`.
-The shared worktree also contains unrelated uncommitted Pi/runtime changes and
-the plugin documentation work. Do not treat that combined dirty tree as a tested
+At planning time, fetched `origin/main` was `4bde2fc`; implementation was isolated
+in `/home/stone/Web/repodesk-plugin-system` and rebased onto `44f32bd`.
+At that point the shared worktree also contained unrelated uncommitted Pi/runtime
+changes and the plugin documentation work. Do not treat that combined dirty tree as a tested
 source baseline for new runtime changes.
 
 Before the first implementation batch:
@@ -70,8 +88,9 @@ Before the first implementation batch:
 
 ## First implementation batch: P0
 
-The immediate next coding task is **P0.1**, followed by the remaining P0 tasks.
-Keep this batch local and offline. The proposed SDK/CLI can live in focused
+The original P0 checklist below is retained for contract review. P0–P5 now have
+local implementations; the delivery ledger and verification report identify their
+actual evidence and open gates. The proposed SDK/CLI can live in focused
 directories in this repository for development; separate publication does not
 require a monorepo migration or another deployed application.
 
@@ -117,7 +136,7 @@ trial. Re-estimate after those results, with the remaining acceptance gates visi
 | --- | --- | --- |
 | P0: contract proof | Versioned manifest schema, schema subset, capability vocabulary, typed SDK and offline harness | Pure tool and scoped GitHub metadata tool pass schema/input/output, denial, cancellation and missing-handler fixtures; no SDK major stability claim yet |
 | P1: execution boundary | Host runner image, supervisor and bounded broker protocol; no network/app credentials inside plugin | Exact-image hostile fixtures prove import deadlines, CPU/memory/PID/filesystem/network limits, forged/late frames, cancellation and unavailable-runner isolation |
-| P2: source and artifact service | GitHub source preview, bounded extraction, full-content digest and local immutable cache | Public/private source fixtures, numeric identity, moved tags, ownership transfer, archive traversal/bombs/links and auth-on-redirect rejection pass |
+| P2: source and artifact service | GitHub source preview, bounded extraction, canonical installed-inventory digest and local immutable cache | Public/private source fixtures, numeric identity, moved tags, ownership transfer, archive traversal/bombs/links and auth-on-redirect rejection pass |
 | P3: workspace installation | Additive records, disabled installation, settings and grants, update/disable/remove/rollback APIs | Operator/tenant/CSRF/revision boundaries, restart recovery, duplicate requests, atomic activation and current authorization pass |
 | P4: Pi and broker integration | Static catalog adapter, existing durable ledger, GitHub read and approved HTTP read | Greeting performs zero external startup calls; permission loss, result reuse, uncertain calls, package updates and cross-workspace isolation pass through production composition |
 | P5: admin and developer experience | Shared modal/summary UI, official template repository, SDK/CLI release, developer/operator guides | Two independently authored plugins complete the install-to-call path; focused desktop/mobile browser cases and author quickstart pass |
@@ -172,7 +191,8 @@ The following assets must exist before the platform offers a third-party quickst
    supported headless subset; the new SDK is a different execution profile.
 
 Publish the SDK and template only after their documented commands work from a
-fresh checkout. This RFC's illustrative code is not a downloadable working SDK.
+fresh checkout. The checked-in `templates/plugin` includes the working preview SDK/CLI; illustrative
+RFC commands are not a separately published CLI.
 
 ## Verification matrix
 

@@ -3,6 +3,8 @@ import { assertJson, limits, PluginError } from "./contract.ts";
 import { dataSchema, schemaType, validateSchema } from "./json-schema.ts";
 
 export const capabilitySchema = z.enum(["github.metadata.read", "http.read"]);
+export const versionPattern =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 export const localName = z.string().regex(/^[a-z][a-z0-9_]{0,31}$/);
 const pathSchema = z.string().min(1).max(512);
 const originSchema = z.string().max(2048);
@@ -12,11 +14,7 @@ export const manifestSchema = z
     id: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/),
     name: z.string().min(1).max(100),
     description: z.string().min(1).max(1024),
-    version: z
-      .string()
-      .regex(
-        /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/,
-      ),
+    version: z.string().max(100).regex(versionPattern),
     apiVersion: z.literal("1"),
     license: z.string().min(1).max(200),
     repository: z
@@ -159,10 +157,13 @@ export function parseManifest(value: unknown): PluginManifest {
     for (const connection of manifest.connections ?? []) {
       if (!manifest.capabilities.includes("http.read"))
         throw new PluginError("plugin_manifest_invalid");
+      if (!unique(connection.requests.flatMap((r) => r.paths)))
+        throw new PluginError("plugin_manifest_invalid");
       for (const request of connection.requests) {
         const url = new URL(request.origin);
         if (
           url.protocol !== "https:" ||
+          url.port ||
           url.origin !== request.origin ||
           url.username ||
           url.password ||

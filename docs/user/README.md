@@ -49,7 +49,9 @@ RepoDesk 是一个自托管的 Telegram AI 助手，让你在聊天中查询 Git
 
 | Guide | What you can do |
 | --- | --- |
-| [Plugin development](plugin-development.md) | Build, test and manually install a reviewed Pi file plugin hosted on GitHub |
+| [Plugin development](plugin-development.md) | Build and package an isolated read-only GitHub plugin with the preview SDK |
+| [Plugin administration](plugin-administration.md) | Configure the private runner, install, grant, update, recover and remove packages |
+| [Local Pi extensions](local-plugins.md) | Register reviewed trusted files using the headless Pi compatibility profile |
 
 ## 使用范围
 

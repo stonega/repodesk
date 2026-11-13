@@ -14,9 +14,7 @@
     "type": "node-sandbox",
     "entry": "dist/plugin.mjs"
   },
-  "capabilities": [
-    "github.metadata.read"
-  ],
+  "capabilities": ["github.metadata.read"],
   "settingsSchema": {
     "type": "object",
     "properties": {},
@@ -28,9 +26,7 @@
       "title": "Repository summary",
       "description": "Read current stars, forks and subscribers. Cannot infer historical changes.",
       "effect": "read",
-      "capabilities": [
-        "github.metadata.read"
-      ],
+      "capabilities": ["github.metadata.read"],
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -39,9 +35,7 @@
             "minimum": 1
           }
         },
-        "required": [
-          "repositoryId"
-        ],
+        "required": ["repositoryId"],
         "additionalProperties": false
       },
       "outputSchema": {
@@ -68,13 +62,7 @@
             "maxLength": 64
           }
         },
-        "required": [
-          "url",
-          "stars",
-          "forks",
-          "subscribers",
-          "fetchedAt"
-        ],
+        "required": ["url", "stars", "forks", "subscribers", "fetchedAt"],
         "additionalProperties": false
       }
     }

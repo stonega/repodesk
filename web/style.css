@@ -2527,35 +2527,6 @@ input.plugin-toggle-input:disabled {
   gap: 14px 24px;
   margin: 0;
 }
-.package-form,
-.package-detail > .card,
-.package-history {
-  display: grid;
-  gap: 16px;
-}
-.package-form > p,
-.package-form > h3,
-.package-detail > .card > p,
-.package-detail > .card > .plugin-card-heading {
-  margin: 0;
-}
-.package-digest,
-.package-diff {
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-.package-diff {
-  max-height: 22rem;
-  overflow: auto;
-  white-space: pre-wrap;
-}
-.package-history-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-}
 .plugin-summary + .row {
   margin-top: 20px;
 }
@@ -3688,4 +3659,53 @@ fieldset.nowledge-fields > * {
 
 .transcription-page {
   padding-bottom: 4rem;
+}
+
+.package-form,
+.package-detail > .card,
+.package-history {
+  display: grid;
+  gap: 16px;
+}
+.package-form > p,
+.package-form > h3,
+.package-detail > .card > p {
+  margin: 0;
+}
+.package-digest,
+.package-diff {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.package-diff {
+  max-height: 22rem;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.package-detail .plugin-card-heading {
+  margin: 0;
+  flex-wrap: nowrap;
+}
+.package-detail .plugin-card-heading > h2 {
+  flex: 1;
+  min-width: 0;
+}
+.package-version-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+@media (max-width: 640px) {
+  .package-source > div:first-child,
+  .package-source > div:last-child,
+  .package-destinations {
+    grid-column: 1 / -1;
+  }
+}
+.package-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
 }

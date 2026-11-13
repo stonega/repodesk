@@ -310,3 +310,72 @@ test("complete package inventory is hashed independently of path ordering", asyn
   expect(safeResourcePath(".github/workflows/check.yml")).toBe(true);
   expect(safeResourcePath("dist/../secret")).toBe(false);
 });
+
+test("guides validate local tool declarations and canonical linked resources", async () => {
+  const { packageGuides, guideText, selectPackageFiles } = await import(
+    "../../src/plugins/package-skills.ts"
+  );
+  const pkg = await loadLocalPackage("examples/plugins/repository-insights");
+  const guides = packageGuides(pkg.manifest, pkg.files);
+  expect(guides[0]?.resources).toEqual([
+    "skills/repository-summary/references/limits.md",
+  ]);
+  expect(
+    guideText(pkg.manifest, pkg.files, 778, guides[0]?.path ?? ""),
+  ).toContain("rdp_778_repository_summary");
+  expect(() => guideText(pkg.manifest, pkg.files, 778, "README.md")).toThrow(
+    "plugin_permission_denied",
+  );
+  const selected = selectPackageFiles(pkg.manifest, {
+    ...pkg.files,
+    "src/uninstalled.ts": Buffer.from("source"),
+  });
+  expect(packageDigest(selected)).toBe(pkg.digest);
+  const path = pkg.manifest.skills[0]?.path ?? "";
+  const files = {
+    ...pkg.files,
+    [path]: Buffer.from(
+      pkg.files[path]
+        ?.toString()
+        .replace("repository_summary", "send_telegram") ?? "",
+    ),
+  };
+  expect(() => validatePackageFiles(files)).toThrow("plugin_package_invalid");
+});
+test("JSON validation accepts shared values and rejects accessor and sparse data", () => {
+  const shared = { value: "same" };
+  expect(() => assertJson({ a: shared, b: shared }, 1000)).not.toThrow();
+  const accessor = Object.defineProperty({}, "secret", {
+    get() {
+      throw new Error("must not run");
+    },
+    enumerable: true,
+  });
+  for (const value of [accessor, Array(3), { [Symbol("hidden")]: true }])
+    expect(() => assertJson(value, 1000)).toThrow();
+});
+
+test("artifact collection keeps retained digests and gives unreferenced bytes a full day", async () => {
+  const { mkdtemp, rm, utimes } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { randomUUID } = await import("node:crypto");
+  const { PluginArtifacts } = await import("../../src/plugins/artifacts.ts");
+  const directory = await mkdtemp(join(tmpdir(), "plugin-artifact-gc-"));
+  const tenant = randomUUID();
+  const artifacts = new PluginArtifacts(directory);
+  try {
+    const pkg = await loadLocalPackage("examples/plugins/word-count");
+    await artifacts.put(tenant, pkg.files);
+    expect(await artifacts.collect(tenant, new Set())).toBe(0);
+    const yesterday = new Date(Date.now() - 2 * 86400000);
+    await utimes(join(directory, tenant, pkg.digest), yesterday, yesterday);
+    expect(await artifacts.collect(tenant, new Set([pkg.digest]))).toBe(0);
+    expect(await artifacts.collect(tenant, new Set())).toBe(1);
+    await expect(artifacts.get(tenant, pkg.digest)).rejects.toThrow(
+      "plugin_package_invalid",
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

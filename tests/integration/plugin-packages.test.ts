@@ -4,20 +4,28 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { claim } from "../../src/admin/auth.ts";
+import { extensionToolExecution } from "../../src/agent/extension-execution.ts";
 import { PluginService } from "../../src/agent/plugin-service.ts";
+import type { AgentInput } from "../../src/agent/runtime.ts";
 import { createApp } from "../../src/app.ts";
 import { migrate } from "../../src/db/migrate.ts";
 import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
 import type { Admin } from "../../src/domain.ts";
+import { Executor } from "../../src/jobs/execute.ts";
 import { PluginError } from "../../src/plugins/contract.ts";
 import type { PluginSandbox } from "../../src/plugins/docker-sandbox.ts";
+import { DockerPluginSandbox } from "../../src/plugins/docker-sandbox.ts";
 import { GitHubPluginSource } from "../../src/plugins/github-source.ts";
+import { PluginHttpReader } from "../../src/plugins/http-reader.ts";
 import {
   createToolContext,
   validateDefinition,
 } from "../../src/plugins/invocation.ts";
 import { PluginPackages } from "../../src/plugins/package-service.ts";
+import { PluginRunnerClient } from "../../src/plugins/runner-client.ts";
+import { pluginRunnerApp } from "../../src/plugins/runner-service.ts";
+import { encrypt } from "../../src/setup/credentials.ts";
 import { SetupService } from "../../src/setup/service.ts";
 import { runAllowed } from "../../src/workspaces/policy.ts";
 import { createRun } from "../../src/workspaces/service.ts";
@@ -76,9 +84,25 @@ const url = process.env.TEST_DATABASE_URL;
       );
       const repo = await pluginRepository();
       let sandboxCalls = 0;
+      const image = process.env.PLUGIN_TEST_IMAGE;
+      const runnerApp = image
+        ? pluginRunnerApp(
+            new DockerPluginSandbox(image),
+            "synthetic-private-integration-token-12345",
+          )
+        : undefined;
+      const remote = runnerApp
+        ? new PluginRunnerClient(
+            "http://private.invalid",
+            "synthetic-private-integration-token-12345",
+            ((url: string | URL | Request, init?: RequestInit) =>
+              runnerApp.request(String(url), init)) as typeof fetch,
+          )
+        : undefined;
       const sandbox: PluginSandbox = {
         async invoke(input) {
           sandboxCalls++;
+          if (remote) return remote.invoke(input);
           await input.guard();
           const encoded = `data:text/javascript;base64,${input.bundle.toString("base64")}`;
           const definition = validateDefinition(
@@ -97,8 +121,21 @@ const url = process.env.TEST_DATABASE_URL;
           return handler(input.arguments, context);
         },
       };
+      let httpReads = 0;
       const options = {
         directory,
+        http: new PluginHttpReader(
+          async () => [{ address: "93.184.216.34", family: 4 }],
+          async (_url, _address, bearer) => {
+            expect(bearer).toBe("synthetic-plugin-service-token");
+            httpReads++;
+            return {
+              status: 200,
+              body: [Buffer.from('{"count":2}')],
+              cancel() {},
+            };
+          },
+        ),
         sandbox,
         source: new GitHubPluginSource(repo.transport),
         encryptionKey: key,
@@ -161,6 +198,7 @@ const url = process.env.TEST_DATABASE_URL;
         request,
         preview,
         calls: () => sandboxCalls,
+        httpReads: () => httpReads,
         options,
       };
     }
@@ -368,6 +406,358 @@ const url = process.env.TEST_DATABASE_URL;
         tools[0]?.execute("call-2", { text: "one" }),
       ).rejects.toThrow("tool_policy_denied");
       expect(f.calls()).toBe(1);
+    });
+
+    test("production Pi and Executor persist package results and do not dispatch after revocation", async () => {
+      const f = await fixture();
+      const p = await f.preview();
+      await f.service.apply(admin, f.w.id, { previewId: p.id, revision: 0 });
+      await f.service.update(admin, f.w.id, 777, {
+        revision: 1,
+        enabled: true,
+        settings: {},
+        grants: [],
+      });
+      let modelCalls = 0;
+      let revoke = false;
+      const server = Bun.serve({
+        port: 0,
+        hostname: "127.0.0.1",
+        async fetch(request) {
+          const body = (await request.json()) as {
+            tools?: { function: { name: string } }[];
+          };
+          expect(
+            body.tools?.some((t) => t.function.name === "rdp_777_count_words"),
+          ).toBe(true);
+          modelCalls++;
+          if (revoke) {
+            const current = await f.service.view(admin, f.w.id);
+            await f.service.update(admin, f.w.id, 777, {
+              revision: current.revision,
+              enabled: false,
+              settings: {},
+              grants: [],
+            });
+          }
+          const tool = modelCalls % 2 === 1;
+          const chunk = {
+            id: "fixture",
+            object: "chat.completion.chunk",
+            created: 1,
+            model: "gpt-4.1-mini",
+            choices: [
+              {
+                index: 0,
+                delta: tool
+                  ? {
+                      role: "assistant",
+                      tool_calls: [
+                        {
+                          index: 0,
+                          id: `package-${modelCalls}`,
+                          type: "function",
+                          function: {
+                            name: "rdp_777_count_words",
+                            arguments: JSON.stringify({ text: "two words" }),
+                          },
+                        },
+                      ],
+                    }
+                  : { role: "assistant", content: "Counted two words." },
+                finish_reason: tool ? "tool_calls" : "stop",
+              },
+            ],
+            usage: {
+              prompt_tokens: 10,
+              completion_tokens: 2,
+              total_tokens: 12,
+            },
+          };
+          return new Response(
+            `data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`,
+            { headers: { "content-type": "text/event-stream" } },
+          );
+        },
+      });
+      try {
+        const deployment = await store.deployment();
+        deployment.active = true;
+        deployment.modelBaseUrl = `http://127.0.0.1:${server.port}/v1`;
+        deployment.credentials.model = encrypt(key, "model", "fake-local-key");
+        await store.saveDeployment(store.pool, deployment);
+        const executor = new Executor(
+          store,
+          new SetupService(store, key, origin),
+          (d, id) => f.plugins.runner(d, id),
+        );
+        const run = await store.change(f.w.id, (w) =>
+          createRun(w, "101", "Count two words", "101", 0, "gpt-4.1-mini"),
+        );
+        await executor.execute(f.w.id, run.id);
+        const saved = (await store.read(f.w.id)).runs.find(
+          (r) => r.id === run.id,
+        );
+        expect(saved?.status).toBe("succeeded");
+        expect(saved?.tools["package-1"]?.state).toBe("done");
+        expect(saved?.packageRead?.installations["777"]?.digest).toBe(p.digest);
+        expect(f.calls()).toBe(1);
+        revoke = true;
+        const next = await store.change(f.w.id, (w) =>
+          createRun(w, "101", "Count again", "101", 0, "gpt-4.1-mini"),
+        );
+        await executor.execute(f.w.id, next.id);
+        const stopped = (await store.read(f.w.id)).runs.find(
+          (r) => r.id === next.id,
+        );
+        expect(["failed", "cancelled"]).toContain(stopped?.status ?? "");
+        expect(f.calls()).toBe(1);
+      } finally {
+        await server.stop(true);
+      }
+    });
+    test("durable receipts reuse a completed package result, refuse uncertain calls and recheck revocation", async () => {
+      const f = await fixture();
+      const p = await f.preview();
+      await f.service.apply(admin, f.w.id, { previewId: p.id, revision: 0 });
+      await f.service.update(admin, f.w.id, 777, {
+        revision: 1,
+        enabled: true,
+        settings: {},
+        grants: [],
+      });
+      const run = await store.change(f.w.id, (w) => {
+        const r = createRun(w, "101", "Count", "101", 0, "gpt-4.1-mini");
+        r.status = "running";
+        r.fence = 1;
+        return r;
+      });
+      const tool = await registered(f.plugins, f.w.id, run.id);
+      const ledger = extensionToolExecution(
+        store,
+        f.w.id,
+        run.id,
+        1,
+        new AbortController().signal,
+      );
+      const execute = () => tool.execute("call", { text: "one two" });
+      await ledger(tool.name, "call", execute);
+      await ledger(tool.name, "call", execute);
+      expect(f.calls()).toBe(1);
+      await store.change(f.w.id, (w) => {
+        const r = w.runs.find((r) => r.id === run.id);
+        if (r) r.tools.uncertain = { name: tool.name, state: "started" };
+      });
+      await expect(ledger(tool.name, "uncertain", execute)).rejects.toThrow(
+        "extension_tool_outcome_unknown",
+      );
+      await f.service.update(admin, f.w.id, 777, {
+        revision: 2,
+        enabled: false,
+        settings: {},
+        grants: [],
+      });
+      await expect(ledger(tool.name, "call", execute)).rejects.toThrow(
+        "tool_policy_denied",
+      );
+      expect(f.calls()).toBe(1);
+    });
+    async function registered(
+      plugins: PluginService,
+      workspaceId: string,
+      runId: string,
+      actor = "101",
+    ) {
+      const extensions = plugins.packages.extensions(
+        await store.read(workspaceId),
+      );
+      type Tool = {
+        name: string;
+        execute: (
+          id: string,
+          args: { text: string },
+        ) => Promise<{
+          content: { type: "text"; text: string }[];
+          details: unknown;
+        }>;
+      };
+      const tools: Tool[] = [];
+      const factory = extensions[0]?.factory({
+        workspaceId,
+        runId,
+        actor,
+        signal: new AbortController().signal,
+        guard: async () => {},
+      } as AgentInput);
+      await factory?.({
+        registerTool: (tool: Tool) => tools.push(tool),
+      } as unknown as Parameters<NonNullable<typeof factory>>[0]);
+      const tool = tools.find((t) => t.name.endsWith("count_words"));
+      if (!tool) throw new Error("fixture missing package tool");
+      return tool;
+    }
+    test("workspace HTTP credentials are encrypted, scoped to members and revoked before reuse", async () => {
+      const f = await fixture();
+      const original = f.repo.manifest.tools[0];
+      if (!original) throw new Error("missing fixture");
+      f.repo.add(
+        "0.2.0",
+        {
+          capabilities: ["http.read"],
+          connections: [
+            {
+              id: "service",
+              name: "Service",
+              scope: "workspace",
+              auth: { type: "bearer" },
+              requests: [
+                {
+                  origin: "https://service.example",
+                  paths: ["/count"],
+                  queryKeys: [],
+                },
+              ],
+            },
+          ],
+          tools: [{ ...original, effect: "read", capabilities: ["http.read"] }],
+        },
+        `export default {tools:{async count_words(input, context){const r=await context.http.request('service',{path:'/count'});return {content:[{type:'text',text:'count'}],structuredContent:r.data}}}};`,
+      );
+      const p = await f.preview(0, "install", "v0.2.0");
+      await f.service.apply(admin, f.w.id, { previewId: p.id, revision: 0 });
+      await f.service.update(admin, f.w.id, 777, {
+        revision: 1,
+        enabled: true,
+        settings: {},
+        grants: ["http.read"],
+      });
+      const secret = "synthetic-plugin-service-token";
+      await f.service.connect(admin, f.w.id, 777, {
+        revision: 2,
+        id: "service",
+        token: secret,
+        members: ["101"],
+        chats: [],
+        privateOnly: true,
+      });
+      const saved = await store.read(f.w.id);
+      expect(JSON.stringify(saved)).not.toContain(secret);
+      expect(
+        saved.plugins?.packages?.[0]?.connections[0]?.encrypted,
+      ).toBeTruthy();
+      expect(JSON.stringify(await f.service.view(admin, f.w.id))).not.toContain(
+        "encrypted",
+      );
+      const other = { ...admin, operator: false, telegramId: "202" };
+      await expect(
+        f.service.connect(other, f.w.id, 777, {
+          revision: 3,
+          id: "service",
+          members: ["202"],
+          chats: [],
+          privateOnly: true,
+        }),
+      ).rejects.toThrow("operator_required");
+      const privateRun = await store.change(f.w.id, (w) => {
+        const r = createRun(w, "101", "read", "101", 0, "gpt-4.1-mini");
+        r.status = "running";
+        return r;
+      });
+      const privateTool = await registered(f.plugins, f.w.id, privateRun.id);
+      expect(await privateTool.execute("read", { text: "x" })).toMatchObject({
+        details: { count: 2 },
+      });
+      expect(f.httpReads()).toBe(1);
+      const run = await store.change(f.w.id, (w) => {
+        const r = createRun(w, "101", "read", "-100100", 0, "gpt-4.1-mini");
+        r.status = "running";
+        return r;
+      });
+      const tool = await registered(f.plugins, f.w.id, run.id);
+      await expect(tool.execute("denied-group", { text: "x" })).rejects.toThrow(
+        "plugin_permission_denied",
+      );
+      await f.service.connect(admin, f.w.id, 777, {
+        revision: 3,
+        id: "service",
+        disconnect: true,
+        members: [],
+        chats: [],
+        privateOnly: true,
+      });
+      const current = await store.read(f.w.id);
+      expect(current.plugins?.packages?.[0]?.connections).toEqual([]);
+      const priorRun = current.runs.find((r) => r.id === run.id);
+      expect(priorRun && runAllowed(current, priorRun)).toBe(false);
+    });
+
+    test("personal connections require a verified self identity and cannot bind a group", async () => {
+      const f = await fixture();
+      const original = f.repo.manifest.tools[0];
+      if (!original) throw new Error("missing fixture");
+      f.repo.add("0.2.0", {
+        capabilities: ["http.read"],
+        connections: [
+          {
+            id: "personal",
+            name: "Personal",
+            scope: "member",
+            auth: { type: "bearer" },
+            requests: [
+              {
+                origin: "https://service.example",
+                paths: ["/count"],
+                queryKeys: [],
+              },
+            ],
+          },
+        ],
+        tools: [{ ...original, effect: "read", capabilities: ["http.read"] }],
+      });
+      const p = await f.preview(0, "install", "v0.2.0");
+      await f.service.apply(admin, f.w.id, { previewId: p.id, revision: 0 });
+      const binding = {
+        revision: 1,
+        id: "personal",
+        token: "synthetic-plugin-service-token",
+        members: [],
+        chats: [],
+        privateOnly: true,
+      };
+      await expect(
+        f.service.connect(admin, f.w.id, 777, binding),
+      ).rejects.toThrow("access_denied");
+      const member: Admin = {
+        id: randomUUID(),
+        username: "linkedmember",
+        operator: false,
+        telegramId: "101",
+      };
+      await expect(
+        f.service.connect(member, f.w.id, 777, {
+          ...binding,
+          members: ["202"],
+        }),
+      ).rejects.toThrow("access_denied");
+      await expect(
+        f.service.connect(member, f.w.id, 777, {
+          ...binding,
+          chats: ["-100100"],
+          privateOnly: false,
+        }),
+      ).rejects.toThrow("access_denied");
+      await f.service.connect(member, f.w.id, 777, binding);
+      const saved = (await store.read(f.w.id)).plugins?.packages?.[0]
+        ?.connections[0];
+      expect(saved?.actor).toBe("101");
+      expect(saved?.privateOnly).toBe(true);
+      expect(saved?.members).toEqual([]);
+      await expect(
+        f.service.connect({ ...member, telegramId: "999999" }, f.w.id, 777, {
+          ...binding,
+          revision: 2,
+        }),
+      ).rejects.toThrow("access_denied");
     });
   },
 );

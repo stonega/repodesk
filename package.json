@@ -63,7 +63,9 @@
     "plugin:validate": "bun scripts/plugin-cli.ts validate",
     "plugin:run": "bun scripts/plugin-cli.ts run",
     "plugin:schema": "bun scripts/plugin-cli.ts schema",
-    "test:plugins": "bun test tests/unit/plugin-packages.test.ts tests/unit/plugin-protocol.test.ts"
+    "test:plugins": "bun test tests/unit/plugin-*.test.ts",
+    "plugin:distribution": "bun scripts/plugin-distribution.ts",
+    "plugin:verify": "bun scripts/verify-plugin-template.ts"
   },
   "engines": {
     "node": ">=22.19.0"

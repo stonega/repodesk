@@ -2,6 +2,7 @@ import {
   lstat,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rename,
   rm,
@@ -55,6 +56,40 @@ export class PluginArtifacts {
     } finally {
       await rm(staging, { recursive: true, force: true });
     }
+  }
+  /** Caller holds the tenant state lock. Newly staged/downloaded bytes get a full day. */
+  async collect(
+    workspaceId: string,
+    retained: ReadonlySet<string>,
+    now = Date.now(),
+  ) {
+    const directory = dirname(this.path(workspaceId, "0".repeat(64)));
+    let names: string[];
+    try {
+      names = await readdir(directory);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
+      throw error;
+    }
+    let removed = 0;
+    for (const name of names) {
+      if (
+        !/^(?:[a-f0-9]{64}|\.staging-[A-Za-z0-9]+)$/.test(name) ||
+        retained.has(name)
+      )
+        continue;
+      const path = join(directory, name);
+      const info = await lstat(path);
+      if (
+        !info.isDirectory() ||
+        info.isSymbolicLink() ||
+        now - info.mtimeMs < 86400000
+      )
+        continue;
+      await rm(path, { recursive: true });
+      removed++;
+    }
+    return removed;
   }
   async get(workspaceId: string, digest: string) {
     try {

@@ -1,0 +1,17 @@
+{
+  "files": {
+    "includes": [
+      "src/**",
+      "tests/**",
+      "!src/generated"
+    ]
+  },
+  "formatter": {
+    "indentStyle": "space"
+  },
+  "linter": {
+    "rules": {
+      "recommended": true
+    }
+  }
+}

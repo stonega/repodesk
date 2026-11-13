@@ -50,6 +50,7 @@ import { obsidianTools } from "../obsidian/config.ts";
 import { obsidianExtension } from "../obsidian/extension.ts";
 import { ObsidianService } from "../obsidian/service.ts";
 import { obsidianEnabled, obsidianGeneration } from "../obsidian/vault.ts";
+import { packageToolNames } from "../plugins/extension.ts";
 import {
   type PluginPackageOptions,
   PluginPackages,
@@ -165,8 +166,7 @@ export class PluginService {
       const names = new Set<string>(TOOLS);
       for (const pkg of prior?.packages ?? [])
         if (pkg.enabled)
-          for (const tool of pkg.manifest.tools)
-            names.add(`rdp_${pkg.source.repositoryId}_${tool.name}`);
+          for (const tool of packageToolNames(pkg)) names.add(tool);
       // Reserve default built-ins even while disabled, so re-enabling is safe.
       for (const name of obsidianTools) names.add(name);
       for (const name of browserTools) names.add(name);

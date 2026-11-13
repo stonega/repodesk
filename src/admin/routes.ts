@@ -1027,6 +1027,18 @@ export function adminRoutes(
       ),
     ),
   );
+  app.post("/api/admin/workspaces/:id/plugin-packages/cleanup", async (c) => {
+    const value = await c.req.json();
+    return c.json(
+      await packageCall(() =>
+        plugins.packages.collect(
+          c.get("session").admin,
+          validId(c.req.param("id")),
+          value,
+        ),
+      ),
+    );
+  });
   app.post("/api/admin/workspaces/:id/plugin-packages/previews", async (c) => {
     const value = await c.req.json();
     return c.json(

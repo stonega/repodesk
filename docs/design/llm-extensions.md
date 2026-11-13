@@ -1,13 +1,14 @@
 # LLM extensions (plugins)
 
-Status: implemented headless subset, Pi 1.5.2. **Plugin and Pi extension mean the
-same thing.** An extension is executable JavaScript/TypeScript with a default
+Status: implemented trusted local-file headless subset, Pi 1.5.2. Within this
+profile, plugin and Pi extension mean the same thing. An extension is executable JavaScript/TypeScript with a default
 `(pi: ExtensionAPI) => void | Promise<void>` factory. It can add model tools and
 supported lifecycle hooks. Instruction skills remain Markdown managed in the panel.
 
-The [GitHub plugin RFC](github-plugins.md) proposes a separate isolated third-party
-package profile and author SDK. It does not change this implemented local-file
-contract or provide repository installation today.
+The separate [GitHub package design](github-plugins.md) has an opt-in isolated
+read-only preview. Its manifest/SDK, GitHub installer, private runner and static
+host-owned Pi adapters do not change the trusted local-file contract below.
+See the [package developer guide](../user/plugin-development.md).
 
 ## Compatibility
 

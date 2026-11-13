@@ -153,6 +153,65 @@ export async function verifyPluginStartup(
           ],
         },
       };
+      w.plugins.packages = [
+        {
+          manifest: {
+            schemaVersion: 1,
+            apiVersion: "1",
+            id: "startup-probe",
+            name: "Startup probe",
+            description: "Static catalog fixture",
+            version: "0.1.0",
+            license: "MIT",
+            repository: "https://github.com/example/startup-probe",
+            publisher: { name: "Fixture" },
+            runtime: { type: "node-sandbox", entry: "dist/plugin.mjs" },
+            capabilities: [],
+            settingsSchema: {
+              type: "object",
+              properties: {},
+              additionalProperties: false,
+            },
+            tools: [
+              {
+                name: "probe",
+                title: "Probe",
+                description: "Offline startup probe",
+                effect: "compute",
+                capabilities: [],
+                inputSchema: {
+                  type: "object",
+                  properties: {},
+                  additionalProperties: false,
+                },
+                outputSchema: {
+                  type: "object",
+                  properties: {},
+                  additionalProperties: false,
+                },
+              },
+            ],
+            skills: [],
+          },
+          source: {
+            repositoryId: 123456,
+            ownerId: 42,
+            repository: "example/startup-probe",
+            ref: "v0.1.0",
+            commit: "a".repeat(40),
+            private: true,
+          },
+          digest: "b".repeat(64),
+          bundleHash: "c".repeat(64),
+          manifestHash: "d".repeat(64),
+          generation: 1,
+          enabled: true,
+          settings: {},
+          grants: [],
+          history: [],
+          connections: [],
+        },
+      ];
       w.coding = { revision: 1, settings: { ...emptyCoding, enabled: true } };
       if (mode === "denied")
         w.plugins.browser = { enabled: false, generation: 1 };
@@ -203,6 +262,12 @@ export async function verifyPluginStartup(
                   ? undefined
                   : "/unavailable-browser.sock",
                 BROWSER_HOST_TOKEN_FILE: "/unavailable-browser-token",
+                PLUGIN_PACKAGES_DIRECTORY: "/unavailable-plugin-artifacts",
+                PLUGIN_RUNNER_URL:
+                  mode === "missing_service"
+                    ? undefined
+                    : "http://unused.invalid",
+                PLUGIN_RUNNER_TOKEN_FILE: "/unavailable-plugin-token",
               }),
               apps,
             )
@@ -277,6 +342,7 @@ export async function verifyPluginStartup(
               `${mode}: Browser default enablement`,
             );
           for (const name of [
+            "rdp_123456_probe",
             "send_telegram_widget",
             "obsidian_query",
             "query_google_docs",

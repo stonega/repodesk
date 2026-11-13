@@ -55,6 +55,7 @@ export function packageMessage(cause: unknown): string {
   };
   return (
     messages[code] ??
+    Object.entries(messages).find(([key]) => code.startsWith(`${key}.`))?.[1] ??
     "The request could not be completed. Check your connection and try again."
   );
 }
@@ -65,7 +66,7 @@ function SourceSummary({
   entry: Pick<PublicPackageInstallation, "manifest" | "source" | "digest">;
 }) {
   return (
-    <dl className="plugin-summary">
+    <dl className="plugin-summary package-source">
       <div>
         <dt>Source</dt>
         <dd>
@@ -127,6 +128,7 @@ export function PackageSourceModal({
   const lock = useRef(false);
   const requestId = useRef(crypto.randomUUID());
   const notify = useToast();
+  const unchanged = !!preview && current?.digest === preview.digest;
   const title = rollback
     ? "Review plugin rollback"
     : current
@@ -150,7 +152,7 @@ export function PackageSourceModal({
             intent: rollback ? "rollback" : current ? "update" : "install",
           }),
         );
-      } else if (reviewed) {
+      } else if (reviewed && !unchanged) {
         await request(base, "POST", {
           previewId: preview.id,
           revision: preview.revision,
@@ -258,9 +260,15 @@ export function PackageSourceModal({
                 </pre>
               </details>
             )}
+            {unchanged && (
+              <p className="notice" role="status">
+                This exact version is already installed. No update is available.
+              </p>
+            )}
             <label className="check">
               <input
                 type="checkbox"
+                disabled={unchanged}
                 checked={reviewed}
                 onChange={(e) => setReviewed(e.target.checked)}
               />
@@ -292,7 +300,10 @@ export function PackageSourceModal({
           </button>
         )}
         <ModalActions>
-          <button type="submit" disabled={busy || (preview ? !reviewed : !url)}>
+          <button
+            type="submit"
+            disabled={busy || unchanged || (preview ? !reviewed : !url)}
+          >
             {busy
               ? "Working…"
               : preview
@@ -373,6 +384,10 @@ function SettingField({
                         ? Number(line)
                         : schema.items?.type === "boolean"
                           ? line === "true"
+                            ? true
+                            : line === "false"
+                              ? false
+                              : line
                           : line,
                     )
                 : [],
@@ -878,25 +893,32 @@ export function PackageDetail({
           <Skeleton width="100%" height="8rem" />
         )}
       </section>
-      {entry && (
+      {(entry || !data) && (
         <section className="card" aria-label="Package versions">
           <div className="plugin-card-heading">
             <h2>Version management</h2>
-            <IconButton
-              icon="refresh"
-              label="Check for updates"
-              showLabel
-              disabled={busy || loading}
-              onClick={() => setSource({})}
-            />
+            <div className="package-version-actions">
+              <IconButton
+                icon="refresh"
+                label="Check for updates"
+                disabled={!entry || busy || loading}
+                onClick={() => setSource({})}
+              />
+              <IconButton
+                icon="delete"
+                label="Remove plugin"
+                disabled={!entry || busy || loading}
+                onClick={() => setRemoving(true)}
+              />
+            </div>
           </div>
           <p className="muted">
             Updates require reviewing the source and permissions. Applying a
             version leaves the plugin disabled.
           </p>
-          {!!entry.history.length && (
+          {!!entry?.history.length && (
             <div className="package-history">
-              {entry.history.map((version) => (
+              {entry?.history.map((version) => (
                 <div className="package-history-row" key={version.digest}>
                   <span>
                     {version.manifest.version} ·{" "}
@@ -916,15 +938,6 @@ export function PackageDetail({
               ))}
             </div>
           )}
-          <div className="row">
-            <IconButton
-              icon="delete"
-              label="Remove plugin"
-              showLabel
-              disabled={busy || loading}
-              onClick={() => setRemoving(true)}
-            />
-          </div>
         </section>
       )}
       {entry?.manifest.connections?.map((descriptor) => {
@@ -970,7 +983,30 @@ export function PackageDetail({
                     : "Selected workspace members and destinations"}
                 </dd>
               </div>
-              <div>
+              {saved && descriptor.scope === "workspace" && (
+                <>
+                  <div>
+                    <dt>Allowed members</dt>
+                    <dd>
+                      {saved.members
+                        .map(
+                          (id) =>
+                            data?.members.find((m) => m.id === id)?.name ?? id,
+                        )
+                        .join(", ") || "None"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Conversations</dt>
+                    <dd>
+                      {saved.privateOnly
+                        ? "Private only"
+                        : `Private and selected groups: ${saved.chats.map((id) => data?.chats.find((c) => c.id === id)?.name ?? id).join(", ") || "None"}`}
+                    </dd>
+                  </div>
+                </>
+              )}
+              <div className="package-destinations">
                 <dt>Destinations</dt>
                 <dd>{descriptor.requests.map((r) => r.origin).join(", ")}</dd>
               </div>

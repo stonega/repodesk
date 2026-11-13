@@ -45,9 +45,10 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [First-run setup](design/first-run-setup.md) | Initial admin creation, bot onboarding, secrets and activation |
 | [Nowledge Mem](implementation/nowledge-mem.md) | Optional private memory recall and explicit saves through a scoped built-in adapter |
 | [LLM extensions / plugins](design/llm-extensions.md) | Existing Pi extension loading, headless compatibility, grants and recovery |
-| [GitHub plugin contract](design/github-plugins.md) | Proposed third-party repository format, SDK, isolated tools, capabilities and installation lifecycle |
+| [GitHub plugin contract](design/github-plugins.md) | Design baseline and implemented preview profile for repository packages, SDK, isolation and capabilities |
 | [Plugin ecosystem research](research/plugin-ecosystems-2026-11-13.md) | Dated primary-source comparison, current implementation gaps and distribution tradeoffs |
-| [GitHub plugin delivery plan](implementation/github-plugins-plan.md) | Proposed implementation slices, developer template and verification gates |
+| [GitHub plugin delivery plan](implementation/github-plugins-plan.md) | Delivery ledger, independent author template and outstanding pilot/publication gates |
+| [GitHub plugin verification](implementation/github-plugins-verification.md) | Source, tests, image identities, UI acceptance and remaining release gates |
 | [Obsidian organization notes](implementation/obsidian.md) | Default-enabled managed vault, native note formats, shared access and import/export |
 | [Shared host browser](implementation/browser.md) | Default-enabled Browser plugin, private headed sessions, shared consumers and secure input |
 | [Built-in web reader](implementation/web-reader.md) | Defuddle Markdown extraction, public network boundaries and durable reads |

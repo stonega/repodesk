@@ -14,6 +14,7 @@
 !scripts/runtime-contract.ts
 !scripts/register-webhook.ts
 !scripts/code-truth-token.ts
+!scripts/plugin-runner-token.ts
 !scripts/browser-host-smoke.ts
 !scripts/fixtures/
 !scripts/fixtures/plugin-startup.ts

@@ -1047,6 +1047,9 @@ test.describe
       await page
         .getByRole("button", { name: "Add plugin", exact: true })
         .click();
+      await page
+        .getByRole("button", { name: "Local file", exact: true })
+        .click();
       await page.getByLabel("Plugin ID", { exact: true }).fill("word-count");
       await page
         .getByLabel("Installed file path")
@@ -1343,6 +1346,9 @@ test.describe
         .getByRole("button", { name: "Add plugin", exact: true })
         .click();
       await page
+        .getByRole("button", { name: "Local file", exact: true })
+        .click();
+      await page
         .getByLabel("Plugin ID", { exact: true })
         .fill("independent-plugin");
       await page
@@ -1400,6 +1406,9 @@ test.describe
       await page.goto(`/admin/plugins?workspace=${secondId}`);
       await page
         .getByRole("button", { name: "Add plugin", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "Local file", exact: true })
         .click();
       await page
         .getByLabel("Plugin ID", { exact: true })
@@ -2034,7 +2043,7 @@ test.describe
         ["instructions", "Add instruction", "Propose an instruction"],
         ["threads", "New request", "New request"],
         ["operations", "Create panel account", "Create panel account"],
-        ["plugins", "Add plugin", "Register a Pi extension"],
+        ["plugins", "Add plugin", "New plugin"],
         ["plugins/code-truth", "Add repository", "Add repository"],
       ]) {
         await page.goto(`/admin/${path}`);

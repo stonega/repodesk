@@ -80,13 +80,14 @@ ENTRYPOINT ["node", "/opt/deepx/job.js"]
 FROM codex-job AS codex-opensandbox-job
 USER root
 
-# This image contains no application dependencies, configuration or credentials.
+# Trusted private supervisor has no application state or service credentials.
 FROM runtime-base AS plugin-supervisor
+ENV PORT=3030
 COPY --from=docker-client /usr/local/bin/docker /usr/local/bin/docker
-COPY --from=dependencies /app/node_modules ./node_modules
 COPY --from=build /app/dist/plugin-supervisor.js ./dist/plugin-supervisor.js
 CMD ["node", "dist/plugin-supervisor.js"]
 
+# Job contains only the protocol runtime and validators.
 FROM runtime-base AS plugin-job
 WORKDIR /opt/repodesk-plugin
 COPY --from=build --chown=node:node /app/dist/plugin-job.mjs ./job.mjs

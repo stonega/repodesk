@@ -1,0 +1,2 @@
+# Preserve whitespace inside upstream code-generation strings in the bundled author CLI.
+templates/plugin/.repodesk/scripts/plugin-cli.mjs linguist-generated=true whitespace=-blank-at-eol

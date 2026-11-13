@@ -42,6 +42,13 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Install Code Truth integration test dependencies
         run: bun install --cwd services/code-truth --frozen-lockfile
+      - name: Verify portable plugin author package and generated artifacts
+        run: |
+          bun scripts/plugin-distribution.ts
+          bun run plugin:build examples/plugins/word-count
+          bun run plugin:build examples/plugins/repository-insights
+          bun run plugin:verify
+          git diff --exit-code -- templates/plugin sdk/plugin examples/plugins
       - run: bun run check
       - name: Type check within runner memory budget
         env:
@@ -113,6 +120,34 @@ jobs:
           # Cache uploads are optional and must leave time for smoke/restore checks.
           cache-to: type=gha,scope=verify-app,mode=max,timeout=2m,ignore-error=true
       - run: docker run --rm --network none --entrypoint node deepx-agent:ci dist/runtime-contract.js
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - name: Build restricted plugin job
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: plugin-job
+          load: true
+          tags: repodesk-plugin-job:ci
+          cache-from: type=gha,scope=verify-plugin-job
+          cache-to: type=gha,scope=verify-plugin-job,mode=max,timeout=2m,ignore-error=true
+      - name: Build private plugin supervisor
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: plugin-supervisor
+          load: true
+          tags: repodesk-plugin-supervisor:ci
+          cache-from: type=gha,scope=verify-plugin-supervisor
+          cache-to: type=gha,scope=verify-plugin-supervisor,mode=max,timeout=2m,ignore-error=true
+      - name: Verify exact plugin job image
+        run: |
+          export PLUGIN_TEST_IMAGE=$(docker image inspect --format '{{.Id}}' repodesk-plugin-job:ci)
+          bun test tests/unit/plugin-sandbox.test.ts
+          bun scripts/plugin-supervisor-smoke.ts repodesk-plugin-supervisor:ci "$PLUGIN_TEST_IMAGE"
+          PLUGIN_RUNNER_IMAGE=$PLUGIN_TEST_IMAGE docker compose -f compose.yaml -f examples/plugin-packages.compose.yaml config --quiet
       - name: Build Code Truth image
         uses: docker/build-push-action@v6
         with:

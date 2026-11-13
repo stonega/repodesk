@@ -1,5 +1,29 @@
 # Implementation evidence
 
+## GitHub repository plugin preview (2026-11-13)
+
+Implemented locally on the Pi 1.5.2 source: versioned manifest/semantic validation,
+source-only author SDK and portable template/CLI, immutable GitHub source preview,
+tenant artifact cache, disabled-by-default install/update/rollback, settings/grants,
+encrypted scoped HTTP bindings, static Pi adapters and a private Docker supervisor
+with bounded per-call jobs. The app and worker share the existing `pluginRuntime`
+composition; optional services/credentials remain lazy during registration.
+
+The final full suite passes **1,712 tests across 175 files** with eight Docker-gated
+cases covered separately by **19 exact-image tests**. Lint (nine pre-existing
+incident-script warnings), strict types, production build, template verification,
+**24 distinct selected browser scenarios**, local/exact-app runtime contracts,
+exact-supervisor smoke, storage initialization and the opt-in Compose validation
+pass. See [source/image identities and verification scope](github-plugins-verification.md).
+
+This is an opt-in read-only preview, not stable SDK 1 or a production release.
+Official template/npm publication, two independently authored remote repositories,
+real GitHub/Telegram/service pilot and target-host recovery drills remain open
+release gates. No live account connection, message or deployment is performed.
+See [delivery ledger](github-plugins-plan.md),
+[developer guide](../user/plugin-development.md) and
+[operator guide](../user/plugin-administration.md).
+
 ## Pi 1.5.2 dependency upgrade (2026-11-13)
 
 The npm `latest` tags for `@earendil-works/pi-agent-core`, `pi-ai` and

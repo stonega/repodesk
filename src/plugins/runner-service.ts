@@ -96,6 +96,11 @@ export function pluginRunnerApp(sandbox: PluginSandbox, token: string) {
       bundle.length > limits.bundle
     )
       throw new PluginError("plugin_package_invalid");
+    if (
+      calls.size >= 64 ||
+      [...calls.values()].filter((call) => !call.done).length >= 4
+    )
+      throw new PluginError("plugin_unavailable");
     const id = randomUUID();
     const call: Call = {
       controller: new AbortController(),

@@ -1,10 +1,39 @@
 # GitHub plugin contract
 
-Status: **proposed RFC, 2026-11-13**. This document defines a candidate third-party
-contract, not implemented behavior. SDK names, API versions, routes and commands
-below are proposed. Follow the [current Pi extension contract](llm-extensions.md)
-for working local extensions. See [research](../research/plugin-ecosystems-2026-11-13.md)
-and the [delivery plan](../implementation/github-plugins-plan.md).
+Status: **design baseline with an implemented read-only preview, 2026-11-13**.
+The delivered profile lives in `src/plugins/`, `sdk/plugin/`, `templates/plugin/`
+and the package admin routes. [Developer documentation](../user/plugin-development.md)
+and [operator documentation](../user/plugin-administration.md) describe current
+interfaces. The broader design below retains future requirements; illustrative
+commands are not a published CLI. See the [delivery ledger](../implementation/github-plugins-plan.md)
+for completed work, validation and outstanding pilot/publication gates.
+
+### Delivered profile decisions
+
+- Bun 1.3.14 author tooling, Node 24 job image and Pi 1.5.2 host adapter. API 1 is
+  preview-only. SDK/CLI are supplied inside a copyable independent template,
+  without an npm package or separate hosted template repository.
+- `plugin-cli` implements `schema`, `generate`, `build`, `validate` and explicitly
+  trusted offline `run`. The platform never runs an author build or installer.
+- GitHub preview uses bounded inline read-only requests, persists completed
+  previews for 15 minutes and supports request/apply idempotency. It does not
+  introduce detached installation jobs or package migrations.
+- Immutable GitHub commit identity pins the source tree; the package digest hashes
+  the canonical installed inventory (manifest, package metadata, bundle,
+  README/LICENSE and approved linked guides), not every source/build file.
+- Source is streamed as bounded JSON-RPC chunks into a fresh networkless job;
+  no host package mounts or secrets enter the sandbox. The worker has only a
+  private authenticated HTTP client to the Docker-owning supervisor.
+- Flat scalar/bounded scalar-array settings, compute, GitHub metadata and exact
+  approved HTTPS GET connections are supported. Updates/rollbacks always disable
+  the saved version. Runtime-unknown outcomes use the existing non-replay ledger.
+- Companion guide access uses a host-owned authorized `load_guide` tool. Personal
+  HTTP bindings require a verified linked panel identity; there is no standalone
+  Telegram connection editor in this preview.
+- Operator-triggered artifact collection keeps installation/history, live-preview
+  and retained-run references, with a 24-hour grace period for unreferenced bytes.
+  The private supervisor reaps expired labelled jobs after interruptions. Shared
+  kernel/daemon failure handling remains an operator deployment boundary.
 
 ## Product contract
 

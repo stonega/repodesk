@@ -25,6 +25,7 @@ export function packageExtension(
   installation: PackageInstallation,
   workspaceId: string,
   revision: number,
+  runtimeIdentity: string,
   execute: (
     input: AgentInput,
     installation: PackageInstallation,
@@ -41,7 +42,7 @@ export function packageExtension(
     enabled: true,
     workspaces: [workspaceId],
     tools: packageToolNames(installation),
-    hash: fingerprint({ installation, revision }),
+    hash: fingerprint({ installation, revision, runtimeIdentity }),
     toolErrorCodes: errorCodes,
     factory: (input) => (pi) => {
       if (installation.manifest.skills.length)

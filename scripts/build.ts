@@ -5,7 +5,6 @@ const backend = await Bun.build({
   entrypoints: [
     "src/server.ts",
     "src/worker.ts",
-    "src/plugins/plugin-supervisor.ts",
     "src/web-reader/web-reader-extract.ts",
     "src/coding/local/runner-server.ts",
     "src/coding/local/job.ts",
@@ -19,6 +18,7 @@ const backend = await Bun.build({
     "scripts/runtime-contract.ts",
     "scripts/register-webhook.ts",
     "scripts/code-truth-token.ts",
+    "scripts/plugin-runner-token.ts",
   ],
   outdir: "dist",
   target: "node",
@@ -27,6 +27,18 @@ const backend = await Bun.build({
 });
 if (!backend.success)
   throw new AggregateError(backend.logs, "Backend build failed");
+const pluginSupervisor = await Bun.build({
+  entrypoints: ["src/plugins/plugin-supervisor.ts"],
+  outdir: "dist",
+  naming: "plugin-supervisor.js",
+  target: "node",
+  format: "esm",
+});
+if (!pluginSupervisor.success)
+  throw new AggregateError(
+    pluginSupervisor.logs,
+    "Plugin supervisor build failed",
+  );
 const pluginJob = await Bun.build({
   entrypoints: ["src/plugins/sandbox-job.ts"],
   outdir: "dist",

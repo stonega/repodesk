@@ -14,7 +14,7 @@ import { PluginArtifacts } from "./artifacts.ts";
 import type { Json } from "./contract.ts";
 import { PluginError } from "./contract.ts";
 import type { PluginSandbox } from "./docker-sandbox.ts";
-import { packageExtension } from "./extension.ts";
+import { packageExtension, packageToolNames } from "./extension.ts";
 import { GitHubPluginSource, parseRepositoryUrl } from "./github-source.ts";
 import { PluginHttpReader } from "./http-reader.ts";
 import {
@@ -36,6 +36,7 @@ import { guideText, packageGuides } from "./package-skills.ts";
 
 export interface PluginPackageOptions {
   directory?: string;
+  runtimeIdentity?: string;
   sandbox?: PluginSandbox;
   source?: GitHubPluginSource;
   encryptionKey?: string;
@@ -130,11 +131,49 @@ export class PluginPackages {
       entries: (w.plugins?.packages ?? []).map(publicInstallation),
       members: w.members
         .filter((m) => m.active)
-        .map((m) => ({ id: m.id, name: m.id })),
+        .map((m) => ({ id: m.id, name: m.name ?? m.username ?? m.id })),
       chats: w.chats
         .filter((c) => c.active)
-        .map((c) => ({ id: c.id, name: c.id })),
+        .map((c) => ({
+          id: c.id,
+          name: c.title ? `${c.title} (${c.id})` : c.id,
+        })),
     };
+  }
+  async collect(admin: Admin, workspaceId: string, value: unknown) {
+    const input = z
+      .object({ revision: z.number().int().min(0) })
+      .strict()
+      .parse(value);
+    return this.store.change(workspaceId, async (w) => {
+      authorizePackages(admin, w);
+      requireThat(
+        (w.plugins?.revision ?? 0) === input.revision,
+        "version_conflict",
+        409,
+      );
+      requireThat(this.artifacts, "plugin_storage_unavailable", 409);
+      const retained = new Set<string>();
+      for (const installation of w.plugins?.packages ?? []) {
+        retained.add(installation.digest);
+        for (const prior of installation.history) retained.add(prior.digest);
+      }
+      for (const preview of w.pluginPackagePreviews ?? [])
+        if (Date.parse(preview.expiresAt) > Date.now())
+          retained.add(preview.digest);
+      for (const run of w.runs)
+        for (const pin of Object.values(run.packageRead?.installations ?? {}))
+          retained.add(pin.digest);
+      const removed = await this.artifacts.collect(workspaceId, retained);
+      audit(
+        w,
+        admin.id,
+        "plugins.package_artifacts_collected",
+        workspaceId,
+        w.plugins?.revision ?? 0,
+      );
+      return { removed };
+    });
   }
   async preview(
     admin: Admin,
@@ -185,7 +224,19 @@ export class PluginPackages {
       );
       requireThat(retained, "plugin_rollback_unavailable", 409);
       await this.artifacts.get(workspaceId, retained.digest);
-      candidate = artifact(retained);
+      candidate = {
+        ...artifact(retained),
+        source: { ...retained.source, ref: retained.source.commit },
+      };
+      const access = await this.token(w, candidate.source.repository);
+      await this.source.recheck(candidate.source, access.token, signal);
+      sourceConnection = access.sourceConnection;
+      if (candidate.source.private)
+        requireThat(
+          sourceConnection?.repositoryId === candidate.source.repositoryId,
+          "access_denied",
+          403,
+        );
     } else {
       const access = await this.token(w, name);
       const pkg = await this.source.inspect(
@@ -302,7 +353,7 @@ export class PluginPackages {
     );
     requireThat(this.artifacts, "plugin_storage_unavailable", 409);
     await this.artifacts.get(workspaceId, preview.digest);
-    if (preview.intent !== "rollback") {
+    {
       const access = await this.token(w, preview.source.repository);
       await this.source.recheck(
         preview.source,
@@ -443,9 +494,7 @@ export class PluginPackages {
             .flatMap((entry) => entry.tools),
         );
         requireThat(
-          installation.manifest.tools.every(
-            (tool) => !names.has(`rdp_${repositoryId}_${tool.name}`),
-          ),
+          packageToolNames(installation).every((name) => !names.has(name)),
           "extension_tool_collision",
           409,
         );
@@ -610,6 +659,7 @@ export class PluginPackages {
           installation,
           w.id,
           w.plugins?.revision ?? 0,
+          this.options.runtimeIdentity ?? "preview",
           (input, pkg, tool, args, signal) =>
             this.invoke(input, pkg, tool, args, signal),
         ),

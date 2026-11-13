@@ -152,3 +152,133 @@ test("runner requires an immutable image identity", () => {
     "plugin_unavailable",
   );
 });
+check(
+  "Docker enforces resource limits and cancellation leaves no descendants",
+  async () => {
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const execute = promisify(execFile);
+    const before = (
+      await execute("docker", [
+        "ps",
+        "-aq",
+        "--filter",
+        "label=repodesk.plugin-sandbox=true",
+      ])
+    ).stdout
+      .trim()
+      .split(/\s+/);
+    const controller = new AbortController();
+    const bundle = Buffer.from(
+      "export default {tools:{async count_words(){await new Promise(()=>{});}}};",
+    );
+    const pending = new DockerPluginSandbox(image as string).invoke(
+      await input({
+        bundle,
+        bundleHash: sha256(bundle),
+        signal: controller.signal,
+      }),
+    );
+    let id = "";
+    try {
+      const deadline = Date.now() + 5000;
+      while (!id && Date.now() < deadline) {
+        const ids = (
+          await execute("docker", [
+            "ps",
+            "-q",
+            "--filter",
+            "label=repodesk.plugin-sandbox=true",
+          ])
+        ).stdout
+          .trim()
+          .split(/\s+/);
+        id = ids.find((value) => value && !before.includes(value)) ?? "";
+        if (!id) await Bun.sleep(50);
+      }
+      expect(id).not.toBe("");
+      const info = JSON.parse(
+        (await execute("docker", ["inspect", id])).stdout,
+      )[0];
+      expect(info.HostConfig).toMatchObject({
+        NetworkMode: "none",
+        ReadonlyRootfs: true,
+        Memory: 268435456,
+        MemorySwap: 268435456,
+        NanoCpus: 1000000000,
+        PidsLimit: 32,
+        CapDrop: ["ALL"],
+        SecurityOpt: ["no-new-privileges:true"],
+      });
+      expect(info.Config.User).toBe("1000:1000");
+    } finally {
+      controller.abort();
+      await expect(pending).rejects.toThrow("plugin_cancelled");
+    }
+    const after = (
+      await execute("docker", [
+        "ps",
+        "-aq",
+        "--filter",
+        "label=repodesk.plugin-sandbox=true",
+      ])
+    ).stdout;
+    expect(after).not.toContain(id);
+  },
+  15000,
+);
+check(
+  "expiry sweep removes an interrupted task and preserves a current task",
+  async () => {
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const { reapPluginSandboxes } = await import(
+      "../../src/plugins/docker-sandbox.ts"
+    );
+    const execute = promisify(execFile);
+    const ids: string[] = [];
+    try {
+      for (const deadline of [Date.now() - 1000, Date.now() + 60000]) {
+        const started = await execute("docker", [
+          "run",
+          "-d",
+          "--network",
+          "none",
+          "--read-only",
+          "--memory",
+          "64m",
+          "--pids-limit",
+          "8",
+          "--cap-drop",
+          "ALL",
+          "--label",
+          "repodesk.plugin-sandbox=true",
+          "--label",
+          `repodesk.plugin-deadline=${deadline}`,
+          "--entrypoint",
+          "node",
+          image as string,
+          "-e",
+          "setInterval(()=>{},1000)",
+        ]);
+        ids.push(started.stdout.trim());
+      }
+      expect(await reapPluginSandboxes()).toBeGreaterThanOrEqual(1);
+      const remaining = (
+        await execute("docker", [
+          "ps",
+          "-aq",
+          "--no-trunc",
+          "--filter",
+          "label=repodesk.plugin-sandbox=true",
+        ])
+      ).stdout;
+      expect(remaining).not.toContain(ids[0] ?? "missing");
+      expect(remaining).toContain(ids[1] ?? "missing");
+    } finally {
+      for (const id of ids)
+        await execute("docker", ["rm", "-f", id]).catch(() => {});
+    }
+  },
+  15000,
+);

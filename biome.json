@@ -6,7 +6,12 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!examples/plugins/**/src/generated"]
+    "includes": [
+      "**",
+      "!examples/plugins/**/src/generated",
+      "!examples/plugins/**/dist",
+      "!!templates/plugin"
+    ]
   },
   "formatter": {
     "enabled": true,

@@ -1,4 +1,4 @@
-import { unzipSync } from "fflate";
+import { inflateRawSync } from "node:zlib";
 import { limits, PluginError } from "./contract.ts";
 import type { PackageFiles } from "./local-package.ts";
 import { safeResourcePath } from "./manifest.ts";
@@ -16,7 +16,7 @@ function crc32(bytes: Uint8Array) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-/** Preflight the central directory before fflate can allocate decompressed output. */
+/** Bound both declared sizes and actual inflation; headers alone are untrusted. */
 export function unpackGitHubZip(bytes: Buffer): PackageFiles {
   try {
     if (bytes.length < 22 || bytes.length > limits.archive) throw new Error();
@@ -48,7 +48,15 @@ export function unpackGitHubZip(bytes: Buffer): PackageFiles {
     let root: string | undefined;
     const entries = new Map<
       string,
-      { path: string; size: number; crc: number; directory: boolean }
+      {
+        path: string;
+        size: number;
+        crc: number;
+        directory: boolean;
+        dataStart: number;
+        compressed: number;
+        compression: number;
+      }
     >();
     const ranges: [number, number][] = [];
     for (let i = 0; i < count; i++) {
@@ -128,6 +136,9 @@ export function unpackGitHubZip(bytes: Buffer): PackageFiles {
         size,
         crc: bytes.readUInt32LE(offset + 16),
         directory,
+        dataStart,
+        compressed,
+        compression,
       });
       offset = next;
     }
@@ -137,17 +148,19 @@ export function unpackGitHubZip(bytes: Buffer): PackageFiles {
       ranges.some((range, i) => i > 0 && range[0] < (ranges[i - 1]?.[1] ?? 0))
     )
       throw new Error();
-    const extracted = unzipSync(bytes, {
-      filter: (file) => {
-        const entry = entries.get(file.name);
-        if (!entry || entry.size !== file.originalSize) throw new Error();
-        return !entry.directory;
-      },
-    });
     const files: PackageFiles = Object.create(null);
-    for (const [name, entry] of entries) {
+    for (const entry of entries.values()) {
       if (entry.directory) continue;
-      const content = extracted[name];
+      const compressed = bytes.subarray(
+        entry.dataStart,
+        entry.dataStart + entry.compressed,
+      );
+      const content =
+        entry.compression === 0
+          ? compressed
+          : inflateRawSync(compressed, {
+              maxOutputLength: Math.max(1, entry.size),
+            });
       if (
         !content ||
         content.length !== entry.size ||

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { unpackGitHubZip } from "./archive.ts";
 import { limits, PluginError } from "./contract.ts";
 import { type PackageFiles, validatePackageFiles } from "./local-package.ts";
-import { parseManifest } from "./manifest.ts";
+import { parseManifest, versionPattern } from "./manifest.ts";
 import { selectPackageFiles } from "./package-skills.ts";
 
 export interface PackageSource {
@@ -116,9 +116,7 @@ export class GitHubPluginSource {
   ) {
     if (
       !/^[a-f0-9]{40}$/.test(ref) &&
-      !/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/.test(
-        ref,
-      )
+      !(ref.startsWith("v") && versionPattern.test(ref.slice(1)))
     )
       throw new PluginError("plugin_package_invalid");
     return commitSchema.parse(
@@ -131,28 +129,36 @@ export class GitHubPluginSource {
     ).sha;
   }
   async identity(url: string, token: string | undefined, signal: AbortSignal) {
-    const repository = parseRepositoryUrl(url);
-    return repositorySchema.parse(
-      await this.api(repository, "", token, signal),
-    );
+    try {
+      const repository = parseRepositoryUrl(url);
+      return repositorySchema.parse(
+        await this.api(repository, "", token, signal),
+      );
+    } catch {
+      throw new PluginError("plugin_package_invalid");
+    }
   }
   async recheck(
     source: PackageSource,
     token: string | undefined,
     signal: AbortSignal,
   ) {
-    const current = await this.identity(
-      `https://github.com/${source.repository}`,
-      token,
-      signal,
-    );
-    if (
-      current.id !== source.repositoryId ||
-      current.owner.id !== source.ownerId ||
-      (await this.ref(current.full_name, source.ref, token, signal)) !==
-        source.commit
-    )
+    try {
+      const current = await this.identity(
+        `https://github.com/${source.repository}`,
+        token,
+        signal,
+      );
+      if (
+        current.id !== source.repositoryId ||
+        current.owner.id !== source.ownerId ||
+        (await this.ref(current.full_name, source.ref, token, signal)) !==
+          source.commit
+      )
+        throw new PluginError("plugin_package_invalid");
+    } catch {
       throw new PluginError("plugin_package_invalid");
+    }
   }
   async inspect(
     url: string,
