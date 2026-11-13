@@ -26,13 +26,13 @@ memory ceiling is 6 GiB on the recorded four-CPU, 8-GiB VPS, leaving approximate
 2 GiB for production and the host. CPU limits are shared ceilings, not reserved
 cores; all three busy runners still compete with production for four host CPUs.
 Each runner executes one job at a time, allowing up to three verification jobs
-to run simultaneously. The browser suite remains one job with one Playwright worker.
+to run simultaneously. The browser suite uses two shards, each with one Playwright worker.
 Release installation runs on the host updater. Its deployment SSH secrets are
 unused; the optional Codex diagnostics workflow can still use SSH credentials.
 
-Verify runs quality/database checks, one browser job for the complete suite, and
-application/Code Truth container checks. The browser job allows 45 minutes; quality
-and application container jobs allow ten minutes each. Multi-step browser tests
+Verify runs quality/database checks, two browser shards for the complete suite,
+and application/Code Truth container checks. Each browser shard allows 45 minutes;
+quality and application container jobs allow 30 minutes each. Multi-step browser tests
 allow 60 seconds on CI and retain the 30-second local limit; assertion and action
 timeouts are unchanged. The full serial suite exceeded the previous 30-minute job
 budget on 2026-10-23, so the longer CI budgets leave room for shared VPS contention.
@@ -41,15 +41,18 @@ builds app/Codex/Code Truth release images locally before its protected cutover.
 
 ## Install
 
-Use the operator-provided SSH access recorded in [debugging](debugging.md).
+Use the current operator-provided SSH access recorded in [debugging](debugging.md#vps-access).
+The commands below target the host recorded on 2026-11-09; update the destination
+when moving hosts. Runner containers, registration volumes and Docker caches
+are a separate installation and must be restored after a host migration.
 The VPS needs its existing Docker Engine and Compose; no host Node installation
 or production service restart is required. From the repository checkout:
 
 ```sh
 tar -C deploy/actions-runner -cf - Dockerfile entrypoint.sh daemon.json cleanup.sh compose.yaml |
-  ssh root@169.58.58.71 \
+  ssh root@13.140.242.169 \
     'install -d -m 0755 /opt/repodesk-actions-runner && tar -C /opt/repodesk-actions-runner -xf -'
-ssh root@169.58.58.71 \
+ssh root@13.140.242.169 \
   'docker compose --file /opt/repodesk-actions-runner/compose.yaml build runner &&
    docker compose --file /opt/repodesk-actions-runner/compose.yaml up --no-build --detach'
 ```
@@ -66,12 +69,12 @@ for runner_service in runner runner-2 runner-3; do
     runner_name="repodesk-vps-${runner_service#runner-}"
   fi
   # Preserve any existing registration, especially the original runner.
-  if ssh root@169.58.58.71 \
+  if ssh root@13.140.242.169 \
     "docker compose --file /opt/repodesk-actions-runner/compose.yaml exec -T --user runner '$runner_service' test -f .runner"; then
     continue
   fi
   gh api --method POST repos/stonega/repodesk/actions/runners/registration-token --jq .token |
-  ssh root@169.58.58.71 "
+  ssh root@13.140.242.169 "
     set -eu
     IFS= read -r registration_token
     docker compose --file /opt/repodesk-actions-runner/compose.yaml exec -T --user runner '$runner_service' \
@@ -96,7 +99,7 @@ GitHub reports all affected runners idle and no `Runner.Worker` process is activ
 before recreating them. Copy the updated Compose file, validate it, then run:
 
 ```sh
-ssh root@169.58.58.71 \
+ssh root@13.140.242.169 \
   'docker compose --file /opt/repodesk-actions-runner/compose.yaml config --quiet &&
    docker compose --file /opt/repodesk-actions-runner/compose.yaml up --no-build --detach'
 ```
@@ -130,7 +133,7 @@ not update the running runner container.
 ```sh
 gh api repos/stonega/repodesk/actions/runners \
   --jq '.runners[] | {name,status,busy,labels:[.labels[].name]}'
-ssh root@169.58.58.71 \
+ssh root@13.140.242.169 \
   'docker compose --file /opt/repodesk-actions-runner/compose.yaml ps'
 ```
 
@@ -141,7 +144,7 @@ a reboot. To restart one deliberately, first check that GitHub reports `busy:fal
 for that runner. Substitute `runner-2` or `runner-3` for the additional services:
 
 ```sh
-ssh root@169.58.58.71 \
+ssh root@13.140.242.169 \
   'docker compose --file /opt/repodesk-actions-runner/compose.yaml restart runner'
 ```
 
