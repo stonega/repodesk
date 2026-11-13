@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
@@ -140,11 +141,12 @@ for (const code of [
     if (code === "code_truth_unavailable") client.error = error;
     const catalog = ExtensionCatalog.fromSnapshot([], [extension]);
     const runner = new PiRunner((_model, context) => {
-      expect(context.tools?.map((tool) => tool.name)).toEqual([
-        "unrelated_tool",
-        ...codeTruthTools,
-      ]);
-      expect(context.systemPrompt).not.toContain("private diagnostic secret");
+      expect(
+        getCurrentTools(context.messages)?.map((tool) => tool.name),
+      ).toEqual(["unrelated_tool", ...codeTruthTools]);
+      expect(getCurrentSystemPrompt(context.messages)).not.toContain(
+        "private diagnostic secret",
+      );
       return reply();
     }, catalog);
     expect((await runner.run(input())).text).toBe("Hello");

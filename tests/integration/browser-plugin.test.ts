@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, JsonObject } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { claim } from "../../src/admin/auth.ts";
 import { PluginService } from "../../src/agent/plugin-service.ts";
@@ -222,7 +222,7 @@ const url = process.env.TEST_DATABASE_URL,
       );
     }
     function modelSequence(
-      steps: ({ name: string; args: Record<string, unknown> } | string)[],
+      steps: ({ name: string; args: JsonObject } | string)[],
     ): StreamFn {
       let sequence = 0;
       return (model) => {

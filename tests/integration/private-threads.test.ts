@@ -1396,6 +1396,8 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       const saved = await store.read(w.id);
       const [a, b] = saved.runs;
       if (!a || !b) throw Error("missing runs");
+      const threadId = a.threadId;
+      if (!threadId) throw Error("missing thread");
       let providerCalls = 0;
       const runner = new PiRunner((model, context) => {
         providerCalls++;
@@ -1409,7 +1411,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
               type: "toolCall",
               id: "history",
               name: "query_chat_history",
-              arguments: { threadId: a.threadId },
+              arguments: { threadId },
             },
           ];
         } else {

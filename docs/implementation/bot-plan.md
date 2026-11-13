@@ -50,7 +50,7 @@ This document records the foundation's implementation order.
 
 Pi upstream currently names packages `@earendil-works/pi-agent-core` and
 `@earendil-works/pi-ai`; older examples use `@mariozechner`. The reviewed upstream
-manifests declare version 0.85.1 and Node >=22.19.0. Verify the actual published
+release is pinned to 1.5.2 and requires Node >=22.19.0. Verify the actual published
 release, pin compatible versions together, and code against that release rather than
 mixing examples from both generations. [Pi packages](https://github.com/earendil-works/pi),
 [runtime manifest](https://github.com/earendil-works/pi/blob/main/packages/agent/package.json)
@@ -367,7 +367,7 @@ HTTPS behavior and the complete real Telegram scheduled-recap demonstration. See
 
 The local provider is explicitly OpenAI, with provisional `gpt-4.1-mini`. Packages
 `@earendil-works/pi-agent-core`, `@earendil-works/pi-ai` and the extension loader package
-`@earendil-works/pi-coding-agent` are pinned together at 0.85.1.
+`@earendil-works/pi-coding-agent` are pinned together at 1.5.2.
 Operator-installed [plugins are Pi extensions](../design/llm-extensions.md), with a
 documented headless subset and explicit workspace/tool grants.
 Node 24 image contract verification ran on v24.21.0. Application source uses no

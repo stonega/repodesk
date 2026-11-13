@@ -1,9 +1,13 @@
 # LLM extensions (plugins)
 
-Status: implemented headless subset, Pi 0.85.1. **Plugin and Pi extension mean the
+Status: implemented headless subset, Pi 1.5.2. **Plugin and Pi extension mean the
 same thing.** An extension is executable JavaScript/TypeScript with a default
 `(pi: ExtensionAPI) => void | Promise<void>` factory. It can add model tools and
 supported lifecycle hooks. Instruction skills remain Markdown managed in the panel.
+
+The [GitHub plugin RFC](github-plugins.md) proposes a separate isolated third-party
+package profile and author SDK. It does not change this implemented local-file
+contract or provide repository installation today.
 
 ## Compatibility
 
@@ -11,15 +15,15 @@ The worker uses Pi's `DefaultResourceLoader`, with all automatic discovery disab
 explicit local file paths and isolated temporary working directories. Existing Pi
 extension files using the following APIs load unchanged. Pi's loader handles TypeScript,
 `@mariozechner/*` aliases and `@sinclair/typebox` compatibility imports. We pin
-`@earendil-works/pi-coding-agent` alongside `pi-agent-core` and `pi-ai` at 0.85.1;
+`@earendil-works/pi-coding-agent` alongside `pi-agent-core` and `pi-ai` at 1.5.2;
 the added dependency supplies the real loader, API types and extension helper exports.
 It also brings Pi's transitive CLI/TUI dependencies, but no coding tools are enabled.
 
 | API | Headless behavior |
 | --- | --- |
-| `pi.registerTool` | Registers explicitly granted tools; TypeBox validation and sequential execution. Rendering callbacks are unused. Register during factory initialization only. |
-| `pi.on("before_agent_start")` | Receives prompt/system prompt; system prompt replacements chain in registration order. Custom-message injection is unsupported. |
-| `pi.on("context")` | Receives a copy of model messages before every provider dispatch; message replacements chain and count against the normal input budget. Only standard user/assistant/tool-result messages are accepted. |
+| `pi.registerTool` | Registers explicitly granted tools; JSON Schema validation via Pi Schema and sequential execution. Rendering callbacks are unused. Register during factory initialization only. |
+| `pi.on("before_agent_start")` | Receives `messageType: "user"` and prompt/system prompt; system prompt replacements chain in registration order. Custom-message injection is unsupported. |
+| `pi.on("context")` | Receives a copy of model messages before every provider dispatch; message replacements chain and count against the normal input budget. Only standard user/assistant/tool-result messages are accepted. Pi transcript system messages retain the application-owned prompt and tools outside this hook. |
 | `pi.on("tool_call")` | Can veto a validated tool call with `block`, `reason`, `terminate`. Input mutation is rejected. Application guards run first and again afterward. |
 | `pi.on("tool_result")` | Observation only. Replacing or mutating durable tool results is rejected. |
 | `session_start`, `agent_start`, `agent_end`, `session_shutdown` | Awaited lifecycle notifications for each run invocation, including continuations. `agent_end` receives messages with thinking removed. Shutdown cleans up on success or failure. |
@@ -27,10 +31,16 @@ It also brings Pi's transitive CLI/TUI dependencies, but no coding tools are ena
 | `pi.registerFlag`, `pi.getFlag`, `pi.events` | Pi's in-memory flag defaults/event bus; no CLI flag overrides. Subscriptions are invalidated at shutdown. |
 | Context | `hasUI: false`, `mode: "print"`, temporary `cwd`, model/thinking metadata, cancellation signal, current system prompt. |
 
+TypeBox schemas remain accepted as JSON Schema. Pi Schema validates arguments
+using its coercion rules; TypeBox-only refinements, codecs and registered formats
+are not evaluated. Extensions must enforce checks outside JSON Schema during
+tool execution.
+
 Terminal dialogs, commands/shortcuts, session manipulation, provider registration,
 model switching, persistent custom entries, message injection, dynamic tool registration,
-and unsupported event names fail explicitly. There is no blanket claim that every
-Pi community extension works. Hook failures stop the run with a fixed error code;
+nested tool execution (`ctx.tools` / `ctx.executeTool`), and unsupported event names
+fail explicitly. There is no blanket claim that every Pi community extension works.
+Hook failures stop the run with a fixed error code;
 raw extension exception messages are excluded from application logs and model results.
 
 Application-owned built-ins may explicitly allowlist stable tool fault codes for

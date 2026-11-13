@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { getCurrentTools } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { compactionPlan } from "../../src/agent/compaction.ts";
 import {
@@ -215,6 +216,8 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     });
     test("real Pi tool flow silently records a new discussion and recalls it by ID", async () => {
       const { w, run } = await seed(false);
+      const source = run.sources[0];
+      if (!source) throw Error("missing source");
       let count = 0;
       const runner = new PiRunner((_model, context, options) => {
         expect(options?.sessionId).toMatch(/^[a-f0-9]{64}$/);
@@ -232,15 +235,17 @@ const rootUrl = process.env.TEST_DATABASE_URL;
                     summary: "Single server",
                     decisions: ["Use one server"],
                     todos: ["Backup storage"],
-                    messageIds: [run.sources[0]?.id],
+                    messageIds: [source.id],
                   },
                 },
               ]
             : [],
         );
-        expect(context.tools?.some((t) => t.name === "record_discussion")).toBe(
-          true,
-        );
+        expect(
+          getCurrentTools(context.messages)?.some(
+            (t) => t.name === "record_discussion",
+          ),
+        ).toBe(true);
         const stream = new AssistantMessageEventStream();
         stream.push({
           type: "done",

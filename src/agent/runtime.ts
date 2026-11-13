@@ -281,9 +281,14 @@ export class PiRunner implements AgentRunner {
         input.signal.throwIfAborted();
         await input.guard();
         if (extensions) {
+          const systemMessages = context.messages.filter(
+            (message) => message.role === "system",
+          );
           const event: ContextEvent = {
             type: "context",
-            messages: structuredClone(context.messages),
+            messages: structuredClone(
+              context.messages.filter((message) => message.role !== "system"),
+            ),
           };
           await extensions.emit(event, (value) => {
             const result = value as { messages?: AgentMessage[] } | undefined;
@@ -291,15 +296,18 @@ export class PiRunner implements AgentRunner {
           });
           context = {
             ...context,
-            messages: event.messages.map((message) => {
-              if (
-                message.role === "user" ||
-                message.role === "assistant" ||
-                message.role === "toolResult"
-              )
-                return message;
-              throw new Fault("extension_api_unsupported", 409);
-            }),
+            messages: [
+              ...systemMessages,
+              ...event.messages.map((message) => {
+                if (
+                  message.role === "user" ||
+                  message.role === "assistant" ||
+                  message.role === "toolResult"
+                )
+                  return message;
+                throw new Fault("extension_api_unsupported", 409);
+              }),
+            ],
           };
           input.signal.throwIfAborted();
           await input.guard();
@@ -519,16 +527,16 @@ export class PiRunner implements AgentRunner {
           };
         }
       },
-      shouldStopAfterTurn: async () => {
+      finishTurn: async ({ message }) => {
+        if (["error", "aborted"].includes(message.stopReason)) return;
         if (
           (input.maxTurns !== undefined && turns >= input.maxTurns) ||
           blocked ||
           input.signal.aborted ||
           (await input.shouldPause?.())
         )
-          return true;
+          return { action: "end" };
         await queueInput();
-        return false;
       },
     });
     agent.subscribe(async (event) => {

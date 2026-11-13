@@ -45,6 +45,12 @@ RepoDesk 是一个自托管的 Telegram AI 助手，让你在聊天中查询 Git
 | [Google Search Console](search-console.md) | 查询选定资源的搜索表现、Sitemap 与 URL 索引状态 |
 | [Cloudflare](cloudflare.md) | 查询流量、DNS、Workers、存储与安全资源；经确认修改 DNS、缓存、设置和路由 |
 
+## Developer guides
+
+| Guide | What you can do |
+| --- | --- |
+| [Plugin development](plugin-development.md) | Build, test and manually install a reviewed Pi file plugin hosted on GitHub |
+
 ## 使用范围
 
 当前版本面向自托管试用；首次使用请先用测试机器人和测试仓库验证自己的模型、权限和交付流程。可用功能取决于部署版本、已连接的服务和工作区设置。RepoDesk 不提供预先连接的公共机器人。

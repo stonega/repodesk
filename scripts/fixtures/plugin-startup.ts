@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { getCurrentTools } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
+import { pluginRuntime } from "../../src/agent/plugin-runtime.ts";
 import { PluginService } from "../../src/agent/plugin-service.ts";
 import { type AgentInput, selectedModel } from "../../src/agent/runtime.ts";
 import { applicationTools } from "../../src/agent/tools.ts";
@@ -11,6 +13,7 @@ import { CloudflareService } from "../../src/cloudflare/service.ts";
 import { CodeTruthClient } from "../../src/code-truth/client.ts";
 import { codeTruthTools } from "../../src/code-truth/config.ts";
 import { emptyCoding } from "../../src/coding/config.ts";
+import { config } from "../../src/config.ts";
 import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
 import { type Deployment, Fault, settingsSchema } from "../../src/domain.ts";
@@ -37,7 +40,9 @@ export const pluginStartupCases = [
 ] as const;
 
 /** Same factories as production, with synthetic tenant state and no external access. */
-export async function verifyPluginStartup() {
+export async function verifyPluginStartup(
+  composition: "injected" | "configured" = "injected",
+) {
   const cases = pluginStartupCases.flatMap((mode) =>
     (["owner", "member"] as const).map((role) => ({ mode, role })),
   );
@@ -175,33 +180,62 @@ export async function verifyPluginStartup() {
         "https://fixture.invalid",
         forbidden,
       );
-      const plugins = new PluginService(
-        store,
-        undefined,
-        mode === "missing_service" ? undefined : code,
-        apps,
-        new CloudflareService(store, key, forbidden),
-        new SearchConsoleService(store, key, forbidden, google),
-        google,
-        undefined,
-        browserRuntime(
-          store,
-          key,
-          {
-            BROWSER_HOST_SOCKET: ["missing_service", "disconnected"].includes(
-              mode,
+      const plugins =
+        composition === "configured"
+          ? pluginRuntime(
+              store,
+              config({
+                DATABASE_URL: "postgres://unused@127.0.0.1:1/unused",
+                ENCRYPTION_KEY: key,
+                PUBLIC_ORIGIN: "https://fixture.invalid",
+                CODE_TRUTH_URL:
+                  mode === "missing_service"
+                    ? undefined
+                    : "http://unused.invalid",
+                CODE_TRUTH_TOKEN:
+                  mode === "missing_service"
+                    ? undefined
+                    : "synthetic".repeat(4),
+                BROWSER_HOST_SOCKET: [
+                  "missing_service",
+                  "disconnected",
+                ].includes(mode)
+                  ? undefined
+                  : "/unavailable-browser.sock",
+                BROWSER_HOST_TOKEN_FILE: "/unavailable-browser-token",
+              }),
+              apps,
             )
-              ? undefined
-              : "/unavailable-browser.sock",
-            BROWSER_HOST_TOKEN_FILE: "/unavailable-browser-token",
-          },
-          async () => {
-            credentials++;
-            throw new Error("Optional Browser credential read during startup");
-          },
-        ),
-        new NowledgeService(store, key, forbidden),
-      );
+          : new PluginService(
+              store,
+              undefined,
+              mode === "missing_service" ? undefined : code,
+              apps,
+              new CloudflareService(store, key, forbidden),
+              new SearchConsoleService(store, key, forbidden, google),
+              google,
+              undefined,
+              browserRuntime(
+                store,
+                key,
+                {
+                  BROWSER_HOST_SOCKET: [
+                    "missing_service",
+                    "disconnected",
+                  ].includes(mode)
+                    ? undefined
+                    : "/unavailable-browser.sock",
+                  BROWSER_HOST_TOKEN_FILE: "/unavailable-browser-token",
+                },
+                async () => {
+                  credentials++;
+                  throw new Error(
+                    "Optional Browser credential read during startup",
+                  );
+                },
+              ),
+              new NowledgeService(store, key, forbidden),
+            );
       const model = selectedModel("gpt-4.1-mini");
       const input: AgentInput = {
         workspaceId: w.id,
@@ -234,7 +268,8 @@ export async function verifyPluginStartup() {
         w.id,
         (_model, context) => {
           modelCalls++;
-          const names = context.tools?.map((tool) => tool.name) ?? [];
+          const names =
+            getCurrentTools(context.messages)?.map((tool) => tool.name) ?? [];
           for (const name of browserTools)
             assert.equal(
               names.includes(name),
@@ -257,7 +292,7 @@ export async function verifyPluginStartup() {
             ...codeTruthTools,
           ])
             assert.ok(names.includes(name), `${mode}: missing ${name}`);
-          const metadata = context.tools?.find(
+          const metadata = getCurrentTools(context.messages)?.find(
             (tool) => tool.name === "query_github_metadata",
           );
           assert.ok(

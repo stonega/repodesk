@@ -2,6 +2,7 @@ import type {
   AgentMessage,
   AgentToolResult,
 } from "@earendil-works/pi-agent-core";
+import type { JsonValue } from "@earendil-works/pi-ai";
 import type { Run } from "../domain.ts";
 import { browserTools } from "./config.ts";
 
@@ -55,11 +56,11 @@ export function restoreBrowserPause(run: Run) {
       continue;
     const prior = run.tools[tool.id];
     if (position < index && prior?.state !== "done") return false;
-    const result: AgentToolResult<unknown> =
+    const result: AgentToolResult<JsonValue> =
       tool.id === wait.callId
         ? receipt
         : prior?.state === "done"
-          ? (prior.result as AgentToolResult<unknown>)
+          ? (prior.result as AgentToolResult<JsonValue>)
           : {
               content: [{ type: "text", text: "browser_waiting" }],
               details: {},

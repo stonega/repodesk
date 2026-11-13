@@ -1,9 +1,6 @@
 import { serve } from "@hono/node-server";
-import { PluginService } from "./agent/plugin-service.ts";
+import { pluginRuntime } from "./agent/plugin-runtime.ts";
 import { createApp } from "./app.ts";
-import { browserRuntime } from "./browser/runtime.ts";
-import { CloudflareService } from "./cloudflare/service.ts";
-import { CodeTruthClient } from "./code-truth/client.ts";
 import { LocalRunnerClient } from "./coding/local/client.ts";
 import { config } from "./config.ts";
 import { database } from "./db/pool.ts";
@@ -11,11 +8,8 @@ import { Store } from "./db/repositories.ts";
 import { configuredGitHubApp } from "./github/app.ts";
 import { GitHubApps } from "./github/registry.ts";
 import { GitHubService } from "./github/service.ts";
-import { GoogleService } from "./google/service.ts";
-import { NowledgeService } from "./nowledge-mem/service.ts";
 import { RuntimeLogger } from "./observability/logs.ts";
 import { ReviewService } from "./review-bot/service.ts";
-import { SearchConsoleService } from "./search-console/service.ts";
 import { SetupService } from "./setup/service.ts";
 import { ReleaseUpdates } from "./updates/releases.ts";
 
@@ -23,7 +17,6 @@ const cfg = config();
 const pool = database(cfg.DATABASE_URL);
 const log = new RuntimeLogger(pool, "app");
 const store = new Store(pool, log, cfg.ENCRYPTION_KEY);
-const google = new GoogleService(store, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN);
 const githubApp = new GitHubApps(
   store,
   cfg.ENCRYPTION_KEY,
@@ -39,25 +32,7 @@ const app = createApp(
     cfg.TELEGRAM_TRANSPORT,
   ),
   cfg.PUBLIC_ORIGIN,
-  new PluginService(
-    store,
-    cfg.PI_EXTENSIONS_FILE,
-    cfg.CODE_TRUTH_URL && cfg.CODE_TRUTH_TOKEN
-      ? new CodeTruthClient(cfg.CODE_TRUTH_URL, cfg.CODE_TRUTH_TOKEN)
-      : undefined,
-    githubApp,
-    new CloudflareService(
-      store,
-      cfg.ENCRYPTION_KEY,
-      undefined,
-      cfg.PUBLIC_ORIGIN,
-    ),
-    new SearchConsoleService(store, cfg.ENCRYPTION_KEY, undefined, google),
-    google,
-    undefined,
-    browserRuntime(store, cfg.ENCRYPTION_KEY, cfg),
-    new NowledgeService(store, cfg.ENCRYPTION_KEY),
-  ),
+  pluginRuntime(store, cfg, githubApp),
   new GitHubService(store, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN, githubApp),
   cfg.ENCRYPTION_KEY,
   cfg.CODEX_RUNNER_URL && cfg.CODEX_RUNNER_TOKEN

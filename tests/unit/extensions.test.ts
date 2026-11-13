@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { Type } from "typebox";
 import {
@@ -170,9 +171,15 @@ test("loads an unchanged Pi extension, runs its hook and validated tool, and che
   const saved: AgentMessage[] = [];
   let calls = 0;
   const runner = new PiRunner((_model, context) => {
-    expect(context.systemPrompt).toContain("Existing policy");
-    expect(context.systemPrompt).toContain("Use count_words");
-    expect(context.tools?.map((tool) => tool.name)).toEqual(["count_words"]);
+    expect(getCurrentSystemPrompt(context.messages)).toContain(
+      "Existing policy",
+    );
+    expect(getCurrentSystemPrompt(context.messages)).toContain(
+      "Use count_words",
+    );
+    expect(getCurrentTools(context.messages)?.map((tool) => tool.name)).toEqual(
+      ["count_words"],
+    );
     return ++calls === 1
       ? stream([call], "toolUse")
       : stream([{ type: "text", text: "Done" }]);
@@ -196,8 +203,8 @@ test("workspace grants exclude extensions before module import", async () => {
     'throw Error("must not load"); export default function () {}',
   );
   const runner = new PiRunner((_model, context) => {
-    expect(context.tools).toEqual([]);
-    expect(context.systemPrompt).toBe("Existing policy");
+    expect(getCurrentTools(context.messages)).toEqual([]);
+    expect(getCurrentSystemPrompt(context.messages)).toBe("Existing policy");
     return stream([{ type: "text", text: "Done" }]);
   }, plugins);
   await runner.run(
@@ -354,6 +361,91 @@ test("each run gets fresh factory state; invalid arguments, revocation and appro
       }),
     ),
   ).rejects.toThrow("revoked");
+});
+
+test("context hooks preserve application-owned transcript instructions and tools", async () => {
+  const { catalog: plugins } = await catalog(
+    `export default pi => {
+      pi.on("before_agent_start", event => {
+        if (event.messageType !== "user") throw Error("wrong message type");
+      });
+      pi.on("context", event => {
+        if (event.messages.some(message => message.role === "system")) throw Error("system exposed");
+        return {messages: [{role:"user",content:"Filtered context",timestamp:1}]};
+      });
+    };`,
+    { tools: [] },
+  );
+  let requests = 0;
+  const result = await new PiRunner((_model, context) => {
+    requests++;
+    expect(getCurrentSystemPrompt(context.messages)).toBe("Existing policy");
+    expect(getCurrentTools(context.messages).map((tool) => tool.name)).toEqual([
+      "read",
+    ]);
+    expect(context.messages.map((message) => message.role)).toEqual([
+      "system",
+      "user",
+    ]);
+    expect(context.messages.at(-1)?.content).toBe("Filtered context");
+    return stream([{ type: "text", text: "Done" }]);
+  }, plugins).run(
+    input({
+      tools: [
+        {
+          name: "read",
+          label: "Read",
+          description: "Read",
+          parameters: Type.Object({}),
+          execute: async () => ({ content: [], details: {} }),
+        },
+      ],
+    }),
+  );
+  expect(requests).toBe(1);
+  expect(result.text).toBe("Done");
+});
+
+test("extensions cannot use nested tool APIs to bypass application execution", async () => {
+  for (const access of ["ctx.tools", 'ctx.executeTool("read", {})']) {
+    const { catalog: plugins } = await catalog(
+      `import { Type } from "typebox";
+       export default pi => pi.registerTool({
+         name:"count_words",label:"Test",description:"Test",
+         parameters:Type.Object({text:Type.String()}),
+         execute:async (_id, _args, _signal, _update, ctx) => {
+           await ${access};
+           return {content:[{type:"text",text:"unexpected access"}],details:{}};
+         }
+       });`,
+    );
+    let executed = 0;
+    const result = await new PiRunner(
+      () => stream([call], "toolUse"),
+      plugins,
+    ).run(
+      input({
+        maxTurns: 1,
+        tools: [
+          {
+            name: "read",
+            label: "Read",
+            description: "Read",
+            parameters: Type.Object({}),
+            execute: async () => {
+              executed++;
+              return { content: [], details: {} };
+            },
+          },
+        ],
+      }),
+    );
+    expect(executed).toBe(0);
+    expect(
+      result.transcript.find((message) => message.role === "toolResult")
+        ?.content,
+    ).toEqual([{ type: "text", text: "extension_tool_failed" }]);
+  }
 });
 
 test("context hook changes count against input budget before any provider request", async () => {

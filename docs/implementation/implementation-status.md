@@ -1,5 +1,63 @@
 # Implementation evidence
 
+## Pi 1.5.2 dependency upgrade (2026-11-13)
+
+The npm `latest` tags for `@earendil-works/pi-agent-core`, `pi-ai` and
+`pi-coding-agent` resolve to **1.5.2**. All three direct dependencies and the Bun
+lockfile move together from 0.85.1. See the upstream
+[agent](https://github.com/earendil-works/pi/blob/v1.5.2/packages/agent/CHANGELOG.md),
+[AI](https://github.com/earendil-works/pi/blob/v1.5.2/packages/ai/CHANGELOG.md) and
+[extension](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/CHANGELOG.md)
+changelogs for the intervening changes.
+
+The adapter uses Pi's `finishTurn` boundary in place of `shouldStopAfterTurn`,
+retaining hard exits, cancellation, limits and queued-input handling. Provider
+fixtures read prompts and tools from normalized transcript system messages.
+The headless `context` hook continues to receive only conversational messages;
+application-owned system instructions and granted tools remain outside its
+replacement list. User-start hooks include `messageType: "user"`. The new nested
+tool APIs remain unsupported rather than bypassing application execution guards.
+Persisted Browser wait results use Pi's JSON-compatible details type. The runtime
+contract reports Pi's installed version instead of a hardcoded historical value.
+
+New deterministic regressions verify prompt/tool preservation across context
+replacement and denial of nested tool access. Existing extension, steering,
+pause/resume, cancellation, permission and duplicate-event coverage remains in
+the verification scope. Tool schemas remain TypeBox-built JSON Schema; Pi 1.5
+now validates these through Pi Schema. No migration or new application-owned
+dependency is added.
+
+The Pi upgrade's complete run passes **1,651 tests across 167 files** with Bun
+1.3.14 and disposable PostgreSQL. Frozen-lockfile installation, Biome (nine existing
+warnings in the incident diagnostic script), root and Code Truth strict typechecks, the
+production build and **70 selected browser scenarios** pass. Local Node 22.22.3
+and the built application image on Node 24.21.0 pass the runtime contract,
+including **16 injected and 16 configured production-startup cases with zero
+external startup calls** after the concurrent composition cleanup described below.
+The image contract runs with networking disabled; its image ID is
+`sha256:b66aee4f42235e5158bd33326447ba8562f8d943efad392bf4e0b20b84a1d45f`.
+`docker compose config --quiet` also passes.
+
+Concurrent cleanup changed server/worker plugin wiring and startup fixtures
+during the final full run. Its 1,651-test total covers the Pi upgrade before
+those changes, not the entire combined checkout. The combined checkout subsequently
+passes fresh lint, types, build, both startup tests, the local runtime contract
+and the rebuilt image's offline contract. The full suite is not repeated for that
+separate cleanup; its remaining validation belongs to that workstream.
+
+Browser selection compares the local candidate with clean main `4bde2fc`, whose
+runtime source is the previously verified `c3473d9`; the later baseline commits
+contain documentation only. Selected files are `model-providers.e2e.ts`,
+`plugins-catalog.e2e.ts`, `skill-management.e2e.ts`, `team-workflows.e2e.ts` and
+`browser.e2e.ts`, covering model/catalog settings, extension configuration,
+skills, schedule controls and Browser continuation consumers. No earlier test
+result from the baseline is reused. Candidate browser and image results remain
+valid after the service-test fixture correction because their runtime source,
+dependencies and configuration are unchanged. The later composition cleanup
+gets the fresh image checks above; browser-facing code and fixtures remain unchanged.
+Other browser flows, live
+model/Telegram behavior and deployment remain outside this local verification.
+
 ## Authenticated repository statistics for schedules (2026-11-13)
 
 The existing `query_github_metadata` tool now accepts `kind: repository` to read

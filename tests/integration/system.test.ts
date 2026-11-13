@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import {
+  type AssistantMessage,
+  getCurrentSystemPrompt,
+} from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { login, session } from "../../src/admin/auth.ts";
 import { extensionToolExecution } from "../../src/agent/extension-execution.ts";
@@ -1807,7 +1811,7 @@ suite("PostgreSQL integration (isolated database)", () => {
     );
     const runner = new PiRunner((model) => {
       const stream = new AssistantMessageEventStream();
-      const message = {
+      const message: AssistantMessage = {
         role: "assistant" as const,
         content: [
           {
@@ -3539,7 +3543,9 @@ suite("PostgreSQL integration (isolated database)", () => {
     expect(run?.instructions[0]?.body).toBe("Use bullet lists");
     expect((await second.read(w.id)).runs).toHaveLength(1);
     const runner = new PiRunner((model, context) => {
-      expect(context.systemPrompt).toContain("Use bullet lists");
+      expect(getCurrentSystemPrompt(context.messages)).toContain(
+        "Use bullet lists",
+      );
       const stream = new AssistantMessageEventStream();
       const message = {
         role: "assistant" as const,

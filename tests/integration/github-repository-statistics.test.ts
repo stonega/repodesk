@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
+import { getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { PluginService } from "../../src/agent/plugin-service.ts";
 import { migrate } from "../../src/db/migrate.ts";
@@ -320,7 +321,9 @@ const statistics = {
       const stream: StreamFn = (model, context) => {
         modelCalls++;
         expect(
-          context.tools?.some((t) => t.name === "query_github_metadata"),
+          getCurrentTools(context.messages)?.some(
+            (t) => t.name === "query_github_metadata",
+          ),
         ).toBe(true);
         const result = context.messages.findLast(
           (m) => m.role === "toolResult",
@@ -337,7 +340,9 @@ const statistics = {
           text = `${data.repository}: ${data.stars} stars, ${data.forks} forks, ${data.watchers} watchers. ${data.url} Retrieved ${data.retrievedAt}`;
         } else {
           expect(p.requests).toHaveLength(0);
-          expect(context.systemPrompt).toContain("kind: repository");
+          expect(getCurrentSystemPrompt(context.messages)).toContain(
+            "kind: repository",
+          );
         }
         const message = {
           role: "assistant" as const,

@@ -4,6 +4,11 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import {
+  getCurrentSystemPrompt,
+  getCurrentTools,
+  PI_AI_VERSION,
+} from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { Type } from "typebox";
 import { ExtensionCatalog } from "../src/agent/extensions.ts";
@@ -238,7 +243,9 @@ try {
   let requests = 0;
   const plugins = await ExtensionCatalog.load(manifest);
   const runner = new PiRunner((_model, context) => {
-    assert.ok(context.systemPrompt?.includes("Extension active."));
+    assert.ok(
+      getCurrentSystemPrompt(context.messages)?.includes("Extension active."),
+    );
     return ++requests === 1
       ? emit(
           [
@@ -290,14 +297,18 @@ try {
     ],
   );
   const runner = new PiRunner((_model, context) => {
-    assert.ok(context.systemPrompt?.includes("# RepoDesk GitHub"));
+    assert.ok(
+      getCurrentSystemPrompt(context.messages)?.includes("# RepoDesk GitHub"),
+    );
     for (const name of [
       "find_connected_repository",
       "query_github_metadata",
       "propose_github_issue",
       "propose_github_pull_request_action",
     ])
-      assert.ok(context.tools?.some((tool) => tool.name === name));
+      assert.ok(
+        getCurrentTools(context.messages)?.some((tool) => tool.name === name),
+      );
     return emit([{ type: "text", text: "github ready" }], "stop");
   }, catalog);
   assert.equal(
@@ -314,9 +325,15 @@ try {
   obsidian.executionFence = async () => 0;
   const notesRunner = new PiRunner(
     (_model, context) => {
-      assert.ok(context.systemPrompt?.includes("# RepoDesk Obsidian"));
+      assert.ok(
+        getCurrentSystemPrompt(context.messages)?.includes(
+          "# RepoDesk Obsidian",
+        ),
+      );
       for (const name of ["obsidian_query", "obsidian_read", "obsidian_write"])
-        assert.ok(context.tools?.some((tool) => tool.name === name));
+        assert.ok(
+          getCurrentTools(context.messages)?.some((tool) => tool.name === name),
+        );
       return emit([{ type: "text", text: "obsidian ready" }], "stop");
     },
     ExtensionCatalog.fromSnapshot(
@@ -333,6 +350,7 @@ try {
 }
 // Exercise the same combined plugin path in CI and every image's pre-cutover gate.
 const startupCases = await verifyPluginStartup();
+const configuredStartupCases = await verifyPluginStartup("configured");
 let sourceCalls = 0,
   sourceTurns = 0;
 const unavailableCodeClient = new CodeTruthClient(
@@ -392,7 +410,7 @@ assert.equal(sourceCalls, 1);
 process.stdout.write(
   `${JSON.stringify({
     node: process.version,
-    pi: "0.85.1",
+    pi: PI_AI_VERSION,
     toolFlow: true,
     restoration: true,
     eventOrdering: true,
@@ -403,6 +421,7 @@ process.stdout.write(
     obsidianDefaults: true,
     codeTruthUnavailable: true,
     pluginStartupCases: startupCases,
+    configuredPluginStartupCases: configuredStartupCases,
     externalStartupCalls: 0,
     webReader: true,
     browserNetwork: true,

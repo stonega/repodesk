@@ -50,7 +50,7 @@ See Setup for prerequisites. Normal checks never call live Telegram or model API
 ## Stack
 
 TypeScript strict, Bun packages/build/tests, Biome, Hono on Node 24, React Router 7,
-Pi 0.85.1, PostgreSQL 17 and pg-boss. API and worker share one Docker image and durable
+Pi 1.5.2, PostgreSQL 17 and pg-boss. API and worker share one Docker image and durable
 configuration. The local pilot uses transactionally locked workspace aggregates;
 read the architecture's capacity limits before scaling.
 

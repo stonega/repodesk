@@ -7,7 +7,7 @@ is the [GitHub journey](../design/github-workflows.md).
 
 | Slices | Local result | Remaining external gate |
 | --- | --- | --- |
-| I01 | Pi 0.85.1, explicit OpenAI provider, fake tool flow, Node 24 contract checks | Credentialed model comparison and billing review |
+| I01 | Pi 1.5.2, explicit OpenAI provider, fake tool flow, Node 24 contract checks | Credentialed model comparison and billing review |
 | I02 | PostgreSQL migrations, atomic inbox/outbox, pg-boss adapter, worker/leases | Production capacity/load review |
 | I02A/I04A | Claimed setup, sessions, encrypted settings, verified Telegram linking, admin SPA | Staging HTTPS and browser session review on actual domain |
 | I03/I04 | Webhook/router, scoped onboarding/linking/collection, delivery state machine | Dedicated bot `/help`, visibility and group-admin checks |

@@ -6,9 +6,9 @@ import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import {
   type BeforeAgentStartEventResult,
   DefaultResourceLoader,
-  type ExtensionContext,
   type ExtensionEvent,
   type ExtensionFactory,
+  type ExtensionToolContext,
   type LoadExtensionsResult,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
@@ -213,7 +213,7 @@ export class ExtensionCatalog {
 /** Pi's real loader/API registrations, adapted to the application's durable run. */
 export class ExtensionHost {
   readonly tools: AgentTool[] = [];
-  private context: ExtensionContext;
+  private context: ExtensionToolContext;
   private system: string;
   private closed = false;
   private running = false;
@@ -248,6 +248,10 @@ export class ExtensionHost {
       get modelRegistry() {
         return unsupported();
       },
+      get tools() {
+        return unsupported();
+      },
+      executeTool: unsupported,
       abort: unsupported,
       shutdown: unsupported,
       compact: unsupported,
@@ -315,7 +319,7 @@ export class ExtensionHost {
                           callId,
                           definition.name,
                         ),
-                      }) as ExtensionContext)
+                      }) as ExtensionToolContext)
                     : this.context,
                 );
                 signal?.throwIfAborted();
@@ -395,6 +399,7 @@ export class ExtensionHost {
           const result = (await handler(
             {
               type: "before_agent_start",
+              messageType: "user",
               prompt: this.input.prompt,
               systemPrompt: this.system,
               systemPromptOptions: {

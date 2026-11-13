@@ -1,7 +1,4 @@
-import { PluginService } from "./agent/plugin-service.ts";
-import { browserRuntime } from "./browser/runtime.ts";
-import { CloudflareService } from "./cloudflare/service.ts";
-import { CodeTruthClient } from "./code-truth/client.ts";
+import { pluginRuntime } from "./agent/plugin-runtime.ts";
 import { LocalRunnerClient } from "./coding/local/client.ts";
 import { CodingService } from "./coding/service.ts";
 import { config } from "./config.ts";
@@ -12,12 +9,9 @@ import { GitHubIssues } from "./github/issues.ts";
 import { GitHubPullRequests } from "./github/pull-requests.ts";
 import { GitHubApps } from "./github/registry.ts";
 import { GitHubUsers } from "./github/users.ts";
-import { GoogleService } from "./google/service.ts";
 import { startWorker } from "./jobs/queue.ts";
-import { NowledgeService } from "./nowledge-mem/service.ts";
 import { RuntimeLogger } from "./observability/logs.ts";
 import { ReviewExecutor } from "./review-bot/executor.ts";
-import { SearchConsoleService } from "./search-console/service.ts";
 import { SetupService } from "./setup/service.ts";
 import { qwenRuntime } from "./transcription/runtime.ts";
 
@@ -25,31 +19,16 @@ const cfg = config();
 const pool = database(cfg.DATABASE_URL);
 const log = new RuntimeLogger(pool, "worker");
 const store = new Store(pool, log, cfg.ENCRYPTION_KEY);
-const google = new GoogleService(store, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN);
 const githubApps = new GitHubApps(
   store,
   cfg.ENCRYPTION_KEY,
   configuredGitHubApp(cfg),
 );
-const plugins = new PluginService(
-  store,
-  cfg.PI_EXTENSIONS_FILE,
-  cfg.CODE_TRUTH_URL && cfg.CODE_TRUTH_TOKEN
-    ? new CodeTruthClient(cfg.CODE_TRUTH_URL, cfg.CODE_TRUTH_TOKEN)
-    : undefined,
-  githubApps,
-  new CloudflareService(
-    store,
-    cfg.ENCRYPTION_KEY,
-    undefined,
-    cfg.PUBLIC_ORIGIN,
-  ),
-  new SearchConsoleService(store, cfg.ENCRYPTION_KEY, undefined, google),
-  google,
-  undefined,
-  browserRuntime(store, cfg.ENCRYPTION_KEY, cfg),
-  new NowledgeService(store, cfg.ENCRYPTION_KEY),
-);
+const plugins = pluginRuntime(store, cfg, githubApps);
+const localRunner =
+  cfg.CODEX_RUNNER_URL && cfg.CODEX_RUNNER_TOKEN
+    ? new LocalRunnerClient(cfg.CODEX_RUNNER_URL, cfg.CODEX_RUNNER_TOKEN)
+    : undefined;
 const stop = await startWorker(
   store,
   new SetupService(
@@ -65,21 +44,12 @@ const stop = await startWorker(
   new CodingService(
     store,
     githubApps,
-    cfg.CODEX_RUNNER_URL && cfg.CODEX_RUNNER_TOKEN
-      ? new LocalRunnerClient(cfg.CODEX_RUNNER_URL, cfg.CODEX_RUNNER_TOKEN)
-      : undefined,
+    localRunner,
     cfg.ENCRYPTION_KEY,
     plugins.browser.coding,
   ),
   new GitHubUsers(store, githubApps, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN),
-  new ReviewExecutor(
-    store,
-    githubApps,
-    cfg.CODEX_RUNNER_URL && cfg.CODEX_RUNNER_TOKEN
-      ? new LocalRunnerClient(cfg.CODEX_RUNNER_URL, cfg.CODEX_RUNNER_TOKEN)
-      : undefined,
-    cfg.ENCRYPTION_KEY,
-  ),
+  new ReviewExecutor(store, githubApps, localRunner, cfg.ENCRYPTION_KEY),
   new GitHubPullRequests(store, githubApps),
   plugins.cloudflare,
   plugins.google,

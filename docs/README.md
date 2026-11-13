@@ -39,11 +39,15 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Repository task collaboration plan](implementation/repository-task-plan.md) | Accepted delivery contracts and remaining live rollout gates |
 | [Source grounded memory workstream](implementation/decision-memory-plan.md) | Decision cases, scoped preference revisions, correction and repository-task recall |
 | [Architecture](design/architecture.md) | Implemented local pilot and production boundaries |
+| [Codebase cleanup](implementation/codebase-cleanup.md) | Verified cleanup batches, baseline checks, deferred findings and remaining assessment scope |
 | [Admin panel](design/admin-panel.md) | P0 configuration screens, permissions, APIs and acceptance criteria |
 | [UI rules](design/ui-rules.md) | User design preferences, their scope, and how to apply and maintain them |
 | [First-run setup](design/first-run-setup.md) | Initial admin creation, bot onboarding, secrets and activation |
 | [Nowledge Mem](implementation/nowledge-mem.md) | Optional private memory recall and explicit saves through a scoped built-in adapter |
 | [LLM extensions / plugins](design/llm-extensions.md) | Existing Pi extension loading, headless compatibility, grants and recovery |
+| [GitHub plugin contract](design/github-plugins.md) | Proposed third-party repository format, SDK, isolated tools, capabilities and installation lifecycle |
+| [Plugin ecosystem research](research/plugin-ecosystems-2026-11-13.md) | Dated primary-source comparison, current implementation gaps and distribution tradeoffs |
+| [GitHub plugin delivery plan](implementation/github-plugins-plan.md) | Proposed implementation slices, developer template and verification gates |
 | [Obsidian organization notes](implementation/obsidian.md) | Default-enabled managed vault, native note formats, shared access and import/export |
 | [Shared host browser](implementation/browser.md) | Default-enabled Browser plugin, private headed sessions, shared consumers and secure input |
 | [Built-in web reader](implementation/web-reader.md) | Defuddle Markdown extraction, public network boundaries and durable reads |

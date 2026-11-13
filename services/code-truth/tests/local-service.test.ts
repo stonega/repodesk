@@ -5,7 +5,11 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { AssistantMessage } from "@earendil-works/pi-ai";
+import {
+  type AssistantMessage,
+  getCurrentSystemPrompt,
+  getCurrentTools,
+} from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { create } from "tar";
 import { ExtensionCatalog } from "../../../src/agent/extensions.ts";
@@ -262,17 +266,21 @@ test("predefined Pi extension loads the real MCP tools with scoped factories and
     await host?.close();
     let turns = 0;
     const runner = new PiRunner((_model, context) => {
-      expect(context.systemPrompt).toContain("## Configured repositories");
-      expect(context.systemPrompt).toContain(
+      expect(getCurrentSystemPrompt(context.messages)).toContain(
+        "## Configured repositories",
+      );
+      expect(getCurrentSystemPrompt(context.messages)).toContain(
         "Never use that syntax for Code Truth",
       );
-      expect(context.systemPrompt).toContain(
+      expect(getCurrentSystemPrompt(context.messages)).toContain(
         "[source:package.json]` is invalid",
       );
-      expect(context.systemPrompt).toContain("`package.json:1–111`");
-      expect(context.tools?.map((tool) => tool.name)).toContain(
-        "get_code_context",
+      expect(getCurrentSystemPrompt(context.messages)).toContain(
+        "`package.json:1–111`",
       );
+      expect(
+        getCurrentTools(context.messages)?.map((tool) => tool.name),
+      ).toContain("get_code_context");
       turns++;
       if (turns === 2)
         expect(JSON.stringify(context.messages)).toContain(

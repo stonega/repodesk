@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import {
   type AgentInput,
@@ -645,10 +646,10 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       let requests = 0;
       const pi = new PiRunner((_model, context) => {
         requests++;
-        const gate = context.systemPrompt?.includes(
+        const gate = getCurrentSystemPrompt(context.messages)?.includes(
           "Return exactly REPLY or IGNORE",
         );
-        if (gate) expect(context.tools ?? []).toEqual([]);
+        if (gate) expect(getCurrentTools(context.messages) ?? []).toEqual([]);
         else expect(JSON.stringify(context)).not.toContain('"text":"REPLY"');
         const stream = new AssistantMessageEventStream();
         const msg = response(gate ? "REPLY" : "详细部署步骤");

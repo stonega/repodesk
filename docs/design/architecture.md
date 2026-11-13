@@ -167,7 +167,7 @@ verified linking plus local account login is the implemented path.
 
 `AgentRunner` receives bound actor/run identity, model, context, tools, budgets and
 cancellation; returns output/status and emits awaited durable checkpoints. Pi core, AI and coding-agent packages
-are pinned to 0.85.1. [Plugins are Pi extensions](llm-extensions.md), loaded from an
+are pinned to 1.5.2. [Plugins are Pi extensions](llm-extensions.md), loaded from an
 operator registry for explicitly granted workspaces through the headless adapter.
 The Plugins panel stores per-operator revisions and file hashes in deployment JSONB;
 workers resolve that registry per run and check its revision at every guard. A local

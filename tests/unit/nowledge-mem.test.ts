@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { getCurrentSystemPrompt } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { PluginService } from "../../src/agent/plugin-service.ts";
 import { selectedModel } from "../../src/agent/runtime.ts";
@@ -116,7 +117,9 @@ describe("Nowledge Mem application adapter", () => {
     const model = selectedModel("gpt-4.1-mini");
     const runner = await plugins.runner(f.d, f.w.id, (_model, context) => {
       const toolTurn = turns++ === 0;
-      expect(context.systemPrompt).toContain("historical reference");
+      expect(getCurrentSystemPrompt(context.messages)).toContain(
+        "historical reference",
+      );
       if (!toolTurn) {
         const result = context.messages.find((m) => m.role === "toolResult");
         expect(JSON.stringify(result)).toContain("PostgreSQL");

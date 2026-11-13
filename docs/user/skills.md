@@ -5,6 +5,8 @@ They can request existing tools, but cannot grant repository access, install
 programs or provide arbitrary shell execution. **Skills** manages instructions;
 **Plugins** manages connected services and executable tools.
 
+To build a custom executable tool, see [Plugin development](plugin-development.md).
+
 ## Manage skills on GitHub
 
 We recommend keeping your skill instructions, reviews and version history in

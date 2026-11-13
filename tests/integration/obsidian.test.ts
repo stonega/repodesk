@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { unzipSync } from "fflate";
 import { claim } from "../../src/admin/auth.ts";
@@ -429,12 +430,13 @@ const url = process.env.TEST_DATABASE_URL;
         await store.deployment(),
         w.id,
         (model, context) => {
-          expect(context.systemPrompt).toContain(
+          expect(getCurrentSystemPrompt(context.messages)).toContain(
             "All active members can manage notes in interactive requests",
           );
           expect(
-            context.tools?.find((t) => t.name === "obsidian_write")
-              ?.description,
+            getCurrentTools(context.messages)?.find(
+              (t) => t.name === "obsidian_write",
+            )?.description,
           ).toContain("All active members");
           const stopReason = calls++ === 0 ? "toolUse" : "stop";
           const message: AssistantMessage = {
