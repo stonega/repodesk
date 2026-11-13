@@ -83,11 +83,20 @@ for (const width of [1280, 375]) {
         await expect(tools.getByRole("listitem")).toHaveText(spec.tools);
         const toolsBounds = await tools.boundingBox();
         expect(toolsBounds?.height).toBeLessThan(width > 640 ? 90 : 160);
-        // Supporting guides add their own collapsed disclosure row.
-        const guideRow = spec.resources?.length ? 80 : 0;
-        expect((await card.boundingBox())?.height).toBeLessThan(
-          (width > 640 ? 450 : 700) + guideRow,
-        );
+        // Long instructions remain fully readable; their length must not set
+        // a maximum card height. Bound the settings and tools independently.
+        const instructions = card.locator(".skill-preview-content > .prose");
+        await expect(instructions).toHaveText(spec.body);
+        const readable = await instructions.evaluate((element) => ({
+          height: element.clientHeight,
+          scrollHeight: element.scrollHeight,
+          width: element.clientWidth,
+          scrollWidth: element.scrollWidth,
+        }));
+        expect(readable.scrollHeight).toBeLessThanOrEqual(readable.height + 1);
+        expect(readable.scrollWidth).toBeLessThanOrEqual(readable.width + 1);
+        const settingsBounds = await card.getByLabel("Settings").boundingBox();
+        expect(settingsBounds?.height).toBeLessThan(width > 640 ? 100 : 200);
         if (spec.resources?.length) {
           await card
             .getByText(`Supporting files (${spec.resources.length})`, {

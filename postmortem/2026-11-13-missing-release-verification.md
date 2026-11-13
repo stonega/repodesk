@@ -35,6 +35,13 @@ driver correctly returned `coding_native_host_required`; the fixtures had no way
 to represent the intended host. One fake CLI also hardcoded `/usr/bin/node`
 instead of using the Node installation selected by CI.
 
+Full browser coverage also exposed an obsolete whole-card height limit for
+preset previews. The newer Telegram widget instructions exceed that limit while
+remaining correctly readable. The documented compact-preview rule explicitly
+exempts long instructions from truncation. The corrected browser contract checks
+complete, unclipped instruction text and independently bounds the settings grid
+and wrapping tool list. No application UI or skill content changed for this fix.
+
 ## Recovery
 
 Built the checked-in Actions runner image and passed the isolated nested-Docker
@@ -48,7 +55,7 @@ Re-enabled Verify and pushed the unchanged release commit to
 `verify/v0.1.48-recovery-20261113`. This created push-triggered
 [Verify run 43357867105](https://github.com/stonega/repodesk/actions/runs/43357867105).
 The published release/tag were not rewritten. No application deployment or
-failed update-request replay is part of this CI repair.
+failed update-request replay occurred during CI restoration.
 
 That run completed with **1,579 passing and six failing tests**; browser and
 container jobs were skipped. It is not passing evidence for v0.1.48. The
@@ -80,9 +87,15 @@ application-update browser scenarios pass,
 covering the version indicator, desktop/mobile themes, release notes, request
 deduplication, pending/error states and explicit retries.
 
+The corrected preset contract and application-update suites pass together:
+**14 browser scenarios**, including long preset/custom instructions, settings and
+tool layout, supporting guides, toggle failure recovery and direct custom saves.
+Desktop and mobile failure screenshots were inspected to confirm the excess
+height was readable widget instructions, rather than unused space or a layout bug.
+
 Local browser selection compares v0.1.49 with main/release commit `0424ce9`:
-only native host observations, fake-CLI tests, documentation and version metadata
-change. The five update scenarios cover the affected version/release behavior;
+only native host observations, fake-CLI/browser tests, documentation and version
+metadata change. The update and preset scenarios cover the affected contracts;
 this focused pass does not claim that v0.1.48's broader browser scope was verified.
 The new release's own Verify run must still pass its complete configured
 quality/database, browser and container jobs before publication. Record its final
