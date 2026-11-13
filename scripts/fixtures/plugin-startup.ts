@@ -253,9 +253,17 @@ export async function verifyPluginStartup() {
             "configure_repository_tasks",
             "manage_preference",
             "propose_github_issue",
+            "query_github_metadata",
             ...codeTruthTools,
           ])
             assert.ok(names.includes(name), `${mode}: missing ${name}`);
+          const metadata = context.tools?.find(
+            (tool) => tool.name === "query_github_metadata",
+          );
+          assert.ok(
+            JSON.stringify(metadata?.parameters).includes('"repository"'),
+            `${mode}: missing repository statistics query`,
+          );
           assert.ok(
             w.skills.some(
               (s) =>

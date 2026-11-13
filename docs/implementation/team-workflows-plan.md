@@ -18,7 +18,10 @@ Live provider evaluation and deployment remain separate release steps.
 ## Contracts
 
 Repository queries use the existing GitHub App registry and repository ID selection.
-Tokens request only Issues/Pull requests read permissions for one repository.
+Repository statistics use Metadata-read tokens; issue/PR queries request only
+Issues/Pull requests read permissions. Each token is scoped to one repository.
+Statistics provide current stars, forks and notification subscribers with a
+canonical URL and retrieval time, without inferring historical changes.
 Lists have bounded page/output sizes and report whether the result is complete.
 Merged PR windows use `merged_at`, not `closed_at`; issue lists exclude PRs.
 Default repository report ranges are previous complete local calendar days in the

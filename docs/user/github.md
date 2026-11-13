@@ -42,6 +42,12 @@ Ask “Help me choose a repository”, or name `owner/repository` in each reques
 - “列出 example/app 本周合并的 PR，附日期和链接。”
 - “example/app 的 Issue #42 现在是什么状态？”
 - “比较 PR #12 和 #15 的代码改动、审查意见和未解决问题。”
+- “Show the current stars, forks and watchers for example/app, with its link and retrieval time.”
+
+Repository statistics use the connected GitHub App's existing Metadata read
+permission. Watchers are users subscribed to repository notifications. The
+report provides current totals; historical counts and daily changes require
+separate verified evidence. These queries also work in repository schedules.
 
 GitHub 连接本身支持元数据、PR 改动及审查记录查询，不要求启动 Code Truth。理解仓库中更广泛的源码，使用 [Code Truth](code-truth.md)。分页、缺失补丁或截断会限制结论，可以要求继续查询并说明覆盖范围。
 
