@@ -16,6 +16,45 @@ including earlier production-based snapshots; they do not establish that pattern
 as the baseline for new work. Emergency exceptions require a recorded
 return-to-main owner/deadline and reconciliation before the next normal release.
 
+## Scheduled GitHub statistics deployed (2026-11-13)
+
+Operator-authorized bundle `1794550454130-92998264` deploys immutable main source
+`c3473d9aaf4c3382e09a7dc98c8a988c04da5362`, tree
+`8d061ad5ae2ee6acd8995bfcf5c2f4fb8c5150cf`, over `1794546698145-81474502`.
+The earlier v0.1.49 source predates the GitHub statistics correction. Scheduled
+repository reports now have the authenticated `query_github_metadata` repository
+query for current stars, forks and notification subscribers. Package version
+remains v0.1.49; no new stable release, dependency or SQL migration is added.
+
+The source's complete push-triggered [Verify run 43367444453](https://github.com/stonega/repodesk/actions/runs/43367444453)
+passes **1,616 deterministic tests and 450 browser scenarios**, quality/types/build,
+runtime and container recovery checks. The four images are built on the VPS from
+the checksummed Git archive of that exact main-reachable source. Exact-image
+offline startup passes all 16 cases with zero external startup calls; CPU speech,
+Code Truth, isolated Compose configuration/readiness, migration rerun and
+disposable backup/restore pass. The complete CI browser result is reused for the
+identical source, dependencies, configuration and fixtures; no extra browser run
+or native Telegram/model acceptance is claimed.
+
+The guarded cutover checks the idle updater queue, holds the storage lock, waits
+for durable coding checkpoints and uses the existing backup/migration/readiness
+procedure. Running image identities, all **57 packaged artifacts**, public and
+loopback health/readiness and declared frontend assets verify. Configuration,
+credentials, persistent mounts, PostgreSQL identity and all three CI runner
+identities are preserved. The updater resumes after cutover.
+
+A PostgreSQL-enforced read-only probe uses the current schedule's authorization
+and `GitHubMetadata.repository` with an in-memory run. The production GitHub App
+returns **27 stars, 1 fork and 2 notification subscribers** for Wallshader at
+06:20 UTC. The schedule stays active, version 1, daily at 08:00 Asia/Taipei.
+No schedule is changed, old occurrence replayed, model called or Telegram message
+sent. The next scheduled model choice and native delivery remain unobserved.
+
+The protected backup is `backups/pre-release-1794550454130-92998264.dump`
+(721,872 bytes, mode 0600); its PostgreSQL archive listing verifies. The retained source archive, CI evidence,
+operator intent, image checks, live query result and `deployment-receipt.json`
+are under the release directory. See [the statistics incident](../../postmortem/2026-11-13-scheduled-github-repository-statistics.md).
+
 ## Verified v0.1.49 update recovered (2026-11-13)
 
 The failed v0.1.48 panel update was caused by disabled Verify and offline CI

@@ -1,7 +1,8 @@
 # Scheduled GitHub statistics had no authenticated tool
 
-Date: 2026-11-13. Status: corrected locally; production deployment and live
-model acceptance remain outstanding.
+Date: 2026-11-13. Status: correction merged and deployed; the live authenticated
+statistics query passes. Native model selection and the next scheduled Telegram
+delivery remain unobserved.
 
 ## Report and production evidence
 
@@ -65,11 +66,40 @@ clipping. Main independently supplies this correction in `5b77390`; integration
 preserves that newer test unchanged. All nine
 focused preset scenarios pass, with desktop/mobile and both themes inspected.
 No product UI or preset content changed. This passing focused result does not
-turn the earlier interrupted/failed whole workflow into a full pass; the updated
-PR head requires fresh CI verification before merge.
+turn the earlier interrupted/failed whole workflow into a full pass. At that stage,
+the updated PR head still required fresh CI verification before merge.
 
-No schedule mutation, live model/Telegram request, historical replay or production
-deployment is part of this local correction.
+The final main source `c3473d9aaf4c3382e09a7dc98c8a988c04da5362` subsequently
+passed complete push-triggered [Verify run 43367444453](https://github.com/stonega/repodesk/actions/runs/43367444453):
+**1,616 deterministic tests and 450 browser scenarios**, quality/types/build,
+runtime, Code Truth and container recovery checks. Earlier failed runs above
+remain historical failures. No application code changed after this verified source.
+
+## Production correction
+
+The operator's request to fix the supplied screenshot on the VPS authorizes a
+manual deployment from the verified immutable main source. The previous v0.1.49
+bundle used `5b77390`, which predates the statistics correction. Package version
+remains v0.1.49; this source deployment does not publish a new stable release.
+
+Bundle `1794550454130-92998264` retains the source archive, checksum, operator
+intent, CI evidence, exact image identities and deployment verification. The exact
+images pass the 16-case offline startup contract with zero external startup calls,
+CPU speech imports, Code Truth smoke, isolated Compose configuration/readiness,
+migration rerun and disposable backup/restore. No browser suite is repeated:
+the complete passing CI browser evidence applies to this exact source, including
+unchanged dependencies, configuration and fixtures.
+
+The live probe uses the saved schedule's current actor, repository and destination
+through `createRun`, `runAllowed` and `GitHubMetadata.repository`. Its run exists
+only in memory; PostgreSQL enforces a read-only connection. GitHub credentials
+remain inside the production service. The authenticated read returns current
+stars, forks and notification subscribers without using the Browser plugin.
+The active schedule remains version 1, daily at 08:00 Asia/Taipei. No schedule
+mutation, historical replay, live model call or manual Telegram send is performed.
+
+See [VPS deployment evidence](../docs/implementation/vps-deployment.md#scheduled-github-statistics-deployed-2026-11-13)
+for cutover, backup and post-deployment verification.
 
 Reference: [GitHub Get a repository](https://docs.github.com/en/rest/repos/repos#get-a-repository),
 checked 2026-11-13.

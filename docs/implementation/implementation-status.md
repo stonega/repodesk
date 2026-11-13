@@ -26,8 +26,9 @@ dependencies, configuration and fixtures are unchanged; no prior browser result
 is reused. The production-composition regression exercises scheduled private
 Topics, an ordinary member, dispatch/execution/delivery duplicates, Store restart
 and revoked delivery access with fake GitHub, model and Telegram transports.
-Native Telegram/model acceptance and production deployment remain unverified.
-No live send, schedule mutation, historical replay or deployment was performed.
+Native Telegram/model acceptance remains unverified. The later operator-authorized
+VPS deployment and live authenticated read are recorded below; the initial local
+verification did not send messages, mutate schedules or replay historical runs.
 See [the incident](../../postmortem/2026-11-13-scheduled-github-repository-statistics.md)
 and [runnable examples](../../examples/team-workflows.md#current-repository-stars-forks-and-watchers).
 
@@ -41,8 +42,20 @@ keyboard, toggle/error and editor-boundary checks. All nine focused preset
 browser scenarios pass; expanded widget previews were inspected at 1280px and
 375px in light/dark themes. Main independently corrected the same test in
 `5b77390`; integration preserves that newer test unchanged. No product UI or
-preference rule was changed. CI must
-pass on the updated head before merge; the earlier full browser run is not a pass.
+preference rule was changed. The final merged source subsequently passed complete
+[Verify run 43367444453](https://github.com/stonega/repodesk/actions/runs/43367444453):
+**1,616 deterministic tests and 450 browser scenarios**, quality/types/build,
+runtime and container checks. The earlier failing browser run remains a failure.
+
+Operator-authorized VPS bundle `1794550454130-92998264` deploys that immutable
+main source `c3473d9aaf4c3382e09a7dc98c8a988c04da5362`, replacing the v0.1.49
+source that predates this fix. The exact images pass the offline startup contract,
+Code Truth, Compose readiness, migration rerun and disposable backup/restore.
+A read-only production probe through the current schedule's authorization and
+`GitHubMetadata.repository` returns live GitHub totals. The schedule remains
+active, version 1, at 08:00 Asia/Taipei; no model call, manual Telegram send,
+schedule mutation or historical replay is used. Package version remains v0.1.49;
+no new stable release is published. See [deployment evidence](vps-deployment.md#scheduled-github-statistics-deployed-2026-11-13).
 
 ## Repository tasks, release effects and preference memory (2026-11-12)
 
