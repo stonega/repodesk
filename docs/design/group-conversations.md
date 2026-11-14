@@ -3,7 +3,41 @@
 Implemented locally, 2026-09-22. Live Telegram/model acceptance remains a deployment
 check. This extends [Topic memory](private-threads.md) to interactive group requests.
 
-## Conversation scope
+## Repository feedback groups
+
+An administrator can bind one selected public GitHub repository to a linked group
+from its Edit dialog. Every participant and Topic inherits that target, including
+new Topics. Personal repository selections cannot override the binding. Binding
+supplies context, while implementation still requires active workspace membership
+and the requester's current verified GitHub write access. Private repositories
+retain their private-chat boundary. Ordinary group traffic retains the existing
+addressing rules and does not automatically start coding work.
+
+Actionable bug reports and feature requests ask the bot to check and implement
+a justified change unless the person asks only for analysis. They use read-only
+Codex intake to investigate the repository and assess correctness, security,
+privacy, destructive effects and
+fit with the reported problem. A structured assessment must explicitly allow the
+current input revision before implementation or publication authority is granted.
+Harmful or clearly counterproductive suggestions are rejected with a reason;
+uncertain risks require a consequential clarification. Missing, malformed or stale
+assessments cannot pass. Answers and later requirements repeat this check. This is
+a model-assisted review, not proof that every unsafe suggestion will be detected.
+
+Changing/removing the binding, relinking the group, replacing the bot or GitHub
+connection, or changing/removing the target fences earlier work. Binding never
+authorizes merging, deployment or another repository. Verified changes follow the
+existing checked PR publication flow and human merge approval.
+
+### Acceptance and UI scope
+
+The saved group row shows its repository as readable text. Repository selection,
+search, save and removal live inside the existing group Edit modal; drafts survive
+failed saves and pending requests prevent duplicate submission and dismissal.
+The shared dropdown, modal, toast and spacing rules apply. Verify desktop/mobile,
+both themes, unavailable repository/loading/error states, saved summaries and edits.
+
+## Conversation identity
 
 An ordinary human sender is identified by Telegram `from.id`, never by display name
 or username. Anonymous administrators and messages sent on behalf of a channel

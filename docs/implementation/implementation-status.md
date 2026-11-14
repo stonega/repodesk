@@ -1,5 +1,57 @@
 # Implementation evidence
 
+## Repository-bound group feedback (2026-11-13)
+
+Workspace managers can bind one selected public GitHub repository from a group's
+Edit dialog. Saved rows show the repository; all participants and Topics inherit
+it, including new Topics. Personal repository selections and stale picker callbacks
+cannot override the target. Bindings pin the bot, installation, connection and
+repository generations, with optimistic revisions and an audit trail. Replacing,
+removing or relinking a binding fences older runs/tasks; unchanged saves preserve
+work. An unavailable optional repository permits a new ordinary conversation with
+truthful unavailable context, while repository work requires a current binding.
+
+Actionable bugs and feature requests enter read-only Codex investigation and risk
+assessment. Current active membership and the requester's verified GitHub write
+access remain mandatory. The structured allow/clarify/reject decision pins the
+consumed input revision and exact authenticated evidence before implementation or
+publication authority. Rejection stops without a write grant; missing, malformed
+or stale assessments fail closed. Clarifications, answers after implementation
+questions and later requirements repeat intake. New inputs during work prevent an
+older patch from publishing. Checked changes follow existing PR publication and
+human merge approval. No dependency or SQL migration is added.
+
+The applicable UI acceptance criteria are saved text separate from modal editing,
+shared dropdowns and controls, retained drafts on errors, pending dismissal locks,
+Save/Cancel ordering, focus return and container spacing. Desktop 1280px and mobile
+390px screenshots were inspected across both themes, including saved summaries,
+editor errors, loading, empty, pending and unavailable bindings. All **41 selected
+browser tests passed** in `group-repository.e2e.ts`, `group-links.e2e.ts` and
+`groups-members.e2e.ts`. Selection starts from freshly fetched, clean shared main
+`7d0beb6a71b778bb32b4d5f3e8ffef93395bf268`; these suites cover the changed group
+editor, linking/collection controls, member page, routing, loading and workspace
+isolation. No earlier browser results are reused, and this is not a full browser
+suite run. Intermediate failures exposed focus restoration and test assumptions
+about the old collection-to-Cancel tab order; both are corrected in the passing run.
+
+Validation on Bun 1.4.4, Node 22.22.3 and disposable PostgreSQL 17 passed:
+`bun run check` (nine existing incident-script warnings), `bun run typecheck`,
+`bun test` (**1,731 passed, eight Docker-gated skips, zero failures**),
+`bun run build` and `bun run test:runtime`. The full deterministic run includes
+the unavailable-binding greeting regression. The bundled Code Truth catalog was
+regenerated without a diff; its local service smoke passed real indexing, MCP
+and commit provenance. The Node
+production-factory contract passed all 16 startup cases with zero external calls.
+Implementation was verified on `feat/group-repository-feedback`. No application release
+image, production change, GitHub write, Telegram send or live model acceptance was
+performed. Semantic risk quality and native Telegram rendering remain live gates;
+model assessment does not prove universal detection of harmful suggestions.
+Deploy app/worker, supervisor and job builds together for the feedback protocol.
+
+See [group behavior](../design/group-conversations.md#repository-feedback-groups),
+[the user guide](../user/groups.md#bind-a-repository-for-feedback) and the
+[acceptance journey and HTTP requests](../../examples/telegram-group-feedback.md).
+
 ## Chatbot prompt confidentiality (2026-11-13)
 
 Private, group and scheduled runs now prepend shared security instructions before

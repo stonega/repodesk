@@ -840,6 +840,8 @@ export class Ingress {
         );
       }
       const linkedAt = new Date().toISOString();
+      const repositoryRevision =
+        (w.chats.find((c) => c.id === chatId)?.repositoryRevision ?? 0) + 1;
       w.chats = w.chats.filter((c) => c.id !== chatId);
       w.chats.push({
         id: chatId,
@@ -849,6 +851,7 @@ export class Ingress {
         consentBy: actor,
         consentAt: linkedAt,
         linkedAt,
+        repositoryRevision,
         visibleAll: visibleAll ?? !!d.bot?.visibleAll,
       });
       w.tokens = w.tokens.filter((t) => t.kind !== "group");

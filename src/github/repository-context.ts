@@ -1,4 +1,5 @@
 import type { Delivery, Workspace } from "../domain.ts";
+import { groupRepositoryCurrent } from "../workspaces/group-repository.ts";
 import type { GitHubRepository } from "./app.ts";
 import { repositoryAccess } from "./user-access.ts";
 
@@ -101,6 +102,13 @@ export function selectedRepository(
   botId?: string,
   now = Date.now(),
 ): GitHubRepository | undefined {
+  const binding = w.chats.find((c) => c.id === chatId)?.repository;
+  if (binding)
+    return groupRepositoryCurrent(w, chatId, binding, botId)
+      ? selectableRepositories(w, actor, chatId).find(
+          (r) => r.id === binding.repositoryId,
+        )
+      : undefined;
   const selection = w.repositorySelections?.find(
     (s) =>
       s.actor === actor &&

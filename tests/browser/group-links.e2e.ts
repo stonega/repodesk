@@ -64,6 +64,12 @@ async function fixture(page: Page) {
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
+    if (path.endsWith("/repository")) {
+      await route.fulfill({
+        json: { revision: 0, available: true, repositories: [] },
+      });
+      return;
+    }
     if (path.endsWith("/members") || path.endsWith("/access-requests")) {
       await route.fulfill({
         json: { version: 1, items: [], total: 0, offset: 0, requestUrl: null },
@@ -224,7 +230,9 @@ for (const width of [1280, 390]) {
       expect(bounds?.width).toBeGreaterThanOrEqual(44);
       expect(bounds?.height).toBeGreaterThanOrEqual(44);
       await expect(card.locator("input, select, textarea")).toHaveCount(0);
-      const collection = editor(page).locator(".modal-actions .action button");
+      const collection = editor(page)
+        .getByRole("region", { name: "Message collection" })
+        .getByRole("button");
       for (const enabled of [false, true]) {
         const label = enabled
           ? "Disable message collection"
@@ -313,6 +321,24 @@ for (const width of [1280, 390]) {
         await expect(collection).toBeEnabled();
         await expect(editor(page).getByRole("alert")).toHaveCount(0);
         await collection.focus();
+        await page.keyboard.press("Tab");
+        await expect(
+          editor(page).getByLabel("Search repositories"),
+        ).toBeFocused();
+        await page.keyboard.press("Tab");
+        await expect(
+          editor(page).getByRole("combobox", {
+            name: "Repository",
+            exact: true,
+          }),
+        ).toBeFocused();
+        await page.keyboard.press("Tab");
+        await expect(
+          editor(page).getByRole("button", {
+            name: "Save repository",
+            exact: true,
+          }),
+        ).toBeFocused();
         await page.keyboard.press("Tab");
         const cancel = editor(page).getByRole("button", {
           name: "Cancel",

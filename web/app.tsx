@@ -75,6 +75,7 @@ import { GitHubConnection, GitHubSetup } from "./github.tsx";
 import { GitHubMemberField } from "./github-member-field.tsx";
 import { GroupLinkDialog } from "./group-link.tsx";
 import { GroupMentionGuide } from "./group-mention-guide.tsx";
+import { GroupRepositoryEditor } from "./group-repository.tsx";
 import { type ActionIcon, IconButton } from "./icon-button.tsx";
 import { RuntimeLogs } from "./logs.tsx";
 import { MemberGitHub } from "./member-github.tsx";
@@ -2182,14 +2183,24 @@ function GroupAccessRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
+  const row = useRef<HTMLTableRowElement>(null);
+  const focusAfterSave = useRef(false);
+  useEffect(() => {
+    if (loading || editing || !focusAfterSave.current) return;
+    row.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    focusAfterSave.current = false;
+  }, [loading, editing]);
   const notify = useToast();
   const status = `${chat.active ? "Linked" : "Inactive"} · ${chat.visibleAll ? "Receives group messages" : "Directed visibility"} · Collection: ${chat.collection ? "enabled" : "directed only"}`;
   return (
     <>
-      <tr className="group-row">
+      <tr className="group-row" ref={row}>
         <td>
           <strong>{chat.title || chat.id}</strong>
           {chat.title && <div className="muted">Group ID: {chat.id}</div>}
+          {chat.repository && (
+            <div className="muted">Repository: {chat.repository.full_name}</div>
+          )}
           {!chat.active && (
             <p className="group-relink-guidance">
               This group is inactive. Choose New in Groups and send the new
@@ -2278,7 +2289,7 @@ function GroupAccessRow({
                 Unlink group
               </Action>
             </div>
-            <ModalActions>
+            <section className="row" aria-label="Message collection">
               <Action
                 loading={loading}
                 onError={setError}
@@ -2300,7 +2311,18 @@ function GroupAccessRow({
                   ? "Disable message collection"
                   : "Enable message collection"}
               </Action>
-            </ModalActions>
+            </section>
+            <GroupRepositoryEditor
+              id={id}
+              chat={chat}
+              request={api}
+              onSaved={() => {
+                focusAfterSave.current = true;
+                setEditing(false);
+                reload();
+                notify("Group repository saved.");
+              }}
+            />
           </div>
         </Modal>
       )}

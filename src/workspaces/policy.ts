@@ -20,6 +20,7 @@ import { obsidianReadAllowed } from "../obsidian/policy.ts";
 import { packageReadAllowed } from "../plugins/package-policy.ts";
 import { searchConsoleReadAllowed } from "../search-console/policy.ts";
 import { validMemory } from "./conversation-memory.ts";
+import { groupRepositoryAllowed } from "./group-repository.ts";
 export function eligible(w: Workspace, actor: string, admin = false) {
   const member = w.members.find((m) => m.id === actor && m.active);
   return !w.deletion && !!member && (!admin || member.role !== "member");
@@ -95,6 +96,15 @@ function allowedRun(
   }
   const result =
     eligible(w, run.actor) &&
+    (!!run.workflowId ||
+      groupRepositoryAllowed(
+        w,
+        run.chatId,
+        run.groupRepository,
+        undefined,
+        run.groupRepositoryVersion,
+        !!run.repository,
+      )) &&
     packageReadAllowed(w, run) &&
     browserReadAllowed(w, run) &&
     !w.settings.paused &&

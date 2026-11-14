@@ -78,10 +78,22 @@ export function codingExtension(
       "coding_repository_target_mismatch",
       "coding_repository_replacement_unsafe",
       "coding_task_conflict",
+      "group_repository_changed",
+      "group_repository_target_mismatch",
     ],
     factory: (input) => async (pi) => {
-      const accessibleTargets = targets.filter((t) =>
-        verifiedRepositoryAccess(workspace, input.actor, t.repositoryId, true),
+      const binding = workspace.runs.find(
+        (r) => r.id === input.runId,
+      )?.groupRepository;
+      const accessibleTargets = targets.filter(
+        (t) =>
+          (!binding || binding.repositoryId === t.repositoryId) &&
+          verifiedRepositoryAccess(
+            workspace,
+            input.actor,
+            t.repositoryId,
+            true,
+          ),
       );
       const operate = async (action: (w: Workspace, sql: Sql) => unknown) => {
         input.signal.throwIfAborted();
