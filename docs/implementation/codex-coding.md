@@ -307,6 +307,18 @@ See the [HTTP example](../../examples/coding/settings.http).
 
 ## Authorization and execution
 
+Repository-bound feedback groups require a structured read-only risk assessment
+before each implementation grant. The assessment pins the consumed input revision;
+its source evidence must exactly match the authenticated instruction. Rejection
+stops the task with `coding_feedback_rejected`; missing/stale assessments fail with
+`coding_feedback_risk_unverified`. Uncertain risks ask a consequential question.
+Answers and new requirements repeat intake, including answers after an earlier
+implementation grant. New input during work blocks publication of the older result.
+The group binding fences target identity and revision throughout execution and
+publication; it does not replace current per-member GitHub write authorization.
+Update app/worker and runner/job builds together for the feedback protocol fields.
+See [group feedback](../design/group-conversations.md#repository-feedback-groups).
+
 An active workspace member with verified GitHub write access can request a feature
 or fix. `start_development_task` binds the original request, actor, repository and
 chat/topic. Codex interprets the request in a read-only intake turn; the application

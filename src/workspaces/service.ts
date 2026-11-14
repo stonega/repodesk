@@ -245,6 +245,14 @@ export function createRun(
   const run: Run = {
     id: options.id ?? randomUUID(),
     actor,
+    groupRepository:
+      !options.workflowId && options.botId
+        ? structuredClone(w.chats.find((c) => c.id === chatId)?.repository)
+        : undefined,
+    groupRepositoryVersion:
+      !options.workflowId && chatId !== actor
+        ? (w.chats.find((c) => c.id === chatId)?.repositoryRevision ?? 0)
+        : undefined,
     repository:
       repository && w.github?.installationId
         ? {

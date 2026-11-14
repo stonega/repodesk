@@ -62,6 +62,11 @@ import {
 } from "../workflows/service.ts";
 import { decideAccessRequest } from "../workspaces/access-requests.ts";
 import { issueGroupLink } from "../workspaces/group-links.ts";
+import {
+  groupRepositories,
+  groupRepositoryCurrent,
+  saveGroupRepository,
+} from "../workspaces/group-repository.ts";
 import { membersWithProfiles } from "../workspaces/member-profile.ts";
 import {
   audit,
@@ -1623,6 +1628,63 @@ export function adminRoutes(
       201,
     );
   });
+  app.get("/api/admin/workspaces/:id/chats/:chat/repository", async (c) => {
+    const w = await store.read(validId(c.req.param("id")));
+    workspaceActor(w, c.get("session").admin);
+    const chat = w.chats.find((chat) => chat.id === c.req.param("chat"));
+    requireThat(chat, "not_found", 404);
+    const deployment = await store.deployment();
+    return c.json({
+      revision: chat.repositoryRevision ?? 0,
+      binding: chat.repository,
+      available:
+        !chat.repository ||
+        (!!deployment.bot &&
+          groupRepositoryCurrent(
+            w,
+            chat.id,
+            chat.repository,
+            deployment.bot.id,
+          )),
+      repositories: groupRepositories(w).map(({ id, full_name }) => ({
+        id,
+        full_name,
+      })),
+    });
+  });
+  app.put("/api/admin/workspaces/:id/chats/:chat/repository", async (c) => {
+    const input = z
+      .object({
+        revision: z.number().int().nonnegative(),
+        repositoryId: z.number().int().positive().nullable(),
+      })
+      .strict()
+      .parse(await c.req.json());
+    await store.change(validId(c.req.param("id")), async (w, sql) => {
+      const actor = workspaceActor(w, c.get("session").admin);
+      const deployment = await store.deployment(sql);
+      requireThat(deployment.bot, "bot_not_configured", 409);
+      const changed = saveGroupRepository(
+        w,
+        c.req.param("chat"),
+        actor,
+        deployment.bot.id,
+        input.revision,
+        input.repositoryId,
+      );
+      if (changed) {
+        revokeWork(w);
+        audit(
+          w,
+          actor,
+          "chat.repository_saved",
+          c.req.param("chat"),
+          input.revision + 1,
+        );
+      }
+    });
+    return c.json({ ok: true });
+  });
   app.post("/api/admin/workspaces/:id/chats/:chat/action", async (c) => {
     const input = z
       .object({ action: z.enum(["collect", "directed", "unlink"]) })
@@ -1641,6 +1703,8 @@ export function adminRoutes(
       } else chat.collection = false;
       if (input.action === "unlink") {
         chat.active = false;
+        chat.repository = undefined;
+        chat.repositoryRevision = (chat.repositoryRevision ?? 0) + 1;
         w.tokens = w.tokens.filter((entry) => entry.kind !== "group");
         await sql.query(
           "DELETE FROM chat_bindings WHERE workspace_id=$1 AND chat_id=$2",

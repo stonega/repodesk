@@ -33,7 +33,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [Telegram platform constraints](reference/telegram-platform.md) | What changes when Slack becomes Telegram |
 | [Private Topic delivery recovery](implementation/telegram-topic-fallback.md) | Explicit member opt-in, safe main-chat retries and operator recovery |
 | [Private conversation threads](design/private-threads.md) | Native Topics, discussion memory, cache-aware compaction and private history |
-| [Group conversations](design/group-conversations.md) | Per-user continuity, shared discussions and natural follow-up triggering |
+| [Group conversations](design/group-conversations.md) | Per-user continuity, repository feedback groups, risk checks and natural follow-ups |
 | [Long-term memory](design/long-term-memory.md) | Scoped private/shared recall, background extraction, user controls and retention |
 | [Repository tasks and preferences](implementation/repository-tasks.md) | Implemented objectives, process-independent tasks, verified release exports, controlled effects and memory |
 | [Repository task collaboration plan](implementation/repository-task-plan.md) | Accepted delivery contracts and remaining live rollout gates |

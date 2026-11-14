@@ -13,8 +13,10 @@ workspace with an active member and workspace-selected GitHub repositories.
    still requires normal access. Selection alone creates no approval or coding task.
 3. Ask “Help me choose a repository” again. The saved selection has a checkmark and **Selected** label.
    Ask “Find the service repository” to search names, or **Clear selection** to remove the default.
-4. Switch Topics or workspaces, or use another member. Selection must not carry
-   into their context. In a linked group, private repositories must not appear.
+4. Switch Topics or workspaces, or use another member. Personal selection must not
+   carry into their context. In a linked group, private repositories must not appear.
+   A group repository binding instead applies to every member and Topic; asking
+   to choose a repository explains that binding without offering personal overrides.
 5. Test an expired menu, an older menu after opening a new one, another person's
    button, and a repository whose access was removed. Selection must be rejected;
    stale-menu errors tell you to ask to choose a repository again for current choices.

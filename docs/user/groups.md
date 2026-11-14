@@ -34,6 +34,36 @@ the remaining columns.
 
 Verified workspace owner/admin members can instead ask “Help me link a Telegram group” in private chat. Open the returned invitation link and choose the group; Telegram supplies the linking payload automatically. The same group-admin and membership checks apply, without typing a command.
 
+## Bind a repository for feedback
+
+1. Connect and select the target repository in the [GitHub plugin](github.md).
+2. Open **Groups & Members**, choose the group's pencil icon (**Edit**) and find
+   **Repository feedback**.
+3. Search for a repository, select it and choose **Save repository**. The saved
+   group row shows the repository name. Every member and Topic uses this target,
+   including newly created Topics. Personal repository choices cannot override it.
+
+Group bindings support active public repositories. Keep private repository work
+in private chat. An active workspace member with current verified GitHub write
+access can address an actionable bug report or feature request to the bot, such
+as “@your_bot the next-page button repeats page one; please fix it.” To request
+investigation without changes, say “analyze only.” Other group members gain no
+repository write access from the binding.
+
+The bot investigates the repository and checks correctness, security, privacy,
+destructive effects and product fit before implementing feedback. Harmful or
+clearly counterproductive suggestions are rejected with a reason. Consequential
+uncertainty pauses for clarification, and answers are checked again. A failed or
+unverified risk check cannot authorize implementation. Model review can miss risks;
+review the resulting PR before merging. Checked implementations open a PR; merging
+and deployment retain their existing explicit approvals. See [Codex](codex.md).
+
+Choose **No group repository → Save repository** to remove the binding. Changing
+or removing it stops earlier work under that binding. Relinking clears it; select
+the repository again after relinking. If the bot or GitHub connection changes, or
+the repository becomes unavailable, an administrator must repair and save the
+binding before new work. Existing scheduled reports keep their own approved scope.
+
 ## 在群里提问
 
 - `/ask@your_bot 请总结本话题的结论`
@@ -70,7 +100,9 @@ administrator and an active workspace member.
 
 ## Topic 与自然追问
 
-讨论保留在当前群和 Topic，默认仓库选择也独立。Reply 一个保留的机器人回答可以加入该公开讨论。
+Discussions stay within the current group and Topic. Unbound groups keep personal
+repository choices per Topic; repository-bound groups share one target across all
+Topics. Replying to a retained bot answer joins that public discussion.
 
 明确提问得到回答后，在 Telegram 能送达普通消息的前提下，同一成员可在约五分钟内用“再详细点”“换成英文”等清楚追问继续，无需重新 @。其他成员发言不会接管你的讨论。指向别人或无关的消息会结束自动关注。
 

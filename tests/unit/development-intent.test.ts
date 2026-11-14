@@ -9,6 +9,7 @@ import {
   developmentPrompt,
   developmentSchema,
 } from "../../src/coding/development.ts";
+import { requireFeedbackRisk } from "../../src/coding/feedback-risk.ts";
 import { runConversation } from "../../src/coding/local/conversation.ts";
 
 function retry(text = "Try again"): DevelopmentRun {
@@ -35,6 +36,43 @@ function retry(text = "Try again"): DevelopmentRun {
     context: "Reference context may describe the previous request.",
   };
 }
+
+test("repository feedback intake requires a revision-bound risk assessment and explains rejection criteria", () => {
+  const run = { ...retry(), repositoryFeedback: true as const };
+  const schema = developmentSchema(run);
+  expect(schema.required).toContain("feedbackRisk");
+  expect(schema.properties).toHaveProperty(
+    "feedbackRisk.properties.revision.enum",
+    [2],
+  );
+  expect(developmentSchema(retry()).required).not.toContain("feedbackRisk");
+  const prompt = developmentPrompt(run);
+  for (const phrase of [
+    "read-only intake",
+    "counterproductive",
+    "privacy",
+    "authorization",
+    "exact consumed revision",
+  ])
+    expect(prompt).toContain(phrase);
+  const allowed = {
+    revision: 2,
+    decision: "allow",
+    summary: "Scoped fix with deterministic checks.",
+    risks: [],
+  };
+  expect(requireFeedbackRisk(allowed, 2).decision).toBe("allow");
+  for (const value of [
+    undefined,
+    { ...allowed, revision: 1 },
+    { ...allowed, decision: "reject" },
+    { ...allowed, decision: "clarify", risks: [""] },
+    { ...allowed, decision: "yes" },
+  ])
+    expect(() => requireFeedbackRisk(value, 2)).toThrow(
+      "coding_feedback_risk_unverified",
+    );
+});
 
 test("coding handoff explains authenticated pinned preparation despite repository pull instructions", () => {
   const checkout = {

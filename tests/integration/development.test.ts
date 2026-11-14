@@ -76,6 +76,7 @@ import {
 } from "../../src/telegram/task-controls.ts";
 import { Ingress } from "../../src/telegram/webhook.ts";
 import { TranscriptionService } from "../../src/transcription/service.ts";
+import { saveGroupRepository } from "../../src/workspaces/group-repository.ts";
 import { runAllowed } from "../../src/workspaces/policy.ts";
 import { createRun } from "../../src/workspaces/service.ts";
 import { grantGitHubAccess, workspace } from "../fixtures.ts";
@@ -808,6 +809,219 @@ const url = process.env.TEST_DATABASE_URL;
     expect(f.starts[1]?.development.mode).toBe("analysis");
     expect(f.publications).toEqual([]);
   });
+  function bindFeedback(w: Workspace) {
+    present(w.github?.repositories[0]).private = false;
+    saveGroupRepository(w, "-100100", "101", "999", 0, 7001);
+  }
+  const assessment = (
+    decision: "allow" | "clarify" | "reject",
+    revision = 1,
+  ) => ({
+    revision,
+    decision,
+    summary:
+      decision === "allow"
+        ? "The fix addresses the reported problem without expanding access."
+        : "Removing authorization would expose other users' data.",
+    risks: decision === "allow" ? [] : ["Unauthorized data access"],
+  });
+
+  test("bound group feedback passes read-only risk intake before work and checked publication", async () => {
+    const f = await fixture(original, "-100100", undefined, bindFeedback);
+    await f.tick();
+    expect(f.starts[0]?.development).toMatchObject({
+      mode: "intake",
+      repositoryFeedback: true,
+    });
+    const allowed = await f.tick({
+      state: "succeeded",
+      result: result({ feedbackRisk: assessment("allow") }),
+    });
+    expect(allowed).toMatchObject({
+      state: "queued",
+      phase: "work",
+      canImplement: true,
+      canPublish: true,
+    });
+    const grants = await store.pool.query(
+      "SELECT data FROM coding_task_events WHERE workspace_id=$1 AND task_id=$2 AND id='feedback-risk:1'",
+      [f.w.id, f.task.id],
+    );
+    expect(grants.rows[0]?.data.decision).toBe("allow");
+    await f.tick({ state: "running" });
+    expect(f.starts[1]?.development.mode).toBe("work");
+    await f.tick({
+      state: "ready",
+      checkPassed: true,
+      result: result({ status: "completed" }),
+    });
+    expect(f.publications).toHaveLength(1);
+  });
+
+  test("harmful group feedback is rejected without implementation grants or publication and duplicate ticks stay stopped", async () => {
+    const f = await fixture(original, "-100100", undefined, bindFeedback);
+    await f.tick();
+    const denied = await f.tick({
+      state: "succeeded",
+      result: result({ feedbackRisk: assessment("reject") }),
+    });
+    expect(denied).toMatchObject({
+      state: "failed",
+      error: "coding_feedback_rejected",
+      canImplement: false,
+      canPublish: false,
+    });
+    await f.tick();
+    expect(f.starts).toHaveLength(1);
+    expect(f.publications).toHaveLength(0);
+    const grants = await store.pool.query(
+      "SELECT data FROM coding_task_events WHERE workspace_id=$1 AND task_id=$2 AND id LIKE 'grant:%'",
+      [f.w.id, f.task.id],
+    );
+    expect(grants.rowCount).toBe(0);
+    expect((await store.read(f.w.id)).deliveries.at(-1)?.text).toContain(
+      "Removing authorization",
+    );
+  });
+
+  test("missing or stale feedback assessments and mismatched source evidence fail closed", async () => {
+    for (const patch of [
+      {},
+      { feedbackRisk: assessment("allow", 2) },
+      { feedbackRisk: assessment("allow"), evidence: "Fix pagination" },
+    ]) {
+      const f = await fixture(original, "-100100", undefined, bindFeedback);
+      await f.tick();
+      const denied = await f.tick({
+        state: "succeeded",
+        result: result(patch),
+      });
+      expect(denied.state).toBe("failed");
+      expect(denied.canImplement).toBe(false);
+      expect(denied.canPublish).toBe(false);
+      expect(f.starts).toHaveLength(1);
+      expect(f.publications).toHaveLength(0);
+    }
+  });
+
+  test("uncertain risk asks a question and its answer repeats intake before any implementation", async () => {
+    const f = await fixture(original, "-100100", undefined, bindFeedback);
+    await f.tick();
+    const waiting = await f.tick({
+      state: "succeeded",
+      result: result({
+        feedbackRisk: assessment("clarify"),
+        question: "Which roles should retain access?",
+      }),
+    });
+    expect(waiting).toMatchObject({
+      state: "waiting",
+      canImplement: false,
+      canPublish: false,
+    });
+    await f.append("Only existing authorized roles.");
+    await f.tick({ state: "running" });
+    expect(f.starts.at(-1)?.development).toMatchObject({
+      mode: "intake",
+      revision: 2,
+    });
+    const denied = await f.tick({
+      state: "succeeded",
+      result: result({
+        evidenceRevision: 2,
+        evidence: "Only existing authorized roles.",
+        feedbackRisk: assessment("reject", 2),
+      }),
+    });
+    expect(denied.state).toBe("failed");
+    expect(f.starts.every((start) => start.development.mode === "intake")).toBe(
+      true,
+    );
+    expect(f.publications).toHaveLength(0);
+  });
+
+  test("answers after an allowed work question cannot inherit an earlier feedback grant", async () => {
+    const f = await fixture(original, "-100100", undefined, bindFeedback);
+    await f.tick();
+    await f.tick({
+      state: "succeeded",
+      result: result({ feedbackRisk: assessment("allow") }),
+    });
+    await f.tick({ state: "running" });
+    await f.tick({
+      state: "succeeded",
+      result: result({
+        status: "needs_input",
+        question: "Should access stay limited?",
+      }),
+    });
+    const appended = await f.append("No, remove every authorization check.");
+    expect(appended).toMatchObject({
+      phase: "intake",
+      canImplement: false,
+      canPublish: false,
+    });
+    await f.tick({ state: "running" });
+    expect(f.starts.at(-1)?.development.mode).toBe("intake");
+  });
+
+  test("new group feedback arriving during work cannot publish under the previous risk approval", async () => {
+    const f = await fixture(original, "-100100", undefined, bindFeedback);
+    await f.tick();
+    await f.tick({
+      state: "succeeded",
+      result: result({ feedbackRisk: assessment("allow") }),
+    });
+    await f.tick({ state: "running" });
+    await f.append("Remove all permission checks too.");
+    const superseded = await f.tick({
+      state: "ready",
+      checkPassed: true,
+      result: result({ status: "completed" }),
+    });
+    expect(superseded).toMatchObject({ state: "queued", phase: "intake" });
+    expect(f.publications).toHaveLength(0);
+    await f.tick({ state: "running" });
+    expect(f.starts.at(-1)?.development).toMatchObject({
+      mode: "intake",
+      revision: 2,
+    });
+    const denied = await f.tick({
+      state: "succeeded",
+      result: result({
+        evidenceRevision: 2,
+        evidence: "Remove all permission checks too.",
+        feedbackRisk: assessment("reject", 2),
+      }),
+    });
+    expect(denied).toMatchObject({
+      state: "failed",
+      canImplement: false,
+      canPublish: false,
+    });
+    expect(f.publications).toHaveLength(0);
+  });
+
+  test("binding changes and permission loss stop group implementation without granting the group write access", async () => {
+    for (const action of ["unbind", "permission"] as const) {
+      const f = await fixture(original, "-100100", undefined, bindFeedback);
+      await f.tick();
+      await f.tick({
+        state: "succeeded",
+        result: result({ feedbackRisk: assessment("allow") }),
+      });
+      await store.change(f.w.id, (w) => {
+        if (action === "unbind")
+          saveGroupRepository(w, "-100100", "101", "999", 1, null);
+        else present(w.members.find((m) => m.id === "101")).github = undefined;
+      });
+      const stopped = await f.tick();
+      expect(stopped.state).toBe("cancelled");
+      expect(f.starts).toHaveLength(1);
+      expect(f.publications).toHaveLength(0);
+    }
+  });
+
   async function fixture(
     text = original,
     chatId = "101",

@@ -2,6 +2,14 @@ import { attachmentErrors } from "../telegram/attachments.ts";
 import type { CodingPayload } from "./config.ts";
 
 const messages: Record<string, string> = {
+  coding_feedback_risk_unverified:
+    "The feedback risk check could not be verified. No implementation or publication was authorized. Ask a workspace administrator to check the runner before a new request.",
+  coding_feedback_rejected:
+    "This feedback was rejected by the risk check and will not be implemented.",
+  group_repository_changed:
+    "The group's repository binding changed or is unavailable. Check Groups & Members before starting a new request.",
+  group_repository_target_mismatch:
+    "This group can implement feedback only in its bound repository. Ask a workspace administrator to change the binding for a different target.",
   coding_runner_protocol_required:
     "The runner must be updated before this repository objective can start.",
   coding_objective_disabled:

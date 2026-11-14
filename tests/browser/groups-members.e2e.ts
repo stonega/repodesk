@@ -12,6 +12,12 @@ async function fixture(page: Page) {
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
+    if (path.endsWith("/repository")) {
+      await route.fulfill({
+        json: { revision: 0, available: true, repositories: [] },
+      });
+      return;
+    }
     state.requests.push(url.pathname + url.search);
     const members = path.endsWith("/members");
     const groups = path.endsWith("/chats");

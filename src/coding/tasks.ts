@@ -12,6 +12,7 @@ import { mergeMemoryReferences } from "../memory/state.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import { clearProgress, deliverTaskProgress } from "../telegram/feedback.ts";
 import { pullRequestButtons, taskButtons } from "../telegram/task-buttons.ts";
+import { requireGroupRepositoryTarget } from "../workspaces/group-repository.ts";
 import {
   audience,
   audit,
@@ -56,6 +57,14 @@ export function checkDevelopment(
   requireThat(task.workspaceId === w.id, "access_denied", 403);
   audience(w, actor, task.chatId);
   if (stopping && actor === task.actor) return;
+  requireGroupRepositoryTarget(
+    w,
+    task.chatId,
+    task.botId,
+    task.payload.repositoryId,
+    task.groupRepository,
+    task.groupRepositoryVersion,
+  );
   requireThat(
     !task.browserRead ||
       (actor === task.browserRead.owner &&
@@ -190,6 +199,14 @@ export async function startDevelopment(
   const run = w.runs.find((r) => r.id === runId);
   requireThat(run, "not_found", 404);
   const sources = currentRequirement(w, actor, run, sourceIds);
+  requireGroupRepositoryTarget(
+    w,
+    run.chatId,
+    botId,
+    repositoryId,
+    run.groupRepository,
+    run.groupRepositoryVersion,
+  );
   const policy = developmentPolicy.parse(w.coding?.settings.development ?? {});
   const source = sources.find(
     (s) =>
@@ -269,6 +286,10 @@ export async function startDevelopment(
   });
   const at = new Date().toISOString();
   const task: DevelopmentTask = {
+    groupRepository: run.groupRepository
+      ? structuredClone(run.groupRepository)
+      : undefined,
+    groupRepositoryVersion: run.groupRepositoryVersion,
     ...(objective ? { objective } : {}),
     ...(run.browserRead ? { browserRead: run.browserRead } : {}),
     id: randomUUID(),
@@ -618,7 +639,14 @@ export async function appendDevelopment(
   });
   if (["review", "waiting"].includes(task.state)) {
     task.state = "queued";
-    task.phase = answering && task.canImplement ? "work" : "intake";
+    task.phase =
+      answering && task.canImplement && !task.groupRepository
+        ? "work"
+        : "intake";
+    if (task.groupRepository) {
+      task.canImplement = false;
+      task.canPublish = false;
+    }
     task.question = undefined;
   }
   await taskSave(sql, task);

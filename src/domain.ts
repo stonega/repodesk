@@ -206,6 +206,8 @@ export interface Member {
   active: boolean;
 }
 export interface Chat {
+  repository?: GroupRepository;
+  repositoryRevision?: number;
   id: string;
   title?: string;
   active: boolean;
@@ -214,6 +216,17 @@ export interface Chat {
   consentAt?: string;
   linkedAt: string;
   visibleAll: boolean;
+}
+export interface GroupRepository {
+  revision: number;
+  botId: string;
+  installationId: number;
+  connectionRevision: number;
+  repositoryRevision: number;
+  repositoryId: number;
+  full_name: string;
+  savedBy: string;
+  savedAt: string;
 }
 export interface ConversationThread {
   browserRead?: BrowserReadStamp;
@@ -399,6 +412,8 @@ export interface Run {
   memoryContext?: MemoryContext;
   memoryMutation?: boolean;
   repository?: { id: number; full_name: string; installationId: number };
+  groupRepository?: GroupRepository;
+  groupRepositoryVersion?: number;
   githubRead?: RepositorySources;
   cloudflareRead?: { revision: number; accountId: string };
   googleRead?: Partial<

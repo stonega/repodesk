@@ -171,6 +171,117 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         },
       });
     }
+    test("group repository API enforces management authority, revisions and public scope across all topics", async () => {
+      const w = await seed();
+      await ingress.accept(update((await issue(w)).command));
+      await store.change(w.id, (saved) => {
+        saved.github = {
+          revision: 1,
+          installationId: 7,
+          repositories: [
+            { id: 1, full_name: "example/public", private: false },
+            { id: 2, full_name: "example/private", private: true },
+          ],
+        };
+      });
+      const path = `/api/admin/workspaces/${w.id}/chats/-100200/repository`;
+      const call = (
+        repositoryId: number | null,
+        revision: number,
+        session = credentials,
+        headers = {},
+      ) =>
+        app.request(path, {
+          method: "PUT",
+          headers: {
+            cookie: `repodesk_session=${session.raw}`,
+            origin,
+            "x-csrf-token": session.csrf,
+            "content-type": "application/json",
+            ...headers,
+          },
+          body: JSON.stringify({ repositoryId, revision }),
+        });
+      const read = () =>
+        app.request(path, {
+          headers: { cookie: `repodesk_session=${credentials.raw}` },
+        });
+      const initial = await (await read()).json();
+      expect(initial.repositories).toEqual([
+        { id: 1, full_name: "example/public" },
+      ]);
+      expect((await call(1, initial.revision, memberCredentials)).status).toBe(
+        403,
+      );
+      expect(
+        (
+          await call(1, initial.revision, credentials, {
+            "x-csrf-token": "bad",
+          })
+        ).status,
+      ).toBe(403);
+      expect(
+        (
+          await call(1, initial.revision, credentials, {
+            origin: "https://other.example",
+          })
+        ).status,
+      ).toBe(403);
+      expect((await call(2, initial.revision)).status).toBe(409);
+      expect((await call(1, initial.revision, adminCredentials)).status).toBe(
+        200,
+      );
+      expect((await call(null, initial.revision)).status).toBe(409);
+      for (const topic of [0, 40]) {
+        const message = update("/ask@fixture_bot Fix this bug");
+        if (message.message)
+          message.message.message_thread_id = topic || undefined;
+        await ingress.accept(message);
+        await ingress.accept(message);
+      }
+      const saved = await store.read(w.id);
+      expect(saved.runs).toHaveLength(2);
+      expect(
+        saved.runs.every(
+          (run) =>
+            run.repository?.id === 1 && run.groupRepository?.repositoryId === 1,
+        ),
+      ).toBe(true);
+      expect(saved.members.find((m) => m.id === "202")?.github).toBeUndefined();
+      expect(saved.chats[0]?.repository?.savedBy).toBe("303");
+      const bound = await (await read()).json();
+      expect(bound.available).toBe(true);
+      expect((await call(null, bound.revision)).status).toBe(200);
+      expect((await store.read(w.id)).runs.every((run) => run.cancelled)).toBe(
+        true,
+      );
+      expect((await store.read(w.id)).chats[0]?.repository).toBeUndefined();
+    });
+
+    test("relinking clears repository authority and advances its revision", async () => {
+      const w = await seed();
+      await ingress.accept(update((await issue(w)).command));
+      await store.change(w.id, (saved) => {
+        const chat = saved.chats[0];
+        if (!chat) throw Error("Missing group");
+        chat.repositoryRevision = 10;
+        chat.repository = {
+          revision: 10,
+          repositoryId: 1,
+          full_name: "example/public",
+          installationId: 7,
+          connectionRevision: 1,
+          repositoryRevision: 0,
+          botId: "999",
+          savedBy: "101",
+          savedAt: new Date().toISOString(),
+        };
+      });
+      await ingress.accept(update((await issue(w)).command));
+      const chat = (await store.read(w.id)).chats[0];
+      expect(chat?.repository).toBeUndefined();
+      expect(chat?.repositoryRevision).toBe(11);
+    });
     test("an unverified operator issues a command; a regular workspace member links and receives confirmation", async () => {
       const w = await seed();
       await store.change(w.id, (saved) => {

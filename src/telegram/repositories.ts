@@ -21,6 +21,20 @@ export function repositoryMenu(
     topicId = msg.message_thread_id ?? 0;
   audience(w, actor, chatId);
   requireThat(!w.settings.paused, "workspace_paused", 409);
+  const binding = w.chats.find((c) => c.id === chatId)?.repository;
+  if (binding) {
+    const selected = selectedRepository(w, actor, chatId, topicId, botId);
+    deliver(
+      w,
+      actor,
+      chatId,
+      selected
+        ? `This group and all its topics use ${selected.full_name} for repository feedback. Implementation requests are checked for risks and require your verified GitHub write access. A workspace administrator can change the binding in Groups & Members.`
+        : "This group's repository is unavailable. Ask a workspace administrator to check its binding in Groups & Members.",
+      { id: `repos:${botId}:${u.update_id}`, topicId },
+    );
+    return;
+  }
   const selected = selectedRepository(w, actor, chatId, topicId, botId);
   const repositories = recentRepositories(w, actor, chatId, query);
   const available = selectableRepositories(w, actor, chatId);
@@ -99,6 +113,11 @@ export function selectRepository(w: Workspace, u: Update, botId: string) {
     chatId = String(c.message.chat.id),
     topicId = c.message.message_thread_id ?? 0;
   audience(w, actor, chatId);
+  requireThat(
+    !w.chats.find((c) => c.id === chatId)?.repository,
+    "group_repository_managed",
+    409,
+  );
   const delivery = w.deliveries.find(
     (d) => d.id === `repos:${botId}:${match[1]}`,
   );

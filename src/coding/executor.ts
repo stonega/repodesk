@@ -37,6 +37,7 @@ import {
   runnerStage,
   taskUnknown,
 } from "./feedback.ts";
+import { requireFeedbackRisk } from "./feedback-risk.ts";
 import {
   checkDevelopmentGitHubPolicy,
   developmentInputPresent,
@@ -507,6 +508,16 @@ export class DevelopmentExecutor {
           lease,
           async (w, sql, t) => {
             const deployment = await this.allowed(w, sql, t);
+            if (
+              t.groupRepository &&
+              (t.phase === "intake" ||
+                t.feedbackRisk?.revision !== t.revision ||
+                t.feedbackRisk.decision !== "allow")
+            ) {
+              t.phase = "intake";
+              t.canImplement = false;
+              t.canPublish = false;
+            }
             t.pr = pr;
             t.fence++;
             t.runnerModel = sharedProvider.modelProvider;
@@ -535,6 +546,7 @@ export class DevelopmentExecutor {
               taskId: t.id,
               revision: t.revision,
               mode: t.phase,
+              repositoryFeedback: t.groupRepository ? true : undefined,
               inputs,
               ...(t.referenceSources?.length
                 ? { referenceSources: t.referenceSources }
@@ -908,6 +920,73 @@ export class DevelopmentExecutor {
           requireThat(status.result, "coding_result_invalid", 409);
           t.readRevision = t.consumedRevision;
           t.result = status.result;
+          if (
+            t.groupRepository &&
+            t.phase === "intake" &&
+            t.revision === t.consumedRevision
+          ) {
+            const assessment = requireFeedbackRisk(
+              status.result.feedbackRisk,
+              t.consumedRevision,
+            );
+            const evidence = developmentEvidence({
+              inputs: await taskInputs(sql, t),
+              revision: t.consumedRevision,
+            });
+            requireThat(
+              status.result.evidenceRevision === evidence.revision &&
+                status.result.evidence === evidence.text &&
+                !!evidence.text.trim(),
+              "coding_intent_unverified",
+              409,
+            );
+            t.canImplement = false;
+            t.canPublish = false;
+            t.feedbackRisk = assessment;
+            await taskEvent(
+              sql,
+              t,
+              `feedback-risk:${t.consumedRevision}`,
+              assessment,
+            );
+            if (assessment.decision === "reject") {
+              t.state = "failed";
+              t.error = "coding_feedback_rejected";
+              t.question = undefined;
+              t.attemptId = undefined;
+              t.previousAttemptId = undefined;
+              await this.notice(
+                w,
+                t,
+                `I won’t implement this feedback. ${assessment.summary}`,
+                `feedback-rejected:${t.consumedRevision}`,
+              );
+              return;
+            }
+            if (assessment.decision === "clarify") {
+              const question = status.result.question ?? "";
+              requireThat(
+                question.trim(),
+                "coding_feedback_risk_unverified",
+                409,
+              );
+              t.state = "waiting";
+              t.question = {
+                id: randomUUID(),
+                text: question,
+                revision: t.consumedRevision,
+              };
+              await taskEvent(sql, t, `question:${t.question.id}`, t.question);
+              await this.notice(
+                w,
+                t,
+                `${assessment.summary}\n${t.question.text}`,
+                `question:${t.question.id}`,
+              );
+              t.attemptId = undefined;
+              return;
+            }
+          }
           if (t.revision > t.consumedRevision) {
             t.state = "queued";
             t.phase = "intake";
@@ -1399,6 +1478,13 @@ export class DevelopmentExecutor {
     lease: string,
     status: LocalStatus,
   ) {
+    if (task.groupRepository)
+      requireThat(
+        requireFeedbackRisk(task.feedbackRisk, task.consumedRevision)
+          .decision === "allow",
+        "coding_feedback_risk_unverified",
+        409,
+      );
     requireThat(
       this.runner &&
         task.attemptId &&
