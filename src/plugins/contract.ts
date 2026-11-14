@@ -4,12 +4,16 @@ export type {
   Json,
   JsonObject,
   PluginDefinition,
+  PluginNotification,
   RepositorySummary,
   ToolContext,
   ToolContracts,
   ToolResult,
 } from "../../sdk/plugin/index.ts";
-export type Capability = "github.metadata.read" | "http.read";
+export type Capability =
+  | "github.metadata.read"
+  | "http.read"
+  | "notifications.publish";
 export type PluginErrorCode =
   | "plugin_manifest_invalid"
   | "plugin_input_invalid"

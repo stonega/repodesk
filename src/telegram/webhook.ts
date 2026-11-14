@@ -14,6 +14,7 @@ import {
   timezone,
   type Workspace,
 } from "../domain.ts";
+import { manageNotifications } from "../github/notifications.ts";
 import type { GitHubUsers } from "../github/users.ts";
 import type { GoogleService } from "../google/service.ts";
 import { googleControl } from "../google/telegram.ts";
@@ -723,6 +724,43 @@ export class Ingress {
     }
     if (await googleControl(w, u, d, this.google, this.searchConsole))
       return true;
+    if (cmd?.name === "notifications" && actor && msg && d.bot) {
+      authorize(w, actor);
+      requireThat(
+        msg.chat.type === "private" && String(msg.chat.id) === actor,
+        "use_private_chat",
+        403,
+      );
+      const [action = "list", repository, selection] = cmd.args
+        .split(/\s+/)
+        .filter(Boolean);
+      const events =
+        selection === "prs"
+          ? ["pull_request"]
+          : selection === "issues"
+            ? ["issues"]
+            : undefined;
+      const subscriptions = manageNotifications(w, actor, d.bot.id, {
+        action,
+        repository,
+        events,
+      });
+      deliver(
+        w,
+        actor,
+        actor,
+        subscriptions.length
+          ? subscriptions
+              .map(
+                (s) =>
+                  `${s.repository}: ${s.enabled ? "On" : "Paused"} · ${s.events.map((e) => (e === "issues" ? "new issues" : "new PRs")).join(", ")}`,
+              )
+              .join("\n")
+          : "You have no repository notifications. Ask me to notify you when a connected repository receives a new PR or issue.",
+        { topicId: msg.message_thread_id ?? 0 },
+      );
+      return true;
+    }
     if (cmd?.name === "github" && actor && msg) {
       authorize(w, actor);
       requireThat(

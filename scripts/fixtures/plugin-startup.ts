@@ -166,7 +166,14 @@ export async function verifyPluginStartup(
             repository: "https://github.com/example/startup-probe",
             publisher: { name: "Fixture" },
             runtime: { type: "node-sandbox", entry: "dist/plugin.mjs" },
-            capabilities: [],
+            capabilities: ["notifications.publish"],
+            notifications: [
+              {
+                name: "probe_updated",
+                title: "Probe updated",
+                description: "Static notification declaration",
+              },
+            ],
             settingsSchema: {
               type: "object",
               properties: {},
@@ -177,8 +184,8 @@ export async function verifyPluginStartup(
                 name: "probe",
                 title: "Probe",
                 description: "Offline startup probe",
-                effect: "compute",
-                capabilities: [],
+                effect: "read",
+                capabilities: ["notifications.publish"],
                 inputSchema: {
                   type: "object",
                   properties: {},
@@ -207,7 +214,7 @@ export async function verifyPluginStartup(
           generation: 1,
           enabled: true,
           settings: {},
-          grants: [],
+          grants: ["notifications.publish"],
           history: [],
           connections: [],
         },
@@ -344,6 +351,8 @@ export async function verifyPluginStartup(
           for (const name of [
             "rdp_123456_probe",
             "send_telegram_widget",
+            "manage_github_notifications",
+            "manage_plugin_notifications",
             "obsidian_query",
             "query_google_docs",
             "query_search_console",

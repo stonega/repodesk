@@ -75,6 +75,35 @@ check(
   15000,
 );
 check(
+  "exact image validates declared notification candidates without a messaging broker",
+  async () => {
+    const pkg = await loadLocalPackage("examples/plugins/repository-alerts");
+    const value = await input({
+      manifest: pkg.manifest,
+      bundle: pkg.files[pkg.manifest.runtime.entry] as Buffer,
+      bundleHash: pkg.bundleHash,
+      tool: "check_stars",
+      arguments: { repositoryId: 123, threshold: 10 },
+      grants: ["github.metadata.read", "notifications.publish"],
+      broker: async () => ({
+        url: "https://github.com/example/repository",
+        stars: 12,
+        forks: 1,
+        subscribers: 2,
+        fetchedAt: "2026-11-14T00:00:00.000Z",
+      }),
+    });
+    const result = await new DockerPluginSandbox(image as string).invoke(value);
+    expect(result.notifications).toHaveLength(1);
+    expect(result.notifications?.[0]).toMatchObject({
+      event: "star_threshold",
+      id: "repository:123:stars:10",
+    });
+    expect(result.notifications?.[0]).not.toHaveProperty("chatId");
+  },
+  15000,
+);
+check(
   "plugin cannot see host credentials, mounts, write package/root or use network",
   async () => {
     process.env.REPODESK_PLUGIN_TEST_SECRET = "host-only-fixture";

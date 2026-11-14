@@ -141,3 +141,21 @@ private volume in your workspace retention/deletion and backup procedures.
 Back up PostgreSQL state and the private package volume consistently,
 with the encryption key protected separately. A restore must retain immutable
 artifact identities and use current reviewed connection grants before enablement.
+
+## Personal plugin notification subscriptions
+
+Plugins with declared events expose a **Notifications** card on their details
+page. Grant `notifications.publish` in the plugin's configuration only after
+reviewing its events and code. This does not grant additional source access.
+Members with a linked Telegram identity can use **New** or **Edit** to subscribe
+personally, or ask the bot privately. Saved summaries show the event selection
+and private destination; Pause, Resume and Delete manage the subscription.
+
+Events are published only when a tool runs in the subscribing member's private
+conversation. No background poller starts automatically. The current actor's
+private source results are never broadcast to other subscribers. Plugin updates,
+configuration changes and source revocation stop stale work; removal pauses saved
+subscriptions, including after a later reinstall. Review the current installed
+version before resuming. See [plugin development](plugin-development.md#publish-opt-in-notification-events)
+for the author contract and [GitHub notifications](github-notifications.md) for the
+separate built-in realtime repository Webhook feature.

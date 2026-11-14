@@ -3709,3 +3709,42 @@ fieldset.nowledge-fields > * {
   flex-wrap: wrap;
   gap: 12px;
 }
+
+.notification-subscription {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding-block: 1rem 0;
+  border-top: 1px solid var(--ui-border);
+}
+.notification-summary {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .notification-subscription {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+.notification-card {
+  display: grid;
+  gap: 1rem;
+}
+.card.notification-card > * {
+  margin: 0;
+}
+
+.notification-webhook-url {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.notification-card .plugin-card-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}

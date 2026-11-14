@@ -32,6 +32,24 @@ const repositorySummary = z
     fetchedAt: z.string().datetime(),
   })
   .strict();
+export const pluginNotificationSchema = z
+  .object({
+    occurredAt: z.string().datetime(),
+    event: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/),
+    id: z.string().min(1).max(128),
+    title: z.string().min(1).max(120),
+    body: z.string().min(1).max(2000),
+    url: z
+      .string()
+      .max(2048)
+      .url()
+      .refine((v) => {
+        const u = new URL(v);
+        return u.protocol === "https:" && !u.username && !u.password;
+      })
+      .optional(),
+  })
+  .strict();
 const resultSchema = z
   .object({
     content: z
@@ -46,6 +64,7 @@ const resultSchema = z
       .min(1)
       .max(8),
     structuredContent: z.record(z.string(), z.json()),
+    notifications: z.array(pluginNotificationSchema).max(10).optional(),
   })
   .strict();
 
@@ -88,6 +107,18 @@ export function validateResult(
     const result = resultSchema.parse(value);
     if (
       !matches(toolFor(manifest, tool).outputSchema, result.structuredContent)
+    )
+      throw new PluginError("plugin_result_invalid");
+    if (
+      result.notifications !== undefined &&
+      (!toolFor(manifest, tool).capabilities.includes(
+        "notifications.publish",
+      ) ||
+        result.notifications.some(
+          (n) => !manifest.notifications?.some((t) => t.name === n.event),
+        ) ||
+        new Set(result.notifications.map((n) => `${n.event}:${n.id}`)).size !==
+          result.notifications.length)
     )
       throw new PluginError("plugin_result_invalid");
     return result;

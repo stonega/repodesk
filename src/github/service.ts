@@ -14,8 +14,8 @@ import {
   registrationInput,
 } from "./registry.ts";
 import { RepositorySync } from "./repository-sync.ts";
-
 import { GitHubUsers } from "./users.ts";
+import { GitHubWebhooks } from "./webhooks.ts";
 
 const revisionSchema = z.number().int().nonnegative();
 const selectionSchema = z.union([
@@ -42,6 +42,7 @@ export function githubAuthority(admin: Admin, w: Workspace) {
 }
 export class GitHubService {
   private apps: GitHubApps;
+  readonly webhooks: GitHubWebhooks;
   readonly repositorySync: RepositorySync;
   readonly users: GitHubUsers;
   readonly skills: GitHubSkills;
@@ -53,6 +54,7 @@ export class GitHubService {
   ) {
     this.apps =
       app instanceof GitHubApps ? app : new GitHubApps(store, key, app);
+    this.webhooks = new GitHubWebhooks(store, this.apps, key);
     this.repositorySync = new RepositorySync(store, this.apps);
     this.users = new GitHubUsers(store, this.apps, key, origin);
     this.skills = new GitHubSkills(store, this.apps);
@@ -262,6 +264,7 @@ export class GitHubService {
         request_oauth_on_install: false,
         default_permissions: { ...githubAppPermissions },
         default_events: [
+          "issues",
           "pull_request",
           "issue_comment",
           "pull_request_review_comment",

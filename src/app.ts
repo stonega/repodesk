@@ -116,16 +116,16 @@ export function createApp(
     );
   });
   app.post("/github/webhook/:operatorId", async (c) => {
-    requireThat(review, "review_bot_unavailable", 409);
-    return c.json(
-      await review.accept(
-        c.req.param("operatorId"),
-        c.req.header("x-github-event") ?? "",
-        c.req.header("x-github-delivery") ?? "",
-        c.req.header("x-hub-signature-256") ?? "",
-        Buffer.from(await c.req.arrayBuffer()),
-      ),
-    );
+    const args = [
+      c.req.param("operatorId"),
+      c.req.header("x-github-event") ?? "",
+      c.req.header("x-github-delivery") ?? "",
+      c.req.header("x-hub-signature-256") ?? "",
+      Buffer.from(await c.req.arrayBuffer()),
+    ] as const;
+    await (review?.webhooks ?? github.webhooks).accept(...args);
+    if (review) await review.accept(...args);
+    return c.json({ accepted: true });
   });
   // Telegram flows use the existing registered callback, without a panel login.
   app.get("/api/admin/github/callback", async (c, next) => {

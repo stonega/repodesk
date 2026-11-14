@@ -31,6 +31,10 @@ import {
 } from "../domain.ts";
 import { type GitHubMember, githubUsernameSchema } from "../github/app.ts";
 import { assignGitHubAccount } from "../github/member-account.ts";
+import {
+  manageNotifications,
+  notificationPage,
+} from "../github/notifications.ts";
 import { reconcileCharge, resolveDelivery } from "../jobs/recovery.ts";
 import { logQuery, readRuntimeLogs } from "../observability/logs.ts";
 import { ObsidianService } from "../obsidian/service.ts";
@@ -117,6 +121,11 @@ import {
   runtimeSave,
 } from "../coding/runtime-config.ts";
 import type { GitHubService } from "../github/service.ts";
+import {
+  managePluginNotifications,
+  pluginNotificationInput,
+  pluginNotificationPage,
+} from "../plugins/notifications.ts";
 import { packageFault } from "../plugins/package-service.ts";
 import type { ReleaseUpdates } from "../updates/releases.ts";
 
@@ -560,6 +569,114 @@ export function adminRoutes(
         await c.req.json(),
       ),
     ),
+  );
+  app.get("/api/admin/workspaces/:id/github/notifications", async (c) => {
+    const w = await store.read(validId(c.req.param("id")));
+    const admin = c.get("session").admin;
+    workspaceActor(w, admin);
+    const d = await store.deployment();
+    return c.json({
+      ...notificationPage(
+        w,
+        admin.telegramId,
+        d.bot?.id,
+        !!(await github.webhooks.configured(w.operatorId)),
+      ),
+      webhookUrl: `${deploymentOrigin(d, origin)}/github/webhook/${w.operatorId}`,
+      canConfigureWebhook: admin.operator && admin.id === w.operatorId,
+    });
+  });
+  app.post("/api/admin/workspaces/:id/github/notifications", async (c) => {
+    const admin = c.get("session").admin;
+    const input = await c.req.json();
+    const id = validId(c.req.param("id"));
+    await store.change(id, async (w, sql) => {
+      workspaceActor(w, admin);
+      requireThat(admin.telegramId, "telegram_identity_required", 403);
+      const d = await store.deployment(sql);
+      requireThat(d.bot, "bot_not_configured", 409);
+      manageNotifications(w, admin.telegramId, d.bot.id, input);
+    });
+    const w = await store.read(id);
+    const d = await store.deployment();
+    return c.json({
+      ...notificationPage(
+        w,
+        admin.telegramId,
+        d.bot?.id,
+        !!(await github.webhooks.configured(w.operatorId)),
+      ),
+      webhookUrl: `${deploymentOrigin(d, origin)}/github/webhook/${w.operatorId}`,
+      canConfigureWebhook: admin.operator && admin.id === w.operatorId,
+    });
+  });
+  app.post(
+    "/api/admin/workspaces/:id/github/notifications/webhook",
+    async (c) => {
+      return c.json(
+        await github.webhooks.configure(
+          c.get("session").admin,
+          validId(c.req.param("id")),
+          await c.req.json(),
+        ),
+      );
+    },
+  );
+  app.get(
+    "/api/admin/workspaces/:id/plugin-packages/:repositoryId/notifications",
+    async (c) => {
+      const w = await store.read(validId(c.req.param("id")));
+      const admin = c.get("session").admin;
+      workspaceActor(w, admin);
+      const repositoryId = z.coerce
+        .number()
+        .int()
+        .positive()
+        .safe()
+        .parse(c.req.param("repositoryId"));
+      return c.json(
+        pluginNotificationPage(
+          w,
+          admin.telegramId,
+          repositoryId,
+          (await store.deployment()).bot?.id,
+        ),
+      );
+    },
+  );
+  app.post(
+    "/api/admin/workspaces/:id/plugin-packages/:repositoryId/notifications",
+    async (c) => {
+      const admin = c.get("session").admin;
+      const id = validId(c.req.param("id"));
+      const repositoryId = z.coerce
+        .number()
+        .int()
+        .positive()
+        .safe()
+        .parse(c.req.param("repositoryId"));
+      const input = pluginNotificationInput
+        .omit({ plugin: true })
+        .parse(await c.req.json());
+      await store.change(id, async (w, sql) => {
+        workspaceActor(w, admin);
+        requireThat(admin.telegramId, "telegram_identity_required", 403);
+        const d = await store.deployment(sql);
+        requireThat(d.bot, "bot_not_configured", 409);
+        managePluginNotifications(w, admin.telegramId, d.bot.id, {
+          ...input,
+          plugin: String(repositoryId),
+        });
+      });
+      return c.json(
+        pluginNotificationPage(
+          await store.read(id),
+          admin.telegramId,
+          repositoryId,
+          (await store.deployment()).bot?.id,
+        ),
+      );
+    },
   );
   app.get("/api/admin/workspaces/:id/plugins/review-bot", async (c) => {
     requireThat(review, "review_bot_unavailable", 409);

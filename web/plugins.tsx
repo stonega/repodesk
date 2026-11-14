@@ -15,6 +15,7 @@ import { Cloudflare } from "./cloudflare.tsx";
 import { CodeTruth } from "./code-truth.tsx";
 import { Coding } from "./coding.tsx";
 import { GitHubConnection } from "./github.tsx";
+import { GitHubNotificationSettings } from "./github-notifications.tsx";
 import { Google } from "./google.tsx";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
@@ -170,6 +171,7 @@ export function Plugins({
         pluginId !== "cloudflare" &&
         pluginId !== "search-console" &&
         pluginId !== "codex" &&
+        pluginId !== "github-notifications" &&
         pluginId !== "review-bot")
     )
       void load();
@@ -311,6 +313,7 @@ export function Plugins({
           pluginId !== "cloudflare" &&
           pluginId !== "search-console" &&
           pluginId !== "codex" &&
+          pluginId !== "github-notifications" &&
           pluginId !== "review-bot") ||
         view === "market" ? (
         <PluginDetailHeading title={heading} backTo={path()}>
@@ -332,6 +335,14 @@ export function Plugins({
         </PluginDetailHeading>
       ) : null}
       <GitHubConnection request={request} workspaceId={workspaceId} />
+      {view === "installed" && pluginId === "github-notifications" && (
+        <GitHubNotificationSettings
+          key={workspaceId}
+          request={request}
+          workspaceId={workspaceId}
+          backTo={path()}
+        />
+      )}
       {view === "catalog" && (
         <section
           className="plugin-catalog-section"
@@ -445,6 +456,12 @@ export function Plugins({
                     ? "Enabled"
                     : "Disabled"
               }
+            />
+            <PluginCard
+              to={path("/github-notifications")}
+              name="GitHub notifications"
+              summary="Personal Telegram notifications for new PRs and issues."
+              status="Built in"
             />
             <PluginCard
               to={path("/review-bot")}
@@ -580,6 +597,7 @@ export function Plugins({
         pluginId !== "cloudflare" &&
         pluginId !== "search-console" &&
         pluginId !== "codex" &&
+        pluginId !== "github-notifications" &&
         pluginId !== "review-bot" && (
           <>
             {!data && loading && !error && (

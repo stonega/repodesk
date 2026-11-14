@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "id": "repository-alerts",
+  "name": "Repository alerts",
+  "description": "Publish an opt-in private event when a repository star threshold is observed.",
+  "version": "0.1.0",
+  "apiVersion": "1",
+  "license": "MIT",
+  "repository": "https://github.com/example/repodesk-repository-alerts",
+  "publisher": {
+    "name": "Example"
+  },
+  "runtime": {
+    "type": "node-sandbox",
+    "entry": "dist/plugin.mjs"
+  },
+  "capabilities": ["github.metadata.read", "notifications.publish"],
+  "settingsSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "tools": [
+    {
+      "name": "check_stars",
+      "title": "Check repository star threshold",
+      "description": "Read a connected repository and publish a candidate personal event when the current star threshold is observed. This does not establish when the threshold was first crossed.",
+      "effect": "read",
+      "capabilities": ["github.metadata.read", "notifications.publish"],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repositoryId": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "threshold": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000000
+          }
+        },
+        "required": ["repositoryId", "threshold"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "stars": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "matched": {
+            "type": "boolean"
+          }
+        },
+        "required": ["stars", "matched"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "skills": [],
+  "notifications": [
+    {
+      "name": "star_threshold",
+      "title": "Star threshold observed",
+      "description": "The current repository star count is at or above a requested threshold."
+    }
+  ]
+}

@@ -13,11 +13,13 @@ import {
   requireThat,
   type Workspace,
 } from "../domain.ts";
+import { notificationDeliveryAllowed } from "../github/notifications.ts";
 import { repositoryDeliveryAllowed } from "../github/repository-context.ts";
 import { googleDeliveryAllowed, googleReadAllowed } from "../google/policy.ts";
 import { referenceMemoryValid } from "../memory/state.ts";
 import { taskReference } from "../miniapp/auth.ts";
 import { nowledgeReadAllowed } from "../nowledge-mem/policy.ts";
+import { pluginNotificationDeliveryAllowed } from "../plugins/notifications.ts";
 import { searchConsoleReadAllowed } from "../search-console/policy.ts";
 import type { SetupService } from "../setup/service.ts";
 import { TelegramError } from "../telegram/client.ts";
@@ -113,6 +115,17 @@ export class DeliveryWorker {
     d: Delivery,
     sql: Sql = this.store.pool,
   ) {
+    if (d.githubNotification || d.pluginNotification) {
+      const deployment = await this.store.deployment(sql);
+      if (
+        !deployment.active ||
+        deployment.paused ||
+        w.settings.paused ||
+        !notificationDeliveryAllowed(w, d, deployment.bot?.id) ||
+        !pluginNotificationDeliveryAllowed(w, d, deployment.bot?.id)
+      )
+        return false;
+    }
     if (d.repositoryMemory) {
       try {
         const task = await taskGet(sql, w.id, d.repositoryMemory.taskId);

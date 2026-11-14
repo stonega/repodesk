@@ -195,6 +195,7 @@ const url = process.env.TEST_DATABASE_URL;
         pull_requests: "write",
       },
       default_events: [
+        "issues",
         "pull_request",
         "issue_comment",
         "pull_request_review_comment",
@@ -256,6 +257,7 @@ const url = process.env.TEST_DATABASE_URL;
         active: true,
       },
       default_events: [
+        "issues",
         "pull_request",
         "issue_comment",
         "pull_request_review_comment",

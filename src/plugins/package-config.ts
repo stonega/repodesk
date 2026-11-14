@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Capability, JsonObject } from "./contract.ts";
 import type { PackageSource } from "./github-source.ts";
 import type { PluginManifest } from "./manifest.ts";
+import { capabilitySchema } from "./manifest.ts";
 
 export interface PackageArtifact {
   guides?: import("./package-skills.ts").PackageGuide[];
@@ -77,7 +78,7 @@ export const packageUpdateInput = z
     revision: z.number().int().min(0),
     enabled: z.boolean(),
     settings: z.record(z.string(), z.json()),
-    grants: z.array(z.enum(["github.metadata.read", "http.read"])).max(2),
+    grants: z.array(capabilitySchema).max(3),
   })
   .strict();
 export const packageConnectionInput = z

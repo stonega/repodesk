@@ -9,7 +9,7 @@ import {
   validateResult,
   validateSettings,
 } from "./invocation.ts";
-import { parseManifest } from "./manifest.ts";
+import { capabilitySchema, parseManifest } from "./manifest.ts";
 import { type BrokerRequest, errorCodes } from "./protocol.ts";
 
 export type RunnerEvent =
@@ -38,7 +38,7 @@ const startSchema = z
     tool: z.string().max(32),
     arguments: z.json(),
     settings: z.json(),
-    grants: z.array(z.enum(["github.metadata.read", "http.read"])).max(2),
+    grants: z.array(capabilitySchema).max(3),
     timeoutMs: z.number().int().positive().max(limits.deadlineMs).optional(),
   })
   .strict();

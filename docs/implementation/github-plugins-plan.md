@@ -7,6 +7,14 @@ deployment, hosted template creation or npm publication is performed by this wor
 See the [RFC](../design/github-plugins.md), [developer guide](../user/plugin-development.md)
 and [operator guide](../user/plugin-administration.md).
 
+## Optional notification profile, 2026-11-14
+
+[Plugin notification events](plugin-notifications.md) adds manifest/SDK candidate
+publication, personal subscriptions and host-owned durable delivery. It is limited
+to ordinary private tool invocations. The later background-event/scheduler profile
+below remains deferred. Operator capability grants and personal opt-in are separate;
+plugins never receive Telegram credentials or choose recipients.
+
 ## Delivery ledger
 
 | Slice | Local delivery | Evidence / remaining acceptance |

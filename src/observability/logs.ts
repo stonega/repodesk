@@ -23,6 +23,10 @@ export const logEvents = {
     "error",
     "Worker maintenance failed; it will retry.",
   ],
+  github_webhook_recovery_failed: [
+    "warn",
+    "GitHub webhook recovery failed; it will retry.",
+  ],
   github_user_sync_failed: [
     "warn",
     "GitHub account permissions could not be synced. Inspect the safe failure code.",
@@ -74,6 +78,7 @@ export const logEvents = {
 export type LogEvent = keyof typeof logEvents;
 export type LogService = "app" | "worker";
 const codes = new Set([
+  "github_webhook_recovery_failed",
   "workflow_suspended",
   "workflow_owner_revoked",
   "workflow_skill_revoked",

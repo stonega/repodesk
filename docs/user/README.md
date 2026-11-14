@@ -33,6 +33,7 @@ RepoDesk 是一个自托管的 Telegram AI 助手，让你在聊天中查询 Git
 
 | 文档 | 你可以完成什么 |
 | --- | --- |
+| [GitHub notifications](github-notifications.md) | Receive private notifications for new PRs and issues |
 | [连接和使用 GitHub](github.md) | 连接仓库和个人账号，查询 PR，创建 Issue，确认 PR 操作 |
 | [代码问答：Code Truth](code-truth.md) | 为选定仓库建立源码索引，获取带代码位置的回答 |
 | [Codex 开发任务](codex.md) | 配置执行环境，发起修改，补充需求并查看 PR |

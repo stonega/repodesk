@@ -20,8 +20,10 @@ import { PluginHttpReader } from "./http-reader.ts";
 import {
   authorizeBroker,
   validateInput,
+  validateResult,
   validateSettings,
 } from "./invocation.ts";
+import { publishPluginNotifications } from "./notifications.ts";
 import type { PackageCatalog } from "./package-config.ts";
 import {
   applyInput,
@@ -550,6 +552,11 @@ export class PluginPackages {
       w.plugins.packages = (w.plugins.packages ?? []).filter(
         (p) => p.source.repositoryId !== repositoryId,
       );
+      for (const subscription of w.pluginNotifications ?? [])
+        if (subscription.repositoryId === repositoryId) {
+          subscription.enabled = false;
+          subscription.revision++;
+        }
       w.plugins.revision++;
       audit(
         w,
@@ -864,8 +871,37 @@ export class PluginPackages {
         return response;
       },
     });
-    await check();
-    return { content: result.content, details: result.structuredContent };
+    const verified = await check();
+    const checked = validateResult(pinned.manifest, tool, result);
+    if (checked.notifications?.length)
+      await this.store.change(workspaceId, async (w, sql) => {
+        signal.throwIfAborted();
+        const run = w.runs.find((r) => r.id === input.runId);
+        requireThat(
+          run &&
+            run.status === "running" &&
+            run.actor === input.actor &&
+            run.fence === verified.run.fence &&
+            runAllowed(w, run),
+          "tool_policy_denied",
+          403,
+        );
+        const deployment = await this.store.deployment(sql);
+        requireThat(
+          deployment.active && !deployment.paused,
+          "deployment_paused",
+          409,
+        );
+        await publishPluginNotifications(
+          sql,
+          w,
+          run,
+          pinned,
+          checked.notifications,
+          deployment.bot?.id,
+        );
+      });
+    return { content: checked.content, details: checked.structuredContent };
   }
 }
 

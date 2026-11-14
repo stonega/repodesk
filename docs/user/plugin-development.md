@@ -130,6 +130,7 @@ the current member, workspace, run and connection policy again.
 | --- | --- | --- |
 | `github.metadata.read` | `context.github.getRepository({ repositoryId })` | Selected workspace repository and invoking member's current verified GitHub read permission |
 | `http.read` | `context.http.request(connectionId, { path, query })` | Declared exact destination/path/query keys and an explicit current connection binding |
+| `notifications.publish` | `ToolResult.notifications` | Declared events, an operator grant and the current private actor's active subscription; data reads retain their own requirements |
 
 GitHub reads return `url`, `stars`, `forks`, `subscribers` and `fetchedAt`.
 The `examples/plugins/repository-insights/` package in the distribution demonstrates
@@ -238,3 +239,74 @@ contents is rejected. Rollback is a fresh reviewed installation of a retained
 version at its immutable commit; it does not restore historical grants or secrets.
 Disabling, updating, removing or changing connections invalidates dependent work.
 See [plugin administration](plugin-administration.md) for setup and recovery.
+
+## Publish opt-in notification events
+
+Declare `notifications.publish` on both the manifest and the producing tool, and
+add the event names your plugin can emit:
+
+```json
+{
+  "capabilities": ["notifications.publish"],
+  "notifications": [
+    {"name":"updated","title":"New item","description":"A newly observed item."}
+  ]
+}
+```
+
+This is a manifest fragment. Keep the required package fields and the producing
+tool's input/output schemas. Set that tool's `effect` to `read` and include
+`notifications.publish` in its capability list. Additional GitHub or HTTP reads
+still need their own declarations, grants and current source permissions.
+
+Run `generate`; the generated contract now exports `NotificationEvent`. Use it as
+`definePlugin<Contract, Settings, NotificationEvent>`. A successful handler can
+return candidates alongside its usual result:
+
+```ts
+return {
+  content: [{ type: "text", text: "Observed one new item." }],
+  structuredContent: { count: 1 },
+  notifications: [{
+    event: "updated",
+    id: upstreamItem.id,
+    occurredAt: upstreamItem.createdAt,
+    title: "New item",
+    body: upstreamItem.summary,
+    url: upstreamItem.url,
+  }],
+};
+```
+
+Use the upstream event's stable ID and actual occurrence/observation timestamp.
+A fresh ID on every check defeats deduplication. The example variables above come
+from your validated read; they are not SDK-provided objects. A candidate has no
+actor, chat ID, bot token or destination field. Unknown fields fail validation.
+The optional link must use HTTPS without embedded URL credentials.
+
+The host accepts up to ten candidates per result, at most 16 declared event types,
+128 characters per ID, 120 per title and 2,000 per body. The optional URL is bounded
+to 2,048 characters. Events before subscription activation, older than three days
+or over one minute in the future are ignored. Host deduplication receipts retain
+no event text and expire after 30 days.
+
+An operator must grant this capability and enable the installed package. Members
+then opt in through the package's **Notifications** card or a private request such
+as “Subscribe me to New item notifications from this plugin.” Members can pause,
+resume, edit or delete their own subscriptions. Updating the plugin, changing its
+configuration/grants, disconnecting sources or removing access fences older work.
+Review the current version before explicitly resuming. Reinstalling a removed
+plugin never silently resumes an old subscription.
+
+This profile publishes only after an authorized plugin tool completes in a private
+conversation. Events go only to that invocation's own subscribed member; another
+member's HTTP data cannot become your notification. Groups do not publish these
+events. Subscription does not create a timer or background checker. Plugins cannot
+call Telegram or run arbitrary webhook handlers. Basic event delivery uses the
+host's durable delivery worker and requires no additional model call. Initial chat
+requests and ordinary plugin tool execution retain their normal model costs.
+
+See `examples/plugins/repository-alerts/` in the distribution for a runnable GitHub
+metadata producer. It reports a threshold observed now without claiming when it
+was first crossed. Existing hosts reject the new capability; update the host, job
+and supervisor components together before installing a notification producer.

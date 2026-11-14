@@ -84,3 +84,8 @@ service user's permissions. It requires a prepared host service; saving the opti
 does not install it. Provider/ChatGPT sign-in, repository permissions, progress,
 Stop and PR publication use the existing Codex settings and task flow. Docker
 remains the default. Runtime changes wait for retained tasks to be cleaned up.
+
+## Personal repository notifications
+
+See [GitHub notifications](github-notifications.md) to receive private Telegram
+notifications for new PRs and issues, manage subscriptions and configure delivery.

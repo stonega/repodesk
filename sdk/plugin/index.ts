@@ -22,20 +22,37 @@ export interface ToolContext<Settings = JsonObject> {
   };
   readonly diagnostics: { emit(code: string): void };
 }
-export interface ToolResult<Output = JsonObject> {
+export interface ToolResult<
+  Output = JsonObject,
+  Event extends string = string,
+> {
   content: { type: "text"; text: string }[];
   structuredContent: Output;
+  /** Candidate events; only the host may authorize and deliver subscribed events. */
+  notifications?: PluginNotification<Event>[];
+}
+export interface PluginNotification<Event extends string = string> {
+  occurredAt: string;
+  event: Event;
+  id: string;
+  title: string;
+  body: string;
+  url?: string;
 }
 export type ToolContracts = Record<
   string,
   { input: JsonObject; output: JsonObject }
 >;
-export type PluginDefinition<C extends ToolContracts, S> = {
+export type PluginDefinition<
+  C extends ToolContracts,
+  S,
+  Event extends string = string,
+> = {
   tools: {
     [Name in keyof C]: (
       input: C[Name]["input"],
       context: ToolContext<S>,
-    ) => Promise<ToolResult<C[Name]["output"]>>;
+    ) => Promise<ToolResult<C[Name]["output"], Event>>;
   };
 };
 
@@ -43,6 +60,7 @@ export type PluginDefinition<C extends ToolContracts, S> = {
 export function definePlugin<
   C extends ToolContracts,
   S = Record<string, never>,
->(definition: PluginDefinition<C, S>): PluginDefinition<C, S> {
+  Event extends string = string,
+>(definition: PluginDefinition<C, S, Event>): PluginDefinition<C, S, Event> {
   return definition;
 }

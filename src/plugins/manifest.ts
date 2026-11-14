@@ -2,7 +2,11 @@ import { z } from "zod";
 import { assertJson, limits, PluginError } from "./contract.ts";
 import { dataSchema, schemaType, validateSchema } from "./json-schema.ts";
 
-export const capabilitySchema = z.enum(["github.metadata.read", "http.read"]);
+export const capabilitySchema = z.enum([
+  "github.metadata.read",
+  "http.read",
+  "notifications.publish",
+]);
 export const versionPattern =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 export const localName = z.string().regex(/^[a-z][a-z0-9_]{0,31}$/);
@@ -25,7 +29,20 @@ export const manifestSchema = z
     runtime: z
       .object({ type: z.literal("node-sandbox"), entry: pathSchema })
       .strict(),
-    capabilities: z.array(capabilitySchema).max(2),
+    capabilities: z.array(capabilitySchema).max(3),
+    notifications: z
+      .array(
+        z
+          .object({
+            name: localName,
+            title: z.string().min(1).max(100),
+            description: z.string().min(1).max(1024),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(16)
+      .optional(),
     settingsSchema: dataSchema,
     settingsUi: z
       .record(
@@ -78,7 +95,7 @@ export const manifestSchema = z
             title: z.string().min(1).max(100),
             description: z.string().min(1).max(1024),
             effect: z.enum(["compute", "read"]),
-            capabilities: z.array(capabilitySchema).max(2),
+            capabilities: z.array(capabilitySchema).max(3),
             inputSchema: dataSchema,
             outputSchema: dataSchema,
           })
@@ -115,6 +132,9 @@ export function parseManifest(value: unknown): PluginManifest {
       !unique(manifest.connections?.map((c) => c.id) ?? []) ||
       !unique(manifest.skills.map((s) => s.path)) ||
       !unique(manifest.diagnosticCodes ?? []) ||
+      !unique(manifest.notifications?.map((n) => n.name) ?? []) ||
+      !!manifest.notifications !==
+        manifest.capabilities.includes("notifications.publish") ||
       manifest.settingsSchema.type !== "object" ||
       Object.keys(manifest.metadata ?? {}).length > 32
     )
@@ -193,5 +213,8 @@ export function generateContract(manifest: PluginManifest): string {
         `${JSON.stringify(tool.name)}: { input: ${schemaType(tool.inputSchema)}; output: ${schemaType(tool.outputSchema)} }`,
     )
     .join(";\n  ");
-  return `// Generated from repodesk.plugin.json. Do not edit.\nexport type Settings = ${schemaType(manifest.settingsSchema)};\nexport type Contract = {\n  ${tools}\n};\n`;
+  const notificationTypes = manifest.notifications
+    ? `export type NotificationEvent = ${manifest.notifications.map((n) => JSON.stringify(n.name)).join(" | ")};\n`
+    : "";
+  return `// Generated from repodesk.plugin.json. Do not edit.\nexport type Settings = ${schemaType(manifest.settingsSchema)};\nexport type Contract = {\n  ${tools}\n};\n${notificationTypes}`;
 }

@@ -1,9 +1,4 @@
-import {
-  createHmac,
-  randomBytes,
-  randomUUID,
-  timingSafeEqual,
-} from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { deploymentOrigin } from "../admin/site.ts";
 import { branchName, codingPayload } from "../coding/config.ts";
@@ -11,8 +6,13 @@ import { appendGitHubDevelopment } from "../coding/github-inputs.ts";
 import type { Store } from "../db/repositories.ts";
 import { type Admin, Fault, requireThat, type Workspace } from "../domain.ts";
 import type { GitHubApps } from "../github/registry.ts";
+import {
+  GitHubWebhooks,
+  githubHookSecret,
+  verifyGitHubSignature,
+} from "../github/webhooks.ts";
 import { ModelProviders } from "../models/service.ts";
-import { decrypt, encrypt, fingerprint } from "../setup/credentials.ts";
+import { fingerprint } from "../setup/credentials.ts";
 import { audit } from "../workspaces/policy.ts";
 import {
   emptyReview,
@@ -62,40 +62,20 @@ const eventSchema = z.object({
     })
     .optional(),
 });
-export function verifyReviewSignature(
-  secret: string,
-  body: Buffer,
-  signature: string,
-) {
-  requireThat(
-    /^sha256=[0-9a-f]{64}$/.test(signature),
-    "unauthorized_webhook",
-    401,
-  );
-  const expected = createHmac("sha256", secret).update(body).digest();
-  requireThat(
-    timingSafeEqual(expected, Buffer.from(signature.slice(7), "hex")),
-    "unauthorized_webhook",
-    401,
-  );
-}
+
+export { verifyGitHubSignature as verifyReviewSignature } from "../github/webhooks.ts";
 export class ReviewService {
+  readonly webhooks: GitHubWebhooks;
   constructor(
     readonly store: Store,
     readonly apps: GitHubApps,
     private key: string,
     private origin: string,
-  ) {}
+  ) {
+    this.webhooks = new GitHubWebhooks(store, apps, key);
+  }
   async hookSecret(operatorId: string) {
-    const row = (
-      await this.store.pool.query(
-        "SELECT secret FROM review_bot_hooks WHERE operator_id=$1",
-        [operatorId],
-      )
-    ).rows[0];
-    return row
-      ? decrypt(this.key, `review-hook:${operatorId}`, row.secret)
-      : (await this.apps.get(operatorId))?.config.webhookSecret;
+    return githubHookSecret(this.store, this.apps, this.key, operatorId);
   }
   async view(admin: Admin, workspaceId: string): Promise<ReviewPage> {
     const w = await this.store.read(workspaceId);
@@ -112,28 +92,7 @@ export class ReviewService {
     };
   }
   async configureHook(admin: Admin, workspaceId: string, value: unknown) {
-    const input = z
-      .object({ secret: z.string().trim().min(32).max(8192).optional() })
-      .strict()
-      .parse(value);
-    requireThat(this.key, "coding_credentials_unavailable", 503);
-    const secret = input.secret ?? randomBytes(32).toString("hex");
-    await this.store.change(workspaceId, async (w, sql) => {
-      reviewAuthority(w, admin);
-      requireThat(
-        await this.apps.get(w.operatorId),
-        "github_app_not_configured",
-        409,
-      );
-      await sql.query(
-        "INSERT INTO review_bot_hooks(operator_id,secret) VALUES($1,$2) ON CONFLICT(operator_id) DO UPDATE SET secret=EXCLUDED.secret,updated_at=now()",
-        [
-          w.operatorId,
-          encrypt(this.key, `review-hook:${w.operatorId}`, secret),
-        ],
-      );
-      audit(w, admin.id, "review.webhook_configured", w.id);
-    });
+    const { secret } = await this.webhooks.configure(admin, workspaceId, value);
     return { secret, url: (await this.view(admin, workspaceId)).webhookUrl };
   }
   async save(admin: Admin, workspaceId: string, value: unknown) {
@@ -212,7 +171,7 @@ export class ReviewService {
     );
     const secret = await this.hookSecret(operatorId);
     requireThat(secret, "unauthorized_webhook", 401);
-    verifyReviewSignature(secret, body, signature);
+    verifyGitHubSignature(secret, body, signature);
     if (
       ![
         "pull_request",

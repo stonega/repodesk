@@ -7,11 +7,13 @@ import { claim } from "../../src/admin/auth.ts";
 import { extensionToolExecution } from "../../src/agent/extension-execution.ts";
 import { PluginService } from "../../src/agent/plugin-service.ts";
 import type { AgentInput } from "../../src/agent/runtime.ts";
+import { applicationTools } from "../../src/agent/tools.ts";
 import { createApp } from "../../src/app.ts";
 import { migrate } from "../../src/db/migrate.ts";
 import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
 import type { Admin } from "../../src/domain.ts";
+import { DeliveryWorker } from "../../src/jobs/delivery.ts";
 import { Executor } from "../../src/jobs/execute.ts";
 import { PluginError } from "../../src/plugins/contract.ts";
 import type { PluginSandbox } from "../../src/plugins/docker-sandbox.ts";
@@ -22,6 +24,7 @@ import {
   createToolContext,
   validateDefinition,
 } from "../../src/plugins/invocation.ts";
+import { managePluginNotifications } from "../../src/plugins/notifications.ts";
 import { PluginPackages } from "../../src/plugins/package-service.ts";
 import { PluginRunnerClient } from "../../src/plugins/runner-client.ts";
 import { pluginRunnerApp } from "../../src/plugins/runner-service.ts";
@@ -406,6 +409,203 @@ const url = process.env.TEST_DATABASE_URL;
         tools[0]?.execute("call-2", { text: "one" }),
       ).rejects.toThrow("tool_policy_denied");
       expect(f.calls()).toBe(1);
+    });
+
+    test("subscribed plugin events publish through the production factory with private deduplication and revocation", async () => {
+      const f = await fixture();
+      f.repo.add(
+        "0.2.0",
+        {
+          capabilities: ["notifications.publish"],
+          notifications: [
+            {
+              name: "updated",
+              title: "Updated",
+              description: "A new observed item.",
+            },
+          ],
+          tools: f.repo.manifest.tools.map((t) => ({
+            ...t,
+            effect: "read",
+            capabilities: ["notifications.publish"],
+          })),
+        },
+        `export default {tools:{async count_words({text}){return {content:[{type:"text",text:"1"}],structuredContent:{count:1},notifications:[{event:"updated",id:text,title:"Observed item",body:"Private plugin data",occurredAt:new Date().toISOString()}]}}}};`,
+      );
+      const preview = await f.preview(0, "install", "v0.2.0");
+      await f.service.apply(admin, f.w.id, {
+        previewId: preview.id,
+        revision: 0,
+      });
+      await f.service.update(admin, f.w.id, 777, {
+        revision: 1,
+        enabled: true,
+        settings: {},
+        grants: ["notifications.publish"],
+      });
+      await store.pool.query(
+        "UPDATE deployment SET data=jsonb_set(jsonb_set(jsonb_set(data,'{active}','true'),'{paused}','false'),'{bot}', $1::jsonb)",
+        [JSON.stringify({ id: "900", username: "fixture", visibleAll: true })],
+      );
+      const run = await store.change(f.w.id, (w) => {
+        managePluginNotifications(w, "101", "900", {
+          action: "subscribe",
+          plugin: "777",
+        });
+        managePluginNotifications(w, "202", "900", {
+          action: "subscribe",
+          plugin: "777",
+        });
+        const run = createRun(
+          w,
+          "101",
+          "Subscribe me to plugin updates and check the plugin",
+          "101",
+          0,
+          "gpt-4.1-mini",
+          { botId: "900", replyTo: 50 },
+        );
+        run.status = "running";
+        return run;
+      });
+      const management = applicationTools(
+        store,
+        f.w.id,
+        run.id,
+        run.fence,
+      ).find((t) => t.name === "manage_plugin_notifications");
+      if (!management) throw Error("missing plugin notification tool");
+      await management.execute("subscribe", {
+        action: "subscribe",
+        plugin: "777",
+        requestQuote: "Subscribe me to plugin updates",
+      });
+      await store.pool.query(
+        "UPDATE admins SET telegram_id='101' WHERE id=$1",
+        [admin.id],
+      );
+      try {
+        const page = await (await f.request("/777/notifications")).json();
+        expect(page.subscription.actor).toBe("101");
+        expect(
+          (
+            await f.request("/777/notifications", "POST", {
+              action: "subscribe",
+              generation: 999,
+            })
+          ).status,
+        ).toBe(409);
+        expect(
+          (
+            await f.request("/777/notifications", "POST", {
+              action: "subscribe",
+              actor: "202",
+            })
+          ).status,
+        ).toBe(400);
+        expect(
+          (
+            await f.request(
+              "/777/notifications",
+              "POST",
+              { action: "pause" },
+              { "x-csrf-token": "wrong" },
+            )
+          ).status,
+        ).toBe(403);
+      } finally {
+        await store.pool.query(
+          "UPDATE admins SET telegram_id=NULL WHERE id=$1",
+          [admin.id],
+        );
+      }
+      const tools: {
+        name: string;
+        execute: (id: string, args: { text: string }) => Promise<unknown>;
+      }[] = [];
+      const extensions = f.service.extensions(await store.read(f.w.id));
+      const input = {
+        workspaceId: f.w.id,
+        actor: "101",
+        runId: run.id,
+        signal: new AbortController().signal,
+        guard: async () => {},
+      };
+      const factory = extensions[0]?.factory(
+        input as Parameters<NonNullable<(typeof extensions)[0]>["factory"]>[0],
+      );
+      await factory?.({
+        registerTool: (tool: (typeof tools)[number]) => tools.push(tool),
+      } as unknown as Parameters<NonNullable<typeof factory>>[0]);
+      expect(f.calls()).toBe(0);
+      await tools[0]?.execute("first", { text: "event-one" });
+      await tools[0]?.execute("duplicate", { text: "event-one" });
+      let saved = await store.read(f.w.id);
+      expect(saved.deliveries).toHaveLength(1);
+      expect(saved.deliveries[0]?.actor).toBe("101");
+      expect(saved.deliveries[0]?.chatId).toBe("101");
+      expect(saved.deliveries[0]?.topicId).toBe(0);
+      expect(
+        (
+          await store.pool.query(
+            "SELECT 1 FROM plugin_notification_events WHERE workspace_id=$1",
+            [f.w.id],
+          )
+        ).rowCount,
+      ).toBe(1);
+      const delivery = saved.deliveries[0];
+      if (!delivery) throw Error("missing notification");
+      await store.change(f.w.id, (w) => {
+        managePluginNotifications(w, "101", "900", {
+          action: "pause",
+          plugin: "777",
+        });
+      });
+      await new DeliveryWorker(
+        store,
+        new SetupService(store, key, origin),
+      ).send(f.w.id, delivery.id);
+      expect((await store.read(f.w.id)).deliveries[0]?.state).toBe("cancelled");
+      await store.change(f.w.id, (w) => {
+        managePluginNotifications(w, "101", "900", {
+          action: "resume",
+          plugin: "777",
+        });
+      });
+      await tools[0]?.execute("next", { text: "event-two" });
+      saved = await store.read(f.w.id);
+      expect(saved.deliveries).toHaveLength(2);
+      await f.service.update(admin, f.w.id, 777, {
+        revision: 2,
+        enabled: false,
+        settings: {},
+        grants: ["notifications.publish"],
+      });
+      await new DeliveryWorker(
+        store,
+        new SetupService(store, key, origin),
+      ).send(f.w.id, saved.deliveries[1]?.id ?? "");
+      expect((await store.read(f.w.id)).deliveries[1]?.state).toBe("cancelled");
+      await expect(
+        tools[0]?.execute("revoked", { text: "event-three" }),
+      ).rejects.toThrow("tool_policy_denied");
+      await f.service.remove(admin, f.w.id, 777, { revision: 3 });
+      const reinstall = await f.preview(4, "install", "v0.2.0");
+      await f.service.apply(admin, f.w.id, {
+        previewId: reinstall.id,
+        revision: 4,
+      });
+      await f.service.update(admin, f.w.id, 777, {
+        revision: 5,
+        enabled: true,
+        settings: {},
+        grants: ["notifications.publish"],
+      });
+      expect(
+        (await store.read(f.w.id)).pluginNotifications?.every(
+          (s) => !s.enabled,
+        ),
+      ).toBe(true);
     });
 
     test("production Pi and Executor persist package results and do not dispatch after revocation", async () => {

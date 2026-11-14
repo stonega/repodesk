@@ -4,10 +4,12 @@ import type { PluginSettings } from "./agent/plugin-config.ts";
 import type { CodingConfig } from "./coding/config.ts";
 import { currencies } from "./currency.ts";
 import type { GitHubConnection } from "./github/config.ts";
+import type { GitHubSubscription } from "./github/notifications.ts";
 import type { GitHubUserAccess } from "./github/user-access.ts";
 import type { GooglePlugin, GoogleUser } from "./google/config.ts";
 import type { MemoryContext, MemoryState } from "./memory/types.ts";
 import type { ModelProvider, ModelSelection } from "./models/config.ts";
+import type { PluginSubscription } from "./plugins/notifications.ts";
 import type { ReviewConfig, ReviewTask } from "./review-bot/config.ts";
 import type { SearchPin, SearchProvider } from "./search/config.ts";
 
@@ -547,6 +549,8 @@ export interface TelegramWidget {
   requestMessageId?: number;
 }
 export interface Delivery {
+  githubNotification?: { subscriptionId: string; revision: number };
+  pluginNotification?: { subscriptionId: string; revision: number };
   repositoryMemory?: { taskId: string; refs: Omit<MemoryContext, "text"> };
   browserTaskState?: {
     refresh?: boolean;
@@ -665,6 +669,8 @@ export interface Workspace {
   reviewCleanup?: string[];
   coding?: CodingConfig;
   github?: GitHubConnection;
+  githubNotifications?: GitHubSubscription[];
+  pluginNotifications?: PluginSubscription[];
   plugins?: PluginSettings;
   id: string;
   operatorId: string;

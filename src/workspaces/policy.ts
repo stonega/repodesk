@@ -189,6 +189,14 @@ function allowedRun(
   return result;
 }
 export function revokeWork(w: Workspace, now = new Date()) {
+  for (const s of [
+    ...(w.githubNotifications ?? []),
+    ...(w.pluginNotifications ?? []),
+  ])
+    if (s.enabled && !eligible(w, s.actor)) {
+      s.enabled = false;
+      s.revision++;
+    }
   for (const actor of Object.keys(w.googleUsers ?? {}))
     if (!eligible(w, actor)) delete w.googleUsers?.[actor];
   for (const approval of w.approvals)

@@ -101,7 +101,7 @@ conflict, never silently deleted.
 flowchart LR
   Web[Admin SPA] --> API[Hono API]
   TG[Telegram webhook] --> API
-  GHW[GitHub App webhook / Review Bot] --> API
+  GHW[GitHub App webhook / notifications / Review Bot] --> API
   API --> DB[(PostgreSQL)]
   DB --> Outbox[Transactional dispatcher]
   Outbox --> Jobs[pg-boss]

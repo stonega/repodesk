@@ -16,6 +16,7 @@ import type {
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading, PluginToggle } from "./plugin-detail.tsx";
+import { PluginNotifications } from "./plugin-notifications.tsx";
 import { Select } from "./select.tsx";
 import { Skeleton } from "./skeleton.tsx";
 import { ErrorToast, useToast } from "./toast.tsx";
@@ -939,6 +940,14 @@ export function PackageDetail({
             </div>
           )}
         </section>
+      )}
+      {!!entry?.manifest.notifications?.length && (
+        <PluginNotifications
+          key={`${entry.source.repositoryId}:${entry.generation}`}
+          request={request}
+          workspaceId={workspaceId}
+          repositoryId={entry.source.repositoryId}
+        />
       )}
       {entry?.manifest.connections?.map((descriptor) => {
         const saved = entry.connections.find(

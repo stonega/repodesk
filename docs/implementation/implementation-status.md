@@ -1,5 +1,130 @@
 # Implementation evidence
 
+## Plugin notification events (2026-11-14)
+
+GitHub repository plugins can declare `notifications.publish` and named events.
+A successful private tool result can return bounded, typed notification candidates;
+the host validates the complete result, current capability grant and source pins,
+then records a deduplicated personal Telegram delivery. Candidates cannot choose
+an actor or chat. Another member's subscriptions never receive the invoking
+member's source results. Group invocations do not publish these events.
+
+The SDK exports candidate types and generated `NotificationEvent` names. Manifest,
+result and capability validation, the private supervisor and the portable
+SDK/schema/CLI template share the additive preview API 1 contract. Older hosts
+reject the new capability before execution. The `repository-alerts` example reads
+current GitHub counters and reports an observed threshold without inventing its
+historical crossing time. This profile adds no plugin timer, autonomous poller,
+public plugin webhook or Telegram credential access.
+
+Members manage their own subscriptions through `manage_plugin_notifications` in a
+current private text request or through the package details' Notifications card.
+Saved values remain separate from New/Edit dialogs. Revisions and installation
+generations reject stale edits; removed event names are discarded from upgraded
+editor drafts. Pending saves lock dismissal and preserve failed drafts. Pausing,
+deleting, losing source access or changing installation/configuration/grants fences
+older deliveries. Uninstall explicitly pauses subscriptions so reinstalling
+identical bytes cannot revive them. Receipts in migration
+`025_plugin_notifications.sql` contain event hashes rather than text; the shared
+worker purges them after 30 days and on workspace deletion. Existing Telegram
+retry/unknown-outcome handling applies.
+
+Final combined-source checks passed: lint (nine existing incident-script warnings),
+strict root and new-example TypeScript, build, Node runtime contract, and the full
+Bun suite (**1,755 passed, nine Docker-gated skips, zero failures across 179 files**).
+The job-image and package production-composition suite was separately run with the
+immutable image below: **21 passed, zero failures**, including all gated sandbox
+checks and the new candidate-event case. The pinned Bun 1.3.14 portable template
+passed from an independent directory. The bundled Code Truth catalog regenerated
+without a diff and the real-index/MCP/commit-provenance service smoke passed.
+
+**42 distinct selected browser cases passed** across seven files. The final fresh
+13-case run covers GitHub notification management, plugin event subscriptions,
+upgrade-event recovery and the full package install/configuration/rollback flow.
+The 29 unchanged GitHub permissions/repository refresh, catalog and version/update
+cases from the first phase are reused; their code/dependencies/configuration did
+not change. This is bounded selection, not a full browser-suite claim. Desktop
+1280px and mobile 390px saved summaries, editors, retained errors and control
+placement were inspected. Earlier runs made during active edits/builds and their
+intermediate failures are superseded by the stable-source passing runs.
+
+Local validation artifacts (not production release images):
+
+- App: `sha256:928bf9ac9c02ca6fb39648ec48442f29372e182b570c29ce6031e92ef21c3851`.
+  Its isolated Node 24.21.0 contract passed 16 ordinary and 16 configured startup
+  cases with **zero external startup calls**, including a granted notification
+  producer and both management tools.
+- Plugin job: `sha256:ee899c297120a1dbc972f01d501f81d9f6dd9f9c5ee13c15ee8a8df2a896a637`.
+- Plugin supervisor: `sha256:593b59dea019e90d0623f8619f7768bb01132258e3c27c8799dfbc91ebf76dbe`.
+  Its isolated authenticated health smoke returned protocol 1, HTTP 200 with the
+  synthetic token and HTTP 403 without it. Docker execution/broker behavior was
+  tested separately through the exact job-image suite.
+
+Compose configuration validated with an empty environment file and synthetic
+password. This entry records local verification before commit and push. No production deployment,
+account connection, webhook registration, live model/provider event or Telegram
+send was performed. Live model intent, real provider events and native Telegram
+rendering remain acceptance gates. See [contracts and boundaries](plugin-notifications.md)
+and the [author guide](../user/plugin-development.md#publish-opt-in-notification-events).
+
+## Personal GitHub notifications (2026-11-14)
+
+Members can subscribe to new PRs and issues in connected repositories through a
+current private Telegram text request or **Plugins → GitHub notifications**. Each
+member manages only their own repository/event subscriptions. New/Edit use shared
+modal controls; saved summaries remain read-only. Pause, resume and deletion fence
+queued recipients and deliveries. Notifications use the private main chat, include
+Draft labels and links, and require no model, Code Truth, Codex or Review Bot run.
+Natural-language subscription management uses the ordinary chat model.
+
+The shared GitHub ingress validates raw-body HMAC signatures and persists bounded,
+tenant-scoped event metadata with delivery/semantic deduplication. Worker
+transactions create normal outbox-backed Telegram intents. Current membership,
+repository scope, bot identity, subscription revision and linked-user read access
+are checked before delivery. App lifecycle revocation pauses affected subscriptions;
+refresh/reconnection and explicit resume are required. Removed permissions and
+reactivation cannot revive cancelled intents. Repository renames retain numeric
+identity. Processed payloads are erased immediately; 30-day event retention also
+runs while a workspace is paused. Workspace deletion removes subscription and
+receipt state.
+
+Migration `024_github_notifications.sql` adds event receipts and durable App webhook
+recovery state. New GitHub App manifests include `issues`; existing Apps must add
+it manually. The notification Delivery card exposes the URL and an operator-only
+shared secret editor, compatible with Review Bot's encrypted storage. Saving a
+secret does not update GitHub. A separate bounded recovery loop checks App delivery
+history every five minutes, with cursor pagination, three attempts per GUID and
+three redelivery requests per check within a three-day window. Telegram uncertain
+sends retain the existing unknown-outcome policy and are not automatically replayed.
+
+Final frozen-source validation on Bun 1.4.4, Node 22.22.3 and disposable PostgreSQL
+17 passed: `bun run check` (nine existing incident-script warnings),
+`bun run typecheck`, `bun test` (**1,744 passed, eight Docker-gated skips, zero
+failures across 178 files**), `bun run build` and `bun run test:runtime`.
+All 13 notification integration tests passed. The production-factory contract
+passed 16 ordinary and 16 configured startup cases with **zero external startup
+calls**. Earlier runs performed while fixes were still being made are superseded
+by the final complete run; an intermediate Codex test timeout did not recur.
+
+**33 distinct selected browser cases passed** across notification management,
+GitHub repository refresh, Review Bot/Codex configuration, plugin catalog and
+application version/update flows. The notification suites were repeated after
+scoped visual adjustments; unchanged related results were reused. Desktop 1280px
+and mobile 390px saved/empty, editor, pending and error layouts were inspected,
+including light/dark styling and right-aligned mobile management actions. Baseline
+`f615f56588f3b33afe6e4488553a8369fa03b23c` has documented group-feedback verification;
+only instructions and package version differ between it and the starting release
+`c81cbf6d470f85353590958df82f13d1933ccfd1`. No dependency change intervenes.
+This is selected browser coverage, not a full browser-suite pass.
+
+See [implementation contracts and selection](github-notifications.md),
+[the standalone user guide](../user/github-notifications.md) and
+[the acceptance journey](../../examples/github-notifications.md).
+These checks record local verification before commit and push. No production change,
+account connection, webhook registration, live GitHub/model call or Telegram send
+was performed. Live event delivery and native Telegram rendering remain acceptance
+gates. The pre-existing `CLAUDE.md` deletion was preserved.
+
 ## Repository-bound group feedback (2026-11-13)
 
 Workspace managers can bind one selected public GitHub repository from a group's

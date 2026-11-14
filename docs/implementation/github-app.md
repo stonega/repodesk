@@ -45,7 +45,7 @@ checked 2026-11-13.
    **Continue to GitHub**. Confirm creation on GitHub. The manifest preconfigures
    Contents, Issues and Pull requests read/write access, Metadata read access,
    organization Members read access,
-   `pull_request`, `issue_comment` and `pull_request_review_comment` webhook
+   `issues`, `pull_request`, `issue_comment` and `pull_request_review_comment` webhook
    subscriptions, and the deployment's callbacks. These permissions support
    Codex checkout, PR publication and approved PR merge/close actions; coding policies and task authorization
    still control each operation. The callback accepts exactly this permission set
@@ -562,3 +562,10 @@ do not include a logo. GitHub assigns a default badge, which the owner can
 [customize in GitHub settings](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/creating-a-custom-badge-for-your-github-app)
 after registration. This customization is optional. RepoDesk continues directly to
 authorization without an icon download, upload instructions or acknowledgement.
+
+## Personal event notifications
+
+[GitHub notifications](github-notifications.md) uses the same authenticated App
+webhook and secret, independently of Review Bot and Codex. New manifests include
+`issues`; existing Apps must add that event manually. Subscriptions and recipients
+remain scoped to their workspace and member.

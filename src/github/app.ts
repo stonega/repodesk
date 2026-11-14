@@ -94,6 +94,7 @@ export class GitHubApp {
     body?: unknown,
     signal?: AbortSignal,
     method?: "PATCH",
+    metadata?: { headers?: Headers; empty?: boolean },
   ) {
     try {
       signal?.throwIfAborted();
@@ -154,11 +155,59 @@ export class GitHubApp {
           throw new Fault("github_app_permissions_missing", 409);
       }
       requireThat(response.ok, "github_unavailable", 502);
-      return await response.json();
+      if (metadata) metadata.headers = response.headers;
+      return metadata?.empty ? undefined : await response.json();
     } catch (error) {
       if (error instanceof Fault) throw error;
       throw new Fault("github_unavailable", 502);
     }
+  }
+  async webhookDeliveries(cursor?: string) {
+    const parameters = new URLSearchParams({ per_page: "100" });
+    if (cursor) parameters.set("cursor", cursor);
+    const metadata: { headers?: Headers } = {};
+    const data = await this.request(
+      `https://api.github.com/app/hook/deliveries?${parameters}`,
+      this.jwt(),
+      undefined,
+      undefined,
+      undefined,
+      metadata,
+    );
+    const items = z
+      .array(
+        z.object({
+          id: z.number().int().positive(),
+          guid: z.string().max(100),
+          status_code: z
+            .number()
+            .nullable()
+            .transform((v) => v ?? 0),
+          delivered_at: z.string().datetime(),
+        }),
+      )
+      .max(100)
+      .parse(data);
+    const next = /<([^>]+)>;\s*rel="next"/.exec(
+      metadata.headers?.get("link") ?? "",
+    )?.[1];
+    return {
+      items,
+      cursor: next
+        ? (new URL(next).searchParams.get("cursor") ?? undefined)
+        : undefined,
+    };
+  }
+  async redeliverWebhook(id: number) {
+    requireThat(Number.isSafeInteger(id) && id > 0, "invalid_github_delivery");
+    await this.request(
+      `https://api.github.com/app/hook/deliveries/${id}/attempts`,
+      this.jwt(),
+      {},
+      undefined,
+      undefined,
+      { empty: true },
+    );
   }
   async exchange(code: string, verifier: string, callback: string) {
     const data = await this.request(

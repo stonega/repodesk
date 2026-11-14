@@ -9,8 +9,10 @@ import { transaction } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import { Fault } from "../domain.ts";
 import type { GitHubIssues } from "../github/issues.ts";
+import { GitHubNotifications } from "../github/notifications.ts";
 import type { GitHubPullRequests } from "../github/pull-requests.ts";
 import type { GitHubUsers } from "../github/users.ts";
+import type { GitHubWebhooks } from "../github/webhooks.ts";
 import type { GoogleService } from "../google/service.ts";
 import { MemoryService } from "../memory/service.ts";
 import { pruneRuntimeLogs, RuntimeLogger } from "../observability/logs.ts";
@@ -81,6 +83,7 @@ export async function startWorker(
   searchConsole?: SearchConsoleService,
   transcription = new TranscriptionService(store),
   browser?: BrowserService,
+  githubWebhooks?: GitHubWebhooks,
 ) {
   const boss = queue(url, store.log);
   await boss.start();
@@ -92,6 +95,7 @@ export async function startWorker(
     new Ingress(store, setup, githubUsers, google, searchConsole),
   );
   const delivery = new DeliveryWorker(store, setup);
+  const notifications = new GitHubNotifications(store);
   const shutdown = new AbortController();
   const id = randomUUID();
   const commandMenu = new TelegramCommandMenu(store, setup);
@@ -169,6 +173,14 @@ export async function startWorker(
             ]);
             await sql.query("DELETE FROM outbox WHERE workspace_id=$1", [w.id]);
             await sql.query("DELETE FROM inbox WHERE workspace_id=$1", [w.id]);
+            await sql.query(
+              "DELETE FROM github_notification_events WHERE workspace_id=$1",
+              [w.id],
+            );
+            await sql.query(
+              "DELETE FROM plugin_notification_events WHERE workspace_id=$1",
+              [w.id],
+            );
             await sql.query("DELETE FROM runtime_logs WHERE workspace_id=$1", [
               w.id,
             ]);
@@ -179,6 +191,7 @@ export async function startWorker(
           }
         });
         // Durable rate-limit retries and ambiguous-send detection do not rely on queue retry timing.
+        await notifications.tick(workspaceId);
         const current = await store.read(workspaceId);
         await transcription.reconcile(current);
         browser?.maintain(workspaceId, shutdown.signal);
@@ -234,6 +247,9 @@ export async function startWorker(
           )
             await delivery.send(workspaceId, intent.id);
       }
+      await store.pool.query(
+        "DELETE FROM plugin_notification_events WHERE created_at<now()-interval '30 days'",
+      );
       await deliverAccessHelp(store, setup);
       await recoverJobs(store, boss);
       await dispatch(store, boss);
@@ -352,7 +368,32 @@ export async function startWorker(
   };
   memoryTick();
   const memoryTimer = setInterval(memoryTick, 60000);
+  let hookBusy: Promise<void> | undefined;
+  const hookTick = () => {
+    if (!githubWebhooks || hookBusy || shutdown.signal.aborted) return;
+    hookBusy = (async () => {
+      const operators = new Map<string, string>();
+      for (const w of await store.all())
+        if (
+          !w.deletion &&
+          (w.reviewBot?.settings.enabled ||
+            w.githubNotifications?.some((s) => s.enabled))
+        )
+          operators.set(w.operatorId, w.id);
+      for (const [operatorId, workspaceId] of operators) {
+        if (shutdown.signal.aborted) break;
+        await githubWebhooks.recover(operatorId, workspaceId);
+      }
+    })()
+      .catch(() => store.log.write("github_webhook_recovery_failed"))
+      .finally(() => {
+        hookBusy = undefined;
+      });
+  };
+  hookTick();
+  const hookTimer = setInterval(hookTick, 60000);
   return async () => {
+    clearInterval(hookTimer);
     clearInterval(heartbeatTimer);
     clearInterval(runTimer);
     clearInterval(memoryTimer);
@@ -365,7 +406,7 @@ export async function startWorker(
     await runs.drain();
     await reviewBusy;
     await Promise.all([polling, boss.stop({ graceful: true, timeout: 10000 })]);
-    await Promise.all([codingBusy, githubBusy, menuBusy, memoryBusy]);
+    await Promise.all([codingBusy, githubBusy, menuBusy, memoryBusy, hookBusy]);
     await browser?.drain();
     while (busy) await new Promise((resolve) => setTimeout(resolve, 25));
     await heartbeatBusy;

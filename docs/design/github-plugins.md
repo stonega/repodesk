@@ -35,6 +35,18 @@ for completed work, validation and outstanding pilot/publication gates.
   The private supervisor reaps expired labelled jobs after interruptions. Shared
   kernel/daemon failure handling remains an operator deployment boundary.
 
+## Opt-in notification events (implemented locally, 2026-11-14)
+
+Plugins may additionally declare `notifications.publish` and named event types.
+An authorized private tool result can return bounded notification candidates;
+the host validates the completed result, subscriber, source grants and current
+installation, then commits a deduplicated personal delivery through its outbox.
+Candidates cannot choose an actor or destination and are never broadcast between
+members. The SDK/schema/template and example describe this optional capability.
+It adds no plugin timers, background callbacks, raw Telegram API or external write
+proxy. See [implementation](../implementation/plugin-notifications.md) and the
+[author guide](../user/plugin-development.md#publish-opt-in-notification-events).
+
 ## Product contract
 
 One GitHub repository is one installable plugin. A plugin can contribute several
@@ -44,7 +56,7 @@ management, Pi registration, authorization, cancellation and durable results.
 
 The first public profile supports pure computation, approved read-only HTTP
 operations and a scoped GitHub repository-metadata adapter. It does not expose
-conversation hooks, raw chat history, model/provider APIs, direct messaging,
+conversation hooks, raw chat history, model/provider APIs, direct messaging APIs,
 external writes, persistent plugin state, scheduled callbacks or custom frontend
 code. Existing application-owned integrations retain their existing contracts.
 

@@ -122,6 +122,15 @@ export function invalidateGitHubWork(
 ) {
   if (repositoryIds?.length === 0) return;
   const affected = repositoryIds ? new Set(repositoryIds) : undefined;
+  for (const s of w.githubNotifications ?? [])
+    if (
+      s.actor === actor &&
+      s.enabled &&
+      (!affected || affected.has(s.repositoryId))
+    ) {
+      s.enabled = false;
+      s.revision++;
+    }
   const approvalAffected = (payload: unknown) => {
     if (!affected) return true;
     const id = (payload as { repositoryId?: unknown } | null)?.repositoryId;

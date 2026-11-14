@@ -20696,7 +20696,11 @@ function settingsDefaults(schema, value) {
 }
 
 // src/plugins/manifest.ts
-var capabilitySchema = exports_external.enum(["github.metadata.read", "http.read"]);
+var capabilitySchema = exports_external.enum([
+  "github.metadata.read",
+  "http.read",
+  "notifications.publish"
+]);
 var versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 var localName = exports_external.string().regex(/^[a-z][a-z0-9_]{0,31}$/);
 var pathSchema = exports_external.string().min(1).max(512);
@@ -20712,7 +20716,12 @@ var manifestSchema = exports_external.object({
   repository: exports_external.string().regex(/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/).max(256),
   publisher: exports_external.object({ name: exports_external.string().min(1).max(100) }).strict(),
   runtime: exports_external.object({ type: exports_external.literal("node-sandbox"), entry: pathSchema }).strict(),
-  capabilities: exports_external.array(capabilitySchema).max(2),
+  capabilities: exports_external.array(capabilitySchema).max(3),
+  notifications: exports_external.array(exports_external.object({
+    name: localName,
+    title: exports_external.string().min(1).max(100),
+    description: exports_external.string().min(1).max(1024)
+  }).strict()).min(1).max(16).optional(),
   settingsSchema: dataSchema,
   settingsUi: exports_external.record(exports_external.string(), exports_external.object({
     label: exports_external.string().max(100),
@@ -20736,7 +20745,7 @@ var manifestSchema = exports_external.object({
     title: exports_external.string().min(1).max(100),
     description: exports_external.string().min(1).max(1024),
     effect: exports_external.enum(["compute", "read"]),
-    capabilities: exports_external.array(capabilitySchema).max(2),
+    capabilities: exports_external.array(capabilitySchema).max(3),
     inputSchema: dataSchema,
     outputSchema: dataSchema
   }).strict()).min(1).max(32),
@@ -20751,7 +20760,7 @@ function parseManifest(value) {
   try {
     assertJson(value, limits.manifest);
     const manifest = manifestSchema.parse(value);
-    if (!safeResourcePath(manifest.runtime.entry) || !manifest.runtime.entry.endsWith(".mjs") || !unique(manifest.tools.map((t) => t.name)) || !unique(manifest.capabilities) || !unique(manifest.connections?.map((c) => c.id) ?? []) || !unique(manifest.skills.map((s) => s.path)) || !unique(manifest.diagnosticCodes ?? []) || manifest.settingsSchema.type !== "object" || Object.keys(manifest.metadata ?? {}).length > 32)
+    if (!safeResourcePath(manifest.runtime.entry) || !manifest.runtime.entry.endsWith(".mjs") || !unique(manifest.tools.map((t) => t.name)) || !unique(manifest.capabilities) || !unique(manifest.connections?.map((c) => c.id) ?? []) || !unique(manifest.skills.map((s) => s.path)) || !unique(manifest.diagnosticCodes ?? []) || !unique(manifest.notifications?.map((n) => n.name) ?? []) || !!manifest.notifications !== manifest.capabilities.includes("notifications.publish") || manifest.settingsSchema.type !== "object" || Object.keys(manifest.metadata ?? {}).length > 32)
       throw new PluginError("plugin_manifest_invalid");
     validateSchema(manifest.settingsSchema);
     const scalar = new Set(["string", "integer", "number", "boolean"]);
@@ -20795,12 +20804,14 @@ function parseManifest(value) {
 function generateContract(manifest) {
   const tools = manifest.tools.map((tool) => `${JSON.stringify(tool.name)}: { input: ${schemaType(tool.inputSchema)}; output: ${schemaType(tool.outputSchema)} }`).join(`;
   `);
+  const notificationTypes = manifest.notifications ? `export type NotificationEvent = ${manifest.notifications.map((n) => JSON.stringify(n.name)).join(" | ")};
+` : "";
   return `// Generated from repodesk.plugin.json. Do not edit.
 export type Settings = ${schemaType(manifest.settingsSchema)};
 export type Contract = {
   ${tools}
 };
-`;
+${notificationTypes}`;
 }
 
 // src/plugins/protocol.ts
@@ -20977,12 +20988,24 @@ var repositorySummary = exports_external.object({
   subscribers: exports_external.number().int().nonnegative().safe(),
   fetchedAt: exports_external.string().datetime()
 }).strict();
+var pluginNotificationSchema = exports_external.object({
+  occurredAt: exports_external.string().datetime(),
+  event: exports_external.string().regex(/^[a-z][a-z0-9_]{0,31}$/),
+  id: exports_external.string().min(1).max(128),
+  title: exports_external.string().min(1).max(120),
+  body: exports_external.string().min(1).max(2000),
+  url: exports_external.string().max(2048).url().refine((v) => {
+    const u = new URL(v);
+    return u.protocol === "https:" && !u.username && !u.password;
+  }).optional()
+}).strict();
 var resultSchema = exports_external.object({
   content: exports_external.array(exports_external.object({
     type: exports_external.literal("text"),
     text: exports_external.string().max(limits.result)
   }).strict()).min(1).max(8),
-  structuredContent: exports_external.record(exports_external.string(), exports_external.json())
+  structuredContent: exports_external.record(exports_external.string(), exports_external.json()),
+  notifications: exports_external.array(pluginNotificationSchema).max(10).optional()
 }).strict();
 function toolFor(manifest, name) {
   const tool = manifest.tools.find((t) => t.name === name);
@@ -21012,6 +21035,8 @@ function validateResult(manifest, tool, value) {
     assertJson(value, limits.result);
     const result = resultSchema.parse(value);
     if (!matches(toolFor(manifest, tool).outputSchema, result.structuredContent))
+      throw new PluginError("plugin_result_invalid");
+    if (result.notifications !== undefined && (!toolFor(manifest, tool).capabilities.includes("notifications.publish") || result.notifications.some((n) => !manifest.notifications?.some((t) => t.name === n.event)) || new Set(result.notifications.map((n) => `${n.event}:${n.id}`)).size !== result.notifications.length))
       throw new PluginError("plugin_result_invalid");
     return result;
   } catch {
