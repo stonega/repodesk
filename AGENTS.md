@@ -64,9 +64,6 @@ Source: owner request during v0.1.48 release preparation, 2026-11-12. Follow the
 
 ### Branch integration and release source
 
-- Treat `origin/main` as the shared source of truth. Before starting or integrating
-  work, fetch the remote and inspect the current branch, dirty files, worktrees and
-  divergence. A push from another worktree does not update this worktree's `main`.
 - When integration/push is in scope, verify the result against freshly fetched
   remote main and confirm the push before reporting it integrated. Otherwise,
   explicitly report that the work remains local or on an unmerged branch.
