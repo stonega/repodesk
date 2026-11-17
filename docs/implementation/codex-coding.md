@@ -13,6 +13,9 @@ Telegram theme and viewport settings and rechecks the viewer's task/audience
 access. Enable the bot's Main Mini App at the existing site's `/mini` URL before
 rollout. See [task history and setup](telegram-mini-app.md) for capture boundaries,
 recovery, retention and live client acceptance.
+Inline Status and Cancel buttons are omitted from all Codex task updates, including
+progress edits and queued legacy messages. Confirmed PRs retain Review/Merge links;
+ordinary chat and `/status` or `/cancel` remain available for task controls.
 
 Codex implementation runs approved repository tasks in isolated Docker or
 OpenSandbox environments, or in the optional Native VPS host service using the

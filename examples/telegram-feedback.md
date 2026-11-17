@@ -28,10 +28,10 @@ these steps are not part of automated setup or tests.
 1. Send a short private question. Observe the native thinking preview and one final
    answer, without an extra immediate queued message.
 2. Ask for a coding change in a connected repository. Observe factual preparation, work
-   and verification stages by editing the original acknowledgement, with inline
-   **Status** and **Cancel** buttons. Tap **Status** on the latest task message; it should report the current task and confirmed
-   links, clear the native spinner and remain usable after ten minutes. Also test
-   `/status` in the same Topic or by replying to a task message.
+   and verification stages by editing the original acknowledgement, with
+   **View conversation** and no Status/Cancel row. Send `/status` in the same
+   Topic or by replying to a task message; it should report the current task and
+   confirmed links, including after ten minutes.
 3. Supply a change that needs a consequential product choice. Answer the question
    by Reply to its current question. Confirm that the same task continues. Also
    answer without Reply in its Topic: Pi should resolve the pending question and
@@ -43,11 +43,11 @@ these steps are not part of automated setup or tests.
    should close with the current waiting/finished state and remove active controls.
    Delete the progress message and confirm that the next update creates only one
    replacement and later stages edit it. A successful task returns one confirmed PR.
-5. Tap **Cancel** during work. Observe “Stopping…” followed by confirmed termination.
+5. Send `/cancel` during work. Observe “Stopping…” followed by confirmed termination.
    Repeat for queued, waiting and sign-in-paused tasks. During publication, inspect
    the recorded outcome; a write already in flight may require reconciliation.
-   Repeated taps must not duplicate cancellation; a status reply after stopping
-   should omit Cancel. Explicit `/cancel` remains available.
+   Repeated commands must not duplicate cancellation; status replies should omit
+   Status/Cancel buttons while keeping View conversation.
 6. Create two tasks in one Topic and send `/cancel`. Choose one. Verify that only
    that task stops and the command was not appended as a requirement. A different
    user or a stale/wrong-topic selection must not control it. Test a copied button
@@ -78,22 +78,23 @@ these steps are not part of automated setup or tests.
    not open a Codex-task selection. Test private and explicitly addressed group
    conversations; plain unrelated group traffic should remain uncollected.
 10. Once a PR is confirmed, check the progress message and result on Telegram
-    desktop and mobile. **Review** and **Merge** should replace Status/Cancel:
+    desktop and mobile. **Review** and **Merge** should accompany View conversation:
     Review opens that PR's changed files; Merge opens that PR's GitHub page, where
     merge permissions and confirmation still apply. Continue the task until it
     asks a necessary question: the question and progress edit must retain the
    same PR actions. Repeat with a blocker and a `/status` reply. Use `/cancel` for post-publication
     cancellation and verify its receipt keeps the existing PR links.
 11. Before publication, generate two distinct Codex progress notes. After each
-    confirmed delivery, only the latest task message should show **Status/Cancel**;
-    older message text and other URL links stay intact. Editing the original
-    progress acknowledgement must not restore its controls. Repeat with two tasks
-    in one Topic; each task keeps its own latest controls. Inspect desktop/mobile.
-    In deterministic delivery fixtures, reject or delay the next send: the existing
-    controls must remain. Restart during keyboard cleanup and replay the job: only
-    the known old keyboard changes, without another message. A stale callback is
-    denied even if Telegram could not remove its keyboard. A terminal update may
-    leave no Status/Cancel buttons; PR Review/Merge links remain usable.
+    delivery, each message should show only **View conversation** with no empty
+    keyboard row. Editing the original acknowledgement must keep that layout.
+    Repeat with two tasks in one Topic and inspect desktop/mobile. In deterministic
+    fixtures, include a keyboard already delivered by an older release: the next
+    confirmed update removes its Status/Cancel row while preserving text and links.
+    A failed or unknown send leaves the old message intact. Restart during cleanup
+    and replay the job: only the known keyboard changes, without another message.
+    Queued legacy intents must also omit Status/Cancel when sent or retried.
+    Removed callbacks are denied even if Telegram could not edit the old keyboard.
+    PR Review/Merge links remain usable.
 
 Record the deployed image, repository, verification performed and sanitized
 task/run references. Do not put credentials, private requests, device codes or raw

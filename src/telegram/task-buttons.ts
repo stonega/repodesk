@@ -19,6 +19,8 @@ export function taskButtons(
   id: string,
   cancel = true,
 ): Delivery["buttons"] {
+  // Codex task messages use conversation/PR links; commands still control tasks.
+  if (owner === "development") return;
   const kind = { run: "r", development: "d" }[owner];
   return [
     [

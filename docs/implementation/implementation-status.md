@@ -1,5 +1,31 @@
 # Implementation evidence
 
+## Codex Telegram message actions (2026-11-17)
+
+Codex task acknowledgements, progress edits, questions, blockers, status replies
+and outcomes omit inline Status/Cancel. View conversation remains available;
+confirmed PR messages retain Review/Merge. Ordinary chat, explicit task commands,
+authorized task selectors and native streaming Stop retain their behavior.
+Delivery also strips these controls from retained queued intents and retries.
+The existing durable cleanup removes older delivered keyboards after a confirmed
+update, preserving text and URL links; authenticated legacy callbacks remain
+supported until their stored controls are revoked.
+
+The focused feedback/development selection passed **33 tests**, covering task
+states, delayed progress, repair edits, legacy queue/retry behavior, duplicate and
+concurrent delivery, PR links, cleanup recovery and authorization boundaries.
+Lint (nine existing incident-script warnings), strict TypeScript, build and the
+Node runtime contract passed. The full Bun suite passed against disposable
+PostgreSQL: **1,758 passed, nine Docker-gated skips, zero failures across 179 files**.
+
+Browser selection relative to starting commit
+`89fdee187032a95049b0713ab2a8194e32eaa0e8`: no browser cases selected because this
+change affects native Telegram keyboards and backend delivery only; web source,
+dependencies and configuration are unchanged. No previous browser results are
+claimed as new evidence. Native Telegram desktop/mobile rendering remains
+unverified. No live Telegram messages, deployment or external account changes
+were performed. This entry records local verification before commit and push.
+
 ## Plugin notification events (2026-11-14)
 
 GitHub repository plugins can declare `notifications.publish` and named events.

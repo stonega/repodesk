@@ -29,7 +29,6 @@ import {
   cleanupTaskButtons,
   confirmTaskMessage,
   developmentMessageTask,
-  latestTaskMessage,
   sameTaskAudience,
   withoutTaskControls,
 } from "../telegram/task-control-messages.ts";
@@ -556,11 +555,7 @@ export class DeliveryWorker {
           });
           return;
         }
-      } else if (taskId && intent.editOf) {
-        const latest = latestTaskMessage(current, intent);
-        if (latest && latest.remoteId !== intent.remoteId)
-          buttons = withoutTaskControls(buttons, taskId);
-      }
+      } else if (taskId) buttons = withoutTaskControls(buttons, taskId);
       const developmentId = /^development:([0-9a-f-]{36}):/.exec(
         intent.id,
       )?.[1];

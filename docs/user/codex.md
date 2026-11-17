@@ -109,13 +109,21 @@ use Review Bot's separate workflow. Edited/deleted instructions or lost access
 stop further execution and publication. Temporary source failures retry
 automatically. Merge and deployment require their own authorization.
 
-## 状态、停止与 PR
+## Status, stopping and PRs
 
-进度消息更新已确认阶段；必要问题、阻塞和最终结果会有新消息。用最新任务消息上的 **Status / Cancel**，或 `/status`、`/cancel` 查看和停止。也可以在绑定对话发送“停止”或 `stop`。
+Progress edits show confirmed stages; necessary questions, blockers and final
+results arrive as new messages. Task messages keep **View conversation** and omit
+inline Status/Cancel buttons. Ask for status or send `/status` in the task's
+conversation. Use `/cancel`, “停止” or `stop` to stop work.
 
-旧消息上的控制按钮可能已失效，重新发送 `/status` 获取当前状态。停止是尽力操作，已发布的分支和 PR 保留，进行中的外部写入可能仍完成。
+Controls on older messages may have expired; send `/status` for the current state.
+Stopping is best effort: published branches and PRs remain, and an external write
+already in progress may still complete.
 
-PR 消息中的 **Review** 打开改动页面，**Merge** 打开 GitHub PR。链接本身不执行合并；自动创建 PR 不包含合并或部署授权。普通 Telegram PR 合并操作见 [GitHub 指南](github.md)。当前开发任务不会发布 `.github/` 目录修改。
+PR messages retain **Review** to open the changed files and **Merge** to open the
+GitHub PR. The link itself does not merge; automatic PR creation does not authorize
+merging or deployment. See the [GitHub guide](github.md) for Telegram PR merge
+requests. Current development tasks cannot publish changes under `.github/`.
 
 ## 查看完整任务记录
 

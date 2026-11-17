@@ -2170,16 +2170,15 @@ Use this format for each preference:
 
 ### Telegram PR messages offer Review and Merge
 
-- **Preference:** Once a coding task has a confirmed PR, replace inline Status
-  and Cancel with Review and Merge. Keep the PR actions on the progress message,
+- **Preference:** Once a coding task has a confirmed PR, show Review and Merge
+  alongside View conversation. Keep the PR actions on the progress message,
   final result, questions, blockers and requested status, including follow-up work.
 - **Scope:** Telegram Codex task messages with a confirmed
   PR. Review opens the PR's changed files; Merge opens its GitHub page.
 - **Source:** 2026-10-08 — user showed a waiting-for-input task message containing
   a PR link and requested Review or Merge for its inline buttons.
-- **Exceptions:** Tasks without a confirmed PR retain existing Status/Cancel
-  controls on the latest confirmed update, following
-  [latest task controls](#codex-task-controls-stay-on-the-latest-message).
+- **Exceptions:** Tasks without a confirmed PR show View conversation without
+  Status/Cancel, following [Codex task message actions](#codex-task-message-actions).
   GitHub handles review, merge permissions and merge confirmation;
   the links do not execute these actions in Telegram. Explicit task commands
   remain available. Notification permissions and chat/topic isolation still apply.
@@ -2189,27 +2188,27 @@ Use this format for each preference:
   coding-task Merge links continue to open GitHub. Merge approvals show the target
   branch, method and head commit, and results explain confirmed outcomes or recovery.
 
-### Codex task controls stay on the latest message
+### Codex task message actions
 
-- **Preference:** Show Status/Cancel on only the latest confirmed Codex task
-  message in its audience. After a newer message is delivered, remove these
-  controls from older messages without changing their text. Editing an older
-  progress message must not restore its controls. Keep the previous controls
-  until the new message is confirmed; a failed/unknown send cannot remove the
-  user's existing controls.
+- **Preference:** Omit inline Status and Cancel from Codex task messages. Keep
+  View conversation and confirmed PR Review/Merge links. Status and cancellation
+  remain available through ordinary chat and explicit task commands.
 - **Scope:** Native Telegram Codex task acknowledgements, progress, questions,
   blockers, status replies and outcomes, separately per task, actor, bot and
-  chat/topic. A terminal message can leave no Status/Cancel controls.
+  chat/topic, including queued messages and retries from older releases.
 - **Source:** 2026-10-18 — the user showed repeated Status/Cancel keyboards under
   consecutive Codex runner messages and requested buttons only on the latest update.
-- **Acceptance:** Consecutive confirmed updates leave at most one Status/Cancel
-  keyboard for the task. Failed/pending sends preserve the old keyboard. Verify
-  removal retries/restarts, concurrent delivery, older progress edits, revoked
-  actors and task/bot/chat/topic isolation. Removed controls cannot authorize stale
-  callbacks. Native desktop/mobile rendering remains a live acceptance check.
+  2026-11-17 — the user requested removing Status and Cancel from Codex task
+  messages entirely, superseding the latest-message placement preference.
+- **Acceptance:** New messages and progress edits contain no Status/Cancel row
+  and no empty keyboard row. View conversation retains its task link; confirmed
+  PR messages retain Review/Merge. Confirmed updates still clean up older delivered
+  controls without changing text or links. Verify queued legacy intents, duplicate
+  delivery, retries/restarts, older progress edits and task/audience isolation.
+  Native desktop/mobile rendering remains a live acceptance check.
 - **Exceptions:** The existing Review/Merge links on confirmed PR messages and
   unrelated URL links retain their own rules. Separate tasks
-  retain separate controls. Telegram rejection of an old edit may leave a stale
+  retain separate histories. Telegram rejection of an old edit may leave a stale
   visible keyboard, whose callbacks must remain revoked; never replace that old
   message or repeatedly resend the new update to remove it.
 
@@ -2229,9 +2228,9 @@ Use this format for each preference:
   Acknowledge a stop request separately from confirmed termination when execution
   is still active.
   Maintain one task progress message, editing the acknowledgement as confirmed
-  stages change, including checks, repairs and longer-stage updates. Keep native
-  inline **Status** and **Cancel** controls on the latest confirmed task message
-  while applicable, following [latest task controls](#codex-task-controls-stay-on-the-latest-message).
+  stages change, including checks, repairs and longer-stage updates. Keep the
+  **View conversation** link without inline Status/Cancel controls, following
+  [Codex task message actions](#codex-task-message-actions).
   Once a PR is confirmed, use [Review and Merge](#telegram-pr-messages-offer-review-and-merge).
   New messages belong to necessary questions, actionable blockers, user-requested
   status/input receipts and final outcomes. Routine progress must not flood the

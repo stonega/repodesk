@@ -11,6 +11,7 @@ import {
   requestFailureMessage,
   runStatus,
 } from "../../src/telegram/messages.ts";
+import { taskButtons } from "../../src/telegram/task-buttons.ts";
 import {
   cancelRun,
   confirmRunStopped,
@@ -28,6 +29,21 @@ function task() {
   };
 }
 
+test("Codex omits inline controls while ordinary run controls remain available", () => {
+  const id = randomUUID();
+  expect(taskButtons("development", id)).toBeUndefined();
+  expect(taskButtons("development", id, false)).toBeUndefined();
+  expect(taskButtons("run", id)).toEqual([
+    [
+      { text: "Status", callback_data: `trs:${id}` },
+      { text: "Cancel", callback_data: `trc:${id}` },
+    ],
+  ]);
+  expect(taskButtons("run", id, false)).toEqual([
+    [{ text: "Status", callback_data: `trs:${id}` }],
+  ]);
+});
+
 test("interruption recovery edits the confirmed progress message and deduplicates repeated observations", () => {
   const w = workspace(),
     t = task();
@@ -39,10 +55,7 @@ test("interruption recovery edits the confirmed progress message and deduplicate
   const recovery = w.deliveries.at(-1);
   expect(recovery?.text).toContain("restoring its saved workspace");
   expect(recovery?.editOf).toBe(initial.id);
-  expect(recovery?.buttons?.flat().map((b) => b.text)).toEqual([
-    "Status",
-    "Cancel",
-  ]);
+  expect(recovery?.buttons).toBeUndefined();
   const count = w.deliveries.length;
   recordProgress(w, t, "development", "recover", "recovery-1", 31000);
   expect(w.deliveries).toHaveLength(count);
@@ -87,19 +100,7 @@ test("a confirmed long phase replaces pending progress and real repairs get fres
   );
   expect(delayed?.text).not.toContain(w.deliveries[0]?.text ?? "missing stage");
   expect(delayed?.text).not.toMatch(/\/status|\/cancel|This stage/);
-  expect(delayed?.buttons?.flat().map((b) => b.text)).toEqual([
-    "Status",
-    "Cancel",
-  ]);
-  expect(
-    delayed?.buttons
-      ?.flat()
-      .every(
-        (b) =>
-          typeof b.callback_data === "string" &&
-          Buffer.byteLength(b.callback_data) <= 64,
-      ),
-  ).toBe(true);
+  expect(delayed?.buttons).toBeUndefined();
   recordProgress(w, t, "development", "repair", "2", 310000);
   recordProgress(w, t, "development", "check", "2", 320000);
   expect(new Set(w.deliveries.map((d) => d.id)).size).toBe(w.deliveries.length);

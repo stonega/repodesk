@@ -11,6 +11,9 @@ conversation**. The link opens the bot's Main Mini App with an opaque workspace/
 reference in `startapp`. The same direct-link launch works from private chats and
 groups; it avoids the private-chat restriction on `web_app` inline buttons.
 Forwarding the link grants no access to its contents.
+Codex task messages omit inline Status/Cancel buttons. Confirmed PR messages keep
+Review/Merge beside View conversation; use ordinary chat or `/status` and `/cancel`
+to request status or stop work.
 
 The application serves the page at `/mini` and its authenticated read API at
 `POST /mini-api/history`. It shares the existing deployment and database. It does

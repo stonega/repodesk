@@ -61,18 +61,25 @@ container isolation and provider/account limits continue to apply.
 
 ## User experience
 
+Current Codex message actions (2026-11-17): task updates show **View conversation**
+without inline Status/Cancel. Confirmed PRs also show Review/Merge. Ordinary chat,
+`/status`, `/cancel` and their authorized task selectors remain available. This
+supersedes the inline-button placement described in the historical entries below.
+Queued legacy messages and progress edits strip those controls before delivery;
+confirmed updates still remove old delivered keyboards through durable cleanup.
+
 The messages below are proposed examples. Use the saved repository name and actual
 state; keep routine notices short and keep diagnostics in the admin panel.
 
 | Situation | Example reply | Required evidence |
 | --- | --- | --- |
-| Task accepted | “Your request for owner/repo is queued. I’ll keep you posted.” with Status and Cancel buttons | Task and initial input committed |
+| Task accepted | “Your request for owner/repo is queued. I’ll keep you posted.” with View conversation | Task and initial input committed |
 | Work starts | “I’m investigating the change in owner/repo.” | Runner attempt accepted in the relevant intake or analysis phase |
 | Environment preparation | “I’m preparing the repository environment.” | Confirmed runner preparation/setup phase |
 | Implementation | “I’m implementing the change.” | Implementation authorized and runner in the work phase |
 | Verification | “I’m running the checks now.” | Confirmed check phase, not a model summary |
 | Repair | “A check failed, so I’m fixing it before trying again.” | Failed check and a repair actually started |
-| Longer verification | “The checks are still running. I’ll share the result when they finish.” with Status and Cancel buttons | A recent poll confirms the same active check phase |
+| Longer verification | “The checks are still running. I’ll share the result when they finish.” with View conversation | A recent poll confirms the same active check phase |
 | Question | “Should this apply to all users or only administrators? Reply here to continue.” | Persisted question in the waiting task |
 | Sign-in required | “Your task is paused because Codex needs sign-in. Ask the workspace operator to reconnect the account in Plugins → Codex → Configuration.” | Confirmed authentication pause; maintain the existing authorized continuation behavior |
 | Stop requested | “Stopping your task…” | Cancellation committed while an attempt is still active |

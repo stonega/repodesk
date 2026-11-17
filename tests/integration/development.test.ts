@@ -4233,7 +4233,7 @@ const url = process.env.TEST_DATABASE_URL;
       },
     };
   }
-  async function keyboardFixture() {
+  async function keyboardFixture(legacy = true) {
     const f = await fixture();
     type Keyboard = NonNullable<Delivery["buttons"]>;
     const messages = new Map<number, { text: string; buttons: Keyboard }>();
@@ -4289,6 +4289,21 @@ const url = process.env.TEST_DATABASE_URL;
       (await store.read(f.w.id)).deliveries.at(-1),
     );
     await worker().send(f.w.id, acknowledgement.id);
+    if (legacy) {
+      // Simulate a keyboard already delivered by an older release.
+      const message = present(messages.get(801));
+      message.buttons.unshift([
+        { text: "Status", callback_data: `tds:${f.task.id}` },
+        { text: "Cancel", callback_data: `tdc:${f.task.id}` },
+      ]);
+      await store.change(f.w.id, (w) => {
+        const d = present(
+          w.deliveries.find((d) => d.id === acknowledgement.id),
+        );
+        d.buttons = structuredClone(message.buttons);
+        d.sentButtons = structuredClone(message.buttons);
+      });
+    }
     await store.change(f.w.id, async (_w, sql) => {
       const task = await taskGet(sql, f.w.id, f.task.id);
       task.state = "working";
@@ -4342,9 +4357,9 @@ const url = process.env.TEST_DATABASE_URL;
       },
     };
   }
-  test("only the latest confirmed task message keeps Status/Cancel; queued updates and duplicate sends do not move controls", async () => {
+  test("Codex updates omit Status/Cancel and clean up legacy keyboards after confirmed delivery", async () => {
     for (const legacy of [false, true]) {
-      const f = await keyboardFixture();
+      const f = await keyboardFixture(legacy);
       if (legacy)
         await store.change(f.w.id, (w) => {
           const d = present(
@@ -4356,15 +4371,31 @@ const url = process.env.TEST_DATABASE_URL;
       const originalText = present(f.messages.get(801)).text;
       const first = await f.note("Implementation is ready for checks.");
       const second = await f.note("Browser checks are running.");
-      expect(f.controls().map(([id]) => id)).toEqual([801]);
-      for (const [id, remote] of [
-        [first, 802],
-        [second, 803],
-      ] as const) {
+      expect(f.controls().map(([id]) => id)).toEqual(legacy ? [801] : []);
+      for (const id of [first, second]) {
+        // Queued intents from an older release must also follow the new rule.
+        await store.change(f.w.id, (w) => {
+          present(w.deliveries.find((d) => d.id === id)).buttons = [
+            [
+              { text: "Status", callback_data: `tds:${f.task.id}` },
+              { text: "Cancel", callback_data: `tdc:${f.task.id}` },
+            ],
+          ];
+        });
         await f.worker().send(f.w.id, id);
         await f.worker().send(f.w.id, id);
         await f.drain();
-        expect(f.controls().map(([id]) => id)).toEqual([remote]);
+        expect(f.controls()).toHaveLength(0);
+        expect(f.calls.at(-1)?.params.reply_markup).toEqual({
+          inline_keyboard: [
+            [
+              {
+                text: "View conversation",
+                url: `https://t.me/fixture?startapp=${taskReference(f.w.id, f.task.id)}`,
+              },
+            ],
+          ],
+        });
       }
       expect(f.messages.get(801)?.text).toBe(originalText);
       expect(
@@ -4412,7 +4443,80 @@ const url = process.env.TEST_DATABASE_URL;
       expect((await f.read()).cancelRequested).toBe(false);
     }
   });
-  test("failed and unknown new sends preserve the previous confirmed controls and are not blindly resent", async () => {
+  test("Codex waiting and outcome messages keep only the conversation link", async () => {
+    const f = await keyboardFixture(false);
+    for (const state of [
+      "waiting",
+      "auth_required",
+      "review",
+      "failed",
+      "unknown",
+    ] as const) {
+      const id = await store.change(f.w.id, async (w, sql) => {
+        const task = await taskGet(sql, w.id, f.task.id);
+        task.state = state;
+        await taskSave(sql, task);
+        const id = present(notifyDevelopment(w, task, state, `state:${state}`));
+        expect(w.deliveries.find((d) => d.id === id)?.buttons).toBeUndefined();
+        return id;
+      });
+      await f.worker().send(f.w.id, id);
+      expect(f.calls.at(-1)?.params.reply_markup).toEqual({
+        inline_keyboard: [
+          [
+            {
+              text: "View conversation",
+              url: `https://t.me/fixture?startapp=${taskReference(f.w.id, f.task.id)}`,
+            },
+          ],
+        ],
+      });
+      expect(f.controls()).toHaveLength(0);
+    }
+  });
+  test("queued legacy controls stay absent after a rate-limited send is retried", async () => {
+    const f = await keyboardFixture(false);
+    const id = await f.note("Still checking.");
+    const url = "https://github.com/example/workspace/pull/43";
+    await store.change(f.w.id, (w) => {
+      present(w.deliveries.find((d) => d.id === id)).buttons = [
+        [{ text: "Status", callback_data: `tds:${f.task.id}` }],
+        [
+          { text: "Review", url: `${url}/files` },
+          { text: "Cancel", callback_data: `tdc:${f.task.id}` },
+          { text: "Merge", url },
+        ],
+      ];
+    });
+    f.fail(
+      "sendMessage",
+      new TelegramError("telegram_rate_limited", "retry", 30),
+    );
+    await f.worker().send(f.w.id, id);
+    await store.change(f.w.id, (w) => {
+      present(w.deliveries.find((d) => d.id === id)).nextAt = undefined;
+    });
+    await f.worker().send(f.w.id, id);
+    const attempts = f.calls.filter((c) => c.params.text === "Still checking.");
+    expect(attempts).toHaveLength(2);
+    for (const attempt of attempts)
+      expect(attempt.params.reply_markup).toEqual({
+        inline_keyboard: [
+          [
+            { text: "Review", url: `${url}/files` },
+            { text: "Merge", url },
+          ],
+          [
+            {
+              text: "View conversation",
+              url: `https://t.me/fixture?startapp=${taskReference(f.w.id, f.task.id)}`,
+            },
+          ],
+        ],
+      });
+    expect(f.controls()).toHaveLength(0);
+  });
+  test("failed and unknown new sends preserve legacy controls and are not blindly resent", async () => {
     for (const unknown of [false, true]) {
       const f = await keyboardFixture();
       const id = await f.note("Checking the implementation.");
@@ -4447,7 +4551,7 @@ const url = process.env.TEST_DATABASE_URL;
       new TelegramError("telegram_rate_limited", "retry", 30),
     );
     await f.worker().send(f.w.id, cleanup.id);
-    expect(f.controls()).toHaveLength(2);
+    expect(f.controls()).toHaveLength(1);
     expect((await f.cleanups())[0]?.nextAt).toBeDefined();
     await store.change(f.w.id, (w) => {
       present(w.deliveries.find((d) => d.id === cleanup.id)).nextAt = undefined;
@@ -4458,7 +4562,7 @@ const url = process.env.TEST_DATABASE_URL;
       true,
     );
     await f.worker().send(f.w.id, cleanup.id);
-    expect(f.controls().map(([id]) => id)).toEqual([802]);
+    expect(f.controls()).toHaveLength(0);
     await store.change(f.w.id, (w) => {
       const d = present(w.deliveries.find((d) => d.id === cleanup.id));
       d.state = "sending";
@@ -4495,7 +4599,7 @@ const url = process.env.TEST_DATABASE_URL;
     });
     await f.worker().send(f.w.id, progress);
     await f.drain();
-    expect(f.controls().map(([id]) => id)).toEqual([802]);
+    expect(f.controls()).toHaveLength(0);
     expect(
       f.messages
         .get(801)
@@ -4531,7 +4635,7 @@ const url = process.env.TEST_DATABASE_URL;
       present(w.deliveries.find((d) => d.id === cleanup.id)).nextAt = undefined;
     });
     await f.drain();
-    expect(f.controls().map(([id]) => id)).toEqual([803]);
+    expect(f.controls()).toHaveLength(0);
   });
   test("a confirmed stopped outcome clears controls from every earlier task message", async () => {
     const f = await keyboardFixture();
@@ -4582,7 +4686,7 @@ const url = process.env.TEST_DATABASE_URL;
     expect((await f.cleanups()).some((d) => d.remoteId === 801)).toBe(false);
     expect(f.calls.filter((c) => c.method === "sendMessage")).toHaveLength(3);
   });
-  test("simultaneous task updates serialize and retain controls only on the latest delivered message", async () => {
+  test("simultaneous task updates serialize without restoring legacy controls", async () => {
     const f = await keyboardFixture();
     const a = await f.note("Implementation progress.");
     const b = await f.note("Verification progress.");
@@ -4615,10 +4719,10 @@ const url = process.env.TEST_DATABASE_URL;
     f.onCall();
     await f.worker().send(f.w.id, b);
     await f.drain();
-    expect(f.controls().map(([id]) => id)).toEqual([803]);
+    expect(f.controls()).toHaveLength(0);
     expect(f.calls.filter((c) => c.method === "sendMessage")).toHaveLength(3);
   });
-  test("different tasks retain their own controls and PR links remain on every PR message", async () => {
+  test("different tasks omit task controls and PR links remain on every PR message", async () => {
     const f = await keyboardFixture();
     const second = await store.change(f.w.id, async (w, sql) => {
       const run = createRun(
@@ -4639,8 +4743,8 @@ const url = process.env.TEST_DATABASE_URL;
     await f.worker().send(f.w.id, `development:${second.id}:started`);
     await f.worker().send(f.w.id, await f.note("First task progress."));
     await f.drain();
-    expect(f.controls().map(([id]) => id)).toEqual([803]);
-    expect(f.controls(second.id).map(([id]) => id)).toEqual([802]);
+    expect(f.controls()).toHaveLength(0);
+    expect(f.controls(second.id)).toHaveLength(0);
     const prUrl = "https://github.com/example/workspace/pull/43";
     await store.change(f.w.id, async (_w, sql) => {
       const task = await taskGet(sql, f.w.id, f.task.id);
@@ -4657,7 +4761,7 @@ const url = process.env.TEST_DATABASE_URL;
       await f.drain();
     }
     expect(f.controls()).toHaveLength(0);
-    expect(f.controls(second.id)).toHaveLength(1);
+    expect(f.controls(second.id)).toHaveLength(0);
     for (const id of [804, 805])
       expect(
         f.messages
@@ -4723,7 +4827,6 @@ const url = process.env.TEST_DATABASE_URL;
       expect(call.params.message_thread_id).toBeUndefined();
       expect(call.params.reply_markup).toMatchObject({
         inline_keyboard: [
-          [{ text: "Status" }, { text: "Cancel" }],
           [
             {
               text: "View conversation",
@@ -4849,7 +4952,7 @@ const url = process.env.TEST_DATABASE_URL;
             callback_query: {
               id: "old-status-after-pr",
               from: { id: 101, is_bot: false },
-              data: present(f.acknowledgement.buttons?.[0]?.[0]?.callback_data),
+              data: `tds:${f.task.id}`,
               message: {
                 message_id: 901,
                 date: Math.floor(Date.now() / 1000),
@@ -5281,7 +5384,7 @@ const url = process.env.TEST_DATABASE_URL;
       ),
     ).toHaveLength(1);
   });
-  test("inline Status and Cancel survive long tasks, acknowledge taps and deduplicate updates", async () => {
+  test("legacy inline Status and Cancel remain authenticated without adding controls to new replies", async () => {
     const f = await fixture();
     const started = present(
       (await store.read(f.w.id)).deliveries.find(
@@ -5289,7 +5392,11 @@ const url = process.env.TEST_DATABASE_URL;
       ),
     );
     expect(started.text).not.toMatch(/\/status|\/cancel/);
-    const buttons = present(started.buttons?.[0]);
+    expect(started.buttons).toBeUndefined();
+    const buttons = [
+      { text: "Status", callback_data: `tds:${f.task.id}` },
+      { text: "Cancel", callback_data: `tdc:${f.task.id}` },
+    ];
     const calls: { method: string; params: Record<string, unknown> }[] = [];
     const setup = {
       client: async () => ({
@@ -5323,9 +5430,10 @@ const url = process.env.TEST_DATABASE_URL;
     await f.tick();
     await f.tick({ state: "running", phase: "implement" });
     await store.change(f.w.id, (w) => {
-      present(w.deliveries.find((d) => d.id === started.id)).at = new Date(
-        Date.now() - 1800000,
-      ).toISOString();
+      const sent = present(w.deliveries.find((d) => d.id === started.id));
+      sent.buttons = [buttons];
+      sent.sentButtons = [buttons];
+      sent.at = new Date(Date.now() - 1800000).toISOString();
     });
     const update = (id: number, data: string): Update => ({
       update_id: id,
@@ -5354,6 +5462,7 @@ const url = process.env.TEST_DATABASE_URL;
     expect(statuses).toHaveLength(1);
     expect(statuses[0]?.text).toContain("taking a closer look at your request");
     expect(statuses[0]?.text).not.toContain("Reference:");
+    expect(statuses[0]?.buttons).toBeUndefined();
     expect(
       calls.filter((c) => c.method === "answerCallbackQuery"),
     ).toHaveLength(2);
@@ -5383,10 +5492,10 @@ const url = process.env.TEST_DATABASE_URL;
       ),
     );
     expect(stopped.text).toContain("has stopped");
-    expect(stopped.buttons?.[0]?.map((b) => b.text)).toEqual(["Status"]);
+    expect(stopped.buttons).toBeUndefined();
     expect(await taskInputs(store.pool, await f.read())).toHaveLength(1);
   });
-  test("inline controls bind sent messages to actor, bot, workspace and topic and recheck access", async () => {
+  test("legacy inline controls bind sent messages to actor, bot, workspace and topic and recheck access", async () => {
     const f = await fixture();
     const started = present(
       (await store.read(f.w.id)).deliveries.find(
@@ -5398,12 +5507,18 @@ const url = process.env.TEST_DATABASE_URL;
         state: "sent",
         botId: "999",
         remoteId: 1930,
+        buttons: [
+          [
+            { text: "Status", callback_data: `tds:${f.task.id}` },
+            { text: "Cancel", callback_data: `tdc:${f.task.id}` },
+          ],
+        ],
       });
     });
     const callback = {
       id: "bound-inline",
       from: { id: 101, is_bot: false },
-      data: present(started.buttons?.[0]?.[0]).callback_data,
+      data: `tds:${f.task.id}`,
       message: {
         message_id: 1930,
         date: Math.floor(Date.now() / 1000),
@@ -5460,7 +5575,7 @@ const url = process.env.TEST_DATABASE_URL;
     });
     await expect(select()).rejects.toThrow();
     // The initiator retains cancellation authority when their maintainer grant is removed.
-    await select({ data: present(started.buttons?.[0]?.[1]).callback_data });
+    await select({ data: `tdc:${f.task.id}` });
     expect((await f.read()).state).toBe("cancelled");
     expect(
       (await taskGet(store.pool, other.w.id, other.task.id)).cancelRequested,
