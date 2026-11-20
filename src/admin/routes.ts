@@ -34,6 +34,7 @@ import { assignGitHubAccount } from "../github/member-account.ts";
 import {
   manageNotifications,
   notificationPage,
+  updateNotificationSettings,
 } from "../github/notifications.ts";
 import { reconcileCharge, resolveDelivery } from "../jobs/recovery.ts";
 import { logQuery, readRuntimeLogs } from "../observability/logs.ts";
@@ -610,6 +611,30 @@ export function adminRoutes(
       canConfigureWebhook: admin.operator && admin.id === w.operatorId,
     });
   });
+  app.put(
+    "/api/admin/workspaces/:id/github/notifications/settings",
+    async (c) => {
+      const admin = c.get("session").admin;
+      const input = await c.req.json();
+      const id = validId(c.req.param("id"));
+      await store.change(id, (w) => {
+        const actor = workspaceActor(w, admin);
+        updateNotificationSettings(w, actor, input);
+      });
+      const w = await store.read(id);
+      const d = await store.deployment();
+      return c.json({
+        ...notificationPage(
+          w,
+          admin.telegramId,
+          d.bot?.id,
+          !!(await github.webhooks.configured(w.operatorId)),
+        ),
+        webhookUrl: `${deploymentOrigin(d, origin)}/github/webhook/${w.operatorId}`,
+        canConfigureWebhook: admin.operator && admin.id === w.operatorId,
+      });
+    },
+  );
   app.post(
     "/api/admin/workspaces/:id/github/notifications/webhook",
     async (c) => {

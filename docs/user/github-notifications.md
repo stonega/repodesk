@@ -1,11 +1,35 @@
-# Personal GitHub notifications
+# GitHub notifications
 
 RepoDesk can send a private Telegram notification when a selected repository
-receives a new pull request or issue. Notifications include the repository, item
-number, title, author and GitHub link. Draft PRs are included and labeled.
-Notification delivery does not require Code Truth, Codex or Review Bot and does
-not call a model. Interpreting a natural-language subscription request uses the
-normal chat assistant.
+receives a new pull request or issue. By default, active workspace members with
+verified GitHub **Maintain** or **Admin** access on a connected repository
+automatically receive these private alerts (skipping PRs and issues they opened
+themselves). Any member can also create personal subscriptions or pause and
+customize individual repositories.
+
+Notifications include the repository, item number, title, author and GitHub
+link. Draft PRs are included and labeled. Notification delivery does not require
+Code Truth, Codex or Review Bot and does not call a model. Interpreting a
+natural-language subscription request uses the normal chat assistant.
+
+## Automatic maintainer notifications
+
+When **Plugins → GitHub notifications → Repository maintainers** is enabled (the
+default), RepoDesk automatically alerts active workspace members whose verified
+GitHub account currently has **Maintain** or **Admin** permission on that
+connected repository:
+
+- Alerts go only to each maintainer's private main Telegram chat.
+- PRs and issues opened by that same maintainer are skipped.
+- Write-only, Triage, Read and unlinked members are not automatically notified;
+  they can still subscribe manually.
+- If a maintainer already has a personal subscription (enabled or paused) for a
+  repository, that personal rule takes precedence so no duplicate alerts are
+  sent.
+- Workspace administrators can disable or re-enable automatic maintainer alerts
+  from **Plugins → GitHub notifications → Repository maintainers → Edit**.
+  Disabling stops queued automatic alerts; re-enabling covers only new events
+  opened afterward.
 
 ## Set up GitHub delivery
 

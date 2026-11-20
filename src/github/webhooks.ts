@@ -8,6 +8,7 @@ import { audit } from "../workspaces/policy.ts";
 import {
   GitHubNotifications,
   type NotificationPayload,
+  revokeAutoNotifications,
 } from "./notifications.ts";
 import type { GitHubApps } from "./registry.ts";
 
@@ -58,7 +59,10 @@ const opened = z.object({
 const item = z.object({
   number: positiveId,
   title: z.string().max(4096),
-  user: z.object({ login: z.string().min(1).max(100) }),
+  user: z.object({
+    id: positiveId.optional(),
+    login: z.string().min(1).max(100),
+  }),
   created_at: z.string().datetime(),
   draft: z.boolean().optional(),
   pull_request: z.unknown().optional(),
@@ -181,6 +185,10 @@ export class GitHubWebhooks {
               s.revoked = true;
               s.revision++;
             }
+          revokeAutoNotifications(
+            w,
+            lifecycle.repositories_removed?.map((r) => r.id),
+          );
         });
       }
     }
@@ -188,13 +196,18 @@ export class GitHubWebhooks {
       return { accepted: true };
     const interested = (
       await this.store.pool.query(
-        "SELECT 1 FROM workspaces WHERE operator_id=$1 AND EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(data->'githubNotifications','[]'::jsonb)) s WHERE s->>'enabled'='true') LIMIT 1",
+        "SELECT 1 FROM workspaces WHERE operator_id=$1 AND data->'deletion' IS NULL AND (EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(data->'githubNotifications','[]'::jsonb)) s WHERE s->>'enabled'='true') OR (data#>>'{github,installationId}' IS NOT NULL AND COALESCE(data#>>'{githubNotificationSettings,autoNotifyMaintainers}','true')='true' AND EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(data->'members','[]'::jsonb)) m, jsonb_array_elements(COALESCE(m->'github'->'repositories','[]'::jsonb)) r WHERE m->>'active'='true' AND m->'github'->>'status'='connected' AND (r->'permissions'->>'maintain'='true' OR r->'permissions'->>'admin'='true')))) LIMIT 1",
         [operatorId],
       )
     ).rowCount;
     if (!interested) return { accepted: true };
-    const base = opened.parse(raw);
-    const data = item.parse(raw[event === "issues" ? "issue" : "pull_request"]);
+    const baseResult = opened.safeParse(raw);
+    const dataResult = item.safeParse(
+      raw[event === "issues" ? "issue" : "pull_request"],
+    );
+    if (!baseResult.success || !dataResult.success) return { accepted: true };
+    const base = baseResult.data;
+    const data = dataResult.data;
     if (event === "issues" && data.pull_request !== undefined)
       return { accepted: true };
     const payload: NotificationPayload = {
@@ -205,6 +218,7 @@ export class GitHubWebhooks {
       number: data.number,
       title: clean(data.title).slice(0, 500),
       author: clean(data.user.login),
+      ...(data.user.id !== undefined ? { authorId: data.user.id } : {}),
       draft: data.draft ?? false,
       createdAt: data.created_at,
     };

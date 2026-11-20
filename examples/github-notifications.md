@@ -44,6 +44,11 @@ The authenticated panel API uses the current session cookie, Origin and CSRF tok
 ```http
 GET /api/admin/workspaces/WORKSPACE_ID/github/notifications
 
+PUT /api/admin/workspaces/WORKSPACE_ID/github/notifications/settings
+Content-Type: application/json
+
+{"autoNotifyMaintainers":true,"revision":0}
+
 POST /api/admin/workspaces/WORKSPACE_ID/github/notifications
 Content-Type: application/json
 

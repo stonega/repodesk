@@ -9,7 +9,10 @@ import { transaction } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import { Fault } from "../domain.ts";
 import type { GitHubIssues } from "../github/issues.ts";
-import { GitHubNotifications } from "../github/notifications.ts";
+import {
+  GitHubNotifications,
+  hasActiveGitHubNotifications,
+} from "../github/notifications.ts";
 import type { GitHubPullRequests } from "../github/pull-requests.ts";
 import type { GitHubUsers } from "../github/users.ts";
 import type { GitHubWebhooks } from "../github/webhooks.ts";
@@ -376,8 +379,7 @@ export async function startWorker(
       for (const w of await store.all())
         if (
           !w.deletion &&
-          (w.reviewBot?.settings.enabled ||
-            w.githubNotifications?.some((s) => s.enabled))
+          (w.reviewBot?.settings.enabled || hasActiveGitHubNotifications(w))
         )
           operators.set(w.operatorId, w.id);
       for (const [operatorId, workspaceId] of operators) {

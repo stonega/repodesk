@@ -376,6 +376,7 @@ export class GitHubUsers {
       return (
         !next ||
         (r.permissions?.push && !next.permissions?.push) ||
+        (r.permissions?.maintain && !next.permissions?.maintain) ||
         (r.permissions?.admin && !next.permissions?.admin)
       );
     });

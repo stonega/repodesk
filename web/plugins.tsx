@@ -460,7 +460,7 @@ export function Plugins({
             <PluginCard
               to={path("/github-notifications")}
               name="GitHub notifications"
-              summary="Personal Telegram notifications for new PRs and issues."
+              summary="Automatic maintainer and personal Telegram alerts for new PRs and issues."
               status="Built in"
             />
             <PluginCard

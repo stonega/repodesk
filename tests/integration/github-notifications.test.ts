@@ -9,7 +9,9 @@ import { Store } from "../../src/db/repositories.ts";
 import type { Admin } from "../../src/domain.ts";
 import { GitHubApp } from "../../src/github/app.ts";
 import {
+  automaticMaintainerRepositories,
   GitHubNotifications,
+  hasActiveGitHubNotifications,
   manageNotifications,
 } from "../../src/github/notifications.ts";
 import { GitHubApps } from "../../src/github/registry.ts";
@@ -562,5 +564,301 @@ const url = process.env.TEST_DATABASE_URL;
     expect(cursor).toBe("");
     await new GitHubWebhooks(store, apps, key).recover(admin.id);
     expect(retries).toBe(3);
+  });
+  test("maintainers with Maintain or Admin access are auto-notified by default while skipping self-authored and write-only members", async () => {
+    const f = await fixture();
+    await store.change(f.w.id, (w) => {
+      // Remove manual subscription so delivery relies strictly on auto-maintainer notifications.
+      w.githubNotifications = [];
+      grantGitHubAccess(w, ["101", "202", "303"]);
+      const m101 = w.members.find((m) => m.id === "101")?.github
+        ?.repositories[0];
+      const m202 = w.members.find((m) => m.id === "202")?.github
+        ?.repositories[0];
+      const m303 = w.members.find((m) => m.id === "303")?.github
+        ?.repositories[0];
+      if (m101?.permissions) m101.permissions.maintain = true;
+      // 202 keeps write-only (push: true, maintain: undefined, admin: false)
+      if (m202?.permissions) m202.permissions.admin = false;
+      if (m303?.permissions) m303.permissions.admin = true;
+      // Add an unlinked admin to verify unlinked owners/admins are not auto-notified.
+      w.members.push({ id: "404", role: "admin", active: true });
+    });
+    expect(hasActiveGitHubNotifications(await store.read(f.w.id))).toBe(true);
+    // Opened by external author -> notifies 101 (maintain) and 303 (admin), not 202 (write) or 404 (unlinked).
+    expect(
+      (
+        await f.accept(
+          "pull_request",
+          f.payload("pull_request", {
+            pull_request: {
+              number: 41,
+              title: "External PR",
+              user: { id: 9999, login: "external" },
+              created_at: new Date(Date.now() + 1000).toISOString(),
+              draft: false,
+            },
+          }),
+        )
+      ).status,
+    ).toBe(200);
+    await new GitHubNotifications(store).tick(f.w.id);
+    let w = await store.read(f.w.id);
+    expect(w.deliveries.map((d) => d.chatId).sort()).toEqual(["101", "303"]);
+    for (const d of w.deliveries) {
+      await new DeliveryWorker(store, f.setup).send(w.id, d.id);
+    }
+    expect(f.sends()).toBe(2);
+    // Opened by maintainer 101 (matching numeric user.id) -> skips 101, still notifies 303.
+    expect(
+      (
+        await f.accept(
+          "issues",
+          f.payload("issues", {
+            issue: {
+              number: 42,
+              title: "Self-opened issue by ID",
+              user: { id: 101, login: "renamed-login" },
+              created_at: new Date(Date.now() + 2000).toISOString(),
+            },
+          }),
+        )
+      ).status,
+    ).toBe(200);
+    // Opened by maintainer 303 (matching login fallback without user.id) -> skips 303, still notifies 101.
+    expect(
+      (
+        await f.accept(
+          "issues",
+          f.payload("issues", {
+            issue: {
+              number: 43,
+              title: "Self-opened issue by login",
+              user: { login: "FIXTURE-303" },
+              created_at: new Date(Date.now() + 3000).toISOString(),
+            },
+          }),
+        )
+      ).status,
+    ).toBe(200);
+    await new GitHubNotifications(store).tick(f.w.id);
+    w = await store.read(f.w.id);
+    const issue42 = w.deliveries.filter((d) => d.text.includes("#42"));
+    const issue43 = w.deliveries.filter((d) => d.text.includes("#43"));
+    expect(issue42.map((d) => d.chatId)).toEqual(["303"]);
+    expect(issue43.map((d) => d.chatId)).toEqual(["101"]);
+  });
+  test("personal overrides deduplicate, pause mutes auto-maintainer alerts, and delete restores default", async () => {
+    const f = await fixture();
+    await store.change(f.w.id, (w) => {
+      w.githubNotifications = [];
+      grantGitHubAccess(w, ["101", "303"]);
+      const m101 = w.members.find((m) => m.id === "101")?.github
+        ?.repositories[0];
+      const m303 = w.members.find((m) => m.id === "303")?.github
+        ?.repositories[0];
+      if (m101?.permissions) m101.permissions.maintain = true;
+      if (m303?.permissions) m303.permissions.admin = true;
+      // 101 customizes to PRs only; 303 pauses without subscribing first.
+      manageNotifications(w, "101", "900", {
+        action: "subscribe",
+        repository: "7001",
+        events: ["pull_request"],
+      });
+      manageNotifications(w, "303", "900", {
+        action: "pause",
+        repository: "example/workspace",
+      });
+    });
+    expect(
+      automaticMaintainerRepositories(await store.read(f.w.id), "101"),
+    ).toHaveLength(0);
+    expect(
+      automaticMaintainerRepositories(await store.read(f.w.id), "303"),
+    ).toHaveLength(0);
+    await f.accept(
+      "pull_request",
+      f.payload("pull_request", {
+        pull_request: {
+          number: 51,
+          title: "PR override check",
+          user: { id: 8888, login: "bob" },
+          created_at: new Date(Date.now() + 1000).toISOString(),
+          draft: false,
+        },
+      }),
+    );
+    await f.accept(
+      "issues",
+      f.payload("issues", {
+        issue: {
+          number: 52,
+          title: "Issue override check",
+          user: { id: 8888, login: "bob" },
+          created_at: new Date(Date.now() + 1000).toISOString(),
+        },
+      }),
+    );
+    await new GitHubNotifications(store).tick(f.w.id);
+    const w = await store.read(f.w.id);
+    // 101 gets exactly one PR alert (no duplicate) and no issue alert; 303 gets nothing.
+    expect(w.deliveries).toHaveLength(1);
+    expect(w.deliveries[0]?.chatId).toBe("101");
+    expect(w.deliveries[0]?.text).toContain("#51");
+    // Deleting 303's paused override restores automatic maintainer notifications.
+    await store.change(f.w.id, (current) => {
+      manageNotifications(current, "303", "900", {
+        action: "delete",
+        repository: "7001",
+      });
+    });
+    expect(
+      automaticMaintainerRepositories(await store.read(f.w.id), "303"),
+    ).toEqual([{ id: 7001, full_name: "example/workspace" }]);
+  });
+  test("workspace maintainer setting toggle, permission downgrade and lifecycle removal fence queued deliveries", async () => {
+    const f = await fixture();
+    await store.change(f.w.id, (w) => {
+      w.githubNotifications = [];
+      grantGitHubAccess(w, ["101", "303"]);
+      const m101 = w.members.find((m) => m.id === "101")?.github
+        ?.repositories[0];
+      const m303 = w.members.find((m) => m.id === "303")?.github
+        ?.repositories[0];
+      if (m101?.permissions) m101.permissions.maintain = true;
+      if (m303?.permissions) m303.permissions.admin = true;
+    });
+    const settingsEndpoint = `/api/admin/workspaces/${f.w.id}/github/notifications/settings`;
+    const putSettings = (body: unknown, csrf = auth.csrf) =>
+      f.app.request(settingsEndpoint, {
+        method: "PUT",
+        headers: {
+          cookie: `repodesk_session=${auth.raw}`,
+          origin,
+          "x-csrf-token": csrf,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+    // Queue a pending auto-maintainer delivery, then disable auto-notify via API.
+    await f.accept(
+      "issues",
+      f.payload("issues", {
+        issue: {
+          number: 61,
+          title: "Before toggle off",
+          user: { id: 8888, login: "bob" },
+          created_at: new Date(Date.now() + 1000).toISOString(),
+        },
+      }),
+    );
+    await new GitHubNotifications(store).tick(f.w.id);
+    const queued = (await store.read(f.w.id)).deliveries;
+    expect(queued).toHaveLength(2);
+    expect(
+      (await putSettings({ autoNotifyMaintainers: false, revision: 99 }))
+        .status,
+    ).toBe(409);
+    expect(
+      (
+        await putSettings(
+          { autoNotifyMaintainers: false, revision: 0 },
+          "wrong",
+        )
+      ).status,
+    ).toBe(403);
+    const disabled = await putSettings({
+      autoNotifyMaintainers: false,
+      revision: 0,
+    });
+    expect(disabled.status).toBe(200);
+    const disabledPage = await disabled.json();
+    expect(disabledPage.settings).toEqual({
+      autoNotifyMaintainers: false,
+      revision: 1,
+    });
+    expect(disabledPage.autoRepositories).toEqual([]);
+    expect(hasActiveGitHubNotifications(await store.read(f.w.id))).toBe(false);
+    for (const d of queued)
+      await new DeliveryWorker(store, f.setup).send(f.w.id, d.id);
+    expect(f.sends()).toBe(0);
+    expect(
+      (await store.read(f.w.id)).deliveries.every(
+        (d) => d.state === "cancelled",
+      ),
+    ).toBe(true);
+    // Re-enable; events created before re-enable are ignored, newer events arrive.
+    expect(
+      (await putSettings({ autoNotifyMaintainers: true, revision: 1 })).status,
+    ).toBe(200);
+    await f.accept(
+      "issues",
+      f.payload("issues", {
+        issue: {
+          number: 62,
+          title: "Before re-enable",
+          user: { id: 8888, login: "bob" },
+          created_at: new Date(Date.now() - 5000).toISOString(),
+        },
+      }),
+    );
+    await f.accept(
+      "issues",
+      f.payload("issues", {
+        issue: {
+          number: 63,
+          title: "After re-enable",
+          user: { id: 8888, login: "bob" },
+          created_at: new Date(Date.now() + 2000).toISOString(),
+        },
+      }),
+    );
+    // Lifecycle removal before tick fences auto-maintainer recipients too.
+    await f.accept("installation_repositories", {
+      action: "removed",
+      installation: { id: 501 },
+      repositories_removed: [{ id: 7001 }],
+    });
+    await new GitHubNotifications(store).tick(f.w.id);
+    expect(
+      (await store.read(f.w.id)).deliveries.filter(
+        (d) => d.text.includes("#62") || d.text.includes("#63"),
+      ),
+    ).toHaveLength(0);
+    // Refreshing connection revision restores auto-notify; permission downgrade cancels pending delivery.
+    await store.change(f.w.id, (w) => {
+      if (w.github) w.github.revision++;
+      grantGitHubAccess(w, ["101"]);
+      const m101 = w.members.find((m) => m.id === "101")?.github
+        ?.repositories[0];
+      if (m101?.permissions) m101.permissions.maintain = true;
+    });
+    await f.accept(
+      "issues",
+      f.payload("issues", {
+        issue: {
+          number: 64,
+          title: "Before downgrade",
+          user: { id: 8888, login: "bob" },
+          created_at: new Date(Date.now() + 3000).toISOString(),
+        },
+      }),
+    );
+    await new GitHubNotifications(store).tick(f.w.id);
+    const pending64 = (await store.read(f.w.id)).deliveries.find((d) =>
+      d.text.includes("#64"),
+    );
+    if (!pending64) throw Error("missing #64 delivery");
+    await store.change(f.w.id, (w) => {
+      const m101 = w.members.find((m) => m.id === "101")?.github
+        ?.repositories[0];
+      if (m101?.permissions) m101.permissions.maintain = false;
+    });
+    await new DeliveryWorker(store, f.setup).send(f.w.id, pending64.id);
+    expect(
+      (await store.read(f.w.id)).deliveries.find((d) => d.id === pending64.id)
+        ?.state,
+    ).toBe("cancelled");
+    expect(f.sends()).toBe(0);
   });
 });

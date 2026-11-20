@@ -45,6 +45,7 @@ export function sweep(w: Workspace, now = new Date()) {
     delete w.plugins;
     delete w.googleUsers;
     delete w.github;
+    delete w.githubNotificationSettings;
     delete w.githubNotifications;
     delete w.pluginNotifications;
     delete w.repositorySelections;

@@ -12,9 +12,18 @@ production rollout remain separate acceptance gates.
   The existing endpoint remains `/github/webhook/:operatorId`; Review Bot is an
   independent consumer and retains its exclusive review-workspace routing.
 - `GitHubNotifications` stores one subscription per member/repository in the
-  workspace aggregate. It pins actor, bot, installation, repository ID and
-  connection generation. Subscription revisions fence queued recipients and
-  outgoing delivery intents. An activation timestamp prevents historical replay.
+  workspace aggregate, plus workspace-level `githubNotificationSettings`
+  (`autoNotifyMaintainers`, enabled by default, with optimistic `revision`,
+  `updatedAt` and lifecycle `revokedRevisions`). Subscriptions pin actor, bot,
+  installation, repository ID and connection generation. Subscription revisions
+  and settings revisions fence queued recipients and outgoing delivery intents.
+  Activation timestamps prevent historical replay.
+- Automatic maintainer notifications target active workspace members with fresh
+  verified GitHub Maintain or Admin permission (`repositoryMaintainer`) on the
+  connected repository, skip items opened by that same maintainer (matching
+  GitHub numeric user ID when present, or case-insensitive login fallback), and
+  defer to any existing personal subscription (enabled or paused) for that
+  actor/repository so duplicates never occur.
 - `024_github_notifications.sql` adds tenant-scoped event receipts with unique
   App/delivery and semantic opened-event keys. Ingress records normalized,
   bounded metadata and exact subscription revisions; it makes no Telegram or
@@ -52,10 +61,14 @@ Explicit diagnostic controls share the same policy:
 
 Panel API:
 
-- `GET /api/admin/workspaces/:id/github/notifications`: own saved subscriptions,
-  accessible repositories, webhook URL and configuration status.
+- `GET /api/admin/workspaces/:id/github/notifications`: workspace maintainer
+  notification settings, own saved subscriptions, automatic maintainer
+  repositories, accessible repositories, webhook URL and configuration status.
 - `POST` to the same path: validated subscription action; the panel supplies the
-  saved revision for existing records. Owner/destination cannot be supplied.
+  saved revision for existing records. `pause` also creates a paused override
+  for an automatic maintainer repository. Owner/destination cannot be supplied.
+- `PUT /api/admin/workspaces/:id/github/notifications/settings`: updates
+  `autoNotifyMaintainers` with optimistic `revision` checking and audit logging.
 - `POST /api/admin/workspaces/:id/github/notifications/webhook`: operator-only
   shared secret update/generation. Secrets are returned once and stored encrypted.
 

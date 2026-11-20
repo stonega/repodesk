@@ -3,14 +3,20 @@ import type { NotificationPage } from "../../src/github/notifications.ts";
 import { chooseOption } from "./dropdown-helpers.ts";
 
 const workspaceId = "d2ce2eab-3b09-4e8e-858e-75c20d832517";
-async function fixture(page: Page) {
+async function fixture(page: Page, initial?: Partial<NotificationPage>) {
   const data: NotificationPage = {
     canManage: true,
     canConfigureWebhook: true,
     webhookUrl: "https://notifications.example/github/webhook/operator",
     webhookConfigured: true,
+    settings: {
+      autoNotifyMaintainers: true,
+      revision: 0,
+    },
+    autoRepositories: [],
     repositories: [{ id: 7001, full_name: "example/workspace" }],
     subscriptions: [],
+    ...initial,
   };
   const controls = {
     error: "",
@@ -19,8 +25,30 @@ async function fixture(page: Page) {
     loading: Promise.resolve(),
   };
   const writes: unknown[] = [];
+  const isMaintainer = (initial?.autoRepositories?.length ?? 0) > 0;
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/github/notifications/settings")) {
+      const input = route.request().postDataJSON();
+      writes.push(input);
+      await controls.pending;
+      if (controls.error) {
+        await route.fulfill({ status: 409, json: { error: controls.error } });
+        return;
+      }
+      data.settings = {
+        autoNotifyMaintainers: input.autoNotifyMaintainers,
+        revision: data.settings.revision + 1,
+      };
+      data.autoRepositories =
+        data.settings.autoNotifyMaintainers &&
+        isMaintainer &&
+        !data.subscriptions.length
+          ? [{ id: 7001, full_name: "example/workspace" }]
+          : [];
+      await route.fulfill({ json: data });
+      return;
+    }
     if (path.endsWith("/github/notifications/webhook")) {
       await route.fulfill({
         json: { secret: "synthetic-notification-webhook-secret-for-github" },
@@ -38,8 +66,13 @@ async function fixture(page: Page) {
           return;
         }
         const existing = data.subscriptions[0];
-        if (input.action === "delete") data.subscriptions = [];
-        else if (input.action === "subscribe")
+        if (input.action === "delete") {
+          data.subscriptions = [];
+          data.autoRepositories =
+            data.settings.autoNotifyMaintainers && isMaintainer
+              ? [{ id: 7001, full_name: "example/workspace" }]
+              : [];
+        } else if (input.action === "subscribe") {
           data.subscriptions = [
             {
               id: "subscription",
@@ -56,9 +89,28 @@ async function fixture(page: Page) {
               available: true,
             },
           ];
-        else if (existing) {
+          data.autoRepositories = [];
+        } else if (existing) {
           existing.enabled = input.action === "resume";
           existing.revision++;
+        } else if (input.action === "pause" && data.autoRepositories.length) {
+          data.subscriptions = [
+            {
+              id: "subscription",
+              actor: "101",
+              repositoryId: 7001,
+              repository: "example/workspace",
+              installationId: 501,
+              connectionRevision: 1,
+              botId: "900",
+              revision: 1,
+              events: ["pull_request", "issues"],
+              enabled: false,
+              since: new Date().toISOString(),
+              available: true,
+            },
+          ];
+          data.autoRepositories = [];
         }
       } else if (controls.loadError) {
         await route.fulfill({ status: 503, json: { error: "unavailable" } });
@@ -276,3 +328,93 @@ test("shared webhook settings keep secrets in their explicit editor", async ({
   await page.getByRole("button", { name: "Edit webhook secret" }).click();
   await expect(editor.locator("input")).toHaveValue("");
 });
+
+for (const width of [1280, 390]) {
+  test(`automatic maintainer notifications separate saved summary from modal editor and support personal overrides at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const f = await fixture(page, {
+      autoRepositories: [{ id: 7001, full_name: "example/workspace" }],
+    });
+    await f.open();
+    const maintainerRegion = page.getByRole("region", {
+      name: "Automatic maintainer notifications",
+    });
+    await expect(maintainerRegion).toContainText("Enabled");
+    await expect(maintainerRegion).toContainText(
+      "Verified GitHub Maintain and Admin members",
+    );
+    await expect(maintainerRegion.locator("input,select,form")).toHaveCount(0);
+    const subRegion = page.getByRole("region", {
+      name: "Personal repository notifications",
+    });
+    await expect(subRegion).toContainText("Automatic (Maintainer)");
+    await expect(subRegion).not.toContainText("No subscriptions yet");
+    await page.screenshot({
+      path: `/tmp/repodesk-notifications-maintainer-${width}.png`,
+      fullPage: true,
+    });
+    // Pause an auto-notified repository directly -> creates a paused personal override.
+    await subRegion.getByRole("button", { name: "Pause", exact: true }).click();
+    await expect(subRegion).toContainText("Paused");
+    await expect(subRegion).not.toContainText("Automatic (Maintainer)");
+    // Delete the override -> returns to Automatic (Maintainer).
+    await page
+      .getByRole("button", { name: "Delete example/workspace" })
+      .click();
+    const deleteDialog = page.getByRole("dialog", {
+      name: "Delete subscription",
+    });
+    await expect(deleteDialog).toContainText("automatic maintainer alerts");
+    await deleteDialog
+      .getByRole("button", { name: "Delete", exact: true })
+      .click();
+    await expect(subRegion).toContainText("Automatic (Maintainer)");
+    // Edit workspace maintainer setting through its modal.
+    await page
+      .getByRole("button", { name: "Edit maintainer notifications" })
+      .click();
+    const editor = page.getByRole("dialog", {
+      name: "Edit maintainer notifications",
+      exact: true,
+    });
+    await editor
+      .getByRole("checkbox", {
+        name: "Automatically notify repository maintainers",
+      })
+      .uncheck();
+    f.controls.error = "version_conflict";
+    await editor.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(editor.getByRole("alert")).toContainText("settings changed");
+    await expect(
+      editor.getByRole("checkbox", {
+        name: "Automatically notify repository maintainers",
+      }),
+    ).not.toBeChecked();
+    f.controls.error = "";
+    let release = () => {};
+    f.controls.pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await editor.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(
+      editor.getByRole("button", { name: "Cancel", exact: true }),
+    ).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(editor).toBeVisible();
+    release();
+    await expect(editor).not.toBeVisible();
+    await expect(maintainerRegion).toContainText("Disabled");
+    await expect(subRegion).toContainText("No subscriptions yet");
+    await page.screenshot({
+      path: `/tmp/repodesk-notifications-maintainer-disabled-${width}.png`,
+      fullPage: true,
+    });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+  });
+}

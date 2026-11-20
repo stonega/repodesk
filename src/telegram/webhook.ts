@@ -14,7 +14,10 @@ import {
   timezone,
   type Workspace,
 } from "../domain.ts";
-import { manageNotifications } from "../github/notifications.ts";
+import {
+  automaticMaintainerRepositories,
+  manageNotifications,
+} from "../github/notifications.ts";
 import type { GitHubUsers } from "../github/users.ts";
 import type { GoogleService } from "../google/service.ts";
 import { googleControl } from "../google/telegram.ts";
@@ -745,17 +748,22 @@ export class Ingress {
         repository,
         events,
       });
+      const automatic = automaticMaintainerRepositories(w, actor);
+      const lines = [
+        ...subscriptions.map(
+          (s) =>
+            `${s.repository}: ${s.enabled ? "On" : "Paused"} · ${s.events.map((e) => (e === "issues" ? "new issues" : "new PRs")).join(", ")}`,
+        ),
+        ...automatic.map(
+          (r) => `${r.full_name}: Automatic (Maintainer) · new PRs, new issues`,
+        ),
+      ];
       deliver(
         w,
         actor,
         actor,
-        subscriptions.length
-          ? subscriptions
-              .map(
-                (s) =>
-                  `${s.repository}: ${s.enabled ? "On" : "Paused"} · ${s.events.map((e) => (e === "issues" ? "new issues" : "new PRs")).join(", ")}`,
-              )
-              .join("\n")
+        lines.length
+          ? lines.join("\n")
           : "You have no repository notifications. Ask me to notify you when a connected repository receives a new PR or issue.",
         { topicId: msg.message_thread_id ?? 0 },
       );

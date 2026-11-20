@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type {
+  AutoNotificationRepository,
   GitHubSubscription,
   NotificationEvent,
   NotificationInput,
@@ -9,17 +10,20 @@ import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
 import { PluginDetailHeading } from "./plugin-detail.tsx";
 import { Select } from "./select.tsx";
-import { SkeletonRows } from "./skeleton.tsx";
+import { Skeleton, SkeletonRows } from "./skeleton.tsx";
 import { ErrorToast, useToast } from "./toast.tsx";
 
 type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 const explain = (e: unknown) => {
-  const code = e instanceof Error ? e.message : String(e);
+  const message = e instanceof Error ? e.message : String(e);
+  const code = message.startsWith("version_conflict")
+    ? "version_conflict"
+    : message;
   return (
     (
       {
         version_conflict:
-          "This subscription changed. Close the editor and reload saved subscriptions before trying again.",
+          "These notification settings changed. Close the editor and reload before trying again.",
         github_repository_not_connected:
           "Connect and select this repository before subscribing.",
         github_user_access_denied:
@@ -48,8 +52,13 @@ export function GitHubNotificationSettings({
   const [page, setPage] = useState<NotificationPage>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [settingsDraft, setSettingsDraft] = useState<{
+    autoNotifyMaintainers: boolean;
+    revision: number;
+  }>();
   const [editing, setEditing] = useState<{
     saved?: GitHubSubscription;
+    autoRepository?: AutoNotificationRepository;
     repository: string;
     events: NotificationEvent[];
   }>();
@@ -98,10 +107,75 @@ export function GitHubNotificationSettings({
       setBusy(false);
     }
   };
-  const dialog = editing || removing || hookOpen;
+  const saveSettings = async (input: {
+    autoNotifyMaintainers: boolean;
+    revision: number;
+  }) => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      setPage(
+        await request<NotificationPage>(`${endpoint}/settings`, "PUT", input),
+      );
+      setSettingsDraft(undefined);
+      notify("Maintainer notification settings saved.");
+    } catch (e) {
+      setError(explain(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const dialog = settingsDraft || editing || removing || hookOpen;
   return (
     <>
       <PluginDetailHeading title="GitHub notifications" backTo={backTo} />
+      <section
+        className="card notification-card"
+        aria-label="Automatic maintainer notifications"
+      >
+        <div className="plugin-card-heading">
+          <div>
+            <h2>Repository maintainers</h2>
+            <p className="muted">
+              Automatically alert verified Maintain and Admin members in private
+              Telegram when a PR or issue opens.
+            </p>
+          </div>
+          <IconButton
+            icon="edit"
+            label="Edit maintainer notifications"
+            disabled={!page || busy}
+            onClick={() => {
+              if (!page) return;
+              setError("");
+              setSettingsDraft({ ...page.settings });
+            }}
+          />
+        </div>
+        <dl className="plugin-summary">
+          <div>
+            <dt>Status</dt>
+            <dd>
+              {!page ? (
+                <Skeleton width="min(6rem, 100%)" />
+              ) : page.settings.autoNotifyMaintainers ? (
+                "Enabled"
+              ) : (
+                "Disabled"
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>Recipients</dt>
+            <dd>Verified GitHub Maintain and Admin members</dd>
+          </div>
+          <div>
+            <dt>Events</dt>
+            <dd>New PRs · New issues (self-opened items skipped)</dd>
+          </div>
+        </dl>
+      </section>
       <section
         className="card notification-card"
         aria-label="Personal repository notifications"
@@ -140,12 +214,14 @@ export function GitHubNotificationSettings({
             repository access.
           </p>
         )}
-        {page?.canManage && !page.subscriptions.length && (
-          <p>
-            No subscriptions yet. Choose New or ask the bot to notify you about
-            a connected repository.
-          </p>
-        )}
+        {page?.canManage &&
+          !page.subscriptions.length &&
+          !page.autoRepositories.length && (
+            <p>
+              No subscriptions yet. Choose New or ask the bot to notify you
+              about a connected repository.
+            </p>
+          )}
         {page?.subscriptions.map((s) => (
           <article
             className="notification-subscription"
@@ -210,6 +286,52 @@ export function GitHubNotificationSettings({
             </div>
           </article>
         ))}
+        {page?.autoRepositories.map((r) => (
+          <article
+            className="notification-subscription"
+            key={`auto-${r.id}`}
+            aria-label={r.full_name}
+          >
+            <div className="notification-summary">
+              <strong>{r.full_name}</strong>
+              <span>New PRs · New issues</span>
+              <span className="muted">
+                Automatic (Maintainer)
+                {r.lastDelivery
+                  ? ` · Last delivery: ${r.lastDelivery.replaceAll("_", " ")}`
+                  : ""}
+              </span>
+            </div>
+            <div className="actions">
+              <IconButton
+                icon="edit"
+                label={`Edit ${r.full_name}`}
+                disabled={busy}
+                onClick={() => {
+                  setError("");
+                  setEditing({
+                    autoRepository: r,
+                    repository: String(r.id),
+                    events: ["pull_request", "issues"],
+                  });
+                }}
+              />
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy}
+                onClick={() =>
+                  void save({
+                    action: "pause",
+                    repository: String(r.id),
+                  })
+                }
+              >
+                Pause
+              </button>
+            </div>
+          </article>
+        ))}
       </section>
       <section className="card" aria-label="GitHub notification delivery">
         <div className="plugin-card-heading">
@@ -235,7 +357,9 @@ export function GitHubNotificationSettings({
         )}
         <p>
           Notifications run independently of Review Bot and Codex. Draft PRs are
-          included and labeled. Only events opened after subscribing are sent.
+          included and labeled. Personal subscriptions cover events opened after
+          subscribing; automatic maintainer alerts skip items opened by the same
+          maintainer.
         </p>
         {page && (
           <p>
@@ -250,9 +374,62 @@ export function GitHubNotificationSettings({
           delivery.
         </p>
       </section>
+      {settingsDraft && (
+        <Modal
+          title="Edit maintainer notifications"
+          busy={busy}
+          onClose={() => {
+            setSettingsDraft(undefined);
+            setError("");
+          }}
+        >
+          <form
+            className="record-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveSettings(settingsDraft);
+            }}
+          >
+            <label className="plugin-check">
+              <input
+                type="checkbox"
+                checked={settingsDraft.autoNotifyMaintainers}
+                disabled={busy}
+                onChange={(e) =>
+                  setSettingsDraft({
+                    ...settingsDraft,
+                    autoNotifyMaintainers: e.target.checked,
+                  })
+                }
+              />
+              Automatically notify repository maintainers
+            </label>
+            <p className="muted">
+              Sends private Telegram alerts for new PRs and issues to active
+              members with fresh GitHub Maintain or Admin access. Self-opened
+              items are skipped. Members can pause or customize individual
+              repositories in Subscriptions.
+            </p>
+            {error && (
+              <p className="notice" role="alert">
+                {error}
+              </p>
+            )}
+            <ModalActions>
+              <button type="submit" disabled={busy}>
+                {busy ? "Saving…" : "Save"}
+              </button>
+            </ModalActions>
+          </form>
+        </Modal>
+      )}
       {editing && (
         <Modal
-          title={editing.saved ? "Edit subscription" : "New subscription"}
+          title={
+            editing.saved || editing.autoRepository
+              ? "Edit subscription"
+              : "New subscription"
+          }
           busy={busy}
           onClose={() => {
             setEditing(undefined);
@@ -280,7 +457,7 @@ export function GitHubNotificationSettings({
               <Select
                 id="notification-repository"
                 value={editing.repository}
-                disabled={busy || !!editing.saved}
+                disabled={busy || !!editing.saved || !!editing.autoRepository}
                 required
                 onChange={(e) =>
                   setEditing({ ...editing, repository: e.target.value })
@@ -298,6 +475,14 @@ export function GitHubNotificationSettings({
                   ) && (
                     <option value={String(editing.saved.repositoryId)}>
                       {editing.saved.repository}
+                    </option>
+                  )}
+                {editing.autoRepository &&
+                  !page?.repositories.some(
+                    (r) => r.id === editing.autoRepository?.id,
+                  ) && (
+                    <option value={String(editing.autoRepository.id)}>
+                      {editing.autoRepository.full_name}
                     </option>
                   )}
               </Select>
@@ -352,6 +537,12 @@ export function GitHubNotificationSettings({
             Stop notifications for {removing.repository} and delete this
             subscription?
           </p>
+          {page?.settings.autoNotifyMaintainers && (
+            <p className="muted">
+              If you are a repository maintainer, automatic maintainer alerts
+              will resume for this repository. Use Pause to stay muted.
+            </p>
+          )}
           {error && <p role="alert">{error}</p>}
           <ModalActions>
             <button

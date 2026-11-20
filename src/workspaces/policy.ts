@@ -197,6 +197,13 @@ export function revokeWork(w: Workspace, now = new Date()) {
       s.enabled = false;
       s.revision++;
     }
+  for (const d of w.deliveries)
+    if (
+      d.state === "pending" &&
+      d.githubNotification?.kind === "maintainer" &&
+      !eligible(w, d.actor)
+    )
+      d.state = "cancelled";
   for (const actor of Object.keys(w.googleUsers ?? {}))
     if (!eligible(w, actor)) delete w.googleUsers?.[actor];
   for (const approval of w.approvals)

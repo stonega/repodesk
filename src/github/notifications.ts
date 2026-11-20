@@ -6,10 +6,129 @@ import { type Delivery, requireThat, type Workspace } from "../domain.ts";
 import { audit, authorize, eligible } from "../workspaces/policy.ts";
 import { deliver } from "../workspaces/service.ts";
 import { githubRepositoryScopeCurrent } from "./config.ts";
-import { authorizeRepository, repositoryAccess } from "./user-access.ts";
+import {
+  authorizeRepository,
+  repositoryAccess,
+  repositoryMaintainer,
+} from "./user-access.ts";
 
 export const notificationEvents = ["pull_request", "issues"] as const;
 export type NotificationEvent = (typeof notificationEvents)[number];
+export interface GitHubNotificationSettings {
+  autoNotifyMaintainers: boolean;
+  revision: number;
+  updatedAt?: string;
+  revokedRevisions?: Record<string, number>;
+}
+export const notificationSettingsInput = z
+  .object({
+    autoNotifyMaintainers: z.boolean(),
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+export type NotificationSettingsInput = z.infer<
+  typeof notificationSettingsInput
+>;
+export function githubNotificationSettings(w: Workspace) {
+  return {
+    autoNotifyMaintainers:
+      w.githubNotificationSettings?.autoNotifyMaintainers ?? true,
+    revision: w.githubNotificationSettings?.revision ?? 0,
+    ...(w.githubNotificationSettings?.updatedAt
+      ? { updatedAt: w.githubNotificationSettings.updatedAt }
+      : {}),
+  };
+}
+export function repositoryAutoRevoked(w: Workspace, repositoryId: number) {
+  const rev = w.github?.revision;
+  if (rev === undefined) return true;
+  const revoked = w.githubNotificationSettings?.revokedRevisions;
+  if (!revoked) return false;
+  return revoked["*"] === rev || revoked[String(repositoryId)] === rev;
+}
+export function revokeAutoNotifications(
+  w: Workspace,
+  repositoryIds?: number[],
+) {
+  if (!w.github) return;
+  const current = githubNotificationSettings(w);
+  const revokedRevisions = {
+    ...(w.githubNotificationSettings?.revokedRevisions ?? {}),
+  };
+  if (repositoryIds) {
+    for (const id of repositoryIds)
+      revokedRevisions[String(id)] = w.github.revision;
+  } else {
+    revokedRevisions["*"] = w.github.revision;
+  }
+  w.githubNotificationSettings = {
+    ...w.githubNotificationSettings,
+    autoNotifyMaintainers: current.autoNotifyMaintainers,
+    revision: current.revision + 1,
+    revokedRevisions,
+  };
+  const affected = repositoryIds ? new Set(repositoryIds) : undefined;
+  for (const d of w.deliveries)
+    if (
+      d.state === "pending" &&
+      d.githubNotification?.kind === "maintainer" &&
+      (!affected || affected.has(d.githubNotification.repositoryId))
+    )
+      d.state = "cancelled";
+}
+export function updateNotificationSettings(
+  w: Workspace,
+  actor: string,
+  value: unknown,
+) {
+  const input = notificationSettingsInput.parse(value);
+  const current = githubNotificationSettings(w);
+  requireThat(current.revision === input.revision, "version_conflict", 409);
+  if (current.autoNotifyMaintainers === input.autoNotifyMaintainers)
+    return current;
+  const next: GitHubNotificationSettings = {
+    ...w.githubNotificationSettings,
+    autoNotifyMaintainers: input.autoNotifyMaintainers,
+    revision: current.revision + 1,
+    updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString(),
+  };
+  w.githubNotificationSettings = next;
+  if (!next.autoNotifyMaintainers)
+    for (const d of w.deliveries)
+      if (d.state === "pending" && d.githubNotification?.kind === "maintainer")
+        d.state = "cancelled";
+  audit(w, actor, "github.notification_settings_updated", w.id, next.revision);
+  return githubNotificationSettings(w);
+}
+export function automaticMaintainerRepositories(w: Workspace, actor: string) {
+  if (!githubNotificationSettings(w).autoNotifyMaintainers) return [];
+  if (!eligible(w, actor)) return [];
+  return (w.github?.repositories ?? [])
+    .filter(
+      (r) =>
+        !r.archived &&
+        !r.disabled &&
+        !repositoryAutoRevoked(w, r.id) &&
+        repositoryMaintainer(w, actor, r.id) &&
+        !(w.githubNotifications ?? []).some(
+          (s) => s.actor === actor && s.repositoryId === r.id,
+        ),
+    )
+    .map((r) => ({ id: r.id, full_name: r.full_name }));
+}
+export function hasActiveGitHubNotifications(w: Workspace) {
+  if (w.githubNotifications?.some((s) => s.enabled)) return true;
+  if (!githubNotificationSettings(w).autoNotifyMaintainers) return false;
+  if (!w.github?.installationId || !w.github.repositories.length) return false;
+  return w.members.some(
+    (m) => automaticMaintainerRepositories(w, m.id).length > 0,
+  );
+}
+export interface AutoNotificationRepository {
+  id: number;
+  full_name: string;
+  lastDelivery?: string;
+}
 export interface GitHubSubscription {
   id: string;
   actor: string;
@@ -37,6 +156,11 @@ export interface NotificationPage {
   canManage: boolean;
   webhookUrl?: string;
   canConfigureWebhook?: boolean;
+  settings: {
+    autoNotifyMaintainers: boolean;
+    revision: number;
+  };
+  autoRepositories: AutoNotificationRepository[];
   subscriptions: (GitHubSubscription & {
     available: boolean;
     lastDelivery?: string;
@@ -51,9 +175,25 @@ export function notificationPage(
   webhookConfigured: boolean,
 ): NotificationPage {
   const canManage = !!actor && eligible(w, actor);
+  const settings = githubNotificationSettings(w);
   return {
     canManage,
     webhookConfigured,
+    settings: {
+      autoNotifyMaintainers: settings.autoNotifyMaintainers,
+      revision: settings.revision,
+    },
+    autoRepositories: canManage
+      ? automaticMaintainerRepositories(w, actor).map((r) => ({
+          ...r,
+          lastDelivery: w.deliveries.findLast(
+            (d) =>
+              d.actor === actor &&
+              d.githubNotification?.kind === "maintainer" &&
+              d.githubNotification.repositoryId === r.id,
+          )?.state,
+        }))
+      : [],
     repositories: canManage
       ? (w.github?.repositories ?? [])
           .filter(
@@ -72,7 +212,10 @@ export function notificationPage(
                 ?.full_name ?? s.repository,
             available: subscriptionAllowed(w, { ...s, enabled: true }, botId),
             lastDelivery: w.deliveries.findLast(
-              (d) => d.githubNotification?.subscriptionId === s.id,
+              (d) =>
+                d.githubNotification &&
+                d.githubNotification.kind !== "maintainer" &&
+                d.githubNotification.subscriptionId === s.id,
             )?.state,
           }))
       : [],
@@ -101,14 +244,49 @@ export function subscriptionAllowed(
     repositoryAccess(w, s.actor, s.repositoryId)
   );
 }
+export function autoMaintainerNotificationAllowed(
+  w: Workspace,
+  actor: string,
+  repositoryId: number,
+  botId?: string,
+) {
+  return (
+    !!botId &&
+    githubNotificationSettings(w).autoNotifyMaintainers &&
+    eligible(w, actor) &&
+    !repositoryAutoRevoked(w, repositoryId) &&
+    repositoryMaintainer(w, actor, repositoryId) &&
+    !(w.githubNotifications ?? []).some(
+      (s) => s.actor === actor && s.repositoryId === repositoryId,
+    )
+  );
+}
 export function notificationDeliveryAllowed(
   w: Workspace,
   d: Delivery,
   botId?: string,
 ) {
   if (!d.githubNotification) return true;
+  if (d.githubNotification.kind === "maintainer") {
+    const n = d.githubNotification;
+    const settings = githubNotificationSettings(w);
+    return (
+      settings.autoNotifyMaintainers &&
+      settings.revision === n.settingsRevision &&
+      d.chatId === d.actor &&
+      d.topicId === 0 &&
+      d.botId === botId &&
+      w.github?.installationId === n.installationId &&
+      githubRepositoryScopeCurrent(w.github, n.connectionRevision, [
+        n.repositoryId,
+      ]) &&
+      autoMaintainerNotificationAllowed(w, d.actor, n.repositoryId, botId)
+    );
+  }
   const s = w.githubNotifications?.find(
-    (s) => s.id === d.githubNotification?.subscriptionId,
+    (s) =>
+      d.githubNotification?.kind !== "maintainer" &&
+      s.id === d.githubNotification?.subscriptionId,
   );
   return (
     !!s &&
@@ -119,6 +297,20 @@ export function notificationDeliveryAllowed(
     d.botId === botId &&
     subscriptionAllowed(w, s, botId)
   );
+}
+function cancelPendingMaintainerDeliveries(
+  w: Workspace,
+  actor: string,
+  repositoryId: number,
+) {
+  for (const d of w.deliveries)
+    if (
+      d.actor === actor &&
+      d.state === "pending" &&
+      d.githubNotification?.kind === "maintainer" &&
+      d.githubNotification.repositoryId === repositoryId
+    )
+      d.state = "cancelled";
 }
 export function manageNotifications(
   w: Workspace,
@@ -190,6 +382,7 @@ export function manageNotifications(
       };
       w.githubNotifications ??= [];
       w.githubNotifications.push(s);
+      cancelPendingMaintainerDeliveries(w, actor, repository.id);
     } else {
       const events = input.events ?? s.events;
       if (
@@ -216,13 +409,48 @@ export function manageNotifications(
           since: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString(),
         });
       }
+      cancelPendingMaintainerDeliveries(w, actor, repository.id);
     }
   } else {
-    requireThat(s, "not_found", 404);
-    s.enabled = false;
-    s.revision++;
-    if (input.action === "delete")
-      w.githubNotifications = w.githubNotifications?.filter((t) => t !== s);
+    if (!s && input.action === "pause" && connected) {
+      requireThat(
+        w.github?.installationId &&
+          !connected.archived &&
+          !connected.disabled &&
+          githubNotificationSettings(w).autoNotifyMaintainers &&
+          repositoryMaintainer(w, actor, connected.id),
+        "not_found",
+        404,
+      );
+      requireThat(
+        (w.githubNotifications?.length ?? 0) < 200 && own().length < 50,
+        "notification_capacity_reached",
+        409,
+      );
+      s = {
+        id: randomUUID(),
+        actor,
+        repositoryId: connected.id,
+        repository: connected.full_name,
+        installationId: w.github.installationId,
+        connectionRevision: w.github.revision,
+        botId,
+        events: [...notificationEvents],
+        enabled: false,
+        revision: 1,
+        since: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString(),
+      };
+      w.githubNotifications ??= [];
+      w.githubNotifications.push(s);
+      cancelPendingMaintainerDeliveries(w, actor, connected.id);
+    } else {
+      requireThat(s, "not_found", 404);
+      s.enabled = false;
+      s.revision++;
+      cancelPendingMaintainerDeliveries(w, actor, s.repositoryId);
+      if (input.action === "delete")
+        w.githubNotifications = w.githubNotifications?.filter((t) => t !== s);
+    }
   }
   audit(w, actor, `github.notification.${input.action}`, s.id, s.revision);
   return own();
@@ -236,8 +464,29 @@ export interface NotificationPayload {
   number: number;
   title: string;
   author: string;
+  authorId?: number;
   draft: boolean;
   createdAt: string;
+}
+export type NotificationRecipient =
+  | { kind?: "subscription"; id: string; revision: number }
+  | {
+      kind: "maintainer";
+      actor: string;
+      repositoryId: number;
+      installationId: number;
+      connectionRevision: number;
+      settingsRevision: number;
+      botId: string;
+    };
+function isSelfAuthored(
+  member: Workspace["members"][number] | undefined,
+  payload: Pick<NotificationPayload, "author" | "authorId">,
+) {
+  const github = member?.github;
+  if (!github) return false;
+  if (payload.authorId !== undefined) return github.id === payload.authorId;
+  return github.login.toLowerCase() === payload.author.toLowerCase();
 }
 export class GitHubNotifications {
   constructor(readonly store: Store) {}
@@ -249,7 +498,7 @@ export class GitHubNotifications {
   ) {
     const deployment = await this.store.deployment();
     const candidates = await this.store.pool.query(
-      "SELECT id FROM workspaces WHERE operator_id=$1 AND data#>>'{github,installationId}'=$2 AND EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(data->'githubNotifications','[]'::jsonb)) s WHERE s->>'enabled'='true' AND s->>'repositoryId'=$3)",
+      "SELECT id FROM workspaces WHERE operator_id=$1 AND data->'deletion' IS NULL AND data#>>'{github,installationId}'=$2 AND (EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(data->'githubNotifications','[]'::jsonb)) s WHERE s->>'enabled'='true' AND s->>'repositoryId'=$3) OR (COALESCE(data#>>'{githubNotificationSettings,autoNotifyMaintainers}','true')='true' AND EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(data->'members','[]'::jsonb)) m, jsonb_array_elements(COALESCE(m->'github'->'repositories','[]'::jsonb)) r WHERE m->>'active'='true' AND m->'github'->>'status'='connected' AND r->>'id'=$3 AND (r->'permissions'->>'maintain'='true' OR r->'permissions'->>'admin'='true'))))",
       [
         operatorId,
         String(payload.installationId),
@@ -258,18 +507,60 @@ export class GitHubNotifications {
     );
     for (const { id } of candidates.rows as { id: string }[]) {
       await this.store.change(id, async (w, sql) => {
-        const recipients =
-          w.githubNotifications
-            ?.filter(
-              (s) =>
-                w.operatorId === operatorId &&
-                s.installationId === payload.installationId &&
-                s.repositoryId === payload.repositoryId &&
-                s.events.includes(payload.event) &&
-                Date.parse(s.since) <= Date.parse(payload.createdAt) &&
-                subscriptionAllowed(w, s, deployment.bot?.id),
+        if (
+          w.deletion ||
+          w.operatorId !== operatorId ||
+          w.github?.installationId !== payload.installationId
+        )
+          return;
+        const explicitByActor = new Set<string>();
+        const recipients: NotificationRecipient[] = [];
+        for (const s of w.githubNotifications ?? []) {
+          if (s.repositoryId !== payload.repositoryId) continue;
+          explicitByActor.add(s.actor);
+          if (
+            s.installationId === payload.installationId &&
+            s.events.includes(payload.event) &&
+            Date.parse(s.since) <= Date.parse(payload.createdAt) &&
+            subscriptionAllowed(w, s, deployment.bot?.id)
+          )
+            recipients.push({
+              kind: "subscription",
+              id: s.id,
+              revision: s.revision,
+            });
+        }
+        const settings = githubNotificationSettings(w);
+        if (
+          deployment.bot?.id &&
+          settings.autoNotifyMaintainers &&
+          (!settings.updatedAt ||
+            Date.parse(settings.updatedAt) <= Date.parse(payload.createdAt)) &&
+          !repositoryAutoRevoked(w, payload.repositoryId)
+        ) {
+          for (const member of w.members) {
+            if (
+              explicitByActor.has(member.id) ||
+              isSelfAuthored(member, payload) ||
+              !autoMaintainerNotificationAllowed(
+                w,
+                member.id,
+                payload.repositoryId,
+                deployment.bot.id,
+              )
             )
-            .map((s) => ({ id: s.id, revision: s.revision })) ?? [];
+              continue;
+            recipients.push({
+              kind: "maintainer",
+              actor: member.id,
+              repositoryId: payload.repositoryId,
+              installationId: payload.installationId,
+              connectionRevision: w.github.revision,
+              settingsRevision: settings.revision,
+              botId: deployment.bot.id,
+            });
+          }
+        }
         if (!recipients.length) return;
         await sql.query(
           "INSERT INTO github_notification_events(id,workspace_id,app_id,delivery_id,event_key,payload,recipients) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING",
@@ -301,12 +592,54 @@ export class GitHubNotifications {
         "SELECT id,payload,recipients FROM github_notification_events WHERE workspace_id=$1 AND processed_at IS NULL ORDER BY created_at LIMIT 20 FOR UPDATE",
         [w.id],
       );
+      const settings = githubNotificationSettings(w);
       for (const row of rows.rows) {
         const p = row.payload as NotificationPayload;
-        for (const recipient of row.recipients as {
-          id: string;
-          revision: number;
-        }[]) {
+        const repository = w.github?.repositories.find(
+          (r) => r.id === p.repositoryId,
+        );
+        for (const recipient of row.recipients as NotificationRecipient[]) {
+          if (!repository) continue;
+          const url = `https://github.com/${repository.full_name}/${p.event === "issues" ? "issues" : "pull"}/${p.number}`;
+          const text = `${p.event === "issues" ? "📌 New issue" : "🔀 New PR"}${p.draft ? " (Draft)" : ""} · ${repository.full_name} #${p.number}\n${p.title}\nBy ${p.author}\n${url}`;
+          if (recipient.kind === "maintainer") {
+            const member = w.members.find((m) => m.id === recipient.actor);
+            if (
+              !settings.autoNotifyMaintainers ||
+              settings.revision !== recipient.settingsRevision ||
+              deployment.bot?.id !== recipient.botId ||
+              w.github?.installationId !== recipient.installationId ||
+              !githubRepositoryScopeCurrent(
+                w.github,
+                recipient.connectionRevision,
+                [recipient.repositoryId],
+              ) ||
+              isSelfAuthored(member, p) ||
+              !autoMaintainerNotificationAllowed(
+                w,
+                recipient.actor,
+                recipient.repositoryId,
+                deployment.bot?.id,
+              )
+            )
+              continue;
+            const id = deliver(w, recipient.actor, recipient.actor, text, {
+              id: `github-notification:${row.id}:maintainer:${recipient.actor}`,
+              buttons: [[{ text: "View on GitHub", url }]],
+            });
+            const d = w.deliveries.find((d) => d.id === id);
+            if (d) {
+              d.botId = recipient.botId;
+              d.githubNotification = {
+                kind: "maintainer",
+                repositoryId: recipient.repositoryId,
+                installationId: recipient.installationId,
+                connectionRevision: recipient.connectionRevision,
+                settingsRevision: recipient.settingsRevision,
+              };
+            }
+            continue;
+          }
           const s = w.githubNotifications?.find((s) => s.id === recipient.id);
           if (
             !s ||
@@ -314,12 +647,6 @@ export class GitHubNotifications {
             !subscriptionAllowed(w, s, deployment.bot?.id)
           )
             continue;
-          const repository = w.github?.repositories.find(
-            (r) => r.id === p.repositoryId,
-          );
-          if (!repository) continue;
-          const url = `https://github.com/${repository.full_name}/${p.event === "issues" ? "issues" : "pull"}/${p.number}`;
-          const text = `${p.event === "issues" ? "📌 New issue" : "🔀 New PR"}${p.draft ? " (Draft)" : ""} · ${repository.full_name} #${p.number}\n${p.title}\nBy ${p.author}\n${url}`;
           const id = deliver(w, s.actor, s.actor, text, {
             id: `github-notification:${row.id}:${s.id}`,
             buttons: [[{ text: "View on GitHub", url }]],
@@ -328,6 +655,7 @@ export class GitHubNotifications {
           if (d) {
             d.botId = s.botId;
             d.githubNotification = {
+              kind: "subscription",
               subscriptionId: s.id,
               revision: s.revision,
             };

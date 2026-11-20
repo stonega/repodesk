@@ -75,6 +75,32 @@ export function authorizeRepository(
     403,
   );
 }
+/** Verified GitHub-linked member with fresh Maintain or Admin access on a connected repository. */
+export function repositoryMaintainer(
+  w: Workspace,
+  actor: string,
+  repositoryId: number,
+) {
+  const repository = w.github?.repositories.find((r) => r.id === repositoryId);
+  const access = w.members.find((m) => m.id === actor)?.github;
+  if (
+    !access ||
+    !w.github?.installationId ||
+    !repository ||
+    repository.archived ||
+    repository.disabled ||
+    access.status !== "connected" ||
+    !githubRepositoryScopeCurrent(w.github, access.connectionRevision, [
+      repositoryId,
+    ]) ||
+    Date.parse(access.syncedAt) <= Date.now() - 10 * 60000
+  )
+    return false;
+  const repo = access.repositories.find((r) => r.id === repositoryId);
+  return (
+    repo?.permissions?.maintain === true || repo?.permissions?.admin === true
+  );
+}
 /** Coding/review actions use verified GitHub access, with no unlinked fallback. */
 export function verifiedRepositoryAccess(
   w: Workspace,
@@ -192,9 +218,12 @@ export function invalidateGitHubWork(
   for (const d of w.deliveries)
     if (
       d.actor === actor &&
-      d.runId &&
       d.state === "pending" &&
-      (!affected || w.runs.some((r) => r.id === d.runId && runAffected(r)))
+      ((d.githubNotification?.kind === "maintainer" &&
+        (!affected || affected.has(d.githubNotification.repositoryId))) ||
+        (d.runId &&
+          (!affected ||
+            w.runs.some((r) => r.id === d.runId && runAffected(r)))))
     )
       d.state = "cancelled";
 }
