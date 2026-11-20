@@ -47,6 +47,7 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [LLM extensions / plugins](design/llm-extensions.md) | Existing Pi extension loading, headless compatibility, grants and recovery |
 | [GitHub plugin contract](design/github-plugins.md) | Design baseline and implemented preview profile for repository packages, SDK, isolation and capabilities |
 | [Plugin ecosystem research](research/plugin-ecosystems-2026-11-13.md) | Dated primary-source comparison, current implementation gaps and distribution tradeoffs |
+| [Mingle and Orbital feature research](research/mingle-and-orbital-2026-11-20.md) | Dated comparison of Mingle and Orbital with prioritized feature adaptations and boundary exclusions |
 | [GitHub plugin delivery plan](implementation/github-plugins-plan.md) | Delivery ledger, independent author template and outstanding pilot/publication gates |
 | [GitHub plugin verification](implementation/github-plugins-verification.md) | Source, tests, image identities, UI acceptance and remaining release gates |
 | [Obsidian organization notes](implementation/obsidian.md) | Default-enabled managed vault, native note formats, shared access and import/export |
