@@ -13,6 +13,17 @@ export async function taskList(
     )
   ).rows.map((r) => r.data);
 }
+export async function taskFind(
+  sql: Sql,
+  workspaceId: string,
+  id: string,
+): Promise<DevelopmentTask | undefined> {
+  const result = await sql.query(
+    "SELECT data FROM coding_tasks WHERE workspace_id=$1 AND id=$2",
+    [workspaceId, id],
+  );
+  return result.rows[0]?.data as DevelopmentTask | undefined;
+}
 export async function taskGet(
   sql: Sql,
   workspaceId: string,

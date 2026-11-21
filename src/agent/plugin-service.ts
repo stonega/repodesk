@@ -50,6 +50,7 @@ import { obsidianTools } from "../obsidian/config.ts";
 import { obsidianExtension } from "../obsidian/extension.ts";
 import { ObsidianService } from "../obsidian/service.ts";
 import { obsidianEnabled, obsidianGeneration } from "../obsidian/vault.ts";
+import { ORCHESTRATION_TOOLS } from "../orchestration/tools.ts";
 import { packageToolNames } from "../plugins/extension.ts";
 import {
   type PluginPackageOptions,
@@ -66,6 +67,7 @@ import {
   pluginSaveSchema,
 } from "./plugin-config.ts";
 import { PiRunner } from "./runtime.ts";
+import { RESEARCH_SUBAGENT_TOOL } from "./subagent.ts";
 
 function authorizePlugins(admin: Admin, workspace: Workspace) {
   operator(admin);
@@ -234,6 +236,8 @@ export class PluginService {
       );
       const builtin = prior?.codeTruth;
       const names = new Set<string>(TOOLS);
+      names.add(RESEARCH_SUBAGENT_TOOL);
+      for (const name of ORCHESTRATION_TOOLS) names.add(name);
       for (const pkg of prior?.packages ?? [])
         if (pkg.enabled)
           for (const tool of packageToolNames(pkg)) names.add(tool);

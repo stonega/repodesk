@@ -296,6 +296,7 @@ function Shell() {
   const navigation: [string, string][] = [
     ["overview", "Overview"],
     ["members", "Groups & Members"],
+    ["missions", "Missions"],
     ["workflows", "Workflows"],
     ["skills", "Skills"],
     ["instructions", "Instructions"],
@@ -311,6 +312,7 @@ function Shell() {
         [
           "overview",
           "members",
+          "missions",
           "workflows",
           "skills",
           "threads",

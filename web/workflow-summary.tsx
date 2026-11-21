@@ -11,11 +11,21 @@ export function scheduleLabel(recurrence: WorkflowMetadata["recurrence"]) {
     "Friday",
     "Saturday",
   ];
+  if (recurrence.frequency === "once") {
+    return recurrence.runAt ? `Once at ${recurrence.runAt}` : "Once";
+  }
+  if (recurrence.frequency === "interval") {
+    return `Every ${recurrence.intervalMinutes ?? 60} minutes`;
+  }
+  const time = `${String(recurrence.hour ?? 0).padStart(2, "0")}:${String(recurrence.minute ?? 0).padStart(2, "0")}`;
+  if (recurrence.frequency === "weekdays") return `Weekdays at ${time}`;
+  if (recurrence.frequency === "monthly")
+    return `Monthly (day ${recurrence.dayOfMonth ?? 1}) at ${time}`;
   const frequency =
     recurrence.frequency === "weekly"
       ? `Every ${day[(recurrence.weekday ?? 7) % 7]}`
       : "Every day";
-  return `${frequency} at ${String(recurrence.hour).padStart(2, "0")}:${String(recurrence.minute).padStart(2, "0")}`;
+  return `${frequency} at ${time}`;
 }
 
 function ScheduleTime({ at, timezone }: { at: string; timezone: string }) {

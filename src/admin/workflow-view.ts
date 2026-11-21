@@ -76,7 +76,10 @@ export function workflowView(
       name: owner?.name,
       username: owner?.username,
     },
-    next: nextOccurrences(workflow.spec.recurrence, new Date()),
+    next:
+      workflow.spec.trigger && workflow.spec.trigger.kind !== "schedule"
+        ? []
+        : nextOccurrences(workflow.spec.recurrence, new Date()),
   };
 }
 type RepositorySources = ReturnType<typeof workflowRepositories>;

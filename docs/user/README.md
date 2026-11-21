@@ -25,6 +25,7 @@ RepoDesk 是一个自托管的 Telegram AI 助手，让你在聊天中查询 Git
 | [Chat requests](commands.md) | Ask for features in ordinary language |
 | [群组与话题](groups.md) | 关联群组，控制消息收集，在群内协作 |
 | [定时任务与报告](workflows.md) | 创建定期总结或仓库报告，调整输出和暂停任务 |
+| [Agent Orchestration & Autonomy](agent-orchestration.md) | Parallel reads, research subagents, background missions, autonomy presets, watchers, and repo queues |
 | [技能与可复用流程](skills.md) | 保存、导入、发布和启用团队技能 |
 | [记忆与隐私](memory-and-privacy.md) | 管理历史记忆、持久指令和数据保留 |
 | [Preference memory](preference-memory.md) | Manage scoped preference recall, inspect evidence, correct and forget revisions |

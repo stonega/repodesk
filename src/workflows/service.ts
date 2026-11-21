@@ -318,7 +318,10 @@ export function decide(
     );
     requireThat(workflowSkillAvailable(w, workflow), "skill_unavailable");
     workflow.status = "active";
-    workflow.nextAt = nextOccurrences(workflow.spec.recurrence, now, 1)[0];
+    workflow.nextAt =
+      workflow.spec.trigger && workflow.spec.trigger.kind !== "schedule"
+        ? undefined
+        : nextOccurrences(workflow.spec.recurrence, now, 1)[0];
     workflow.reason = undefined;
   }
   if (accept && approval.kind === "instruction") {
@@ -398,7 +401,10 @@ export function workflowAction(
     );
     requireThat(workflowSkillAvailable(w, f), "skill_unavailable");
     f.status = "active";
-    f.nextAt = nextOccurrences(f.spec.recurrence, new Date(), 1)[0];
+    f.nextAt =
+      f.spec.trigger && f.spec.trigger.kind !== "schedule"
+        ? undefined
+        : nextOccurrences(f.spec.recurrence, new Date(), 1)[0];
   } else f.status = action === "pause" ? "paused" : "deleted";
   revokeWork(w);
   audit(w, manager ?? actor, `workflow.${action}`, id, f.version);
@@ -410,18 +416,26 @@ export function tick(w: Workspace, model: string, now = new Date()) {
   for (const f of w.workflows) {
     if (
       f.status !== "active" ||
+      (f.spec.trigger && f.spec.trigger.kind !== "schedule") ||
       !f.nextAt ||
       Date.parse(f.nextAt) > now.getTime()
     )
       continue;
     const instant = f.nextAt;
     const key = `${f.id}:${instant}`;
-    f.nextAt = nextOccurrences(f.spec.recurrence, now, 1)[0];
-    if (w.occurrences.some((o) => o.key === key)) continue;
+    const isOnce = f.spec.recurrence.frequency === "once";
+    f.nextAt = isOnce
+      ? undefined
+      : nextOccurrences(f.spec.recurrence, now, 1)[0];
+    if (w.occurrences.some((o) => o.key === key)) {
+      if (isOnce) f.status = "completed";
+      continue;
+    }
     if (
       now.getTime() - Date.parse(instant) >
       w.settings.missedRunMinutes * 60000
     ) {
+      if (isOnce) f.status = "completed";
       w.occurrences.push({
         key,
         workflowId: f.id,
@@ -451,6 +465,7 @@ export function tick(w: Workspace, model: string, now = new Date()) {
         model,
         { workflowId: f.id, now },
       );
+      if (isOnce) f.status = "completed";
       w.occurrences.push({
         key,
         workflowId: f.id,

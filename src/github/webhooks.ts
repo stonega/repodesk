@@ -3,7 +3,12 @@ import { z } from "zod";
 import { operator } from "../admin/auth.ts";
 import type { Store } from "../db/repositories.ts";
 import { type Admin, Fault, requireThat } from "../domain.ts";
+import { resolveMissionWait } from "../orchestration/wakeup.ts";
 import { decrypt, encrypt } from "../setup/credentials.ts";
+import {
+  dispatchAutomationEvent,
+  type IncomingAutomationEvent,
+} from "../workflows/events.ts";
 import { audit } from "../workspaces/policy.ts";
 import {
   GitHubNotifications,
@@ -192,6 +197,8 @@ export class GitHubWebhooks {
         });
       }
     }
+    // Dispatch GitHub event-triggered automations and mission waits (check_suite, issues, pull_request).
+    await this.dispatchAutomationHooks(operatorId, event, delivery, raw);
     if (!["pull_request", "issues"].includes(event) || raw.action !== "opened")
       return { accepted: true };
     const interested = (
@@ -231,6 +238,172 @@ export class GitHubWebhooks {
       payload,
     );
     return { accepted: true };
+  }
+  private async dispatchAutomationHooks(
+    operatorId: string,
+    event: string,
+    delivery: string,
+    raw: Record<string, unknown>,
+  ) {
+    const repoParsed = z
+      .object({
+        installation: z.object({ id: positiveId }),
+        repository: z.object({
+          id: positiveId,
+          full_name: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
+        }),
+      })
+      .safeParse(raw);
+    if (!repoParsed.success) return;
+    const { installation, repository } = repoParsed.data;
+    const action = typeof raw.action === "string" ? raw.action : "";
+
+    let automationEvent: IncomingAutomationEvent | undefined;
+    let missionTargetId: string | undefined;
+    let missionSummary = "";
+    let missionStatus: "satisfied" | "failed" = "satisfied";
+
+    if (event === "check_suite" && action === "completed") {
+      const suite = z
+        .object({
+          head_branch: z.string().nullable().optional(),
+          head_sha: z.string().optional(),
+          conclusion: z.string().nullable().optional(),
+          html_url: z.string().optional(),
+        })
+        .safeParse(raw.check_suite);
+      if (suite.success && suite.data.head_sha) {
+        missionTargetId = `check_suite:${repository.id}:${suite.data.head_sha}`;
+        missionStatus =
+          suite.data.conclusion === "success" ? "satisfied" : "failed";
+        missionSummary = `CI check suite ${suite.data.conclusion ?? "completed"} on ${repository.full_name} (${suite.data.head_branch ?? "unknown"}).`;
+        if (suite.data.conclusion === "failure") {
+          automationEvent = {
+            kind: "github_event",
+            event: "check_suite_failed",
+            eventKey: `check_suite_failed:${repository.id}:${suite.data.head_sha}:${delivery}`,
+            repositoryId: repository.id,
+            repository: repository.full_name,
+            branch: suite.data.head_branch ?? undefined,
+            sha: suite.data.head_sha,
+            url: suite.data.html_url,
+          };
+        }
+      }
+    } else if (
+      event === "issues" &&
+      (action === "opened" || action === "labeled")
+    ) {
+      const issue = z
+        .object({
+          number: positiveId,
+          title: z.string().max(4096),
+          html_url: z.string().optional(),
+          pull_request: z.unknown().optional(),
+        })
+        .safeParse(raw.issue);
+      const label = z
+        .object({ name: z.string().min(1).max(100) })
+        .safeParse(raw.label);
+      if (issue.success && issue.data.pull_request === undefined) {
+        automationEvent = {
+          kind: "github_event",
+          event: action === "labeled" ? "issue_labeled" : "issue_opened",
+          eventKey: `issue:${action}:${repository.id}:${issue.data.number}:${label.success ? label.data.name : delivery}`,
+          repositoryId: repository.id,
+          repository: repository.full_name,
+          number: issue.data.number,
+          title: clean(issue.data.title).slice(0, 200),
+          label: label.success ? label.data.name : undefined,
+          url: issue.data.html_url,
+        };
+      }
+    } else if (
+      event === "pull_request" &&
+      (action === "opened" || action === "ready_for_review")
+    ) {
+      const pr = z
+        .object({
+          number: positiveId,
+          title: z.string().max(4096),
+          html_url: z.string().optional(),
+          head: z.object({ sha: z.string().optional() }).optional(),
+          base: z.object({ ref: z.string().optional() }).optional(),
+        })
+        .safeParse(raw.pull_request);
+      if (pr.success) {
+        automationEvent = {
+          kind: "github_event",
+          event:
+            action === "ready_for_review"
+              ? "pull_request_ready"
+              : "pull_request_opened",
+          eventKey: `pr:${action}:${repository.id}:${pr.data.number}:${pr.data.head?.sha ?? delivery}`,
+          repositoryId: repository.id,
+          repository: repository.full_name,
+          branch: pr.data.base?.ref,
+          number: pr.data.number,
+          title: clean(pr.data.title).slice(0, 200),
+          sha: pr.data.head?.sha,
+          url: pr.data.html_url,
+        };
+      }
+    }
+
+    if (!automationEvent && !missionTargetId) return;
+    const deployment = await this.store.deployment();
+    if (!deployment.active || deployment.paused) return;
+
+    for (const id of await this.store.ids()) {
+      const current = await this.store.read(id);
+      if (
+        current.deletion ||
+        current.settings.paused ||
+        current.operatorId !== operatorId ||
+        current.github?.installationId !== installation.id
+      )
+        continue;
+      const hasEventWorkflow =
+        !!automationEvent &&
+        current.workflows.some(
+          (wf) =>
+            wf.status === "active" &&
+            wf.spec.trigger?.kind === "github_event" &&
+            wf.spec.github?.repositoryIds.includes(repository.id),
+        );
+      if (!hasEventWorkflow && !missionTargetId) continue;
+      await this.store.change(id, async (w, sql) => {
+        if (
+          w.deletion ||
+          w.settings.paused ||
+          w.github?.installationId !== installation.id
+        )
+          return;
+        if (automationEvent && hasEventWorkflow) {
+          await dispatchAutomationEvent(
+            sql,
+            w,
+            automationEvent,
+            deployment.model,
+          );
+        }
+        if (missionTargetId) {
+          await resolveMissionWait(
+            sql,
+            w,
+            "github_event",
+            missionTargetId,
+            {
+              status: missionStatus,
+              summary: missionSummary,
+              data: { repository: repository.full_name, event, action },
+            },
+            deployment.model,
+            { botId: deployment.bot?.id },
+          );
+        }
+      });
+    }
   }
   async recover(operatorId: string, workspaceId?: string) {
     // A database lease bounds checks across worker instances and process restarts.

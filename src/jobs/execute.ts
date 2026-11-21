@@ -27,6 +27,9 @@ import { codingTaskContext } from "../coding/task-context.ts";
 import { taskGet } from "../coding/task-store.ts";
 import type { Store } from "../db/repositories.ts";
 import { Fault, requireThat } from "../domain.ts";
+import { waitCreate } from "../orchestration/store.ts";
+import { orchestrationTools } from "../orchestration/tools.ts";
+import { missionContextSnapshot } from "../orchestration/wakeup.ts";
 import type { SearchPin } from "../search/config.ts";
 import { searchTool } from "../search/tool.ts";
 import type { SetupService } from "../setup/service.ts";
@@ -42,6 +45,7 @@ import { Ingress } from "../telegram/webhook.ts";
 import { publishWidget } from "../telegram/widgets.ts";
 import { TranscriptionService } from "../transcription/service.ts";
 import { webReaderTool } from "../web-reader/tool.ts";
+import { recordWatcherDedupe } from "../workflows/events.ts";
 import { commitDiscussions } from "../workspaces/conversation-memory.ts";
 import { audit, runAllowed } from "../workspaces/policy.ts";
 import { confirmRunStopped, deliver } from "../workspaces/service.ts";
@@ -253,7 +257,11 @@ export class Executor {
     poll.unref();
     let compacting = false;
     let classifying = false;
-    const checkpoint = async (message: AgentMessage, attemptId?: string) => {
+    const checkpoint = async (
+      message: AgentMessage,
+      attemptId?: string,
+      purpose?: AgentInput["purpose"],
+    ) => {
       await this.store.change(workspaceId, (w) => {
         const r = w.runs.find((r) => r.id === runId);
         requireThat(r && r.fence === fence, "lease_lost", 409);
@@ -276,6 +284,7 @@ export class Executor {
           }
         }
         if (!w.deletion && runAllowed(w, r)) {
+          if (purpose === "research_subagent") return;
           if (classifying) r.followup?.transcript.push(message);
           else if (compacting) r.compaction?.transcript.push(message);
           else {
@@ -319,10 +328,20 @@ export class Executor {
             "run_revoked",
             409,
           );
-          return codingTaskContext(sql, w, run, deployment.bot?.id);
+          const [coding, mission] = await Promise.all([
+            codingTaskContext(sql, w, run, deployment.bot?.id),
+            missionContextSnapshot(sql, w, run).catch(() => ({})),
+          ]);
+          return { coding, mission };
         });
       const w = await this.store.read(workspaceId);
-      let context = buildContext(w, claimed, await taskContext());
+      const initialCtx = await taskContext();
+      let context = buildContext(
+        w,
+        claimed,
+        initialCtx.coding,
+        initialCtx.mission,
+      );
       const transcript = claimed.transcript as AgentMessage[];
       // Restore only complete transcript boundaries. Tool effects and outcomes are committed atomically.
       const tail = transcript.at(-1);
@@ -388,6 +407,7 @@ export class Executor {
         system: context.system,
         prompt: context.prompt,
         transcript,
+        enableSubagent: !claimed.workflowId,
         tools: [
           ...applicationTools(
             this.store,
@@ -395,6 +415,13 @@ export class Executor {
             runId,
             fence,
             this.chat,
+            claimed.workflowId ? "workflow" : "interactive",
+          ),
+          ...orchestrationTools(
+            this.store,
+            workspaceId,
+            runId,
+            fence,
             claimed.workflowId ? "workflow" : "interactive",
           ),
           webReaderTool(this.store, workspaceId, runId, fence, guard),
@@ -431,7 +458,7 @@ export class Executor {
         },
         signal,
         guard,
-        reserve: async (amount) =>
+        reserve: async (amount, purpose) =>
           this.store.change(workspaceId, (w) => {
             const r = w.runs.find((r) => r.id === runId);
             requireThat(
@@ -453,11 +480,13 @@ export class Executor {
             const id = randomUUID();
             r.attempts.push({
               id,
-              purpose: classifying
-                ? "followup"
-                : compacting
-                  ? "compaction"
-                  : undefined,
+              purpose:
+                purpose ??
+                (classifying
+                  ? "followup"
+                  : compacting
+                    ? "compaction"
+                    : undefined),
               reserved: amount,
               status: "reserved",
               at: new Date().toISOString(),
@@ -560,7 +589,13 @@ export class Executor {
           compacting = false;
         }
         const current = await this.store.read(workspaceId);
-        context = buildContext(current, claimed, await taskContext());
+        const refreshedCtx = await taskContext();
+        context = buildContext(
+          current,
+          claimed,
+          refreshedCtx.coding,
+          refreshedCtx.mission,
+        );
         input.system = context.system;
         input.prompt = context.prompt;
       }
@@ -628,13 +663,29 @@ export class Executor {
             if (r.pendingInputs?.length) return false;
             const activation = r.workflowActivation;
             if (result.text && !activation) validateSources(result.text, r);
-            const proposals = w.approvals.some(
+            const pendingApprovals = w.approvals.filter(
               (a) =>
                 !a.decision &&
                 a.runId === r.id &&
                 Date.parse(a.expiresAt) > Date.now(),
             );
-            const handoff = !!r.codingTaskId;
+            const proposals = pendingApprovals.length > 0;
+            if (r.missionId && proposals) {
+              for (const approval of pendingApprovals) {
+                await waitCreate(sql, {
+                  workspaceId: w.id,
+                  missionId: r.missionId,
+                  kind: "approval",
+                  targetId: approval.id,
+                  reason: `Awaiting ${approval.kind} approval`,
+                });
+              }
+              await sql.query(
+                "UPDATE workspace_missions SET status='awaiting_approval', updated_at=now(), data=jsonb_set(data, '{status}', '\"awaiting_approval\"') WHERE workspace_id=$1 AND id=$2 AND status IN ('active','waiting')",
+                [w.id, r.missionId],
+              );
+            }
+            const handoff = !!r.codingTaskId && !r.missionId;
             const task = r.codingTaskId
               ? await taskGet(sql, w.id, r.codingTaskId)
               : undefined;
@@ -678,7 +729,43 @@ export class Executor {
             if (r.widget)
               validateSources(`${r.widget.caption}\n${r.widget.html}`, r);
             publishWidget(w, r, deployment.bot?.id);
-            if (!browserWaiting && !handoff && (text || !proposals)) {
+            let watcherSilent = false;
+            if (r.workflowId && r.watcherResult) {
+              const wf = w.workflows.find((f) => f.id === r.workflowId);
+              if (!r.watcherResult.notify) {
+                watcherSilent = true;
+                r.status = "succeeded";
+                r.error = undefined;
+                r.result =
+                  r.watcherResult.summary ??
+                  "Watcher check completed with no alert.";
+                audit(w, r.actor, "run.silent", r.id);
+              } else if (r.watcherResult.dedupeKey) {
+                const cooldown = wf?.spec.cooldownMinutes ?? 15;
+                const shouldSend = await recordWatcherDedupe(
+                  sql,
+                  w.id,
+                  r.workflowId,
+                  r.watcherResult.dedupeKey,
+                  cooldown,
+                );
+                if (!shouldSend) {
+                  watcherSilent = true;
+                  r.status = "succeeded";
+                  r.error = undefined;
+                  r.result =
+                    r.watcherResult.summary ??
+                    "Watcher alert suppressed within cooldown window.";
+                  audit(w, r.actor, "run.silent_deduped", r.id);
+                }
+              }
+            }
+            if (
+              !watcherSilent &&
+              !browserWaiting &&
+              !handoff &&
+              (text || !proposals)
+            ) {
               const response = text
                 ? `${text.slice(0, 2700)}${result.status === "partial" && !activation ? `\n\n${requestFailureMessage(r.error ?? "incomplete_response")}` : ""}`
                 : requestFailureMessage(r.error ?? "empty_response");

@@ -21,6 +21,7 @@ import { GitHubApps } from "../../src/github/registry.ts";
 import { GoogleService } from "../../src/google/service.ts";
 import { NowledgeService } from "../../src/nowledge-mem/service.ts";
 import { RuntimeLogger } from "../../src/observability/logs.ts";
+import { orchestrationTools } from "../../src/orchestration/tools.ts";
 import { SearchConsoleService } from "../../src/search-console/service.ts";
 import {
   createRun,
@@ -321,7 +322,11 @@ export async function verifyPluginStartup(
         system: "Startup fixture",
         prompt: "hi",
         transcript: [],
-        tools: applicationTools(store, w.id, run.id, run.fence),
+        enableSubagent: true,
+        tools: [
+          ...applicationTools(store, w.id, run.id, run.fence),
+          ...orchestrationTools(store, w.id, run.id, run.fence),
+        ],
         maxTurns: 1,
         signal: AbortSignal.timeout(5000),
         guard: async () => {},
@@ -352,6 +357,10 @@ export async function verifyPluginStartup(
               `${mode}: Browser default enablement`,
             );
           for (const name of [
+            "delegate_research",
+            "manage_mission",
+            "schedule_mission_followup",
+            "inspect_missions",
             "rdp_123456_probe",
             "send_telegram_widget",
             "manage_github_notifications",

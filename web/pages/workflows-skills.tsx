@@ -127,6 +127,16 @@ export function WorkflowsPage({
                 )}
               </h2>
               <span className="pill">{f.status}</span>
+              {f.spec.deliveryMode === "on_condition" && (
+                <span className="pill">Watcher</span>
+              )}
+              {f.spec.trigger && f.spec.trigger.kind !== "schedule" && (
+                <span className="pill">
+                  {f.spec.trigger.kind === "github_event"
+                    ? `GitHub: ${f.spec.trigger.event}`
+                    : `Plugin: ${f.spec.trigger.eventName}`}
+                </span>
+              )}
             </div>
             {f.canEdit && (
               <IconButton

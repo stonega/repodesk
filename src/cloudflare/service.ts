@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { operator } from "../admin/auth.ts";
 import type { PluginRecord } from "../agent/plugin-config.ts";
+import {
+  evaluateAutonomy,
+  isDestructiveCloudflareAction,
+} from "../autonomy/policy.ts";
 import type { Store } from "../db/repositories.ts";
 import {
   type Admin,
@@ -690,7 +694,23 @@ export class CloudflareService {
       };
       const preview = `Cloudflare: ${request.action}\nZone: ${zoneName} (${request.zoneId})\n\n${JSON.stringify(request, null, 2)}${before ? `\n\nCurrent target:\n${JSON.stringify(before, null, 2)}` : ""}\n\nApprove this exact Cloudflare change?`;
       requireThat(preview.length <= 3800, "cloudflare_preview_too_large", 409);
+      const autonomy = evaluateAutonomy(
+        w,
+        isDestructiveCloudflareAction(request.action)
+          ? "cloudflare_destructive_write"
+          : "cloudflare_non_destructive_write",
+      );
       w.approvals.push(approval);
+      if (autonomy.allowedAutomatic) {
+        approval.decision = "approved";
+        approval.autonomyMode = autonomy.effectiveMode;
+        audit(w, actor, "cloudflare.auto_approved", approval.id);
+        return {
+          status: "approved_automatic",
+          approvalId: approval.id,
+          autonomyMode: autonomy.effectiveMode,
+        };
+      }
       audit(w, actor, "cloudflare.proposed", approval.id);
       deliver(w, actor, run.chatId, preview, {
         runId,

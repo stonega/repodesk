@@ -203,10 +203,10 @@ async function syncRuns(
   }
   if (!upserts.length) return;
   await sql.query(
-    `INSERT INTO workspace_runs(workspace_id,id,seq,status,workflow_id,thread_id,actor,chat_id,topic_id,draft_id,draft_bot_id,created_at,data)
-     SELECT $1, u.id, u.seq, u.status, u.workflow_id, u.thread_id, u.actor, u.chat_id, u.topic_id, u.draft_id, u.draft_bot_id, u.created_at, u.data
-     FROM UNNEST($2::text[],$3::int[],$4::text[],$5::text[],$6::text[],$7::text[],$8::text[],$9::int[],$10::bigint[],$11::text[],$12::text[],$13::jsonb[])
-       AS u(id,seq,status,workflow_id,thread_id,actor,chat_id,topic_id,draft_id,draft_bot_id,created_at,data)
+    `INSERT INTO workspace_runs(workspace_id,id,seq,status,workflow_id,thread_id,actor,chat_id,topic_id,draft_id,draft_bot_id,mission_id,created_at,data)
+     SELECT $1, u.id, u.seq, u.status, u.workflow_id, u.thread_id, u.actor, u.chat_id, u.topic_id, u.draft_id, u.draft_bot_id, u.mission_id, u.created_at, u.data
+     FROM UNNEST($2::text[],$3::int[],$4::text[],$5::text[],$6::text[],$7::text[],$8::text[],$9::int[],$10::bigint[],$11::text[],$12::text[],$13::text[],$14::jsonb[])
+       AS u(id,seq,status,workflow_id,thread_id,actor,chat_id,topic_id,draft_id,draft_bot_id,mission_id,created_at,data)
      ON CONFLICT(workspace_id,id) DO UPDATE SET
        seq=excluded.seq,
        status=excluded.status,
@@ -217,6 +217,7 @@ async function syncRuns(
        topic_id=excluded.topic_id,
        draft_id=excluded.draft_id,
        draft_bot_id=excluded.draft_bot_id,
+       mission_id=excluded.mission_id,
        created_at=excluded.created_at,
        data=excluded.data`,
     [
@@ -237,6 +238,7 @@ async function syncRuns(
           : null,
       ),
       upserts.map((u) => u.item.telegramDraft?.botId ?? null),
+      upserts.map((u) => u.item.missionId ?? null),
       upserts.map((u) => u.item.at ?? ""),
       upserts.map((u) => u.json),
     ],

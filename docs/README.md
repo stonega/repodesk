@@ -48,6 +48,8 @@ Competitor feature parity is neither a goal nor an implementation claim.
 | [GitHub plugin contract](design/github-plugins.md) | Design baseline and implemented preview profile for repository packages, SDK, isolation and capabilities |
 | [Plugin ecosystem research](research/plugin-ecosystems-2026-11-13.md) | Dated primary-source comparison, current implementation gaps and distribution tradeoffs |
 | [Mingle and Orbital feature research](research/mingle-and-orbital-2026-11-20.md) | Dated comparison of Mingle and Orbital with prioritized feature adaptations and boundary exclusions |
+| [Agent orchestration and autonomy](design/agent-orchestration.md) | Proposed multi-step orchestration, read concurrency, research subagents, autonomy presets, proactive triggers and repo queues |
+| [Agent orchestration plan](implementation/agent-orchestration-plan.md) | Four-phase engineering plan, migrations, UI/API contracts and verification gates |
 | [GitHub plugin delivery plan](implementation/github-plugins-plan.md) | Delivery ledger, independent author template and outstanding pilot/publication gates |
 | [GitHub plugin verification](implementation/github-plugins-verification.md) | Source, tests, image identities, UI acceptance and remaining release gates |
 | [Obsidian organization notes](implementation/obsidian.md) | Default-enabled managed vault, native note formats, shared access and import/export |

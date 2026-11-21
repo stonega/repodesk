@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ModelOptions } from "./agent/model-settings.ts";
 import type { PluginSettings } from "./agent/plugin-config.ts";
+import type { WorkspaceAutonomyConfig } from "./autonomy/policy.ts";
 import type { CodingConfig } from "./coding/config.ts";
 import { currencies } from "./currency.ts";
 import type { GitHubConnection } from "./github/config.ts";
@@ -72,18 +73,101 @@ export const settingsSchema = z.preprocess(
 export type Settings = z.infer<typeof settingsSchema>;
 export const recurrenceSchema = z
   .object({
-    frequency: z.enum(["daily", "weekly"]),
-    hour: z.number().int().min(0).max(23),
-    minute: z.number().int().min(0).max(59),
+    frequency: z.enum([
+      "once",
+      "daily",
+      "weekly",
+      "weekdays",
+      "monthly",
+      "interval",
+    ]),
+    hour: z.number().int().min(0).max(23).optional(),
+    minute: z.number().int().min(0).max(59).optional(),
     weekday: z.number().int().min(1).max(7).optional(),
+    dayOfMonth: z
+      .union([z.number().int().min(1).max(28), z.literal("last")])
+      .optional(),
+    runAt: z.iso.datetime().optional(),
+    intervalMinutes: z.number().int().min(15).max(1440).optional(),
+    quietStartHour: z.number().int().min(0).max(23).optional(),
+    quietEndHour: z.number().int().min(0).max(23).optional(),
     timezone,
   })
   .strict()
-  .refine(
-    (s) => s.frequency !== "weekly" || s.weekday !== undefined,
-    "Weekly schedules need a weekday (Monday=1)",
-  );
+  .superRefine((s, ctx) => {
+    if (s.frequency === "once") {
+      if (!s.runAt) {
+        ctx.addIssue({
+          code: "custom",
+          message: "One-shot schedules need runAt (ISO datetime)",
+          path: ["runAt"],
+        });
+      }
+      return;
+    }
+    if (s.frequency === "interval") {
+      if (s.intervalMinutes === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Interval schedules need intervalMinutes (15–1440)",
+          path: ["intervalMinutes"],
+        });
+      }
+      return;
+    }
+    if (s.hour === undefined || s.minute === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Calendar schedules need hour and minute",
+        path: ["hour"],
+      });
+    }
+    if (s.frequency === "weekly" && s.weekday === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Weekly schedules need a weekday (Monday=1)",
+        path: ["weekday"],
+      });
+    }
+    if (s.frequency === "monthly" && s.dayOfMonth === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Monthly schedules need dayOfMonth (1–28 or 'last')",
+        path: ["dayOfMonth"],
+      });
+    }
+  });
 export type Recurrence = z.infer<typeof recurrenceSchema>;
+
+export const automationTriggerSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("schedule") }).strict(),
+  z
+    .object({
+      kind: z.literal("github_event"),
+      event: z.enum([
+        "check_suite_failed",
+        "issue_opened",
+        "issue_labeled",
+        "pull_request_opened",
+        "pull_request_ready",
+      ]),
+      branch: z.string().trim().min(1).max(200).optional(),
+      label: z.string().trim().min(1).max(100).optional(),
+      cooldownMinutes: z.number().int().min(1).max(1440).default(15),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("plugin_event"),
+      pluginId: z.string().trim().min(1).max(100),
+      pluginGeneration: z.number().int().min(1),
+      eventName: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/),
+      cooldownMinutes: z.number().int().min(1).max(1440).default(15),
+    })
+    .strict(),
+]);
+export type AutomationTrigger = z.infer<typeof automationTriggerSchema>;
+
 export const repositorySourcesSchema = z
   .object({
     revision: z.number().int().nonnegative(),
@@ -108,6 +192,10 @@ export const workflowSchema = z.preprocess(
       chatId,
       topicId: z.number().int().nonnegative().default(0),
       recurrence: recurrenceSchema,
+      trigger: automationTriggerSchema.optional(),
+      deliveryMode: z.enum(["always", "on_condition"]).optional(),
+      watcherAction: z.enum(["notify_only", "investigate_readonly"]).optional(),
+      cooldownMinutes: z.number().int().min(1).max(1440).optional(),
       format: z
         .string()
         .max(2000)
@@ -338,7 +426,7 @@ export interface Workflow {
   id: string;
   version: number;
   owner: string;
-  status: "draft" | "active" | "paused" | "suspended" | "deleted";
+  status: "draft" | "active" | "paused" | "suspended" | "completed" | "deleted";
   spec: WorkflowSpec;
   skillVersion?: number;
   versions: { version: number; spec: WorkflowSpec; skillVersion?: number }[];
@@ -365,6 +453,7 @@ export interface Approval {
   payload: unknown;
   expiresAt: string;
   decision?: "approved" | "rejected" | "revoked";
+  autonomyMode?: "supervised" | "check_in";
   cloudflare?: {
     state: "sending" | "completed" | "failed" | "unknown";
     startedAt: string;
@@ -440,6 +529,15 @@ export interface Run {
     codingRevision?: number;
   };
   codingTaskId?: string;
+  missionId?: string;
+  triggerKind?: "interactive" | "workflow" | "mission_wakeup";
+  watcherResult?: {
+    notify: boolean;
+    summary?: string;
+    dedupeKey?: string;
+    investigateRepositoryId?: number;
+    investigateReason?: string;
+  };
   workflowActivation?: { id: string; version: number; text: string };
   stopConfirmed?: boolean;
   id: string;
@@ -529,7 +627,8 @@ export interface Run {
       | "compaction"
       | "followup"
       | "memory_extract"
-      | "memory_consolidate";
+      | "memory_consolidate"
+      | "research_subagent";
     tokens?: {
       input: number;
       output: number;
@@ -679,6 +778,7 @@ export interface Workspace {
   reviewTasks?: ReviewTask[];
   reviewCleanup?: string[];
   coding?: CodingConfig;
+  autonomy?: WorkspaceAutonomyConfig;
   github?: GitHubConnection;
   githubNotificationSettings?: GitHubNotificationSettings;
   githubNotifications?: GitHubSubscription[];

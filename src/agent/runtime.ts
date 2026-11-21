@@ -30,6 +30,16 @@ import {
   modelPricingSchema,
   type ThinkingLevel,
 } from "./model-settings.ts";
+import {
+  createResearchSubagentTool,
+  RESEARCH_SUBAGENT_TOOL,
+} from "./subagent.ts";
+import {
+  createConcurrencyLimiter,
+  DEFAULT_PARALLEL_TOOL_CONCURRENCY,
+  isSubagentSafeTool,
+  wrapToolWithConcurrencyLimit,
+} from "./tool-metadata.ts";
 export const models = createModels();
 models.setProvider(openaiProvider());
 export function modelCapabilities(
@@ -141,7 +151,12 @@ export function selectedModel(
   };
 }
 export interface AgentInput {
-  purpose?: "compaction" | "followup" | "memory_extract" | "memory_consolidate";
+  purpose?:
+    | "compaction"
+    | "followup"
+    | "memory_extract"
+    | "memory_consolidate"
+    | "research_subagent";
   cacheKey?: string;
   workspaceId?: string;
   actor: string;
@@ -154,6 +169,8 @@ export interface AgentInput {
   images?: ImageContent[];
   transcript: AgentMessage[];
   tools: AgentTool[];
+  enableSubagent?: boolean;
+  parallelToolConcurrency?: number;
   // Internal tool-free passes and evaluation callers may impose an explicit cap.
   // Ordinary workspace requests have no model-call count limit.
   maxTurns?: number;
@@ -168,8 +185,12 @@ export interface AgentInput {
   guard: () => Promise<void>;
   shouldPause?: () => Promise<boolean | "completed">;
   nextInput?: () => Promise<AgentMessage | undefined>;
-  reserve: (amount: number) => Promise<string>;
-  checkpoint: (message: AgentMessage, attemptId?: string) => Promise<void>;
+  reserve: (amount: number, purpose?: AgentInput["purpose"]) => Promise<string>;
+  checkpoint: (
+    message: AgentMessage,
+    attemptId?: string,
+    purpose?: AgentInput["purpose"],
+  ) => Promise<void>;
   events?: (type: string) => void;
   preview?: (text: string) => Promise<void>;
   extensionTool?: (
@@ -397,7 +418,7 @@ export class PiRunner implements AgentRunner {
           );
         }
         const reserve = inputCost + maxTokens * outputCost;
-        attemptId = await input.reserve(reserve);
+        attemptId = await input.reserve(reserve, input.purpose);
         turns++;
         return this.stream(model, context, {
           ...options,
@@ -429,16 +450,46 @@ export class PiRunner implements AgentRunner {
       agent.steer(message);
       return true;
     };
+    const limiter = createConcurrencyLimiter(
+      input.parallelToolConcurrency ?? DEFAULT_PARALLEL_TOOL_CONCURRENCY,
+    );
+    const rawTools = [...input.tools, ...(extensions?.tools ?? [])].map(
+      (tool) => ({
+        ...tool,
+        // Fail-closed: only explicitly marked parallel read-only tools execute concurrently.
+        executionMode: tool.executionMode ?? ("sequential" as const),
+      }),
+    );
+    const tools = rawTools.map((tool) =>
+      wrapToolWithConcurrencyLimit(tool, limiter),
+    );
+    if (
+      !input.purpose &&
+      input.enableSubagent &&
+      !tools.some((t) => t.name === RESEARCH_SUBAGENT_TOOL) &&
+      rawTools.some(
+        (t) => t.executionMode === "parallel" && isSubagentSafeTool(t.name),
+      )
+    ) {
+      tools.push(
+        createResearchSubagentTool({
+          parentInput: input,
+          availableTools: rawTools,
+          runSubagent: (subInput) => this.execute(subInput),
+          limiter,
+        }),
+      );
+    }
     const agent = new Agent({
       initialState: {
         model: input.model,
         systemPrompt: extensions ? await extensions.start() : input.system,
         messages: input.transcript,
-        tools: [...input.tools, ...(extensions?.tools ?? [])],
+        tools,
         thinkingLevel: input.thinkingLevel ?? "off",
       },
       streamFn,
-      toolExecution: "sequential",
+      toolExecution: "parallel",
       sessionId: input.cacheKey ?? input.runId,
       beforeToolCall: async ({ toolCall, args }) => {
         try {
@@ -556,6 +607,7 @@ export class PiRunner implements AgentRunner {
         await input.checkpoint(
           sanitizeMessage(event.message),
           event.message.role === "assistant" ? attemptId : undefined,
+          input.purpose,
         );
         if (event.message.role === "assistant") attemptId = undefined;
       }

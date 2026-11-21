@@ -20,6 +20,7 @@ import {
   pluginManifestSchema,
 } from "./plugin-config.ts";
 import type { AgentInput } from "./runtime.ts";
+import { toolExecutionMode } from "./tool-metadata.ts";
 
 type Entry = PluginSpec & { hash: string };
 type BrowserBridge = (
@@ -200,6 +201,7 @@ export class ExtensionCatalog {
           ]),
         ),
         this.browserBridge,
+        new Set(this.builtins.map((entry) => entry.path)),
       );
     } catch (error) {
       loaded?.runtime.invalidate();
@@ -224,6 +226,7 @@ export class ExtensionHost {
     private input: AgentInput,
     builtinErrorCodes: ReadonlyMap<string, readonly string[]> = new Map(),
     browserBridge?: BrowserBridge,
+    builtinPaths: ReadonlySet<string> = new Set(),
   ) {
     this.system = input.system;
     this.context = {
@@ -299,7 +302,10 @@ export class ExtensionHost {
                 }
               }
             : undefined,
-          executionMode: "sequential",
+          executionMode: toolExecutionMode(
+            definition.name,
+            builtinPaths.has(entry.path),
+          ),
           replay: "never",
           execute: async (callId, args, signal, onUpdate) => {
             const execute = async (): Promise<AgentToolResult<unknown>> => {

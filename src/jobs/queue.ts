@@ -3,6 +3,7 @@ import { PgBoss } from "pg-boss";
 import type { AgentRunner, RunnerProvider } from "../agent/runtime.ts";
 import type { BrowserService } from "../browser/service.ts";
 import type { CloudflareService } from "../cloudflare/service.ts";
+import { purgeRepoQueues } from "../coding/queue.ts";
 import type { CodingService } from "../coding/service.ts";
 import { pruneDevelopment } from "../coding/tasks.ts";
 import { transaction } from "../db/pool.ts";
@@ -19,6 +20,8 @@ import type { GitHubWebhooks } from "../github/webhooks.ts";
 import type { GoogleService } from "../google/service.ts";
 import { MemoryService } from "../memory/service.ts";
 import { pruneRuntimeLogs, RuntimeLogger } from "../observability/logs.ts";
+import { purgeWorkspaceMissions } from "../orchestration/store.ts";
+import { tickMissions } from "../orchestration/wakeup.ts";
 import { sweep } from "../privacy/service.ts";
 import type { ReviewExecutor } from "../review-bot/executor.ts";
 import type { SearchConsoleService } from "../search-console/service.ts";
@@ -27,6 +30,7 @@ import { TelegramCommandMenu } from "../telegram/commands.ts";
 import { TelegramPoller } from "../telegram/polling.ts";
 import { Ingress } from "../telegram/webhook.ts";
 import { TranscriptionService } from "../transcription/service.ts";
+import { purgeAutomationEvents } from "../workflows/events.ts";
 import { tick } from "../workflows/service.ts";
 import { deliverAccessHelp } from "./control.ts";
 import { DeliveryWorker } from "./delivery.ts";
@@ -263,10 +267,14 @@ export async function startWorker(
             await sql.query("DELETE FROM runtime_logs WHERE workspace_id=$1", [
               w.id,
             ]);
+            await purgeWorkspaceMissions(sql, w.id);
+            await purgeAutomationEvents(sql, w.id);
+            await purgeRepoQueues(sql, w.id);
             return;
           }
           if (d.active && !d.paused) {
             tick(w, d.model);
+            await tickMissions(sql, w, d.model, { botId: d.bot?.id });
           }
         });
         // Durable rate-limit retries and ambiguous-send detection do not rely on queue retry timing.
@@ -329,6 +337,7 @@ export async function startWorker(
       await store.pool.query(
         "DELETE FROM plugin_notification_events WHERE created_at<now()-interval '30 days'",
       );
+      await purgeAutomationEvents(store.pool);
       await deliverAccessHelp(store, setup);
       await recoverJobs(store, boss);
       await dispatch(store, boss);

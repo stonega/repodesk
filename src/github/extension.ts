@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { Type } from "typebox";
 import type { BuiltinExtension } from "../agent/extensions.ts";
+import { evaluateAutonomy } from "../autonomy/policy.ts";
 import type { Store } from "../db/repositories.ts";
 import { Fault, requireThat } from "../domain.ts";
 import { fingerprint } from "../setup/credentials.ts";
@@ -313,41 +314,67 @@ export function githubExtension(
               approval = issueApproval(w, run.actor, proposal);
               approval.runId = run.id;
               approval.target = target;
-              const repository = connection.repositories.find(
-                (r) => r.id === proposal.repositoryId,
-              );
-              deliver(
+              const decision = evaluateAutonomy(
                 w,
-                run.actor,
-                run.chatId,
-                `Submit GitHub issue to ${repository?.full_name}?\n\nTitle: ${proposal.title}\n\n${proposal.body}\n\nApproving publishes this content to the repository.`,
-                {
-                  runId: run.id,
-                  topicId: run.topicId,
-                  id: `github-issue:${approval.id}:review`,
-                  buttons: [
-                    [
-                      {
-                        text: "Approve",
-                        callback_data: `approve:${approval.id}`,
-                      },
-                      {
-                        text: "Reject",
-                        callback_data: `reject:${approval.id}`,
-                      },
-                    ],
-                  ],
-                },
+                "github_issue_write",
+                proposal.repositoryId,
               );
+              if (decision.allowedAutomatic) {
+                approval.decision = "approved";
+                approval.autonomyMode = decision.effectiveMode;
+                w.audit.push({
+                  id: `${approval.id}:auto`,
+                  actor: run.actor,
+                  action: "github.issue_auto_approved",
+                  target: approval.id,
+                  version: approval.version,
+                  at: new Date().toISOString(),
+                });
+              } else {
+                const repository = connection.repositories.find(
+                  (r) => r.id === proposal.repositoryId,
+                );
+                deliver(
+                  w,
+                  run.actor,
+                  run.chatId,
+                  `Submit GitHub issue to ${repository?.full_name}?\n\nTitle: ${proposal.title}\n\n${proposal.body}\n\nApproving publishes this content to the repository.`,
+                  {
+                    runId: run.id,
+                    topicId: run.topicId,
+                    id: `github-issue:${approval.id}:review`,
+                    buttons: [
+                      [
+                        {
+                          text: "Approve",
+                          callback_data: `approve:${approval.id}`,
+                        },
+                        {
+                          text: "Reject",
+                          callback_data: `reject:${approval.id}`,
+                        },
+                      ],
+                    ],
+                  },
+                );
+              }
             }
             return {
               content: [
                 {
                   type: "text",
-                  text: JSON.stringify({
-                    status: "awaiting_approval",
-                    approvalId: approval.id,
-                  }),
+                  text: JSON.stringify(
+                    approval.decision === "approved"
+                      ? {
+                          status: "approved_automatic",
+                          approvalId: approval.id,
+                          autonomyMode: approval.autonomyMode,
+                        }
+                      : {
+                          status: "awaiting_approval",
+                          approvalId: approval.id,
+                        },
+                  ),
                 },
               ],
               details: {},

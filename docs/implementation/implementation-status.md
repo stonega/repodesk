@@ -5,6 +5,78 @@ Historical verification logs are archived by month to keep this active status le
 - [October 2026 archive](archive/implementation-status-2026-10.md) (125 entries)
 - [September 2026 baseline archive](archive/implementation-status-2026-09.md) (32 entries)
 
+## Agent orchestration, autonomy presets, proactive automations and repo queues (2026-11-20)
+
+All four phases of [Agent Orchestration, Autonomy, and Proactive Scheduling](../design/agent-orchestration.md)
+and the [implementation plan](agent-orchestration-plan.md) are implemented locally without adding runtime
+dependencies:
+
+1. **Phase 1 — Execution core & routing**:
+   - Added explicit read-only tool concurrency metadata (`src/agent/tool-metadata.ts`) with a bounded
+     AbortSignal-aware semaphore (default concurrency `4`) and fail-closed sequential defaults for
+     mutating and non-builtin tools across `PiRunner`, `ExtensionHost`, `applicationTools`, `searchTool`,
+     and `webReaderTool`.
+   - Added the bounded depth-1 read-only research subagent (`delegate_research` in
+     `src/agent/subagent.ts`), enforcing `maxTurns=6`, `maxTools=12`, read-only `subagentSafe` tool
+     allowlisting, prepended confidentiality boundaries, and parent run/workspace USD budget settlement
+     without polluting `run.transcript`.
+   - Refactored `src/agent/context.ts` onto layered prompt builders in `src/agent/routing-prompt.ts`
+     while preserving prompt-confidentiality precedence and all existing workflow/group/coding invariants.
+2. **Phase 2 — Durable missions, continuation wakeups and autonomy presets (`027_agent_orchestration.sql`)**:
+   - Added tenant-scoped `workspace_missions` and `workspace_mission_waits` tables plus `workspace_runs.mission_id`.
+   - Implemented `manage_mission`, `schedule_mission_followup` (bounded autonomous 1m–72h delayed checks,
+     max 3 per mission, no extra confirmation required), and parallel read-only `inspect_missions`
+     (`src/orchestration/`), plus event-driven continuation wakeups (`resolveMissionWait`, `tickMissions`)
+     covering timers, decided approvals, terminal/review coding tasks, and GitHub webhook events with
+     `all`/`any` join barriers, wakeup limits, unchanged-timer circuit breakers, and full re-authorization.
+   - Removed the unconditional `codingTaskId` reply truncation for mission-attached runs so Pi can
+     deliver concise natural acknowledgements while background steps proceed silently.
+   - Added deterministic server-enforced autonomy policy (`src/autonomy/policy.ts`, `Supervised` default
+     and `Check-in` workspace/per-repository overrides) enabling routine non-destructive L1/L2 writes
+     with audit trails while immutably gating all L3 high-impact/destructive actions (PR merge/close,
+     GitHub releases/tags, deletions, permission/autonomy edits).
+3. **Phase 3 — Proactive automations & silent Watchers (`028_automations_triggers.sql`)**:
+   - Extended `recurrenceSchema` and `src/workflows/schedule.ts` to support `once`, `daily`, `weekly`,
+     `weekdays`, `monthly` (`1..28` or `"last"`), and `interval` (with optional quiet hours), preserving
+     DST safety and legacy `daily`/`weekly` compatibility.
+   - Added `report_watcher_result` and `deliveryMode: "on_condition"` Watcher execution with silent
+     healthy runs (`run.silent`) and deduplicated alert cooldowns (`workspace_automation_events`).
+   - Added event-triggered automations (`src/workflows/events.ts`) wired into verified GitHub webhook
+     ingress (`check_suite_failed`, `issue_opened`, `issue_labeled`, `pull_request_opened`,
+     `pull_request_ready`) and mission `github_event` wakeups.
+4. **Phase 4 — Per-repository task queues, cross-repo coordination & worker adapter seam (`029_repo_queue.sql`)**:
+   - Added `workspace_repo_queues` and `workspace_repo_queue_items` (`src/coding/queue.ts`) supporting
+     sequential per-repository serialization, `pin`, `pause`/`resume`, `cancel`, fresh permission checks
+     on promotion, and scope-isolated verified artifact carryover.
+   - Added `dispatchCrossRepoMission` (`src/orchestration/cross-repo.ts`) for parallel `all`-join fan-out
+     and dependent repository chains, plus `CodingWorkerAdapter` / `CodingWorkerRegistry`
+     (`src/coding/worker-adapter.ts`) decoupling orchestration from Codex CLI.
+   - Added Admin Panel **Missions & Orchestration** (`web/pages/missions.tsx`,
+     `src/admin/routes/orchestration.ts`) and upgraded **Workflows** summary/editor cards
+     (`web/workflow-summary.tsx`, `web/form-fields.ts`, `web/pages/workflows-skills.tsx`), following
+     [UI design rules](../design/ui-rules.md).
+
+Local verification on Bun 1.4.4, Node 22.22.3, and disposable PostgreSQL 17:
+
+- `bun run check` (only the nine pre-existing incident-script warnings), `bun run typecheck`,
+  `bun run build`, and `bun run test:runtime` (16 injected + 16 configured startup cases including
+  `delegate_research`, `manage_mission`, `schedule_mission_followup`, and `inspect_missions`, with
+  **zero external startup calls**) pass.
+- Full unit suite: **950 passed, 9 Docker-image-gated skips, 0 failures** across 123 files
+  (5,599 assertions).
+- Full PostgreSQL integration suite: **804 passed, 0 failures** across 58 files (7,173 assertions),
+  including new `tests/integration/agent-orchestration.test.ts` covering migrations `027`–`029`,
+  multi-wait `all`-join wakeups, timer ticks, event dedupe/cooldown, repo queue carryover, and
+  cross-repo dispatch.
+- Selected Playwright browser suite (`tests/browser/agent-orchestration.e2e.ts` and
+  `tests/browser/team-workflows.e2e.ts`): **19 passed, 0 failures** at 1280px desktop and 390px
+  mobile in light and dark themes; rendered desktop and mobile screenshots were visually inspected
+  and refined (`data-table-scroll` and non-wrapping `.pill`). This is bounded selection covering the
+  changed Missions/Autonomy/Queues and Workflows surfaces, not a full browser suite run.
+- Live Telegram rendering, real model multi-step behavior, live GitHub webhook delivery, container
+  image build, and production deployment remain outside this local verification. See
+  [user guide](../user/agent-orchestration.md) and [runnable examples](../../examples/agent-orchestration.md).
+
 ## Core storage split, modularization and slim runtime image (2026-11-20)
 
 Four structural refactors were applied locally without changing external API or UI contracts:

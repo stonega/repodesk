@@ -37,6 +37,10 @@ export function workflowFields(
       options: [
         { value: "daily", label: "Daily" },
         { value: "weekly", label: "Weekly" },
+        { value: "weekdays", label: "Weekdays (Mon–Fri)" },
+        { value: "monthly", label: "Monthly" },
+        { value: "interval", label: "Interval (minutes)" },
+        { value: "once", label: "One-shot" },
       ],
     },
     {
@@ -57,13 +61,43 @@ export function workflowFields(
       ].map((label, i) => ({ label, value: String(i + 1) })),
     },
     {
+      path: "recurrence.dayOfMonth",
+      label: "Day of month",
+      kind: "select",
+      required: true,
+      when: { path: "recurrence.frequency", value: "monthly" },
+      options: [
+        ...Array.from({ length: 28 }, (_, i) => ({
+          value: String(i + 1),
+          label: String(i + 1),
+        })),
+        { value: "last", label: "Last day of month" },
+      ],
+    },
+    {
+      path: "recurrence.runAt",
+      label: "Run at (ISO timestamp)",
+      required: true,
+      when: { path: "recurrence.frequency", value: "once" },
+      help: "UTC or offset ISO datetime, e.g. 2026-11-21T10:00:00Z.",
+    },
+    {
+      path: "recurrence.intervalMinutes",
+      label: "Interval (minutes)",
+      kind: "number",
+      min: 15,
+      max: 1440,
+      step: 1,
+      required: true,
+      when: { path: "recurrence.frequency", value: "interval" },
+    },
+    {
       path: "recurrence.hour",
       label: "Hour (0–23)",
       kind: "number",
       min: 0,
       max: 23,
       step: 1,
-      required: true,
     },
     {
       path: "recurrence.minute",
@@ -72,13 +106,24 @@ export function workflowFields(
       min: 0,
       max: 59,
       step: 1,
-      required: true,
     },
     {
       path: "recurrence.timezone",
       label: "Timezone",
       required: true,
       help: "IANA timezone, for example Asia/Taipei.",
+    },
+    {
+      path: "deliveryMode",
+      label: "Delivery mode",
+      kind: "select",
+      options: [
+        { value: "always", label: "Always notify" },
+        {
+          value: "on_condition",
+          label: "Watcher (notify only on condition)",
+        },
+      ],
     },
     {
       path: "format",

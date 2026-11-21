@@ -22,6 +22,7 @@ import { Skeleton } from "../skeleton.tsx";
 import { ErrorToast, useToast } from "../toast.tsx";
 import { Usage } from "../usage.tsx";
 import { GroupsAndMembersPage } from "./members-groups.tsx";
+import { MissionsPage } from "./missions.tsx";
 import { PrivacyPage, ThreadsPage } from "./runs-privacy.tsx";
 import {
   InstructionsPage,
@@ -41,6 +42,7 @@ export function WorkspacePage({
   if (resource === "usage") return <Usage id={id} request={api} />;
   if (resource === "settings") return <SettingsPage key={id} id={id} />;
   if (resource === "skills") return <SkillsPage id={id} />;
+  if (resource === "missions") return <MissionsPage key={id} id={id} />;
   if (resource === "workflows") return <WorkflowsPage id={id} />;
   if (resource === "instructions") return <InstructionsPage id={id} />;
   if (resource === "threads") return <ThreadsPage key={id} id={id} />;

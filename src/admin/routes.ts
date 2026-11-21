@@ -13,6 +13,7 @@ import { session } from "./auth.ts";
 import { authSetupRoutes } from "./routes/auth-setup.ts";
 import { githubRoutes } from "./routes/github.ts";
 import { operatorRoutes } from "./routes/operator.ts";
+import { orchestrationRoutes } from "./routes/orchestration.ts";
 import { pluginRoutes } from "./routes/plugins.ts";
 import {
   type AdminEnv,
@@ -117,6 +118,7 @@ export function adminRoutes(
   app.route("/", githubRoutes(deps));
   app.route("/", pluginRoutes(deps));
   app.route("/", operatorRoutes(deps));
+  app.route("/", orchestrationRoutes(deps));
   app.route("/", workspaceRoutes(deps));
   app.notFound((c) => c.json({ error: "not_found" }, 404));
   return app;

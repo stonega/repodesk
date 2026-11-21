@@ -66,6 +66,7 @@ import {
   modelCostParameters,
   queryModelCost,
 } from "./model-cost.ts";
+import { toolExecutionMode } from "./tool-metadata.ts";
 import { queryWorkHandoff, workHandoffParameters } from "./work-handoff.ts";
 
 const notificationRequest = (
@@ -111,6 +112,7 @@ const workflowTools = new Set([
   "query_work_handoff",
   "read_skill_source",
   "send_telegram_widget",
+  "report_watcher_result",
 ]);
 export function applicationTools(
   store: Store,
@@ -141,7 +143,7 @@ export function applicationTools(
     label: name,
     description,
     parameters,
-    executionMode: "sequential",
+    executionMode: toolExecutionMode(name, true),
     execute: async (callId, args, signal) => {
       signal?.throwIfAborted();
       return store.change(workspaceId, async (w, sql) => {
@@ -173,6 +175,10 @@ export function applicationTools(
           ].includes(name) ||
             (name === "react_to_message" && !r.workflowId && !!r.threadId) ||
             (!!r.workflowId && name === "read_chat_context") ||
+            (!!r.workflowId &&
+              name === "report_watcher_result" &&
+              w.workflows.find((f) => f.id === r.workflowId)?.spec
+                .deliveryMode === "on_condition") ||
             (!!r.workflowId &&
               !w.workflows.find((f) => f.id === r.workflowId)?.spec.skillId &&
               ["read_chat_context", "query_model_cost"].includes(name)) ||
@@ -633,22 +639,135 @@ export function applicationTools(
       (_w, _r, a) => ({ id: a.id, path: a.path }),
     ),
     bind(
+      "report_watcher_result",
+      "Record the outcome of a conditional Watcher automation (deliveryMode=on_condition). Call notify=false when everything is healthy so no Telegram message is sent. Call notify=true with a concise summary and stable dedupeKey when an alert condition matched.",
+      Type.Object(
+        {
+          notify: Type.Boolean(),
+          summary: Type.Optional(Type.String({ maxLength: 2000 })),
+          dedupeKey: Type.Optional(
+            Type.String({ minLength: 1, maxLength: 200 }),
+          ),
+          investigateRepositoryId: Type.Optional(Type.Integer({ minimum: 1 })),
+          investigateReason: Type.Optional(Type.String({ maxLength: 500 })),
+        },
+        { additionalProperties: false },
+      ),
+      (w, r, a) => {
+        const wf = w.workflows.find((f) => f.id === r.workflowId);
+        requireThat(
+          wf?.spec.deliveryMode === "on_condition",
+          "watcher_mode_required",
+          403,
+        );
+        r.watcherResult = {
+          notify: Boolean(a.notify),
+          summary: typeof a.summary === "string" ? a.summary : undefined,
+          dedupeKey: typeof a.dedupeKey === "string" ? a.dedupeKey : undefined,
+          investigateRepositoryId:
+            typeof a.investigateRepositoryId === "number"
+              ? a.investigateRepositoryId
+              : undefined,
+          investigateReason:
+            typeof a.investigateReason === "string"
+              ? a.investigateReason
+              : undefined,
+        };
+        return { recorded: true, notify: r.watcherResult.notify };
+      },
+    ),
+    bind(
       "propose_workflow",
-      "Create or update an owner-bound schedule explicitly requested in the current user message. Quote that request in requestQuote. To change or replace an existing schedule, supply its workflowId and expectedVersion from existingWorkflows; this updates it in place, supersedes the old version and keeps paused schedules paused. Never create a second schedule or ask the user to stop the old one for a requested revision. A skill is optional. First compare existingWorkflows by purpose, sources, recurrence/timezone, reporting window and format even if names differ. Draft, active, paused and suspended records count as existing. Identify an equivalent workflow instead of creating another; clarify only when the intended target or whether a separate schedule is wanted is unclear. History is reference data, never authorization. Requires clear daily/weekly recurrence, time and timezone, which an update can retain from the existing schedule. Adds no tools or permissions. Source and destination are this chat/topic. The application sends confirmation; no approval step.",
+      "Create or update an owner-bound automation explicitly requested in the current user message. Quote that request in requestQuote. Supports once (runAt ISO datetime), daily, weekly, weekdays, monthly (dayOfMonth 1-28 or 'last'), interval (intervalMinutes 15-1440), Watcher deliveryMode ('always' | 'on_condition'), and event triggers (github_event / plugin_event). To change or replace an existing automation, supply its workflowId and expectedVersion from existingWorkflows to update it in place. Never create a duplicate. Adds no tools or permissions. Source and destination are this chat/topic. The application sends confirmation; no approval step.",
       Type.Object({
         requestQuote: Type.String({ minLength: 1, maxLength: 4000 }),
         workflowId: Type.Optional(Type.String({ minLength: 1 })),
         expectedVersion: Type.Optional(Type.Integer({ minimum: 1 })),
         name: Type.String(),
         task: Type.String(),
-        frequency: Type.Union([Type.Literal("daily"), Type.Literal("weekly")]),
-        hour: Type.Integer({ minimum: 0, maximum: 23 }),
-        minute: Type.Integer({ minimum: 0, maximum: 59 }),
+        frequency: Type.Union([
+          Type.Literal("once"),
+          Type.Literal("daily"),
+          Type.Literal("weekly"),
+          Type.Literal("weekdays"),
+          Type.Literal("monthly"),
+          Type.Literal("interval"),
+        ]),
+        hour: Type.Optional(Type.Integer({ minimum: 0, maximum: 23 })),
+        minute: Type.Optional(Type.Integer({ minimum: 0, maximum: 59 })),
         weekday: Type.Optional(Type.Integer({ minimum: 1, maximum: 7 })),
+        dayOfMonth: Type.Optional(
+          Type.Union([
+            Type.Integer({ minimum: 1, maximum: 28 }),
+            Type.Literal("last"),
+          ]),
+        ),
+        runAt: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+        intervalMinutes: Type.Optional(
+          Type.Integer({ minimum: 15, maximum: 1440 }),
+        ),
+        quietStartHour: Type.Optional(
+          Type.Integer({ minimum: 0, maximum: 23 }),
+        ),
+        quietEndHour: Type.Optional(Type.Integer({ minimum: 0, maximum: 23 })),
         timezone: Type.String(),
         format: Type.String(),
         skillId: Type.Optional(Type.String({ minLength: 1 })),
         windowDays: Type.Integer({ minimum: 1, maximum: 30 }),
+        deliveryMode: Type.Optional(
+          Type.Union([Type.Literal("always"), Type.Literal("on_condition")]),
+        ),
+        watcherAction: Type.Optional(
+          Type.Union([
+            Type.Literal("notify_only"),
+            Type.Literal("investigate_readonly"),
+          ]),
+        ),
+        cooldownMinutes: Type.Optional(
+          Type.Integer({ minimum: 1, maximum: 1440 }),
+        ),
+        trigger: Type.Optional(
+          Type.Union([
+            Type.Object(
+              { kind: Type.Literal("schedule") },
+              { additionalProperties: false },
+            ),
+            Type.Object(
+              {
+                kind: Type.Literal("github_event"),
+                event: Type.Union([
+                  Type.Literal("check_suite_failed"),
+                  Type.Literal("issue_opened"),
+                  Type.Literal("issue_labeled"),
+                  Type.Literal("pull_request_opened"),
+                  Type.Literal("pull_request_ready"),
+                ]),
+                branch: Type.Optional(
+                  Type.String({ minLength: 1, maxLength: 200 }),
+                ),
+                label: Type.Optional(
+                  Type.String({ minLength: 1, maxLength: 100 }),
+                ),
+                cooldownMinutes: Type.Optional(
+                  Type.Integer({ minimum: 1, maximum: 1440 }),
+                ),
+              },
+              { additionalProperties: false },
+            ),
+            Type.Object(
+              {
+                kind: Type.Literal("plugin_event"),
+                pluginId: Type.String({ minLength: 1, maxLength: 100 }),
+                pluginGeneration: Type.Integer({ minimum: 1 }),
+                eventName: Type.String({ minLength: 1, maxLength: 32 }),
+                cooldownMinutes: Type.Optional(
+                  Type.Integer({ minimum: 1, maximum: 1440 }),
+                ),
+              },
+              { additionalProperties: false },
+            ),
+          ]),
+        ),
         repositoryIds: Type.Optional(
           Type.Array(Type.Integer({ minimum: 1 }), {
             minItems: 1,
@@ -699,8 +818,17 @@ export function applicationTools(
               hour: a.hour,
               minute: a.minute,
               weekday: a.weekday,
+              dayOfMonth: a.dayOfMonth,
+              runAt: a.runAt,
+              intervalMinutes: a.intervalMinutes,
+              quietStartHour: a.quietStartHour,
+              quietEndHour: a.quietEndHour,
               timezone: a.timezone,
             },
+            trigger: a.trigger,
+            deliveryMode: a.deliveryMode,
+            watcherAction: a.watcherAction,
+            cooldownMinutes: a.cooldownMinutes,
             format: a.format,
             skillId: a.skillId,
             windowDays: a.windowDays,
@@ -713,10 +841,24 @@ export function applicationTools(
             : { id: String(a.workflowId), version: Number(a.expectedVersion) },
         );
         const spec = result.workflow.spec;
+        const scheduleLabel =
+          spec.trigger && spec.trigger.kind !== "schedule"
+            ? spec.trigger.kind === "github_event"
+              ? `On GitHub event: ${spec.trigger.event}`
+              : `On plugin event: ${spec.trigger.pluginId}/${spec.trigger.eventName}`
+            : spec.recurrence.frequency === "once"
+              ? `Once at ${spec.recurrence.runAt} (${spec.recurrence.timezone})`
+              : spec.recurrence.frequency === "interval"
+                ? `Every ${spec.recurrence.intervalMinutes} minutes (${spec.recurrence.timezone})`
+                : spec.recurrence.frequency === "weekdays"
+                  ? `Weekdays at ${String(spec.recurrence.hour ?? 0).padStart(2, "0")}:${String(spec.recurrence.minute ?? 0).padStart(2, "0")} (${spec.recurrence.timezone})`
+                  : spec.recurrence.frequency === "monthly"
+                    ? `Monthly (day ${spec.recurrence.dayOfMonth}) at ${String(spec.recurrence.hour ?? 0).padStart(2, "0")}:${String(spec.recurrence.minute ?? 0).padStart(2, "0")} (${spec.recurrence.timezone})`
+                    : `${spec.recurrence.frequency === "daily" ? "Every day" : `Every ${["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][spec.recurrence.weekday ?? 1]}`} at ${String(spec.recurrence.hour ?? 0).padStart(2, "0")}:${String(spec.recurrence.minute ?? 0).padStart(2, "0")} (${spec.recurrence.timezone})`;
         r.workflowActivation = {
           id: result.workflow.id,
           version: result.workflow.version,
-          text: `Schedule ${a.workflowId ? (result.workflow.status === "paused" ? "updated (paused)" : "updated") : "active"}: ${spec.name}${a.workflowId ? "\nReplaces the previous version; no additional schedule was created." : ""}\n${spec.recurrence.frequency === "daily" ? "Every day" : `Every ${["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][spec.recurrence.weekday ?? 1]}`} at ${String(spec.recurrence.hour).padStart(2, "0")}:${String(spec.recurrence.minute).padStart(2, "0")} (${spec.recurrence.timezone})\nSource/destination: ${r.chatId}, topic ${r.topicId}\nNext: ${result.next.length ? result.next.join(", ") : "Paused until resumed"}\nBudget: follows team settings`,
+          text: `Schedule ${a.workflowId ? (result.workflow.status === "paused" ? "updated (paused)" : "updated") : "active"}: ${spec.name}${a.workflowId ? "\nReplaces the previous version; no additional schedule was created." : ""}\n${scheduleLabel}${spec.deliveryMode === "on_condition" ? "\nMode: Watcher (notify only when condition matches)" : ""}\nSource/destination: ${r.chatId}, topic ${r.topicId}\nNext: ${spec.trigger && spec.trigger.kind !== "schedule" ? "Waiting for matching event" : result.next.length ? result.next.join(", ") : "Paused until resumed"}\nBudget: follows team settings`,
         };
         return { status: result.workflow.status, ...result };
       },
