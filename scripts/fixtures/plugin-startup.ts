@@ -278,16 +278,19 @@ export async function verifyPluginStartup(
               }),
               apps,
             )
-          : new PluginService(
+          : new PluginService({
               store,
-              undefined,
-              mode === "missing_service" ? undefined : code,
-              apps,
-              new CloudflareService(store, key, forbidden),
-              new SearchConsoleService(store, key, forbidden, google),
+              codeTruth: mode === "missing_service" ? undefined : code,
+              githubApp: apps,
+              cloudflare: new CloudflareService(store, key, forbidden),
+              searchConsole: new SearchConsoleService(
+                store,
+                key,
+                forbidden,
+                google,
+              ),
               google,
-              undefined,
-              browserRuntime(
+              browser: browserRuntime(
                 store,
                 key,
                 {
@@ -306,8 +309,8 @@ export async function verifyPluginStartup(
                   );
                 },
               ),
-              new NowledgeService(store, key, forbidden),
-            );
+              nowledgeMem: new NowledgeService(store, key, forbidden),
+            });
       const model = selectedModel("gpt-4.1-mini");
       const input: AgentInput = {
         workspaceId: w.id,

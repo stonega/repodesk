@@ -71,6 +71,28 @@ export async function dispatch(store: Store, boss: PgBoss) {
   });
 }
 
+export interface WorkerDependencies {
+  store: Store;
+  setup: SetupService;
+  databaseUrl: string;
+  runner?: AgentRunner | RunnerProvider;
+  githubIssues?: GitHubIssues;
+  coding?: CodingService;
+  githubUsers?: GitHubUsers;
+  review?: ReviewExecutor;
+  githubPullRequests?: GitHubPullRequests;
+  cloudflare?: CloudflareService;
+  google?: GoogleService;
+  searchConsole?: SearchConsoleService;
+  transcription?: TranscriptionService;
+  browser?: BrowserService;
+  githubWebhooks?: GitHubWebhooks;
+}
+
+export async function startWorker(
+  deps: WorkerDependencies,
+): Promise<() => Promise<void>>;
+/** @deprecated Pass a named {@link WorkerDependencies} object. */
 export async function startWorker(
   store: Store,
   setup: SetupService,
@@ -84,10 +106,64 @@ export async function startWorker(
   cloudflare?: CloudflareService,
   google?: GoogleService,
   searchConsole?: SearchConsoleService,
-  transcription = new TranscriptionService(store),
+  transcription?: TranscriptionService,
   browser?: BrowserService,
   githubWebhooks?: GitHubWebhooks,
+): Promise<() => Promise<void>>;
+export async function startWorker(
+  storeOrDeps: Store | WorkerDependencies,
+  setupArg?: SetupService,
+  urlArg?: string,
+  runnerArg?: AgentRunner | RunnerProvider,
+  githubIssuesArg?: GitHubIssues,
+  codingArg?: CodingService,
+  githubUsersArg?: GitHubUsers,
+  reviewArg?: ReviewExecutor,
+  githubPullRequestsArg?: GitHubPullRequests,
+  cloudflareArg?: CloudflareService,
+  googleArg?: GoogleService,
+  searchConsoleArg?: SearchConsoleService,
+  transcriptionArg?: TranscriptionService,
+  browserArg?: BrowserService,
+  githubWebhooksArg?: GitHubWebhooks,
 ) {
+  const deps: WorkerDependencies =
+    "store" in storeOrDeps
+      ? storeOrDeps
+      : {
+          store: storeOrDeps,
+          setup: setupArg as SetupService,
+          databaseUrl: urlArg as string,
+          runner: runnerArg,
+          githubIssues: githubIssuesArg,
+          coding: codingArg,
+          githubUsers: githubUsersArg,
+          review: reviewArg,
+          githubPullRequests: githubPullRequestsArg,
+          cloudflare: cloudflareArg,
+          google: googleArg,
+          searchConsole: searchConsoleArg,
+          transcription: transcriptionArg,
+          browser: browserArg,
+          githubWebhooks: githubWebhooksArg,
+        };
+  const {
+    store,
+    setup,
+    databaseUrl: url,
+    runner,
+    githubIssues,
+    coding,
+    githubUsers,
+    review,
+    githubPullRequests,
+    cloudflare,
+    google,
+    searchConsole,
+    browser,
+    githubWebhooks,
+  } = deps;
+  const transcription = deps.transcription ?? new TranscriptionService(store);
   const boss = queue(url, store.log);
   await boss.start();
   const executor = new Executor(

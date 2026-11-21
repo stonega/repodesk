@@ -22,24 +22,35 @@ const githubApp = new GitHubApps(
   cfg.ENCRYPTION_KEY,
   configuredGitHubApp(cfg),
 );
-const app = createApp(
+const app = createApp({
   store,
-  new SetupService(
+  setup: new SetupService(
     store,
     cfg.ENCRYPTION_KEY,
     cfg.PUBLIC_ORIGIN,
     undefined,
     cfg.TELEGRAM_TRANSPORT,
   ),
-  cfg.PUBLIC_ORIGIN,
-  pluginRuntime(store, cfg, githubApp),
-  new GitHubService(store, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN, githubApp),
-  cfg.ENCRYPTION_KEY,
-  cfg.CODEX_RUNNER_URL && cfg.CODEX_RUNNER_TOKEN
-    ? new LocalRunnerClient(cfg.CODEX_RUNNER_URL, cfg.CODEX_RUNNER_TOKEN)
-    : undefined,
-  new ReviewService(store, githubApp, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN),
-  new ReleaseUpdates(
+  origin: cfg.PUBLIC_ORIGIN,
+  plugins: pluginRuntime(store, cfg, githubApp),
+  github: new GitHubService(
+    store,
+    cfg.ENCRYPTION_KEY,
+    cfg.PUBLIC_ORIGIN,
+    githubApp,
+  ),
+  encryptionKey: cfg.ENCRYPTION_KEY,
+  deviceAuth:
+    cfg.CODEX_RUNNER_URL && cfg.CODEX_RUNNER_TOKEN
+      ? new LocalRunnerClient(cfg.CODEX_RUNNER_URL, cfg.CODEX_RUNNER_TOKEN)
+      : undefined,
+  review: new ReviewService(
+    store,
+    githubApp,
+    cfg.ENCRYPTION_KEY,
+    cfg.PUBLIC_ORIGIN,
+  ),
+  updates: new ReleaseUpdates(
     store,
     cfg.UPDATES_GITHUB_REPOSITORY,
     cfg.UPDATES_GITHUB_TOKEN,
@@ -48,7 +59,7 @@ const app = createApp(
     undefined,
     cfg.UPDATES_DIRECTORY,
   ),
-);
+});
 const server = serve({ fetch: app.fetch, hostname: "0.0.0.0", port: cfg.PORT });
 log.write("app_started");
 let stopping = false;

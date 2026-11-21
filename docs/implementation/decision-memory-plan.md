@@ -24,7 +24,7 @@ multi-machine scheduling and automatic decision answering are separate work.
 ## Existing implementation
 
 The [historical memory design](../design/long-term-memory.md) and
-[implementation evidence](implementation-status.md#private-and-shared-long-term-memory-2026-10-17)
+[implementation evidence](archive/implementation-status-2026-10.md#private-and-shared-long-term-memory-2026-10-17)
 establish the current baseline:
 
 - Workspace JSONB holds historical entries, indexes, jobs, source dependencies,

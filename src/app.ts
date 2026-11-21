@@ -18,17 +18,60 @@ import type { SetupService } from "./setup/service.ts";
 import { updateSchema } from "./telegram/router.ts";
 import { Ingress } from "./telegram/webhook.ts";
 import { ReleaseUpdates } from "./updates/releases.ts";
+export interface AppDependencies {
+  store: Store;
+  setup: SetupService;
+  origin: string;
+  plugins?: PluginService;
+  github?: GitHubService;
+  encryptionKey?: string;
+  deviceAuth?: LocalDeviceAuth & Partial<LocalRuntimeControl>;
+  review?: ReviewService;
+  updates?: ReleaseUpdates;
+}
+
+export function createApp(deps: AppDependencies): Hono;
+/** @deprecated Pass a named {@link AppDependencies} object. */
 export function createApp(
   store: Store,
   setup: SetupService,
   origin: string,
-  plugins = new PluginService(store),
-  github = new GitHubService(store, "", origin),
+  plugins?: PluginService,
+  github?: GitHubService,
   encryptionKey?: string,
   deviceAuth?: LocalDeviceAuth & Partial<LocalRuntimeControl>,
   review?: ReviewService,
-  updates = new ReleaseUpdates(store),
+  updates?: ReleaseUpdates,
+): Hono;
+export function createApp(
+  storeOrDeps: Store | AppDependencies,
+  setupArg?: SetupService,
+  originArg?: string,
+  pluginsArg?: PluginService,
+  githubArg?: GitHubService,
+  encryptionKeyArg?: string,
+  deviceAuthArg?: LocalDeviceAuth & Partial<LocalRuntimeControl>,
+  reviewArg?: ReviewService,
+  updatesArg?: ReleaseUpdates,
 ) {
+  const deps: AppDependencies =
+    "store" in storeOrDeps
+      ? storeOrDeps
+      : {
+          store: storeOrDeps,
+          setup: setupArg as SetupService,
+          origin: originArg as string,
+          plugins: pluginsArg,
+          github: githubArg,
+          encryptionKey: encryptionKeyArg,
+          deviceAuth: deviceAuthArg,
+          review: reviewArg,
+          updates: updatesArg,
+        };
+  const { store, setup, origin, encryptionKey, deviceAuth, review } = deps;
+  const plugins = deps.plugins ?? new PluginService({ store });
+  const github = deps.github ?? new GitHubService(store, "", origin);
+  const updates = deps.updates ?? new ReleaseUpdates(store);
   const app = new Hono();
   const ingress = new Ingress(
     store,
@@ -170,7 +213,7 @@ export function createApp(
   app.get("/mini", serveStatic({ path: "./dist/web/mini.html" }));
   app.route(
     "/",
-    adminRoutes(
+    adminRoutes({
       store,
       setup,
       origin,
@@ -180,7 +223,7 @@ export function createApp(
       deviceAuth,
       review,
       updates,
-    ),
+    }),
   );
   app.get("/", async (c) => {
     const row = (

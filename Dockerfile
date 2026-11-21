@@ -15,19 +15,7 @@ RUN bun run build
 FROM node:24-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS runtime-base
 ENV NODE_ENV=production PORT=3000
 WORKDIR /app
-# Speech dependencies are installed at build time; weights are downloaded only on enable.
-FROM runtime-base AS transcription-runtime
-RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv libsndfile1 ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && python3 -m venv /opt/repodesk-asr
-COPY src/transcription/requirements.txt /tmp/transcription-requirements.txt
-RUN /opt/repodesk-asr/bin/pip install --no-cache-dir pip==25.3 \
-    && /opt/repodesk-asr/bin/pip install --no-cache-dir torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu \
-    && /opt/repodesk-asr/bin/pip install --no-cache-dir -r /tmp/transcription-requirements.txt \
-    && rm /tmp/transcription-requirements.txt \
-    && mkdir -p /var/lib/repodesk-models && chown node:node /var/lib/repodesk-models
-ENV QWEN_ASR_PYTHON=/opt/repodesk-asr/bin/python QWEN_ASR_DIRECTORY=/var/lib/repodesk-models
-FROM transcription-runtime AS runtime
+FROM runtime-base AS runtime
 COPY --from=dependencies --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --chown=node:node migrations ./migrations
@@ -39,8 +27,31 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 CMD ["node", "dist/server.js"]
 
+# Optional CPU speech runtime; enable via --target app-transcription or compose.transcription.yaml.
+FROM runtime-base AS transcription-runtime
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv libsndfile1 ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m venv /opt/repodesk-asr
+COPY src/transcription/requirements.txt /tmp/transcription-requirements.txt
+RUN /opt/repodesk-asr/bin/pip install --no-cache-dir pip==25.3 \
+    && /opt/repodesk-asr/bin/pip install --no-cache-dir torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu \
+    && /opt/repodesk-asr/bin/pip install --no-cache-dir -r /tmp/transcription-requirements.txt \
+    && rm /tmp/transcription-requirements.txt \
+    && mkdir -p /var/lib/repodesk-models && chown node:node /var/lib/repodesk-models
+ENV QWEN_ASR_PYTHON=/opt/repodesk-asr/bin/python QWEN_ASR_DIRECTORY=/var/lib/repodesk-models
+FROM transcription-runtime AS app-transcription
+COPY --from=runtime --chown=node:node /app /app
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+CMD ["node", "dist/server.js"]
+
 # Pinned client only; the host's existing Docker daemon runs the task containers.
 FROM docker:29-cli@sha256:b1805116a6a86cc591b5d5f60a910a0715cdcc9d18d866ad68b1457ead25c35c AS docker-client
+# Pinned user-space toolchain managers for per-repository persistent /env volumes.
+FROM ghcr.io/jdx/mise:2026.10.4 AS mise-bin
+FROM ghcr.io/astral-sh/uv:0.8.3 AS uv-bin
 
 # Install supervisor tools before application files so code changes reuse this layer.
 FROM runtime-base AS codex-supervisor-dependencies
@@ -61,17 +72,20 @@ CMD ["node", "dist/runner-server.js"]
 FROM node:24-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS codex-job
 ARG CODEX_VERSION=0.155.1
 ARG OPEN_CODE_REVIEW_VERSION=1.12.12
-RUN apt-get update && apt-get install -y --no-install-recommends git bash ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git bash ca-certificates curl xz-utils unzip build-essential pkg-config \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g @openai/codex@${CODEX_VERSION} @alibaba-group/open-code-review@${OPEN_CODE_REVIEW_VERSION} \
     && npm cache clean --force
 COPY --from=base /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=mise-bin /usr/local/bin/mise /usr/local/bin/mise
+COPY --from=uv-bin /uv /uvx /usr/local/bin/
 WORKDIR /opt/deepx
 COPY --from=build /app/dist/job.js ./job.js
 COPY --from=dependencies /app/node_modules/zod ./node_modules/zod
 # Browser dynamic-tool schemas share the application's explicit TypeBox dependency.
 COPY --from=dependencies /app/node_modules/typebox ./node_modules/typebox
-RUN mkdir /task /input /auth && chown node:node /task /auth
+RUN mkdir /task /input /auth /env && chown node:node /task /auth /env
 ENV HOME=/task/home
 USER node
 ENTRYPOINT ["node", "/opt/deepx/job.js"]

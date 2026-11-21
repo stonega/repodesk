@@ -20,8 +20,17 @@ export async function stopGeneration(
   const topicId = stop.message_thread_id ?? 0;
   // Resolve by the persisted draft, never the user's current workspace selection.
   const matches = await sql.query<{ id: string }>(
-    "SELECT id FROM workspaces WHERE data->'runs' @> $1::jsonb LIMIT 2",
+    `SELECT DISTINCT workspace_id AS id
+     FROM workspace_runs
+     WHERE actor=$1 AND chat_id=$1 AND topic_id=$2 AND draft_id=$3 AND draft_bot_id=$4
+     UNION
+     SELECT id FROM workspaces WHERE data ? 'runs' AND data->'runs' @> $5::jsonb
+     LIMIT 2`,
     [
+      actor,
+      topicId,
+      stop.draft_id,
+      botId,
       JSON.stringify([
         {
           actor,

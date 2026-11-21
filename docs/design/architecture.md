@@ -122,11 +122,14 @@ flowchart LR
 pg-boss schema creation runs only in the migration entry point; runtime clients
 set `migrate:false`. The app and worker never race schema installation.
 
-Workspace records are typed JSONB **aggregates**, updated under `SELECT FOR UPDATE`.
-Membership, policy, runs, instructions, approvals, workflows, skill versions,
-occurrences, usage attempts, deliveries and audit events belong to that tenant row.
-This is an intentional pilot implementation choice instead of a table for each
-nested record. Short workspace mutations serialize; provider/Telegram calls execute
+Workspace configuration records (settings, membership, policy, chats, instructions,
+approvals, workflows, skills, occurrences and plugin settings) remain typed JSONB
+**aggregates** in `workspaces.data`, updated under `SELECT FOR UPDATE`. High-frequency
+and growing collections (`messages`, `runs`, `deliveries` and `audit`) live in dedicated,
+indexed, tenant-scoped relational tables (`workspace_messages`, `workspace_runs`,
+`workspace_deliveries`, `workspace_audit`, added in `026_workspace_records.sql`) with
+delta-based persistence and targeted `outbox` enqueueing for newly queued runs and
+pending deliveries. Short workspace mutations serialize; provider/Telegram calls execute
 outside these locks. API and worker use the same repository and policy services.
 
 Relational tables cover deployment/configuration, local admins/sessions, first-run

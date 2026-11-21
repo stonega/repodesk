@@ -76,23 +76,93 @@ function authorizePlugins(admin: Admin, workspace: Workspace) {
   );
 }
 
+export interface PluginServiceDependencies {
+  store: Store;
+  manifestPath?: string;
+  codeTruth?: CodeTruthClient;
+  githubApp?: GitHubApp | GitHubApps;
+  cloudflare?: CloudflareService;
+  searchConsole?: SearchConsoleService;
+  google?: GoogleService;
+  transcription?: TranscriptionService;
+  browser?: BrowserService;
+  nowledgeMem?: NowledgeService;
+  packageOptions?: PluginPackageOptions;
+}
+
 export class PluginService {
   readonly packages: PluginPackages;
+  private store: Store;
+  private manifestPath?: string;
+  private codeTruth?: CodeTruthClient;
+  private githubApp?: GitHubApp | GitHubApps;
+  readonly cloudflare?: CloudflareService;
+  readonly searchConsole?: SearchConsoleService;
+  readonly google?: GoogleService;
+  readonly transcription: TranscriptionService;
+  readonly browser: BrowserService;
+  readonly nowledgeMem: NowledgeService;
+
+  constructor(deps: PluginServiceDependencies);
+  /** @deprecated Pass a named {@link PluginServiceDependencies} object. */
   constructor(
-    private store: Store,
-    private manifestPath?: string,
-    private codeTruth?: CodeTruthClient,
-    private githubApp?: GitHubApp | GitHubApps,
-    readonly cloudflare?: CloudflareService,
-    readonly searchConsole?: SearchConsoleService,
-    readonly google?: GoogleService,
-    readonly transcription = new TranscriptionService(store),
-    readonly browser = new BrowserService(store),
-    readonly nowledgeMem = new NowledgeService(store),
-    packageOptions: PluginPackageOptions = {},
+    store: Store,
+    manifestPath?: string,
+    codeTruth?: CodeTruthClient,
+    githubApp?: GitHubApp | GitHubApps,
+    cloudflare?: CloudflareService,
+    searchConsole?: SearchConsoleService,
+    google?: GoogleService,
+    transcription?: TranscriptionService,
+    browser?: BrowserService,
+    nowledgeMem?: NowledgeService,
+    packageOptions?: PluginPackageOptions,
+  );
+  constructor(
+    storeOrDeps: Store | PluginServiceDependencies,
+    manifestPath?: string,
+    codeTruth?: CodeTruthClient,
+    githubApp?: GitHubApp | GitHubApps,
+    cloudflare?: CloudflareService,
+    searchConsole?: SearchConsoleService,
+    google?: GoogleService,
+    transcription?: TranscriptionService,
+    browser?: BrowserService,
+    nowledgeMem?: NowledgeService,
+    packageOptions?: PluginPackageOptions,
   ) {
-    this.packages = new PluginPackages(store, packageOptions, githubApp, (w) =>
-      this.entries(w),
+    const deps: PluginServiceDependencies =
+      "store" in storeOrDeps
+        ? storeOrDeps
+        : {
+            store: storeOrDeps,
+            manifestPath,
+            codeTruth,
+            githubApp,
+            cloudflare,
+            searchConsole,
+            google,
+            transcription,
+            browser,
+            nowledgeMem,
+            packageOptions,
+          };
+    this.store = deps.store;
+    this.manifestPath = deps.manifestPath;
+    this.codeTruth = deps.codeTruth;
+    this.githubApp = deps.githubApp;
+    this.cloudflare = deps.cloudflare;
+    this.searchConsole = deps.searchConsole;
+    this.google = deps.google;
+    this.transcription =
+      deps.transcription ?? new TranscriptionService(deps.store);
+    this.browser = deps.browser ?? new BrowserService(deps.store);
+    this.nowledgeMem = deps.nowledgeMem ?? new NowledgeService(deps.store);
+    this.packages = new PluginPackages(
+      deps.store,
+      deps.packageOptions ?? {},
+      deps.githubApp,
+      (w) => this.entries(w),
     );
   }
   private legacy?: Promise<PluginRecord[]>;

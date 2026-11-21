@@ -1,11 +1,3 @@
-import {
-  browserDeliveryAllowed,
-  browserReadAllowed,
-} from "../browser/privacy.ts";
-import { browserTaskButtons, browserTaskStatus } from "../browser/tasks.ts";
-import { taskGet } from "../coding/task-store.ts";
-import { checkDevelopment } from "../coding/tasks.ts";
-import type { Sql } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import {
   type Delivery,
@@ -13,55 +5,26 @@ import {
   requireThat,
   type Workspace,
 } from "../domain.ts";
-import { notificationDeliveryAllowed } from "../github/notifications.ts";
-import { repositoryDeliveryAllowed } from "../github/repository-context.ts";
-import { googleDeliveryAllowed, googleReadAllowed } from "../google/policy.ts";
-import { referenceMemoryValid } from "../memory/state.ts";
-import { taskReference } from "../miniapp/auth.ts";
-import { nowledgeReadAllowed } from "../nowledge-mem/policy.ts";
-import { pluginNotificationDeliveryAllowed } from "../plugins/notifications.ts";
-import { searchConsoleReadAllowed } from "../search-console/policy.ts";
 import type { SetupService } from "../setup/service.ts";
 import { TelegramError } from "../telegram/client.ts";
 import { telegramMarkdown, telegramRichMessage } from "../telegram/format.ts";
-import { reactionDeliveryAllowed } from "../telegram/reactions.ts";
-import {
-  cleanupTaskButtons,
-  confirmTaskMessage,
-  developmentMessageTask,
-  sameTaskAudience,
-  withoutTaskControls,
-} from "../telegram/task-control-messages.ts";
-import { selectionAllowed } from "../telegram/task-controls.ts";
 import {
   privateTopicFallback,
   privateTopicFallbackText,
 } from "../telegram/topic-fallback.ts";
-import { widgetDeliveryAllowed } from "../telegram/widgets.ts";
 import { eligible, runAllowed } from "../workspaces/policy.ts";
+import {
+  type DeliveryPolicyRegistry,
+  defaultDeliveryPolicies,
+} from "./delivery-policies.ts";
+
 export class DeliveryWorker {
   constructor(
     private store: Store,
     private setup: SetupService,
+    private policies: DeliveryPolicyRegistry = defaultDeliveryPolicies(),
   ) {}
-  private refreshBrowserStatus(
-    w: Workspace,
-    d: Delivery,
-    bot: Deployment["bot"],
-  ) {
-    if (!d.browserTaskState?.refresh) return;
-    const run = w.runs.find((r) => r.id === d.runId);
-    if (!run) return;
-    d.text = browserTaskStatus(run);
-    d.browserTaskState = {
-      refresh: true,
-      status: run.status,
-      fence: run.fence,
-      requestId: run.browserWait?.id,
-      error: run.error,
-    };
-    d.buttons = browserTaskButtons(w, run, bot);
-  }
+
   private browserStatusBeforeSend(
     workspaceId: string,
     intent: Delivery,
@@ -80,8 +43,8 @@ export class DeliveryWorker {
         !d.browserTaskState?.refresh
       )
         return;
-      this.refreshBrowserStatus(w, d, bot);
-      if (!(await this.feedbackAllowed(w, d, sql))) {
+      this.policies.hooks.refreshBeforeClaim(w, d, bot);
+      if (!(await this.policies.allowed(this.store, w, d, sql))) {
         d.state = "cancelled";
         return;
       }
@@ -92,6 +55,7 @@ export class DeliveryWorker {
       return structuredClone(w);
     });
   }
+
   private editTarget(w: Workspace, d: Delivery, botId?: string) {
     const target = w.deliveries.find((t) => t.id === d.editOf);
     const scope = target?.progressMessage ?? target?.feedback;
@@ -109,185 +73,7 @@ export class DeliveryWorker {
       return;
     return target;
   }
-  private async feedbackAllowed(
-    w: Workspace,
-    d: Delivery,
-    sql: Sql = this.store.pool,
-  ) {
-    if (d.githubNotification || d.pluginNotification) {
-      const deployment = await this.store.deployment(sql);
-      if (
-        !deployment.active ||
-        deployment.paused ||
-        w.settings.paused ||
-        !notificationDeliveryAllowed(w, d, deployment.bot?.id) ||
-        !pluginNotificationDeliveryAllowed(w, d, deployment.bot?.id)
-      )
-        return false;
-    }
-    if (d.repositoryMemory) {
-      try {
-        const task = await taskGet(sql, w.id, d.repositoryMemory.taskId);
-        checkDevelopment(w, task, d.actor, false, true);
-        if (
-          task.contentRemoved ||
-          task.botId !== (await this.store.deployment(sql)).bot?.id ||
-          task.chatId !== d.chatId ||
-          task.topicId !== d.topicId ||
-          !referenceMemoryValid(w, d.repositoryMemory.refs, d.actor, task.botId)
-        ) {
-          d.text = "";
-          d.buttons = undefined;
-          return false;
-        }
-      } catch {
-        return false;
-      }
-    }
-    if (d.browserTaskState) {
-      const run = w.runs.find((r) => r.id === d.runId);
-      const expected = d.browserTaskState;
-      if (
-        !run ||
-        run.cancelled ||
-        run.actor !== d.actor ||
-        run.chatId !== d.chatId ||
-        run.topicId !== d.topicId ||
-        run.status !== expected.status ||
-        run.fence !== expected.fence ||
-        run.browserWait?.id !== expected.requestId ||
-        run.error !== expected.error
-      )
-        return false;
-    }
-    if (d.browserResume?.taskId) {
-      try {
-        const task = await taskGet(sql, w.id, d.browserResume.taskId);
-        checkDevelopment(w, task);
-        if (
-          task.cancelRequested ||
-          task.contentRemoved ||
-          task.state !== "working" ||
-          task.actor !== d.actor ||
-          task.chatId !== d.chatId ||
-          task.topicId !== d.topicId ||
-          task.botId !== (await this.store.deployment(sql)).bot?.id ||
-          task.browserWait ||
-          task.browserResumed?.at(-1) !== d.browserResume.id
-        )
-          return false;
-      } catch {
-        return false;
-      }
-    } else if (
-      d.browserResume &&
-      !w.runs.some(
-        (run) =>
-          run.id === d.runId &&
-          run.actor === d.actor &&
-          run.chatId === d.chatId &&
-          run.topicId === d.topicId &&
-          !run.cancelled &&
-          !run.browserWait &&
-          ["queued", "running"].includes(run.status) &&
-          run.browserResumed?.at(-1) === d.browserResume?.id,
-      )
-    )
-      return false;
-    if (d.browserRequest?.taskId) {
-      try {
-        const task = await taskGet(sql, w.id, d.browserRequest.taskId);
-        if (
-          task.cancelRequested ||
-          task.state !== "working" ||
-          task.actor !== d.actor ||
-          task.chatId !== d.chatId ||
-          task.browserWait?.id !== d.browserRequest.id ||
-          d.browserRequest.expiresAt <= Date.now()
-        )
-          return false;
-      } catch {
-        return false;
-      }
-    } else if (
-      d.browserRequest &&
-      (!d.runId ||
-        d.browserRequest.expiresAt <= Date.now() ||
-        !w.runs.some(
-          (run) =>
-            run.id === d.runId &&
-            run.browserWait?.id === d.browserRequest?.id &&
-            run.actor === d.actor &&
-            run.chatId === d.chatId &&
-            !run.cancelled &&
-            ["running", "awaiting_approval"].includes(run.status),
-        ))
-    )
-      return false;
-    if (
-      d.browserRead &&
-      !browserDeliveryAllowed(w, d, (await this.store.deployment(sql)).bot?.id)
-    )
-      return false;
-    if (d.reaction || d.widget) {
-      const deployment = await this.store.deployment(sql);
-      if (
-        !deployment.active ||
-        deployment.paused ||
-        !reactionDeliveryAllowed(w, d, deployment.bot?.id) ||
-        !widgetDeliveryAllowed(w, d, deployment.bot?.id)
-      )
-        return false;
-    }
-    if (
-      d.googleControl &&
-      !googleDeliveryAllowed(w, d, (await this.store.deployment(sql)).bot?.id)
-    )
-      return false;
-    if (d.runId) {
-      const run = w.runs.find((r) => r.id === d.runId);
-      const botId = (await this.store.deployment(sql)).bot?.id;
-      if (
-        run &&
-        (!browserReadAllowed(w, run, botId) ||
-          !googleReadAllowed(w, run, botId) ||
-          !searchConsoleReadAllowed(w, run, botId) ||
-          !nowledgeReadAllowed(w, run, botId))
-      )
-        return false;
-    }
-    if (!repositoryDeliveryAllowed(w, d)) return false;
-    if (!(await selectionAllowed(sql, w, d))) return false;
-    if (d.cancellationRunId) {
-      const r = w.runs.find((r) => r.id === d.cancellationRunId);
-      if (
-        !r?.cancelled ||
-        r.actor !== d.actor ||
-        r.chatId !== d.chatId ||
-        r.topicId !== d.topicId
-      )
-        return false;
-      if (d.id.endsWith(":requested") && r.stopConfirmed) return false;
-    }
-    // Old queued chat notices must also stay silent after an upgrade.
-    if (d.feedback?.owner === "run") return false;
-    if (d.feedback?.owner === "development") {
-      try {
-        const t = await taskGet(sql, w.id, d.feedback.id);
-        return (
-          !t.cancelRequested &&
-          (d.feedback.key === "queued"
-            ? t.state === "queued"
-            : ["working", "publishing"].includes(t.state) &&
-              t.progress?.key === d.feedback.key &&
-              !t.progress.unavailable)
-        );
-      } catch {
-        return false;
-      }
-    }
-    return true;
-  }
+
   async send(workspaceId: string, id: string) {
     const deployment = await this.store.deployment();
     if (deployment.paused) return;
@@ -295,19 +81,7 @@ export class DeliveryWorker {
       const d = w.deliveries.find((d) => d.id === id);
       if (!d || !["pending", "sending"].includes(d.state)) return;
       if (d.state === "pending")
-        this.refreshBrowserStatus(w, d, deployment.bot);
-      if (
-        d.state === "pending" &&
-        d.browserRequest &&
-        !d.browserRequest.taskId &&
-        w.runs.some(
-          (run) =>
-            run.id === d.runId &&
-            run.browserWait?.id === d.browserRequest?.id &&
-            run.status === "running",
-        )
-      )
-        return;
+        this.policies.hooks.refreshBeforeClaim(w, d, deployment.bot);
       if (d.state === "sending") {
         if (Date.parse(d.startedAt ?? "") + 30000 < Date.now()) {
           // Edits and setting the same reaction can be replayed after a worker crash.
@@ -320,52 +94,29 @@ export class DeliveryWorker {
         }
         return;
       }
-      if (!(await this.feedbackAllowed(w, d, sql))) {
+      if (this.policies.hooks.shouldDeferClaim(w, d, deployment.bot?.id))
+        return;
+      if (!(await this.policies.allowed(this.store, w, d, sql))) {
         d.state = "cancelled";
         return;
       }
-      if (d.repositoryMenu && d.botId !== deployment.bot?.id) {
-        d.state = "cancelled";
-        return;
-      }
-      if (d.taskControlsCleanup && d.botId !== deployment.bot?.id) {
-        d.state = "cancelled";
-        return;
-      }
-      const taskId = developmentMessageTask(d);
       if (
-        taskId &&
-        w.deliveries.some(
-          (other) =>
-            other.id !== d.id &&
-            other.state === "sending" &&
-            Date.parse(other.startedAt ?? "1970-01-01") > Date.now() - 30000 &&
-            sameTaskAudience(other, { ...d, botId: deployment.bot?.id }),
-        )
-      )
+        (d.repositoryMenu || d.taskControlsCleanup) &&
+        d.botId !== deployment.bot?.id
+      ) {
+        d.state = "cancelled";
         return;
-      if (taskId) {
-        try {
-          const task = await taskGet(sql, workspaceId, taskId);
-          requireThat(
-            task.botId === deployment.bot?.id,
-            "delivery_revoked",
-            403,
-          );
-          checkDevelopment(
-            w,
-            task,
-            d.actor,
-            d.id.includes(":cancel:") ||
-              (!!d.taskControlsCleanup &&
-                task.cancelRequested &&
-                task.actor === d.actor),
-            d.id.includes(":status:") || !!d.taskControlsCleanup,
-          );
-        } catch {
-          d.state = "cancelled";
-          return;
-        }
+      }
+      try {
+        await this.policies.hooks.validateTaskAudience(
+          sql,
+          w,
+          d,
+          deployment.bot?.id,
+        );
+      } catch {
+        d.state = "cancelled";
+        return;
       }
       const run = d.runId ? w.runs.find((r) => r.id === d.runId) : undefined;
       if (
@@ -382,12 +133,17 @@ export class DeliveryWorker {
       }
       if (d.nextAt && Date.parse(d.nextAt) > Date.now()) return;
       if (d.taskControlsCleanup) {
-        const buttons = cleanupTaskButtons(w, d);
-        if (buttons === undefined) {
+        const prepared = this.policies.hooks.prepareButtons(
+          workspaceId,
+          w,
+          d,
+          deployment.bot,
+        );
+        if (prepared.cancelled) {
           d.state = "cancelled";
           return;
         }
-        d.buttons = buttons;
+        d.buttons = prepared.buttons;
       }
       if (d.editOf) {
         const target = this.editTarget(w, d, deployment.bot?.id);
@@ -456,7 +212,7 @@ export class DeliveryWorker {
           403,
         );
       requireThat(
-        await this.feedbackAllowed(current, intent),
+        await this.policies.allowed(this.store, current, intent),
         "delivery_revoked",
         403,
       );
@@ -518,26 +274,13 @@ export class DeliveryWorker {
         });
         return;
       }
-      const taskId = developmentMessageTask(intent);
-      if (taskId) {
-        const task = await taskGet(this.store.pool, workspaceId, taskId);
-        requireThat(
-          task.botId === deployment.bot?.id &&
-            (await this.store.deployment()).bot?.id === intent.botId,
-          "delivery_revoked",
-          403,
-        );
-        checkDevelopment(
-          current,
-          task,
-          intent.actor,
-          intent.id.includes(":cancel:") ||
-            (!!intent.taskControlsCleanup &&
-              task.cancelRequested &&
-              task.actor === intent.actor),
-          intent.id.includes(":status:") || !!intent.taskControlsCleanup,
-        );
-      }
+      await this.policies.hooks.validateTaskAudience(
+        this.store.pool,
+        current,
+        intent,
+        deployment.bot?.id,
+        async () => (await this.store.deployment()).bot?.id,
+      );
       if (intent.editOf)
         requireThat(
           (await this.store.deployment()).bot?.id === intent.botId &&
@@ -546,30 +289,19 @@ export class DeliveryWorker {
           "delivery_revoked",
           403,
         );
-      let buttons = intent.buttons;
-      if (intent.taskControlsCleanup) {
-        buttons = cleanupTaskButtons(current, intent);
-        if (buttons === undefined) {
-          await this.finish(workspaceId, intent, (d) => {
-            d.state = "cancelled";
-          });
-          return;
-        }
-      } else if (taskId) buttons = withoutTaskControls(buttons, taskId);
-      const developmentId = /^development:([0-9a-f-]{36}):/.exec(
-        intent.id,
-      )?.[1];
-      if (developmentId && deployment.bot?.username) {
-        buttons = [
-          ...(buttons ?? []),
-          [
-            {
-              text: "View conversation",
-              url: `https://t.me/${deployment.bot.username}?startapp=${taskReference(workspaceId, developmentId)}`,
-            },
-          ],
-        ];
+      const preparedButtons = this.policies.hooks.prepareButtons(
+        workspaceId,
+        current,
+        intent,
+        deployment.bot,
+      );
+      if (preparedButtons.cancelled) {
+        await this.finish(workspaceId, intent, (d) => {
+          d.state = "cancelled";
+        });
+        return;
       }
+      const buttons = preparedButtons.buttons;
       intent.buttons = buttons;
       const text = intent.privateTopicFallback
         ? privateTopicFallbackText(intent.text)
@@ -668,12 +400,7 @@ export class DeliveryWorker {
           error.code === "telegram_message_uneditable"
         ) {
           d.state = "failed";
-          for (const old of w.deliveries)
-            if (
-              sameTaskAudience(old, intent) &&
-              old.remoteId === intent.remoteId
-            )
-              old.editUnavailable = true;
+          this.policies.hooks.markTaskUneditable(w, intent);
         } else if (
           intent.editOf &&
           error instanceof TelegramError &&
@@ -731,6 +458,7 @@ export class DeliveryWorker {
       });
     }
   }
+
   private async finish(
     workspaceId: string,
     intent: Delivery,
@@ -740,7 +468,7 @@ export class DeliveryWorker {
       const d = w.deliveries.find((d) => d.id === intent.id);
       if (d?.state === "sending" && d.attempts === intent.attempts) {
         action(d, w);
-        confirmTaskMessage(w, d, intent.buttons);
+        this.policies.hooks.onComplete(w, d, intent.buttons);
       }
     });
   }

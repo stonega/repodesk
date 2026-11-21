@@ -7,7 +7,7 @@ import {
 } from "../agent/model-settings.ts";
 import { modelCapabilities, selectedModel } from "../agent/runtime.ts";
 import { type Sql, transaction } from "../db/pool.ts";
-import type { Store } from "../db/repositories.ts";
+import { coreWorkspaceData, type Store } from "../db/repositories.ts";
 import {
   type Admin,
   type Deployment,
@@ -131,7 +131,7 @@ export class SetupService {
     await transaction(this.store.pool, async (sql) => {
       await sql.query(
         "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",
-        [w.id, admin.id, JSON.stringify(w)],
+        [w.id, admin.id, JSON.stringify(coreWorkspaceData(w))],
       );
       await sql.query(
         "INSERT INTO operator_audit(actor,action,target) VALUES($1,'workspace.created',$2)",

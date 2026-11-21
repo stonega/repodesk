@@ -21,13 +21,24 @@ be slow;
 measure latency and memory on the deployment host before raising input limits.
 GPU selection, live streaming and speaker diarization are outside this version.
 
-The app Docker image includes an isolated Python environment with CPU PyTorch
+The default slim `app` Docker image omits Python and PyTorch so deployments that do not
+use local speech transcription stay small. To enable local Qwen3-ASR in Docker, use the
+opt-in `app-transcription` build target via `compose.transcription.yaml`:
+
+```sh
+docker compose -f compose.yaml -f compose.transcription.yaml config --quiet
+docker compose -f compose.yaml -f compose.transcription.yaml up --build -d
+```
+
+The `app-transcription` Docker target adds an isolated Python environment with CPU PyTorch
 2.6.0, `qwen-asr` 0.0.6, `huggingface-hub` 0.36.2 and PyAV 16.1.0. These are explicit
 runtime dependencies, separate from the Node/Bun package graph. PyAV supplies the
-media decoder without a system FFmpeg executable. This increases the image size;
-model weights are **not** downloaded during image build or when the plugin is disabled.
+media decoder without a system FFmpeg executable. Model weights are **not** downloaded
+during image build or when the plugin is disabled. When running the default slim `app`
+image without the Python runtime, **Plugins → Qwen3-ASR** reports `Runtime unavailable`
+without affecting ordinary chat.
 
-Compose shares the `transcription_models` volume between app and worker at
+`compose.transcription.yaml` shares the `transcription_models` volume between app and worker at
 `/var/lib/repodesk-models`. Public weights can be reused across workspaces; audio,
 transcripts and Telegram identifiers are never stored in that cache. OS locks
 serialize downloads and inference across containers. Each process keeps at most one

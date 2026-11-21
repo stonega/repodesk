@@ -1,0 +1,19 @@
+# Optional local Qwen3-ASR voice transcription runtime (Python + CPU PyTorch).
+# Start with: docker compose -f compose.yaml -f compose.transcription.yaml up --build -d
+services:
+  app:
+    build:
+      context: .
+      target: app-transcription
+    image: ${APP_TRANSCRIPTION_IMAGE:-deepx-agent-transcription:local}
+    volumes:
+      - transcription_models:/var/lib/repodesk-models
+  worker:
+    build:
+      context: .
+      target: app-transcription
+    image: ${APP_TRANSCRIPTION_IMAGE:-deepx-agent-transcription:local}
+    volumes:
+      - transcription_models:/var/lib/repodesk-models
+volumes:
+  transcription_models:

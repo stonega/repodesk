@@ -30,35 +30,45 @@ const localRunner =
   cfg.CODEX_RUNNER_URL && cfg.CODEX_RUNNER_TOKEN
     ? new LocalRunnerClient(cfg.CODEX_RUNNER_URL, cfg.CODEX_RUNNER_TOKEN)
     : undefined;
-const stop = await startWorker(
+const stop = await startWorker({
   store,
-  new SetupService(
+  setup: new SetupService(
     store,
     cfg.ENCRYPTION_KEY,
     cfg.PUBLIC_ORIGIN,
     undefined,
     cfg.TELEGRAM_TRANSPORT,
   ),
-  cfg.DATABASE_URL,
-  (deployment, workspaceId) => plugins.runner(deployment, workspaceId),
-  new GitHubIssues(store, githubApps),
-  new CodingService(
+  databaseUrl: cfg.DATABASE_URL,
+  runner: (deployment, workspaceId) => plugins.runner(deployment, workspaceId),
+  githubIssues: new GitHubIssues(store, githubApps),
+  coding: new CodingService(
     store,
     githubApps,
     localRunner,
     cfg.ENCRYPTION_KEY,
     plugins.browser.coding,
   ),
-  new GitHubUsers(store, githubApps, cfg.ENCRYPTION_KEY, cfg.PUBLIC_ORIGIN),
-  new ReviewExecutor(store, githubApps, localRunner, cfg.ENCRYPTION_KEY),
-  new GitHubPullRequests(store, githubApps),
-  plugins.cloudflare,
-  plugins.google,
-  plugins.searchConsole,
-  plugins.transcription,
-  plugins.browser,
-  new GitHubWebhooks(store, githubApps, cfg.ENCRYPTION_KEY),
-);
+  githubUsers: new GitHubUsers(
+    store,
+    githubApps,
+    cfg.ENCRYPTION_KEY,
+    cfg.PUBLIC_ORIGIN,
+  ),
+  review: new ReviewExecutor(
+    store,
+    githubApps,
+    localRunner,
+    cfg.ENCRYPTION_KEY,
+  ),
+  githubPullRequests: new GitHubPullRequests(store, githubApps),
+  cloudflare: plugins.cloudflare,
+  google: plugins.google,
+  searchConsole: plugins.searchConsole,
+  transcription: plugins.transcription,
+  browser: plugins.browser,
+  githubWebhooks: new GitHubWebhooks(store, githubApps, cfg.ENCRYPTION_KEY),
+});
 log.write("worker_started");
 let stopping = false;
 async function shutdown() {

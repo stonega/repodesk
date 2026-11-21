@@ -17,24 +17,29 @@ export function pluginRuntime(store: Store, cfg: Config, github: GitHubApps) {
     cfg.ENCRYPTION_KEY,
     cfg.PUBLIC_ORIGIN,
   );
-  return new PluginService(
+  return new PluginService({
     store,
-    cfg.PI_EXTENSIONS_FILE,
-    cfg.CODE_TRUTH_URL && cfg.CODE_TRUTH_TOKEN
-      ? new CodeTruthClient(cfg.CODE_TRUTH_URL, cfg.CODE_TRUTH_TOKEN)
-      : undefined,
-    github,
-    new CloudflareService(
+    manifestPath: cfg.PI_EXTENSIONS_FILE,
+    codeTruth:
+      cfg.CODE_TRUTH_URL && cfg.CODE_TRUTH_TOKEN
+        ? new CodeTruthClient(cfg.CODE_TRUTH_URL, cfg.CODE_TRUTH_TOKEN)
+        : undefined,
+    githubApp: github,
+    cloudflare: new CloudflareService(
       store,
       cfg.ENCRYPTION_KEY,
       undefined,
       cfg.PUBLIC_ORIGIN,
     ),
-    new SearchConsoleService(store, cfg.ENCRYPTION_KEY, undefined, google),
+    searchConsole: new SearchConsoleService(
+      store,
+      cfg.ENCRYPTION_KEY,
+      undefined,
+      google,
+    ),
     google,
-    undefined,
-    browserRuntime(store, cfg.ENCRYPTION_KEY, cfg),
-    new NowledgeService(store, cfg.ENCRYPTION_KEY),
-    packageRuntime(cfg),
-  );
+    browser: browserRuntime(store, cfg.ENCRYPTION_KEY, cfg),
+    nowledgeMem: new NowledgeService(store, cfg.ENCRYPTION_KEY),
+    packageOptions: packageRuntime(cfg),
+  });
 }

@@ -555,8 +555,8 @@ export class Ingress {
       const digest = confirmation
         ? Buffer.from(key, "base64url").toString("hex")
         : key;
-      const row = await sql.query(
-        "SELECT data FROM workspaces WHERE data->'googleUsers'->$1->$2->>$3=$4 AND NOT (data ? 'deletion') FOR UPDATE",
+      const row = await sql.query<{ id: string }>(
+        "SELECT id FROM workspaces WHERE data->'googleUsers'->$1->$2->>$3=$4 AND NOT (data ? 'deletion') FOR UPDATE",
         [
           String(actor),
           confirmation ? "flow" : "properties",
@@ -564,7 +564,9 @@ export class Ingress {
           digest,
         ],
       );
-      return row.rows[0]?.data as Workspace | undefined;
+      return row.rows[0]?.id
+        ? this.store.read(row.rows[0].id, sql, true)
+        : undefined;
     }
     if (requestedId !== undefined && c?.type === "private") {
       const legacy =
@@ -576,11 +578,13 @@ export class Ingress {
         : d.bot &&
           this.setup.accessLinks.resolve(requestedId, d.bot.id)?.workspaceId;
       if (!workspaceId) return;
-      const row = await sql.query(
-        "SELECT data FROM workspaces WHERE id=$1 AND NOT (data ? 'deletion') FOR UPDATE",
+      const row = await sql.query<{ id: string }>(
+        "SELECT id FROM workspaces WHERE id=$1 AND NOT (data ? 'deletion') FOR UPDATE",
         [workspaceId],
       );
-      return row.rows[0]?.data as Workspace | undefined;
+      return row.rows[0]?.id
+        ? this.store.read(row.rows[0].id, sql, true)
+        : undefined;
     }
     if (
       cmd?.name === "start" &&
