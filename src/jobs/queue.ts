@@ -15,6 +15,7 @@ import {
   hasActiveGitHubNotifications,
 } from "../github/notifications.ts";
 import type { GitHubPullRequests } from "../github/pull-requests.ts";
+import type { RepositorySync } from "../github/repository-sync.ts";
 import type { GitHubUsers } from "../github/users.ts";
 import type { GitHubWebhooks } from "../github/webhooks.ts";
 import type { GoogleService } from "../google/service.ts";
@@ -84,6 +85,7 @@ export interface WorkerDependencies {
   githubIssues?: GitHubIssues;
   coding?: CodingService;
   githubUsers?: GitHubUsers;
+  repositorySync?: RepositorySync;
   review?: ReviewExecutor;
   githubPullRequests?: GitHubPullRequests;
   cloudflare?: CloudflareService;
@@ -168,6 +170,7 @@ export async function startWorker(
     browser,
     githubWebhooks,
   } = deps;
+  const repositorySync = deps.repositorySync ?? githubUsers?.repositorySync;
   const transcription = deps.transcription ?? new TranscriptionService(store);
   const boss = queue(url, store.log);
   await boss.start();
@@ -176,7 +179,14 @@ export async function startWorker(
     setup,
     runner,
     transcription,
-    new Ingress(store, setup, githubUsers, google, searchConsole),
+    new Ingress(
+      store,
+      setup,
+      githubUsers,
+      google,
+      searchConsole,
+      repositorySync,
+    ),
   );
   const delivery = new DeliveryWorker(store, setup);
   const notifications = new GitHubNotifications(store);
@@ -374,6 +384,7 @@ export async function startWorker(
           githubUsers,
           google,
           searchConsole,
+          repositorySync,
         ).run(shutdown.signal)
       : Promise.resolve();
   // Observe unexpected infrastructure failures immediately; normal poll failures retry in the loop.
@@ -397,9 +408,17 @@ export async function startWorker(
   };
   let githubBusy: Promise<void> | undefined;
   const githubTick = () => {
-    if (!githubUsers || githubBusy || shutdown.signal.aborted) return;
-    githubBusy = githubUsers
-      .syncDue()
+    if (
+      (!githubUsers && !repositorySync) ||
+      githubBusy ||
+      shutdown.signal.aborted
+    )
+      return;
+    githubBusy = (async () => {
+      if (repositorySync)
+        await repositorySync.syncAllWorkspaces(shutdown.signal);
+      if (githubUsers) await githubUsers.syncDue();
+    })()
       .catch(() => store.log.write("worker_maintenance_failed"))
       .finally(() => {
         githubBusy = undefined;

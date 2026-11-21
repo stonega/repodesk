@@ -1029,6 +1029,9 @@ input.plugin-toggle-input:checked::before {
   padding: 0;
   list-style: none;
 }
+.github-details .row + .repository-list {
+  margin-top: 12px;
+}
 .cloudflare-domain-fields {
   min-width: 0;
   padding: 0;

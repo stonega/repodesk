@@ -21,7 +21,9 @@ GitHub 的 **Authorized GitHub Apps** 仅表示身份授权；**Installed GitHub
 
 已有 App 增加权限后，需要在 GitHub installation 接受新权限，组织可能需要 owner 批准。仅在 RepoDesk 重新连接不能授予缺失权限。
 
-仓库重命名会按已选仓库的数字身份更新；后来新授权的仓库不会自动加入工作区，需要重新授权和选择。GitHub 中的 **All repositories** 会授权其范围内的仓库，选择前确认符合预期。
+仓库重命名会按已选仓库的数字身份更新。开启 **All repositories (auto-sync)** 模式的工作区会自动同步 GitHub App 可访问的新建或新增仓库（通过后台定期同步、GitHub Webhook、以及打开面板刷新），并触发已绑定成员的权限刷新；仅选择指定仓库的工作区仍保持已选范围，不会自动加入其他仓库。
+
+在管理面板的 **Overview → Manage GitHub** 中，可以随时点击 **Sync repositories** 立即同步、点击 **Auto-sync all repositories** / **Use selected only** 切换同步模式，或点击 **Change repositories** 重新选择仓库。工作区管理员也可以在 Telegram 机器人私聊中直接让机器人同步工作区仓库或开启“所有仓库自动同步”。GitHub 中的 **All repositories** 会授权其范围内的仓库，选择前确认符合预期。
 
 ## 成员：验证自己的账号
 

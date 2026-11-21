@@ -73,10 +73,11 @@ GitHub lists user authorization under **Authorized GitHub Apps**. That confirms
 identity only. Repository access appears under **Installed GitHub Apps** after
 installation. Setup does not mark the workspace connected until it verifies an
 installation and saves the repositories chosen on GitHub. It connects all granted
-repositories when exactly one installation is accessible. The workspace records
-the repositories accessible at connection time; a new authorization and selection
-flow is required to include repositories granted later. Multiple installations
-require an explicit choice in Plugins.
+repositories with `allRepositories: true` when exactly one installation is
+accessible, so newly created or granted repositories sync automatically.
+Workspaces that choose specific repository IDs stay locked to those IDs unless
+an operator switches to all-repository auto-sync or updates the selection.
+Multiple installations require an explicit choice in Plugins.
 
 App credentials are scoped to the local operator account and can be reused by that
 operator's workspaces. Creating an App does not connect any workspace or grant it
@@ -173,8 +174,11 @@ The user authorization/selection window expires after 10 minutes. Start Connect
 GitHub again if it expires or GitHub denies access. For SAML organizations, establish
 an active organization SSO session before authorizing the App.
 
-The connected GitHub card lists repositories with links to GitHub. It has no
-change-connection or disconnect button. The workspace-scoped DELETE API still
+The connected GitHub modal lists repositories with links to GitHub, shows
+whether the workspace uses **All repositories (auto-sync)** or **Selected
+repositories**, and provides **Sync repositories**, **Auto-sync all
+repositories** / **Use selected only**, and **Change repositories** actions
+without a destructive disconnect button. The workspace-scoped DELETE API still
 disconnects only this workspace; it does not uninstall the App from GitHub or
 affect another workspace. It also explicitly disables the legacy shared GitHub
 token fallback for this workspace. Public repository access remains possible.
@@ -194,23 +198,32 @@ editor's settings revision so a concurrent settings edit still conflicts on save
 The server reads current repository names and visibility from
 [GitHub's installation repository list](https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-app-installation).
 It uses an in-memory, short-lived Metadata-read token; it has no source or write
-permission and never leaves the backend. Responses are filtered to the
-workspace's selected numeric IDs. Repositories no longer available to the App
-are removed; a new repository using an old name does not gain workspace access.
-Newly granted or restored repositories require a new authorization/selection flow.
-Matching workspace Code Truth URLs follow renames, retaining their configured
-branches. Metadata changes advance the connection revision, invalidating older
-pinned approvals and runs; unchanged polls do not advance revisions. Concurrent
-refreshes share one request and successful or failed checks are cached for three
-seconds. Tokens are reused until near expiry and discarded after an upstream failure.
+permission and never leaves the backend. For workspaces with specific selected
+repositories, responses are filtered to the saved numeric IDs; removed
+repositories are dropped and replacement names never grant new IDs. For
+workspaces with `allRepositories: true`, newly accessible installation
+repositories are appended automatically (with `repositoryRevisions` recorded for
+every added/changed/removed ID so older grants can never revive), and linked
+members' `next_sync_at` is nudged so user permissions re-sync promptly.
+
+Workspaces in `allRepositories` mode also sync automatically in the background
+worker (every five minutes), immediately upon `installation_repositories`
+(`added`/`removed`) and `repository` (`created`/`deleted`/`renamed`/`archived`/
+`unarchived`/`publicized`/`privatized`) webhooks, and on demand via
+`POST /api/admin/workspaces/:id/github/sync` or Telegram bot admin controls
+(`github repos`, `github repos all`, `github repos selected`, plus `github sync`
+when `allRepositories` is enabled). Matching workspace Code Truth URLs follow
+renames, retaining their configured branches. Metadata changes advance the
+connection revision, invalidating older pinned approvals and runs; unchanged
+polls do not advance revisions. Concurrent refreshes share one request and
+successful or failed checks are cached for three seconds. Tokens are reused
+until near expiry and discarded after an upstream failure.
 
 Polling stops for hidden pages and closed GitHub dialogs. GitHub outages,
 denied access and invalid responses retain the last saved list and show an update
 notice; normal tool permission checks still apply. Reconnect, disconnect,
 ownership revocation or deletion during a request prevents that response from
-replacing newer state. Updates are near realtime while the list is open; webhooks
-are separate from this polling flow; there is no background repository metadata sync
-while the panel is closed.
+replacing newer state.
 No migration, new dependency or App permission change is required. See the
 [manual staging check](../../examples/github-repository-sync.md).
 

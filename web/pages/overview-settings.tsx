@@ -266,6 +266,7 @@ export function ReadPage({
               workspaceId={id}
               open
               onClose={() => setManagingGitHub(false)}
+              onUpdated={() => reload()}
             />
           )}
           <section className="card" aria-label="Team" aria-busy={loading}>

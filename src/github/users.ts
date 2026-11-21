@@ -9,15 +9,20 @@ import { type GitHubApp, GitHubRateLimitError } from "./app.ts";
 import { githubConnectionRevision } from "./config.ts";
 import { availableGitHubAccount } from "./member-account.ts";
 import type { GitHubApps } from "./registry.ts";
+import { RepositorySync } from "./repository-sync.ts";
 import { type GitHubUserAccess, invalidateGitHubWork } from "./user-access.ts";
 
 export class GitHubUsers {
+  readonly repositorySync: RepositorySync;
   constructor(
     private store: Store,
     private apps: GitHubApps,
     private key: string,
     private origin: string,
-  ) {}
+    repositorySync?: RepositorySync,
+  ) {
+    this.repositorySync = repositorySync ?? new RepositorySync(store, apps);
+  }
   private async callback() {
     return `${await publicOrigin(this.store, this.origin)}/api/admin/github/callback`;
   }
@@ -30,6 +35,7 @@ export class GitHubUsers {
     actor: string,
     repositories?: number[],
   ) {
+    if (repositories?.length === 0) return;
     invalidateGitHubWork(w, actor, repositories);
     await sql.query(
       `UPDATE coding_tasks SET data=data || '{"cancelRequested":true,"error":"github_user_access_denied"}'::jsonb,updated_at=now()
@@ -39,6 +45,19 @@ export class GitHubUsers {
             OR data#>>'{payload,repositoryId}'=ANY($3::text[]))`,
       [w.id, actor, repositories?.map(String) ?? null],
     );
+  }
+  async syncIfConnected(sql: Sql, w: Workspace, actor: string) {
+    const member = w.members.find((m) => m.id === actor);
+    if (!member?.github || member.github.status === "disconnected")
+      return undefined;
+    const row = (
+      await sql.query(
+        "SELECT 1 FROM github_user_accounts WHERE workspace_id=$1 AND actor=$2",
+        [w.id, actor],
+      )
+    ).rows[0];
+    if (!row) return undefined;
+    return this.sync(sql, w, actor);
   }
   private async app(w: Workspace) {
     requireThat(

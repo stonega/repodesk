@@ -16,6 +16,7 @@ import {
   revokeAutoNotifications,
 } from "./notifications.ts";
 import type { GitHubApps } from "./registry.ts";
+import { RepositorySync } from "./repository-sync.ts";
 
 export function verifyGitHubSignature(
   secret: string,
@@ -77,12 +78,15 @@ const clean = (text: string) => text.replace(/[\p{Cc}\p{Cf}]/gu, " ").trim();
 /** Shared ingress and recovery; Review Bot remains an independent consumer. */
 export class GitHubWebhooks {
   readonly notifications: GitHubNotifications;
+  private repositorySync: RepositorySync;
   constructor(
     private store: Store,
     private apps: GitHubApps,
     private key: string,
+    repositorySync?: RepositorySync,
   ) {
     this.notifications = new GitHubNotifications(store);
+    this.repositorySync = repositorySync ?? new RepositorySync(store, apps);
   }
   async configure(admin: Admin, workspaceId: string, value: unknown) {
     operator(admin);
@@ -197,6 +201,8 @@ export class GitHubWebhooks {
         });
       }
     }
+    // Sync connected workspace repository lists on installation/repository lifecycle changes.
+    await this.syncRepositoriesFromEvent(operatorId, event, raw);
     // Dispatch GitHub event-triggered automations and mission waits (check_suite, issues, pull_request).
     await this.dispatchAutomationHooks(operatorId, event, delivery, raw);
     if (!["pull_request", "issues"].includes(event) || raw.action !== "opened")
@@ -238,6 +244,51 @@ export class GitHubWebhooks {
       payload,
     );
     return { accepted: true };
+  }
+  private async syncRepositoriesFromEvent(
+    operatorId: string,
+    event: string,
+    raw: Record<string, unknown>,
+  ) {
+    const action = typeof raw.action === "string" ? raw.action : "";
+    const isAdded =
+      (event === "installation_repositories" && action === "added") ||
+      (event === "repository" && action === "created");
+    const isMetadataOrRemoval =
+      (event === "installation_repositories" && action === "removed") ||
+      (event === "repository" &&
+        [
+          "deleted",
+          "renamed",
+          "archived",
+          "unarchived",
+          "publicized",
+          "privatized",
+        ].includes(action));
+    if (!isAdded && !isMetadataOrRemoval) return;
+    const parsed = z
+      .object({ installation: z.object({ id: positiveId }) })
+      .safeParse(raw);
+    if (!parsed.success) return;
+    const installationId = parsed.data.installation.id;
+    for (const id of await this.store.ids()) {
+      try {
+        const current = await this.store.read(id);
+        if (
+          current.deletion ||
+          current.operatorId !== operatorId ||
+          current.github?.installationId !== installationId ||
+          !current.github.allRepositories
+        )
+          continue;
+        await this.repositorySync.syncWorkspace(id, { force: true });
+      } catch {
+        this.store.log.write("worker_maintenance_failed", {
+          workspaceId: id,
+          error: new Fault("github_repository_sync_failed", 503),
+        });
+      }
+    }
   }
   private async dispatchAutomationHooks(
     operatorId: string,

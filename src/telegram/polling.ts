@@ -24,6 +24,7 @@ export function pollingErrorCode(error: unknown) {
       : "polling_receive_failed";
 }
 
+import type { RepositorySync } from "../github/repository-sync.ts";
 import type { GitHubUsers } from "../github/users.ts";
 import type { GoogleService } from "../google/service.ts";
 import type { SearchConsoleService } from "../search-console/service.ts";
@@ -38,6 +39,7 @@ export class TelegramPoller {
     githubUsers?: GitHubUsers,
     google?: GoogleService,
     searchConsole?: SearchConsoleService,
+    repositorySync?: RepositorySync,
   ) {
     this.ingress = new Ingress(
       store,
@@ -45,6 +47,7 @@ export class TelegramPoller {
       githubUsers,
       google,
       searchConsole,
+      repositorySync,
     );
   }
 

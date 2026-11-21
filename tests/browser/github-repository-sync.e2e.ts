@@ -22,9 +22,61 @@ async function fixture(page: Page) {
       })),
     },
   };
-  const state = { calls: 0, unavailable: false };
+  const state = {
+    calls: 0,
+    syncCalls: 0,
+    lastSyncBody: undefined as Record<string, unknown> | undefined,
+    unavailable: false,
+  };
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === `${endpoint}/sync` && route.request().method() === "POST") {
+      state.syncCalls++;
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      state.lastSyncBody = body;
+      if (state.unavailable) {
+        await route.fulfill({
+          status: 502,
+          json: { error: "github_unavailable" },
+        });
+        return;
+      }
+      if (data.connection) {
+        const before = data.connection.repositories.length;
+        if (typeof body.allRepositories === "boolean") {
+          if (body.allRepositories) data.connection.allRepositories = true;
+          else delete data.connection.allRepositories;
+        }
+        let added = 0;
+        if (
+          data.connection.allRepositories &&
+          !data.connection.repositories.some((r) => r.id === 8)
+        ) {
+          data.connection.repositories = [
+            ...data.connection.repositories,
+            { id: 8, full_name: "example/new-auto-repo" },
+          ];
+          added = 1;
+        }
+        data.connection.revision++;
+        data.revision = data.connection.revision;
+        await route.fulfill({
+          json: {
+            ...data,
+            syncResult: {
+              changed: added > 0 || typeof body.allRepositories === "boolean",
+              total: data.connection.repositories.length,
+              added,
+              removed: 0,
+              addedNames: added ? ["example/new-auto-repo"] : [],
+              allRepositories: !!data.connection.allRepositories,
+            },
+          },
+        });
+        void before;
+        return;
+      }
+    }
     if (path === endpoint) {
       state.calls++;
       if (state.unavailable) {
@@ -149,4 +201,66 @@ test("returning from GitHub refreshes and transient failures keep the saved list
   await expect(
     dialog.getByRole("link", { name: "Open example/renamed on GitHub" }),
   ).toBeVisible();
+});
+
+test("operator can enable all-repository auto-sync and manually sync from Manage GitHub at desktop and mobile widths", async ({
+  page,
+}) => {
+  const { dialog, state } = await fixture(page);
+  await expect(dialog).toContainText("Selected repositories");
+  await expect(
+    dialog.getByRole("button", { name: "Sync repositories" }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "Auto-sync all repositories" }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "Change repositories" }),
+  ).toBeVisible();
+
+  // Enable all-repository auto-sync and verify new repo appears immediately.
+  await dialog
+    .getByRole("button", { name: "Auto-sync all repositories" })
+    .click();
+  expect(state.syncCalls).toBe(1);
+  expect(state.lastSyncBody).toEqual({ revision: 1, allRepositories: true });
+  await expect(dialog).toContainText("All repositories (auto-sync)");
+  await expect(dialog.getByRole("status")).toContainText(
+    "All-repository auto-sync enabled. 8 repositories connected (1 added).",
+  );
+  await expect(
+    dialog.getByRole("button", { name: "Use selected only" }),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "3 more" }).click();
+  await expect(
+    dialog.getByRole("link", { name: "Open example/new-auto-repo on GitHub" }),
+  ).toBeVisible();
+
+  // Manual Sync repositories reports up-to-date status.
+  await dialog.getByRole("button", { name: "Sync repositories" }).click();
+  expect(state.syncCalls).toBe(2);
+  expect(state.lastSyncBody).toEqual({ revision: 2 });
+  await expect(dialog.getByRole("status")).toContainText(
+    "Repositories are up to date (8 connected).",
+  );
+
+  // Desktop and mobile layout verification (light + dark, zero overflow).
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const screenshotDir = process.env.BROWSER_SCREENSHOT_DIR ?? "test-results";
+  await page.screenshot({
+    path: `${screenshotDir}/github-sync-desktop-light.png`,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= 390),
+  ).toBe(true);
+  await page.screenshot({
+    path: `${screenshotDir}/github-sync-mobile-light.png`,
+  });
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = "dark";
+  });
+  await page.screenshot({
+    path: `${screenshotDir}/github-sync-mobile-dark.png`,
+  });
 });

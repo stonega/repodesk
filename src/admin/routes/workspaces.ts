@@ -170,6 +170,7 @@ export function workspaceRoutes(deps: AdminRouteDeps) {
                   connected: !!w.github?.installationId,
                   account: w.github?.account,
                   repositories: w.github?.repositories.length ?? 0,
+                  allRepositories: !!w.github?.allRepositories,
                 },
               }
             : undefined,

@@ -166,6 +166,16 @@ export function githubRoutes(deps: AdminRouteDeps) {
       ),
     ),
   );
+  app.post("/api/admin/workspaces/:id/github/sync", async (c) =>
+    c.json(
+      await github.sync(
+        c.get("session").admin,
+        validId(c.req.param("id")),
+        hash(sessionCookieValue(c) ?? ""),
+        await c.req.json().catch(() => ({})),
+      ),
+    ),
+  );
   app.delete("/api/admin/workspaces/:id/github", async (c) =>
     c.json(
       await github.disconnect(

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { operator, throttle } from "../admin/auth.ts";
 import { publicOrigin, siteDomain } from "../admin/site.ts";
 import type { Store } from "../db/repositories.ts";
-import { type Admin, requireThat, type Workspace } from "../domain.ts";
+import { type Admin, Fault, requireThat, type Workspace } from "../domain.ts";
 import { decrypt, encrypt, hash, token } from "../setup/credentials.ts";
 import { GitHubSkills } from "../skills/github-service.ts";
 import { audit } from "../workspaces/policy.ts";
@@ -54,9 +54,20 @@ export class GitHubService {
   ) {
     this.apps =
       app instanceof GitHubApps ? app : new GitHubApps(store, key, app);
-    this.webhooks = new GitHubWebhooks(store, this.apps, key);
     this.repositorySync = new RepositorySync(store, this.apps);
-    this.users = new GitHubUsers(store, this.apps, key, origin);
+    this.webhooks = new GitHubWebhooks(
+      store,
+      this.apps,
+      key,
+      this.repositorySync,
+    );
+    this.users = new GitHubUsers(
+      store,
+      this.apps,
+      key,
+      origin,
+      this.repositorySync,
+    );
     this.skills = new GitHubSkills(store, this.apps);
   }
   private async callback() {
@@ -368,9 +379,14 @@ export class GitHubService {
         account: installation.account,
         connectedBy: pending.row.login,
         connectedAt: new Date().toISOString(),
+        ...("allRepositories" in input ? { allRepositories: true } : {}),
         repositories: selected,
       };
       if (w.plugins) w.plugins.revision++;
+      await sql.query(
+        "UPDATE github_user_accounts SET next_sync_at=LEAST(next_sync_at, now()) WHERE workspace_id=$1",
+        [id],
+      );
       audit(
         w,
         admin.id,
@@ -380,6 +396,53 @@ export class GitHubService {
       );
     });
     return this.view(admin, id, sessionHash);
+  }
+  async sync(
+    admin: Admin,
+    id: string,
+    sessionHash: string,
+    value: unknown = {},
+  ) {
+    const input = z
+      .object({
+        revision: revisionSchema.optional(),
+        allRepositories: z.boolean().optional(),
+      })
+      .strict()
+      .parse(value ?? {});
+    const w = await this.workspace(admin, id);
+    requireThat(
+      w.github?.installationId,
+      "github_repository_not_connected",
+      409,
+    );
+    if (input.revision !== undefined)
+      requireThat(
+        (w.github.revision ?? 0) === input.revision,
+        "version_conflict",
+        409,
+      );
+    const { summary, refreshError } = await this.repositorySync.syncWorkspace(
+      id,
+      {
+        force: true,
+        allRepositories: input.allRepositories,
+        actor: admin.id,
+        check: (current) => githubAuthority(admin, current),
+      },
+    );
+    if (refreshError) {
+      throw new Fault(
+        refreshError,
+        refreshError === "github_access_denied"
+          ? 403
+          : refreshError === "github_app_not_configured"
+            ? 409
+            : 502,
+      );
+    }
+    const page = await this.view(admin, id, sessionHash);
+    return { ...page, syncResult: summary };
   }
   async disconnect(
     admin: Admin,

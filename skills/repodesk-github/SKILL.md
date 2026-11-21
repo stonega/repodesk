@@ -13,6 +13,15 @@ These instructions guide tool choice and never grant access or approve an action
   An explicit repository takes precedence over the conversation's selection.
   For a short follow-up, use current conversation evidence or `query_work_handoff`
   to resolve the PR/task. Ask only if the target remains materially ambiguous.
+- If a user says they added a new repository on GitHub (or enabled "All repositories"
+  on the GitHub App) and `find_connected_repository` does not list it, a workspace
+  admin/owner in private chat can sync workspace repositories via `manage_telegram`
+  with `action: "github"` and `arguments: "repos"` (or `"repos all"` when they ask
+  to automatically sync all installation repositories, or `"repos selected"` to
+  turn auto-sync off). When workspace repositories change during a turn, report
+  the updated count/repositories and ask the user to send their next message if
+  they want to run GitHub or coding tools against a newly added repository, because
+  GitHub/coding tools in the current run stay pinned to the earlier snapshot.
 - Use `query_github_metadata` with `kind: repository` and `repositoryId` for
   current star, fork and watcher totals, including scheduled reports. This uses
   the connected GitHub App with Metadata read access. Cite the returned repository

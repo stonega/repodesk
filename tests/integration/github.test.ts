@@ -331,6 +331,7 @@ const url = process.env.TEST_DATABASE_URL;
     });
     expect(response.status).toBe(200);
     const page = await response.json();
+    expect(page.connection.allRepositories).toBe(true);
     expect(page.connection.repositories).toHaveLength(13);
     expect(page.connection.repositories[12]).toEqual({
       id: 7013,

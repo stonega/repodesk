@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import type { GitHubRepository } from "../src/github/app.ts";
 import type { GitHubPage } from "../src/github/config.ts";
+import type { RepositorySyncSummary } from "../src/github/repository-sync.ts";
 import {
   GitHubRegistration,
   submitGitHubManifest,
@@ -242,21 +243,25 @@ export function GitHubConnection({
   source,
   open,
   onClose,
+  onUpdated,
 }: {
   request: Request;
   workspaceId: string;
   source?: "setup";
   open?: boolean;
   onClose?: () => void;
+  onUpdated?: () => void;
 }) {
   const endpoint = `/api/admin/workspaces/${workspaceId}/github`;
   const [data, setData] = useState<GitHubPage>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [syncNotice, setSyncNotice] = useState("");
   const [installation, setInstallation] = useState("");
   const [refreshError, setRefreshError] = useState("");
   const [repositories, setRepositories] = useState<GitHubRepository[]>([]);
   const [selected, setSelected] = useState<number[]>([]);
+  const [selectAllMode, setSelectAllMode] = useState(false);
   const [showAllRepositories, setShowAllRepositories] = useState(false);
   const [params, setParams] = useSearchParams();
   const [internalOpen, setInternalOpen] = useState(() => params.has("github"));
@@ -267,6 +272,7 @@ export function GitHubConnection({
     setInternalOpen(false);
     onClose?.();
     setShowAllRepositories(false);
+    setSyncNotice("");
     if (params.has("github")) {
       const next = new URLSearchParams(params);
       next.delete("github");
@@ -277,11 +283,13 @@ export function GitHubConnection({
     setBusy(true);
     setError("");
     setRefreshError("");
+    setSyncNotice("");
     try {
       setData(await request<GitHubPage>(endpoint));
       setInstallation("");
       setRepositories([]);
       setSelected([]);
+      setSelectAllMode(false);
       setShowAllRepositories(false);
     } catch (error) {
       setError(explain(error));
@@ -294,9 +302,11 @@ export function GitHubConnection({
     setData(undefined);
     setError("");
     setRefreshError("");
+    setSyncNotice("");
     setInstallation("");
     setRepositories([]);
     setSelected([]);
+    setSelectAllMode(false);
     setShowAllRepositories(false);
   }, [endpoint]);
   const refresh = useCallback(
@@ -336,6 +346,7 @@ export function GitHubConnection({
   const act = async (action: () => Promise<void>) => {
     setBusy(true);
     setError("");
+    setSyncNotice("");
     try {
       await action();
     } catch (error) {
@@ -343,6 +354,44 @@ export function GitHubConnection({
     } finally {
       setBusy(false);
     }
+  };
+  const syncRepositories = async (allRepositories?: boolean) => {
+    if (!data?.connection?.installationId) return;
+    await act(async () => {
+      const result = await request<
+        GitHubPage & { syncResult?: RepositorySyncSummary }
+      >(`${endpoint}/sync`, "POST", {
+        revision: data.revision,
+        ...(allRepositories !== undefined ? { allRepositories } : {}),
+      });
+      const { syncResult, ...page } = result;
+      setData(page);
+      setRefreshError("");
+      onUpdated?.();
+      if (syncResult) {
+        const delta: string[] = [];
+        if (syncResult.added > 0) delta.push(`${syncResult.added} added`);
+        if (syncResult.removed > 0) delta.push(`${syncResult.removed} removed`);
+        const suffix = delta.length ? ` (${delta.join(", ")})` : "";
+        if (allRepositories === true) {
+          setSyncNotice(
+            `All-repository auto-sync enabled. ${syncResult.total} ${syncResult.total === 1 ? "repository" : "repositories"} connected${suffix}.`,
+          );
+        } else if (allRepositories === false) {
+          setSyncNotice(
+            `Switched to selected repositories only. ${syncResult.total} ${syncResult.total === 1 ? "repository" : "repositories"} remain connected.`,
+          );
+        } else if (syncResult.changed) {
+          setSyncNotice(
+            `Repositories synced: ${syncResult.total} connected${suffix}.`,
+          );
+        } else {
+          setSyncNotice(
+            `Repositories are up to date (${syncResult.total} connected).`,
+          );
+        }
+      }
+    });
   };
   return (
     <>
@@ -377,6 +426,11 @@ export function GitHubConnection({
               <p className="notice" role="status">
                 Repository updates are temporarily unavailable. Showing the last
                 saved list. {explain(new Error(data.refreshError))}
+              </p>
+            )}
+            {syncNotice && !data?.refreshError && !error && !refreshError && (
+              <p className="notice" role="status">
+                {syncNotice}
               </p>
             )}
             {params.get("github") === "registration-failed" && (
@@ -422,7 +476,12 @@ export function GitHubConnection({
               <>
                 <p>
                   Connected to <strong>{data.connection.account}</strong> by{" "}
-                  {data.connection.connectedBy}.
+                  {data.connection.connectedBy}.{" "}
+                  <span className="muted">
+                    {data.connection.allRepositories
+                      ? "All repositories (auto-sync)"
+                      : "Selected repositories"}
+                  </span>
                 </p>
                 <p className="muted">
                   To submit issues, grant the App Issues: read and write in
@@ -430,6 +489,47 @@ export function GitHubConnection({
                   ask the Telegram assistant to draft an issue and review its
                   Approve/Reject buttons.
                 </p>
+                <div className="row">
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={busy}
+                    onClick={() => void syncRepositories()}
+                  >
+                    Sync repositories
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={busy}
+                    onClick={() =>
+                      void syncRepositories(!data.connection?.allRepositories)
+                    }
+                  >
+                    {data.connection.allRepositories
+                      ? "Use selected only"
+                      : "Auto-sync all repositories"}
+                  </button>
+                  {data.configured && !data.pending && (
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() =>
+                        void act(async () => {
+                          const result = await request<{ url: string }>(
+                            `${endpoint}/connect`,
+                            "POST",
+                            source ? { source } : {},
+                          );
+                          window.location.assign(result.url);
+                        })
+                      }
+                    >
+                      Change repositories
+                    </button>
+                  )}
+                </div>
                 <ul
                   className="repository-list"
                   aria-label="Connected repositories"
@@ -511,11 +611,21 @@ export function GitHubConnection({
                 onSubmit={(event) => {
                   event.preventDefault();
                   void act(async () => {
-                    await request(endpoint, "PUT", {
-                      revision: data.revision,
-                      installationId: Number(installation),
-                      repositoryIds: selected,
-                    });
+                    await request(
+                      endpoint,
+                      "PUT",
+                      selectAllMode
+                        ? {
+                            revision: data.revision,
+                            installationId: Number(installation),
+                            allRepositories: true,
+                          }
+                        : {
+                            revision: data.revision,
+                            installationId: Number(installation),
+                            repositoryIds: selected,
+                          },
+                    );
                     window.location.reload();
                   });
                 }}
@@ -541,6 +651,7 @@ export function GitHubConnection({
                         setInstallation(id);
                         setRepositories([]);
                         setSelected([]);
+                        setSelectAllMode(false);
                         if (id)
                           void act(async () =>
                             setRepositories(
@@ -569,24 +680,43 @@ export function GitHubConnection({
                   {!!installation && !repositories.length && (
                     <p>No accessible repositories in this installation.</p>
                   )}
-                  {repositories.map((repo) => (
-                    <label className="checkbox" key={repo.id}>
+                  {!!installation && repositories.length > 0 && (
+                    <label className="checkbox">
                       <input
                         type="checkbox"
-                        checked={selected.includes(repo.id)}
-                        onChange={(e) =>
-                          setSelected(
-                            e.target.checked
-                              ? [...selected, repo.id]
-                              : selected.filter((id) => id !== repo.id),
-                          )
-                        }
+                        checked={selectAllMode}
+                        onChange={(e) => setSelectAllMode(e.target.checked)}
                       />
-                      {repo.full_name}
+                      All repositories (sync new repositories automatically)
                     </label>
-                  ))}
-                  <button type="submit" disabled={!selected.length}>
-                    Connect selected repositories
+                  )}
+                  {!selectAllMode &&
+                    repositories.map((repo) => (
+                      <label className="checkbox" key={repo.id}>
+                        <input
+                          type="checkbox"
+                          checked={selected.includes(repo.id)}
+                          onChange={(e) =>
+                            setSelected(
+                              e.target.checked
+                                ? [...selected, repo.id]
+                                : selected.filter((id) => id !== repo.id),
+                            )
+                          }
+                        />
+                        {repo.full_name}
+                      </label>
+                    ))}
+                  <button
+                    type="submit"
+                    disabled={
+                      !installation ||
+                      (selectAllMode ? !repositories.length : !selected.length)
+                    }
+                  >
+                    {selectAllMode
+                      ? "Connect all repositories"
+                      : "Connect selected repositories"}
                   </button>
                 </fieldset>
               </form>

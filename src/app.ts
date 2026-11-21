@@ -84,6 +84,7 @@ export function createApp(
     github.users,
     plugins.google,
     plugins.searchConsole,
+    github.repositorySync,
   );
   app.use("*", (c, next) =>
     secureHeaders({

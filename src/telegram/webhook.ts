@@ -18,6 +18,7 @@ import {
   automaticMaintainerRepositories,
   manageNotifications,
 } from "../github/notifications.ts";
+import type { RepositorySync } from "../github/repository-sync.ts";
 import type { GitHubUsers } from "../github/users.ts";
 import type { GoogleService } from "../google/service.ts";
 import { googleControl } from "../google/telegram.ts";
@@ -63,13 +64,17 @@ import { selectTaskControl, taskControl } from "./task-controls.ts";
 import { groupVisibility } from "./visibility.ts";
 
 export class Ingress {
+  private repositorySync?: RepositorySync;
   constructor(
     private store: Store,
     private setup: SetupService,
     private githubUsers?: GitHubUsers,
     private google?: GoogleService,
     private searchConsole?: SearchConsoleService,
-  ) {}
+    repositorySync?: RepositorySync,
+  ) {
+    this.repositorySync = repositorySync ?? githubUsers?.repositorySync;
+  }
   async chatAction(
     sql: Sql,
     w: Workspace,
@@ -810,23 +815,84 @@ export class Ingress {
         403,
       );
       requireThat(this.githubUsers && d.bot, "github_app_not_configured", 409);
+      const sub = cmd.args.trim().toLowerCase();
       let text: string;
-      if (cmd.args === "disconnect") {
+      if (sub === "disconnect") {
         await this.githubUsers.disconnect(sql, w, actor);
         text =
           "GitHub account disconnected. Ask me to connect GitHub to authorize again.";
-      } else if (cmd.args === "sync") {
+      } else if (sub === "sync") {
+        let workspaceAdded = 0;
+        let workspaceRemoved = 0;
+        if (
+          w.github?.installationId &&
+          w.github.allRepositories &&
+          this.repositorySync
+        ) {
+          try {
+            const synced = await this.repositorySync.syncInTransaction(sql, w);
+            workspaceAdded = synced.added;
+            workspaceRemoved = synced.removed;
+          } catch {
+            // Continue with personal permission sync even if workspace metadata refresh fails.
+          }
+        }
         const access = await this.githubUsers.sync(sql, w, actor);
+        const delta =
+          workspaceAdded || workspaceRemoved
+            ? `Workspace repositories updated (${workspaceAdded ? `+${workspaceAdded}` : ""}${workspaceAdded && workspaceRemoved ? ", " : ""}${workspaceRemoved ? `-${workspaceRemoved}` : ""}). `
+            : "";
         text =
           access.status === "connected"
-            ? `GitHub permissions synced for ${access.repositories.length} selected repositories.`
+            ? `${delta}GitHub permissions synced for ${access.repositories.length} selected repositories.`
             : "GitHub permissions could not be synced. Repository access is blocked. Ask me to reconnect GitHub to authorize again.";
-      } else if (!cmd.args || cmd.args === "connect") {
+      } else if (
+        sub === "repos" ||
+        sub === "repos sync" ||
+        sub === "repos all" ||
+        sub === "repos selected"
+      ) {
+        authorize(w, actor, true);
+        requireThat(this.repositorySync, "github_app_not_configured", 409);
+        const targetMode =
+          sub === "repos all"
+            ? true
+            : sub === "repos selected"
+              ? false
+              : undefined;
+        const result = await this.repositorySync.syncInTransaction(sql, w, {
+          allRepositories: targetMode,
+          actor,
+        });
+        const memberAccess = await this.githubUsers.syncIfConnected(
+          sql,
+          w,
+          actor,
+        );
+        const addedPreview =
+          result.addedNames.length > 0
+            ? ` Added: ${result.addedNames.slice(0, 5).join(", ")}${result.addedNames.length > 5 ? ` (+${result.addedNames.length - 5} more)` : ""}.`
+            : "";
+        const personalNote = memberAccess
+          ? memberAccess.status === "connected"
+            ? ` Your GitHub permissions synced for ${memberAccess.repositories.length} repositories.`
+            : " Your personal GitHub permissions could not be synced; ask me to refresh or reconnect your account."
+          : "";
+        if (targetMode === true) {
+          text = `All-repository auto-sync enabled. Workspace now has ${result.total} connected repositories (${result.added} added, ${result.removed} removed).${addedPreview} New repositories accessible to the GitHub App will sync automatically.${personalNote}`;
+        } else if (targetMode === false) {
+          text = `Automatic all-repository sync disabled. Workspace keeps ${result.total} selected repositories.${personalNote}`;
+        } else if (result.allRepositories) {
+          text = `Workspace repositories synced: ${result.total} connected (${result.added} added, ${result.removed} removed; all-repository auto-sync enabled).${addedPreview}${personalNote}`;
+        } else {
+          text = `Workspace repositories refreshed: ${result.total} connected (${result.removed} removed; specific-repository selection mode). Ask me to enable all-repository sync to include newly created repositories automatically.${personalNote}`;
+        }
+      } else if (!sub || sub === "connect") {
         const url = await this.githubUsers.begin(sql, w, actor, d.bot.id);
         text = `Connect your GitHub account within 10 minutes:\n${url}\nThen return here to confirm your account.`;
       } else
         text =
-          "Ask me to connect GitHub, refresh your GitHub permissions or disconnect your account.";
+          "Ask me to connect GitHub, refresh your GitHub permissions, sync workspace repositories, enable all-repository sync, or disconnect your account.";
       deliver(w, actor, actor, text, {
         id: `event:${u.update_id}:github`,
         topicId: msg.message_thread_id,

@@ -1532,8 +1532,11 @@ when implementing or reviewing a change.
   connected repositories in the modal as a wrapping inline list of
   compact items, each with an external link to its GitHub repository at the end.
   Show at most five by default, followed by an "N more" tag that reveals the rest
-  and can collapse the list again. Keep connection-change and disconnect buttons
-  out of the connected GitHub details.
+  and can collapse the list again. Keep destructive disconnect buttons out of the
+  connected GitHub details, while providing compact repository sync/update
+  controls (**Sync repositories**, **Auto-sync all repositories** / **Use
+  selected only**, and **Change repositories**) so operators can refresh newly
+  created repositories or switch sync modes without disconnecting.
 - **Scope:** Workspace GitHub App details in the modal and its Overview entry.
 - **Source:** 2026-09-27 — user requested an inline flex repository list with
   external links and removal of the two connection buttons shown below it.
@@ -1541,6 +1544,9 @@ when implementing or reviewing a change.
   2026-09-28 — user requested moving the GitHub details into a modal opened by
   Manage GitHub. The user then asked to remove the GitHub summary card from
   Plugins.
+  2026-11-21 — user requested automatic syncing for `allRepositories` mode plus
+  in-panel and Telegram bot repository update controls so newly created GitHub
+  repositories become accessible without manual reconnection.
 - **Exceptions:** An unconnected workspace still shows Connect GitHub; failed
   loads may show Reload GitHub connection.
 
@@ -1548,17 +1554,25 @@ when implementing or reviewing a change.
 
 - **Preference:** Refresh repository lists while visible and when returning from
   GitHub, so renames and visibility changes appear without reloading the page.
-  Match repositories by their numeric GitHub ID. Keep loaded lists, expanded
+  Match repositories by their numeric GitHub ID. When the workspace uses
+  `allRepositories` mode, automatically include newly accessible installation
+  repositories via polling, GitHub lifecycle webhooks, background worker sync,
+  and explicit admin panel or Telegram bot sync. Keep loaded lists, expanded
   items, selected repositories and unsaved form values visible during refresh.
 - **Scope:** Connected repositories in Manage GitHub and repository lists and
   selectors in the Codex plugin.
 - **Source:** 2026-10-06 — user requested realtime repository updates because
   users can rename or edit repositories on GitHub.
-- **Exceptions:** The current implementation polls every five seconds (three
-  seconds during pending Codex sign-in); it has no GitHub webhook receiver.
-  Hidden pages and closed dialogs stop polling. Upstream failures retain the
-  saved list with an update notice. Newly granted repositories still require
-  workspace authorization and selection.
+  2026-11-21 — user requested tracking `allRepositories` mode and syncing newly
+  accessible repositories automatically, with manual update support in the admin
+  panel and Telegram bot.
+- **Exceptions:** Polling runs every five seconds while the modal or Codex list
+  is visible (three seconds during pending Codex sign-in), while background
+  worker sync checks `allRepositories` workspaces every five minutes and webhook
+  deliveries sync immediately on `installation_repositories` and `repository`
+  events. Hidden pages and closed dialogs stop UI polling. Upstream failures
+  retain the saved list with an update notice. Workspaces configured for
+  specific selected repositories still do not auto-add unselected repositories.
 
 ### Sidebar account controls stay compact and grouped
 

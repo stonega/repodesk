@@ -8,6 +8,7 @@ import { configuredGitHubApp } from "./github/app.ts";
 import { GitHubIssues } from "./github/issues.ts";
 import { GitHubPullRequests } from "./github/pull-requests.ts";
 import { GitHubApps } from "./github/registry.ts";
+import { RepositorySync } from "./github/repository-sync.ts";
 import { GitHubUsers } from "./github/users.ts";
 import { GitHubWebhooks } from "./github/webhooks.ts";
 import { startWorker } from "./jobs/queue.ts";
@@ -30,6 +31,7 @@ const localRunner =
   cfg.CODEX_RUNNER_URL && cfg.CODEX_RUNNER_TOKEN
     ? new LocalRunnerClient(cfg.CODEX_RUNNER_URL, cfg.CODEX_RUNNER_TOKEN)
     : undefined;
+const repositorySync = new RepositorySync(store, githubApps);
 const stop = await startWorker({
   store,
   setup: new SetupService(
@@ -54,7 +56,9 @@ const stop = await startWorker({
     githubApps,
     cfg.ENCRYPTION_KEY,
     cfg.PUBLIC_ORIGIN,
+    repositorySync,
   ),
+  repositorySync,
   review: new ReviewExecutor(
     store,
     githubApps,
@@ -67,7 +71,12 @@ const stop = await startWorker({
   searchConsole: plugins.searchConsole,
   transcription: plugins.transcription,
   browser: plugins.browser,
-  githubWebhooks: new GitHubWebhooks(store, githubApps, cfg.ENCRYPTION_KEY),
+  githubWebhooks: new GitHubWebhooks(
+    store,
+    githubApps,
+    cfg.ENCRYPTION_KEY,
+    repositorySync,
+  ),
 });
 log.write("worker_started");
 let stopping = false;

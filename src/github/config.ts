@@ -9,6 +9,8 @@ export type GitHubConnection = {
   account?: string;
   connectedBy?: string;
   connectedAt?: string;
+  /** When true, newly accessible repositories in this installation sync automatically. */
+  allRepositories?: boolean;
   repositories: GitHubRepository[];
 };
 export const githubConnectionRevision = (connection: GitHubConnection) =>
