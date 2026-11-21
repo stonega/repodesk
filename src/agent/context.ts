@@ -193,32 +193,179 @@ export function buildContext(
     skills,
   };
 }
-export function validateSources(text: string, run: Run) {
+const EXTERNAL_EVIDENCE_TOOLS = new Set([
+  "query_github_metadata",
+  "query_github_pull_request",
+  "find_connected_repository",
+  "query_work_handoff",
+  "search_tool",
+  "read_web",
+  "list_code_targets",
+  "search_code",
+  "search_code_batch",
+  "get_code_context",
+  "get_symbol_source",
+  "get_file_excerpt",
+  "get_dependency_manifests",
+  "get_file_tree",
+  "obsidian_query",
+  "obsidian_read",
+  "query_google_docs",
+  "query_google_sheets",
+  "query_google_drive",
+  "query_gmail",
+  "query_search_console",
+  "query_cloudflare",
+  "query_nowledge_mem",
+  "development_task_status",
+  "development_task_conversation",
+  "delegate_research",
+  "inspect_missions",
+  "query_model_cost",
+  "read_skill_source",
+  "load_skill",
+  "read_instructions",
+  "browser_session",
+  "browser_action",
+]);
+
+const TELEGRAM_LINK_RE = /https?:\/\/(?:t\.me|telegram\.me)\/[^\s)\]>,"'`]*/gi;
+const MARKDOWN_TELEGRAM_LINK_RE =
+  /\[([^\]]+)\]\((https?:\/\/(?:t\.me|telegram\.me)\/[^\s)]*)\)/gi;
+
+function isExternalEvidenceTool(name: string): boolean {
+  return (
+    EXTERNAL_EVIDENCE_TOOLS.has(name) || /^rdp_\d+_[a-z0-9_]+$/i.test(name)
+  );
+}
+
+function hasExternalEvidence(run: Run): boolean {
+  return Object.values(run.tools).some(
+    (tool) => tool.state === "done" && isExternalEvidenceTool(tool.name),
+  );
+}
+
+function normalizeTelegramUrl(raw: string): string {
+  const trimmed = raw.replace(/[.,;:!?]+$/, "");
+  return trimmed.replace(/^(https?:\/\/(?:t\.me|telegram\.me))/i, (prefix) =>
+    prefix.toLowerCase(),
+  );
+}
+
+function collectTelegramUrls(text: string, target: Set<string>) {
+  for (const match of text.matchAll(TELEGRAM_LINK_RE)) {
+    target.add(normalizeTelegramUrl(match[0]));
+  }
+}
+
+function authorizedTelegramLinks(run: Run): Set<string> {
+  const verified = new Set<string>();
+  for (const source of run.sources) {
+    if (source.text) collectTelegramUrls(source.text, verified);
+  }
+  for (const tool of Object.values(run.tools)) {
+    if (tool.state !== "done" || tool.result === undefined) continue;
+    try {
+      const serialized =
+        typeof tool.result === "string"
+          ? tool.result
+          : JSON.stringify(tool.result);
+      collectTelegramUrls(serialized, verified);
+    } catch {
+      /* ignore non-serializable tool payload */
+    }
+  }
+  return verified;
+}
+
+export type SourceValidationIssue =
+  | "invalid_source_citation"
+  | "use_source_ids_not_unverified_links"
+  | "recap_requires_sources";
+
+export function validateSources(
+  text: string,
+  run: Run,
+  options: { allowMissingRecapCitations?: boolean } = {},
+) {
   const authorized = new Set(run.sources.map((s) => s.id));
   const citations = [...text.matchAll(/\[source:([^\]]+)\]/g)].map((m) => m[1]);
   requireThat(
     citations.every((c) => c && authorized.has(c)),
     "invalid_source_citation",
   );
-  requireThat(
-    !/https?:\/\/(?:t\.me|telegram\.me)\//i.test(text),
-    "use_source_ids_not_unverified_links",
+  const telegramLinks = [...text.matchAll(TELEGRAM_LINK_RE)].map((m) =>
+    normalizeTelegramUrl(m[0]),
   );
-  const recordEvidence = Object.values(run.tools).some(
-    (tool) =>
-      tool.state === "done" &&
-      [
-        "query_github_metadata",
-        "query_work_handoff",
-        "search_tool",
-        "read_web",
-      ].includes(tool.name),
-  );
+  if (telegramLinks.length) {
+    const verified = authorizedTelegramLinks(run);
+    requireThat(
+      telegramLinks.every((url) => verified.has(url)),
+      "use_source_ids_not_unverified_links",
+    );
+  }
   if (
+    !options.allowMissingRecapCitations &&
     run.sources.length &&
     /recap|summari[sz]/i.test(run.task) &&
-    !recordEvidence
+    !hasExternalEvidence(run)
   )
     requireThat(citations.length, "recap_requires_sources");
   return text;
+}
+
+/**
+ * Removes unauthorized chat citations and unverified Telegram links before final
+ * delivery instead of discarding an otherwise valid model answer.
+ */
+export function sanitizeRunOutput(
+  text: string,
+  run: Run,
+): { text: string; issues: SourceValidationIssue[] } {
+  const issues: SourceValidationIssue[] = [];
+  const pushIssue = (code: SourceValidationIssue) => {
+    if (!issues.includes(code)) issues.push(code);
+  };
+  const authorized = new Set(run.sources.map((s) => s.id));
+  let sanitized = text.replace(
+    /[ \t]?\[source:([^\]]+)\]/g,
+    (match, id: string) => {
+      if (id && authorized.has(id)) return match;
+      pushIssue("invalid_source_citation");
+      return "";
+    },
+  );
+  if (issues.includes("invalid_source_citation")) {
+    sanitized = sanitized
+      .replace(/\(\s*\)/g, "")
+      .replace(/[ \t]+([.,;:!?。！？，；])/g, "$1");
+  }
+  const verified = authorizedTelegramLinks(run);
+  sanitized = sanitized.replace(
+    MARKDOWN_TELEGRAM_LINK_RE,
+    (match, label: string, url: string) => {
+      if (verified.has(normalizeTelegramUrl(url))) return match;
+      pushIssue("use_source_ids_not_unverified_links");
+      return label;
+    },
+  );
+  sanitized = sanitized.replace(TELEGRAM_LINK_RE, (match) => {
+    if (verified.has(normalizeTelegramUrl(match))) return match;
+    pushIssue("use_source_ids_not_unverified_links");
+    return "[unverified Telegram link removed]";
+  });
+  const remainingCitations = [
+    ...sanitized.matchAll(/\[source:([^\]]+)\]/g),
+  ].map((m) => m[1]);
+  if (
+    run.sources.length &&
+    /recap|summari[sz]/i.test(run.task) &&
+    !hasExternalEvidence(run) &&
+    !remainingCitations.length
+  ) {
+    pushIssue("recap_requires_sources");
+  }
+  // Defense in depth: guarantee no unauthorized citation or unverified Telegram link survives.
+  validateSources(sanitized, run, { allowMissingRecapCitations: true });
+  return { text: sanitized.trim(), issues };
 }

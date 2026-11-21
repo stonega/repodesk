@@ -1,7 +1,12 @@
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { compactTopic } from "../agent/compaction.ts";
-import { buildContext, validateSources } from "../agent/context.ts";
+import {
+  buildContext,
+  type SourceValidationIssue,
+  sanitizeRunOutput,
+  validateSources,
+} from "../agent/context.ts";
 import { extensionToolExecution } from "../agent/extension-execution.ts";
 import { classifyFollowup } from "../agent/followup.ts";
 import { remainingBudgets } from "../agent/limits.ts";
@@ -41,6 +46,7 @@ import {
   requestFailureMessage,
 } from "../telegram/feedback.ts";
 import { discardFollowup } from "../telegram/followup.ts";
+import { splitTelegramMarkdown } from "../telegram/format.ts";
 import { Ingress } from "../telegram/webhook.ts";
 import { publishWidget } from "../telegram/widgets.ts";
 import { TranscriptionService } from "../transcription/service.ts";
@@ -311,7 +317,10 @@ export class Executor {
               409,
             );
           },
-          (text) => validateSources(text, claimed),
+          (text) =>
+            validateSources(text, claimed, {
+              allowMissingRecapCitations: true,
+            }),
           signal,
           Date.now,
           (event, error) =>
@@ -649,6 +658,7 @@ export class Executor {
           : await runner.run(input);
       while (true) {
         await guard();
+        let sanitizedIssues: SourceValidationIssue[] = [];
         const finished = await this.store.change(
           workspaceId,
           async (w, sql) => {
@@ -662,7 +672,14 @@ export class Executor {
             // Pi's last steering poll must be answered before committing the result.
             if (r.pendingInputs?.length) return false;
             const activation = r.workflowActivation;
-            if (result.text && !activation) validateSources(result.text, r);
+            let validatedText = result.text;
+            if (validatedText && !activation) {
+              const cleaned = sanitizeRunOutput(validatedText, r);
+              validatedText = cleaned.text;
+              sanitizedIssues = cleaned.issues;
+              if (cleaned.issues.length)
+                audit(w, r.actor, "run.output_sanitized", r.id);
+            }
             const pendingApprovals = w.approvals.filter(
               (a) =>
                 !a.decision &&
@@ -699,8 +716,8 @@ export class Executor {
                   : task
                     ? developmentStatus(task)
                     : "Task status is unavailable."
-                : result.text.trim()
-                  ? result.text
+                : validatedText.trim()
+                  ? validatedText
                   : "";
             const browserWaiting = !!r.browserWait;
             r.status = activation
@@ -727,7 +744,9 @@ export class Executor {
             if (text && !browserWaiting) commitDiscussions(w, r);
             else delete r.discussionUpdates;
             if (r.widget)
-              validateSources(`${r.widget.caption}\n${r.widget.html}`, r);
+              validateSources(`${r.widget.caption}\n${r.widget.html}`, r, {
+                allowMissingRecapCitations: true,
+              });
             publishWidget(w, r, deployment.bot?.id);
             let watcherSilent = false;
             if (r.workflowId && r.watcherResult) {
@@ -766,28 +785,45 @@ export class Executor {
               !handoff &&
               (text || !proposals)
             ) {
-              const response = text
-                ? `${text.slice(0, 2700)}${result.status === "partial" && !activation ? `\n\n${requestFailureMessage(r.error ?? "incomplete_response")}` : ""}`
-                : requestFailureMessage(r.error ?? "empty_response");
-              deliver(
-                w,
-                r.actor,
-                r.chatId,
-                `${r.threadNotice ? `${r.threadNotice}\n\n` : ""}${response}`,
-                {
+              const noticePrefix = r.threadNotice
+                ? `${r.threadNotice}\n\n`
+                : "";
+              const partialSuffix =
+                text && result.status === "partial" && !activation
+                  ? `\n\n${requestFailureMessage(r.error ?? "incomplete_response")}`
+                  : "";
+              const fullMessage = text
+                ? `${noticePrefix}${text}${partialSuffix}`
+                : `${noticePrefix}${requestFailureMessage(r.error ?? "empty_response")}`;
+              const chunks = splitTelegramMarkdown(fullMessage);
+              const replyTo = answerReference(r, text, deployment.bot?.id);
+              for (const [index, chunk] of chunks.entries()) {
+                deliver(w, r.actor, r.chatId, chunk, {
                   topicId: r.topicId,
-                  replyTo: answerReference(r, text, deployment.bot?.id),
+                  replyTo: index === 0 ? replyTo : undefined,
                   runId: r.id,
-                  id: `run:${r.id}:result`,
+                  id:
+                    index === 0
+                      ? `run:${r.id}:result`
+                      : `run:${r.id}:result:part:${index + 1}`,
                   format: "rich",
-                },
-              );
+                });
+              }
             }
             audit(w, r.actor, `run.${r.status}`, r.id);
             return true;
           },
         );
-        if (finished) break;
+        if (finished) {
+          for (const issue of sanitizedIssues) {
+            this.store.log.write("run_output_sanitized", {
+              workspaceId,
+              runId,
+              error: new Fault(issue),
+            });
+          }
+          break;
+        }
         const next = await input.nextInput?.();
         requireThat(next, "live_input_source_changed", 409);
         await checkpoint(next);

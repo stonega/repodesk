@@ -16,6 +16,7 @@ import { eligible, runAllowed } from "../workspaces/policy.ts";
 import {
   type DeliveryPolicyRegistry,
   defaultDeliveryPolicies,
+  nextResultPartId,
 } from "./delivery-policies.ts";
 
 export class DeliveryWorker {
@@ -351,7 +352,8 @@ export class DeliveryWorker {
                 : { link_preview_options: { is_disabled: true } }),
             },
       );
-      await this.finish(workspaceId, intent, (d) => {
+      let nextPart: string | undefined;
+      await this.finish(workspaceId, intent, (d, w) => {
         d.state = "sent";
         d.deliveredTopicId =
           sent.message_thread_id ??
@@ -360,11 +362,20 @@ export class DeliveryWorker {
           intent.editOf || intent.taskControlsCleanup
             ? intent.remoteId
             : sent.message_id;
+        const candidate = nextResultPartId(d.id);
+        if (
+          candidate &&
+          w.deliveries.some(
+            (other) => other.id === candidate && other.state === "pending",
+          )
+        )
+          nextPart = candidate;
       });
       this.store.log.write("delivery_sent", {
         workspaceId,
         runId: intent.runId,
       });
+      if (nextPart) await this.send(workspaceId, nextPart);
     } catch (error) {
       const unchanged =
         (intent.editOf || intent.taskControlsCleanup) &&

@@ -215,7 +215,7 @@ export function recordThreadAnswer(w: Workspace, run: Run) {
     chatId: run.chatId,
     topicId: run.topicId,
     author: "assistant",
-    text: run.result.slice(0, 2700),
+    text: run.result.slice(0, 12000).replace(/[\uD800-\uDBFF]$/, ""),
     at: run.finishedAt ?? new Date().toISOString(),
     retentionOriginAt: new Date(
       Math.min(

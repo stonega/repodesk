@@ -181,6 +181,179 @@ function safeLink(value: string) {
   }
 }
 
+export const TELEGRAM_MESSAGE_CHUNK_LIMIT = 3800;
+const TELEGRAM_MAX_CHUNKS = 5;
+const TRUNCATION_NOTICE = "\n\n… (response truncated)";
+
+interface OpenFence {
+  marker: "`" | "~";
+  length: number;
+  opener: string;
+}
+
+function openFenceAt(markdown: string): OpenFence | undefined {
+  let open: OpenFence | undefined;
+  for (const line of markdown.split("\n")) {
+    const trimmed = line.replace(/\r$/, "");
+    if (!open) {
+      const start = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/.exec(trimmed);
+      if (start?.[1]) {
+        const marker = start[1][0] as "`" | "~";
+        // CommonMark: backtick fence info strings cannot contain backticks.
+        if (marker === "`" && (start[2] ?? "").includes("`")) continue;
+        open = { marker, length: start[1].length, opener: trimmed };
+      }
+    } else {
+      const close = /^[ \t]{0,3}(`{3,}|~{3,})[ \t]*$/.exec(trimmed);
+      if (
+        close?.[1] &&
+        close[1][0] === open.marker &&
+        close[1].length >= open.length
+      ) {
+        open = undefined;
+      }
+    }
+  }
+  return open;
+}
+
+function isHighSurrogate(code: number): boolean {
+  return code >= 0xd800 && code <= 0xdbff;
+}
+
+function safeCutIndex(text: string, rawCut: number): number {
+  let cut = Math.max(0, Math.min(rawCut, text.length));
+  if (cut > 0 && isHighSurrogate(text.charCodeAt(cut - 1))) cut--;
+  // Avoid cutting inside an inline [source:...] citation token.
+  const prefix = text.slice(0, cut);
+  const openSource = prefix.lastIndexOf("[source:");
+  if (openSource > 0 && !prefix.slice(openSource).includes("]")) {
+    cut = openSource;
+  }
+  // Avoid cutting inside a Markdown link [label](url) or bare URL near the boundary.
+  const tailWindowStart = Math.max(0, cut - 256);
+  const tail = text.slice(tailWindowStart, cut);
+  const openMdLink = tail.lastIndexOf("](");
+  if (openMdLink >= 0 && !tail.slice(openMdLink).includes(")")) {
+    const bracket = tail.lastIndexOf("[", openMdLink);
+    if (bracket >= 0 && tailWindowStart + bracket > 0) {
+      cut = tailWindowStart + bracket;
+    }
+  } else {
+    const bareUrl = /https?:\/\/\S+$/i.exec(tail);
+    if (bareUrl && cut < text.length && !/\s/.test(text[cut] ?? "")) {
+      const candidate = tailWindowStart + bareUrl.index;
+      if (candidate > 0) cut = candidate;
+    }
+  }
+  if (cut > 0 && isHighSurrogate(text.charCodeAt(cut - 1))) cut--;
+  return cut;
+}
+
+function findPreferredSplit(text: string, limit: number): number {
+  const minParagraph = Math.floor(limit * 0.4);
+  const minLine = Math.floor(limit * 0.3);
+  const minWord = Math.floor(limit * 0.5);
+
+  // 1. Prefer a paragraph break outside an open code fence.
+  let pos = text.lastIndexOf("\n\n", limit);
+  while (pos >= minParagraph) {
+    if (!openFenceAt(text.slice(0, pos))) return safeCutIndex(text, pos);
+    pos = text.lastIndexOf("\n\n", pos - 1);
+  }
+  // 2. Fall back to any newline boundary.
+  const line = text.lastIndexOf("\n", limit);
+  if (line >= minLine) return safeCutIndex(text, line);
+  // 3. Fall back to sentence punctuation or whitespace.
+  for (let i = limit; i >= minWord; i--) {
+    const ch = text[i - 1];
+    if (ch && /[。！？!?]/.test(ch)) return safeCutIndex(text, i);
+    if (ch && /\s/.test(ch)) return safeCutIndex(text, i - 1);
+  }
+  return safeCutIndex(text, limit) || Math.min(limit, text.length);
+}
+
+/**
+ * Splits a long Markdown reply into Telegram-safe chunks without breaking
+ * fenced code blocks, [source:...] citations, Markdown links, or UTF-16 pairs.
+ */
+export function splitTelegramMarkdown(
+  markdown: string,
+  maxLength = TELEGRAM_MESSAGE_CHUNK_LIMIT,
+  maxParts = TELEGRAM_MAX_CHUNKS,
+): string[] {
+  const boundedLimit = Math.max(64, maxLength);
+  const cleaned = markdown.replace(/[\uD800-\uDBFF]$/, "");
+  if (cleaned.length <= boundedLimit) return [cleaned];
+
+  const parts: string[] = [];
+  let remaining = cleaned;
+
+  while (remaining.length > 0 && parts.length < maxParts) {
+    if (remaining.length <= boundedLimit) {
+      parts.push(remaining.trimEnd());
+      remaining = "";
+      break;
+    }
+    const isLast = parts.length === maxParts - 1;
+    const noticeReserve = isLast ? TRUNCATION_NOTICE.length : 0;
+    const fenceReserve = 12;
+    const targetLimit = Math.max(
+      32,
+      boundedLimit - noticeReserve - fenceReserve,
+    );
+    let cut = findPreferredSplit(remaining, targetLimit);
+    if (cut <= 0) cut = safeCutIndex(remaining, targetLimit) || targetLimit;
+
+    let chunk = remaining.slice(0, cut);
+    let rest = remaining.slice(cut);
+    let fence = openFenceAt(chunk);
+
+    if (fence) {
+      const closing = `\n${fence.marker.repeat(fence.length)}`;
+      const maxChunkChars = boundedLimit - noticeReserve - closing.length;
+      if (chunk.length > maxChunkChars) {
+        cut = findPreferredSplit(remaining, Math.max(16, maxChunkChars));
+        if (cut <= 0) cut = Math.max(1, maxChunkChars);
+        chunk = remaining.slice(0, cut);
+        rest = remaining.slice(cut);
+        fence = openFenceAt(chunk);
+      }
+      if (fence) {
+        const finalClosing = `\n${fence.marker.repeat(fence.length)}`;
+        chunk = `${chunk.replace(/\n+$/, "")}${finalClosing}`;
+        const trimmedRest = rest.replace(/^\n+/, "");
+        rest = trimmedRest ? `${fence.opener}\n${trimmedRest}` : "";
+      }
+    } else {
+      chunk = chunk.trimEnd();
+      rest = rest.replace(/^\n+/, "");
+    }
+
+    if (isLast && rest.trim().length > 0) {
+      chunk = `${chunk}${TRUNCATION_NOTICE}`;
+      if (chunk.length > boundedLimit) {
+        chunk = `${chunk.slice(0, boundedLimit - TRUNCATION_NOTICE.length).replace(/[\uD800-\uDBFF]$/, "")}${TRUNCATION_NOTICE}`;
+      }
+      parts.push(chunk);
+      break;
+    }
+
+    if (chunk.length > 0) parts.push(chunk);
+    if (rest.length >= remaining.length) {
+      // Defensive progress guarantee if fence reopening prevented shrinking.
+      const fallback = remaining
+        .slice(0, boundedLimit - TRUNCATION_NOTICE.length)
+        .replace(/[\uD800-\uDBFF]$/, "");
+      parts.push(`${fallback}${TRUNCATION_NOTICE}`);
+      break;
+    }
+    remaining = rest;
+  }
+
+  return parts.length ? parts : [cleaned.slice(0, boundedLimit)];
+}
+
 /** Render Markdown as text plus Telegram's UTF-16 entities, never executable HTML. */
 export function telegramMarkdown(markdown: string) {
   let text = "";

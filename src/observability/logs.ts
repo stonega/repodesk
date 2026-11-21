@@ -49,6 +49,10 @@ export const logEvents = {
   ],
   run_started: ["info", "An assistant run started."],
   run_completed: ["info", "An assistant run finished or paused for approval."],
+  run_output_sanitized: [
+    "warn",
+    "Sanitized unauthorized citations or unverified Telegram links before delivery.",
+  ],
   workflow_activation_recovered: [
     "warn",
     "A saved schedule activation was confirmed after a chat interruption.",
@@ -171,6 +175,8 @@ const codes = new Set([
   "lease_lost",
   "turn_limit",
   "invalid_source_citation",
+  "use_source_ids_not_unverified_links",
+  "recap_requires_sources",
   "incomplete_tool_checkpoint",
   "database_unavailable",
   "unexpected_error",

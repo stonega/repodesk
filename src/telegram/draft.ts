@@ -1,6 +1,6 @@
 import type { Telegram } from "./client.ts";
 import { TelegramError } from "./client.ts";
-import { telegramRichMessage } from "./format.ts";
+import { TELEGRAM_MESSAGE_CHUNK_LIMIT, telegramRichMessage } from "./format.ts";
 
 /** Ephemeral, awaited previews only. Final delivery always goes through the outbox. */
 export class TelegramDraft {
@@ -33,7 +33,7 @@ export class TelegramDraft {
       return;
     // Do not show incomplete citations or a dangling UTF-16 surrogate.
     const preview = text
-      .slice(0, 2700)
+      .slice(0, TELEGRAM_MESSAGE_CHUNK_LIMIT)
       .replace(/\[source:[^\]]*$|[\uD800-\uDBFF]$/g, "");
     if (!preview.trim() || preview === this.lastText) return;
     try {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  splitTelegramMarkdown,
   telegramMarkdown,
   telegramRichMessage,
 } from "../../src/telegram/format.ts";
@@ -159,5 +160,81 @@ describe("Telegram Markdown formatting", () => {
     const many = telegramMarkdown("**bold** ".repeat(300));
     expect(many.entities.length).toBeLessThanOrEqual(100);
     expect(many.text.match(/bold/g)).toHaveLength(300);
+  });
+});
+
+describe("splitTelegramMarkdown", () => {
+  test("returns short messages unchanged", () => {
+    expect(splitTelegramMarkdown("Hello **world**", 200)).toEqual([
+      "Hello **world**",
+    ]);
+  });
+
+  test("splits long replies cleanly on paragraph boundaries within limit", () => {
+    const p1 = `First paragraph. ${"Alpha ".repeat(40)}`.trim();
+    const p2 = `Second paragraph. ${"Beta ".repeat(40)}`.trim();
+    const p3 = `Third paragraph. ${"Gamma ".repeat(40)}`.trim();
+    const chunks = splitTelegramMarkdown(`${p1}\n\n${p2}\n\n${p3}`, 320);
+    expect(chunks.length).toBe(3);
+    for (const chunk of chunks) {
+      expect(chunk.length).toBeLessThanOrEqual(320);
+    }
+    expect(chunks[0]).toBe(p1);
+    expect(chunks[1]).toBe(p2);
+    expect(chunks[2]).toBe(p3);
+  });
+
+  test("closes and reopens fenced code blocks across chunk boundaries", () => {
+    const codeLines = Array.from(
+      { length: 20 },
+      (_, i) => `const line${i} = "value_${i}_abcdef";`,
+    ).join("\n");
+    const markdown = `Intro\n\n\`\`\`ts\n${codeLines}\n\`\`\`\n\nOutro`;
+    const chunks = splitTelegramMarkdown(markdown, 260);
+    expect(chunks.length).toBeGreaterThan(2);
+    for (const chunk of chunks) {
+      expect(chunk.length).toBeLessThanOrEqual(260);
+      // Every chunk must have balanced code fences and render cleanly.
+      const fences = chunk.match(/^```/gm) ?? [];
+      expect(fences.length % 2).toBe(0);
+      expect(telegramRichMessage(chunk).blocks.length).toBeGreaterThan(0);
+    }
+    expect(chunks[0]).toContain("```ts\n");
+    expect(chunks[0]?.endsWith("\n```")).toBe(true);
+    expect(chunks[1]?.startsWith("```ts\n")).toBe(true);
+    expect(chunks.at(-1)).toContain("Outro");
+  });
+
+  test("never splits emoji surrogate pairs, source citations or markdown links", () => {
+    const emojiBlock = `${"a".repeat(175)}😀${"b".repeat(175)}`;
+    const emojiChunks = splitTelegramMarkdown(emojiBlock, 200);
+    expect(emojiChunks.length).toBe(2);
+    expect(emojiChunks.join("")).toBe(emojiBlock);
+    for (const chunk of emojiChunks) {
+      expect(chunk).not.toMatch(/[\uD800-\uDBFF]$/);
+      expect(chunk).not.toMatch(/^[\uDC00-\uDFFF]/);
+    }
+
+    const withCitation = `${"x".repeat(165)} [source:bot:101:12345] ${"y".repeat(120)}`;
+    const citeChunks = splitTelegramMarkdown(withCitation, 200);
+    expect(citeChunks.some((c) => c.includes("[source:bot:101:12345]"))).toBe(
+      true,
+    );
+    for (const chunk of citeChunks) {
+      expect(chunk).not.toMatch(/\[source:[^\]]*$/);
+    }
+  });
+
+  test("caps extreme outputs at maxParts with an explicit truncation notice", () => {
+    const huge = Array.from(
+      { length: 10 },
+      (_, i) => `Section ${i}: ${"z".repeat(150)}`,
+    ).join("\n\n");
+    const chunks = splitTelegramMarkdown(huge, 200, 3);
+    expect(chunks).toHaveLength(3);
+    for (const chunk of chunks) {
+      expect(chunk.length).toBeLessThanOrEqual(200);
+    }
+    expect(chunks[2]).toContain("… (response truncated)");
   });
 });

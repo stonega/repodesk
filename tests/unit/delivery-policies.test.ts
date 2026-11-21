@@ -11,6 +11,8 @@ import {
   DeliveryPolicyRegistry,
   defaultDeliveryPolicies,
   deliveryKind,
+  nextResultPartId,
+  previousResultPartId,
 } from "../../src/jobs/delivery-policies.ts";
 import { RuntimeLogger } from "../../src/observability/logs.ts";
 import { newWorkspace } from "../../src/workspaces/service.ts";
@@ -176,6 +178,56 @@ describe("deliveryKind and DeliveryPolicyRegistry", () => {
           }),
         ),
       ).toBe(false);
+    } finally {
+      await store.pool.end();
+    }
+  });
+
+  test("enforces sequential ordering for multi-part run result deliveries", async () => {
+    expect(previousResultPartId("run:r1:result")).toBeUndefined();
+    expect(previousResultPartId("run:r1:result:part:2")).toBe("run:r1:result");
+    expect(previousResultPartId("run:r1:result:part:3")).toBe(
+      "run:r1:result:part:2",
+    );
+    expect(nextResultPartId("run:r1:result")).toBe("run:r1:result:part:2");
+    expect(nextResultPartId("run:r1:result:part:2")).toBe(
+      "run:r1:result:part:3",
+    );
+    expect(nextResultPartId("other")).toBeUndefined();
+
+    const store = new Store(
+      database("postgres://unused@127.0.0.1:1/unused"),
+      new RuntimeLogger(undefined, "worker", () => {}),
+    );
+    try {
+      const w = newWorkspace(
+        "00000000-0000-4000-8000-000000000001",
+        settingsSchema.parse({ name: "Result ordering", timezone: "UTC" }),
+      );
+      const part1 = baseDelivery({ id: "run:r1:result", state: "pending" });
+      const part2 = baseDelivery({
+        id: "run:r1:result:part:2",
+        state: "pending",
+      });
+      w.deliveries.push(part1, part2);
+      const registry = defaultDeliveryPolicies();
+
+      // Defer while part 1 is pending or sending.
+      expect(registry.hooks.shouldDeferClaim(w, part2)).toBe(true);
+      part1.state = "sending";
+      expect(registry.hooks.shouldDeferClaim(w, part2)).toBe(true);
+
+      // Allow once part 1 is confirmed sent.
+      part1.state = "sent";
+      expect(registry.hooks.shouldDeferClaim(w, part2)).toBe(false);
+      expect(await registry.allowed(store, w, part2)).toBe(true);
+
+      // Cancel continuation part if predecessor failed or was cancelled.
+      part1.state = "failed";
+      expect(registry.hooks.shouldDeferClaim(w, part2)).toBe(false);
+      expect(await registry.allowed(store, w, part2)).toBe(false);
+      part1.state = "cancelled";
+      expect(await registry.allowed(store, w, part2)).toBe(false);
     } finally {
       await store.pool.end();
     }

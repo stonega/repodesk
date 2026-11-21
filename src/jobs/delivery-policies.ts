@@ -371,6 +371,42 @@ const feedbackPolicy: DeliveryPolicy = {
   },
 };
 
+const RESULT_PART_RE = /^run:([^:]+):result:part:(\d+)$/;
+
+export function previousResultPartId(id: string): string | undefined {
+  const match = RESULT_PART_RE.exec(id);
+  if (!match?.[1] || !match[2]) return undefined;
+  const part = Number(match[2]);
+  if (!Number.isInteger(part) || part < 2) return undefined;
+  return part === 2
+    ? `run:${match[1]}:result`
+    : `run:${match[1]}:result:part:${part - 1}`;
+}
+
+export function nextResultPartId(id: string): string | undefined {
+  const first = /^run:([^:]+):result$/.exec(id);
+  if (first?.[1]) return `run:${first[1]}:result:part:2`;
+  const part = RESULT_PART_RE.exec(id);
+  if (part?.[1] && part[2]) {
+    const n = Number(part[2]);
+    if (Number.isInteger(n) && n >= 2)
+      return `run:${part[1]}:result:part:${n + 1}`;
+  }
+  return undefined;
+}
+
+const resultPartOrderPolicy: DeliveryPolicy = {
+  name: "result_part_order",
+  applies: (d) => RESULT_PART_RE.test(d.id),
+  allow({ workspace: w, delivery: d }) {
+    const prevId = previousResultPartId(d.id);
+    if (!prevId) return false;
+    const prev = w.deliveries.find((other) => other.id === prevId);
+    // Only send continuation parts after their predecessor is confirmed sent.
+    return prev?.state === "sent";
+  },
+};
+
 const defaultHooks: DeliveryLifecycleHooks = {
   refreshBeforeClaim(w, d, bot) {
     if (!d.browserTaskState?.refresh) return;
@@ -387,6 +423,11 @@ const defaultHooks: DeliveryLifecycleHooks = {
     d.buttons = browserTaskButtons(w, run, bot);
   },
   shouldDeferClaim(w, d, botId) {
+    const prevResultId = previousResultPartId(d.id);
+    if (prevResultId) {
+      const prev = w.deliveries.find((other) => other.id === prevResultId);
+      if (prev && ["pending", "sending"].includes(prev.state)) return true;
+    }
     if (
       d.browserRequest &&
       !d.browserRequest.taskId &&
@@ -482,6 +523,7 @@ export function defaultDeliveryPolicies(): DeliveryPolicyRegistry {
       taskSelectionPolicy,
       cancellationPolicy,
       feedbackPolicy,
+      resultPartOrderPolicy,
     ],
     defaultHooks,
   );
