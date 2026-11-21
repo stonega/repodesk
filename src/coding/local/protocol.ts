@@ -37,6 +37,17 @@ export const localRecovery = z
   })
   .strict();
 export type LocalRecovery = z.infer<typeof localRecovery>;
+export const tokenUsageBreakdownSchema = z.object({
+  input: z.number().int().nonnegative(),
+  output: z.number().int().nonnegative(),
+  cacheRead: z.number().int().nonnegative(),
+  cacheWrite: z.number().int().nonnegative(),
+  reasoning: z.number().int().nonnegative().optional(),
+  total: z.number().int().nonnegative().optional(),
+});
+export type LocalTokenUsageBreakdown = z.infer<
+  typeof tokenUsageBreakdownSchema
+>;
 export const localStatus = z.object({
   release: preparedRelease.optional(),
   transcript: transcriptPage.optional(),
@@ -59,6 +70,7 @@ export const localStatus = z.object({
     .optional(),
   result: developmentResult.optional(),
   tokens: z.number().int().nonnegative().optional(),
+  tokenUsage: tokenUsageBreakdownSchema.optional(),
   usageUnknown: z.boolean().optional(),
   resultIssues: resultIssues.optional(),
   baseSha: z

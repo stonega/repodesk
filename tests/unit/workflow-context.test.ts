@@ -53,7 +53,7 @@ test.each(["101", "-100100"])(
       throughRunId: setup.id,
     };
     const context = buildContext(w, run);
-    const prompt = JSON.parse(context.prompt);
+    const prompt = context.metadata;
     expect(prompt.execution).toEqual({
       mode: "workflow",
       workflowId: f.id,
@@ -63,6 +63,7 @@ test.each(["101", "-100100"])(
     expect(prompt.sources).toEqual([]);
     expect(prompt.summary).toBeUndefined();
     expect(prompt.existingWorkflows).toEqual([]);
+    expect(context.historyMessages).toEqual([]);
     expect(context.prompt).not.toContain("SETUP");
     expect(context.system).toContain("already-active workflow");
     expect(context.system).not.toContain("Before scheduling");
@@ -96,10 +97,10 @@ test("schedule context includes comparison details for every non-deleted workflo
     0,
     "gpt-4.1-mini",
   );
-  const { prompt } = buildContext(w, run);
-  const existing = JSON.parse(prompt).existingWorkflows;
-  expect(existing.map((f: Workflow) => f.status)).toEqual(states);
-  expect(existing[0]).toEqual({
+  const { prompt, metadata } = buildContext(w, run);
+  const existing = metadata.existingWorkflows;
+  expect(existing.map((f) => f.status)).toEqual([...states]);
+  expect(existing[0]).toMatchObject({
     id: "draft",
     version: 1,
     owner: "101",
@@ -126,7 +127,7 @@ test("private schedule comparison excludes other owners, destinations, topics an
     10,
     "gpt-4.1-mini",
   );
-  expect(JSON.parse(buildContext(w, run).prompt).existingWorkflows).toEqual([
+  expect(buildContext(w, run).metadata.existingWorkflows).toEqual([
     { id: "own", version: 1, owner: "101", status: "active", spec: own },
   ]);
 });
@@ -147,9 +148,8 @@ test("group comparison includes teammates in the same topic and refreshes change
     10,
     "gpt-4.1-mini",
   );
-  const context = () =>
-    JSON.parse(buildContext(w, run).prompt).existingWorkflows;
-  expect(context().map((f: Workflow) => f.id)).toEqual(["own", "teammate"]);
+  const context = () => buildContext(w, run).metadata.existingWorkflows;
+  expect(context().map((f) => f.id)).toEqual(["own", "teammate"]);
   own.status = "deleted";
   teammate.status = "paused";
   expect(context()).toEqual([

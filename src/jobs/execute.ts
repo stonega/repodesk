@@ -267,6 +267,14 @@ export class Executor {
       message: AgentMessage,
       attemptId?: string,
       purpose?: AgentInput["purpose"],
+      meta?: {
+        model?: string;
+        estimatedInputTokens?: number;
+        latencyMs?: number;
+        stopReason?: string;
+        toolCalls?: number;
+        pricingUnknown?: boolean;
+      },
     ) => {
       await this.store.change(workspaceId, (w) => {
         const r = w.runs.find((r) => r.id === runId);
@@ -275,6 +283,13 @@ export class Executor {
         if (message.role === "assistant" && attemptId) {
           const a = r.attempts.find((a) => a.id === attemptId);
           if (a) {
+            if (meta?.model) a.model = meta.model;
+            if (meta?.estimatedInputTokens !== undefined)
+              a.estimatedInputTokens = meta.estimatedInputTokens;
+            if (meta?.latencyMs !== undefined) a.latencyMs = meta.latencyMs;
+            if (meta?.stopReason) a.stopReason = meta.stopReason;
+            if (meta?.toolCalls !== undefined) a.toolCalls = meta.toolCalls;
+            if (meta?.pricingUnknown) a.pricingUnknown = true;
             if (["error", "aborted"].includes(message.stopReason))
               a.status = "unknown";
             else {
@@ -414,6 +429,7 @@ export class Executor {
           : await this.setup.modelKey(claimed.modelOptions?.modelBaseUrl),
         thinkingLevel: claimed.modelOptions?.thinkingLevel,
         system: context.system,
+        historyMessages: context.historyMessages,
         prompt: context.prompt,
         transcript,
         enableSubagent: !claimed.workflowId,
@@ -467,7 +483,7 @@ export class Executor {
         },
         signal,
         guard,
-        reserve: async (amount, purpose) =>
+        reserve: async (amount, purpose, meta) =>
           this.store.change(workspaceId, (w) => {
             const r = w.runs.find((r) => r.id === runId);
             requireThat(
@@ -489,6 +505,12 @@ export class Executor {
             const id = randomUUID();
             r.attempts.push({
               id,
+              model: meta?.model ?? r.model,
+              providerId: r.modelProvider?.id,
+              ...(meta?.estimatedInputTokens !== undefined
+                ? { estimatedInputTokens: meta.estimatedInputTokens }
+                : {}),
+              ...(meta?.pricingUnknown ? { pricingUnknown: true } : {}),
               purpose:
                 purpose ??
                 (classifying
@@ -606,6 +628,7 @@ export class Executor {
           refreshedCtx.mission,
         );
         input.system = context.system;
+        input.historyMessages = context.historyMessages;
         input.prompt = context.prompt;
       }
       if (!completed && !transcript.length && !claimed.workflowId) {
@@ -636,9 +659,16 @@ export class Executor {
           );
         input.images = attachments.images;
         if (attachments.requestText) {
-          const prompt = JSON.parse(input.prompt);
-          prompt.request = attachments.requestText;
-          input.prompt = JSON.stringify(prompt);
+          const current = await this.store.read(workspaceId);
+          const refreshedCtx = await taskContext();
+          context = buildContext(
+            current,
+            claimed,
+            refreshedCtx.coding,
+            refreshedCtx.mission,
+            { requestOverride: attachments.requestText },
+          );
+          input.prompt = context.prompt;
         }
         input.prompt += attachments.prompt;
       }

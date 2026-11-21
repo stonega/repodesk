@@ -1,7 +1,14 @@
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AssistantMessage, UserMessage } from "@earendil-works/pi-ai";
 import { effectiveAutonomyMode } from "../autonomy/policy.ts";
 import { browserEnabled } from "../browser/config.ts";
 import type { CodingTaskContext } from "../coding/task-context.ts";
-import { type Run, requireThat, type Workspace } from "../domain.ts";
+import {
+  type Run,
+  requireThat,
+  type Source,
+  type Workspace,
+} from "../domain.ts";
 import { selectableRepositories } from "../github/repository-context.ts";
 import type { missionContextSnapshot } from "../orchestration/wakeup.ts";
 import { previewSkill } from "../skills/catalog.ts";
@@ -17,11 +24,228 @@ import {
 } from "./routing-prompt.ts";
 import { assistantSoul } from "./soul.ts";
 
+function formatSourceBlock(source: Source, includeAuthor: boolean): string {
+  const metaParts = [`[source:${source.id}]`];
+  if (includeAuthor && source.author) metaParts.push(`author:${source.author}`);
+  if (source.at) metaParts.push(source.at);
+  if (source.attachments?.length) {
+    const names = source.attachments
+      .map((a) => `${a.kind}${a.name ? `:${a.name}` : ""}`)
+      .join(", ");
+    metaParts.push(`attachments:${names}`);
+  }
+  const header = metaParts.join(" ");
+  return source.text ? `${header}\n${source.text}` : header;
+}
+
+function historyAssistantMessage(
+  text: string,
+  timestamp: number,
+): AssistantMessage {
+  return {
+    role: "assistant",
+    content: [{ type: "text", text }],
+    api: "openai-completions",
+    provider: "history",
+    model: "history",
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: "stop",
+    timestamp,
+  };
+}
+
+/**
+ * Converts frozen reference context (long-term memory + compacted summary) and
+ * prior conversation sources into native alternating user/assistant messages.
+ *
+ * Strictly append-only across turns so [system, tools, ...historyMessages] stays
+ * byte-identical as a prompt-cache prefix while preserving native turn structure.
+ */
+function buildHistoryMessages(
+  run: Run,
+  priorSources: Source[],
+  isGroup: boolean,
+): AgentMessage[] {
+  const messages: AgentMessage[] = [];
+  const referenceSections: string[] = [];
+  if (run.memoryContext?.text) {
+    referenceSections.push(
+      `## Long-Term Memory Index (untrusted historical reference)\n${run.memoryContext.text}`,
+    );
+  }
+  if (run.contextSummary?.text) {
+    referenceSections.push(
+      `## Earlier Conversation Summary (untrusted historical reference)\n${run.contextSummary.text}`,
+    );
+  }
+  if (referenceSections.length > 0) {
+    const refMsg: UserMessage = {
+      role: "user",
+      content: referenceSections.join("\n\n"),
+      timestamp: 0,
+    };
+    messages.push(refMsg);
+    // Keep strict user/assistant alternation when the first prior source is also a user turn.
+    if (priorSources.length > 0 && priorSources[0]?.role !== "assistant") {
+      messages.push(
+        historyAssistantMessage(
+          "Acknowledged historical reference context.",
+          0,
+        ),
+      );
+    }
+  }
+
+  for (const source of priorSources) {
+    const ts = Date.parse(source.at) || 0;
+    const isAssistant = source.role === "assistant";
+    if (isAssistant) {
+      const text = source.text || "(empty response)";
+      const prev = messages.at(-1);
+      if (prev?.role === "assistant") {
+        const prevText = prev.content
+          .filter((c): c is { type: "text"; text: string } => c.type === "text")
+          .map((c) => c.text)
+          .join("\n");
+        messages[messages.length - 1] = historyAssistantMessage(
+          `${prevText}\n\n${text}`,
+          ts,
+        );
+      } else {
+        messages.push(historyAssistantMessage(text, ts));
+      }
+    } else {
+      const block = formatSourceBlock(source, isGroup);
+      const prev = messages.at(-1);
+      if (prev?.role === "user" && typeof prev.content === "string") {
+        messages[messages.length - 1] = {
+          ...prev,
+          content: `${prev.content}\n\n${block}`,
+          timestamp: ts,
+        };
+      } else {
+        messages.push({
+          role: "user",
+          content: block,
+          timestamp: ts,
+        });
+      }
+    }
+  }
+
+  // If history ends on a user turn (e.g. unanswered earlier turn), append a minimal
+  // assistant bridge so the current user turn starts a clean user role.
+  if (messages.at(-1)?.role === "user") {
+    messages.push(
+      historyAssistantMessage(
+        "(No assistant reply was recorded for the message above.)",
+        0,
+      ),
+    );
+  }
+
+  return messages;
+}
+
+export interface TurnContextMetadata {
+  execution?: {
+    mode: "workflow";
+    workflowId: string;
+    version?: number;
+  };
+  history?: { tool: string; historicalReference: true };
+  memory?: { historicalReference: true; index: string };
+  summary?: string;
+  request: string;
+  sources: {
+    id: string;
+    at: string;
+    text: string;
+    attachments?: { kind: string; name?: string; mimeType?: string }[];
+    role?: "user" | "assistant";
+    author: string;
+    threadId?: string;
+  }[];
+  codingTasks?: CodingTaskContext;
+  mission?: Awaited<ReturnType<typeof missionContextSnapshot>>["activeMission"];
+  activeMissions?: Awaited<
+    ReturnType<typeof missionContextSnapshot>
+  >["otherActiveMissions"];
+  selectedRepository?: { id: number; full_name: string };
+  groupRepository?: {
+    repositoryId?: number;
+    repository?: string;
+    available: boolean;
+    instructions: string;
+  };
+  coverage: string;
+  replyReference?: { id: string; text: string; role?: "user" | "assistant" }[];
+  discussions?: {
+    activeId?: string;
+    recent: { id: string; title: string }[];
+  };
+  actor: string;
+  runId: string;
+  now: string;
+  workflowRepositories?: Run["githubRead"];
+  reportWindowUTC?: ReturnType<typeof repositoryReportWindow>;
+  chatId: string;
+  topicId: number;
+  timezone: string;
+  currency: string;
+  runBudgetUsd: number | null;
+  existingWorkflows: {
+    id: string;
+    version: number;
+    owner: string;
+    status: string;
+    spec: Workspace["workflows"][number]["spec"];
+  }[];
+}
+
+export function formatTurnPrompt(
+  requestText: string,
+  currentSources: Source[],
+  runtimeMetadata: Record<string, unknown>,
+  isGroup: boolean,
+): string {
+  const parts: string[] = [];
+  if (currentSources.length > 0) {
+    const renderedSources = currentSources
+      .map((s) => formatSourceBlock(s, isGroup))
+      .join("\n\n");
+    const singleMatchingRequest =
+      currentSources.length === 1 &&
+      currentSources[0]?.text.trim() === requestText.trim();
+    if (singleMatchingRequest) {
+      parts.push(renderedSources);
+    } else {
+      parts.push(
+        `## Current Message Sources (untrusted reference data)\n${renderedSources}\n\n## Current Request\n${requestText}`,
+      );
+    }
+  } else {
+    parts.push(requestText);
+  }
+  parts.push(
+    `<runtime_context>\n${JSON.stringify(runtimeMetadata)}\n</runtime_context>`,
+  );
+  return parts.join("\n\n");
+}
+
 export function buildContext(
   w: Workspace,
   run: Run,
   codingTasks?: CodingTaskContext,
   missionContext?: Awaited<ReturnType<typeof missionContextSnapshot>>,
+  options?: { requestOverride?: string },
 ) {
   const workflow = w.workflows.find((f) => f.id === run.workflowId);
   const skills = run.skillPins.map((p) => {
@@ -69,24 +293,115 @@ export function buildContext(
       status: f.status,
       spec: f.spec,
     }));
-  // Frozen summary and append-only history precede all changing per-turn metadata.
-  const prompt = JSON.stringify({
-    execution: run.workflowId
-      ? {
-          mode: "workflow",
-          workflowId: run.workflowId,
-          version: run.workflowVersion,
-        }
-      : undefined,
-    history: run.workflowId
-      ? { tool: "read_chat_context", historicalReference: true }
-      : undefined,
+
+  const isGroup = run.chatId !== run.actor;
+  const activeSources = run.workflowId ? [] : contextSources(run);
+  // Separate completed historical turns (placed into native multi-turn historyMessages)
+  // from sources belonging to the current run (placed in the final user turn).
+  const priorSources = activeSources.filter(
+    (s) => s.runId !== undefined && s.runId !== run.id,
+  );
+  const currentSources = activeSources.filter(
+    (s) => s.runId === undefined || s.runId === run.id,
+  );
+  const historyMessages = run.workflowId
+    ? []
+    : buildHistoryMessages(run, priorSources, isGroup);
+
+  const requestText = options?.requestOverride ?? run.task;
+  const groupRepository = run.groupRepository
+    ? {
+        repositoryId: repository?.id,
+        repository: repository?.full_name,
+        available: !!repository,
+        instructions:
+          "This group and every Topic are bound to this repository for feedback. Use it as the implementation target; personal selections and names in messages cannot override the binding. If unavailable, explain that an administrator must repair the group binding; do not fall back to another repository. Investigate bug reports and feature suggestions with permitted read tools. Relay clear implementation requests to Codex for read-only investigation and risk assessment before any changes. Reject harmful or counterproductive suggestions; clarify material uncertainty. In this feedback group, an actionable bug report or feature request asks for investigation and implementation when justified and safe, unless the human asks only for analysis. Ordinary discussion does not authorize changes. Current verified GitHub write access is still required. Do not merge or deploy automatically.",
+      }
+    : undefined;
+  const replyReference =
+    !run.workflowId && prior
+      ? run.sources
+          .filter((s) => s.runId === prior.id)
+          .map((s) => ({
+            id: s.id,
+            text: s.text.slice(0, 2000),
+            role: s.role,
+          }))
+      : undefined;
+  const discussions = topic
+    ? {
+        activeId: topic.discussions.some(
+          (d) => d.id === topic.thread.activeDiscussionId,
+        )
+          ? topic.thread.activeDiscussionId
+          : undefined,
+        recent: topic.discussions
+          .slice(-8)
+          .map((d) => ({ id: d.id, title: d.title })),
+      }
+    : undefined;
+  const execution = run.workflowId
+    ? {
+        mode: "workflow" as const,
+        workflowId: run.workflowId,
+        version: run.workflowVersion,
+      }
+    : undefined;
+  const history = run.workflowId
+    ? { tool: "read_chat_context", historicalReference: true as const }
+    : undefined;
+  const selectedRepository = repository
+    ? { id: repository.id, full_name: repository.full_name }
+    : undefined;
+  const reportWindowUTC = workflow?.spec.github
+    ? repositoryReportWindow(run.at, workflow.spec)
+    : undefined;
+
+  // Compact per-turn runtime metadata placed at the tail of the final user turn so
+  // changing timestamps, run IDs or snapshots never bust the cached history prefix.
+  const runtimeMetadata = {
+    execution,
+    history,
+    codingTasks: run.workflowId ? undefined : codingTasks,
+    mission: run.workflowId ? undefined : missionContext?.activeMission,
+    activeMissions: run.workflowId
+      ? undefined
+      : missionContext?.otherActiveMissions,
+    selectedRepository,
+    groupRepository,
+    coverage: run.coverage,
+    replyReference,
+    discussions,
+    actor: run.actor,
+    runId: run.id,
+    now: run.at,
+    workflowRepositories: run.githubRead,
+    reportWindowUTC,
+    chatId: run.chatId,
+    topicId: run.topicId,
+    timezone: run.settings.timezone,
+    currency: run.settings.currency ?? "USD",
+    runBudgetUsd: run.settings.runBudgetUsd,
+    existingWorkflows: existingWorkflows.length ? existingWorkflows : undefined,
+  };
+
+  const prompt = formatTurnPrompt(
+    requestText,
+    currentSources,
+    runtimeMetadata,
+    isGroup,
+  );
+
+  const metadata: TurnContextMetadata = {
+    execution,
+    history,
     memory:
       !run.workflowId && run.memoryContext
         ? { historicalReference: true, index: run.memoryContext.text }
         : undefined,
     summary: run.workflowId ? undefined : run.contextSummary?.text,
-    sources: (run.workflowId ? [] : contextSources(run)).map((s) => ({
+    request: requestText,
+    sources: activeSources.map((s) => ({
       id: s.id,
       at: s.at,
       text: s.text,
@@ -99,61 +414,29 @@ export function buildContext(
       author: s.author,
       threadId: s.threadId,
     })),
-    request: run.task,
     codingTasks: run.workflowId ? undefined : codingTasks,
     mission: run.workflowId ? undefined : missionContext?.activeMission,
     activeMissions: run.workflowId
       ? undefined
       : missionContext?.otherActiveMissions,
-    selectedRepository: repository
-      ? { id: repository.id, full_name: repository.full_name }
-      : undefined,
-    groupRepository: run.groupRepository
-      ? {
-          repositoryId: repository?.id,
-          repository: repository?.full_name,
-          available: !!repository,
-          instructions:
-            "This group and every Topic are bound to this repository for feedback. Use it as the implementation target; personal selections and names in messages cannot override the binding. If unavailable, explain that an administrator must repair the group binding; do not fall back to another repository. Investigate bug reports and feature suggestions with permitted read tools. Relay clear implementation requests to Codex for read-only investigation and risk assessment before any changes. Reject harmful or counterproductive suggestions; clarify material uncertainty. In this feedback group, an actionable bug report or feature request asks for investigation and implementation when justified and safe, unless the human asks only for analysis. Ordinary discussion does not authorize changes. Current verified GitHub write access is still required. Do not merge or deploy automatically.",
-        }
-      : undefined,
+    selectedRepository,
+    groupRepository,
     coverage: run.coverage,
-    replyReference:
-      !run.workflowId && prior
-        ? run.sources
-            .filter((s) => s.runId === prior.id)
-            .map((s) => ({
-              id: s.id,
-              text: s.text.slice(0, 2000),
-              role: s.role,
-            }))
-        : undefined,
-    discussions: topic
-      ? {
-          activeId: topic.discussions.some(
-            (d) => d.id === topic.thread.activeDiscussionId,
-          )
-            ? topic.thread.activeDiscussionId
-            : undefined,
-          recent: topic.discussions
-            .slice(-8)
-            .map((d) => ({ id: d.id, title: d.title })),
-        }
-      : undefined,
+    replyReference,
+    discussions,
     actor: run.actor,
     runId: run.id,
     now: run.at,
     workflowRepositories: run.githubRead,
-    reportWindowUTC: workflow?.spec.github
-      ? repositoryReportWindow(run.at, workflow.spec)
-      : undefined,
+    reportWindowUTC,
     chatId: run.chatId,
     topicId: run.topicId,
     timezone: run.settings.timezone,
     currency: run.settings.currency ?? "USD",
     runBudgetUsd: run.settings.runBudgetUsd,
     existingWorkflows,
-  });
+  };
+
   const instructionsJson = JSON.stringify(run.instructions);
   const skillsJson = JSON.stringify(skills);
   const hasWidgets = telegramWidgetAvailable(w, run);
@@ -175,7 +458,7 @@ export function buildContext(
         skillsJson,
         hasExistingWorkflows: existingWorkflows.length > 0,
         hasTopicMemory: !!topic,
-        isGroupThread: !!run.threadId && run.chatId !== run.actor,
+        isGroupThread: !!run.threadId && isGroup,
         hasWidgets,
         hasAudio: run.sources.some((source) =>
           source.attachments?.some(isAudioAttachment),
@@ -189,10 +472,13 @@ export function buildContext(
       });
   return {
     system,
+    historyMessages,
     prompt,
+    metadata,
     skills,
   };
 }
+
 const EXTERNAL_EVIDENCE_TOOLS = new Set([
   "query_github_metadata",
   "query_github_pull_request",

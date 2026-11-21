@@ -144,13 +144,14 @@ export function createResearchSubagentTool(
               remainingBudget: ctx.parentInput.remainingBudget,
               signal: effectiveSignal,
               guard: ctx.parentInput.guard,
-              reserve: (amount) =>
-                ctx.parentInput.reserve(amount, "research_subagent"),
-              checkpoint: (message, attemptId) =>
+              reserve: (amount, _purpose, meta) =>
+                ctx.parentInput.reserve(amount, "research_subagent", meta),
+              checkpoint: (message, attemptId, _purpose, meta) =>
                 ctx.parentInput.checkpoint(
                   message,
                   attemptId,
                   "research_subagent",
+                  meta,
                 ),
             };
             try {

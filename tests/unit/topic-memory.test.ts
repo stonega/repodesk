@@ -62,14 +62,17 @@ test("discussion changes stay at the tail while history and fixed summaries reta
   const b = ask(w, "Why?");
   const second = buildContext(w, b);
   expect(second.system).toBe(first.system);
-  // The complete source object remains byte-identical before the growing array's closing bracket.
-  const historyEnd = first.prompt.indexOf('],"request"');
-  expect(historyEnd).toBeGreaterThan(0);
-  expect(second.prompt.startsWith(first.prompt.slice(0, historyEnd))).toBe(
-    true,
+  // Native multi-turn history messages grow strictly append-only; changing discussions stay in the tail runtime_context.
+  expect(first.historyMessages).toEqual([]);
+  expect(second.historyMessages.map((m) => m.role)).toEqual([
+    "user",
+    "assistant",
+  ]);
+  expect(second.prompt.indexOf("<runtime_context>")).toBeGreaterThan(
+    second.prompt.indexOf("Why?"),
   );
   expect(second.prompt.indexOf('"discussions"')).toBeGreaterThan(
-    second.prompt.indexOf('"request"'),
+    second.prompt.indexOf("Why?"),
   );
   expect(second.system).toContain(
     "Ask one concise clarification only when essential information is missing",
@@ -170,8 +173,8 @@ test("threshold compaction keeps recent turns and freezes its summary across sub
   for (let i = 0; i < 18; i++)
     answer(w, ask(w, `turn ${i}: ${"detail ".repeat(450)}`));
   const current = ask(w, "Continue");
-  // Fit a complete bounded summary batch alongside the expanded pinned skills.
-  const compactionInput = input(60000);
+  // Token-based sizing (~19k tokens across 18 turns + system prompt) triggers compaction on a 24k context window.
+  const compactionInput = input(24000);
   const plan = compactionPlan(w, current, compactionInput);
   expect(plan).toBeDefined();
   if (!plan) throw Error("missing plan");
@@ -188,18 +191,16 @@ test("threshold compaction keeps recent turns and freezes its summary across sub
   current.compaction = { ...plan, state: "done", summary: thread.summary };
   refreshThreadContext(w, current);
   const before = buildContext(w, current);
-  expect(JSON.parse(before.prompt).sources.length).toBeLessThan(
-    current.sources.length,
-  );
+  expect(before.metadata.sources.length).toBeLessThan(current.sources.length);
   expect(compactionPlan(w, current, compactionInput)).toBeUndefined();
   answer(w, current);
   const next = ask(w, "More details");
   expect(next.contextSummary).toEqual(current.contextSummary);
+  const nextCtx = buildContext(w, next);
+  // Prior native history prefix (including frozen summary) stays strictly identical across turns.
   expect(
-    buildContext(w, next).prompt.startsWith(
-      before.prompt.slice(0, before.prompt.indexOf('],"request"')),
-    ),
-  ).toBe(true);
+    nextCtx.historyMessages.slice(0, before.historyMessages.length),
+  ).toEqual(before.historyMessages);
 });
 
 test("edits and retention invalidate summaries and discussion records without reviving deleted content", () => {

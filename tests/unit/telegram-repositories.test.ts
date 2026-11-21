@@ -258,7 +258,7 @@ test("selection is pinned as default context without changing original task or a
   );
   expect(run.task).toBe("Explain the architecture");
   expect(run.repository?.id).toBe(12);
-  expect(JSON.parse(buildContext(w, run).prompt).selectedRepository).toEqual({
+  expect(buildContext(w, run).metadata.selectedRepository).toEqual({
     id: 12,
     full_name: "example/repo-12",
   });
@@ -271,9 +271,7 @@ test("selection is pinned as default context without changing original task or a
   });
   expect(other.repository).toBeUndefined();
   if (w.github) w.github.repositories = [];
-  expect(
-    JSON.parse(buildContext(w, run).prompt).selectedRepository,
-  ).toBeUndefined();
+  expect(buildContext(w, run).metadata.selectedRepository).toBeUndefined();
 });
 
 test("empty/search-miss menus offer useful recovery and retention purges selection state", () => {

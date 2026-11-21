@@ -84,7 +84,7 @@ export function workspaceRoutes(deps: AdminRouteDeps) {
     if (actor === admin.id) {
       const resource = c.req.path.split("/").slice(5).join("/");
       requireThat(
-        /^(overview|settings|members|access-requests|chats|skills|workflows|autonomy|missions|queues)(\/.*)?$/.test(
+        /^(overview|settings|members|access-requests|chats|skills|workflows|autonomy|missions|queues|model-usage)(\/.*)?$/.test(
           resource,
         ) ||
           (resource === "self-check" && c.req.method === "POST") ||

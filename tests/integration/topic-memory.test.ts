@@ -143,7 +143,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         modelBaseUrl: "https://api.openai.com/v1",
         thinkingLevel: "off",
         modelLimits: {
-          contextWindow: long ? 50000 : 1000000,
+          contextWindow: long ? 24000 : 1000000,
           maxOutputTokens: 4000,
         },
       };
@@ -171,10 +171,14 @@ const rootUrl = process.env.TEST_DATABASE_URL;
           }
           answers++;
           keys.push(input.cacheKey);
-          const context = JSON.parse(input.prompt);
-          expect(context.summary).toContain("pending backup task");
-          expect(context.sources.length).toBeLessThan(run.sources.length);
-          expect(context.sources.at(-1)?.role).toBe("user");
+          const historyJson = JSON.stringify(input.historyMessages ?? []);
+          expect(historyJson).toContain("pending backup task");
+          expect((input.historyMessages ?? []).length).toBeLessThan(
+            run.sources.length,
+          );
+          expect(input.prompt).toContain(
+            answers === 1 ? "Please continue" : "More detail",
+          );
           return finish(input, "Continuing the discussion.");
         },
       };
@@ -294,7 +298,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         if (!r) throw Error("missing run");
         r.modelOptions = {
           ...r.modelOptions,
-          modelLimits: { contextWindow: 70000, maxOutputTokens: 4000 },
+          modelLimits: { contextWindow: 24000, maxOutputTokens: 4000 },
         };
         const plan = compactionPlan(latest, r, {
           model: selectedModel(r.model, r.modelOptions),
@@ -320,7 +324,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       const runner: AgentRunner = {
         async run(input) {
           if (input.purpose) summaries++;
-          expect(JSON.parse(input.prompt).summary).toContain(
+          expect(JSON.stringify(input.historyMessages ?? [])).toContain(
             "Recovered summary",
           );
           return finish(input, "Resumed answer");

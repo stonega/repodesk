@@ -144,12 +144,11 @@ test("shared group discussion records and growing cache prefix survive participa
   const b = ask(w, "202", "加上回滚", 0, 100);
   const second = buildContext(w, b);
   expect(second.system).toBe(first.system);
-  expect(
-    second.prompt.startsWith(
-      first.prompt.slice(0, first.prompt.indexOf('],"request"')),
-    ),
-  ).toBe(true);
-  expect(JSON.parse(second.prompt).actor).toBe("202");
+  expect(second.historyMessages.map((m) => m.role)).toEqual([
+    "user",
+    "assistant",
+  ]);
+  expect(second.metadata.actor).toBe("202");
   expect(queryDiscussions(w, b, {}).discussions[0]?.id).toBe(recorded.id);
   expect(
     queryChatHistory(w, b, { discussionId: recorded.id }).messages.length,
@@ -177,7 +176,7 @@ test("group history compacts and source edits invalidate frozen memory", () => {
   const compactionInput = {
     model: {
       ...selectedModel("gpt-4.1-mini"),
-      contextWindow: 60000,
+      contextWindow: 24000,
       maxTokens: 4000,
     },
     tools: [],

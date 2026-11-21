@@ -59,6 +59,7 @@ import {
   type LocalStatus,
   localRecovery,
   localStart,
+  tokenUsageBreakdownSchema,
 } from "./protocol.ts";
 import { RuntimeSelection } from "./runtime-control.ts";
 import { taskRuntime } from "./runtime-factory.ts";
@@ -312,6 +313,7 @@ export class RunnerSupervisor
       phase: r.phase,
       result: r.result,
       tokens: r.tokens,
+      tokenUsage: r.tokenUsage,
       usageUnknown: r.usageUnknown,
       resultIssues: r.resultIssues,
       baseSha: r.baseSha,
@@ -968,6 +970,7 @@ export class RunnerSupervisor
             .object({
               result: developmentResult,
               tokens: z.number().int().nonnegative(),
+              tokenUsage: tokenUsageBreakdownSchema.optional(),
               usageUnknown: z.boolean().optional(),
               resultIssues: resultIssues.optional(),
               threadId: z.string().regex(/^[a-zA-Z0-9-]{1,100}$/),
@@ -989,6 +992,20 @@ export class RunnerSupervisor
           r.result = turn.result;
           r.threadId = turn.threadId;
           r.tokens = (r.tokens ?? 0) + turn.tokens;
+          if (turn.tokenUsage) {
+            r.tokenUsage = {
+              input: (r.tokenUsage?.input ?? 0) + turn.tokenUsage.input,
+              output: (r.tokenUsage?.output ?? 0) + turn.tokenUsage.output,
+              cacheRead:
+                (r.tokenUsage?.cacheRead ?? 0) + turn.tokenUsage.cacheRead,
+              cacheWrite:
+                (r.tokenUsage?.cacheWrite ?? 0) + turn.tokenUsage.cacheWrite,
+              reasoning:
+                (r.tokenUsage?.reasoning ?? 0) +
+                (turn.tokenUsage.reasoning ?? 0),
+              total: (r.tokenUsage?.total ?? 0) + turn.tokens,
+            };
+          }
           r.usageUnknown ||= turn.usageUnknown;
           r.resultIssues = turn.resultIssues;
           await writeFile(this.path(r, "conversation"), JSON.stringify(turn), {

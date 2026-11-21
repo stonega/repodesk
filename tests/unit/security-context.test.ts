@@ -29,7 +29,7 @@ test.each(["private", "group", "scheduled"] as const)(
       provenance: "fixture",
     });
 
-    const { system, prompt } = buildContext(w, run);
+    const { system, prompt, metadata } = buildContext(w, run);
     const boundary = system.slice(0, system.indexOf("You are RepoDesk"));
     expect(boundary).toStartWith("Security and instruction boundaries:");
     expect(boundary).toContain("take precedence over personality");
@@ -45,7 +45,8 @@ test.each(["private", "group", "scheduled"] as const)(
     expect(system.indexOf(boundary)).toBeLessThan(
       system.indexOf("Personality (style only):"),
     );
-    expect(JSON.parse(prompt).request).toBe(attack);
+    expect(metadata.request).toBe(attack);
+    expect(prompt).toContain(attack);
   },
 );
 
@@ -66,12 +67,14 @@ test("analyzing suspicious source text preserves it as reference data", () => {
     directed: false,
   });
 
-  const { system, prompt } = buildContext(w, run);
+  const { system, prompt, metadata } = buildContext(w, run);
   expect(system).toContain("untrusted reference data");
   expect(system).toContain("analyzing suspicious content");
   expect(system).not.toContain(attack);
-  expect(JSON.parse(prompt).request).toBe(task);
-  expect(JSON.parse(prompt).sources).toContainEqual(
+  expect(metadata.request).toBe(task);
+  expect(metadata.sources).toContainEqual(
     expect.objectContaining({ id: "suspicious-reference", text: attack }),
   );
+  expect(prompt).toContain("[source:suspicious-reference]");
+  expect(prompt).toContain(attack);
 });

@@ -32,12 +32,12 @@ test("assistant currency uses the run snapshot, isolates teams and supports hist
   );
   w.settings.currency = "EUR";
   const context = buildContext(w, run);
-  expect(JSON.parse(context.prompt)).toMatchObject({
+  expect(context.metadata).toMatchObject({
     currency: "TWD",
     runBudgetUsd: 10,
   });
   expect(context.system).toContain("never invent exchange rates");
   expect(workspace().settings.currency).toBe("USD");
   Reflect.deleteProperty(run.settings, "currency");
-  expect(JSON.parse(buildContext(w, run).prompt).currency).toBe("USD");
+  expect(buildContext(w, run).metadata.currency).toBe("USD");
 });

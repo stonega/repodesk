@@ -22,6 +22,10 @@ import {
 import { type Telegram, TelegramClient } from "../telegram/client.ts";
 import { clearProgress, recordProgress } from "../telegram/feedback.ts";
 import { TranscriptionService } from "../transcription/service.ts";
+import {
+  deriveCodingUsageEvent,
+  upsertModelUsageEvents,
+} from "../usage/model-usage.ts";
 import { TaskConversationExecutor } from "./conversation-executor.ts";
 import {
   type DevelopmentRun,
@@ -1688,10 +1692,11 @@ export class DevelopmentExecutor {
         [task.workspaceId, task.attemptId],
       )
     ).rows[0];
-    task.activeMs += Math.max(
+    const elapsedMs = Math.max(
       0,
       Date.now() - (row?.data.startedAt ?? Date.now()) - (task.authWaitMs ?? 0),
     );
+    task.activeMs += elapsedMs;
     task.tokens += status.tokens ?? 0;
     task.usageUnknown ||= status.usageUnknown || status.tokens === undefined;
     task.threadId = status.threadId;
@@ -1704,12 +1709,32 @@ export class DevelopmentExecutor {
       {
         endedAt: Date.now(),
         tokens: status.tokens,
+        tokenUsage: status.tokenUsage,
         usageUnknown: status.usageUnknown || status.tokens === undefined,
         checkPassed: status.checkPassed,
         hasChanges: status.hasChanges,
         resultIssues: status.resultIssues,
       },
     );
+    if (task.attemptId) {
+      await upsertModelUsageEvents(sql, [
+        deriveCodingUsageEvent({
+          task,
+          attemptId: task.attemptId,
+          kind: "coding_task",
+          status:
+            status.state === "unknown"
+              ? "unknown"
+              : status.state === "failed" || status.state === "cancelled"
+                ? "failed"
+                : "settled",
+          tokens: status.tokens,
+          tokenUsage: status.tokenUsage,
+          usageUnknown: status.usageUnknown || status.tokens === undefined,
+          latencyMs: elapsedMs,
+        }),
+      ]);
+    }
   }
   private async notice(
     w: Workspace,

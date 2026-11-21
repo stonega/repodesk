@@ -35,6 +35,10 @@ import {
   RESEARCH_SUBAGENT_TOOL,
 } from "./subagent.ts";
 import {
+  DEFAULT_IMAGE_TOKEN_ALLOWANCE,
+  estimateContextTokens,
+} from "./tokens.ts";
+import {
   createConcurrencyLimiter,
   DEFAULT_PARALLEL_TOOL_CONCURRENCY,
   isSubagentSafeTool,
@@ -93,6 +97,7 @@ export function selectedModel(
 ): Model<"openai-completions"> & {
   pricingKnown: boolean;
   providerContext: boolean;
+  contextWindowKnown: boolean;
 } {
   const catalog = options.modelMetadata
     ? undefined
@@ -138,8 +143,10 @@ export function selectedModel(
     providerContext:
       options.providerContext ??
       options.modelLimits?.contextWindow === undefined,
+    contextWindowKnown: capabilities.limits.contextWindow !== undefined,
     thinkingLevelMap: { xhigh: "xhigh", max: "max" },
-    // Pi requires numeric metadata. An unknown provider window imposes no local cap.
+    // Pi requires numeric metadata. An unknown provider window imposes no local cap;
+    // compaction uses effectiveCompactionWindow() to avoid MAX_SAFE_INTEGER disabling compaction.
     contextWindow: capabilities.limits.contextWindow ?? Number.MAX_SAFE_INTEGER,
     maxTokens: capabilities.limits.maxOutputTokens,
     compat: {
@@ -149,6 +156,14 @@ export function selectedModel(
       maxTokensField: "max_completion_tokens",
     },
   };
+}
+export interface AttemptTelemetry {
+  model?: string;
+  estimatedInputTokens?: number;
+  latencyMs?: number;
+  stopReason?: string;
+  toolCalls?: number;
+  pricingUnknown?: boolean;
 }
 export interface AgentInput {
   purpose?:
@@ -161,11 +176,17 @@ export interface AgentInput {
   workspaceId?: string;
   actor: string;
   runId: string;
-  model: Model<Api> & { pricingKnown?: boolean; providerContext?: boolean };
+  model: Model<Api> & {
+    pricingKnown?: boolean;
+    providerContext?: boolean;
+    contextWindowKnown?: boolean;
+  };
   apiKey: string;
   thinkingLevel?: ThinkingLevel;
   system: string;
   prompt: string;
+  /** Append-only native multi-turn history messages preceding this run's transcript. */
+  historyMessages?: AgentMessage[];
   images?: ImageContent[];
   transcript: AgentMessage[];
   tools: AgentTool[];
@@ -185,11 +206,16 @@ export interface AgentInput {
   guard: () => Promise<void>;
   shouldPause?: () => Promise<boolean | "completed">;
   nextInput?: () => Promise<AgentMessage | undefined>;
-  reserve: (amount: number, purpose?: AgentInput["purpose"]) => Promise<string>;
+  reserve: (
+    amount: number,
+    purpose?: AgentInput["purpose"],
+    meta?: AttemptTelemetry,
+  ) => Promise<string>;
   checkpoint: (
     message: AgentMessage,
     attemptId?: string,
     purpose?: AgentInput["purpose"],
+    meta?: AttemptTelemetry,
   ) => Promise<void>;
   events?: (type: string) => void;
   preview?: (text: string) => Promise<void>;
@@ -296,6 +322,9 @@ export class PiRunner implements AgentRunner {
     let turns = 0;
     let toolCount = 0;
     let attemptId: string | undefined;
+    let attemptStartedAt: number | undefined;
+    let attemptEstimatedInputTokens: number | undefined;
+    let attemptModelId: string | undefined;
     let blocked: string | undefined;
     const streamFn: StreamFn = async (model, context, options) => {
       try {
@@ -337,33 +366,29 @@ export class PiRunner implements AgentRunner {
           input.maxTurns === undefined || turns < input.maxTurns,
           "turn_limit",
         );
-        const bytes = Buffer.byteLength(JSON.stringify(context));
-        let imageAllowance = 0;
-        const budgetContext = {
-          ...context,
-          messages: context.messages.map((message) => {
-            if (
-              (message.role !== "user" && message.role !== "toolResult") ||
-              typeof message.content === "string"
-            )
-              return message;
-            return {
-              ...message,
-              content: message.content.map((part) => {
-                if (part.type !== "image") return part;
-                requireThat(
-                  model.input.includes("image"),
-                  "model_images_unsupported",
-                );
-                // Reserve conservatively for vision input, independently of base64 wire size.
-                imageAllowance += 32768;
-                return { ...part, data: "" };
-              }),
-            };
-          }),
-        };
-        const inputTokens =
-          Buffer.byteLength(JSON.stringify(budgetContext)) + imageAllowance;
+        const bytes = input.maxInputChars
+          ? Buffer.byteLength(JSON.stringify(context))
+          : 0;
+        for (const message of context.messages) {
+          if (
+            (message.role !== "user" && message.role !== "toolResult") ||
+            typeof message.content === "string"
+          )
+            continue;
+          for (const part of message.content) {
+            if (part.type === "image") {
+              requireThat(
+                model.input.includes("image"),
+                "model_images_unsupported",
+              );
+            }
+          }
+        }
+        const estimated = estimateContextTokens(
+          context,
+          DEFAULT_IMAGE_TOKEN_ALLOWANCE,
+        );
+        const inputTokens = estimated.totalTokens;
         requireThat(
           input.maxOutputTokens === undefined ||
             input.maxOutputTokens <= model.maxTokens,
@@ -384,8 +409,8 @@ export class PiRunner implements AgentRunner {
               inputTokens + maxTokens <= model.contextWindow),
           "model_context_limit_exceeded",
         );
-        // Text bytes and the image allowance conservatively estimate input tokens. Output also
-        // respects financial headroom; the atomic reservation below remains authoritative.
+        // Estimate input tokens accurately for text (mixed ASCII/CJK) plus vision allowance.
+        // Output also respects financial headroom; the atomic reservation remains authoritative.
         const inputCost =
           (inputTokens *
             Math.max(
@@ -418,7 +443,14 @@ export class PiRunner implements AgentRunner {
           );
         }
         const reserve = inputCost + maxTokens * outputCost;
-        attemptId = await input.reserve(reserve, input.purpose);
+        attemptEstimatedInputTokens = inputTokens;
+        attemptModelId = model.id;
+        attemptId = await input.reserve(reserve, input.purpose, {
+          model: model.id,
+          estimatedInputTokens: inputTokens,
+          pricingUnknown: input.model.pricingKnown === false ? true : undefined,
+        });
+        attemptStartedAt = Date.now();
         turns++;
         return this.stream(model, context, {
           ...options,
@@ -480,11 +512,12 @@ export class PiRunner implements AgentRunner {
         }),
       );
     }
+    const historyPrefix = input.purpose ? [] : (input.historyMessages ?? []);
     const agent = new Agent({
       initialState: {
         model: input.model,
         systemPrompt: extensions ? await extensions.start() : input.system,
-        messages: input.transcript,
+        messages: [...historyPrefix, ...input.transcript],
         tools,
         thinkingLevel: input.thinkingLevel ?? "off",
       },
@@ -604,12 +637,36 @@ export class PiRunner implements AgentRunner {
             .join("\n"),
         );
       if (event.type === "message_end") {
+        const msg = event.message;
+        const isAssistant = msg.role === "assistant";
+        const meta: AttemptTelemetry | undefined =
+          msg.role === "assistant"
+            ? {
+                model: attemptModelId ?? msg.model,
+                estimatedInputTokens: attemptEstimatedInputTokens,
+                latencyMs:
+                  attemptStartedAt !== undefined
+                    ? Math.max(0, Date.now() - attemptStartedAt)
+                    : undefined,
+                stopReason: msg.stopReason,
+                toolCalls: msg.content.filter((c) => c.type === "toolCall")
+                  .length,
+                pricingUnknown:
+                  input.model.pricingKnown === false ? true : undefined,
+              }
+            : undefined;
         await input.checkpoint(
-          sanitizeMessage(event.message),
-          event.message.role === "assistant" ? attemptId : undefined,
+          sanitizeMessage(msg),
+          isAssistant ? attemptId : undefined,
           input.purpose,
+          meta,
         );
-        if (event.message.role === "assistant") attemptId = undefined;
+        if (isAssistant) {
+          attemptId = undefined;
+          attemptStartedAt = undefined;
+          attemptEstimatedInputTokens = undefined;
+          attemptModelId = undefined;
+        }
       }
       if (
         extensions &&
@@ -637,7 +694,8 @@ export class PiRunner implements AgentRunner {
     }
     if (blocked) throw new Fault(blocked, 409);
     if (input.signal.aborted) throw new Fault("cancelled", 409);
-    const last = agent.state.messages.findLast(
+    const runMessages = agent.state.messages.slice(historyPrefix.length);
+    const last = runMessages.findLast(
       (m): m is AssistantMessage => m.role === "assistant",
     );
     requireThat(
@@ -665,7 +723,9 @@ export class PiRunner implements AgentRunner {
               : "empty_response",
       turns,
       tools: toolCount,
-      transcript: agent.state.messages.map(sanitizeMessage),
+      transcript: agent.state.messages
+        .slice(historyPrefix.length)
+        .map(sanitizeMessage),
     };
   }
 }

@@ -191,6 +191,10 @@ export class SelfCheckService {
         adminId: admin.id,
         actor: admin.telegramId ?? admin.id,
         model: snapshot.chat?.model ?? snapshot.deployment.model,
+        providerId: snapshot.chat?.provider.id,
+        providerName:
+          snapshot.chat?.options.modelBaseUrl ??
+          snapshot.deployment.modelBaseUrl,
         at: checkedAt,
         status: "running",
         attempts: [],
@@ -285,7 +289,7 @@ export class SelfCheckService {
               settings: w.settings,
             });
           },
-          reserve: async (amount) =>
+          reserve: async (amount, _purpose, meta) =>
             this.store.change(workspaceId, (w) => {
               allowed(w, admin);
               const check = w.adminChecks?.find(
@@ -307,19 +311,35 @@ export class SelfCheckService {
               const id = randomUUID();
               check.attempts.push({
                 id,
+                model: meta?.model ?? check.model,
+                providerId: check.providerId,
+                providerName: check.providerName,
+                ...(meta?.estimatedInputTokens !== undefined
+                  ? { estimatedInputTokens: meta.estimatedInputTokens }
+                  : {}),
+                ...(meta?.pricingUnknown ? { pricingUnknown: true } : {}),
                 reserved: amount,
                 status: "reserved",
                 at: new Date().toISOString(),
               });
               return id;
             }),
-          checkpoint: async (message, attemptId) => {
+          checkpoint: async (message, attemptId, _purpose, meta) => {
             if (message.role !== "assistant" || !attemptId) return;
             await this.store.change(workspaceId, (w) => {
               const attempt = w.adminChecks
                 ?.find((c) => c.id === input.requestId)
                 ?.attempts.find((a) => a.id === attemptId);
               if (!attempt) return;
+              if (meta?.model) attempt.model = meta.model;
+              if (meta?.estimatedInputTokens !== undefined)
+                attempt.estimatedInputTokens = meta.estimatedInputTokens;
+              if (meta?.latencyMs !== undefined)
+                attempt.latencyMs = meta.latencyMs;
+              if (meta?.stopReason) attempt.stopReason = meta.stopReason;
+              if (meta?.toolCalls !== undefined)
+                attempt.toolCalls = meta.toolCalls;
+              if (meta?.pricingUnknown) attempt.pricingUnknown = true;
               attempt.status = ["error", "aborted"].includes(message.stopReason)
                 ? "unknown"
                 : "settled";

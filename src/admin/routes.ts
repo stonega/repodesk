@@ -12,6 +12,7 @@ import type { ReleaseUpdates } from "../updates/releases.ts";
 import { session } from "./auth.ts";
 import { authSetupRoutes } from "./routes/auth-setup.ts";
 import { githubRoutes } from "./routes/github.ts";
+import { modelUsageRoutes } from "./routes/model-usage.ts";
 import { operatorRoutes } from "./routes/operator.ts";
 import { orchestrationRoutes } from "./routes/orchestration.ts";
 import { pluginRoutes } from "./routes/plugins.ts";
@@ -119,6 +120,7 @@ export function adminRoutes(
   app.route("/", pluginRoutes(deps));
   app.route("/", operatorRoutes(deps));
   app.route("/", orchestrationRoutes(deps));
+  app.route("/", modelUsageRoutes(deps));
   app.route("/", workspaceRoutes(deps));
   app.notFound((c) => c.json({ error: "not_found" }, 404));
   return app;

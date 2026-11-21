@@ -63,7 +63,9 @@ test("private recall crosses topics for its owner, while actors, bots and worksp
   remember(w, a);
   const own = ask(w, "What do I prefer?", "101", "101", 20);
   expect(queryMemories(w, own, {}).memories).toHaveLength(1);
-  expect(buildContext(w, own).prompt).toContain("简短回答");
+  expect(JSON.stringify(buildContext(w, own).historyMessages)).toContain(
+    "简短回答",
+  );
   for (const r of [
     ask(w, "other", "202"),
     ask(w, "bot", "101", "101", 20, "888"),

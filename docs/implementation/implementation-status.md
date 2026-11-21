@@ -5,6 +5,31 @@ Historical verification logs are archived by month to keep this active status le
 - [October 2026 archive](archive/implementation-status-2026-10.md) (125 entries)
 - [September 2026 baseline archive](archive/implementation-status-2026-09.md) (32 entries)
 
+## Accurate token estimation, native multi-turn context, resilient compaction and Model usage analytics (2026-11-21)
+
+Fixed token budget distortion, compaction fragility, context/prompt packing, and added source-complete Model usage analytics with zero new runtime dependencies:
+
+1. **Accurate token estimation & compaction window fallback (`src/agent/tokens.ts`, `src/agent/runtime.ts`, `src/agent/compaction.ts`)**:
+   - Replaced raw `Buffer.byteLength(JSON.stringify(...))` token estimation with a deterministic, zero-dependency mixed ASCII/code/CJK token estimator (`estimateTextTokens`, `estimateValueTokens`, `estimateContextTokens`), eliminating the 2–4× English/Chinese overestimation in budget reservations, `maxTokens` clamping, and compaction triggers while retaining conservative vision image allowance.
+   - Added `contextWindowKnown` to `selectedModel()` and `effectiveCompactionWindow()` fallback (`DEFAULT_COMPACTION_CONTEXT_WINDOW = 128_000`) in `compactionPlan()` so custom models with unknown context windows still trigger compaction instead of using `Number.MAX_SAFE_INTEGER`.
+2. **Fault-tolerant compaction (`src/agent/compaction.ts`)**:
+   - Added `sanitizeCompactionSummary()` and `truncateUtf8Safe()` so invalid `[source:...]` citations are stripped and oversized summaries are safely truncated at UTF-8 code-point and citation boundaries instead of hard-failing with `compaction_invalid_summary`. Empty/unusable first-pass outputs retry once with explicit corrective guidance before failing closed.
+3. **Native multi-turn context & structured system prompts (`src/agent/context.ts`, `src/agent/routing-prompt.ts`, `src/agent/runtime.ts`, `src/jobs/execute.ts`)**:
+   - Split `buildContext()` into append-only native alternating `user`/`assistant` `historyMessages` (preceded by frozen memory/summary reference blocks when present) and an unescaped current-turn `prompt` with tail `<runtime_context>` metadata, improving multi-turn/code comprehension and prompt-cache prefix stability without polluting `run.transcript`.
+   - Reorganized `src/agent/routing-prompt.ts` into concise Markdown sections with scannable bullets while preserving all security/confidentiality and behavioral invariants.
+4. **Source-complete Model usage ledger & dedicated Admin Panel page (`migrations/030_model_usage.sql`, `src/usage/model-usage.ts`, `src/admin/routes/model-usage.ts`, `web/pages/model-usage.tsx`, `web/usage-charts.tsx`)**:
+   - Added tenant-scoped `model_usage_events` table with historical backfill covering every model invocation source (`chat`, `workflow`, `mission`, `compaction`, `followup`, `research_subagent`, `memory_extract`, `memory_consolidate`, `self_check`, `coding_task`, `coding_conversation`, `review_bot`), capturing full token breakdowns (uncached input, cache read, cache write, output, reasoning), estimated input tokens, latency, tool calls, stop reasons, provider/model identity, USD spend, and explicit source links.
+   - Extended `PiRunner`, `Executor`, `MemoryService`, `SelfCheckService`, Codex (`src/coding/local/conversation.ts`, `supervisor.ts`, `executor.ts`, `conversation-executor.ts`), `ReviewExecutor`, and `Store.save()` to capture and persist complete source-attributed usage and `pricingUnknown` flags, with workspace deletion cleanup.
+   - Added `/admin/model-usage` ("Model usage") with time-range & source/model/status filters, 6 KPI summary cards (including estimator calibration ratio and prompt-cache savings), interactive SVG charts (stacked token timeline, dual USD spend & cache hit-rate trend, source attribution donut, model stacked bars, token composition bar, actor breakdown), and a paginated source-attributed ledger with record detail modal.
+
+Local verification on Bun 1.4.4, Node 22.22.3, and disposable PostgreSQL 17:
+
+- `bun run check` (only the nine pre-existing incident-script warnings), `bun run typecheck`, `bun run build`, and `bun run test:runtime` (16 injected + 16 configured startup cases, **zero external startup calls**) pass.
+- Full unit suite: **976 passed, 9 Docker-gated skips, 0 failures** across 125 files (5,815 assertions), including new `tests/unit/tokens-and-compaction.test.ts` and `tests/unit/model-usage.test.ts`.
+- Selected PostgreSQL integration suites (`model-usage`, `topic-memory`, `workspace-records`, `team-workflows`, `agent-orchestration`): **42 passed, 0 failures** (287 assertions), verifying migration `030_model_usage.sql`, all 12 source kinds, reconciliation, API filtering, tenant isolation, and workspace deletion erasure.
+- Selected Playwright browser suites (`tests/browser/model-usage.e2e.ts` and `tests/browser/loading.e2e.ts`): **20 passed, 0 failures** across 1280px desktop and 390px mobile in light and dark themes; rendered screenshots were visually inspected and refined (donut breakdown wrapping, ledger header wrapping, and non-breaking table cells). This is bounded selection covering the new Model usage page and shared loading/usage layout, not a full browser suite run.
+- Live Telegram rendering, live upstream provider caching/token behavior, container image builds, and production deployment remain outside this local verification.
+
 ## Agent orchestration, autonomy presets, proactive automations and repo queues (2026-11-20)
 
 All four phases of [Agent Orchestration, Autonomy, and Proactive Scheduling](../design/agent-orchestration.md)

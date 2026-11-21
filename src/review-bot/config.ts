@@ -85,6 +85,7 @@ export interface ReviewTask {
   prUrl?: string;
   reviewId?: number;
   tokens?: number;
+  tokenUsage?: import("../usage/model-usage.ts").TokenUsageBreakdown;
   usageUnknown?: boolean;
   error?: string;
   cancelRequested?: boolean;

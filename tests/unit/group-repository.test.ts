@@ -95,9 +95,10 @@ test("all people and topics inherit one target over personal selections without 
       });
       expect(run.repository?.id).toBe(1);
       expect(runAllowed(w, run)).toBe(true);
-      expect(
-        JSON.parse(buildContext(w, run).prompt).groupRepository,
-      ).toMatchObject({ repositoryId: 1, available: true });
+      expect(buildContext(w, run).metadata.groupRepository).toMatchObject({
+        repositoryId: 1,
+        available: true,
+      });
     }
   expect(selectedRepository(w, "202", "202", 40, "999")?.id).toBe(2);
   expect(selectedRepository(w, "202", chatId, 40, "other-bot")).toBeUndefined();
@@ -197,9 +198,9 @@ test("an unavailable optional repository blocks coding but permits a new greetin
   });
   expect(run.repository).toBeUndefined();
   expect(runAllowed(w, run)).toBe(true);
-  expect(JSON.parse(buildContext(w, run).prompt).groupRepository).toMatchObject(
-    { available: false },
-  );
+  expect(buildContext(w, run).metadata.groupRepository).toMatchObject({
+    available: false,
+  });
   expect(() =>
     requireGroupRepositoryTarget(w, chatId, "999", 1, run.groupRepository),
   ).toThrow("group_repository_changed");

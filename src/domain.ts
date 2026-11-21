@@ -620,6 +620,9 @@ export interface Run {
   >;
   attempts: {
     id: string;
+    model?: string;
+    providerId?: string;
+    providerName?: string;
     reserved: number;
     actual?: number;
     pricingUnknown?: boolean;
@@ -634,7 +637,12 @@ export interface Run {
       output: number;
       cacheRead: number;
       cacheWrite: number;
+      reasoning?: number;
     };
+    estimatedInputTokens?: number;
+    latencyMs?: number;
+    stopReason?: string;
+    toolCalls?: number;
     reconciliation?: { actor: string; reference: string; at: string };
     status: "reserved" | "settled" | "unknown";
     at: string;
@@ -755,6 +763,8 @@ export interface Workspace {
     adminId: string;
     actor: string;
     model: string;
+    providerId?: string;
+    providerName?: string;
     at: string;
     status: "running" | "succeeded" | "failed";
     attempts: Run["attempts"];

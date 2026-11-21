@@ -169,7 +169,7 @@ export class MemoryService {
           this.store.change(workspaceId, (w) =>
             remainingBudgets(w, current(w).parent),
           ),
-        reserve: async (amount) =>
+        reserve: async (amount, _purpose, meta) =>
           this.store.change(workspaceId, (w) => {
             const { parent, saved } = current(w);
             const budgets = remainingBudgets(w, parent);
@@ -183,6 +183,12 @@ export class MemoryService {
             const id = randomUUID();
             parent.attempts.push({
               id,
+              model: meta?.model ?? parent.model,
+              providerId: parent.modelProvider?.id,
+              ...(meta?.estimatedInputTokens !== undefined
+                ? { estimatedInputTokens: meta.estimatedInputTokens }
+                : {}),
+              ...(meta?.pricingUnknown ? { pricingUnknown: true } : {}),
               purpose:
                 phase === "extract" ? "memory_extract" : "memory_consolidate",
               reserved: amount,
@@ -192,12 +198,19 @@ export class MemoryService {
             saved.attemptIds.push(id);
             return id;
           }),
-        checkpoint: async (message, attemptId) =>
+        checkpoint: async (message, attemptId, _purpose, meta) =>
           this.store.change(workspaceId, (w) => {
             // Settle usage even if source deletion, cancellation or lease loss arrived in flight.
             const parent = w.runs.find((r) => r.id === job.runId);
             const a = parent?.attempts.find((a) => a.id === attemptId);
             if (message.role === "assistant" && a) {
+              if (meta?.model) a.model = meta.model;
+              if (meta?.estimatedInputTokens !== undefined)
+                a.estimatedInputTokens = meta.estimatedInputTokens;
+              if (meta?.latencyMs !== undefined) a.latencyMs = meta.latencyMs;
+              if (meta?.stopReason) a.stopReason = meta.stopReason;
+              if (meta?.toolCalls !== undefined) a.toolCalls = meta.toolCalls;
+              if (meta?.pricingUnknown) a.pricingUnknown = true;
               a.status = ["error", "aborted"].includes(message.stopReason)
                 ? "unknown"
                 : "settled";

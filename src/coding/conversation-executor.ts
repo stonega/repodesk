@@ -4,6 +4,10 @@ import { Fault, requireThat, type Workspace } from "../domain.ts";
 import type { GitHubApps } from "../github/registry.ts";
 import { ModelProviders } from "../models/service.ts";
 import { decrypt, fingerprint } from "../setup/credentials.ts";
+import {
+  deriveCodingUsageEvent,
+  upsertModelUsageEvents,
+} from "../usage/model-usage.ts";
 import type { TaskExchange } from "./conversation.ts";
 import {
   exchangeSourcesPresent,
@@ -610,7 +614,9 @@ export class TaskConversationExecutor {
           t.workspaceId,
           message.attemptId,
           JSON.stringify({
+            endedAt: Date.now(),
             tokens: status.tokens,
+            tokenUsage: status.tokenUsage,
             usageUnknown: status.usageUnknown || status.tokens === undefined,
           }),
         ],
@@ -619,6 +625,24 @@ export class TaskConversationExecutor {
         t.tokens += status.tokens ?? 0;
         t.usageUnknown ||= status.usageUnknown || status.tokens === undefined;
         await taskSave(sql, t);
+        if (message.attemptId) {
+          await upsertModelUsageEvents(sql, [
+            deriveCodingUsageEvent({
+              task: t,
+              attemptId: message.attemptId,
+              kind: "coding_conversation",
+              status:
+                status.state === "unknown"
+                  ? "unknown"
+                  : status.state === "failed" || status.state === "cancelled"
+                    ? "failed"
+                    : "settled",
+              tokens: status.tokens,
+              tokenUsage: status.tokenUsage,
+              usageUnknown: status.usageUnknown || status.tokens === undefined,
+            }),
+          ]);
+        }
       }
     });
   }

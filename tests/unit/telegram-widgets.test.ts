@@ -111,7 +111,7 @@ test("private answers receive proactive selection guidance and load rendering de
   ]) {
     r.task = task;
     const context = buildContext(w, r);
-    expect(JSON.parse(context.prompt).request).toBe(task);
+    expect(context.metadata.request).toBe(task);
     expect(context.system).toContain("Proactively use send_telegram_widget");
     expect(context.system).toContain("Honor text-only requests");
     expect(context.system).toContain("use text for simple facts");

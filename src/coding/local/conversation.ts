@@ -49,6 +49,14 @@ export async function runConversation(options: {
   turnId: string;
   result: DevelopmentResult;
   tokens: number;
+  tokenUsage?: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    reasoning?: number;
+    total?: number;
+  };
   usageUnknown: boolean;
   reconstructed: boolean;
   resultIssues?: ResultIssues;
@@ -86,15 +94,48 @@ export async function runConversation(options: {
       usageSummary(!modelActivity).tokens,
       usageSummary(!modelActivity).usageUnknown,
     );
-  const usageByTurn = new Map<string, { tokens: number; total: number }>();
+  type TurnUsageDelta = {
+    tokens: number;
+    total: number;
+    input: number;
+    output: number;
+    cacheRead: number;
+    reasoning: number;
+    hasBreakdown: boolean;
+    totalInput: number;
+    totalOutput: number;
+    totalCacheRead: number;
+    totalReasoning: number;
+  };
+  let priorBreakdown:
+    | { input: number; output: number; cacheRead: number; reasoning: number }
+    | undefined;
+  const usageByTurn = new Map<string, TurnUsageDelta>();
   const usageSummary = (deniedBeforeActivity = false) => {
-    const current =
-      usageByTurn.get(turnId)?.tokens ?? (deniedBeforeActivity ? 0 : undefined);
+    const turnEntry = usageByTurn.get(turnId);
+    const current = turnEntry?.tokens ?? (deniedBeforeActivity ? 0 : undefined);
+    const breakdown =
+      turnEntry?.hasBreakdown || priorBreakdown
+        ? {
+            input: (priorBreakdown?.input ?? 0) + (turnEntry?.input ?? 0),
+            output: (priorBreakdown?.output ?? 0) + (turnEntry?.output ?? 0),
+            cacheRead:
+              (priorBreakdown?.cacheRead ?? 0) + (turnEntry?.cacheRead ?? 0),
+            cacheWrite: 0,
+            reasoning:
+              (priorBreakdown?.reasoning ?? 0) + (turnEntry?.reasoning ?? 0),
+            total:
+              current !== undefined || priorTokens > 0
+                ? priorTokens + (current ?? 0)
+                : 0,
+          }
+        : undefined;
     return {
       tokens:
         current !== undefined || priorTokens > 0
           ? priorTokens + (current ?? 0)
           : undefined,
+      tokenUsage: breakdown,
       usageUnknown: priorUsageUnknown || current === undefined,
     };
   };
@@ -270,19 +311,65 @@ export async function runConversation(options: {
           typeof p?.turnId === "string"
         ) {
           const usage = p.tokenUsage?.last;
-          const total = p.tokenUsage?.total?.totalTokens;
+          const totals = p.tokenUsage?.total;
+          const total = totals?.totalTokens;
           if (
             Number.isSafeInteger(total) &&
             total >= 0 &&
             Number.isSafeInteger(usage?.totalTokens) &&
             usage.totalTokens >= 0
           ) {
+            const safeNum = (v: unknown) =>
+              typeof v === "number" && Number.isSafeInteger(v) && v >= 0
+                ? v
+                : undefined;
+            const lastIn = safeNum(usage.inputTokens);
+            const lastOut = safeNum(usage.outputTokens);
+            const lastCached = safeNum(usage.cachedInputTokens) ?? 0;
+            const lastReasoning = safeNum(usage.reasoningOutputTokens) ?? 0;
+            const totIn = safeNum(totals?.inputTokens);
+            const totOut = safeNum(totals?.outputTokens);
+            const totCached = safeNum(totals?.cachedInputTokens) ?? 0;
+            const totReasoning = safeNum(totals?.reasoningOutputTokens) ?? 0;
+            const hasBreakdown =
+              (lastIn !== undefined && lastOut !== undefined) ||
+              (totIn !== undefined && totOut !== undefined);
             const prior = usageByTurn.get(p.turnId);
+            const deltaInput = prior
+              ? totIn !== undefined
+                ? Math.max(0, totIn - prior.totalInput)
+                : 0
+              : Math.max(0, (lastIn ?? 0) - lastCached);
+            const deltaCacheRead = prior
+              ? Math.max(0, totCached - prior.totalCacheRead)
+              : lastCached;
+            const deltaOutput = prior
+              ? totOut !== undefined
+                ? Math.max(0, totOut - prior.totalOutput)
+                : 0
+              : (lastOut ?? 0);
+            const deltaReasoning = prior
+              ? Math.max(0, totReasoning - prior.totalReasoning)
+              : lastReasoning;
+            // For cumulative updates, totals.inputTokens includes cachedInputTokens in Codex;
+            // subtract deltaCacheRead to get uncached input tokens.
+            const uncachedDeltaInput = prior
+              ? Math.max(0, deltaInput - deltaCacheRead)
+              : deltaInput;
             usageByTurn.set(p.turnId, {
               tokens:
                 (prior?.tokens ?? 0) +
                 (prior ? Math.max(0, total - prior.total) : usage.totalTokens),
               total,
+              input: (prior?.input ?? 0) + uncachedDeltaInput,
+              output: (prior?.output ?? 0) + deltaOutput,
+              cacheRead: (prior?.cacheRead ?? 0) + deltaCacheRead,
+              reasoning: (prior?.reasoning ?? 0) + deltaReasoning,
+              hasBreakdown: Boolean(prior?.hasBreakdown || hasBreakdown),
+              totalInput: totIn ?? prior?.totalInput ?? 0,
+              totalOutput: totOut ?? prior?.totalOutput ?? 0,
+              totalCacheRead: totCached,
+              totalReasoning: totReasoning,
             });
           }
         }
@@ -506,6 +593,7 @@ export async function runConversation(options: {
           turnId,
           result: parsed.result,
           tokens: usage.tokens ?? 0,
+          ...(usage.tokenUsage ? { tokenUsage: usage.tokenUsage } : {}),
           usageUnknown: usage.usageUnknown,
           reconstructed,
           resultIssues: validationIssues,
@@ -513,7 +601,16 @@ export async function runConversation(options: {
       }
       validationIssues = parsed.issues;
       if (correction) throw failure(parsed.code);
-      priorTokens += usageByTurn.get(turnId)?.tokens ?? 0;
+      const finishedTurn = usageByTurn.get(turnId);
+      priorTokens += finishedTurn?.tokens ?? 0;
+      if (finishedTurn?.hasBreakdown) {
+        priorBreakdown = {
+          input: (priorBreakdown?.input ?? 0) + finishedTurn.input,
+          output: (priorBreakdown?.output ?? 0) + finishedTurn.output,
+          cacheRead: (priorBreakdown?.cacheRead ?? 0) + finishedTurn.cacheRead,
+          reasoning: (priorBreakdown?.reasoning ?? 0) + finishedTurn.reasoning,
+        };
+      }
       priorUsageUnknown ||= !usageByTurn.has(turnId);
       prompt = `Your previous turn completed, but its task result failed local validation. Correct only the final JSON using the same thread and existing checkout. Do not redo implementation, run commands, modify files, publish, or weaken any fixed verification plan. Preserve original authorization and schema-pinned evidence. For completed, return one to eight nonblank verification commands including necessary preparation. For needs_input, return a nonblank question. Follow the supplied schema's field bounds. Safe validation issues: ${JSON.stringify(validationIssues)}. Return only the corrected JSON.`;
     }

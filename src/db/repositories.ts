@@ -15,6 +15,7 @@ import {
 } from "../domain.ts";
 import { RuntimeLogger } from "../observability/logs.ts";
 import { ensureTelegramWidgetSkill } from "../skills/telegram-widgets.ts";
+import { syncWorkspaceUsageLedger } from "../usage/model-usage.ts";
 import { type Sql, transaction } from "./pool.ts";
 
 type RecordEntry = { seq: number; json: string };
@@ -182,7 +183,7 @@ async function syncRuns(
   workspaceId: string,
   records: Run[],
   previous?: Map<string, RecordEntry>,
-) {
+): Promise<Run[]> {
   const { replaceAll, removed, upserts } = diffRecords(records, previous);
   if (replaceAll) {
     const keep = upserts.map((u) => u.item.id);
@@ -201,7 +202,7 @@ async function syncRuns(
       [workspaceId, removed],
     );
   }
-  if (!upserts.length) return;
+  if (!upserts.length) return [];
   await sql.query(
     `INSERT INTO workspace_runs(workspace_id,id,seq,status,workflow_id,thread_id,actor,chat_id,topic_id,draft_id,draft_bot_id,mission_id,created_at,data)
      SELECT $1, u.id, u.seq, u.status, u.workflow_id, u.thread_id, u.actor, u.chat_id, u.topic_id, u.draft_id, u.draft_bot_id, u.mission_id, u.created_at, u.data
@@ -243,6 +244,7 @@ async function syncRuns(
       upserts.map((u) => u.json),
     ],
   );
+  return upserts.map((u) => u.item);
 }
 
 async function syncDeliveries(
@@ -482,7 +484,13 @@ export class Store {
       encoded.messages,
       lockedPrevious?.messages,
     );
-    await syncRuns(sql, workspace.id, encoded.runs, lockedPrevious?.runs);
+    const changedRuns = await syncRuns(
+      sql,
+      workspace.id,
+      encoded.runs,
+      lockedPrevious?.runs,
+    );
+    await syncWorkspaceUsageLedger(sql, workspace, changedRuns, coreChanged);
     await syncDeliveries(
       sql,
       workspace.id,

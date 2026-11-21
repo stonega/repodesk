@@ -36,7 +36,7 @@ test("post-summary hysteresis still requires another bounded batch for oversized
   const input: AgentInput = {
     model: {
       ...selectedModel("gpt-4.1-mini"),
-      contextWindow: 50000,
+      contextWindow: 36000,
       maxTokens: 4000,
     },
     tools: applicationTools({} as Store, w.id, r.id, 1),

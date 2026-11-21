@@ -547,6 +547,7 @@ export class ReviewExecutor {
       )
         t.state = "running";
       t.tokens = status.tokens;
+      t.tokenUsage = status.tokenUsage;
       t.usageUnknown = status.usageUnknown;
       if (
         status.state === "failed" &&

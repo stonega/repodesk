@@ -302,6 +302,7 @@ function Shell() {
     ["instructions", "Instructions"],
     ["threads", "Threads"],
     ["usage", "Usage"],
+    ["model-usage", "Model usage"],
     ["audit", "Audit"],
     ["deletion", "Privacy"],
     ["settings", "Settings"],
@@ -316,6 +317,7 @@ function Shell() {
           "workflows",
           "skills",
           "threads",
+          "model-usage",
           "settings",
         ].includes(path),
       )

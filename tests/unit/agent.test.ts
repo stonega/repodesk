@@ -9,6 +9,7 @@ import {
   PiRunner,
   selectedModel,
 } from "../../src/agent/runtime.ts";
+import { estimateContextTokens } from "../../src/agent/tokens.ts";
 import { Fault } from "../../src/domain.ts";
 
 function message(
@@ -750,18 +751,25 @@ test("model capacity and explicit input limits reject before reservation or disp
   await expect(runner.run({ ...base, maxOutputTokens: 3001 })).rejects.toThrow(
     "model_output_limit_exceeded",
   );
+  // 1500 Chinese chars (~1650 tokens) now fit in a 5000-token window (previously overestimated as 4500 UTF-8 bytes).
+  expect(
+    (await runner.run({ ...base, prompt: "字".repeat(1500) })).status,
+  ).toBe("succeeded");
+  expect(calls).toBe(1);
+  expect(reservations).toBe(1);
+  // 4000 Chinese chars (~4400 tokens + 1000 maxOutputTokens > 5000) still reject before reservation.
   await expect(
-    runner.run({ ...base, prompt: "字".repeat(1500) }),
+    runner.run({ ...base, prompt: "字".repeat(4000) }),
   ).rejects.toThrow("model_context_limit_exceeded");
   await expect(runner.run({ ...base, maxInputChars: 10 })).rejects.toThrow(
     "input_budget_exceeded",
   );
-  expect(reservations).toBe(0);
-  expect(calls).toBe(0);
+  expect(reservations).toBe(1);
+  expect(calls).toBe(1);
   expect((await runner.run({ ...base, maxOutputTokens: 2500 })).status).toBe(
     "succeeded",
   );
-  expect(calls).toBe(1);
+  expect(calls).toBe(2);
 });
 
 test("blank context windows defer oversized input to the provider for known and custom models", async () => {
@@ -852,9 +860,9 @@ test("automatic output fits remaining dollars and preserves the model response",
 });
 test("cached write prices above input rates are covered before provider dispatch", async () => {
   let reserved = 0;
-  let bytes = 0;
+  let estimatedTokens = 0;
   const runner = new PiRunner((_model, context) => {
-    bytes = Buffer.byteLength(JSON.stringify(context));
+    estimatedTokens = estimateContextTokens(context).totalTokens;
     return stream(message([{ type: "text", text: "Cache fixture." }]));
   });
   await runner.run(
@@ -868,8 +876,8 @@ test("cached write prices above input rates are covered before provider dispatch
       },
     }),
   );
-  expect(bytes).toBeGreaterThan(0);
-  expect(reserved).toBeCloseTo((bytes * 2) / 1_000_000, 9);
+  expect(estimatedTokens).toBeGreaterThan(0);
+  expect(reserved).toBeCloseTo((estimatedTokens * 2) / 1_000_000, 9);
 });
 
 test("automatic output shrinks to remaining context and supports zero-cost models", async () => {
@@ -886,13 +894,13 @@ test("automatic output shrinks to remaining context and supports zero-cost model
     const output = options?.maxTokens ?? 0;
     expect(output).toBeGreaterThan(0);
     expect(output).toBeLessThan(3000);
-    expect(Buffer.byteLength(JSON.stringify(context)) + output).toBe(5000);
+    expect(estimateContextTokens(context).totalTokens + output).toBe(5000);
     return stream(message([{ type: "text", text: "Done" }]));
   });
   await runner.run(
     input({
       model,
-      prompt: "a".repeat(3500),
+      prompt: "a".repeat(12000),
       maxInputChars: undefined,
       maxOutputTokens: undefined,
       remainingBudget: async () => ({ run: 0, workspace: 0 }),
