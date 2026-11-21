@@ -11,6 +11,7 @@ export function repositorySourcesAllowed(
   w: Workspace,
   actor: string,
   scope: RepositorySources,
+  allowUnconfirmed = false,
 ) {
   return (
     githubRepositoryScopeCurrent(
@@ -21,19 +22,25 @@ export function repositorySourcesAllowed(
     scope.repositoryIds.every(
       (id) =>
         w.github?.repositories.some((r) => r.id === id) &&
-        repositoryAccess(w, actor, id),
+        repositoryAccess(w, actor, id, false, allowUnconfirmed),
     )
   );
 }
 
+/**
+ * With `allowUnconfirmed`, a transient GitHub sync failure or an overdue
+ * refresh does not count as revocation. Use it only to decide whether a saved
+ * workflow must be suspended; dispatch and reads use the strict default.
+ */
 export function workflowRepositoriesAllowed(
   w: Workspace,
   actor: string,
   chatId: string,
   scope: RepositorySources,
+  allowUnconfirmed = false,
 ) {
   return (
-    repositorySourcesAllowed(w, actor, scope) &&
+    repositorySourcesAllowed(w, actor, scope, allowUnconfirmed) &&
     (chatId === actor ||
       scope.repositoryIds.every(
         (id) =>

@@ -656,6 +656,16 @@ performed during this consolidation.
 
 ## Scoped repository schedules (2026-11-12)
 
+Update 2026-11-21: transient member permission-sync failures (`github_unavailable`,
+`github_rate_limited`) and overdue snapshots no longer suspend GitHub-scoped
+schedules. Production suspended an idle daily report twice after one failed
+5-minute sync. `revokeWork` now suspends only on confirmed loss (denied sync,
+removed permission, disconnection, connection or repository revision change).
+Unconfirmed access still blocks reads and cancels queued runs; scheduled
+dispatch keeps `nextAt` and retries until the missed-run window ends.
+Permission-sync audit entries now compare canonical snapshots, removing an
+entry recorded on every sync because stored JSONB reorders keys.
+
 Unrelated repository metadata changes no longer suspend a report or cancel its
 queued run and pending output. Read scopes and fresh permission snapshots check
 the connection generation and selected repositories' change revisions. Removed

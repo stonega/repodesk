@@ -275,18 +275,22 @@ const url = process.env.TEST_DATABASE_URL;
         reason: "github_workflow_scope_denied",
       },
       {
-        name: "stale permissions",
-        mutate: (w) => {
-          const a = w.members.find((m) => m.id === "202")?.github;
-          if (a) a.syncedAt = new Date(Date.now() - 11 * 60000).toISOString();
-        },
-        reason: "github_workflow_scope_denied",
-      },
-      {
         name: "denied permissions",
         mutate: (w) => {
           const a = w.members.find((m) => m.id === "202")?.github;
           if (a) a.repositories = [];
+        },
+        reason: "github_workflow_scope_denied",
+      },
+      {
+        name: "confirmed sync denial",
+        mutate: (w) => {
+          const a = w.members.find((m) => m.id === "202")?.github;
+          if (a) {
+            a.status = "unavailable";
+            a.syncError = "github_access_denied";
+            a.repositories = [];
+          }
         },
         reason: "github_workflow_scope_denied",
       },
@@ -316,6 +320,41 @@ const url = process.env.TEST_DATABASE_URL;
             repositoryIds: [7001],
           }),
         ).toBe(false);
+      });
+    const unconfirmed: { name: string; mutate: (w: Workspace) => void }[] = [
+      {
+        name: "stale permissions",
+        mutate: (w) => {
+          const a = w.members.find((m) => m.id === "202")?.github;
+          if (a) a.syncedAt = new Date(Date.now() - 11 * 60000).toISOString();
+        },
+      },
+      {
+        name: "transient sync failure",
+        mutate: (w) => {
+          const a = w.members.find((m) => m.id === "202")?.github;
+          if (a) {
+            a.status = "unavailable";
+            a.syncError = "github_unavailable";
+          }
+        },
+      },
+    ];
+    for (const scenario of unconfirmed)
+      test(`${scenario.name} denies the queued run but keeps the schedule active`, async () => {
+        const f = await fixture();
+        await store.change(f.id, (w) => {
+          scenario.mutate(w);
+          revokeWork(w);
+          revokeWork(w);
+        });
+        const w = await store.read(f.id);
+        expect(w.workflows[0]?.status).toBe("active");
+        expect(w.workflows[0]?.reason).toBeUndefined();
+        expect(w.runs[0]?.cancelled).toBe(true);
+        expect(
+          w.audit.filter((a) => a.action === "workflow.suspended"),
+        ).toHaveLength(0);
       });
   },
 );

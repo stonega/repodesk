@@ -217,6 +217,8 @@ export function revokeWork(w: Workspace, now = new Date()) {
       )
     )
       approval.decision = "revoked";
+  // Suspension is durable and needs a new approval, so only confirmed loss of
+  // scope suspends. Unconfirmed GitHub access still blocks dispatch and runs.
   for (const workflow of w.workflows)
     if (
       workflow.status === "active" &&
@@ -228,6 +230,7 @@ export function revokeWork(w: Workspace, now = new Date()) {
             workflow.owner,
             workflow.spec.chatId,
             workflow.spec.github,
+            true,
           )))
     ) {
       workflow.status = "suspended";

@@ -421,6 +421,16 @@ export function tick(w: Workspace, model: string, now = new Date()) {
       Date.parse(f.nextAt) > now.getTime()
     )
       continue;
+    // revokeWork already suspended confirmed scope loss. When GitHub access
+    // is only unconfirmed, keep nextAt so a later tick dispatches after the
+    // next successful sync; the missed-run window still bounds the delay.
+    if (
+      f.spec.github &&
+      !workflowRepositoriesAllowed(w, f.owner, f.spec.chatId, f.spec.github) &&
+      now.getTime() - Date.parse(f.nextAt) <=
+        w.settings.missedRunMinutes * 60000
+    )
+      continue;
     const instant = f.nextAt;
     const key = `${f.id}:${instant}`;
     const isOnce = f.spec.recurrence.frequency === "once";

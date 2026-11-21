@@ -50,7 +50,10 @@ publication; there is no separate workflow approval step.
 
 Repository reports keep working when an unrelated repository changes or becomes
 unavailable. Changes to the report's selected repositories, the workspace GitHub
-connection, owner membership or current permissions can still suspend it. Restoring
+connection, owner membership or current permissions can still suspend it. A
+temporary GitHub outage or a delayed permission refresh does not suspend a report:
+its run waits for the next successful permission check and is skipped, with a
+notice, if access cannot be confirmed within the late-run window. Restoring
 access does not automatically reactivate a suspended schedule. Recheck its current
 sources before saving it again; cancelled occurrences are not replayed.
 

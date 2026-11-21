@@ -2,15 +2,36 @@ import { publicOrigin } from "../admin/site.ts";
 import type { Sql } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
 import { Fault, requireThat, type Workspace } from "../domain.ts";
-import { decrypt, encrypt, hash, token } from "../setup/credentials.ts";
+import {
+  decrypt,
+  encrypt,
+  fingerprint,
+  hash,
+  token,
+} from "../setup/credentials.ts";
 import { audit, authorize, eligible } from "../workspaces/policy.ts";
 import { deliver } from "../workspaces/service.ts";
-import { type GitHubApp, GitHubRateLimitError } from "./app.ts";
+import {
+  type GitHubApp,
+  GitHubRateLimitError,
+  type GitHubRepository,
+} from "./app.ts";
 import { githubConnectionRevision } from "./config.ts";
 import { availableGitHubAccount } from "./member-account.ts";
 import type { GitHubApps } from "./registry.ts";
 import { RepositorySync } from "./repository-sync.ts";
 import { type GitHubUserAccess, invalidateGitHubWork } from "./user-access.ts";
+
+/** Canonical fingerprint of repository access fields, ignoring activity timestamps and ordering. */
+export function repositoryPermissionFingerprint(
+  repositories: GitHubRepository[],
+) {
+  return fingerprint(
+    repositories
+      .map(({ pushed_at: _pushed, updated_at: _updated, ...policy }) => policy)
+      .sort((a, b) => a.id - b.id),
+  );
+}
 
 export class GitHubUsers {
   readonly repositorySync: RepositorySync;
@@ -425,9 +446,11 @@ export class GitHubUsers {
       "UPDATE github_user_accounts SET next_sync_at=$3 WHERE workspace_id=$1 AND actor=$2",
       [w.id, actor, new Date(retryAt)],
     );
+    // Ignore JSONB key reordering, page ordering, and activity timestamp churn.
     if (
       lost ||
-      JSON.stringify(prior.repositories) !== JSON.stringify(access.repositories)
+      repositoryPermissionFingerprint(prior.repositories) !==
+        repositoryPermissionFingerprint(access.repositories)
     )
       audit(w, actor, "github.permissions_synced", String(access.id));
     return access;

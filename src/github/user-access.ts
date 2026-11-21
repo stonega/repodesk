@@ -26,23 +26,40 @@ export function githubAccessPending(error: unknown) {
     ].includes(error.code)
   );
 }
+/**
+ * The last successful snapshot cannot be confirmed right now (transient sync
+ * failure or overdue refresh), but nothing has proven that access was revoked.
+ */
+export function githubAccessUnconfirmed(access: GitHubUserAccess) {
+  return (
+    (access.status === "unavailable" &&
+      access.syncError !== "github_access_denied") ||
+    (access.status === "connected" &&
+      Date.parse(access.syncedAt) <= Date.now() - 10 * 60000)
+  );
+}
 // Existing unlinked members retain the operator-managed policy. Linking adds
 // an upstream boundary; disconnecting cannot remove that boundary.
+// `allowUnconfirmed` is only for deciding whether durable configuration (such
+// as a schedule) must be revoked; reads and actions always require fresh access.
 export function repositoryAccess(
   w: Workspace,
   actor: string,
   repositoryId: number,
   write = false,
+  allowUnconfirmed = false,
 ) {
   const access = w.members.find((m) => m.id === actor)?.github;
   if (!access) return true;
   const repo = access.repositories.find((r) => r.id === repositoryId);
-  return (
+  const fresh =
     access.status === "connected" &&
+    Date.parse(access.syncedAt) > Date.now() - 10 * 60000;
+  return (
+    (fresh || (allowUnconfirmed && githubAccessUnconfirmed(access))) &&
     githubRepositoryScopeCurrent(w.github, access.connectionRevision, [
       repositoryId,
     ]) &&
-    Date.parse(access.syncedAt) > Date.now() - 10 * 60000 &&
     (write
       ? repo?.permissions?.push === true || repo?.permissions?.admin === true
       : repo?.permissions?.pull === true)
