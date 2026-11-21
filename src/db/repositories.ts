@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import {
   decodeBrowserWorkspace,
+  encodeBrowserRun,
   encodeBrowserWorkspace,
 } from "../browser/storage.ts";
 import {
@@ -346,6 +347,27 @@ async function syncAudit(
   );
 }
 
+function hydrateReadOnlyWorkspace(
+  raw: Record<string, unknown>,
+  messages: Source[],
+  runs: Run[],
+  privateStateKey?: string,
+): Workspace {
+  const assembled = {
+    ...raw,
+    messages: Array.isArray(raw.messages)
+      ? (raw.messages as Source[])
+      : messages,
+    runs: Array.isArray(raw.runs) ? (raw.runs as Run[]) : runs,
+    deliveries: Array.isArray(raw.deliveries)
+      ? (raw.deliveries as Delivery[])
+      : [],
+    audit: Array.isArray(raw.audit) ? (raw.audit as Audit[]) : [],
+  } as Workspace;
+  const normalized = workspaceDefaults(assembled);
+  return decodeBrowserWorkspace(normalized, privateStateKey);
+}
+
 function hydrateWorkspace(
   raw: Record<string, unknown>,
   messages: Source[],
@@ -420,38 +442,56 @@ export class Store {
     ).rows[0];
     if (!row) throw new Fault("not_found", 404);
     const raw = row.data as Record<string, unknown>;
-    const messages = Array.isArray(raw.messages)
-      ? []
-      : (
-          await sql.query<{ data: Source }>(
-            "SELECT data FROM workspace_messages WHERE workspace_id=$1 ORDER BY seq",
-            [id],
-          )
-        ).rows.map((x) => x.data);
-    const runs = Array.isArray(raw.runs)
-      ? []
-      : (
-          await sql.query<{ data: Run }>(
-            "SELECT data FROM workspace_runs WHERE workspace_id=$1 ORDER BY seq",
-            [id],
-          )
-        ).rows.map((x) => x.data);
-    const deliveries = Array.isArray(raw.deliveries)
-      ? []
-      : (
-          await sql.query<{ data: Delivery }>(
-            "SELECT data FROM workspace_deliveries WHERE workspace_id=$1 ORDER BY seq",
-            [id],
-          )
-        ).rows.map((x) => x.data);
-    const audit = Array.isArray(raw.audit)
-      ? []
-      : (
-          await sql.query<{ data: Audit }>(
-            "SELECT data FROM workspace_audit WHERE workspace_id=$1 ORDER BY seq",
-            [id],
-          )
-        ).rows.map((x) => x.data);
+    const loadMessages = () =>
+      Array.isArray(raw.messages)
+        ? Promise.resolve<Source[]>([])
+        : sql
+            .query<{ data: Source }>(
+              "SELECT data FROM workspace_messages WHERE workspace_id=$1 ORDER BY seq",
+              [id],
+            )
+            .then((res) => res.rows.map((x) => x.data));
+    const loadRuns = () =>
+      Array.isArray(raw.runs)
+        ? Promise.resolve<Run[]>([])
+        : sql
+            .query<{ data: Run }>(
+              "SELECT data FROM workspace_runs WHERE workspace_id=$1 ORDER BY seq",
+              [id],
+            )
+            .then((res) => res.rows.map((x) => x.data));
+    const loadDeliveries = () =>
+      Array.isArray(raw.deliveries)
+        ? Promise.resolve<Delivery[]>([])
+        : sql
+            .query<{ data: Delivery }>(
+              "SELECT data FROM workspace_deliveries WHERE workspace_id=$1 ORDER BY seq",
+              [id],
+            )
+            .then((res) => res.rows.map((x) => x.data));
+    const loadAudit = () =>
+      Array.isArray(raw.audit)
+        ? Promise.resolve<Audit[]>([])
+        : sql
+            .query<{ data: Audit }>(
+              "SELECT data FROM workspace_audit WHERE workspace_id=$1 ORDER BY seq",
+              [id],
+            )
+            .then((res) => res.rows.map((x) => x.data));
+    const [messages, runs, deliveries, audit] =
+      sql === this.pool
+        ? await Promise.all([
+            loadMessages(),
+            loadRuns(),
+            loadDeliveries(),
+            loadAudit(),
+          ])
+        : [
+            await loadMessages(),
+            await loadRuns(),
+            await loadDeliveries(),
+            await loadAudit(),
+          ];
     return hydrateWorkspace(
       raw,
       messages,
@@ -461,6 +501,170 @@ export class Store {
       this.privateStateKey,
       lock ? sql : undefined,
     );
+  }
+  /**
+   * Lock-free, lightweight workspace read for run authorization guards.
+   * Omits deliveries, audit logs, snapshot diffing, and heavy run transcripts/tools.
+   */
+  async readForGuard(id: string, sql: Sql = this.pool): Promise<Workspace> {
+    const row = (
+      await sql.query("SELECT data FROM workspaces WHERE id=$1", [id])
+    ).rows[0];
+    if (!row) throw new Fault("not_found", 404);
+    const raw = row.data as Record<string, unknown>;
+    const loadMessages = () =>
+      Array.isArray(raw.messages)
+        ? Promise.resolve<Source[]>([])
+        : sql
+            .query<{ data: Source }>(
+              "SELECT data FROM workspace_messages WHERE workspace_id=$1 ORDER BY seq",
+              [id],
+            )
+            .then((res) => res.rows.map((x) => x.data));
+    const loadRuns = () =>
+      Array.isArray(raw.runs)
+        ? Promise.resolve<Run[]>([])
+        : sql
+            .query<{ data: Run }>(
+              "SELECT data - 'transcript' - 'tools' AS data FROM workspace_runs WHERE workspace_id=$1 ORDER BY seq",
+              [id],
+            )
+            .then((res) =>
+              res.rows.map((x) => ({
+                ...x.data,
+                transcript: x.data.transcript ?? [],
+                tools: x.data.tools ?? {},
+              })),
+            );
+    const [messages, runs] =
+      sql === this.pool
+        ? await Promise.all([loadMessages(), loadRuns()])
+        : [await loadMessages(), await loadRuns()];
+    return hydrateReadOnlyWorkspace(raw, messages, runs, this.privateStateKey);
+  }
+  /**
+   * Surgically renews a single running run's lease using a shared workspace lock
+   * (`FOR SHARE`), avoiding full-workspace `FOR UPDATE` contention and table scans.
+   */
+  async renewRunLease(
+    workspaceId: string,
+    runId: string,
+    fence: number,
+    leaseUntil: string,
+  ): Promise<void> {
+    const outcome = await transaction(this.pool, async (sql) => {
+      const ws = (
+        await sql.query<{ legacy: boolean }>(
+          "SELECT (data ? 'runs') AS legacy FROM workspaces WHERE id=$1 FOR SHARE",
+          [workspaceId],
+        )
+      ).rows[0];
+      if (!ws) throw new Fault("not_found", 404);
+      if (ws.legacy) return "legacy" as const;
+      const updated = await sql.query(
+        `UPDATE workspace_runs
+         SET data = jsonb_set(data, '{leaseUntil}', to_jsonb($4::text), true)
+         WHERE workspace_id = $1
+           AND id = $2
+           AND status = 'running'
+           AND (data->>'fence')::int = $3
+         RETURNING id`,
+        [workspaceId, runId, fence, leaseUntil],
+      );
+      if (updated.rowCount !== 1) throw new Fault("run_revoked", 409);
+      return "updated" as const;
+    });
+    if (outcome === "legacy") {
+      await this.change(workspaceId, (w) => {
+        const r = w.runs.find((item) => item.id === runId);
+        if (!r || r.fence !== fence || r.status !== "running")
+          throw new Fault("run_revoked", 409);
+        r.leaseUntil = leaseUntil;
+      });
+    }
+  }
+  /**
+   * Atomically validates and mutates a single run row under `workspaces FOR SHARE`
+   * + `workspace_runs FOR UPDATE`, enabling concurrent parallel tools and concurrent
+   * runs in the same workspace while staying strictly clobber-free with `Store.change`.
+   */
+  async mutateRunRow<T>(
+    workspaceId: string,
+    runId: string,
+    action: (workspace: Workspace, run: Run, sql: Sql) => T | Promise<T>,
+  ): Promise<T> {
+    const outcome = await transaction(this.pool, async (sql) => {
+      const wsRow = (
+        await sql.query<{ data: Record<string, unknown> }>(
+          "SELECT data FROM workspaces WHERE id=$1 FOR SHARE",
+          [workspaceId],
+        )
+      ).rows[0];
+      if (!wsRow) throw new Fault("not_found", 404);
+      const raw = wsRow.data;
+      if (Array.isArray(raw.runs)) return { legacy: true as const };
+
+      const targetRow = (
+        await sql.query<{ data: Run }>(
+          "SELECT data FROM workspace_runs WHERE workspace_id=$1 AND id=$2 FOR UPDATE",
+          [workspaceId, runId],
+        )
+      ).rows[0];
+      if (!targetRow) throw new Fault("run_revoked", 409);
+
+      const messages = Array.isArray(raw.messages)
+        ? []
+        : (
+            await sql.query<{ data: Source }>(
+              "SELECT data FROM workspace_messages WHERE workspace_id=$1 ORDER BY seq",
+              [workspaceId],
+            )
+          ).rows.map((x) => x.data);
+      const otherRuns = (
+        await sql.query<{ id: string; data: Run }>(
+          "SELECT id, data - 'transcript' - 'tools' AS data FROM workspace_runs WHERE workspace_id=$1 ORDER BY seq",
+          [workspaceId],
+        )
+      ).rows.map((x) =>
+        x.id === runId
+          ? targetRow.data
+          : {
+              ...x.data,
+              transcript: x.data.transcript ?? [],
+              tools: x.data.tools ?? {},
+            },
+      );
+
+      const workspace = hydrateReadOnlyWorkspace(
+        raw,
+        messages,
+        otherRuns,
+        this.privateStateKey,
+      );
+      const run = workspace.runs.find((item) => item.id === runId);
+      if (!run) throw new Fault("run_revoked", 409);
+
+      const beforeJson = JSON.stringify(run);
+      const value = await action(workspace, run, sql);
+      const afterJson = JSON.stringify(run);
+      if (afterJson !== beforeJson) {
+        const encoded = encodeBrowserRun(workspace, run, this.privateStateKey);
+        await sql.query(
+          "UPDATE workspace_runs SET status=$3, data=$4 WHERE workspace_id=$1 AND id=$2",
+          [workspaceId, runId, encoded.status ?? "", JSON.stringify(encoded)],
+        );
+      }
+      return { legacy: false as const, value };
+    });
+
+    if (outcome.legacy) {
+      return this.change(workspaceId, (w, sql) => {
+        const run = w.runs.find((item) => item.id === runId);
+        if (!run) throw new Fault("run_revoked", 409);
+        return action(w, run, sql);
+      });
+    }
+    return outcome.value;
   }
   async save(sql: Sql, workspace: Workspace) {
     const previous = snapshots.get(workspace);

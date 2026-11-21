@@ -208,6 +208,8 @@ export class Executor {
       ...(shutdown ? [shutdown] : []),
     ]);
     let handedOff = !!claimed.codingTaskId;
+    let lastLeaseRenewalAt = Date.now();
+    const LEASE_RENEWAL_INTERVAL_MS = 30_000;
     const guard = async () => {
       signal.throwIfAborted();
       const d = await this.store.deployment();
@@ -228,31 +230,44 @@ export class Executor {
           409,
         );
       }
-      await this.store.change(workspaceId, (w) => {
-        if (claimed.modelProvider)
-          requireThat(
-            w.operatorId === claimed.modelProvider.operatorId &&
-              w.chatModel?.selection.providerId === claimed.modelProvider.id &&
-              (claimed.modelProvider.chatRevision === undefined ||
-                w.chatModel?.revision === claimed.modelProvider.chatRevision),
-            "model_configuration_changed",
-            409,
-          );
+      const w = await this.store.readForGuard(workspaceId);
+      if (claimed.modelProvider)
         requireThat(
-          (w.plugins?.revision ?? 0) === pluginRevision &&
-            (w.coding?.revision ?? 0) === codingRevision,
-          "extension_configuration_changed",
+          w.operatorId === claimed.modelProvider.operatorId &&
+            w.chatModel?.selection.providerId === claimed.modelProvider.id &&
+            (claimed.modelProvider.chatRevision === undefined ||
+              w.chatModel?.revision === claimed.modelProvider.chatRevision),
+          "model_configuration_changed",
           409,
         );
-        const r = w.runs.find((r) => r.id === runId);
-        requireThat(
-          r && r.fence === fence && r.status === "running" && runAllowed(w, r),
-          "run_revoked",
-          409,
+      requireThat(
+        (w.plugins?.revision ?? 0) === pluginRevision &&
+          (w.coding?.revision ?? 0) === codingRevision,
+        "extension_configuration_changed",
+        409,
+      );
+      const r = w.runs.find((r) => r.id === runId);
+      requireThat(
+        r && r.fence === fence && r.status === "running" && runAllowed(w, r),
+        "run_revoked",
+        409,
+      );
+      handedOff = !!r.codingTaskId;
+      const nowMs = Date.now();
+      const currentLeaseMs = Date.parse(r.leaseUntil ?? "");
+      if (
+        nowMs - lastLeaseRenewalAt >= LEASE_RENEWAL_INTERVAL_MS ||
+        !Number.isFinite(currentLeaseMs) ||
+        currentLeaseMs - nowMs <= 90_000
+      ) {
+        await this.store.renewRunLease(
+          workspaceId,
+          runId,
+          fence,
+          new Date(nowMs + 120000).toISOString(),
         );
-        handedOff = !!r.codingTaskId;
-        r.leaseUntil = new Date(Date.now() + 120000).toISOString();
-      });
+        lastLeaseRenewalAt = nowMs;
+      }
     };
     let polling = false;
     const poll = setInterval(() => {
@@ -283,6 +298,11 @@ export class Executor {
       await this.store.change(workspaceId, (w) => {
         const r = w.runs.find((r) => r.id === runId);
         requireThat(r && r.fence === fence, "lease_lost", 409);
+        if (r.status === "running") {
+          const nowMs = Date.now();
+          r.leaseUntil = new Date(nowMs + 120000).toISOString();
+          lastLeaseRenewalAt = nowMs;
+        }
         // Usage must settle even when cancellation arrived during the provider request.
         if (message.role === "assistant" && attemptId) {
           const a = r.attempts.find((a) => a.id === attemptId);

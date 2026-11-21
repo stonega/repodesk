@@ -15,13 +15,9 @@ export function extensionToolExecution(
 ): NonNullable<AgentInput["extensionTool"]> {
   return async (name, callId, execute) => {
     signal.throwIfAborted();
-    const prior = await store.change(workspaceId, (w) => {
-      const run = w.runs.find((r) => r.id === runId);
+    const prior = await store.mutateRunRow(workspaceId, runId, (w, run) => {
       requireThat(
-        run &&
-          run.fence === fence &&
-          run.status === "running" &&
-          runAllowed(w, run),
+        run.fence === fence && run.status === "running" && runAllowed(w, run),
         "tool_policy_denied",
         403,
       );
@@ -46,13 +42,9 @@ export function extensionToolExecution(
     if (prior) return prior;
     const result = await execute();
     signal.throwIfAborted();
-    await store.change(workspaceId, (w) => {
-      const run = w.runs.find((r) => r.id === runId);
+    await store.mutateRunRow(workspaceId, runId, (w, run) => {
       requireThat(
-        run &&
-          run.fence === fence &&
-          run.status === "running" &&
-          runAllowed(w, run),
+        run.fence === fence && run.status === "running" && runAllowed(w, run),
         "tool_policy_denied",
         403,
       );

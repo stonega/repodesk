@@ -63,6 +63,49 @@ export function orchestrationTools(
     executionMode,
     execute: async (callId, args, signal) => {
       signal?.throwIfAborted();
+      if (executionMode === "parallel") {
+        const claimed = await store.mutateRunRow(workspaceId, runId, (w, r) => {
+          requireThat(
+            r.fence === fence && runAllowed(w, r) && r.status === "running",
+            "tool_policy_denied",
+            403,
+          );
+          requireThat(!r.workflowId, "workflow_tool_denied", 403);
+          const prior = r.tools[callId];
+          if (prior?.state === "done") {
+            return {
+              cached: prior.result as {
+                content: { type: "text"; text: string }[];
+                details: unknown;
+              },
+            };
+          }
+          r.tools[callId] = { name, state: "started" };
+          return { w, r: structuredClone(r) };
+        });
+        if ("cached" in claimed && claimed.cached) return claimed.cached;
+        const value = await action(
+          claimed.w,
+          claimed.r,
+          args as Record<string, unknown>,
+          store.pool,
+          callId,
+        );
+        signal?.throwIfAborted();
+        const result = {
+          content: [{ type: "text" as const, text: JSON.stringify(value) }],
+          details: {},
+        };
+        await store.mutateRunRow(workspaceId, runId, (w, r) => {
+          requireThat(
+            r.fence === fence && runAllowed(w, r) && r.status === "running",
+            "tool_policy_denied",
+            403,
+          );
+          r.tools[callId] = { name, state: "done", result };
+        });
+        return result;
+      }
       return store.change(workspaceId, async (w, sql) => {
         const r = w.runs.find((item) => item.id === runId);
         requireThat(

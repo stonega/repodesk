@@ -1,4 +1,4 @@
-import type { BrowserReadStamp, Workspace } from "../domain.ts";
+import type { BrowserReadStamp, Run, Workspace } from "../domain.ts";
 import { Fault, requireThat } from "../domain.ts";
 import { decrypt, encrypt } from "../setup/credentials.ts";
 import { browserPrivateGrants } from "./privacy.ts";
@@ -68,6 +68,33 @@ function unseal(
   } catch {
     throw new Fault("browser_private_storage_unavailable", 503);
   }
+}
+
+/** Encrypt a single run's private browser body when updating one row in workspace_runs. */
+export function encodeBrowserRun(
+  workspace: Workspace,
+  run: Run,
+  key?: string,
+): Run {
+  const stamp = run.browserRead ?? browserPrivateGrants(workspace, run)[0];
+  if (!stamp) return run;
+  requireThat(key, "browser_private_storage_unavailable", 503);
+  const copy = structuredClone(run);
+  copy.browserRead ??= structuredClone(stamp);
+  seal(
+    record(copy),
+    runFields,
+    name(workspace, "run", copy.id, copy.browserRead.owner),
+    key,
+    {
+      task: "Private browser task",
+      sources: [],
+      instructions: [],
+      transcript: [],
+      tools: {},
+    },
+  );
+  return copy;
 }
 
 /** Keep queryable run/queue metadata, encrypt all private browser conversation bodies. */

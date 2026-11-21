@@ -10,7 +10,7 @@ import { coreWorkspaceData, Store } from "../../src/db/repositories.ts";
 import { settingsSchema } from "../../src/domain.ts";
 import { SetupService } from "../../src/setup/service.ts";
 import { stopGeneration } from "../../src/telegram/generation.ts";
-import { audit } from "../../src/workspaces/policy.ts";
+import { audit, runAllowed } from "../../src/workspaces/policy.ts";
 import {
   createRun,
   deliver,
@@ -251,5 +251,123 @@ describeDb("relational workspace records and incremental outbox", () => {
     });
     expect((await app.request("/healthz")).status).toBe(200);
     expect(coreWorkspaceData(after)).not.toHaveProperty("runs");
+  });
+
+  test("readForGuard, renewRunLease and mutateRunRow avoid full-workspace FOR UPDATE contention and preserve browser encryption", async () => {
+    const { id } = await setup.createWorkspace(
+      { id: adminId, username: "records-admin", operator: true },
+      settingsSchema.parse({ name: "Run Row Locking", timezone: "UTC" }),
+    );
+    let run1Id = "";
+    let run2Id = "";
+    await store.change(id, (w) => {
+      enrollOwner(w, "101");
+      w.members.push({ id: "202", role: "member", active: true });
+      const r1 = createRun(w, "101", "first task", "101", 0, "gpt-4.1-mini");
+      r1.status = "running";
+      r1.fence = 1;
+      r1.leaseUntil = new Date(Date.now() + 60000).toISOString();
+      r1.transcript = [{ role: "user", content: "heavy ".repeat(500) }];
+      r1.tools = { t0: { name: "search_code", state: "done", result: "big" } };
+      run1Id = r1.id;
+
+      const r2 = createRun(w, "202", "second task", "202", 0, "gpt-4.1-mini");
+      r2.status = "running";
+      r2.fence = 1;
+      r2.leaseUntil = new Date(Date.now() + 60000).toISOString();
+      run2Id = r2.id;
+
+      deliver(w, "101", "101", "pending notice", { topicId: 0, runId: r1.id });
+      audit(w, "101", "test.setup", id);
+    });
+
+    // readForGuard omits deliveries and audit and strips heavy transcript/tools in SQL while keeping runAllowed intact.
+    const guardWs = await store.readForGuard(id);
+    expect(guardWs.deliveries).toEqual([]);
+    expect(guardWs.audit).toEqual([]);
+    const guardR1 = guardWs.runs.find((r) => r.id === run1Id);
+    expect(guardR1).toBeDefined();
+    expect(guardR1?.transcript).toEqual([]);
+    expect(guardR1?.tools).toEqual({});
+    expect(guardR1 ? runAllowed(guardWs, guardR1) : false).toBe(true);
+
+    // renewRunLease surgically updates leaseUntil and rejects stale fences.
+    const nextLease = new Date(Date.now() + 120000).toISOString();
+    await store.renewRunLease(id, run1Id, 1, nextLease);
+    const afterRenew = await store.readForGuard(id);
+    expect(afterRenew.runs.find((r) => r.id === run1Id)?.leaseUntil).toBe(
+      nextLease,
+    );
+    await expect(
+      store.renewRunLease(id, run1Id, 99, nextLease),
+    ).rejects.toThrow("run_revoked");
+
+    // mutateRunRow executes concurrently on two distinct runs in the same workspace without blocking each other.
+    let activeMutators = 0;
+    let maxConcurrent = 0;
+    await Promise.all([
+      store.mutateRunRow(id, run1Id, async (_w, run) => {
+        activeMutators++;
+        maxConcurrent = Math.max(maxConcurrent, activeMutators);
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        run.tools.callA = { name: "inspect_missions", state: "done" };
+        activeMutators--;
+      }),
+      store.mutateRunRow(id, run2Id, async (_w, run) => {
+        activeMutators++;
+        maxConcurrent = Math.max(maxConcurrent, activeMutators);
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        run.tools.callB = { name: "query_github_metadata", state: "done" };
+        activeMutators--;
+      }),
+    ]);
+    expect(maxConcurrent).toBe(2);
+
+    const persisted = await store.read(id);
+    expect(persisted.runs.find((r) => r.id === run1Id)?.tools.callA?.name).toBe(
+      "inspect_missions",
+    );
+    expect(persisted.runs.find((r) => r.id === run2Id)?.tools.callB?.name).toBe(
+      "query_github_metadata",
+    );
+    // Original heavy transcript and deliveries remain untouched.
+    expect(
+      persisted.runs.find((r) => r.id === run1Id)?.transcript,
+    ).toHaveLength(1);
+    expect(persisted.deliveries).toHaveLength(1);
+
+    // Private browser runs stay sealed at rest when mutated via mutateRunRow.
+    await store.change(id, (w) => {
+      const r1 = w.runs.find((r) => r.id === run1Id);
+      if (r1) {
+        r1.browserRead = {
+          owner: "101",
+          botId: "bot-1",
+          generation: 1,
+          epoch: 1,
+        };
+      }
+    });
+    await store.mutateRunRow(id, run1Id, (_w, run) => {
+      run.tools.secretTool = {
+        name: "browser_action",
+        state: "done",
+        result: { secret: "sensitive-cookie-value" },
+      };
+    });
+    const rawSealedRow = (
+      await pool.query<{ data: Record<string, unknown> }>(
+        "SELECT data FROM workspace_runs WHERE workspace_id=$1 AND id=$2",
+        [id, run1Id],
+      )
+    ).rows[0]?.data;
+    expect(typeof rawSealedRow?.browserSealed).toBe("string");
+    expect(JSON.stringify(rawSealedRow)).not.toContain(
+      "sensitive-cookie-value",
+    );
+    const decoded = await store.read(id);
+    expect(
+      decoded.runs.find((r) => r.id === run1Id)?.tools.secretTool?.result,
+    ).toEqual({ secret: "sensitive-cookie-value" });
   });
 });
