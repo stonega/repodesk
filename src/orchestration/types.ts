@@ -76,6 +76,7 @@ export interface Mission {
   autoTimerCount: number;
   maxAutoTimers: number;
   fence: number;
+  repositoryId?: number;
   groupRepositoryVersion?: number;
   lastRunId?: string;
   lastTimerStateHash?: string;

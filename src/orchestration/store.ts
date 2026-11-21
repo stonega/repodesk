@@ -63,6 +63,7 @@ export async function missionCreate(
     autoTimerCount: 0,
     maxAutoTimers: input.maxAutoTimers ?? DEFAULT_MAX_AUTO_TIMERS,
     fence: 1,
+    repositoryId: input.repositoryId,
     groupRepositoryVersion: input.groupRepositoryVersion,
     lastRunId: input.lastRunId,
     spentUsd: 0,

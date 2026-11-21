@@ -219,8 +219,22 @@ export const TOOLS = [
   "load_skill",
   "read_skill_source",
   "propose_skill",
+  "save_skill",
   "query_work_handoff",
 ] as const;
+export const skillScopeSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("global") }).strict(),
+  z
+    .object({
+      kind: z.literal("project"),
+      repositoryId: z.number().int().positive(),
+      repository: z.string().min(1).max(200).optional(),
+    })
+    .strict(),
+]);
+export type SkillScope = z.infer<typeof skillScopeSchema>;
+export const skillAudienceSchema = z.enum(["chat", "coding", "all"]);
+export type SkillAudience = z.infer<typeof skillAudienceSchema>;
 export const skillSchema = z
   .object({
     slug: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
@@ -228,6 +242,8 @@ export const skillSchema = z
     description: z.string().min(1).max(1024),
     body: z.string().min(1).max(16384),
     tools: z.array(z.enum(TOOLS)).max(TOOLS.length),
+    scope: skillScopeSchema.optional(),
+    audience: skillAudienceSchema.optional(),
     frontmatter: z
       .object({
         license: z.string().max(2000).optional(),
@@ -414,6 +430,8 @@ export interface Skill {
     sharedAt: string;
     sourceRemovedAt?: string;
   };
+  auto?: import("./skills/types.ts").SkillAutoMetadata;
+  usage?: import("./skills/types.ts").SkillUsageStats;
   id: string;
   version: number;
   enabled: boolean;
@@ -531,6 +549,10 @@ export interface Run {
   codingTaskId?: string;
   missionId?: string;
   triggerKind?: "interactive" | "workflow" | "mission_wakeup";
+  missionSilent?: {
+    reason?: string;
+    summary?: string;
+  };
   watcherResult?: {
     notify: boolean;
     summary?: string;
@@ -631,6 +653,7 @@ export interface Run {
       | "followup"
       | "memory_extract"
       | "memory_consolidate"
+      | "skill_extract"
       | "research_subagent";
     tokens?: {
       input: number;
@@ -770,6 +793,7 @@ export interface Workspace {
     attempts: Run["attempts"];
   }[];
   memory?: MemoryState;
+  skillExtraction?: import("./skills/types.ts").SkillExtractionState;
   chatModel?: {
     revision: number;
     selection: ModelSelection;

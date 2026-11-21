@@ -134,6 +134,9 @@ export function createResearchSubagentTool(
                 subtaskId: task.id,
                 focus: task.focus,
                 question: task.question,
+                ...(ctx.parentInput.subagentContext
+                  ? { context: ctx.parentInput.subagentContext }
+                  : {}),
                 availableTools: safeTools.map((t) => t.name),
                 note: "Read-only research pass. Return verified findings with exact provenance and explicit unknowns.",
               }),

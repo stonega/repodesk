@@ -153,13 +153,14 @@ export function orchestrationTools(
     bind(
       "manage_mission",
       "Manage multi-step background mission",
-      "Create, update, attach waits/artifacts to, complete, or cancel a durable background Mission for multi-step goals (for example: gather evidence -> dispatch coding/cross-repo work -> wait for completion or approval -> synthesize and follow up). Works silently in the background; avoid narrating internal mission IDs or bookkeeping to the user.",
+      "Create, update, attach waits/artifacts to, silently continue, complete, or cancel a durable background Mission for multi-step goals (for example: gather evidence -> dispatch coding/cross-repo work -> wait for completion or approval -> synthesize and follow up). During background wakeups, call action='continue_silently' when work continues in the background and no user interruption is needed. Avoid narrating internal mission IDs or bookkeeping to the user.",
       Type.Object(
         {
           action: Type.Union([
             Type.Literal("start"),
             Type.Literal("attach_wait"),
             Type.Literal("record_artifact"),
+            Type.Literal("continue_silently"),
             Type.Literal("complete"),
             Type.Literal("cancel"),
           ]),
@@ -229,6 +230,8 @@ export function orchestrationTools(
           const goal = String(a.goal ?? r.task).trim();
           requireThat(goal.length > 0, "mission_goal_required");
           const cfg = workspaceAutonomy(w);
+          const repositoryId =
+            r.repository?.id ?? r.groupRepository?.repositoryId;
           const mission = await missionCreate(sql, {
             workspaceId: w.id,
             actor: r.actor,
@@ -239,8 +242,9 @@ export function orchestrationTools(
             status: "active",
             goal,
             originSourceIds: r.sources.slice(-10).map((s) => s.id),
-            autonomyMode: effectiveAutonomyMode(w, r.repository?.id),
+            autonomyMode: effectiveAutonomyMode(w, repositoryId),
             autonomyRevision: cfg.revision,
+            repositoryId,
             groupRepositoryVersion: r.groupRepositoryVersion,
             lastRunId: r.id,
             summary: typeof a.summary === "string" ? a.summary : undefined,
@@ -274,6 +278,30 @@ export function orchestrationTools(
           "mission_already_finished",
           409,
         );
+
+        if (action === "continue_silently") {
+          requireThat(
+            r.triggerKind === "mission_wakeup" ||
+              mission.status === "waiting" ||
+              mission.status === "awaiting_approval",
+            "mission_silent_not_allowed",
+            409,
+          );
+          const summary =
+            typeof a.summary === "string" && a.summary.trim()
+              ? a.summary.trim().slice(0, 2000)
+              : undefined;
+          if (summary) {
+            mission.summary = summary;
+            await missionSave(sql, mission);
+          }
+          r.missionSilent = { reason: "explicit", summary };
+          return {
+            missionId: mission.id,
+            status: mission.status,
+            silent: true,
+          };
+        }
 
         if (action === "complete") {
           mission.status = "completed";
@@ -393,6 +421,8 @@ export function orchestrationTools(
         } else {
           const deployment = await store.deployment(sql);
           const cfg = workspaceAutonomy(w);
+          const repositoryId =
+            r.repository?.id ?? r.groupRepository?.repositoryId;
           mission = await missionCreate(sql, {
             workspaceId: w.id,
             actor: r.actor,
@@ -403,8 +433,9 @@ export function orchestrationTools(
             status: "waiting",
             goal: String(a.goal ?? r.task).trim() || r.task,
             originSourceIds: r.sources.slice(-10).map((s) => s.id),
-            autonomyMode: effectiveAutonomyMode(w, r.repository?.id),
+            autonomyMode: effectiveAutonomyMode(w, repositoryId),
             autonomyRevision: cfg.revision,
+            repositoryId,
             groupRepositoryVersion: r.groupRepositoryVersion,
             lastRunId: r.id,
             now,

@@ -165,12 +165,32 @@ export interface AttemptTelemetry {
   toolCalls?: number;
   pricingUnknown?: boolean;
 }
+export interface SubagentContext {
+  now: string;
+  timezone: string;
+  chatId: string;
+  topicId: number;
+  isGroup: boolean;
+  selectedRepository?: { id: number; full_name: string };
+  groupRepository?: {
+    repositoryId?: number;
+    repository?: string;
+    available: boolean;
+  };
+  activeMission?: {
+    id: string;
+    goal: string;
+    status: string;
+    repositoryId?: number;
+  };
+}
 export interface AgentInput {
   purpose?:
     | "compaction"
     | "followup"
     | "memory_extract"
     | "memory_consolidate"
+    | "skill_extract"
     | "research_subagent";
   cacheKey?: string;
   workspaceId?: string;
@@ -191,6 +211,8 @@ export interface AgentInput {
   transcript: AgentMessage[];
   tools: AgentTool[];
   enableSubagent?: boolean;
+  /** Scoped non-secret runtime metadata forwarded to depth-1 research subagents. */
+  subagentContext?: SubagentContext;
   parallelToolConcurrency?: number;
   // Internal tool-free passes and evaluation callers may impose an explicit cap.
   // Ordinary workspace requests have no model-call count limit.

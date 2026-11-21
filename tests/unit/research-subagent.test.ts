@@ -215,3 +215,146 @@ test("delegate_research runs isolated depth-1 read-only subagents, excludes writ
   expect(payload.results[0].status).toBe("succeeded");
   expect(payload.results[0].findings).toContain("42 stars");
 });
+
+test("delegate_research forwards scoped runtime context (repository, time, timezone, active mission) to subagents", async () => {
+  const model = selectedModel("gpt-4.1-mini");
+  const subagentPrompts: Record<string, unknown>[] = [];
+
+  const readTool: AgentTool = {
+    name: "query_github_metadata",
+    label: "Read GitHub",
+    description: "Read",
+    executionMode: "parallel",
+    parameters: Type.Object({}),
+    execute: async () => ({
+      content: [{ type: "text", text: JSON.stringify({ ok: true }) }],
+      details: {},
+    }),
+  };
+
+  let parentCall = 0;
+  const runner = new PiRunner((m, context) => {
+    const systemText =
+      context.messages.find((msg) => msg.role === "system")?.content ?? "";
+    const isSubagent =
+      typeof systemText === "string" &&
+      systemText.includes("bounded, read-only research subagent");
+    if (isSubagent) {
+      const userMsg = context.messages.find((msg) => msg.role === "user");
+      const rawText =
+        typeof userMsg?.content === "string"
+          ? userMsg.content
+          : (userMsg?.content
+              ?.filter(
+                (p): p is { type: "text"; text: string } => p.type === "text",
+              )
+              .map((p) => p.text)
+              .join("") ?? "{}");
+      subagentPrompts.push(JSON.parse(rawText));
+      return streamMessage({
+        role: "assistant",
+        content: [{ type: "text", text: "Checked repo 7001." }],
+        api: m.api,
+        provider: m.provider,
+        model: m.id,
+        usage: costUsage,
+        stopReason: "stop",
+        timestamp: Date.now(),
+      });
+    }
+    parentCall++;
+    if (parentCall === 1) {
+      return streamMessage({
+        role: "assistant",
+        content: [
+          {
+            type: "toolCall",
+            id: "dr-ctx",
+            name: RESEARCH_SUBAGENT_TOOL,
+            arguments: {
+              tasks: [
+                {
+                  id: "ctx-check",
+                  focus: "Recent PRs",
+                  question: "What PRs merged today?",
+                },
+              ],
+            },
+          },
+        ],
+        api: m.api,
+        provider: m.provider,
+        model: m.id,
+        usage: costUsage,
+        stopReason: "toolUse",
+        timestamp: Date.now(),
+      });
+    }
+    return streamMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "Done." }],
+      api: m.api,
+      provider: m.provider,
+      model: m.id,
+      usage: costUsage,
+      stopReason: "stop",
+      timestamp: Date.now(),
+    });
+  });
+
+  await runner.run({
+    actor: "101",
+    runId: "r-sub-ctx",
+    model,
+    apiKey: "test",
+    system: "Parent",
+    prompt: "Check today's PRs",
+    transcript: [],
+    enableSubagent: true,
+    subagentContext: {
+      now: "2026-11-21T09:00:00.000Z",
+      timezone: "Asia/Taipei",
+      chatId: "-100100",
+      topicId: 42,
+      isGroup: true,
+      selectedRepository: { id: 7001, full_name: "acme/backend" },
+      groupRepository: {
+        repositoryId: 7001,
+        repository: "acme/backend",
+        available: true,
+      },
+      activeMission: {
+        id: "m-1",
+        goal: "Monitor release readiness",
+        status: "active",
+        repositoryId: 7001,
+      },
+    },
+    tools: [readTool],
+    signal: AbortSignal.timeout(5000),
+    guard: async () => {},
+    reserve: async () => "att-1",
+    checkpoint: async () => {},
+  });
+
+  expect(subagentPrompts).toHaveLength(1);
+  expect(subagentPrompts[0]?.context).toEqual({
+    now: "2026-11-21T09:00:00.000Z",
+    timezone: "Asia/Taipei",
+    chatId: "-100100",
+    topicId: 42,
+    isGroup: true,
+    selectedRepository: { id: 7001, full_name: "acme/backend" },
+    groupRepository: {
+      repositoryId: 7001,
+      repository: "acme/backend",
+      available: true,
+    },
+    activeMission: {
+      id: "m-1",
+      goal: "Monitor release readiness",
+      status: "active",
+      repositoryId: 7001,
+    },
+  });
+});

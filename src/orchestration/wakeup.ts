@@ -6,6 +6,7 @@ import {
 import { taskFind } from "../coding/task-store.ts";
 import type { Sql } from "../db/pool.ts";
 import { type Run, requireThat, type Workspace } from "../domain.ts";
+import { selectableRepositories } from "../github/repository-context.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import { audience, audit, eligible } from "../workspaces/policy.ts";
 import { createRun, deliver } from "../workspaces/service.ts";
@@ -61,6 +62,70 @@ function missionAuthorizationError(
     }
   }
   return undefined;
+}
+
+export const MAX_WAKEUP_TASK_CHARS = 3800;
+
+function trimSurrogateSafe(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value;
+  const cut = Math.max(0, maxChars - 1);
+  return `${value.slice(0, cut).replace(/[\uD800-\uDBFF]$/, "")}…`;
+}
+
+/**
+ * Builds a bounded continuation prompt (< 4000 chars) for createRun().
+ * Full wait payloads and artifacts remain available in activeMission context
+ * and via inspect_missions.
+ */
+export function buildWakeupTaskPrompt(
+  mission: Pick<Mission, "id" | "goal">,
+  groupWaits: MissionWait[],
+): string {
+  const goalLine = `Goal: ${trimSurrogateSafe(mission.goal, 600)}`;
+  const footer =
+    "Review the verified outcomes silently (full wait details are in activeMission / inspect_missions), advance remaining steps if needed (use manage_mission action='continue_silently' if no user interruption is needed), or complete the mission and report the concise result to the user.";
+
+  const compactWaits = groupWaits.map((item) => ({
+    id: item.id,
+    kind: item.kind,
+    targetId: trimSurrogateSafe(item.targetId, 120),
+    status: item.status,
+    ...(item.reason ? { reason: trimSurrogateSafe(item.reason, 120) } : {}),
+    ...(typeof item.result?.summary === "string"
+      ? { summary: trimSurrogateSafe(item.result.summary, 240) }
+      : {}),
+  }));
+
+  const fullPrompt = [
+    `Continue background Mission ${mission.id}.`,
+    goalLine,
+    `Resolved wait events (${groupWaits.length}): ${JSON.stringify(compactWaits)}`,
+    footer,
+  ].join("\n");
+  if (fullPrompt.length <= MAX_WAKEUP_TASK_CHARS) return fullPrompt;
+
+  // Fallback for large multi-wait fan-outs: preserve counts and a bounded sample.
+  const satisfied = groupWaits.filter((w) => w.status === "satisfied").length;
+  const failed = groupWaits.filter((w) => w.status !== "satisfied").length;
+  const minimalSample = groupWaits.slice(0, 6).map((item) => ({
+    id: item.id,
+    kind: item.kind,
+    targetId: trimSurrogateSafe(item.targetId, 80),
+    status: item.status,
+  }));
+  const compactPrompt = [
+    `Continue background Mission ${mission.id}.`,
+    trimSurrogateSafe(goalLine, 400),
+    `Resolved wait events: ${JSON.stringify({
+      total: groupWaits.length,
+      satisfied,
+      failed,
+      sample: minimalSample,
+      truncated: groupWaits.length > minimalSample.length,
+    })}`,
+    footer,
+  ].join("\n");
+  return trimSurrogateSafe(compactPrompt, MAX_WAKEUP_TASK_CHARS);
 }
 
 /**
@@ -222,28 +287,14 @@ export async function resolveMissionWait(
       }
     }
 
-    // Re-evaluate autonomy posture at wakeup time (policy tightening takes effect immediately).
+    // Re-evaluate autonomy posture at wakeup time (preserving repository override).
     const currentAutonomy = workspaceAutonomy(w);
-    mission.autonomyMode = effectiveAutonomyMode(w);
+    mission.autonomyMode = effectiveAutonomyMode(w, mission.repositoryId);
     mission.autonomyRevision = currentAutonomy.revision;
     mission.wakeupCount++;
     mission.status = "active";
 
-    const resolvedSummaries = groupWaits.map((item) => ({
-      id: item.id,
-      kind: item.kind,
-      targetId: item.targetId,
-      status: item.status,
-      reason: item.reason,
-      result: item.result,
-    }));
-
-    const taskPrompt = [
-      `Continue background Mission ${mission.id}.`,
-      `Goal: ${mission.goal}`,
-      `Resolved wait events: ${JSON.stringify(resolvedSummaries)}`,
-      "Review the verified outcomes silently, advance remaining steps if needed, or complete the mission and report the concise result to the user.",
-    ].join("\n");
+    const taskPrompt = buildWakeupTaskPrompt(mission, groupWaits);
 
     try {
       const run = createRun(
@@ -259,6 +310,24 @@ export async function resolveMissionWait(
         },
       );
       if (mission.threadId) run.threadId = mission.threadId;
+      if (
+        !run.groupRepository &&
+        mission.repositoryId !== undefined &&
+        w.github?.installationId
+      ) {
+        const matchedRepo = selectableRepositories(
+          w,
+          mission.actor,
+          mission.chatId,
+        ).find((repo) => repo.id === mission.repositoryId);
+        if (matchedRepo) {
+          run.repository = {
+            id: matchedRepo.id,
+            full_name: matchedRepo.full_name,
+            installationId: w.github.installationId,
+          };
+        }
+      }
       run.missionId = mission.id;
       run.triggerKind = "mission_wakeup";
       mission.lastRunId = run.id;
@@ -538,6 +607,7 @@ export async function missionContextSnapshot(
     id: string;
     status: Mission["status"];
     goal: string;
+    repositoryId?: number;
     wakeupCount: number;
     maxWakeups: number;
     autoTimerCount: number;
@@ -584,6 +654,7 @@ export async function missionContextSnapshot(
             id: current.id,
             status: current.status,
             goal: current.goal,
+            repositoryId: current.repositoryId,
             wakeupCount: current.wakeupCount,
             maxWakeups: current.maxWakeups,
             autoTimerCount: current.autoTimerCount,

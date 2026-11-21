@@ -23,6 +23,7 @@ import {
   modelCapabilities,
   PiRunner,
   type RunnerProvider,
+  type SubagentContext,
   selectedModel,
 } from "../agent/runtime.ts";
 import { applicationTools } from "../agent/tools.ts";
@@ -32,7 +33,7 @@ import { codingTaskContext } from "../coding/task-context.ts";
 import { taskGet } from "../coding/task-store.ts";
 import type { Store } from "../db/repositories.ts";
 import { Fault, requireThat } from "../domain.ts";
-import { waitCreate } from "../orchestration/store.ts";
+import { missionFind, waitCreate } from "../orchestration/store.ts";
 import { orchestrationTools } from "../orchestration/tools.ts";
 import { missionContextSnapshot } from "../orchestration/wakeup.ts";
 import type { SearchPin } from "../search/config.ts";
@@ -186,7 +187,10 @@ export class Executor {
       clearProgress(w, "run", r.id);
       r.fence++;
       r.telegramDraft =
-        r.chatId === r.actor && !r.workflowId && deployment.bot
+        r.chatId === r.actor &&
+        !r.workflowId &&
+        r.triggerKind !== "mission_wakeup" &&
+        deployment.bot
           ? {
               id: randomInt(1, 2 ** 48 - 1),
               botId: deployment.bot.id,
@@ -410,6 +414,39 @@ export class Executor {
         tail.stopReason === "stop" &&
         !claimed.pendingInputs?.length;
       if (!completed && !claimed.workflowActivation) await draft?.start();
+      const buildSubagentContext = (
+        meta: typeof context.metadata,
+      ): SubagentContext => ({
+        now: meta.now,
+        timezone: meta.timezone,
+        chatId: meta.chatId,
+        topicId: meta.topicId,
+        isGroup: meta.chatId !== meta.actor,
+        ...(meta.selectedRepository
+          ? { selectedRepository: meta.selectedRepository }
+          : {}),
+        ...(meta.groupRepository
+          ? {
+              groupRepository: {
+                repositoryId: meta.groupRepository.repositoryId,
+                repository: meta.groupRepository.repository,
+                available: meta.groupRepository.available,
+              },
+            }
+          : {}),
+        ...(meta.mission
+          ? {
+              activeMission: {
+                id: meta.mission.id,
+                goal: meta.mission.goal,
+                status: meta.mission.status,
+                ...(meta.mission.repositoryId !== undefined
+                  ? { repositoryId: meta.mission.repositoryId }
+                  : {}),
+              },
+            }
+          : {}),
+      });
       const input: AgentInput = {
         cacheKey: claimed.threadId
           ? createHash("sha256")
@@ -433,6 +470,9 @@ export class Executor {
         prompt: context.prompt,
         transcript,
         enableSubagent: !claimed.workflowId,
+        subagentContext: !claimed.workflowId
+          ? buildSubagentContext(context.metadata)
+          : undefined,
         tools: [
           ...applicationTools(
             this.store,
@@ -630,6 +670,9 @@ export class Executor {
         input.system = context.system;
         input.historyMessages = context.historyMessages;
         input.prompt = context.prompt;
+        input.subagentContext = !claimed.workflowId
+          ? buildSubagentContext(context.metadata)
+          : undefined;
       }
       if (!completed && !transcript.length && !claimed.workflowId) {
         const attachments = await loadAttachments(
@@ -669,6 +712,9 @@ export class Executor {
             { requestOverride: attachments.requestText },
           );
           input.prompt = context.prompt;
+          input.subagentContext = !claimed.workflowId
+            ? buildSubagentContext(context.metadata)
+            : undefined;
         }
         input.prompt += attachments.prompt;
       }
@@ -750,34 +796,61 @@ export class Executor {
                   ? validatedText
                   : "";
             const browserWaiting = !!r.browserWait;
+            const activeMission =
+              r.missionId && !activation
+                ? await missionFind(sql, w.id, r.missionId)
+                : undefined;
+            const missionSilent =
+              !activation &&
+              !proposals &&
+              !browserWaiting &&
+              !handoff &&
+              (!!r.missionSilent ||
+                (r.triggerKind === "mission_wakeup" &&
+                  !text &&
+                  activeMission?.status === "waiting" &&
+                  (!("reason" in result) ||
+                    !result.reason ||
+                    result.reason === "empty_response")));
             r.status = activation
               ? "succeeded"
               : proposals || browserWaiting
                 ? "awaiting_approval"
-                : handoff
+                : handoff || missionSilent
                   ? "succeeded"
                   : text
                     ? result.status
                     : "partial";
             r.error =
-              activation || proposals || browserWaiting || handoff
+              activation ||
+              proposals ||
+              browserWaiting ||
+              handoff ||
+              missionSilent
                 ? undefined
                 : "reason" in result
                   ? result.reason
                   : undefined;
-            if (!proposals && !browserWaiting && !text)
+            if (!proposals && !browserWaiting && !missionSilent && !text)
               r.error ??= "empty_response";
-            r.result = browserWaiting ? undefined : text;
+            r.result = browserWaiting
+              ? undefined
+              : missionSilent
+                ? (r.missionSilent?.summary ??
+                  "Background mission step completed silently.")
+                : text;
             r.finishedAt = new Date().toISOString();
             r.leaseUntil = undefined;
-            if (!browserWaiting) recordThreadAnswer(w, r);
-            if (text && !browserWaiting) commitDiscussions(w, r);
+            if (missionSilent) audit(w, r.actor, "run.silent", r.id);
+            if (!browserWaiting && !missionSilent) recordThreadAnswer(w, r);
+            if (text && !browserWaiting && !missionSilent)
+              commitDiscussions(w, r);
             else delete r.discussionUpdates;
             if (r.widget)
               validateSources(`${r.widget.caption}\n${r.widget.html}`, r, {
                 allowMissingRecapCitations: true,
               });
-            publishWidget(w, r, deployment.bot?.id);
+            if (!missionSilent) publishWidget(w, r, deployment.bot?.id);
             let watcherSilent = false;
             if (r.workflowId && r.watcherResult) {
               const wf = w.workflows.find((f) => f.id === r.workflowId);
@@ -811,6 +884,7 @@ export class Executor {
             }
             if (
               !watcherSilent &&
+              !missionSilent &&
               !browserWaiting &&
               !handoff &&
               (text || !proposals)

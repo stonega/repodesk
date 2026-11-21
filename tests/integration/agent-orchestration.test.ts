@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { claim } from "../../src/admin/auth.ts";
+import type { AgentRunner, SubagentContext } from "../../src/agent/runtime.ts";
 import {
   autonomyView,
   evaluateAutonomy,
@@ -20,6 +21,7 @@ import { migrate } from "../../src/db/migrate.ts";
 import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
 import { settingsSchema, workflowSchema } from "../../src/domain.ts";
+import { Executor } from "../../src/jobs/execute.ts";
 import { dispatchCrossRepoMission } from "../../src/orchestration/cross-repo.ts";
 import {
   missionCreate,
@@ -29,10 +31,13 @@ import {
 } from "../../src/orchestration/store.ts";
 import {
   cancelMission,
+  missionContextSnapshot,
   resolveMissionWait,
   tickMissions,
 } from "../../src/orchestration/wakeup.ts";
+import { encrypt } from "../../src/setup/credentials.ts";
 import { SetupService } from "../../src/setup/service.ts";
+import type { Telegram } from "../../src/telegram/client.ts";
 import {
   dispatchAutomationEvent,
   recordWatcherDedupe,
@@ -465,5 +470,343 @@ describeDb("agent orchestration, autonomy, triggers, and repo queues", () => {
       const loaded = await missionGet(sql, w.id, m.id);
       expect(loaded.status).toBe("waiting");
     });
+  });
+
+  test("multi-wait large fan-out wakeup stays under 4000-char task limit and preserves repo autonomy overrides", async () => {
+    const id = await createFixtureWorkspace("Wakeup Bounds and Repo Autonomy");
+
+    let missionId = "";
+    let wokeRunId = "";
+    await store.change(id, async (w, sql) => {
+      // Workspace default is supervised; repo 1001 overrides to check_in.
+      updateRepositoryAutonomy(w, "101", 1001, {
+        revision: 0,
+        mode: "check_in",
+      });
+      const m = await missionCreate(sql, {
+        workspaceId: w.id,
+        actor: "101",
+        chatId: "101",
+        topicId: 0,
+        status: "waiting",
+        goal: "Coordinate multi-repository refactor and verification. ".repeat(
+          35,
+        ),
+        originSourceIds: ["src-large"],
+        autonomyMode: "check_in",
+        autonomyRevision: 1,
+        repositoryId: 1001,
+      });
+      missionId = m.id;
+      for (let i = 1; i <= 4; i++) {
+        await waitCreate(sql, {
+          workspaceId: w.id,
+          missionId: m.id,
+          joinGroup: "jg-fanout",
+          joinMode: "all",
+          kind: "coding_task",
+          targetId: `task-fanout-${i}`,
+          reason: `Parallel task ${i}: ${"context ".repeat(30)}`,
+        });
+      }
+      for (let i = 1; i <= 4; i++) {
+        const res = await resolveMissionWait(
+          sql,
+          w,
+          "coding_task",
+          `task-fanout-${i}`,
+          {
+            status: "satisfied",
+            summary: `Task ${i} completed cleanly: ${"detailed diff ".repeat(120)}`,
+            data: { pr: { number: i, body: "x".repeat(1500) } },
+          },
+          "gpt-4.1-mini",
+        );
+        if (i < 4) expect(res.wokeRunIds).toHaveLength(0);
+        else {
+          expect(res.wokeRunIds).toHaveLength(1);
+          wokeRunId = res.wokeRunIds[0] ?? "";
+        }
+      }
+
+      const wokeMission = await missionGet(sql, w.id, missionId);
+      expect(wokeMission.status).toBe("active");
+      expect(wokeMission.error).toBeUndefined();
+      // Repo-level check_in override must survive wakeup instead of degrading to workspace default.
+      expect(wokeMission.autonomyMode).toBe("check_in");
+
+      const wokeRun = w.runs.find((r) => r.id === wokeRunId);
+      expect(wokeRun).toBeDefined();
+      expect(wokeRun?.task.length).toBeLessThanOrEqual(4000);
+      expect(wokeRun?.repository?.id).toBe(1001);
+
+      if (wokeRun) {
+        const snap = await missionContextSnapshot(sql, w, wokeRun);
+        expect(snap.activeMission?.repositoryId).toBe(1001);
+        expect(snap.activeMission?.waits).toHaveLength(4);
+      }
+
+      // Tightening repo 1001 back to supervised takes effect immediately on the next wakeup.
+      updateRepositoryAutonomy(w, "101", 1001, {
+        revision: 1,
+        mode: "supervised",
+      });
+      await waitCreate(sql, {
+        workspaceId: w.id,
+        missionId,
+        kind: "timer",
+        targetId: "timer-tighten",
+        reason: "Recheck autonomy tightening",
+        dueAt: new Date(Date.now() - 1000).toISOString(),
+      });
+      await resolveMissionWait(
+        sql,
+        w,
+        "timer",
+        "timer-tighten",
+        { status: "satisfied", summary: "Due" },
+        "gpt-4.1-mini",
+      );
+      const tightened = await missionGet(sql, w.id, missionId);
+      expect(tightened.autonomyMode).toBe("supervised");
+    });
+  });
+
+  test("mission_wakeup supports explicit and implicit silent continuation without flashing drafts or polluting threads, and passes subagentContext", async () => {
+    const id = await createFixtureWorkspace("Silent Mission Wakeup");
+    const telegramCalls: { method: string; params: Record<string, unknown> }[] =
+      [];
+    const fakeTelegram: Telegram = {
+      async call<T>(method: string, params = {}) {
+        telegramCalls.push({ method, params });
+        return { message_id: 9001 } as T;
+      },
+    };
+    const execSetup = new SetupService(
+      store,
+      encryptionKey,
+      "http://localhost:3000",
+      () => fakeTelegram,
+    );
+    const deployment = await store.deployment();
+    Object.assign(deployment, {
+      active: true,
+      paused: false,
+      bot: { id: "999", username: "orch_bot", visibleAll: true },
+      credentials: {
+        bot: encrypt(encryptionKey, "bot", "999:fake"),
+        model: encrypt(encryptionKey, "model", "fake"),
+        webhook: encrypt(encryptionKey, "webhook", "secret"),
+      },
+    });
+    await store.saveDeployment(store.pool, deployment);
+
+    // 1. Explicit silent wakeup (manage_mission action="continue_silently")
+    let missionId = "";
+    let explicitRunId = "";
+    await store.change(id, async (w, sql) => {
+      const m = await missionCreate(sql, {
+        workspaceId: w.id,
+        actor: "101",
+        chatId: "101",
+        topicId: 0,
+        botId: "999",
+        status: "waiting",
+        goal: "Watch CI and report only when ready",
+        originSourceIds: ["src-s1"],
+        autonomyMode: "supervised",
+        autonomyRevision: 0,
+        repositoryId: 1001,
+      });
+      missionId = m.id;
+      await waitCreate(sql, {
+        workspaceId: w.id,
+        missionId: m.id,
+        kind: "timer",
+        targetId: "timer-explicit-silent",
+        reason: "Check CI",
+        dueAt: new Date(Date.now() - 1000).toISOString(),
+      });
+      const woke = await resolveMissionWait(
+        sql,
+        w,
+        "timer",
+        "timer-explicit-silent",
+        { status: "satisfied", summary: "CI check due" },
+        "gpt-4.1-mini",
+        { botId: "999" },
+      );
+      explicitRunId = woke.wokeRunIds[0] ?? "";
+    });
+
+    let capturedSubagentCtx: SubagentContext | undefined;
+    const explicitSilentRunner: AgentRunner = {
+      async run(input) {
+        capturedSubagentCtx = input.subagentContext;
+        const schedule = input.tools.find(
+          (t) => t.name === "schedule_mission_followup",
+        );
+        const manage = input.tools.find((t) => t.name === "manage_mission");
+        if (!schedule || !manage)
+          throw new Error("orchestration tools missing");
+        await schedule.execute("call-sched-1", {
+          delayMinutes: 10,
+          reason: "CI still running; check again in 10m",
+        });
+        await manage.execute("call-silent-1", {
+          action: "continue_silently",
+          summary: "CI still in progress; rescheduled check.",
+        });
+        return {
+          text: "",
+          status: "partial",
+          reason: "empty_response",
+          turns: 1,
+          tools: 2,
+          transcript: [],
+        };
+      },
+    };
+
+    await new Executor(store, execSetup, explicitSilentRunner).execute(
+      id,
+      explicitRunId,
+    );
+
+    // No streaming draft flashed for background wakeup
+    expect(telegramCalls).toHaveLength(0);
+    // subagentContext populated with selectedRepository, timezone, activeMission
+    expect(capturedSubagentCtx?.selectedRepository).toEqual({
+      id: 1001,
+      full_name: "acme/backend",
+    });
+    expect(capturedSubagentCtx?.timezone).toBe("UTC");
+    expect(capturedSubagentCtx?.activeMission?.id).toBe(missionId);
+    expect(capturedSubagentCtx?.activeMission?.repositoryId).toBe(1001);
+
+    const afterExplicit = await store.read(id);
+    const explicitRun = afterExplicit.runs.find((r) => r.id === explicitRunId);
+    expect(explicitRun?.status).toBe("succeeded");
+    expect(explicitRun?.error).toBeUndefined();
+    expect(explicitRun?.result).toBe(
+      "CI still in progress; rescheduled check.",
+    );
+    expect(
+      afterExplicit.deliveries.filter((d) => d.runId === explicitRunId),
+    ).toHaveLength(0);
+    expect(
+      afterExplicit.messages.some((m) => m.id === `answer:${explicitRunId}`),
+    ).toBe(false);
+    expect(
+      afterExplicit.audit.some(
+        (a) => a.action === "run.silent" && a.target === explicitRunId,
+      ),
+    ).toBe(true);
+
+    // 2. Implicit silent wakeup: model schedules next follow-up (mission is waiting) and returns empty text without calling continue_silently
+    let implicitRunId = "";
+    await store.change(id, async (w, sql) => {
+      await waitCreate(sql, {
+        workspaceId: w.id,
+        missionId,
+        kind: "timer",
+        targetId: "timer-implicit-silent",
+        reason: "Second CI check",
+        dueAt: new Date(Date.now() - 1000).toISOString(),
+      });
+      const woke = await resolveMissionWait(
+        sql,
+        w,
+        "timer",
+        "timer-implicit-silent",
+        {
+          status: "satisfied",
+          summary: "Second CI check due",
+          artifact: { kind: "summary", label: "progress", value: "step-2" },
+        },
+        "gpt-4.1-mini",
+        { botId: "999" },
+      );
+      implicitRunId = woke.wokeRunIds[0] ?? "";
+    });
+
+    const implicitSilentRunner: AgentRunner = {
+      async run(input) {
+        const schedule = input.tools.find(
+          (t) => t.name === "schedule_mission_followup",
+        );
+        if (!schedule) throw new Error("schedule tool missing");
+        await schedule.execute("call-sched-2", {
+          delayMinutes: 15,
+          reason: "Waiting for deploy job",
+        });
+        return {
+          text: "",
+          status: "partial",
+          reason: "empty_response",
+          turns: 1,
+          tools: 1,
+          transcript: [],
+        };
+      },
+    };
+
+    await new Executor(store, execSetup, implicitSilentRunner).execute(
+      id,
+      implicitRunId,
+    );
+    const afterImplicit = await store.read(id);
+    const implicitRun = afterImplicit.runs.find((r) => r.id === implicitRunId);
+    expect(implicitRun?.status).toBe("succeeded");
+    expect(implicitRun?.error).toBeUndefined();
+    expect(
+      afterImplicit.deliveries.filter((d) => d.runId === implicitRunId),
+    ).toHaveLength(0);
+
+    // 3. Non-waiting wakeup returning empty text still surfaces empty_response truthfully
+    let emptyFailureRunId = "";
+    await store.change(id, async (w, sql) => {
+      await waitCreate(sql, {
+        workspaceId: w.id,
+        missionId,
+        kind: "github_event",
+        targetId: "pr:77",
+        reason: "PR merged",
+      });
+      const woke = await resolveMissionWait(
+        sql,
+        w,
+        "github_event",
+        "pr:77",
+        { status: "satisfied", summary: "PR #77 merged" },
+        "gpt-4.1-mini",
+        { botId: "999" },
+      );
+      emptyFailureRunId = woke.wokeRunIds[0] ?? "";
+    });
+
+    const emptyRunner: AgentRunner = {
+      async run() {
+        return {
+          text: "",
+          status: "partial",
+          reason: "empty_response",
+          turns: 1,
+          tools: 0,
+          transcript: [],
+        };
+      },
+    };
+    await new Executor(store, execSetup, emptyRunner).execute(
+      id,
+      emptyFailureRunId,
+    );
+    const afterEmpty = await store.read(id);
+    const emptyRun = afterEmpty.runs.find((r) => r.id === emptyFailureRunId);
+    expect(emptyRun?.status).toBe("partial");
+    expect(emptyRun?.error).toBe("empty_response");
+    expect(
+      afterEmpty.deliveries.filter((d) => d.runId === emptyFailureRunId),
+    ).toHaveLength(1);
   });
 });
