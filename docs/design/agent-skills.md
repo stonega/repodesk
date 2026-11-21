@@ -10,22 +10,26 @@ Executable **plugins** are [Pi extensions](llm-extensions.md), a separate capabi
 from instruction skills. Operators install reviewed extension tools and hooks and
 manage their registry through **Workspace → Plugins**.
 
-## Conversation-created drafts (2026-10-07)
+## Conversation-created and autonomous skills (2026-10-07, updated 2026-11-21)
 
-Users can ask to preserve a successful assistant procedure as a reusable skill.
-The bot reads a retained successful run owned by that actor, proposes sanitized
-inputs/steps/output conventions and an example, and shows the complete draft for
-approval. Approval shares it with admins as a disabled, unpublished catalog entry.
-Admins review the saved instructions and edit or enable the skill directly. Source run,
-actor, sharing time and source hashes are retained as provenance.
+RepoDesk supports both direct autonomous skill extraction and legacy approval-gated
+draft proposals:
+
+- **Autonomous extraction & classification:** See
+  [Autonomous skill extraction](autonomous-skills.md). Completed Codex tasks,
+  multi-step Missions, and high-signal idle conversations automatically extract and
+  evolve enabled **Global** (workspace-wide) or **Project** (repository-bound)
+  skills under deterministic safety rails (zero new tool grants, secret/injection
+  rejection, scope guards, and admin suppression memory on disable/archive). Users
+  can also save or update skills directly via `save_skill` without approval buttons.
+- **Legacy consent-gated proposals (`propose_skill`):** Preserved for backward
+  compatibility. Approval shares a disabled catalog entry with source provenance.
 
 Private inputs cannot be selected from another person's chat or imported into a
-group. Group sources stay in their topic. Source changes/removal block pending
-proposals and unpublished drafts, and cleanup removes derived draft content.
-An admin save or enable action approves a standalone procedure with its own
-lifecycle; it survives source expiry until edited/archived.
-Workspace deletion removes it. Tool requests never carry the original user's
-credentials or repository grants. Existing schedules retain their pinned versions.
+group. Group sources stay in their topic. Project-scoped skills enforce current
+repository read access and never leak across repositories. Tool requests never
+carry the original user's credentials or repository grants. Existing schedules
+retain their pinned versions.
 See [implementation plan](../implementation/team-workflows-plan.md) and
 [examples](../../examples/team-workflows.md).
 

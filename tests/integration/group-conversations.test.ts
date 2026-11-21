@@ -254,8 +254,9 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       const worker = new Executor(store, setup, {
         async run(input) {
           purposes.push(input.purpose ?? "answer");
-          expect(input.prompt).toContain("0x012345");
-          expect(input.prompt).toContain("save this");
+          const combined = `${JSON.stringify(input.historyMessages ?? [])}\n${input.prompt}`;
+          expect(combined).toContain("0x012345");
+          expect(combined).toContain("save this");
           if (input.purpose === "followup") {
             expect(input.tools).toEqual([]);
             expect(JSON.parse(input.prompt).forwardedReference).toBe(true);
@@ -264,7 +265,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
             );
             return finish(input, "REPLY");
           }
-          expect(input.prompt).toContain("Joey Lu");
+          expect(combined).toContain("Joey Lu");
           return finish(
             input,
             "The forwarded content is now available for your save request.",
@@ -612,7 +613,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
           run.modelOptions = {
             modelBaseUrl: "https://api.openai.com/v1",
             thinkingLevel: "off",
-            modelLimits: { contextWindow: 50000, maxOutputTokens: 4000 },
+            modelLimits: { contextWindow: 16000, maxOutputTokens: 2000 },
           };
       });
       const purposes: AgentInput["purpose"][] = [];

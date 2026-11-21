@@ -25,6 +25,10 @@ import {
 } from "../../skills/catalog.ts";
 import { githubSkillUrl } from "../../skills/github-source.ts";
 import { importMarkdown } from "../../skills/import.ts";
+import {
+  skillExtractionEnabled,
+  skillExtractionState,
+} from "../../skills/scope.ts";
 import { TelegramError } from "../../telegram/client.ts";
 import { groupVisibility } from "../../telegram/visibility.ts";
 import {
@@ -233,8 +237,8 @@ export function workspaceRoutes(deps: AdminRouteDeps) {
           ),
         );
       case "skills":
-        return c.json(
-          take(
+        return c.json({
+          ...take(
             w.skills.map((s) => ({
               ...s,
               preset: isPresetSkill(w, s),
@@ -248,7 +252,15 @@ export function workspaceRoutes(deps: AdminRouteDeps) {
                 })),
             })),
           ),
-        );
+          repositories: (w.github?.repositories ?? [])
+            .filter((r) => !r.archived && !r.disabled)
+            .map((r) => ({ id: r.id, full_name: r.full_name })),
+          autoExtraction: {
+            enabled: skillExtractionEnabled(w),
+            autoCount: w.skills.filter((s) => !!s.auto && !s.archived).length,
+            suppressedCount: w.skillExtraction?.suppressed.length ?? 0,
+          },
+        });
       case "instructions":
         return c.json(
           take(
@@ -784,6 +796,35 @@ export function workspaceRoutes(deps: AdminRouteDeps) {
       );
     },
   );
+  app.put("/api/admin/workspaces/:id/skills/extraction", async (c) => {
+    const input = z
+      .object({
+        enabled: z.boolean(),
+        clearSuppressed: z.boolean().optional(),
+      })
+      .strict()
+      .parse(await c.req.json());
+    return c.json(
+      await change(c, (w, actor) => {
+        const state = skillExtractionState(w);
+        state.enabled = input.enabled;
+        if (input.clearSuppressed) state.suppressed = [];
+        audit(
+          w,
+          actor,
+          input.enabled
+            ? "skill_extraction.enabled"
+            : "skill_extraction.disabled",
+          w.id,
+        );
+        return {
+          enabled: skillExtractionEnabled(w),
+          autoCount: w.skills.filter((s) => !!s.auto && !s.archived).length,
+          suppressedCount: state.suppressed.length,
+        };
+      }),
+    );
+  });
   app.post("/api/admin/workspaces/:id/skills/import", async (c) => {
     const input = z
       .object({ markdown: z.string().max(16384) })

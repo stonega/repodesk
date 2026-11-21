@@ -8,6 +8,7 @@ import {
 } from "../domain.ts";
 import { selectedRepository } from "../github/repository-context.ts";
 import { starterSkills } from "../skills/catalog.ts";
+import { skillAllowedForContext } from "../skills/scope.ts";
 import { audience, audit, authorize, runAllowed } from "./policy.ts";
 import { groupThread, privateThread, refreshThreadContext } from "./threads.ts";
 export function newWorkspace(
@@ -107,23 +108,58 @@ export function createRun(
     : undefined;
   if (options.workflowId)
     requireThat(workflow?.status === "active", "workflow_inactive", 409);
+  const now = options.now ?? new Date();
+  const groupRepo =
+    !options.workflowId && options.botId
+      ? structuredClone(w.chats.find((c) => c.id === chatId)?.repository)
+      : undefined;
+  const selectedRepo =
+    !options.workflowId && options.botId
+      ? selectedRepository(
+          w,
+          actor,
+          chatId,
+          topicId,
+          options.botId,
+          now.getTime(),
+        )
+      : undefined;
+  const activeRepoIds = new Set<number>();
+  if (groupRepo?.repositoryId) {
+    activeRepoIds.add(groupRepo.repositoryId);
+  } else {
+    if (selectedRepo?.id) activeRepoIds.add(selectedRepo.id);
+    for (const repoId of workflow?.spec.github?.repositoryIds ?? []) {
+      activeRepoIds.add(repoId);
+    }
+  }
   const pins = workflow
     ? workflow.spec.skillId
       ? [{ id: workflow.spec.skillId, version: workflow.skillVersion ?? 0 }]
       : []
     : w.skills
-        .filter((s) => s.enabled && !s.archived && s.published.length)
+        .filter((s) => {
+          if (!s.enabled || s.archived || !s.published.length) return false;
+          const version = s.published.at(-1);
+          if (!version) return false;
+          return skillAllowedForContext(w, actor, version, activeRepoIds, {
+            forChat: true,
+          });
+        })
         .map((s) => ({ id: s.id, version: s.published.length }));
   requireThat(
     (pins.length || (workflow && !workflow.spec.skillId)) &&
       pins.every((p) =>
-        w.skills.some(
-          (s) =>
-            s.id === p.id &&
-            s.enabled &&
-            !s.archived &&
-            s.published[p.version - 1],
-        ),
+        w.skills.some((s) => {
+          const version = s.published[p.version - 1];
+          if (!s.id || s.id !== p.id || !s.enabled || s.archived || !version) {
+            return false;
+          }
+          if (version.scope?.kind === "project") {
+            return skillAllowedForContext(w, actor, version, activeRepoIds);
+          }
+          return true;
+        }),
       ),
     "skill_unavailable",
     409,
@@ -143,7 +179,6 @@ export function createRun(
     if (widget && !pins.some((p) => p.id === widget.id))
       pins.push({ id: widget.id, version: widget.published.length });
   }
-  const now = options.now ?? new Date();
   const privateChat = chatId === actor && !options.workflowId;
   const selected = privateChat
     ? privateThread(w, actor, options.botId, topicId, options.continueFrom, now)
@@ -231,33 +266,19 @@ export function createRun(
           (i.scope === "workflow" && i.workflowId === workflow?.id)),
     )
     .map((i) => structuredClone(i));
-  const repository =
-    !options.workflowId && options.botId
-      ? selectedRepository(
-          w,
-          actor,
-          chatId,
-          topicId,
-          options.botId,
-          now.getTime(),
-        )
-      : undefined;
   const run: Run = {
     id: options.id ?? randomUUID(),
     actor,
-    groupRepository:
-      !options.workflowId && options.botId
-        ? structuredClone(w.chats.find((c) => c.id === chatId)?.repository)
-        : undefined,
+    groupRepository: groupRepo,
     groupRepositoryVersion:
       !options.workflowId && chatId !== actor
         ? (w.chats.find((c) => c.id === chatId)?.repositoryRevision ?? 0)
         : undefined,
     repository:
-      repository && w.github?.installationId
+      selectedRepo && w.github?.installationId
         ? {
-            id: repository.id,
-            full_name: repository.full_name,
+            id: selectedRepo.id,
+            full_name: selectedRepo.full_name,
             installationId: w.github.installationId,
           }
         : undefined,

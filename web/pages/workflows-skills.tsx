@@ -307,21 +307,29 @@ export function WorkflowsPage({
 }
 function SkillCardHeader({
   skill: s,
+  repositoryName,
   onEdit,
   onAction,
 }: {
   skill: Skill;
+  repositoryName?: string;
   onEdit: () => void;
   onAction: (action: "enable" | "disable" | "archive") => Promise<void>;
 }) {
   const [error, setError] = useState("");
   const notify = useToast();
+  const projectLabel =
+    s.draft.scope?.kind === "project"
+      ? `Project · ${repositoryName ?? s.draft.scope.repository ?? `#${s.draft.scope.repositoryId}`}`
+      : undefined;
   return (
     <>
       <div className="skill-card-header">
         <div className="skill-card-title">
           <h2>{s.draft.name}</h2>
           {s.preset && <span className="pill">Preset</span>}
+          {s.auto && <span className="pill">Auto</span>}
+          {projectLabel && <span className="pill">{projectLabel}</span>}
           <span className="pill">
             {s.archived ? "Archived" : s.enabled ? "Enabled" : "Disabled"}
           </span>
@@ -383,11 +391,48 @@ function SkillCardHeader({
   );
 }
 
+const AUTO_SOURCE_LABELS: Record<string, string> = {
+  coding_task: "coding task",
+  mission: "mission",
+  conversation: "conversation",
+};
+
+function normalizeSkillSubmitSpec(
+  raw: Record<string, unknown>,
+  repositories: { id: number; full_name: string }[],
+): Record<string, unknown> {
+  const copy = structuredClone(raw);
+  const scope = copy.scope as
+    | { kind?: string; repositoryId?: number; repository?: string }
+    | undefined;
+  if (scope?.kind === "project" && typeof scope.repositoryId === "number") {
+    const repo = repositories.find((r) => r.id === scope.repositoryId);
+    copy.scope = {
+      kind: "project",
+      repositoryId: scope.repositoryId,
+      ...(repo?.full_name
+        ? { repository: repo.full_name }
+        : scope.repository
+          ? { repository: scope.repository }
+          : {}),
+    };
+  } else if (scope) {
+    copy.scope = { kind: "global" };
+  }
+  return copy;
+}
+
 export function SkillsPage({ id }: { id: string }) {
   const notify = useToast();
   const { data, error, reload, loading } = useData<{
     items: (Skill & { dependents: unknown[] })[];
     total: number;
+    repositories?: { id: number; full_name: string }[];
+    autoExtraction?: {
+      enabled: boolean;
+      autoCount: number;
+      suppressedCount: number;
+    };
   }>(`/api/admin/workspaces/${id}/skills`);
   const [editing, setEditing] = useState<Skill>();
   const [creating, setCreating] = useState(false);
@@ -399,29 +444,72 @@ export function SkillsPage({ id }: { id: string }) {
   const [updating, setUpdating] = useState<Skill>();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [scopeFilter, setScopeFilter] = useState("all");
   const searchInput = useRef<HTMLInputElement>(null);
+
+  const repoMap = new Map<number, string>();
+  for (const repo of data?.repositories ?? []) {
+    repoMap.set(repo.id, repo.full_name);
+  }
+  for (const skill of data?.items ?? []) {
+    if (
+      skill.draft.scope?.kind === "project" &&
+      !repoMap.has(skill.draft.scope.repositoryId)
+    ) {
+      repoMap.set(
+        skill.draft.scope.repositoryId,
+        skill.draft.scope.repository ??
+          `Repository #${skill.draft.scope.repositoryId}`,
+      );
+    }
+  }
+  const allRepositories = [...repoMap.entries()].map(([repoId, full_name]) => ({
+    id: repoId,
+    full_name,
+  }));
+  const hasScopeChoices =
+    allRepositories.length > 0 ||
+    (data?.items.some((s) => s.draft.scope?.kind === "project") ?? false);
+
   const searchTerms = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const visibleSkills = data?.items.filter((skill) => {
+    const repoName =
+      skill.draft.scope?.kind === "project"
+        ? (repoMap.get(skill.draft.scope.repositoryId) ??
+          skill.draft.scope.repository ??
+          "")
+        : "";
     const text =
-      `${skill.draft.name} ${skill.draft.slug} ${skill.draft.description}`.toLowerCase();
+      `${skill.draft.name} ${skill.draft.slug} ${skill.draft.description} ${repoName}`.toLowerCase();
+    const matchesScope =
+      scopeFilter === "all" ||
+      (scopeFilter === "global"
+        ? skill.draft.scope?.kind !== "project"
+        : skill.draft.scope?.kind === "project" &&
+          `project:${skill.draft.scope.repositoryId}` === scopeFilter);
     return (
       searchTerms.every((term) => text.includes(term)) &&
-      (filter === "all" || (filter === "enabled") === skill.enabled)
+      (filter === "all" || (filter === "enabled") === skill.enabled) &&
+      matchesScope
     );
   });
   const resetFilters = () => {
     setSearch("");
     setFilter("all");
+    setScopeFilter("all");
     searchInput.current?.focus();
   };
   const spec: SkillSpec = {
     slug: "my-recap",
     name: "My recap",
     description: "A team-specific recap",
+    scope: { kind: "global" },
+    audience: "chat",
     body: "Summarize supplied sources and cite [source:ID]. Distinguish facts and suggestions.",
     tools: ["read_chat_context", "read_instructions", "load_skill"],
     settings: { sections: "Decisions, blockers, next steps", maxWords: 400 },
   };
+  const editorFields = skillFields(allRepositories);
   return (
     <Page
       title="Agent skills"
@@ -477,6 +565,21 @@ export function SkillsPage({ id }: { id: string }) {
               />
             )}
           </div>
+          {hasScopeChoices && (
+            <Select
+              aria-label="Skill scope"
+              value={scopeFilter}
+              onChange={(e) => setScopeFilter(e.target.value)}
+            >
+              <option value="all">All scopes</option>
+              <option value="global">Global</option>
+              {allRepositories.map((repo) => (
+                <option key={repo.id} value={`project:${repo.id}`}>
+                  Project · {repo.full_name}
+                </option>
+              ))}
+            </Select>
+          )}
           <Select
             aria-label="Skill state"
             value={filter}
@@ -496,7 +599,7 @@ export function SkillsPage({ id }: { id: string }) {
               ? "Try another search or change the skill state."
               : "Import skills from GitHub to get started, or create a custom skill."}
           </p>
-          {(search || filter !== "all") && (
+          {(search || filter !== "all" || scopeFilter !== "all") && (
             <button type="button" className="secondary" onClick={resetFilters}>
               Reset filters
             </button>
@@ -513,94 +616,139 @@ export function SkillsPage({ id }: { id: string }) {
           <Skeleton width="75%" />
         </section>
       )}
-      {visibleSkills?.map((s) => (
-        <section className="card skill-card" key={s.id}>
-          <SkillCardHeader
-            key={`${s.id}:${s.version}`}
-            skill={s}
-            onEdit={() => setEditing(s)}
-            onAction={async (action) => {
-              await api(
-                `/api/admin/workspaces/${id}/skills/${s.id}/action`,
-                "POST",
-                {
-                  version: s.version,
-                  action,
-                },
-              );
-              reload();
-            }}
-          />
-          <p className="skill-card-description">{s.draft.description}</p>
-          {s.origin && (
-            <p className="muted">
-              Saved from a conversation by {s.origin.actor} on{" "}
-              {new Date(s.origin.sharedAt).toLocaleDateString()}.{" "}
-              {s.published.length
-                ? "Saved reusable instruction skill."
-                : "Review the instructions before enabling this skill for team use."}
-            </p>
-          )}
-          {!s.preset && s.githubSource && (
-            <div className="skill-source-summary">
+      {visibleSkills?.map((s) => {
+        const repoName =
+          s.draft.scope?.kind === "project"
+            ? repoMap.get(s.draft.scope.repositoryId)
+            : undefined;
+        const totalUses =
+          (s.usage?.loads ?? 0) + (s.usage?.codingInjections ?? 0);
+        return (
+          <section className="card skill-card" key={s.id}>
+            <SkillCardHeader
+              key={`${s.id}:${s.version}`}
+              skill={s}
+              repositoryName={repoName}
+              onEdit={() => setEditing(s)}
+              onAction={async (action) => {
+                await api(
+                  `/api/admin/workspaces/${id}/skills/${s.id}/action`,
+                  "POST",
+                  {
+                    version: s.version,
+                    action,
+                  },
+                );
+                reload();
+              }}
+            />
+            <p className="skill-card-description">{s.draft.description}</p>
+            {s.auto && (
               <p className="muted">
-                Source:{" "}
-                <a
-                  href={`https://github.com/${s.githubSource.repository}/blob/${encodeURIComponent(s.githubSource.ref)}/${s.githubSource.path.split("/").map(encodeURIComponent).join("/")}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {s.githubSource.repository} · {s.githubSource.path}
-                </a>
-                {" · "}
-                {s.githubSource.ref}
+                Auto-extracted from{" "}
+                {AUTO_SOURCE_LABELS[s.auto.sourceKind] ?? s.auto.sourceKind}
+                {s.auto.revisions > 1
+                  ? ` · Updated ${s.auto.revisions - 1} ${s.auto.revisions === 2 ? "time" : "times"}`
+                  : ""}
+                {totalUses > 0
+                  ? ` · Used ${totalUses} ${totalUses === 1 ? "time" : "times"}`
+                  : ""}
+                .
               </p>
-              <div className="skill-source-actions">
-                <a
-                  className="button-link secondary"
-                  href={`https://github.com/${s.githubSource.repository}/blob/${encodeURIComponent(s.githubSource.ref)}/${s.githubSource.path.split("/").map(encodeURIComponent).join("/")}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Source
-                  <SquareTopDown
-                    size={18}
-                    weight="Outline"
-                    color="currentColor"
-                    aria-hidden="true"
-                    focusable="false"
-                  />
-                </a>
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={s.archived}
-                  onClick={() => setUpdating(s)}
-                >
-                  Check for updates
-                </button>
+            )}
+            {s.origin && (
+              <p className="muted">
+                Saved from a conversation by {s.origin.actor} on{" "}
+                {new Date(s.origin.sharedAt).toLocaleDateString()}.{" "}
+                {s.published.length
+                  ? "Saved reusable instruction skill."
+                  : "Review the instructions before enabling this skill for team use."}
+              </p>
+            )}
+            {!s.preset && s.githubSource && (
+              <div className="skill-source-summary">
+                <p className="muted">
+                  Source:{" "}
+                  <a
+                    href={`https://github.com/${s.githubSource.repository}/blob/${encodeURIComponent(s.githubSource.ref)}/${s.githubSource.path.split("/").map(encodeURIComponent).join("/")}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {s.githubSource.repository} · {s.githubSource.path}
+                  </a>
+                  {" · "}
+                  {s.githubSource.ref}
+                </p>
+                <div className="skill-source-actions">
+                  <a
+                    className="button-link secondary"
+                    href={`https://github.com/${s.githubSource.repository}/blob/${encodeURIComponent(s.githubSource.ref)}/${s.githubSource.path.split("/").map(encodeURIComponent).join("/")}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Source
+                    <SquareTopDown
+                      size={18}
+                      weight="Outline"
+                      color="currentColor"
+                      aria-hidden="true"
+                      focusable="false"
+                    />
+                  </a>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={s.archived}
+                    onClick={() => setUpdating(s)}
+                  >
+                    Check for updates
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-          <SkillPreview spec={s.draft} dependents={s.dependents} />
-        </section>
-      ))}
+            )}
+            <SkillPreview
+              spec={s.draft}
+              dependents={s.dependents}
+              repositoryName={repoName}
+            />
+          </section>
+        );
+      })}
       {(creating || editing) && (
         <Modal
           title={editing ? `Edit ${editing.draft.name}` : "Create skill"}
           onClose={closeEditor}
         >
           <RecordForm
-            fields={prefixFields(editing ? "spec." : "", skillFields)}
+            fields={prefixFields(editing ? "spec." : "", editorFields)}
             value={
-              editing ? { version: editing.version, spec: editing.draft } : spec
+              editing
+                ? {
+                    version: editing.version,
+                    spec: {
+                      ...editing.draft,
+                      scope: editing.draft.scope ?? { kind: "global" },
+                      audience: editing.draft.audience ?? "chat",
+                    },
+                  }
+                : spec
             }
             label="Save skill"
             save={async (value) => {
+              const raw = value as Record<string, unknown>;
+              const payload = editing
+                ? {
+                    ...raw,
+                    spec: normalizeSkillSubmitSpec(
+                      (raw.spec ?? {}) as Record<string, unknown>,
+                      allRepositories,
+                    ),
+                  }
+                : normalizeSkillSubmitSpec(raw, allRepositories);
               await api(
                 `/api/admin/workspaces/${id}/skills${editing ? `/${editing.id}` : ""}`,
                 editing ? "PUT" : "POST",
-                value,
+                payload,
               );
               notify("Skill saved.");
               closeEditor();

@@ -53,6 +53,7 @@ test("every usage source produces complete, non-empty source attribution", () =>
     "research_subagent",
     "memory_extract",
     "memory_consolidate",
+    "skill_extract",
   ] as const) {
     const ev = deriveRunAttemptUsageEvent(w, chatRun, {
       id: `att-${purpose ?? "chat"}`,

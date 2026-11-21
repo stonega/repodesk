@@ -15,6 +15,7 @@ export const USAGE_SOURCE_KINDS = [
   "research_subagent",
   "memory_extract",
   "memory_consolidate",
+  "skill_extract",
   "self_check",
   "coding_task",
   "coding_conversation",
@@ -32,6 +33,7 @@ export const USAGE_SOURCE_LABELS: Record<UsageSourceKind, string> = {
   research_subagent: "Research subagent",
   memory_extract: "Memory extract",
   memory_consolidate: "Memory consolidate",
+  skill_extract: "Skill extract",
   self_check: "Admin self-check",
   coding_task: "Codex task",
   coding_conversation: "Codex Q&A",
@@ -121,6 +123,7 @@ export function deriveRunAttemptUsageEvent(
     purpose === "followup" ||
     purpose === "memory_extract" ||
     purpose === "memory_consolidate" ||
+    purpose === "skill_extract" ||
     purpose === "research_subagent"
       ? purpose
       : run.workflowId
@@ -143,6 +146,7 @@ export function deriveRunAttemptUsageEvent(
   else if (purpose === "memory_extract") sourceLabel = "Memory extraction";
   else if (purpose === "memory_consolidate")
     sourceLabel = "Memory consolidation";
+  else if (purpose === "skill_extract") sourceLabel = "Skill extraction";
   else if (purpose === "research_subagent") sourceLabel = "Research subagent";
   else if (run.workflowId)
     sourceLabel = workflow

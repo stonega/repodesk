@@ -5,6 +5,31 @@ Historical verification logs are archived by month to keep this active status le
 - [October 2026 archive](archive/implementation-status-2026-10.md) (125 entries)
 - [September 2026 baseline archive](archive/implementation-status-2026-09.md) (32 entries)
 
+## Autonomous skill extraction, Global/Project classification, progressive loading and coding cold-start injection (2026-11-21)
+
+Implemented AI-autonomous skill extraction and Global vs. Project-specific skill classification with zero new runtime dependencies and minimal review friction:
+
+1. **Global & Project-specific skill classification (`src/domain.ts`, `src/skills/types.ts`, `src/skills/scope.ts`, `src/skills/catalog.ts`)**:
+   - Added backward-compatible `scope` (`{ kind: "global" }` or `{ kind: "project", repositoryId, repository? }`) and `audience` (`"chat" | "coding" | "all"`) fields to `skillSchema`, plus `auto` extraction provenance, `usage` counters (`loads`, `codingInjections`), and workspace `skillExtraction` state (`jobs`, `checkpoints`, `suppressed`).
+   - Enforced repository read-access checks (`actorCanReadProjectSkill`) for project-scoped skills and recorded admin suppression entries automatically when an auto-extracted skill is disabled or archived.
+2. **Autonomous background extraction & self-evolution (`src/skills/extractor.ts`, `src/skills/extraction-planner.ts`, `src/skills/extraction-service.ts`, `src/jobs/queue.ts`, `src/usage/model-usage.ts`, `web/usage-charts.tsx`)**:
+   - Added `SkillExtractionService` on an independent 60s worker timer mirroring `MemoryService`'s durable lease-fenced architecture, with zero-cost deterministic signal gates across completed/review-ready Codex tasks (`coding_task`), completed multi-step Missions (`mission`), and idle high-signal conversations (`conversation`).
+   - Automatically classifies, creates (`enabled: true`), or evolves (`update` appending immutable `published` snapshots) skills under deterministic safety rails: safe non-escalating tool ceiling, secret/binary/prompt-injection rejection, deterministic project-scope enforcement for repository-specific findings, protection of built-in presets and GitHub-managed skills, admin suppression memory, and workspace capacity bounds.
+   - Added direct `save_skill` tool (`src/agent/tools.ts`, `src/agent/routing-prompt.ts`) for approval-free conversational saves/updates and metered all extraction calls under `sourceKind: "skill_extract"` in `model_usage_events`.
+3. **Scoped pinning, progressive disclosure & Codex/Review Bot cold-start briefings (`src/workspaces/service.ts`, `src/agent/context.ts`, `src/skills/coding-briefing.ts`, `src/coding/executor.ts`, `src/review-bot/executor.ts`, `src/privacy/service.ts`)**:
+   - Interactive `createRun` pins only enabled `chat`/`all` skills matching `global` or the run's active repositories; `buildContext` uses progressive disclosure (`previewSkillIndex` with `loadOnDemand: true`) for large catalogs or auto/project skills while `load_skill` rechecks project access and increments usage counters.
+   - Compiled enabled `coding`/`all` skills (project skills prioritized ahead of global coding skills) into bounded cold-start `DevelopmentRun.memory` briefings for Codex tasks and Review Bot runs, and ensured workspace deletion sweeps `skillExtraction`.
+4. **Admin Skills catalog & modal editor (`src/admin/routes/workspaces.ts`, `web/form-fields.ts`, `web/pages/workflows-skills.tsx`, `web/skill-preview.tsx`, `web/style.css`)**:
+   - Added scope filtering (`All scopes` / `Global` / `Project · owner/repo`), `Auto` and `Project` badges, read-only auto-extracted provenance/usage summaries, and Scope/Audience controls in the shared modal editor, adhering to [UI design rules](../design/ui-rules.md).
+
+Local verification on Bun 1.4.4, Node 22.22.3, and disposable PostgreSQL 17:
+
+- `bun run check` (only the nine pre-existing incident-script warnings), `bun run typecheck`, `bun run build`, and `bun run test:runtime` (16 injected + 16 configured startup cases, **zero external startup calls**) pass cleanly.
+- Full unit suite (`bun test tests/unit` + updated `tests/unit/model-usage.test.ts`): **985 passed, 9 Docker-gated skips, 0 failures** across 127 files, including new `tests/unit/autonomous-skills.test.ts`.
+- Selected PostgreSQL integration suites (`autonomous-skills`, `managed-skills`, `preset-skills`, `github-skills`, `team-workflows`, `model-usage`, `agent-orchestration`, `topic-memory`): **53 passed, 0 failures** (419 assertions).
+- Selected Playwright browser suites (`skill-classification`, `skill-management`, `skills-search`, `preset-skills`, `github-skills`, `model-usage`): **41 passed, 0 failures** across 1280px desktop and 375px mobile in light and dark themes; rendered screenshots inspected for toolbar wrapping, badges, read-only cards, modal editing, and card padding. This is bounded selection covering all Skills and Model usage surfaces, not a full browser suite run.
+- Live model extraction quality, live Telegram/Codex execution, container image builds, and production deployment remain outside this local verification. See [autonomous skill design](../design/autonomous-skills.md) and [user skills guide](../user/skills.md).
+
 ## Accurate token estimation, native multi-turn context, resilient compaction and Model usage analytics (2026-11-21)
 
 Fixed token budget distortion, compaction fragility, context/prompt packing, and added source-complete Model usage analytics with zero new runtime dependencies:

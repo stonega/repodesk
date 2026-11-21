@@ -66,29 +66,51 @@ appear in import details, saved previews and update comparisons. The assistant
 reads them only through the existing workspace, actor, run and tool permissions.
 An imported instruction's credentials or tool declarations never grant access.
 
-## Conversation-created skills
+## Global and project-specific skills
 
-After a useful conversation, ask the bot to preserve the procedure as a team
-skill and remove private data. The bot proposes sanitized instructions for you
-to review. Your approval shares them with workspace admins as a disabled skill.
-Admins can review and edit the instructions, then enable the skill directly.
+Every custom and auto-extracted skill has a **Scope** and **Applies to** setting:
 
-You cannot create a team skill from another person's private chat. Group sources
-remain limited to their topic. Before sharing, check that the proposed instructions
-contain no information that should remain private.
+- **Global (all projects):** Reusable across every chat, workflow, and repository
+  (for example, weekly recap templates or triage frameworks).
+- **Project-specific:** Bound to one connected GitHub repository. Only available
+  when working with that repository—in repository-bound groups, chats targeting that
+  repository, Codex tasks, and Review Bot runs—and only for members who currently
+  have read access to it.
+- **Applies to:** Choose whether the skill is used in **Chat & workflows**,
+  **Coding & reviews** (injected automatically into Codex and Review Bot cold-start
+  context), or **All (chat & coding)**.
 
-Unapproved conversation procedures depend on their retained sources; source removal
-or expiry can make them unavailable. An admin save or enable action approves a
-standalone procedure with its own lifecycle.
+In **Skills**, use the scope filter alongside search and state filters to browse
+global skills or focus on a specific project repository. You can reclassify a skill
+between Global and Project-specific anytime from its **Edit** dialog.
+
+## Autonomous skill extraction
+
+RepoDesk automatically extracts reusable workflows and repository engineering
+lessons in the background from completed Codex tasks, multi-step Missions, and
+high-signal conversations:
+
+- Auto-extracted skills are classified into **Project** or **Global**, validated
+  against secret, prompt-injection, and safe-tool guards, and enabled automatically
+  without requiring manual approval steps.
+- When follow-up conversations or tasks refine an existing auto-extracted skill,
+  RepoDesk updates it in place while preserving snapshots for existing schedules.
+  Built-in presets and GitHub-imported skills are never overwritten automatically.
+- Cards for auto-extracted skills display an **Auto** badge along with their source
+  and usage count. If you disable or archive an auto-extracted skill, RepoDesk
+  remembers that choice and avoids recreating the same skill automatically.
+- You can also ask the assistant in Telegram to save or update a procedure directly
+  (for example, "Save this release checklist for acme/api").
 
 ## Changes and availability
 
 Existing runs and schedules keep their saved instruction snapshots when you edit
-a skill or apply a GitHub update. New interactive runs use the latest saved
-instructions. Disabling a skill can suspend dependent schedules. Archiving a custom
+a skill or apply a GitHub update. New interactive runs load large catalogs
+progressively (indexing skill descriptions first and loading full instructions on
+demand). Disabling a skill can suspend dependent schedules. Archiving a custom
 skill preserves historical references and prevents enabling it again.
 
-Use search and the state filter to find a skill. If a save conflicts with another
+Use search, the scope filter and the state filter to find a skill. If a save conflicts with another
 session, review the latest saved settings before retrying. Failed saves keep your
 input in the dialog. Configure missing tools through the relevant
 [integration](README.md) before using instructions that require them.

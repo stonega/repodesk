@@ -165,45 +165,94 @@ export function workflowFields(
       : []),
   ];
 }
-export const skillFields: FormField[] = [
-  {
-    path: "slug",
-    label: "Skill slug",
-    required: true,
-    maxLength: 50,
-    help: "Lowercase letters, numbers and hyphens; start with a letter.",
-  },
-  { path: "name", label: "Skill name", required: true, maxLength: 80 },
-  { path: "description", label: "Description", required: true, maxLength: 300 },
-  {
-    path: "body",
-    label: "Instructions",
-    kind: "textarea",
-    required: true,
-    maxLength: 12000,
-  },
-  {
-    path: "tools",
-    label: "Requested tools",
-    kind: "choices",
-    options: TOOLS.map((value) => ({ value, label: detailLabel(value) })),
-  },
-  {
-    path: "settings.sections",
-    label: "Output sections",
-    kind: "textarea",
-    maxLength: 1000,
-  },
-  {
-    path: "settings.maxWords",
-    label: "Maximum words",
-    kind: "number",
-    min: 50,
-    max: 1000,
-    step: 1,
-    required: true,
-  },
-];
+export function skillFields(
+  repositories: { id: number; full_name: string }[] = [],
+): FormField[] {
+  return [
+    {
+      path: "slug",
+      label: "Skill slug",
+      required: true,
+      maxLength: 64,
+      help: "Lowercase letters, numbers and hyphens; start with a letter.",
+    },
+    { path: "name", label: "Skill name", required: true, maxLength: 80 },
+    {
+      path: "description",
+      label: "Description",
+      required: true,
+      maxLength: 300,
+    },
+    {
+      path: "scope.kind",
+      label: "Scope",
+      kind: "select",
+      required: true,
+      help: "Global skills apply everywhere; project skills apply only to a specific repository.",
+      options: [
+        { value: "global", label: "Global (all projects)" },
+        ...(repositories.length
+          ? [{ value: "project", label: "Project-specific" }]
+          : []),
+      ],
+    },
+    ...(repositories.length
+      ? [
+          {
+            path: "scope.repositoryId",
+            label: "Project repository",
+            kind: "select" as const,
+            numeric: true,
+            required: true,
+            when: { path: "scope.kind", value: "project" },
+            options: repositories.map((repo) => ({
+              value: String(repo.id),
+              label: repo.full_name,
+            })),
+          },
+        ]
+      : []),
+    {
+      path: "audience",
+      label: "Applies to",
+      kind: "select",
+      required: true,
+      options: [
+        { value: "chat", label: "Chat & workflows" },
+        { value: "coding", label: "Coding & reviews" },
+        { value: "all", label: "All (chat & coding)" },
+      ],
+    },
+    {
+      path: "body",
+      label: "Instructions",
+      kind: "textarea",
+      required: true,
+      maxLength: 12000,
+    },
+    {
+      path: "tools",
+      label: "Requested tools",
+      kind: "choices",
+      options: TOOLS.map((value) => ({ value, label: detailLabel(value) })),
+    },
+    {
+      path: "settings.sections",
+      label: "Output sections",
+      kind: "textarea",
+      maxLength: 1000,
+    },
+    {
+      path: "settings.maxWords",
+      label: "Maximum words",
+      kind: "number",
+      min: 50,
+      max: 1000,
+      step: 1,
+      required: true,
+    },
+  ];
+}
 export const instructionFields: FormField[] = [
   {
     path: "body",

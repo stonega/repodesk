@@ -41,6 +41,7 @@ export const SOURCE_COLORS: Record<UsageSourceKind, string> = {
   research_subagent: "#14b8a6",
   memory_extract: "#84cc16",
   memory_consolidate: "#22c55e",
+  skill_extract: "#a855f7",
   self_check: "#64748b",
   coding_task: "#f97316",
   coding_conversation: "#fb923c",

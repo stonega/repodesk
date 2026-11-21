@@ -15,6 +15,7 @@ import { ModelProviders } from "../models/service.ts";
 import { RepositoryReleases, releasePayloadHash } from "../releases/service.ts";
 import { reviewDestination } from "../review-bot/policy.ts";
 import { decrypt, fingerprint } from "../setup/credentials.ts";
+import { compileCodingSkillsBriefing } from "../skills/coding-briefing.ts";
 import {
   isAudioAttachment,
   loadSourceAttachments,
@@ -544,9 +545,17 @@ export class DevelopmentExecutor {
               )
             ).rows;
             t.memory = taskMemory(w, t);
+            const skillsBriefing = compileCodingSkillsBriefing(
+              w,
+              t.payload.repositoryId,
+              { actor: t.actor, recordUsage: true },
+            );
+            const combinedMemory = [t.memory?.text, skillsBriefing?.text]
+              .filter(Boolean)
+              .join("\n\n");
             const run: DevelopmentRun = {
               ...(t.objective ? { objective: t.objective } : {}),
-              memory: t.memory?.text,
+              memory: combinedMemory || undefined,
               taskId: t.id,
               revision: t.revision,
               mode: t.phase,

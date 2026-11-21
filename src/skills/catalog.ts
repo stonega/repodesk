@@ -9,6 +9,12 @@ import {
 import { hash } from "../setup/credentials.ts";
 import { audit, authorize, revokeWork } from "../workspaces/policy.ts";
 import { skillSourcesPresent } from "./provenance.ts";
+import {
+  normalizeSkillScope,
+  recordSkillSuppression,
+  resolveSkillRepositoryName,
+  skillAudience,
+} from "./scope.ts";
 import { telegramWidgetSpec } from "./telegram-widgets.ts";
 export function validateSkill(value: unknown) {
   const spec = skillSchema.parse(value);
@@ -125,6 +131,29 @@ export function saveSkill(
 ): Skill {
   authorize(w, actor, true);
   spec = validateSkill(spec);
+  if (spec.scope?.kind === "project") {
+    const targetRepoId = spec.scope.repositoryId;
+    const repo = w.github?.repositories.find((r) => r.id === targetRepoId);
+    const existing = id ? w.skills.find((s) => s.id === id) : undefined;
+    const unchangedDisconnected =
+      existing?.draft.scope?.kind === "project" &&
+      existing.draft.scope.repositoryId === targetRepoId;
+    requireThat(
+      !!repo || unchangedDisconnected,
+      "repository_not_connected",
+      409,
+    );
+    if (repo) {
+      spec = {
+        ...spec,
+        scope: {
+          kind: "project",
+          repositoryId: repo.id,
+          repository: repo.full_name,
+        },
+      };
+    }
+  }
   requireThat(
     !w.skills.some((s) => s.id !== id && s.draft.slug === spec.slug),
     "duplicate_slug",
@@ -198,7 +227,16 @@ export function changeSkill(
     requireThat(skill.published.length && !skill.archived, "publish_first");
     skill.enabled = true;
   }
-  if (action === "disable" || action === "archive") skill.enabled = false;
+  if (action === "disable" || action === "archive") {
+    skill.enabled = false;
+    if (skill.auto) {
+      recordSkillSuppression(
+        w,
+        skill,
+        action === "archive" ? "archived" : "disabled",
+      );
+    }
+  }
   if (action === "archive") skill.archived = true;
   if (action === "rollback") {
     const previous = skill.published[(pin ?? 0) - 1];
@@ -227,13 +265,46 @@ export function saveManagedSkill(
   return skill;
 }
 export function previewSkill(spec: SkillSpec) {
+  const scope = normalizeSkillScope(spec);
+  const scopeLine =
+    scope.kind === "project"
+      ? `\nScope: project (${scope.repository ?? `#${scope.repositoryId}`})`
+      : "";
   const metadata = spec.frontmatter
     ? `\nSource metadata (reference only): ${JSON.stringify(spec.frontmatter)}`
     : "";
   const resources = spec.resources?.length
     ? `\nSupporting files: ${spec.resources.map((resource) => resource.path).join(", ")}. Read them using load_skill with this skill's id and the exact path. Relative links inside a supporting file resolve from that file's directory.`
     : "";
-  return `${spec.name}\n${spec.body}\nSections: ${spec.settings.sections}\nMaximum words: ${spec.settings.maxWords}${metadata}${resources}`;
+  return `${spec.name}\n${spec.body}\nSections: ${spec.settings.sections}\nMaximum words: ${spec.settings.maxWords}${scopeLine}${metadata}${resources}`;
+}
+export function previewSkillIndex(
+  w: Workspace,
+  skill: Skill,
+  spec: SkillSpec,
+  version: number,
+) {
+  const scope = normalizeSkillScope(spec);
+  return {
+    id: skill.id,
+    version,
+    slug: spec.slug,
+    name: spec.name,
+    description: spec.description,
+    scope:
+      scope.kind === "project"
+        ? {
+            kind: "project" as const,
+            repositoryId: scope.repositoryId,
+            repository: resolveSkillRepositoryName(w, scope),
+          }
+        : { kind: "global" as const },
+    audience: skillAudience(spec),
+    ...(spec.resources?.length
+      ? { resources: spec.resources.map((r) => r.path) }
+      : {}),
+    loadOnDemand: true as const,
+  };
 }
 export function testSkill(
   w: Workspace,

@@ -1150,9 +1150,9 @@ button.github-repository-more:hover:not(:disabled) {
 }
 .skill-catalog-search {
   position: relative;
-  width: 320px;
+  width: 260px;
   max-width: 100%;
-  flex: 1 1 220px;
+  flex: 1 1 200px;
 }
 .skill-catalog-search > svg {
   position: absolute;

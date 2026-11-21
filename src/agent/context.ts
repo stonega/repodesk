@@ -11,7 +11,11 @@ import {
 } from "../domain.ts";
 import { selectableRepositories } from "../github/repository-context.ts";
 import type { missionContextSnapshot } from "../orchestration/wakeup.ts";
-import { previewSkill } from "../skills/catalog.ts";
+import {
+  isPresetSkill,
+  previewSkill,
+  previewSkillIndex,
+} from "../skills/catalog.ts";
 import { isAudioAttachment } from "../telegram/attachments.ts";
 import { telegramWidgetAvailable } from "../telegram/widgets.ts";
 import { repositoryReportWindow } from "../workflows/schedule.ts";
@@ -248,11 +252,31 @@ export function buildContext(
   options?: { requestOverride?: string },
 ) {
   const workflow = w.workflows.find((f) => f.id === run.workflowId);
-  const skills = run.skillPins.map((p) => {
+  const resolvedPins = run.skillPins.map((p) => {
     const skill = w.skills.find((s) => s.id === p.id);
     const version = skill?.published[p.version - 1];
     requireThat(skill?.enabled && version, "skill_unavailable");
-    return { id: p.id, version: p.version, content: previewSkill(version) };
+    return { pin: p, skill, version };
+  });
+  const progressiveInteractive =
+    !run.workflowId &&
+    (resolvedPins.length > 3 ||
+      resolvedPins.some(
+        ({ skill, version }) =>
+          !!skill.auto || version.scope?.kind === "project",
+      ));
+  const skills: (
+    | (ReturnType<typeof previewSkillIndex> & { content?: string })
+    | { id: string; version: number; content: string }
+  )[] = resolvedPins.map(({ pin, skill, version }) => {
+    if (progressiveInteractive && !isPresetSkill(w, skill)) {
+      return previewSkillIndex(w, skill, version, pin.version);
+    }
+    return {
+      id: pin.id,
+      version: pin.version,
+      content: previewSkill(version),
+    };
   });
   const topic =
     !run.workflowId && hasDiscussionMemory(run)

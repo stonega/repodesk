@@ -26,6 +26,7 @@ import { sweep } from "../privacy/service.ts";
 import type { ReviewExecutor } from "../review-bot/executor.ts";
 import type { SearchConsoleService } from "../search-console/service.ts";
 import type { SetupService } from "../setup/service.ts";
+import { SkillExtractionService } from "../skills/extraction-service.ts";
 import { TelegramCommandMenu } from "../telegram/commands.ts";
 import { TelegramPoller } from "../telegram/polling.ts";
 import { Ingress } from "../telegram/webhook.ts";
@@ -183,6 +184,7 @@ export async function startWorker(
   const id = randomUUID();
   const commandMenu = new TelegramCommandMenu(store, setup);
   const memories = new MemoryService(store, setup);
+  const skillExtractor = new SkillExtractionService(store, setup);
   const runs = new RunWorker(store, boss, executor, shutdown.signal);
   const runTick = () =>
     runs.poll().catch((error) => {
@@ -456,6 +458,23 @@ export async function startWorker(
   };
   memoryTick();
   const memoryTimer = setInterval(memoryTick, 60000);
+  // Autonomous skill extraction runs independently of ingress, delivery and heartbeats.
+  let skillExtractBusy: Promise<void> | undefined;
+  const skillExtractTick = () => {
+    if (skillExtractBusy || shutdown.signal.aborted) return;
+    skillExtractBusy = (async () => {
+      for (const workspaceId of await store.ids()) {
+        if (shutdown.signal.aborted) break;
+        await skillExtractor.tick(workspaceId, shutdown.signal);
+      }
+    })()
+      .catch((error) => store.log.write("worker_maintenance_failed", { error }))
+      .finally(() => {
+        skillExtractBusy = undefined;
+      });
+  };
+  skillExtractTick();
+  const skillExtractTimer = setInterval(skillExtractTick, 60000);
   let hookBusy: Promise<void> | undefined;
   const hookTick = () => {
     if (!githubWebhooks || hookBusy || shutdown.signal.aborted) return;
@@ -484,6 +503,7 @@ export async function startWorker(
     clearInterval(heartbeatTimer);
     clearInterval(runTimer);
     clearInterval(memoryTimer);
+    clearInterval(skillExtractTimer);
     clearInterval(timer);
     clearInterval(codingTimer);
     clearInterval(githubTimer);
@@ -493,7 +513,14 @@ export async function startWorker(
     await runs.drain();
     await reviewBusy;
     await Promise.all([polling, boss.stop({ graceful: true, timeout: 10000 })]);
-    await Promise.all([codingBusy, githubBusy, menuBusy, memoryBusy, hookBusy]);
+    await Promise.all([
+      codingBusy,
+      githubBusy,
+      menuBusy,
+      memoryBusy,
+      skillExtractBusy,
+      hookBusy,
+    ]);
     await browser?.drain();
     while (busy) await new Promise((resolve) => setTimeout(resolve, 25));
     await heartbeatBusy;

@@ -27,13 +27,27 @@ export function SkillSourceDetails({ spec }: { spec: SkillSpec }) {
   );
 }
 
+const AUDIENCE_LABELS: Record<string, string> = {
+  chat: "Chat & workflows",
+  coding: "Coding & reviews",
+  all: "All (chat & coding)",
+};
+
 export function SkillPreview({
   spec,
   dependents,
+  repositoryName,
 }: {
   spec: SkillSpec;
   dependents: unknown[];
+  repositoryName?: string;
 }) {
+  const showClassification =
+    spec.scope?.kind === "project" || spec.audience !== undefined;
+  const scopeText =
+    spec.scope?.kind === "project"
+      ? `Project · ${repositoryName ?? spec.scope.repository ?? `#${spec.scope.repositoryId}`}`
+      : "Global";
   return (
     <details className="skill-card-preview">
       <summary className="skill-preview-toggle">
@@ -46,6 +60,20 @@ export function SkillPreview({
           className="plugin-summary skill-preview-settings"
           aria-label="Settings"
         >
+          {showClassification && (
+            <>
+              <div>
+                <dt>Scope</dt>
+                <dd>{scopeText}</dd>
+              </div>
+              <div>
+                <dt>Applies to</dt>
+                <dd>
+                  {AUDIENCE_LABELS[spec.audience ?? "chat"] ?? spec.audience}
+                </dd>
+              </div>
+            </>
+          )}
           {(["maxWords", "sections"] as const).map((key) => (
             <div key={key}>
               <dt>{detailLabel(key)}</dt>

@@ -11,6 +11,7 @@ import { Fault, requireThat, type Workspace } from "../domain.ts";
 import type { GitHubApps } from "../github/registry.ts";
 import { ModelProviders } from "../models/service.ts";
 import { decrypt, fingerprint } from "../setup/credentials.ts";
+import { compileCodingSkillsBriefing } from "../skills/coding-briefing.ts";
 import { type ReviewTask, reviewTerminal } from "./config.ts";
 import { progressMarker, ReviewGitHub, reviewMarker } from "./github.ts";
 import { checkReview, reviewDestination } from "./policy.ts";
@@ -424,6 +425,12 @@ export class ReviewExecutor {
       });
       return;
     }
+    const reviewWorkspace = await this.store.read(workspaceId);
+    const reviewSkillsBriefing = compileCodingSkillsBriefing(
+      reviewWorkspace,
+      task.payload.repositoryId,
+      { maxBytes: 8000 },
+    );
     const run =
       task.run ??
       developmentRun.parse({
@@ -431,6 +438,9 @@ export class ReviewExecutor {
         revision: task.revision,
         mode: task.mode === "fix" ? "work" : "analysis",
         inputs: task.inputs,
+        ...(reviewSkillsBriefing?.text
+          ? { memory: reviewSkillsBriefing.text }
+          : {}),
         context: `PR title: ${pull.title.slice(0, 200)}\nDescription: ${(pull.body ?? "").slice(0, 8000)}\nAddressed comments (reference): ${sources}\nPrevious review (reference, may describe an older commit): ${JSON.stringify(previousReview?.result ?? null).slice(0, 8000)}\nPrevious task result: ${JSON.stringify(task.result ?? null).slice(0, 6000)}`,
         previousAttemptId: task.previousAttemptId,
         review: {

@@ -1102,13 +1102,10 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         await new Executor(new Store(store.pool), setup, {
           async run(input) {
             invoked = true;
-            expect(
-              JSON.parse(
-                input.prompt.split("\nAttachment reference data")[0] ?? "{}",
-              ).request,
-            ).toBe("save this");
-            expect(input.prompt).toContain("devnet runtime v224");
-            expect(input.prompt).toContain("Release author");
+            const combined = `${JSON.stringify(input.historyMessages ?? [])}\n${input.prompt}`;
+            expect(input.prompt).toContain("save this");
+            expect(combined).toContain("devnet runtime v224");
+            expect(combined).toContain("Release author");
             expect(input.prompt).toContain(
               "Supported price sources: mark and last.",
             );
@@ -1312,8 +1309,9 @@ const rootUrl = process.env.TEST_DATABASE_URL;
           async run(input) {
             seen.push(input.runId);
             if (input.runId === b.id) {
-              expect(input.prompt).toContain("First answer");
-              expect(input.prompt).not.toContain("Unrelated");
+              const combined = `${JSON.stringify(input.historyMessages ?? [])}\n${input.prompt}`;
+              expect(combined).toContain("First answer");
+              expect(combined).not.toContain("Unrelated");
             }
             return {
               text: input.runId === a.id ? "First answer" : "Other answer",
@@ -1367,10 +1365,10 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         const runner: AgentRunner = {
           async run(input) {
             if (input.runId === a.id) throw Error("fake provider failure");
-            const context = JSON.parse(input.prompt);
-            expect(
-              context.sources.map((s: { role: string }) => s.role),
-            ).toEqual(["user", "user"]);
+            const historyJson = JSON.stringify(input.historyMessages ?? []);
+            expect(historyJson).toContain("First attempt");
+            expect(historyJson).toContain("No assistant reply was recorded");
+            expect(input.prompt).toContain("Try again");
             return {
               text: "Recovered",
               status: "succeeded",
