@@ -95,6 +95,21 @@ export const deviceAuthStatus = z.object({
     .optional(),
 });
 export type DeviceAuthStatus = z.infer<typeof deviceAuthStatus>;
+export const codingEnvironment = z
+  .object({
+    repositoryId: z.number().int().positive(),
+    volume: z.string().regex(/^deepx-codex-env-[a-f0-9]{24}-[1-9]\d{0,18}$/),
+  })
+  .strict();
+export type CodingEnvironment = z.infer<typeof codingEnvironment>;
+export interface LocalEnvironmentControl {
+  listEnvironments(workspaceId: string): Promise<CodingEnvironment[]>;
+  resetEnvironment(
+    workspaceId: string,
+    repositoryId: number,
+  ): Promise<{ removed: boolean }>;
+  eraseWorkspaceEnvironments(workspaceId: string): Promise<{ removed: number }>;
+}
 export interface LocalDeviceAuth {
   deviceStatus(workspaceId: string): Promise<DeviceAuthStatus>;
   deviceStart(workspaceId: string): Promise<DeviceAuthStatus>;

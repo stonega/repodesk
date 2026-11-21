@@ -142,12 +142,44 @@ docker build --target codex-job -t localhost/deepx-codex-job:local .
 ```
 
 The image pins Codex CLI 0.155.1 and Open Code Review CLI 1.12.12 and includes
-Node 24, Bun 1.3.14, Git and Bash. Review Bot uses OCR delegation for file selection
+Node 24, Bun 1.3.14, `mise` 2026.10.4, `uv` 0.8.3, `build-essential`, `pkg-config`,
+Git and Bash. Review Bot uses OCR delegation for file selection
 and rules with the existing Codex model credentials. Custom images used for reviews
 must retain the OCR CLI; missing or incompatible OCR fails preparation.
 Use a reviewed custom image based on this target if a repository needs additional
-system tools. Set `CODEX_RUNNER_IMAGE` to its local tag; the runner never pulls
+system libraries. Set `CODEX_RUNNER_IMAGE` to its local tag; the runner never pulls
 images supplied by a model or task. Build before starting tasks.
+
+### Persistent per-repository environments (`/env`)
+
+Work tasks (`mode: "work"`) automatically mount a persistent, tenant- and
+repository-scoped volume (`deepx-codex-env-<workspaceHash>-<repositoryId>`) at
+`/env` during the `setup`, `implement` and `check` phases. The volume is omitted
+from `prepare`, `export`, `publish` and read-only `intake`/`analysis`/`review`
+phases so credentialed GitHub operations and read-only checks keep their existing
+isolation boundaries.
+
+- `setup`, `implement` and `check` configure `PATH` and standard user-space cache
+  and runtime directories inside `/env` (`MISE_DATA_DIR`, `UV_CACHE_DIR`,
+  `UV_PYTHON_INSTALL_DIR`, `BUN_INSTALL_CACHE_DIR`, `PNPM_STORE_DIR`,
+  `NPM_CONFIG_CACHE`, `YARN_CACHE_FOLDER`, `CARGO_HOME`, `RUSTUP_HOME`,
+  `GOMODCACHE`, `GOCACHE`, `PLAYWRIGHT_BROWSERS_PATH`, `XDG_CACHE_HOME`), while
+  keeping `HOME=/task/home` private per task.
+- During `setup`, the job deterministically inspects safe allowlisted version
+  declarations (`.tool-versions`, `[tools]` in `.mise.toml`/`mise.toml`,
+  `.node-version`, `.nvmrc`, `.python-version`, `.go-version`, `.ruby-version`,
+  `.java-version`, `rust-toolchain.toml`, `package.json#packageManager`, `go.mod`,
+  and lockfile/manifest fallbacks) and installs missing runtimes into `/env/mise`
+  under an exclusive lock (`/env/.setup.lock`) without executing untrusted
+  repository hooks.
+- Repository checkouts and build directories remain isolated per task in
+  `/task/repo`; task erasure and retention cleanup preserve `/env`.
+- Operators can inspect or reset cached repository environments through
+  `GET /api/admin/workspaces/:id/plugins/coding/environments` and
+  `POST /api/admin/workspaces/:id/plugins/coding/environments/:repositoryId/reset`
+  (rejected with `409 coding_environment_in_use` while a task for that repository
+  is active). Workspace deletion removes all persistent `/env` volumes for that
+  workspace once its tasks are inactive.
 
 Ordinary intake, factual analysis and result-only corrections keep Codex's
 read-only filesystem/network policy and explicitly select the pinned CLI's

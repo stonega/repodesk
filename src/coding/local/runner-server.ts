@@ -107,6 +107,45 @@ export function runnerApp(
     );
     await next();
   });
+  app.use("/environments/*", async (c, next) => {
+    requireThat(
+      equal(
+        c.req.header("authorization") ?? "",
+        `Bearer ${supervisor.settings.CODEX_RUNNER_TOKEN}`,
+      ),
+      "coding_runner_denied",
+      401,
+    );
+    c.header("Cache-Control", "no-store");
+    await next();
+  });
+  app.get("/environments/:workspace", async (c) =>
+    c.json(
+      await supervisor.listEnvironments(
+        z.uuid().parse(c.req.param("workspace")),
+      ),
+    ),
+  );
+  app.post("/environments/:workspace/erase", async (c) =>
+    c.json(
+      await supervisor.eraseWorkspaceEnvironments(
+        z.uuid().parse(c.req.param("workspace")),
+      ),
+    ),
+  );
+  app.post("/environments/:workspace/:repository/reset", async (c) =>
+    c.json(
+      await supervisor.resetEnvironment(
+        z.uuid().parse(c.req.param("workspace")),
+        z.coerce
+          .number()
+          .int()
+          .positive()
+          .safe()
+          .parse(c.req.param("repository")),
+      ),
+    ),
+  );
   app.use("/runtime", async (c, next) => {
     requireThat(
       equal(

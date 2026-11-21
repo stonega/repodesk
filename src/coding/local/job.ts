@@ -12,6 +12,11 @@ import { CodexAuthError } from "./auth-failure.ts";
 import { checkoutFailureCode } from "./checkout-failure.ts";
 import { runConversation } from "./conversation.ts";
 import { CodexConversationError } from "./conversation-failure.ts";
+import {
+  ensurePersistentEnvDirs,
+  persistentEnv,
+  preparePersistentEnvironment,
+} from "./environment.ts";
 import { watchInterruption } from "./interruption.ts";
 import { JobTaskChannel } from "./job-channel.ts";
 import { jobCommand as command } from "./job-command.ts";
@@ -36,6 +41,7 @@ const jobSchema = localStart
       .optional(),
     config: z.string().optional(),
     verificationCommands: verificationCommands.optional(),
+    persistentEnv: z.boolean().optional(),
   });
 type Job = z.infer<typeof jobSchema>;
 const repo = jobPath("/task/repo");
@@ -112,9 +118,20 @@ async function clone(job: Job) {
   await git(["checkout", "--detach", sha]);
   return sha;
 }
+function taskToolEnv(job: Job) {
+  const home = jobPath("/task/home");
+  const base: NodeJS.ProcessEnv = { ...gitEnv, HOME: home };
+  if (!job.persistentEnv) return { home, env: base };
+  const envRoot = jobPath("/env");
+  return { home, envRoot, env: persistentEnv(envRoot, base) };
+}
 async function setup(job: Job) {
-  const env = { ...gitEnv, HOME: jobPath("/task/home") };
-  await mkdir(env.HOME, { recursive: true });
+  const { home, envRoot, env } = taskToolEnv(job);
+  await mkdir(home, { recursive: true });
+  if (envRoot && job.development?.mode === "work") {
+    const report = await preparePersistentEnvironment(repo, envRoot, env);
+    await writeFile(jobPath("/task/env-setup.json"), JSON.stringify(report));
+  }
   if (job.development?.review?.action === "review") {
     try {
       const plan = await prepareOpenCodeReview(job.development.review, (args) =>
@@ -141,8 +158,10 @@ async function implement(job: Job) {
       : jobPath("/task/codex");
   await mkdir(codexHome, { recursive: true });
   await writeFile(`${codexHome}/config.toml`, job.config, { mode: 0o600 });
-  const env = { ...gitEnv, HOME: jobPath("/task/home"), CODEX_HOME: codexHome };
-  await mkdir(env.HOME, { recursive: true });
+  const { home, envRoot, env: toolEnv } = taskToolEnv(job);
+  if (envRoot) await ensurePersistentEnvDirs(envRoot);
+  const env: NodeJS.ProcessEnv = { ...toolEnv, CODEX_HOME: codexHome };
+  await mkdir(home, { recursive: true });
   // A resumed execution must not reuse the prior failure marker.
   await rm(jobPath("/task/failure-code"), { force: true });
   await rm(jobPath("/task/auth-failure.json"), { force: true });
@@ -217,6 +236,7 @@ async function implement(job: Job) {
             repository: job.payload.repository,
             baseSha: job.baseSha,
             taskRoot: jobPath("/task"),
+            persistentEnv: Boolean(envRoot),
           },
         ) +
         (job.development.media?.prompt ?? ""),
@@ -287,7 +307,9 @@ async function implement(job: Job) {
 
 async function check(job: Job) {
   if (!job.baseSha) throw new Error("coding_base_invalid");
-  const env = { ...gitEnv, HOME: jobPath("/task/home") };
+  const { home, envRoot, env } = taskToolEnv(job);
+  await mkdir(home, { recursive: true });
+  if (envRoot) await ensurePersistentEnvDirs(envRoot);
   try {
     await verifyReferenceCheckouts(job.development.referenceSources ?? []);
     for (const check of verificationCommands.parse(job.verificationCommands))

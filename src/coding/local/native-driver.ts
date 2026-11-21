@@ -105,7 +105,8 @@ export class NativeDriver implements SandboxDriver {
     const mount = (target: string) =>
       spec.mounts.find((m) => m.target === target)?.source;
     const work = mount("/task"),
-      input = mount("/input");
+      input = mount("/input"),
+      envMount = mount("/env");
     requireThat(work && input, "coding_job_invalid", 409);
     const home = join(work, "home"),
       temp = join(work, "tmp");
@@ -133,6 +134,7 @@ export class NativeDriver implements SandboxDriver {
           REPODESK_TASK_ROOT: work,
           REPODESK_INPUT_ROOT: input,
           REPODESK_AUTH_ROOT: mount("/auth") ?? join(work, "unused-auth"),
+          ...(envMount ? { REPODESK_ENV_ROOT: envMount } : {}),
           REPODESK_CODEX_BIN: this.settings.CODEX_NATIVE_CODEX_BIN,
         },
       },

@@ -2,7 +2,10 @@ import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
 import type { PluginService } from "../../agent/plugin-service.ts";
-import type { LocalDeviceAuth } from "../../coding/local/protocol.ts";
+import type {
+  LocalDeviceAuth,
+  LocalEnvironmentControl,
+} from "../../coding/local/protocol.ts";
 import type { LocalRuntimeControl } from "../../coding/runtime-config.ts";
 import type { Sql } from "../../db/pool.ts";
 import type { Store } from "../../db/repositories.ts";
@@ -24,7 +27,9 @@ export interface AdminRouteDeps {
   plugins: PluginService;
   github: GitHubService;
   encryptionKey?: string;
-  deviceAuth?: LocalDeviceAuth & Partial<LocalRuntimeControl>;
+  deviceAuth?: LocalDeviceAuth &
+    Partial<LocalRuntimeControl> &
+    Partial<LocalEnvironmentControl>;
   review?: ReviewService;
   updates?: ReleaseUpdates;
   selfCheck: SelfCheckService;

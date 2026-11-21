@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CodingPage, CodingSettings } from "../src/coding/config.ts";
 import { codingFailureMessage } from "../src/coding/failure-messages.ts";
 import { codingStatusLabel } from "../src/coding/feedback.ts";
+import { CodingEnvironments } from "./coding-environments.tsx";
 import { CodingRuntime } from "./coding-runtime.tsx";
 import { IconButton } from "./icon-button.tsx";
 import { Modal, ModalActions } from "./modal.tsx";
@@ -515,6 +516,12 @@ export function Coding({
           </div>
         )}
       </section>
+      <CodingEnvironments
+        request={request}
+        workspaceId={workspaceId}
+        repositories={data?.repositories ?? []}
+        tasks={tasks}
+      />
       {stopping && (
         <Modal
           title="Stop coding task?"

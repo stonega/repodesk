@@ -75,8 +75,10 @@ Uncertain create/command responses never trigger automatic replacement or replay
 Cancellation and retention remove sandboxes and task storage; failed cleanup remains
 retryable. Metadata files are bounded regular files, read without following symlinks.
 
-The first adapters retain the existing phase boundaries and polling. They do not
-yet implement prewarmed pools, memory snapshots or cross-task dependency caches.
+The adapters retain the existing phase boundaries and polling. Work tasks now
+share a tenant- and repository-scoped persistent `/env` volume across `setup`,
+`implement` and `check` (see [persistent environments](codex-runner.md#persistent-per-repository-environments-env));
+prewarmed pools and memory snapshots remain unimplemented.
 Benchmark results describe this implementation, not each upstream runtime's best
 possible startup time. Live Codex/account and publication validation are separate
 from the credential-free benchmark.

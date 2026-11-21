@@ -9,6 +9,7 @@ import {
   type ContainerEngine,
   containerArgs,
 } from "../../src/coding/local/container.ts";
+import { environmentVolumeKey } from "../../src/coding/local/environment.ts";
 import type { LocalStart } from "../../src/coding/local/protocol.ts";
 import { runnerApp } from "../../src/coding/local/runner-server.ts";
 import {
@@ -2472,4 +2473,209 @@ test("runner readiness requires the task image and network, while liveness remai
   expect(failed.status).toBe(503);
   expect(await failed.text()).not.toContain("private engine diagnostics");
   expect((await app.request("/healthz")).status).toBe(200);
+});
+
+test("work tasks mount a persistent per-repository /env volume across setup, implement and check only", async () => {
+  const f = await fixture();
+  const volumes = new Set<string>();
+  const baseCommand = f.engine.command;
+  f.engine.command = async (args, env) => {
+    if (args[0] === "volume" && args[1] === "create" && args[2])
+      volumes.add(args[2]);
+    if (args[0] === "volume" && args[1] === "rm")
+      for (const name of args.slice(2))
+        if (!name.startsWith("--")) volumes.delete(name);
+    if (args[0] === "volume" && args[1] === "ls") {
+      const prefix = args.at(-1)?.replace(/^name=/, "") ?? "";
+      return [...volumes].filter((name) => name.startsWith(prefix)).join("\n");
+    }
+    return baseCommand(args, env);
+  };
+
+  const envVol = environmentVolumeKey(
+    f.input.workspaceId,
+    f.input.payload.repositoryId,
+  );
+  await f.supervisor.start(f.input);
+  for (let i = 0; i < 6; i++)
+    await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  await f.supervisor.publish(
+    f.input.workspaceId,
+    f.input.taskId,
+    "publish-write-token",
+  );
+  await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+
+  const creates = f.calls.filter((c) => c.args[0] === "create");
+  const byMode = (mode: string) => creates.find((c) => c.args.at(-1) === mode);
+  for (const mode of ["setup", "implement", "check"]) {
+    const call = byMode(mode);
+    expect(call?.args).toContain(`${envVol}:/env`);
+  }
+  for (const mode of ["prepare", "export", "publish"]) {
+    const call = byMode(mode);
+    expect(call?.args.join(" ")).not.toContain(":/env");
+  }
+  // Prepare and publish job inputs do not enable persistentEnv; setup/implement/check do.
+  const parsedInputs = f.jobInputs.map(
+    (raw) => JSON.parse(raw) as { persistentEnv?: boolean },
+  );
+  expect(parsedInputs[0]?.persistentEnv).toBeUndefined();
+  expect(parsedInputs[1]?.persistentEnv).toBe(true);
+  expect(parsedInputs[2]?.persistentEnv).toBe(true);
+  expect(parsedInputs[3]?.persistentEnv).toBe(true);
+  expect(parsedInputs[4]?.persistentEnv).toBeUndefined();
+
+  // Task erasure preserves the persistent repository environment volume.
+  await f.supervisor.erase(f.input.workspaceId, f.input.taskId);
+  expect(volumes.has(envVol)).toBe(true);
+  expect(await f.supervisor.listEnvironments(f.input.workspaceId)).toEqual([
+    { repositoryId: f.input.payload.repositoryId, volume: envVol },
+  ]);
+
+  // A second task in the same workspace & repository reuses the exact same volume.
+  const second: LocalStart = {
+    ...f.input,
+    taskId: randomUUID(),
+    development: { ...f.input.development, taskId: randomUUID() },
+  };
+  await f.supervisor.start(second);
+  await f.supervisor.status(second.workspaceId, second.taskId);
+  const secondSetup = f.calls
+    .filter((c) => c.args[0] === "create" && c.args.at(-1) === "setup")
+    .at(-1);
+  expect(secondSetup?.args).toContain(`${envVol}:/env`);
+
+  // Intake tasks do not mount or create a persistent /env volume.
+  const intakeRepoId = 9001;
+  const intake: LocalStart = {
+    ...f.input,
+    taskId: randomUUID(),
+    payload: { ...f.input.payload, repositoryId: intakeRepoId },
+    development: {
+      ...f.input.development,
+      taskId: randomUUID(),
+      mode: "intake",
+    },
+  };
+  await f.supervisor.start(intake);
+  for (let i = 0; i < 4; i++)
+    await f.supervisor.status(intake.workspaceId, intake.taskId);
+  expect(
+    volumes.has(environmentVolumeKey(intake.workspaceId, intakeRepoId)),
+  ).toBe(false);
+});
+
+test("containerArgs rejects /env mounts outside setup, implement and check", async () => {
+  const f = await fixture();
+  const envVol = environmentVolumeKey(f.input.workspaceId, 7);
+  const key = taskKey(f.input.workspaceId, f.input.taskId);
+  expect(
+    containerArgs(
+      f.settings,
+      `${key}-setup`,
+      `${key}-work`,
+      "setup",
+      {},
+      undefined,
+      envVol,
+    ),
+  ).toContain(`${envVol}:/env`);
+  for (const mode of ["prepare", "export", "publish"]) {
+    expect(() =>
+      containerArgs(
+        f.settings,
+        `${key}-${mode}`,
+        `${key}-${mode === "publish" ? "publish" : "work"}`,
+        mode,
+        {},
+        undefined,
+        envVol,
+      ),
+    ).toThrow("coding_job_invalid");
+  }
+  expect(() =>
+    containerArgs(
+      f.settings,
+      `${key}-setup`,
+      `${key}-work`,
+      "setup",
+      {},
+      undefined,
+      "arbitrary-host-volume",
+    ),
+  ).toThrow("coding_job_invalid");
+});
+
+test("environment reset and workspace erase refuse active tasks and clean up when idle over HTTP", async () => {
+  const f = await fixture();
+  const volumes = new Set<string>();
+  let running = true;
+  const baseCommand = f.engine.command;
+  f.engine.command = async (args, env) => {
+    if (args[0] === "volume" && args[1] === "create" && args[2])
+      volumes.add(args[2]);
+    if (args[0] === "volume" && args[1] === "rm")
+      for (const name of args.slice(2))
+        if (!name.startsWith("--")) volumes.delete(name);
+    if (args[0] === "volume" && args[1] === "ls") {
+      const prefix = args.at(-1)?.replace(/^name=/, "") ?? "";
+      return [...volumes].filter((name) => name.startsWith(prefix)).join("\n");
+    }
+    if (args[0] === "inspect")
+      return JSON.stringify({
+        Running: running,
+        Status: running ? "running" : "exited",
+        ExitCode: 0,
+      });
+    return baseCommand(args, env);
+  };
+
+  const app = runnerApp(f.supervisor);
+  const client = new LocalRunnerClient(
+    "http://runner.test",
+    f.settings.CODEX_RUNNER_TOKEN,
+    ((input: string | URL | Request, init?: RequestInit) =>
+      Promise.resolve(app.request(input, init))) as typeof fetch,
+  );
+  const envVol = environmentVolumeKey(
+    f.input.workspaceId,
+    f.input.payload.repositoryId,
+  );
+  volumes.add(envVol);
+
+  await client.start(f.input);
+  await expect(
+    client.resetEnvironment(f.input.workspaceId, f.input.payload.repositoryId),
+  ).rejects.toThrow("coding_environment_in_use");
+  await expect(
+    client.eraseWorkspaceEnvironments(f.input.workspaceId),
+  ).rejects.toThrow("coding_environment_in_use");
+
+  running = false;
+  await client.cancel(f.input.workspaceId, f.input.taskId);
+  expect(await client.listEnvironments(f.input.workspaceId)).toEqual([
+    { repositoryId: f.input.payload.repositoryId, volume: envVol },
+  ]);
+  expect(
+    await client.resetEnvironment(
+      f.input.workspaceId,
+      f.input.payload.repositoryId,
+    ),
+  ).toEqual({ removed: true });
+  expect(await client.listEnvironments(f.input.workspaceId)).toEqual([]);
+  expect(
+    await client.resetEnvironment(
+      f.input.workspaceId,
+      f.input.payload.repositoryId,
+    ),
+  ).toEqual({ removed: false });
+
+  const otherVol = environmentVolumeKey(f.input.workspaceId, 99);
+  volumes.add(envVol);
+  volumes.add(otherVol);
+  expect(await client.eraseWorkspaceEnvironments(f.input.workspaceId)).toEqual({
+    removed: 2,
+  });
+  expect(volumes.size).toBe(0);
 });

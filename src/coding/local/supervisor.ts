@@ -43,9 +43,16 @@ import { checkoutFailureCodes } from "./checkout-failure.ts";
 import type { ContainerEngine } from "./container.ts";
 import { conversationFailureCodes } from "./conversation-failure.ts";
 import { DeviceAuth } from "./device-auth.ts";
+import {
+  environmentVolumeKey,
+  envMountModes,
+  parseEnvironmentVolume,
+  workspaceEnvPrefix,
+} from "./environment.ts";
 import { hostBootId, wasInterrupted } from "./interruption.ts";
 import { applyChannelEvent, closeMailbox, enqueueMessage } from "./mailbox.ts";
 import {
+  type LocalEnvironmentControl,
   type LocalRecovery,
   type LocalRunner,
   type LocalStart,
@@ -117,7 +124,9 @@ export const taskKey = (workspaceId: string, taskId: string) => {
   return `deepx-codex-${createHash("sha256").update(`${workspaceId}:${taskId}`).digest("hex").slice(0, 32)}`;
 };
 
-export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
+export class RunnerSupervisor
+  implements LocalRunner, LocalRuntimeControl, LocalEnvironmentControl
+{
   async capabilities() {
     return { repositoryTasks: 1 };
   }
@@ -320,6 +329,12 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
   private authVolume(r: Record) {
     return `${r.key}-auth`;
   }
+  private envVolume(r: Record, mode: TaskMode) {
+    return (envMountModes as readonly string[]).includes(mode) &&
+      r.input.development?.mode === "work"
+      ? environmentVolumeKey(r.input.workspaceId, r.input.payload.repositoryId)
+      : undefined;
+  }
   private async captureAuth(r: Record) {
     if (r.input.payload.authMode !== "device_code") return;
     const credential = await this.engine.readText(
@@ -378,12 +393,14 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
     const name = `${r.key}-${mode}`;
     const deviceRun =
       mode === "implement" && r.input.payload.authMode === "device_code";
+    const envVolume = this.envVolume(r, mode);
     await this.engine.create({
       name,
       volume: this.volume(r, mode),
       mode,
       env,
       authVolume: deviceRun ? this.authVolume(r) : undefined,
+      envVolume,
     });
     if (deviceRun) {
       const credential = this.path(r, "auth");
@@ -428,6 +445,7 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
           verificationCommands: r.verificationCommands,
           executionId: r.executionId,
           recoveryId: r.recoveryPending ? r.recoveryId : undefined,
+          persistentEnv: Boolean(envVolume) || undefined,
           config: codexConfig(
             this.settings,
             r.input.payload.authMode,
@@ -1335,6 +1353,50 @@ export class RunnerSupervisor implements LocalRunner, LocalRuntimeControl {
         )
           await this.stop(r);
       return this.device.logout(workspaceId);
+    });
+  }
+  async listEnvironments(workspaceId: string) {
+    return this.serial(async () => {
+      const prefix = workspaceEnvPrefix(workspaceId);
+      const volumes = await this.engine.listVolumes(prefix);
+      const result: { repositoryId: number; volume: string }[] = [];
+      for (const volume of volumes) {
+        const repositoryId = parseEnvironmentVolume(workspaceId, volume);
+        if (repositoryId !== undefined) result.push({ repositoryId, volume });
+      }
+      result.sort((a, b) => a.repositoryId - b.repositoryId);
+      return result;
+    });
+  }
+  async resetEnvironment(workspaceId: string, repositoryId: number) {
+    return this.serial(async () => {
+      const volume = environmentVolumeKey(workspaceId, repositoryId);
+      const active = [...this.records.values()].some(
+        (r) =>
+          !terminal(r.state) &&
+          r.input.workspaceId === workspaceId &&
+          r.input.payload.repositoryId === repositoryId,
+      );
+      requireThat(!active, "coding_environment_in_use", 409);
+      const names = await this.engine.listVolumes(volume);
+      if (!names.includes(volume)) return { removed: false };
+      await this.engine.removeVolumes([volume]);
+      return { removed: true };
+    });
+  }
+  async eraseWorkspaceEnvironments(workspaceId: string) {
+    return this.serial(async () => {
+      const prefix = workspaceEnvPrefix(workspaceId);
+      const active = [...this.records.values()].some(
+        (r) => !terminal(r.state) && r.input.workspaceId === workspaceId,
+      );
+      requireThat(!active, "coding_environment_in_use", 409);
+      const volumes = (await this.engine.listVolumes(prefix)).filter(
+        (volume) => parseEnvironmentVolume(workspaceId, volume) !== undefined,
+      );
+      if (!volumes.length) return { removed: 0 };
+      await this.engine.removeVolumes(volumes);
+      return { removed: volumes.length };
     });
   }
   providerConnection(token: string) {

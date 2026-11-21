@@ -1,3 +1,5 @@
+import { requireThat } from "../../domain.ts";
+import { envMountModes, envVolumePattern } from "./environment.ts";
 import type { RunnerSettings } from "./settings.ts";
 
 export interface ContainerEngine {
@@ -43,7 +45,15 @@ export function containerArgs(
   mode: string,
   env: Record<string, string> = {},
   authVolume?: string,
+  envVolume?: string,
 ) {
+  if (envVolume)
+    requireThat(
+      (envMountModes as readonly string[]).includes(mode) &&
+        envVolumePattern.test(envVolume),
+      "coding_job_invalid",
+      409,
+    );
   return [
     "create",
     "--name",
@@ -65,6 +75,7 @@ export function containerArgs(
     "--volume",
     `${volume}:/task${mode === "export" ? ":ro" : ""}`,
     ...(authVolume ? ["--volume", `${authVolume}:/auth`] : []),
+    ...(envVolume ? ["--volume", `${envVolume}:/env`] : []),
     "--volume",
     `${name.replace(/-(prepare|setup|implement|check|export|publish)$/, "")}-input:/input:ro`,
     ...Object.keys(env).flatMap((key) => ["--env", key]),

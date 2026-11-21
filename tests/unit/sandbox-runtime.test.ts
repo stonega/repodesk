@@ -14,6 +14,7 @@ import {
   benchmarkOptions,
   distribution,
 } from "../../scripts/sandbox-benchmark.ts";
+import { environmentVolumeKey } from "../../src/coding/local/environment.ts";
 import type { LocalStart } from "../../src/coding/local/protocol.ts";
 import { taskRuntime } from "../../src/coding/local/runtime-factory.ts";
 import {
@@ -335,7 +336,45 @@ test("task storage cannot be substituted with another tenant's volume", async ()
       env: {},
     }),
   ).rejects.toMatchObject({ code: "coding_job_invalid" });
+  await expect(
+    f.runtime.create({
+      name: `${key}-prepare`,
+      volume: `${key}-work`,
+      mode: "prepare",
+      env: {},
+      envVolume: environmentVolumeKey(f.input.workspaceId, 1),
+    }),
+  ).rejects.toMatchObject({ code: "coding_job_invalid" });
   await expect(f.runtime.removeVolumes(["../../private"])).rejects.toThrow();
+});
+
+test("OpenSandbox mounts persistent /env only on work setup/implement/check and preserves it across task erasure", async () => {
+  const f = await fixture();
+  const envVol = environmentVolumeKey(
+    f.input.workspaceId,
+    f.input.payload.repositoryId,
+  );
+  await f.supervisor.start(f.input);
+  for (let i = 0; i < 6; i++)
+    await f.supervisor.status(f.input.workspaceId, f.input.taskId);
+  const byMode = (mode: string) =>
+    f.launches.find((l) => l.name.endsWith(`-${mode}`));
+  for (const mode of ["setup", "implement", "check"])
+    expect(byMode(mode)?.mounts.some((m) => m.target === "/env")).toBe(true);
+  for (const mode of ["prepare", "export"])
+    expect(byMode(mode)?.mounts.some((m) => m.target === "/env")).toBe(false);
+
+  await f.supervisor.erase(f.input.workspaceId, f.input.taskId);
+  expect(await f.supervisor.listEnvironments(f.input.workspaceId)).toEqual([
+    { repositoryId: f.input.payload.repositoryId, volume: envVol },
+  ]);
+  expect(
+    await f.supervisor.resetEnvironment(
+      f.input.workspaceId,
+      f.input.payload.repositoryId,
+    ),
+  ).toEqual({ removed: true });
+  expect(await f.supervisor.listEnvironments(f.input.workspaceId)).toEqual([]);
 });
 
 test("retained tasks refuse a backend change rather than replaying or deleting the wrong sandbox", async () => {

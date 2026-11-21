@@ -143,6 +143,44 @@ export function pluginRoutes(deps: AdminRouteDeps) {
       return c.json(page);
     },
   );
+  app.get(
+    "/api/admin/workspaces/:id/plugins/coding/environments",
+    async (c) => {
+      const id = validId(c.req.param("id"));
+      codingView(await store.read(id), c.get("session").admin);
+      requireThat(
+        deviceAuth?.listEnvironments,
+        "coding_runner_not_configured",
+        409,
+      );
+      return c.json({ environments: await deviceAuth.listEnvironments(id) });
+    },
+  );
+  app.post(
+    "/api/admin/workspaces/:id/plugins/coding/environments/:repositoryId/reset",
+    async (c) => {
+      const id = validId(c.req.param("id"));
+      const admin = c.get("session").admin;
+      codingView(await store.read(id), admin);
+      requireThat(
+        deviceAuth?.resetEnvironment,
+        "coding_runner_not_configured",
+        409,
+      );
+      const repositoryId = z.coerce
+        .number()
+        .int()
+        .positive()
+        .safe()
+        .parse(c.req.param("repositoryId"));
+      const result = await deviceAuth.resetEnvironment(id, repositoryId);
+      await store.change(id, (w) => {
+        codingView(w, admin);
+        audit(w, admin.id, "coding.environment_reset", String(repositoryId));
+      });
+      return c.json(result);
+    },
+  );
   app.post("/api/admin/workspaces/:id/plugins/coding/:task/cancel", async (c) =>
     c.json(
       await store.change(validId(c.req.param("id")), async (w, sql) => {

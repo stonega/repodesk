@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { Fault } from "../../domain.ts";
 import type { TaskMessage } from "../conversation.ts";
 import {
@@ -6,8 +7,10 @@ import {
   runtimeView,
 } from "../runtime-config.ts";
 import {
+  codingEnvironment,
   deviceAuthStatus,
   type LocalDeviceAuth,
+  type LocalEnvironmentControl,
   type LocalRecovery,
   type LocalRunner,
   type LocalStart,
@@ -15,7 +18,11 @@ import {
 } from "./protocol.ts";
 
 export class LocalRunnerClient
-  implements LocalRunner, LocalDeviceAuth, LocalRuntimeControl
+  implements
+    LocalRunner,
+    LocalDeviceAuth,
+    LocalRuntimeControl,
+    LocalEnvironmentControl
 {
   constructor(
     private url: string,
@@ -75,7 +82,8 @@ export class LocalRunnerClient
           error.error === "coding_task_not_ready" ||
           error.error === "coding_token_limit" ||
           error.error === "coding_message_conflict" ||
-          error.error === "coding_message_closed"
+          error.error === "coding_message_closed" ||
+          error.error === "coding_environment_in_use"
         )
           throw new Fault(error.error, 409);
       }
@@ -175,5 +183,32 @@ export class LocalRunnerClient
   }
   async runtimeSave(input: RuntimeSave) {
     return runtimeView.parse(await this.request("/runtime", input));
+  }
+  async listEnvironments(workspaceId: string) {
+    return z
+      .array(codingEnvironment)
+      .parse(
+        await this.request(`/environments/${encodeURIComponent(workspaceId)}`),
+      );
+  }
+  async resetEnvironment(workspaceId: string, repositoryId: number) {
+    return z
+      .object({ removed: z.boolean() })
+      .parse(
+        await this.request(
+          `/environments/${encodeURIComponent(workspaceId)}/${repositoryId}/reset`,
+          {},
+        ),
+      );
+  }
+  async eraseWorkspaceEnvironments(workspaceId: string) {
+    return z
+      .object({ removed: z.number().int().nonnegative() })
+      .parse(
+        await this.request(
+          `/environments/${encodeURIComponent(workspaceId)}/erase`,
+          {},
+        ),
+      );
   }
 }

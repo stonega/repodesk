@@ -1312,6 +1312,7 @@ button.github-repository-more:hover:not(:disabled) {
 .pill {
   font-size: 12px;
   display: inline-block;
+  white-space: nowrap;
   border: 0;
   background: var(--ui-accent-soft);
   border-radius: 20px;
@@ -2472,6 +2473,58 @@ input.plugin-toggle-input:disabled {
 .coding-card-heading {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+}
+.coding-environments-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.coding-environments-card > .plugin-card-heading {
+  margin-bottom: 0;
+}
+.coding-environments-card > p {
+  margin: 0;
+}
+.coding-env-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.coding-env-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--ui-border);
+}
+.coding-env-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.coding-env-row:last-child {
+  padding-bottom: 0;
+}
+.coding-env-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.coding-env-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.coding-env-volume {
+  color: var(--ui-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 .plugin-card-heading h2 {
   margin: 0;

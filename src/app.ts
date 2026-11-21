@@ -5,7 +5,10 @@ import { secureHeaders } from "hono/secure-headers";
 import { ZodError } from "zod";
 import { adminRoutes } from "./admin/routes.ts";
 import { PluginService } from "./agent/plugin-service.ts";
-import type { LocalDeviceAuth } from "./coding/local/protocol.ts";
+import type {
+  LocalDeviceAuth,
+  LocalEnvironmentControl,
+} from "./coding/local/protocol.ts";
 import type { LocalRuntimeControl } from "./coding/runtime-config.ts";
 import type { Store } from "./db/repositories.ts";
 import { Fault, requireThat } from "./domain.ts";
@@ -25,7 +28,9 @@ export interface AppDependencies {
   plugins?: PluginService;
   github?: GitHubService;
   encryptionKey?: string;
-  deviceAuth?: LocalDeviceAuth & Partial<LocalRuntimeControl>;
+  deviceAuth?: LocalDeviceAuth &
+    Partial<LocalRuntimeControl> &
+    Partial<LocalEnvironmentControl>;
   review?: ReviewService;
   updates?: ReleaseUpdates;
 }

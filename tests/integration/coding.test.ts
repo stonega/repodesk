@@ -6,6 +6,7 @@ import { developmentPolicy } from "../../src/coding/development.ts";
 import { codingExtension } from "../../src/coding/extension.ts";
 import type {
   LocalDeviceAuth,
+  LocalEnvironmentControl,
   LocalRunner,
 } from "../../src/coding/local/protocol.ts";
 import { CodingService } from "../../src/coding/service.ts";
@@ -197,15 +198,20 @@ const url = process.env.TEST_DATABASE_URL;
       await host.close();
     }
   });
-  test("deleted workspace clears only its own runner credential", async () => {
+  test("deleted workspace clears only its own runner credential and persistent environments", async () => {
     const { id } = await fixture();
     const purged: string[] = [];
+    const erasedEnvs: string[] = [];
     const local = {
       deviceLogout: async (workspaceId: string) => {
         purged.push(workspaceId);
         return { state: "disconnected" };
       },
-    } as LocalRunner & LocalDeviceAuth;
+      eraseWorkspaceEnvironments: async (workspaceId: string) => {
+        erasedEnvs.push(workspaceId);
+        return { removed: 1 };
+      },
+    } as LocalRunner & LocalDeviceAuth & Partial<LocalEnvironmentControl>;
     const service = new CodingService(
       store,
       new GitHubApps(store, "ab".repeat(32)),
@@ -222,5 +228,6 @@ const url = process.env.TEST_DATABASE_URL;
     });
     await service.purgeDeletedWorkspaceAuth(id);
     expect(purged).toEqual([id]);
+    expect(erasedEnvs).toEqual([id]);
   });
 });

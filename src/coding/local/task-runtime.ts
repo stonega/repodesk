@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { requireThat } from "../../domain.ts";
 import { type ContainerEngine, containerArgs } from "./container.ts";
+import { envMountModes, envVolumePattern } from "./environment.ts";
 import type { RunnerSettings } from "./settings.ts";
 
 export type TaskMode =
@@ -15,6 +17,7 @@ export interface TaskSpec {
   mode: TaskMode;
   env: Record<string, string>;
   authVolume?: string;
+  envVolume?: string;
 }
 export const taskState = z.object({
   Running: z.boolean(),
@@ -61,6 +64,15 @@ export class OciTaskRuntime implements TaskRuntime {
   }
   async create(spec: TaskSpec) {
     if (spec.authVolume) await this.createVolume(spec.authVolume);
+    if (spec.envVolume) {
+      requireThat(
+        (envMountModes as readonly string[]).includes(spec.mode) &&
+          envVolumePattern.test(spec.envVolume),
+        "coding_job_invalid",
+        409,
+      );
+      await this.createVolume(spec.envVolume);
+    }
     await this.engine.command(
       containerArgs(
         this.settings,
@@ -69,6 +81,7 @@ export class OciTaskRuntime implements TaskRuntime {
         spec.mode,
         spec.env,
         spec.authVolume,
+        spec.envVolume,
       ),
       spec.env,
     );
@@ -116,7 +129,9 @@ export class OciTaskRuntime implements TaskRuntime {
         "--filter",
         `name=${prefix}`,
       ])
-    ).split("\n");
+    )
+      .split("\n")
+      .filter(Boolean);
   }
   async removeVolumes(names: string[]) {
     if (names.length)

@@ -14,6 +14,11 @@ import { join } from "node:path";
 import { z } from "zod";
 import { requireThat } from "../../domain.ts";
 import { decrypt, encrypt, hash } from "../../setup/credentials.ts";
+import {
+  envMountModes,
+  envVolumePattern,
+  envVolumePrefixPattern,
+} from "./environment.ts";
 import type { RunnerSettings } from "./settings.ts";
 import {
   type TaskRuntime,
@@ -57,11 +62,14 @@ const nameSchema = z
 const volumeSchema = z
   .string()
   .regex(/^deepx-codex-[a-f0-9]{32}-(work|publish|auth|input)$/);
+const envVolumeSchema = z.string().regex(envVolumePattern);
+const anyVolumeSchema = z.union([volumeSchema, envVolumeSchema]);
 const recordSchema = z.object({
   name: nameSchema,
   volume: volumeSchema,
   mode: z.enum(["prepare", "setup", "implement", "check", "export", "publish"]),
   authVolume: volumeSchema.optional(),
+  envVolume: envVolumeSchema.optional(),
   backend: z.enum(["opensandbox", "native"]),
   sealedEnv: z.string().optional(),
   state: z.enum(["created", "starting", "started", "exited"]),
@@ -109,7 +117,7 @@ export class SandboxTaskRuntime implements TaskRuntime {
     return join(this.metadata, `${nameSchema.parse(name)}.json`);
   }
   private volume(name: string) {
-    return join(this.root, "volumes", volumeSchema.parse(name));
+    return join(this.root, "volumes", anyVolumeSchema.parse(name));
   }
   private async record(name: string) {
     const r = recordSchema.parse(
@@ -158,7 +166,10 @@ export class SandboxTaskRuntime implements TaskRuntime {
         spec.volume ===
           `${key}-${spec.mode === "publish" ? "publish" : "work"}` &&
         (!spec.authVolume ||
-          (spec.mode === "implement" && spec.authVolume === `${key}-auth`)),
+          (spec.mode === "implement" && spec.authVolume === `${key}-auth`)) &&
+        (!spec.envVolume ||
+          ((envMountModes as readonly string[]).includes(spec.mode) &&
+            envVolumeSchema.safeParse(spec.envVolume).success)),
       "coding_job_invalid",
       409,
     );
@@ -171,6 +182,7 @@ export class SandboxTaskRuntime implements TaskRuntime {
     }
     await this.createVolume(spec.volume);
     if (spec.authVolume) await this.createVolume(spec.authVolume);
+    if (spec.envVolume) await this.createVolume(spec.envVolume);
     await mkdir(join(this.root, "inputs", spec.name), { mode: 0o755 });
     const { env, ...safe } = spec;
     await this.save({
@@ -248,6 +260,12 @@ export class SandboxTaskRuntime implements TaskRuntime {
       mounts.push({
         source: join(this.hostRoot, "volumes", r.authVolume),
         target: "/auth",
+        readOnly: false,
+      });
+    if (r.envVolume)
+      mounts.push({
+        source: join(this.hostRoot, "volumes", r.envVolume),
+        target: "/env",
         readOnly: false,
       });
     r.sandboxId = await this.driver.create({
@@ -348,13 +366,14 @@ export class SandboxTaskRuntime implements TaskRuntime {
     requireThat(
       /^deepx-codex-[a-f0-9]{32}(?:-(?:work|publish|auth|input))?$/.test(
         prefix,
-      ),
+      ) || envVolumePrefixPattern.test(prefix),
       "coding_job_invalid",
       409,
     );
     await this.initialize();
     return (await readdir(join(this.root, "volumes"))).filter(
-      (name) => volumeSchema.safeParse(name).success && name.startsWith(prefix),
+      (name) =>
+        anyVolumeSchema.safeParse(name).success && name.startsWith(prefix),
     );
   }
   async removeVolumes(names: string[]) {

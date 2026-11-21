@@ -11,7 +11,11 @@ import {
   emptyCoding,
 } from "./config.ts";
 import { DevelopmentExecutor } from "./executor.ts";
-import type { LocalDeviceAuth, LocalRunner } from "./local/protocol.ts";
+import type {
+  LocalDeviceAuth,
+  LocalEnvironmentControl,
+  LocalRunner,
+} from "./local/protocol.ts";
 
 function operatorWorkspace(w: Workspace, admin: Admin) {
   operator(admin);
@@ -79,11 +83,15 @@ export class CodingService {
   async purgeDeletedWorkspaceAuth(workspaceId: string) {
     const w = await this.store.read(workspaceId);
     requireThat(w.deletion, "deletion_not_requested", 409);
-    const device = this.local as
-      | (LocalRunner & Partial<LocalDeviceAuth>)
+    const runner = this.local as
+      | (LocalRunner &
+          Partial<LocalDeviceAuth> &
+          Partial<LocalEnvironmentControl>)
       | undefined;
-    if (!device?.deviceLogout) return false;
-    await device.deviceLogout(workspaceId);
+    if (!runner?.deviceLogout) return false;
+    await runner.deviceLogout(workspaceId);
+    if (runner.eraseWorkspaceEnvironments)
+      await runner.eraseWorkspaceEnvironments(workspaceId);
     return true;
   }
   async tick(workspaceId: string) {
