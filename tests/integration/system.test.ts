@@ -2018,12 +2018,17 @@ suite("PostgreSQL integration (isolated database)", () => {
     const runner: AgentRunner = {
       async run(input) {
         executions++;
-        const prompt = JSON.parse(input.prompt);
-        expect(prompt.execution).toMatchObject({
+        const runtimeContext = JSON.parse(
+          input.prompt.match(
+            /<runtime_context>\n([\s\S]*?)\n<\/runtime_context>/,
+          )?.[1] ?? "{}",
+        );
+        expect(runtimeContext.execution).toMatchObject({
           mode: "workflow",
           workflowId: prepared.workflowId,
           version: 1,
         });
+        expect(input.historyMessages ?? []).toEqual([]);
         expect(input.prompt).not.toContain("SETUP ONLY");
         expect(input.system).toContain("already-active workflow");
         const tools = input.tools.map((t) => t.name);

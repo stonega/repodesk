@@ -592,6 +592,7 @@ export class Store {
     workspaceId: string,
     runId: string,
     action: (workspace: Workspace, run: Run, sql: Sql) => T | Promise<T>,
+    onMissingRun: () => Fault = () => new Fault("run_revoked", 409),
   ): Promise<T> {
     const outcome = await transaction(this.pool, async (sql) => {
       const wsRow = (
@@ -610,7 +611,7 @@ export class Store {
           [workspaceId, runId],
         )
       ).rows[0];
-      if (!targetRow) throw new Fault("run_revoked", 409);
+      if (!targetRow) throw onMissingRun();
 
       const messages = Array.isArray(raw.messages)
         ? []
@@ -642,7 +643,7 @@ export class Store {
         this.privateStateKey,
       );
       const run = workspace.runs.find((item) => item.id === runId);
-      if (!run) throw new Fault("run_revoked", 409);
+      if (!run) throw onMissingRun();
 
       const beforeJson = JSON.stringify(run);
       const value = await action(workspace, run, sql);
@@ -660,7 +661,7 @@ export class Store {
     if (outcome.legacy) {
       return this.change(workspaceId, (w, sql) => {
         const run = w.runs.find((item) => item.id === runId);
-        if (!run) throw new Fault("run_revoked", 409);
+        if (!run) throw onMissingRun();
         return action(w, run, sql);
       });
     }

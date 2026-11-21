@@ -1,6 +1,6 @@
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { Store } from "../db/repositories.ts";
-import { requireThat } from "../domain.ts";
+import { Fault, requireThat } from "../domain.ts";
 import { runAllowed } from "../workspaces/policy.ts";
 import { inputByteLimit } from "./limits.ts";
 import { type AgentInput, selectedModel } from "./runtime.ts";
@@ -13,56 +13,67 @@ export function extensionToolExecution(
   fence: number,
   signal: AbortSignal,
 ): NonNullable<AgentInput["extensionTool"]> {
+  const missingRun = () => new Fault("tool_policy_denied", 403);
   return async (name, callId, execute) => {
     signal.throwIfAborted();
-    const prior = await store.mutateRunRow(workspaceId, runId, (w, run) => {
-      requireThat(
-        run.fence === fence && run.status === "running" && runAllowed(w, run),
-        "tool_policy_denied",
-        403,
-      );
-      const saved = Object.hasOwn(run.tools, callId)
-        ? run.tools[callId]
-        : undefined;
-      if (saved) {
+    const prior = await store.mutateRunRow(
+      workspaceId,
+      runId,
+      (w, run) => {
         requireThat(
-          saved.name === name && saved.state === "done",
-          "extension_tool_outcome_unknown",
-          409,
+          run.fence === fence && run.status === "running" && runAllowed(w, run),
+          "tool_policy_denied",
+          403,
         );
-        return saved.result as AgentToolResult<unknown>;
-      }
-      Object.defineProperty(run.tools, callId, {
-        value: { name, state: "started" },
-        enumerable: true,
-        configurable: true,
-        writable: true,
-      });
-    });
+        const saved = Object.hasOwn(run.tools, callId)
+          ? run.tools[callId]
+          : undefined;
+        if (saved) {
+          requireThat(
+            saved.name === name && saved.state === "done",
+            "extension_tool_outcome_unknown",
+            409,
+          );
+          return saved.result as AgentToolResult<unknown>;
+        }
+        Object.defineProperty(run.tools, callId, {
+          value: { name, state: "started" },
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
+      },
+      missingRun,
+    );
     if (prior) return prior;
     const result = await execute();
     signal.throwIfAborted();
-    await store.mutateRunRow(workspaceId, runId, (w, run) => {
-      requireThat(
-        run.fence === fence && run.status === "running" && runAllowed(w, run),
-        "tool_policy_denied",
-        403,
-      );
-      const model = selectedModel(run.model, run.modelOptions);
-      requireThat(
-        Buffer.byteLength(JSON.stringify(result)) <=
-          inputByteLimit(
-            {},
-            {
-              contextWindow: model.contextWindow,
-              maxOutputTokens: model.maxTokens,
-            },
-          ),
-        "extension_result_too_large",
-        409,
-      );
-      run.tools[callId] = { name, state: "done", result };
-    });
+    await store.mutateRunRow(
+      workspaceId,
+      runId,
+      (w, run) => {
+        requireThat(
+          run.fence === fence && run.status === "running" && runAllowed(w, run),
+          "tool_policy_denied",
+          403,
+        );
+        const model = selectedModel(run.model, run.modelOptions);
+        requireThat(
+          Buffer.byteLength(JSON.stringify(result)) <=
+            inputByteLimit(
+              {},
+              {
+                contextWindow: model.contextWindow,
+                maxOutputTokens: model.maxTokens,
+              },
+            ),
+          "extension_result_too_large",
+          409,
+        );
+        run.tools[callId] = { name, state: "done", result };
+      },
+      missingRun,
+    );
     return result;
   };
 }

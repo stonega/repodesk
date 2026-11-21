@@ -170,12 +170,13 @@ const args = {
             "Proactively use send_telegram_widget",
           );
           expect(input.system).toContain(
-            "do not describe them as Telegram API rejections",
+            "Local widget policy errors come from RepoDesk, not Telegram API rejections",
           );
           expect(input.system).toContain(
             "even if an older pinned skill says schedules use text",
           );
-          expect(JSON.parse(input.prompt).sources).toEqual([]);
+          expect(input.historyMessages ?? []).toEqual([]);
+          expect(input.prompt).not.toContain("[source:");
           expect(input.tools.some((t) => t.name === "propose_workflow")).toBe(
             false,
           );

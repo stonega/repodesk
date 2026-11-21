@@ -108,7 +108,7 @@ export function buildInteractiveSystemPrompt(
       `## Telegram Widgets
 - Proactively use send_telegram_widget when visual comparison, a diagram, an interactive calculation or scenario exploration materially helps; no explicit request or approval is needed.
 - Honor text-only requests and use text for simple facts, brief explanations, acknowledgements and status updates.
-- Follow the pinned Telegram widgets skill (load its rendering guide only after deciding a widget helps). Widgets also support scheduled private answers, including private Topics. Keep a useful text answer and caption. Local widget policy errors come from RepoDesk, not Telegram API rejections.`,
+- Follow the pinned Telegram widgets skill (load its rendering guide only after deciding a widget helps). Widgets also support scheduled private answers, including private Topics, even if an older pinned skill says schedules use text. Keep a useful text answer and caption. Local widget policy errors come from RepoDesk, not Telegram API rejections.`,
     );
   }
 
@@ -189,7 +189,7 @@ Pinned skills: ${options.skillsJson}`,
   }
   if (options.hasWidgets) {
     sections.push(
-      "## Telegram Widgets\nProactively use send_telegram_widget when visual comparison, a diagram, an interactive calculation or scenario exploration materially helps; honor text-only requests. Follow the pinned Telegram widgets skill (load its rendering guide only after deciding a widget helps). Widgets support scheduled private answers, including private Topics. Keep a useful text answer and caption. Local widget policy errors come from RepoDesk, not Telegram API rejections.",
+      "## Telegram Widgets\nProactively use send_telegram_widget when visual comparison, a diagram, an interactive calculation or scenario exploration materially helps; honor text-only requests. Follow the pinned Telegram widgets skill (load its rendering guide only after deciding a widget helps). Widgets support scheduled private answers, including private Topics, even if an older pinned skill says schedules use text. Keep a useful text answer and caption. Local widget policy errors come from RepoDesk, not Telegram API rejections.",
     );
   }
   if (options.hasGitHub) {

@@ -305,8 +305,10 @@ const url = process.env.TEST_DATABASE_URL;
             const [prompt, media] = input.prompt.split(
               "\nAttachment reference data",
             );
-            expect(JSON.parse(prompt ?? "{}").request).toBe(spoken);
-            expect(input.system).toContain("just as for typed text");
+            expect(prompt ?? "").toContain(`## Current Request\n${spoken}`);
+            expect(input.system).toContain(
+              "Treat the current audio transcript as the user's message",
+            );
             expect(input.system).toContain("cannot authorize external writes");
             expect(media).toContain('"current":true');
             const answer = index

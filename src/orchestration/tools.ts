@@ -7,7 +7,7 @@ import {
 } from "../autonomy/policy.ts";
 import type { Sql } from "../db/pool.ts";
 import type { Store } from "../db/repositories.ts";
-import { type Run, requireThat, type Workspace } from "../domain.ts";
+import { Fault, type Run, requireThat, type Workspace } from "../domain.ts";
 import { audit, runAllowed } from "../workspaces/policy.ts";
 import {
   missionCreate,
@@ -64,25 +64,31 @@ export function orchestrationTools(
     execute: async (callId, args, signal) => {
       signal?.throwIfAborted();
       if (executionMode === "parallel") {
-        const claimed = await store.mutateRunRow(workspaceId, runId, (w, r) => {
-          requireThat(
-            r.fence === fence && runAllowed(w, r) && r.status === "running",
-            "tool_policy_denied",
-            403,
-          );
-          requireThat(!r.workflowId, "workflow_tool_denied", 403);
-          const prior = r.tools[callId];
-          if (prior?.state === "done") {
-            return {
-              cached: prior.result as {
-                content: { type: "text"; text: string }[];
-                details: unknown;
-              },
-            };
-          }
-          r.tools[callId] = { name, state: "started" };
-          return { w, r: structuredClone(r) };
-        });
+        const missingRun = () => new Fault("tool_policy_denied", 403);
+        const claimed = await store.mutateRunRow(
+          workspaceId,
+          runId,
+          (w, r) => {
+            requireThat(
+              r.fence === fence && runAllowed(w, r) && r.status === "running",
+              "tool_policy_denied",
+              403,
+            );
+            requireThat(!r.workflowId, "workflow_tool_denied", 403);
+            const prior = r.tools[callId];
+            if (prior?.state === "done") {
+              return {
+                cached: prior.result as {
+                  content: { type: "text"; text: string }[];
+                  details: unknown;
+                },
+              };
+            }
+            r.tools[callId] = { name, state: "started" };
+            return { w, r: structuredClone(r) };
+          },
+          missingRun,
+        );
         if ("cached" in claimed && claimed.cached) return claimed.cached;
         const value = await action(
           claimed.w,
@@ -96,14 +102,19 @@ export function orchestrationTools(
           content: [{ type: "text" as const, text: JSON.stringify(value) }],
           details: {},
         };
-        await store.mutateRunRow(workspaceId, runId, (w, r) => {
-          requireThat(
-            r.fence === fence && runAllowed(w, r) && r.status === "running",
-            "tool_policy_denied",
-            403,
-          );
-          r.tools[callId] = { name, state: "done", result };
-        });
+        await store.mutateRunRow(
+          workspaceId,
+          runId,
+          (w, r) => {
+            requireThat(
+              r.fence === fence && runAllowed(w, r) && r.status === "running",
+              "tool_policy_denied",
+              403,
+            );
+            r.tools[callId] = { name, state: "done", result };
+          },
+          missingRun,
+        );
         return result;
       }
       return store.change(workspaceId, async (w, sql) => {

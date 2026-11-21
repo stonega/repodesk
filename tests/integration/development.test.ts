@@ -5654,7 +5654,12 @@ const url = process.env.TEST_DATABASE_URL;
     } as unknown as SetupService;
     await new Executor(store, setup, {
       run: async (input) => {
-        expect(JSON.parse(input.prompt).codingTasks).toMatchObject([
+        const runtimeContext = JSON.parse(
+          input.prompt.match(
+            /<runtime_context>\n([\s\S]*?)\n<\/runtime_context>/,
+          )?.[1] ?? "{}",
+        );
+        expect(runtimeContext.codingTasks).toMatchObject([
           {
             state: "waiting",
             question: "The task is bound to the wrong repository.",
