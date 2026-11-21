@@ -96,7 +96,7 @@ for (const width of [1280, 375]) {
     await page.setViewportSize({ width, height: 900 });
     if (width === 375)
       await page.addInitScript(() =>
-        localStorage.setItem("repodesk.theme", "dark"),
+        localStorage.setItem("telo.theme", "dark"),
       );
     const items: Skill[] = [];
     const candidates = Object.entries(harnessSkills).map(([name, source]) => ({
@@ -263,7 +263,7 @@ for (const width of [1280, 375]) {
       exact: true,
     });
     await toolsIssue
-      .getByText(/This skill requests tools that RepoDesk does not provide/)
+      .getByText(/This skill requests tools that Telo does not provide/)
       .scrollIntoViewIfNeeded();
     await page.screenshot({
       path: test.info().outputPath("harness-validation-errors.png"),
@@ -348,9 +348,7 @@ for (const width of [1280, 375]) {
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
-    await page.addInitScript(() =>
-      localStorage.setItem("repodesk.theme", "dark"),
-    );
+    await page.addInitScript(() => localStorage.setItem("telo.theme", "dark"));
     const skill = importedSkill();
     skill.published = [structuredClone(skill.draft)];
     skill.enabled = true;

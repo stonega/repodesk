@@ -97,6 +97,7 @@ export function authSetupRoutes(deps: AdminRouteDeps) {
       hash(sessionCookieValue(c) ?? ""),
     ]);
     deleteCookie(c, sessionCookie, { path: "/" });
+    deleteCookie(c, "repodesk_session", { path: "/" });
     deleteCookie(c, "deepx_session", { path: "/" });
     return c.json({ ok: true });
   });

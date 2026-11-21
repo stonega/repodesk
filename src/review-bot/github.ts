@@ -40,9 +40,9 @@ export const reviewOutputFindings = z
   .max(20);
 export type ReviewFinding = z.infer<typeof reviewFinding>;
 export const progressMarker = (task: ReviewTask) =>
-  `<!-- repodesk-review-task:${task.id} -->`;
+  `<!-- telo-review-task:${task.id} -->`;
 export const reviewMarker = (task: ReviewTask) =>
-  `<!-- repodesk-review:${task.id}:${task.headSha} -->`;
+  `<!-- telo-review:${task.id}:${task.headSha} -->`;
 
 export function diffLines(patch: string): Set<string> {
   const lines = new Set<string>();

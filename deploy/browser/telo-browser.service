@@ -1,5 +1,5 @@
 [Unit]
-Description=RepoDesk private headed browser host
+Description=Telo private headed browser host
 After=network-online.target
 Wants=network-online.target
 
@@ -7,10 +7,10 @@ Wants=network-online.target
 Type=simple
 User=root
 Group=root
-EnvironmentFile=/etc/repodesk/browser.env
-ExecStart=/usr/bin/env node /opt/repodesk-browser/browser-host.js
-WorkingDirectory=/opt/repodesk-browser
-RuntimeDirectory=repodesk-browser
+EnvironmentFile=/etc/telo/browser.env
+ExecStart=/usr/bin/env node /opt/telo-browser/browser-host.js
+WorkingDirectory=/opt/telo-browser
+RuntimeDirectory=telo-browser
 RuntimeDirectoryMode=0750
 RuntimeDirectoryPreserve=yes
 UMask=0077

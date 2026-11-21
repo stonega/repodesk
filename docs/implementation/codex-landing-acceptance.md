@@ -28,9 +28,9 @@ Biome, strict types, unit tests and production build. This isolated preflight us
 2 CPUs/2 GiB, a read-only root, dropped capabilities, no-new-privileges and its own
 disposable work volume. No model, GitHub or Cloudflare credential entered the test.
 The temporary container/work volume were removed. Its log is on the VPS under
-`/opt/repodesk/acceptance/repodesk-landing/preflight.log`.
+`/opt/telo/acceptance/repodesk-landing/preflight.log`.
 
-The existing RepoDesk GitHub App could already access the new repository. With no
+The existing Telo GitHub App could already access the new repository. With no
 coding tasks active, a host-operator action selected only this additional repository,
 recorded an operator audit, and synchronized the existing connected stonega account
 through the application service. Current write access was confirmed. No membership,

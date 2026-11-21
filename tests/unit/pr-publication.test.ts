@@ -11,7 +11,7 @@ import { GitHubApp } from "../../src/github/app.ts";
 import { githubFixtureConfig } from "../github-fixture.ts";
 
 test("publication refuses a concurrent maintainer rewind even when the patch is a fast-forward", async () => {
-  const root = await mkdtemp(join(tmpdir(), "repodesk-publication-"));
+  const root = await mkdtemp(join(tmpdir(), "telo-publication-"));
   const remote = join(root, "remote.git"),
     local = join(root, "repo");
   const env = {
@@ -67,7 +67,7 @@ test("publication refuses a concurrent maintainer rewind even when the patch is 
 
 const expected = {
   number: 43,
-  branch: "codex/repodesk-task",
+  branch: "codex/telo-task",
   headSha: "b".repeat(40),
   baseBranch: "main",
 };

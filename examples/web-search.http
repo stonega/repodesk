@@ -5,7 +5,7 @@
 
 ### Read the built-in DuckDuckGo preset, operator-owned providers and current version
 GET {{baseUrl}}/api/admin/operator/search-providers
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### DuckDuckGo is already available with id "duckduckgo" and preset:true.
 ### Select it directly below; it has no creation, edit or removal step.
@@ -13,7 +13,7 @@ Cookie: repodesk_session={{session}}
 ### DeepSeek; use the latest version from GET (change type to exa for Exa)
 PUT {{baseUrl}}/api/admin/operator/search-providers
 Origin: {{baseUrl}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
@@ -26,14 +26,14 @@ Content-Type: application/json
 
 ### Read the chat model's current revision and selection
 GET {{baseUrl}}/api/admin/workspaces/{{workspace}}/models
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Select the DuckDuckGo preset together with the chat model
 ### Use the current revision and full model selection from GET above.
 ### Set searchProviderId to null to disable; omitting it preserves the saved choice.
 PUT {{baseUrl}}/api/admin/workspaces/{{workspace}}/models
 Origin: {{baseUrl}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
@@ -51,7 +51,7 @@ Content-Type: application/json
 ### Remove a provider after all workspace chat models stop using it
 DELETE {{baseUrl}}/api/admin/operator/search-providers/REPLACE_WITH_SEARCH_PROVIDER_UUID
 Origin: {{baseUrl}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 

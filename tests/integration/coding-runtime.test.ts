@@ -88,7 +88,7 @@ const url = process.env.TEST_DATABASE_URL;
     app.request(endpoint, {
       method,
       headers: {
-        cookie: `repodesk_session=${auth.raw}`,
+        cookie: `telo_session=${auth.raw}`,
         origin,
         "x-csrf-token": auth.csrf,
         "content-type": "application/json",
@@ -101,14 +101,14 @@ const url = process.env.TEST_DATABASE_URL;
     expect(
       (
         await request("GET", undefined, {
-          cookie: `repodesk_session=${member.raw}`,
+          cookie: `telo_session=${member.raw}`,
         })
       ).status,
     ).toBe(403);
     for (const headers of [
       { origin: "https://evil.example" },
       { "x-csrf-token": "wrong" },
-      { cookie: `repodesk_session=${member.raw}`, "x-csrf-token": member.csrf },
+      { cookie: `telo_session=${member.raw}`, "x-csrf-token": member.csrf },
     ])
       expect(
         (
@@ -190,7 +190,7 @@ const url = process.env.TEST_DATABASE_URL;
     const denied = await request(
       "PUT",
       { revision: 3, selection: "docker" },
-      { cookie: `repodesk_session=${member.raw}`, "x-csrf-token": member.csrf },
+      { cookie: `telo_session=${member.raw}`, "x-csrf-token": member.csrf },
     );
     expect(denied.status).toBe(403);
     expect(await (await request()).json()).toMatchObject({

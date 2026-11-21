@@ -1,4 +1,4 @@
-// .repodesk/sdk/plugin/index.ts
+// .telo/sdk/plugin/index.ts
 function definePlugin(definition) {
   return definition;
 }

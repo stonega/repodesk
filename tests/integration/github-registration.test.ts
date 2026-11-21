@@ -31,13 +31,13 @@ import {
 const url = process.env.TEST_DATABASE_URL;
 (url ? describe : describe.skip)("GitHub App manifest registration", () => {
   const root = database(url ?? "postgres://unused@localhost/unused");
-  const name = `deepx_manifest_${randomUUID().replaceAll("-", "")}`;
+  const name = `telo_manifest_${randomUUID().replaceAll("-", "")}`;
   const key = "cd".repeat(32),
     origin = "http://localhost:3000";
   const input = {
     owner: "organization",
     organization: "example",
-    name: "DeepX Test",
+    name: "Telo Test",
     public: false,
   };
   let store: Store,
@@ -121,7 +121,7 @@ const url = process.env.TEST_DATABASE_URL;
     app.request(path, {
       method,
       headers: {
-        cookie: `deepx_session=${auth.raw}`,
+        cookie: `telo_session=${auth.raw}`,
         origin,
         "x-csrf-token": auth.csrf,
         "content-type": "application/json",
@@ -181,7 +181,7 @@ const url = process.env.TEST_DATABASE_URL;
     ).toBe(400);
     const response = await request(`${endpoint()}/register`, "POST", input);
     expect(response.headers.get("set-cookie")).toContain("SameSite=Lax");
-    expect(response.headers.get("set-cookie")).toContain("repodesk_session=");
+    expect(response.headers.get("set-cookie")).toContain("telo_session=");
     const result = await response.json();
     expect(new URL(result.url).pathname).toBe(
       "/organizations/example/settings/apps/new",
@@ -242,8 +242,8 @@ const url = process.env.TEST_DATABASE_URL;
     ).rejects.toMatchObject({ code: "github_authorization_expired" });
     expect(conversions).toBe(0);
   });
-  test("new HTTPS Apps default to repodesk and the operator's active Review Bot webhook", async () => {
-    const hostedOrigin = "https://repodesk.example";
+  test("new HTTPS Apps default to telo and the operator's active Review Bot webhook", async () => {
+    const hostedOrigin = "https://telo.example";
     const hosted = new GitHubService(store, key, hostedOrigin, apps);
     const personal = await hosted.register(admin, id, hash(auth.raw), {
       owner: "personal",
@@ -251,7 +251,7 @@ const url = process.env.TEST_DATABASE_URL;
       source: "setup",
     });
     expect(personal.manifest).toMatchObject({
-      name: "repodesk",
+      name: "telo",
       hook_attributes: {
         url: `${hostedOrigin}/github/webhook/${admin.id}`,
         active: true,
@@ -268,7 +268,7 @@ const url = process.env.TEST_DATABASE_URL;
       organization: "example",
       public: false,
     });
-    expect(organization.manifest.name).toBe("repodesk");
+    expect(organization.manifest.name).toBe("telo");
     expect(organization.manifest.hook_attributes).toEqual(
       personal.manifest.hook_attributes,
     );
@@ -277,10 +277,10 @@ const url = process.env.TEST_DATABASE_URL;
   });
   test("origins without a public HTTPS domain keep webhook delivery inactive", async () => {
     for (const localOrigin of [
-      "http://repodesk.example",
+      "http://telo.example",
       "https://localhost",
       "https://127.0.0.1",
-      "https://repodesk.local",
+      "https://telo.local",
     ]) {
       const local = new GitHubService(store, key, localOrigin, apps);
       const result = await local.register(admin, id, hash(auth.raw), input);
@@ -384,7 +384,7 @@ const url = process.env.TEST_DATABASE_URL;
     expect(publicPage).toMatchObject({
       configured: true,
       canRegister: false,
-      appSlug: "deepx-fixture",
+      appSlug: "telo-fixture",
     });
     expect(JSON.stringify(publicPage)).not.toContain("secret");
     expect(JSON.stringify((await store.read(id)).audit)).not.toContain(

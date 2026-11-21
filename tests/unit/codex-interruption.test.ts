@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { wasInterrupted } from "../../src/coding/local/interruption.ts";
 
 test("job SIGTERM writes a bounded generation marker and exits without exposing input", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-signal-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-signal-"));
   const path = join(dir, "interruption.json");
   const executionId = randomUUID();
   const module = new URL(

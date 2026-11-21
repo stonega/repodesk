@@ -42,7 +42,7 @@ function fragmentedCommand(output: string, diagnostics = "", code = 0) {
 }
 
 test("fragmented multilingual Git output remains an applicable publication patch", async () => {
-  const root = await mkdtemp(join(tmpdir(), "repodesk-utf8-patch-"));
+  const root = await mkdtemp(join(tmpdir(), "telo-utf8-patch-"));
   const git = (args: string[], input?: string) =>
     execFileSync("git", args, { cwd: root, env, input }).toString("utf8");
   const before = "# 群組設定\n\n保留原本內容。\n";

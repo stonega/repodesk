@@ -240,7 +240,7 @@ class Runner implements LocalRunner {
             commit_id: data.commit_id,
             id: reviews.length + 1,
             body: data.body,
-            user: { type: "Bot", login: "deepx-fixture[bot]" },
+            user: { type: "Bot", login: "telo-fixture[bot]" },
           };
           reviews.push(r);
           if (loseReview) {
@@ -254,7 +254,7 @@ class Runner implements LocalRunner {
           const c = {
             id: 1000 + comments.size,
             body: data.body,
-            user: { id: 500, type: "Bot", login: "deepx-fixture[bot]" },
+            user: { id: 500, type: "Bot", login: "telo-fixture[bot]" },
           };
           comments.set(c.id, c);
           if (loseProgress) {
@@ -300,7 +300,7 @@ class Runner implements LocalRunner {
       store,
       apps,
       "ab".repeat(32),
-      "https://repodesk.example",
+      "https://telo.example",
     );
     const runner = new Runner();
     const executor = new ReviewExecutor(store, apps, runner, "ab".repeat(32));
@@ -330,7 +330,7 @@ class Runner implements LocalRunner {
       await service.accept(operatorId, event, delivery, signature, body);
     }
     async function mention(
-      text = "@deepx-fixture[bot] fix this",
+      text = "@telo-fixture[bot] fix this",
       id = 90,
       user = 42,
     ) {
@@ -398,7 +398,7 @@ class Runner implements LocalRunner {
       if (!source) throw Error("Missing Telegram requirement");
       return startDevelopment(sql, w, run.id, "101", 7001, [source.id], "999");
     });
-    f.pull.head.ref = `codex/repodesk-${task.id}`;
+    f.pull.head.ref = `codex/telo-${task.id}`;
     const executor = () =>
       new DevelopmentExecutor(store, f.service.apps, f.runner, "ab".repeat(32));
     const read = () => taskGet(store.pool, f.w.id, task.id);
@@ -454,8 +454,8 @@ class Runner implements LocalRunner {
   test("GitHub fixes continue the published Telegram task and PR across executor reconstruction", async () => {
     const f = await telegramFixture();
     const text = "fix the remaining pagination edge case";
-    await f.mention(`@deepx-fixture[bot] ${text}`);
-    await f.mention(`@deepx-fixture[bot] ${text}`);
+    await f.mention(`@telo-fixture[bot] ${text}`);
+    await f.mention(`@telo-fixture[bot] ${text}`);
     expect((await f.read()).revision).toBe(2);
     expect((await store.read(f.w.id)).reviewTasks ?? []).toHaveLength(0);
     expect(
@@ -697,7 +697,7 @@ class Runner implements LocalRunner {
     });
     const comment = {
       id: 91,
-      body: "@deepx-fixture[bot] fix this",
+      body: "@telo-fixture[bot] fix this",
       user: { id: 42, type: "User", login: "fixture-user" },
       pull_request_url: pullUrl,
       in_reply_to_id: 80,
@@ -752,7 +752,7 @@ class Runner implements LocalRunner {
   });
   test("read-only comments and other verified collaborators keep separate Review Bot routing", async () => {
     const f = await telegramFixture();
-    await f.mention("@deepx-fixture[bot] explain this finding");
+    await f.mention("@telo-fixture[bot] explain this finding");
     expect((await f.read()).revision).toBe(1);
     expect((await store.read(f.w.id)).reviewTasks?.[0]?.mode).toBe("answer");
     await store.change(f.w.id, (w) => {
@@ -765,7 +765,7 @@ class Runner implements LocalRunner {
         login: "other",
       };
     });
-    await f.mention("@deepx-fixture[bot] fix this", 91, 43);
+    await f.mention("@telo-fixture[bot] fix this", 91, 43);
     expect((await f.read()).revision).toBe(1);
     expect((await store.read(f.w.id)).reviewTasks).toHaveLength(2);
   });
@@ -908,9 +908,9 @@ class Runner implements LocalRunner {
       if (!access?.repositories[0]?.permissions) throw Error("Missing access");
       access.repositories[0].permissions.push = false;
     });
-    await f.mention("@deepx-fixture[bot] review");
+    await f.mention("@telo-fixture[bot] review");
     expect((await f.task()).mode).toBe("review");
-    await f.mention("@deepx-fixture[bot] fix this", 97);
+    await f.mention("@telo-fixture[bot] fix this", 97);
     expect((await store.read(f.w.id)).reviewTasks).toHaveLength(1);
   });
   test("connection overlap routes each PR once and revokes the losing workspace's task", async () => {
@@ -955,7 +955,7 @@ class Runner implements LocalRunner {
       issue: { number: 23 },
       comment: {
         id: 1,
-        body: "@deepx-fixture[bot] fix this",
+        body: "@telo-fixture[bot] fix this",
         user: { id: 42, type: "User" },
       },
     });
@@ -978,7 +978,7 @@ class Runner implements LocalRunner {
       if (access?.repositories[0]?.permissions)
         access.repositories[0].permissions.push = false;
     });
-    await f.mention("@deepx-fixture[bot] fix this", 91);
+    await f.mention("@telo-fixture[bot] fix this", 91);
     expect((await store.read(f.w.id)).reviewTasks).toHaveLength(0);
   });
   test("removing coding modes keeps Review Bot fix permission enforced", async () => {
@@ -993,7 +993,7 @@ class Runner implements LocalRunner {
     expect(f.runner.starts).toHaveLength(0);
     expect(f.runner.pushes).toHaveLength(0);
     expect((await f.task()).error).toBe("review_fixes_disabled");
-    await f.mention("@deepx-fixture[bot] fix this", 101);
+    await f.mention("@telo-fixture[bot] fix this", 101);
     expect((await store.read(f.w.id)).reviewTasks).toHaveLength(1);
   });
   test("explicit fixes run checks and update the existing PR without creating an issue or PR", async () => {
@@ -1069,7 +1069,7 @@ class Runner implements LocalRunner {
     await f.accept();
     const first = await f.task();
     await f.executor.advance(f.w.id, first.id);
-    await f.mention("@deepx-fixture[bot] review");
+    await f.mention("@telo-fixture[bot] review");
     const second = await f.task(1);
     await f.executor.advance(f.w.id, second.id);
     expect(f.runner.starts).toHaveLength(1);
@@ -1140,7 +1140,7 @@ class Runner implements LocalRunner {
   });
   test("unknown progress sends recover their comment ID before editing", async () => {
     const f = await fixture();
-    await f.mention("@deepx-fixture[bot] explain this PR");
+    await f.mention("@telo-fixture[bot] explain this PR");
     f.loseProgress();
     const t = await f.task();
     await f.executor.advance(f.w.id, t.id);
@@ -1198,7 +1198,7 @@ class Runner implements LocalRunner {
     });
     await f.executor.advance(f.w.id, t.id);
     expect((await f.task()).state).toBe("waiting");
-    await f.mention("@deepx-fixture[bot] ascending order", 91);
+    await f.mention("@telo-fixture[bot] ascending order", 91);
     expect((await store.read(f.w.id)).reviewTasks).toHaveLength(1);
     await f.executor.advance(f.w.id, t.id);
     expect(f.runner.starts.at(-1)?.development?.inputs.at(-1)?.text).toBe(
@@ -1213,7 +1213,7 @@ class Runner implements LocalRunner {
     await f.mention();
     const t = await f.task();
     await f.executor.advance(f.w.id, t.id);
-    await f.mention("@deepx-fixture[bot] cancel", 91);
+    await f.mention("@telo-fixture[bot] cancel", 91);
     await f.executor.advance(f.w.id, t.id);
     expect((await f.task()).state).toBe("cancelled");
     expect(f.runner.cancels).toContain(t.attemptId);
@@ -1268,8 +1268,8 @@ class Runner implements LocalRunner {
     const f = await fixture();
     const app = createApp(
       store,
-      new SetupService(store, "ab".repeat(32), "https://repodesk.example"),
-      "https://repodesk.example",
+      new SetupService(store, "ab".repeat(32), "https://telo.example"),
+      "https://telo.example",
       undefined,
       undefined,
       "ab".repeat(32),
@@ -1312,7 +1312,7 @@ class Runner implements LocalRunner {
     await f.mention();
     const t = await f.task();
     await f.executor.advance(f.w.id, t.id);
-    await f.mention("@deepx-fixture status", 91);
+    await f.mention("@telo-fixture status", 91);
     const status = await f.task(1);
     await f.executor.advance(f.w.id, status.id);
     expect((await f.task(1)).state).toBe("completed");
@@ -1324,7 +1324,7 @@ class Runner implements LocalRunner {
     f.comments.set(89, {
       id: 89,
       body: "Missing actor authorization in this line.",
-      user: { id: 500, type: "Bot", login: "deepx-fixture[bot]" },
+      user: { id: 500, type: "Bot", login: "telo-fixture[bot]" },
       pull_request_url:
         "https://api.github.com/repos/example/workspace/pulls/23",
       path: "src/api.ts",
@@ -1332,7 +1332,7 @@ class Runner implements LocalRunner {
     });
     const comment = {
       id: 90,
-      body: "@deepx-fixture fix this",
+      body: "@telo-fixture fix this",
       user: { id: 42, type: "User", login: "fixture-user" },
       in_reply_to_id: 89,
       pull_request_url:
@@ -1455,7 +1455,7 @@ class Runner implements LocalRunner {
     const manual = await f.task();
     await f.executor.advance(f.w.id, manual.id);
     expect(f.runner.starts).toHaveLength(1);
-    await f.mention("@deepx-fixture cancel", 91);
+    await f.mention("@telo-fixture cancel", 91);
     await f.executor.advance(f.w.id, manual.id);
     f.pull.draft = false;
     await f.accept();
@@ -1474,8 +1474,8 @@ class Runner implements LocalRunner {
     const f = await fixture();
     const app = createApp(
       store,
-      new SetupService(store, "ab".repeat(32), "https://repodesk.example"),
-      "https://repodesk.example",
+      new SetupService(store, "ab".repeat(32), "https://telo.example"),
+      "https://telo.example",
       undefined,
       undefined,
       "ab".repeat(32),

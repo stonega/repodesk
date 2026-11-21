@@ -33,7 +33,7 @@ describeDb("relational workspace records and incremental outbox", () => {
   beforeAll(async () => {
     if (!baseUrl) return;
     const parsed = new URL(baseUrl);
-    dbName = `repodesk_records_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    dbName = `telo_records_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
     adminPool = database(baseUrl);
     await adminPool.query(`CREATE DATABASE ${dbName}`);
     parsed.pathname = `/${dbName}`;

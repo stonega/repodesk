@@ -81,20 +81,20 @@ security isolation between tenants or repositories**. Use trusted code on a
 dedicated machine. Container CPU/memory and egress restrictions do not apply to
 this runtime. Systemd can constrain the whole service if required.
 
-1. Prepare a checkout at `/opt/repodesk`, install dependencies with
+1. Prepare a checkout at `/opt/telo`, install dependencies with
    `bun install --frozen-lockfile`, then run `bun run build`. Keep the checkout and
    `node_modules` readable by the service user. Use Node 24, Git, Bash, Bun and
    the installed Codex CLI. The tested container protocol baseline is Codex
    **0.155.1**; validate the protocol proofs before upgrading it. PR reviews also
    require Open Code Review CLI **1.12.12**. Install repository-specific tools on
    the host, making their binaries available in the service's `PATH`.
-2. Create a dedicated `repodesk-codex` system user/group. Install
-   `deploy/codex/native.env.example` as `/etc/repodesk/codex-native.env`, mode 600.
+2. Create a dedicated `telo-codex` system user/group. Install
+   `deploy/codex/native.env.example` as `/etc/telo/codex-native.env`, mode 600.
    Set the installed executable path and a private management token. The supplied
    `native.service` uses `/usr/bin/node`; adjust it to the Node 24 installation.
 3. Install `deploy/codex/native.service` as
-   `/etc/systemd/system/repodesk-codex.service`, then use `systemctl daemon-reload`
-   and `systemctl enable --now repodesk-codex`. The service creates its private
+   `/etc/systemd/system/telo-codex.service`, then use `systemctl daemon-reload`
+   and `systemctl enable --now telo-codex`. The service creates its private
    state directory and restarts after host reboot. Health is available at
    `http://127.0.0.1:3020/readyz`. Readiness checks are offline CLI/tool probes.
 4. For native app/worker processes, set `CODEX_RUNNER_URL=http://127.0.0.1:3020`
@@ -138,7 +138,7 @@ The socket grants daemon control; only trusted supervisor infrastructure gets it
 Repository jobs never receive it. Build the task image before starting the stack:
 
 ```sh
-docker build --target codex-job -t localhost/deepx-codex-job:local .
+docker build --target codex-job -t localhost/telo-codex-job:local .
 ```
 
 The image pins Codex CLI 0.155.1 and Open Code Review CLI 1.12.12 and includes
@@ -153,7 +153,7 @@ images supplied by a model or task. Build before starting tasks.
 ### Persistent per-repository environments (`/env`)
 
 Work tasks (`mode: "work"`) automatically mount a persistent, tenant- and
-repository-scoped volume (`deepx-codex-env-<workspaceHash>-<repositoryId>`) at
+repository-scoped volume (`telo-codex-env-<workspaceHash>-<repositoryId>`) at
 `/env` during the `setup`, `implement` and `check` phases. The volume is omitted
 from `prepare`, `export`, `publish` and read-only `intake`/`analysis`/`review`
 phases so credentialed GitHub operations and read-only checks keep their existing

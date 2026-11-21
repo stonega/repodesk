@@ -7,12 +7,12 @@
 
 ### Preset records have preset=true. Read their revision for concurrent-write checks.
 GET {{origin}}/api/admin/workspaces/{{workspace}}/skills
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Disable a preset. Replace version with its current revision from the catalog.
 POST {{origin}}/api/admin/workspaces/{{workspace}}/skills/{{skill}}/action
 Origin: {{origin}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
@@ -21,7 +21,7 @@ Content-Type: application/json
 ### Enable using the revision returned by the previous action.
 POST {{origin}}/api/admin/workspaces/{{workspace}}/skills/{{skill}}/action
 Origin: {{origin}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 

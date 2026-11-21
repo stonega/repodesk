@@ -112,7 +112,7 @@ test("lost mailbox acknowledgements retry one claim and answer without deliverin
   expect(await channel.pull()).toEqual([message]);
   expect(await channel.pull()).toEqual([]);
   await channel.accepted([message]);
-  const result = await channel.handle("answer", "repodesk_task_reply", {
+  const result = await channel.handle("answer", "telo_task_reply", {
     messageId: message.id,
     text: "The cursor ordering.",
   });
@@ -151,7 +151,7 @@ const finalResult: DevelopmentResult = {
 };
 
 async function protocolFixture(scenario: "initial" | "live" | "lost_ack") {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-task-conversation-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-task-conversation-"));
   dirs.push(dir);
   const script = join(dir, "server.cjs"),
     requests = join(dir, "requests.json");
@@ -196,16 +196,16 @@ const fs=require('node:fs'),rl=require('node:readline').createInterface({input:p
 const calls=[];const send=v=>process.stdout.write(JSON.stringify(v)+'\\n');
 const message=${JSON.stringify(message)},scenario=${JSON.stringify(scenario)};
 const params={threadId:'task-thread',turnId:'task-turn'};
-function read(){send({id:101,method:'item/tool/call',params:{...params,callId:'read-call',tool:'repodesk_task_read',arguments:{messageId:message.id}}});}
+function read(){send({id:101,method:'item/tool/call',params:{...params,callId:'read-call',tool:'telo_task_read',arguments:{messageId:message.id}}});}
 function done(){send({method:'item/completed',params:{...params,item:{type:'agentMessage',phase:'final_answer',text:JSON.stringify(${JSON.stringify(finalResult)})}}});send({method:'turn/completed',params:{threadId:'task-thread',turn:{id:'task-turn',status:'completed'}}});}
 rl.on('line',line=>{const m=JSON.parse(line); calls.push(m);fs.writeFileSync(${JSON.stringify(requests)},JSON.stringify(calls));
  if(m.method==='initialize'){if(!m.params.capabilities.experimentalApi)throw Error('Tools must be negotiated');send({id:m.id,result:{}});}
  if(m.method==='thread/start'){if(m.params.dynamicTools.length!==3)throw Error('Missing conversation tools');send({id:m.id,result:{thread:{id:'task-thread'}}});}
  if(m.method==='turn/start'){send({id:m.id,result:{turn:{id:'task-turn'}}});if(scenario==='initial')read();}
  if(m.method==='turn/steer'){if(m.params.expectedTurnId!=='task-turn'||!m.params.input[0].text.includes(message.id))throw Error('Unbound steer');if(scenario==='lost_ack'){setTimeout(done,20);return;}send({id:m.id,result:{turnId:'task-turn'}});read();}
- if(m.id===101&&!m.method){if(!m.result.success)throw Error('Read failed');send({id:102,method:'item/tool/call',params:{...params,callId:'answer-call',tool:'repodesk_task_reply',arguments:{messageId:message.id,text:'It preserves the original event order.'}}});}
- if(m.id===102&&!m.method){if(!m.result.success)throw Error('Answer failed');send({id:103,method:'item/tool/call',params:{...params,callId:'answer-call',tool:'repodesk_task_reply',arguments:{messageId:message.id,text:'It preserves the original event order.'}}});}
- if(m.id===103&&!m.method){send({id:104,method:'item/tool/call',params:{...params,threadId:'other-thread',callId:'foreign-call',tool:'repodesk_task_reply',arguments:{messageId:message.id,text:'Foreign answer'}}});}
+ if(m.id===101&&!m.method){if(!m.result.success)throw Error('Read failed');send({id:102,method:'item/tool/call',params:{...params,callId:'answer-call',tool:'telo_task_reply',arguments:{messageId:message.id,text:'It preserves the original event order.'}}});}
+ if(m.id===102&&!m.method){if(!m.result.success)throw Error('Answer failed');send({id:103,method:'item/tool/call',params:{...params,callId:'answer-call',tool:'telo_task_reply',arguments:{messageId:message.id,text:'It preserves the original event order.'}}});}
+ if(m.id===103&&!m.method){send({id:104,method:'item/tool/call',params:{...params,threadId:'other-thread',callId:'foreign-call',tool:'telo_task_reply',arguments:{messageId:message.id,text:'Foreign answer'}}});}
  if(m.id===104&&!m.method){if(!m.error)throw Error('Foreign thread must be rejected');done();}
 });`,
   );

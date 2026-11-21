@@ -22,7 +22,7 @@ const url = process.env.TEST_DATABASE_URL;
   "plugin management (isolated PostgreSQL)",
   () => {
     const root = database(url ?? "postgres://unused@localhost/unused");
-    const name = `deepx_plugins_${randomUUID().replaceAll("-", "")}`;
+    const name = `telo_plugins_${randomUUID().replaceAll("-", "")}`;
     const origin = "http://localhost:3000";
     const key = "ab".repeat(32);
     let store: Store;
@@ -82,7 +82,7 @@ const url = process.env.TEST_DATABASE_URL;
         "INSERT INTO workspaces(id,operator_id,data) VALUES($1,$2,$3)",
         [sibling.id, id, JSON.stringify(sibling)],
       );
-      dir = await mkdtemp(join(tmpdir(), "deepx-plugin-api-"));
+      dir = await mkdtemp(join(tmpdir(), "telo-plugin-api-"));
       await writeFile(
         join(dir, "plugin.ts"),
         await readFile("examples/pi-extension.ts", "utf8"),
@@ -114,7 +114,7 @@ const url = process.env.TEST_DATABASE_URL;
         {
           method,
           headers: {
-            cookie: credentials ? `deepx_session=${credentials.raw}` : "",
+            cookie: credentials ? `telo_session=${credentials.raw}` : "",
             origin,
             "content-type": "application/json",
             "x-csrf-token": credentials?.csrf ?? "",
@@ -429,7 +429,7 @@ const url = process.env.TEST_DATABASE_URL;
           {
             method,
             headers: {
-              cookie: `deepx_session=${credentials.raw}`,
+              cookie: `telo_session=${credentials.raw}`,
               origin,
               "content-type": "application/json",
               "x-csrf-token": credentials.csrf,
@@ -648,7 +648,7 @@ const url = process.env.TEST_DATABASE_URL;
       expect(
         (
           await app.request("/api/admin/operator/plugins", {
-            headers: { cookie: `deepx_session=${auth.raw}` },
+            headers: { cookie: `telo_session=${auth.raw}` },
           })
         ).status,
       ).toBe(404);

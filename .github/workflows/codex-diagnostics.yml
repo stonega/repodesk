@@ -44,7 +44,7 @@ jobs:
           umask 077
           ssh_dir="$(mktemp -d)"
           trap 'rm -rf "$ssh_dir"' EXIT
-          client="repodesk-browser-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          client="telo-browser-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           printf '%s\n' "$VPS_SSH_KEY" > "$ssh_dir/key"
           printf '%s\n' '169.58.58.71 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICEDUy/5JHbjzCdnECyCEun1u7LWbFz3oM0KIvlVirfK' > "$ssh_dir/known_hosts"
           chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
@@ -63,7 +63,7 @@ jobs:
           set -euo pipefail
           [[ "$STATUS_RELEASE" =~ ^[0-9]+-[0-9]+$ ]]
           source deploy/browser-operator/client.sh
-          ssh_vps "set -eu; cd /opt/repodesk/releases/$STATUS_RELEASE; for f in stage deploy.exit failure.json; do if test -f \"\$f\"; then printf '%s: ' \"\$f\"; cat \"\$f\"; fi; done; printf 'current-release: '; cat /opt/repodesk/.current-release; systemctl is-active repodesk-browser || true; docker ps --format '{{.Names}} {{.Image}} {{.Status}}'"
+          ssh_vps "set -eu; cd /opt/telo/releases/$STATUS_RELEASE; for f in stage deploy.exit failure.json; do if test -f \"\$f\"; then printf '%s: ' \"\$f\"; cat \"\$f\"; fi; done; printf 'current-release: '; cat /opt/telo/.current-release; systemctl is-active telo-browser || true; docker ps --format '{{.Names}} {{.Image}} {{.Status}}'"
           case "$DIAGNOSTIC_LOG" in
             none|'') ;;
             network-family-probe)
@@ -72,38 +72,38 @@ jobs:
               python3 deploy/browser-operator/prepare-deep-browser-probe.py
               bun build deploy/browser-operator/incident-native-probe.ts --target=node --packages=external --outfile="$RUNNER_TEMP/deep-browser-probe.mjs"
               bun build src/browser/incident-diagnostic-worker.ts --target=node --packages=external --outfile="$RUNNER_TEMP/deep-browser-worker.mjs"
-              ssh_vps "install -d -m 755 /opt/repodesk-browser/incident-$GITHUB_RUN_ID"
+              ssh_vps "install -d -m 755 /opt/telo-browser/incident-$GITHUB_RUN_ID"
               for name in deep-browser-probe.mjs deep-browser-worker.mjs; do
                 chmod 644 "$RUNNER_TEMP/$name"
                 docker cp "$RUNNER_TEMP/$name" "$DEPLOY_CLIENT:/tmp/$name"
-                docker exec "$DEPLOY_CLIENT" scp -i /tmp/key -P 22 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts "/tmp/$name" "root@169.58.58.71:/opt/repodesk-browser/incident-$GITHUB_RUN_ID/$name"
+                docker exec "$DEPLOY_CLIENT" scp -i /tmp/key -P 22 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts "/tmp/$name" "root@169.58.58.71:/opt/telo-browser/incident-$GITHUB_RUN_ID/$name"
               done
-              ssh_vps "/opt/repodesk-browser/runtime/bin/node /opt/repodesk-browser/incident-$GITHUB_RUN_ID/deep-browser-probe.mjs" ;;
+              ssh_vps "/opt/telo-browser/runtime/bin/node /opt/telo-browser/incident-$GITHUB_RUN_ID/deep-browser-probe.mjs" ;;
             code-truth-probe)
               bun build deploy/browser-operator/code-truth-probe.ts --target=node --packages=external --outfile="$RUNNER_TEMP/code-truth-probe.mjs"
-              ssh_vps "docker exec -i repodesk-app-1 node --input-type=module" < "$RUNNER_TEMP/code-truth-probe.mjs" ;;
+              ssh_vps "docker exec -i telo-app-1 node --input-type=module" < "$RUNNER_TEMP/code-truth-probe.mjs" ;;
             public-browser-probe)
-              ssh_vps "docker exec -i repodesk-app-1 node --input-type=module" < deploy/browser-operator/public-browser-probe.mjs ;;
+              ssh_vps "docker exec -i telo-app-1 node --input-type=module" < deploy/browser-operator/public-browser-probe.mjs ;;
             chat-diagnostic)
               ssh_vps "python3 -" < deploy/browser-operator/chat-diagnostic.py ;;
             deployment-receipt.json)
-              ssh_vps "cat /opt/repodesk/releases/$STATUS_RELEASE/deployment-receipt.json" ;;
+              ssh_vps "cat /opt/telo/releases/$STATUS_RELEASE/deployment-receipt.json" ;;
             workerdiag)
-              ssh_vps "python3 - /opt/repodesk/releases/$STATUS_RELEASE" < deploy/browser-operator/worker-diagnostic.py ;;
+              ssh_vps "python3 - /opt/telo/releases/$STATUS_RELEASE" < deploy/browser-operator/worker-diagnostic.py ;;
             recover)
-              ssh_vps "bash -s -- /opt/repodesk/releases/$STATUS_RELEASE" < deploy/browser-operator/recover.sh ;;
+              ssh_vps "bash -s -- /opt/telo/releases/$STATUS_RELEASE" < deploy/browser-operator/recover.sh ;;
             restart)
-              ssh_vps "bash -s -- /opt/repodesk/releases/$STATUS_RELEASE" < deploy/browser-operator/restart-proof.sh ;;
+              ssh_vps "bash -s -- /opt/telo/releases/$STATUS_RELEASE" < deploy/browser-operator/restart-proof.sh ;;
             probe)
-              ssh_vps "set -eu; cd /opt/repodesk/releases/$STATUS_RELEASE; image=\$(python3 -c 'import json;print(json.load(open(\"build-images.json\"))[\"app\"][\"id\"])'); docker run --rm --network host --group-add 1000 --volume /run/repodesk-browser:/run/repodesk-browser:ro --volume /opt/repodesk/secrets/browser-token:/run/secrets/browser_token:ro --volume /opt/repodesk/releases/$STATUS_RELEASE/host-probe.mjs:/app/host-probe.mjs:ro --entrypoint node \$image /app/host-probe.mjs" ;;
+              ssh_vps "set -eu; cd /opt/telo/releases/$STATUS_RELEASE; image=\$(python3 -c 'import json;print(json.load(open(\"build-images.json\"))[\"app\"][\"id\"])'); docker run --rm --network host --group-add 1000 --volume /run/telo-browser:/run/telo-browser:ro --volume /opt/telo/secrets/browser-token:/run/secrets/browser_token:ro --volume /opt/telo/releases/$STATUS_RELEASE/host-probe.mjs:/app/host-probe.mjs:ro --entrypoint node \$image /app/host-probe.mjs" ;;
             entry)
-              ssh_vps "systemctl is-active repodesk-browser; docker exec -i repodesk-app-1 node --input-type=module" < deploy/browser-operator/telegram-probe.mjs ;;
+              ssh_vps "systemctl is-active telo-browser; docker exec -i telo-app-1 node --input-type=module" < deploy/browser-operator/telegram-probe.mjs ;;
             trace)
-              ssh_vps "bash -s -- /opt/repodesk/releases/$STATUS_RELEASE" < deploy/browser-operator/diagnose.sh ;;
+              ssh_vps "bash -s -- /opt/telo/releases/$STATUS_RELEASE" < deploy/browser-operator/diagnose.sh ;;
             system)
-              ssh_vps "set -eu; systemctl show repodesk-browser -p MainPID -p User -p Group -p CapabilityBoundingSet -p NoNewPrivileges -p ProtectKernelModules -p ProtectKernelTunables; journalctl -u repodesk-browser --no-pager -n 20; getent passwd | grep '^rdb_' || true; nft list table inet repodesk_browser || true; command -v xdpyinfo || true; lsmod | grep -E 'nft|nf_tables' || true" ;;
+              ssh_vps "set -eu; systemctl show telo-browser -p MainPID -p User -p Group -p CapabilityBoundingSet -p NoNewPrivileges -p ProtectKernelModules -p ProtectKernelTunables; journalctl -u telo-browser --no-pager -n 20; getent passwd | grep '^rdb_' || true; nft list table inet telo_browser || true; command -v xdpyinfo || true; lsmod | grep -E 'nft|nf_tables' || true" ;;
             resume-driver.log|browser-checkpoint-after-stop.stderr|pre-cutover-writer-recovery.log|finish-driver.log|resume-native-package-build.log|resume-nft-build.log|resume-native-install.log|resume-nft-verification.json|resume-firewall-check.log|resume-module-nf_tables.log|resume-module-nft_reject_inet.log|build-app.log|build-job.log|build-supervisor.log|container-checks.log|host-install.log|chrome-install.log|native-host-verification.json|cutover.log|production-verification.log|driver.log)
-              ssh_vps "tail -n 30 /opt/repodesk/releases/$STATUS_RELEASE/$DIAGNOSTIC_LOG" ;;
+              ssh_vps "tail -n 30 /opt/telo/releases/$STATUS_RELEASE/$DIAGNOSTIC_LOG" ;;
             *) exit 1 ;;
           esac
       - name: Restore unchanged writers after a pre-cutover update failure
@@ -114,7 +114,7 @@ jobs:
           set -euo pipefail
           [[ "$STATUS_RELEASE" =~ ^[0-9]+-[0-9]+$ ]]
           source deploy/browser-operator/client.sh
-          ssh_vps "python3 - /opt/repodesk/releases/$STATUS_RELEASE" < deploy/browser-operator/restore-update-writers.py
+          ssh_vps "python3 - /opt/telo/releases/$STATUS_RELEASE" < deploy/browser-operator/restore-update-writers.py
       - name: Resume an exact-image Browser update before cutover
         if: ${{ inputs.mode == 'update-resume' }}
         env:
@@ -129,9 +129,9 @@ jobs:
           cp deploy/browser-operator/host-probe.mjs "$RUNNER_TEMP/host-probe.mjs"
           for name in resume-update.py update_runtime.py resume-update.sh host-probe.mjs; do
             docker cp "$RUNNER_TEMP/$name" "$DEPLOY_CLIENT:/tmp/$name"
-            docker exec "$DEPLOY_CLIENT" scp -i /tmp/key -P 22 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts "/tmp/$name" "root@169.58.58.71:/opt/repodesk/releases/$STATUS_RELEASE/$name"
+            docker exec "$DEPLOY_CLIENT" scp -i /tmp/key -P 22 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts "/tmp/$name" "root@169.58.58.71:/opt/telo/releases/$STATUS_RELEASE/$name"
           done
-          ssh_vps "if test -f /opt/repodesk/releases/$STATUS_RELEASE/resume.exit; then mv /opt/repodesk/releases/$STATUS_RELEASE/resume.exit /opt/repodesk/releases/$STATUS_RELEASE/resume.exit.before-$GITHUB_RUN_ID; fi; systemd-run --unit=repodesk-browser-resume-$STATUS_RELEASE-${GITHUB_SHA:0:8} --collect --property=Type=exec --property=RuntimeMaxSec=3600 --property=TimeoutStopSec=180 --property=WorkingDirectory=/opt/repodesk/releases/$STATUS_RELEASE /bin/bash /opt/repodesk/releases/$STATUS_RELEASE/resume-update.sh"
+          ssh_vps "if test -f /opt/telo/releases/$STATUS_RELEASE/resume.exit; then mv /opt/telo/releases/$STATUS_RELEASE/resume.exit /opt/telo/releases/$STATUS_RELEASE/resume.exit.before-$GITHUB_RUN_ID; fi; systemd-run --unit=telo-browser-resume-$STATUS_RELEASE-${GITHUB_SHA:0:8} --collect --property=Type=exec --property=RuntimeMaxSec=3600 --property=TimeoutStopSec=180 --property=WorkingDirectory=/opt/telo/releases/$STATUS_RELEASE /bin/bash /opt/telo/releases/$STATUS_RELEASE/resume-update.sh"
           printf 'RELEASE_ID=%s\nDEPLOY_RESULT_FILE=resume.exit\n' "$STATUS_RELEASE" >> "$GITHUB_ENV"
       - name: Package and start an update of an installed Browser deployment
         if: ${{ inputs.mode == 'source-update' }}
@@ -155,10 +155,10 @@ jobs:
           node deploy/browser-operator/prepare-update-payload.mjs "$payload"
           tar -czf "$RUNNER_TEMP/browser-update.tgz" -C "$payload" .
           checksum=$(sha256sum "$RUNNER_TEMP/browser-update.tgz" | cut -d' ' -f1)
-          ssh_vps "set -eu; test ! -e /opt/repodesk/releases/$RELEASE_ID; umask 077; mkdir /opt/repodesk/releases/$RELEASE_ID"
+          ssh_vps "set -eu; test ! -e /opt/telo/releases/$RELEASE_ID; umask 077; mkdir /opt/telo/releases/$RELEASE_ID"
           docker cp "$RUNNER_TEMP/browser-update.tgz" "$DEPLOY_CLIENT:/tmp/update.tgz"
-          docker exec "$DEPLOY_CLIENT" scp -i /tmp/key -P 22 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts /tmp/update.tgz "root@169.58.58.71:/opt/repodesk/releases/$RELEASE_ID/payload.tgz"
-          ssh_vps "set -eu; cd /opt/repodesk/releases/$RELEASE_ID; printf '%s  payload.tgz\n' '$checksum' | sha256sum -c -; tar -xzf payload.tgz; systemd-run --unit=repodesk-browser-update-$RELEASE_ID --collect --property=Type=exec --property=RuntimeMaxSec=3600 --property=TimeoutStopSec=180 --property=WorkingDirectory=/opt/repodesk/releases/$RELEASE_ID /bin/bash /opt/repodesk/releases/$RELEASE_ID/run-update.sh"
+          docker exec "$DEPLOY_CLIENT" scp -i /tmp/key -P 22 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts /tmp/update.tgz "root@169.58.58.71:/opt/telo/releases/$RELEASE_ID/payload.tgz"
+          ssh_vps "set -eu; cd /opt/telo/releases/$RELEASE_ID; printf '%s  payload.tgz\n' '$checksum' | sha256sum -c -; tar -xzf payload.tgz; systemd-run --unit=telo-browser-update-$RELEASE_ID --collect --property=Type=exec --property=RuntimeMaxSec=3600 --property=TimeoutStopSec=180 --property=WorkingDirectory=/opt/telo/releases/$RELEASE_ID /bin/bash /opt/telo/releases/$RELEASE_ID/run-update.sh"
       - name: Package and transfer the verified source and checksums
         if: ${{ inputs.mode == 'deploy' }}
         run: |
@@ -175,17 +175,17 @@ jobs:
           cp deploy/codex/wait-checkpoint.mjs "$payload/codex-wait-checkpoint.mjs"
           node deploy/browser-operator/prepare-payload.mjs "$payload"
           tar -czf "$RUNNER_TEMP/browser-payload.tgz" -C "$payload" .
-          ssh_vps "set -eu; test ! -e /opt/repodesk/releases/$RELEASE_ID; umask 077; mkdir /opt/repodesk/releases/$RELEASE_ID"
+          ssh_vps "set -eu; test ! -e /opt/telo/releases/$RELEASE_ID; umask 077; mkdir /opt/telo/releases/$RELEASE_ID"
           docker cp "$RUNNER_TEMP/browser-payload.tgz" "$DEPLOY_CLIENT:/tmp/payload.tgz"
           docker exec "$DEPLOY_CLIENT" scp -i /tmp/key -P 22 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts -o ConnectTimeout=15 \
-            /tmp/payload.tgz "root@169.58.58.71:/opt/repodesk/releases/$RELEASE_ID/payload.tgz"
-          ssh_vps "set -eu; cd /opt/repodesk/releases/$RELEASE_ID; tar -xzf payload.tgz; test -f source-metadata.json; test -f release.py"
+            /tmp/payload.tgz "root@169.58.58.71:/opt/telo/releases/$RELEASE_ID/payload.tgz"
+          ssh_vps "set -eu; cd /opt/telo/releases/$RELEASE_ID; tar -xzf payload.tgz; test -f source-metadata.json; test -f release.py"
       - name: Start the guarded VPS deployment
         if: ${{ inputs.mode == 'deploy' }}
         run: |
           set -euo pipefail
           source deploy/browser-operator/client.sh
-          ssh_vps "systemd-run --unit=repodesk-browser-deploy-$RELEASE_ID --collect --property=Type=exec --property=RuntimeMaxSec=3600 --property=TimeoutStopSec=180 --property=WorkingDirectory=/opt/repodesk/releases/$RELEASE_ID /bin/bash /opt/repodesk/releases/$RELEASE_ID/run-deployment.sh"
+          ssh_vps "systemd-run --unit=telo-browser-deploy-$RELEASE_ID --collect --property=Type=exec --property=RuntimeMaxSec=3600 --property=TimeoutStopSec=180 --property=WorkingDirectory=/opt/telo/releases/$RELEASE_ID /bin/bash /opt/telo/releases/$RELEASE_ID/run-deployment.sh"
       - name: Resume the verified pre-cutover release after prerequisite repair
         if: ${{ inputs.mode == 'resume' }}
         env:
@@ -201,22 +201,22 @@ jobs:
           for file in "$native_archive" "native-source-$GITHUB_SHA.sha256" "native-manifest-$GITHUB_SHA.json"; do
             docker cp "$RUNNER_TEMP/$file" "$DEPLOY_CLIENT:/tmp/$file"
             docker exec "$DEPLOY_CLIENT" scp -i /tmp/key -P 22 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts \
-              "/tmp/$file" "root@169.58.58.71:/opt/repodesk/releases/$STATUS_RELEASE/$file"
+              "/tmp/$file" "root@169.58.58.71:/opt/telo/releases/$STATUS_RELEASE/$file"
           done
           docker cp deploy/browser-operator/resume.py "$DEPLOY_CLIENT:/tmp/resume.py"
           docker cp deploy/browser-operator/run-resume.sh "$DEPLOY_CLIENT:/tmp/run-resume.sh"
           for file in resume.py run-resume.sh; do
             docker exec "$DEPLOY_CLIENT" scp -i /tmp/key -P 22 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts \
-              "/tmp/$file" "root@169.58.58.71:/opt/repodesk/releases/$STATUS_RELEASE/$file"
+              "/tmp/$file" "root@169.58.58.71:/opt/telo/releases/$STATUS_RELEASE/$file"
           done
-          ssh_vps "set -eu; cd /opt/repodesk/releases/$STATUS_RELEASE; test -f deploy.exit; test \"\$(cat deploy.exit)\" != 0; test ! -e deploy.exit.failure-$GITHUB_RUN_ID; mv deploy.exit deploy.exit.failure-$GITHUB_RUN_ID; printf '%s\n' '$GITHUB_SHA' > resume-commit; systemd-run --unit=repodesk-browser-deploy-$STATUS_RELEASE-resume-$GITHUB_RUN_ID --collect --property=Type=exec --property=RuntimeMaxSec=3600 --property=TimeoutStopSec=180 --property=WorkingDirectory=/opt/repodesk/releases/$STATUS_RELEASE /bin/bash /opt/repodesk/releases/$STATUS_RELEASE/run-resume.sh"
+          ssh_vps "set -eu; cd /opt/telo/releases/$STATUS_RELEASE; test -f deploy.exit; test \"\$(cat deploy.exit)\" != 0; test ! -e deploy.exit.failure-$GITHUB_RUN_ID; mv deploy.exit deploy.exit.failure-$GITHUB_RUN_ID; printf '%s\n' '$GITHUB_SHA' > resume-commit; systemd-run --unit=telo-browser-deploy-$STATUS_RELEASE-resume-$GITHUB_RUN_ID --collect --property=Type=exec --property=RuntimeMaxSec=3600 --property=TimeoutStopSec=180 --property=WorkingDirectory=/opt/telo/releases/$STATUS_RELEASE /bin/bash /opt/telo/releases/$STATUS_RELEASE/run-resume.sh"
           printf 'RELEASE_ID=%s\n' "$STATUS_RELEASE" >> "$GITHUB_ENV"
       - name: Finish a recovered release with corrected Compose and service preflight
         if: ${{ inputs.mode == 'finish' }}
         run: |
           set -euo pipefail
           source deploy/browser-operator/client.sh
-          ssh_vps "set -eu; test ! -e /opt/repodesk/releases/$RELEASE_ID; umask 077; mkdir /opt/repodesk/releases/$RELEASE_ID"
+          ssh_vps "set -eu; test ! -e /opt/telo/releases/$RELEASE_ID; umask 077; mkdir /opt/telo/releases/$RELEASE_ID"
           for file in finish.py run-finish.sh; do
             docker cp "deploy/browser-operator/$file" "$DEPLOY_CLIENT:/tmp/$file"
           done
@@ -224,9 +224,9 @@ jobs:
           docker cp scripts/deploy-vps.sh "$DEPLOY_CLIENT:/tmp/deploy-vps.sh"
           for file in finish.py run-finish.sh compose.yaml deploy-vps.sh; do
             docker exec "$DEPLOY_CLIENT" scp -i /tmp/key -P 22 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/known_hosts \
-              "/tmp/$file" "root@169.58.58.71:/opt/repodesk/releases/$RELEASE_ID/$file"
+              "/tmp/$file" "root@169.58.58.71:/opt/telo/releases/$RELEASE_ID/$file"
           done
-          ssh_vps "set -eu; printf '%s\n' '$GITHUB_SHA' > /opt/repodesk/releases/$RELEASE_ID/operator-commit; systemd-run --unit=repodesk-browser-deploy-$RELEASE_ID --collect --property=Type=exec --property=RuntimeMaxSec=1800 --property=WorkingDirectory=/opt/repodesk/releases/$RELEASE_ID /bin/bash /opt/repodesk/releases/$RELEASE_ID/run-finish.sh"
+          ssh_vps "set -eu; printf '%s\n' '$GITHUB_SHA' > /opt/telo/releases/$RELEASE_ID/operator-commit; systemd-run --unit=telo-browser-deploy-$RELEASE_ID --collect --property=Type=exec --property=RuntimeMaxSec=1800 --property=WorkingDirectory=/opt/telo/releases/$RELEASE_ID /bin/bash /opt/telo/releases/$RELEASE_ID/run-finish.sh"
       - name: Wait for image checks, host installation, backup and cutover
         if: ${{ inputs.mode == 'deploy' || inputs.mode == 'resume' || inputs.mode == 'finish' || inputs.mode == 'source-update' || inputs.mode == 'update-resume' }}
         run: |
@@ -234,11 +234,11 @@ jobs:
           source deploy/browser-operator/client.sh
           previous=''
           for attempt in {1..720}; do
-            status=$(ssh_vps "if test -f /opt/repodesk/releases/$RELEASE_ID/${DEPLOY_RESULT_FILE:-deploy.exit}; then printf 'exit:'; cat /opt/repodesk/releases/$RELEASE_ID/${DEPLOY_RESULT_FILE:-deploy.exit}; elif test -f /opt/repodesk/releases/$RELEASE_ID/stage; then cat /opt/repodesk/releases/$RELEASE_ID/stage; else printf 'starting'; fi")
+            status=$(ssh_vps "if test -f /opt/telo/releases/$RELEASE_ID/${DEPLOY_RESULT_FILE:-deploy.exit}; then printf 'exit:'; cat /opt/telo/releases/$RELEASE_ID/${DEPLOY_RESULT_FILE:-deploy.exit}; elif test -f /opt/telo/releases/$RELEASE_ID/stage; then cat /opt/telo/releases/$RELEASE_ID/stage; else printf 'starting'; fi")
             if [[ "$status" != "$previous" ]]; then printf '%s\n' "$status"; previous="$status"; fi
             case "$status" in
               exit:0) exit 0 ;;
-              exit:*) ssh_vps "cat /opt/repodesk/releases/$RELEASE_ID/failure.json 2>/dev/null || true"; exit 1 ;;
+              exit:*) ssh_vps "cat /opt/telo/releases/$RELEASE_ID/failure.json 2>/dev/null || true"; exit 1 ;;
             esac
             sleep 5
           done
@@ -249,7 +249,7 @@ jobs:
         run: |
           set -euo pipefail
           source deploy/browser-operator/client.sh
-          ssh_vps "cat /opt/repodesk/releases/$RELEASE_ID/deployment-receipt.json" > "$RUNNER_TEMP/browser-deployment-receipt.json"
+          ssh_vps "cat /opt/telo/releases/$RELEASE_ID/deployment-receipt.json" > "$RUNNER_TEMP/browser-deployment-receipt.json"
           node -e 'const r=require(process.env.RUNNER_TEMP+"/browser-deployment-receipt.json");console.log(JSON.stringify({release:r.release_id,commit:r.source_commit,services:r.services,browser:r.browser_host,backup:r.backup},null,2))'
       - uses: actions/upload-artifact@v4
         if: ${{ inputs.mode == 'deploy' || inputs.mode == 'resume' || inputs.mode == 'finish' || inputs.mode == 'source-update' || inputs.mode == 'update-resume' }}

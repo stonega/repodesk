@@ -31,7 +31,7 @@ export function validatePackageFiles(files: PackageFiles) {
         limits.package
     )
       throw new PluginError("plugin_package_invalid");
-    const raw = files["repodesk.plugin.json"];
+    const raw = files["telo.plugin.json"];
     if (!raw || raw.length > limits.manifest)
       throw new PluginError("plugin_manifest_invalid");
     const manifest = parseManifest(JSON.parse(raw.toString("utf8")));
@@ -91,7 +91,7 @@ export async function readLocalManifest(
         (
           await regularFile(
             await realpath(resolve(directory)),
-            "repodesk.plugin.json",
+            "telo.plugin.json",
             limits.manifest,
           )
         ).toString("utf8"),
@@ -107,7 +107,7 @@ export async function loadLocalPackage(directory: string) {
   const manifest = await readLocalManifest(root);
   const files: PackageFiles = {};
   for (const path of [
-    "repodesk.plugin.json",
+    "telo.plugin.json",
     "package.json",
     "README.md",
     "LICENSE",

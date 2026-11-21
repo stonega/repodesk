@@ -33,11 +33,11 @@ session cookie; replace placeholders with values from a disposable workspace.
 
 ```http
 GET {{origin}}/api/admin/workspaces/{{workspace}}/chats/{{group}}/repository
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Bind the repository using the revision returned above
 PUT {{origin}}/api/admin/workspaces/{{workspace}}/chats/{{group}}/repository
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 Origin: {{origin}}
 Content-Type: application/json
 X-CSRF-Token: {{csrf}}
@@ -46,7 +46,7 @@ X-CSRF-Token: {{csrf}}
 
 ### Remove it using its new saved revision
 PUT {{origin}}/api/admin/workspaces/{{workspace}}/chats/{{group}}/repository
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 Origin: {{origin}}
 Content-Type: application/json
 X-CSRF-Token: {{csrf}}

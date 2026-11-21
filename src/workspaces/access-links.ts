@@ -13,7 +13,7 @@ export class AccessLinks {
 
   private signature(payload: string, botId: string) {
     return createHmac("sha256", Buffer.from(this.key, "hex"))
-      .update(`repodesk:access-link:v1:${botId}:${payload}`)
+      .update(`telo:access-link:v1:${botId}:${payload}`)
       .digest("base64url")
       .slice(0, 22);
   }

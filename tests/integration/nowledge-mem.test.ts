@@ -105,7 +105,7 @@ const url = process.env.TEST_DATABASE_URL;
       app.request(`/api/admin/workspaces/${target}/plugins/nowledge-mem`, {
         method,
         headers: {
-          cookie: `deepx_session=${auth.raw}`,
+          cookie: `telo_session=${auth.raw}`,
           origin,
           "content-type": "application/json",
           "x-csrf-token": csrf,
@@ -132,7 +132,7 @@ const url = process.env.TEST_DATABASE_URL;
       expect(saved.status).toBe(200);
       expect(await saved.text()).not.toContain(input.apiKey);
       const row = await store.read(id);
-      expect(row.plugins?.nowledgeMem?.credential).toStartWith("v2.");
+      expect(row.plugins?.nowledgeMem?.credential).toStartWith("v3.");
       expect(row.plugins?.nowledgeMem?.credential).not.toContain(input.apiKey);
       expect(calls).toBe(0);
       expect((await request("PUT", input)).status).toBe(409);

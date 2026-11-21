@@ -17,7 +17,7 @@ can carry between those consumers after you approve their access.
    coding task.
 2. Open **Browser** from the task's Telegram message. Telegram verifies your
    identity; no panel account or earlier remote-desktop login is required.
-3. Review the destination and choose **Allow website**. RepoDesk remembers that
+3. Review the destination and choose **Allow website**. Telo remembers that
    exact website for your future private tasks in this workspace, including
    authorized plugins. Closing the browser or restarting the service preserves
    this choice. A different website needs its own approval.

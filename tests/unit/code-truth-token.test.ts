@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { initializeCodeTruthToken } from "../../scripts/code-truth-token.ts";
 
 test("Code Truth initialization publishes one shared token and preserves it across restarts", () => {
-  const root = mkdtempSync(join(tmpdir(), "repodesk-code-truth-token-"));
+  const root = mkdtempSync(join(tmpdir(), "telo-code-truth-token-"));
   const path = join(root, "auth/token");
   try {
     initializeCodeTruthToken(path);
@@ -28,7 +28,7 @@ test("Code Truth initialization publishes one shared token and preserves it acro
 });
 
 test("an invalid saved Code Truth token stops initialization without replacing or revealing it", () => {
-  const root = mkdtempSync(join(tmpdir(), "repodesk-code-truth-token-"));
+  const root = mkdtempSync(join(tmpdir(), "telo-code-truth-token-"));
   const path = join(root, "token");
   try {
     writeFileSync(path, "private-invalid-token");
@@ -43,7 +43,7 @@ test("an invalid saved Code Truth token stops initialization without replacing o
 });
 
 test("concurrent initializers share one complete token without exposing it", async () => {
-  const root = mkdtempSync(join(tmpdir(), "repodesk-code-truth-token-"));
+  const root = mkdtempSync(join(tmpdir(), "telo-code-truth-token-"));
   const path = join(root, "token");
   try {
     const children = Array.from({ length: 4 }, () =>

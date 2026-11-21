@@ -26,7 +26,7 @@ afterEach(async () => {
   );
 });
 async function catalog(source?: string, patch = {}) {
-  const dir = await mkdtemp(join(tmpdir(), "deepx-extension-test-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-extension-test-"));
   dirs.push(dir);
   await writeFile(
     join(dir, "extension.ts"),

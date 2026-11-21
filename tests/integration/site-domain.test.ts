@@ -76,7 +76,7 @@ const url = process.env.TEST_DATABASE_URL;
     app.request(path, {
       method,
       headers: {
-        cookie: `repodesk_session=${auth.raw}`,
+        cookie: `telo_session=${auth.raw}`,
         origin: fallback,
         "x-csrf-token": auth.csrf,
         "content-type": "application/json",
@@ -91,7 +91,7 @@ const url = process.env.TEST_DATABASE_URL;
     expect(
       (
         await request(endpoint, "GET", undefined, {
-          cookie: `repodesk_session=${member.raw}`,
+          cookie: `telo_session=${member.raw}`,
         })
       ).status,
     ).toBe(403);
@@ -101,7 +101,7 @@ const url = process.env.TEST_DATABASE_URL;
       { origin: "https://evil.example" },
       { origin: "" },
       { "x-csrf-token": "wrong" },
-      { cookie: `repodesk_session=${member.raw}`, "x-csrf-token": member.csrf },
+      { cookie: `telo_session=${member.raw}`, "x-csrf-token": member.csrf },
     ])
       expect((await request(endpoint, "PUT", input, headers)).status).toBe(403);
     for (const domain of [
@@ -125,7 +125,7 @@ const url = process.env.TEST_DATABASE_URL;
     const github = new GitHubService(store, key, fallback);
     await github.register(admin, w.id, hash(auth.raw), {
       owner: "personal",
-      name: "RepoDesk",
+      name: "Telo",
       public: false,
     });
     const d = await store.deployment();
@@ -179,7 +179,7 @@ const url = process.env.TEST_DATABASE_URL;
     ).toBe(1);
     const next = await github.register(admin, w.id, hash(auth.raw), {
       owner: "personal",
-      name: "RepoDesk",
+      name: "Telo",
       public: false,
     });
     expect(next.manifest).toMatchObject({

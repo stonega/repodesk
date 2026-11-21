@@ -77,7 +77,7 @@ for (const width of [1280, 390]) {
       "/api/admin/auth/session",
       "/api/admin/workspaces",
     ]);
-    const startup = page.getByRole("status", { name: "Opening RepoDesk" });
+    const startup = page.getByRole("status", { name: "Opening Telo" });
     const expectNeutralStartup = async () => {
       await expect(startup).toBeVisible();
       await expect(page.locator(".auth-hero, .setup-steps")).toHaveCount(0);
@@ -132,13 +132,13 @@ for (const initialized of [true, false]) {
     });
     await page.goto("/admin");
     await expect(
-      page.getByRole("status", { name: "Opening RepoDesk" }),
+      page.getByRole("status", { name: "Opening Telo" }),
     ).toBeVisible();
     await expect(page.locator(".auth-form, .auth-hero")).toHaveCount(0);
     await expect.poll(() => held.length).toBe(1);
     await held.shift()?.fulfill({ json: { initialized } });
     await expect(
-      page.getByRole("status", { name: "Opening RepoDesk" }),
+      page.getByRole("status", { name: "Opening Telo" }),
     ).toHaveCount(0);
     await expect(
       page.getByRole("heading", {
@@ -180,7 +180,7 @@ for (const width of [1280, 390]) {
     for (const [path, json] of responses) {
       await expect.poll(() => held.length).toBe(1);
       await expect(
-        page.getByRole("status", { name: "Opening RepoDesk" }),
+        page.getByRole("status", { name: "Opening Telo" }),
       ).toBeVisible();
       await expect(
         page.locator(".layout-auth, .auth-hero, .auth-main, .auth-form"),
@@ -332,7 +332,7 @@ for (const width of [1280, 390, 320]) {
       const dismiss = toast.getByRole("button", {
         name: "Dismiss notification",
       });
-      await expect(alert).toHaveText("Couldn’t connect to RepoDesk.");
+      await expect(alert).toHaveText("Couldn’t connect to Telo.");
       await expect(retry).toHaveText("Retry");
       await expect(toast).toHaveCSS("position", "fixed");
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
@@ -447,7 +447,7 @@ for (const width of [1280, 390, 320]) {
       await page.clock.fastForward(5001);
       await expect.poll(() => held.length).toBeGreaterThan(0);
       for (const route of held.splice(0)) await route.abort("failed");
-      await expect(alert).toHaveText("Couldn’t connect to RepoDesk.");
+      await expect(alert).toHaveText("Couldn’t connect to Telo.");
       await expect(
         config.getByText("ChatGPT connected", { exact: true }),
       ).toBeVisible();

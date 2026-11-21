@@ -83,7 +83,7 @@ test("native transcript captures assistant text and bounded activity while exclu
   ).not.toMatch(/secret-value|abcdefghij|known-sensitive-value/);
 });
 test("runner history survives reopening and resumes from byte cursors without losing page boundaries", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-mini-history-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-mini-history-"));
   try {
     const path = join(dir, "history");
     expect((await readTranscript(path)).entries).toHaveLength(0);
@@ -133,7 +133,7 @@ test("app-server messages are recorded faithfully through the channel and a chan
     "../../src/coding/local/job-channel.ts"
   );
   const { readFile, writeFile } = await import("node:fs/promises");
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-mini-protocol-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-mini-protocol-"));
   try {
     const result = {
       status: "analysis",

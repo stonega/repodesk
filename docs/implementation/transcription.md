@@ -1,6 +1,6 @@
 # Local Qwen3-ASR voice transcription
 
-RepoDesk includes a built-in **Qwen3-ASR** plugin for Telegram voice notes, audio
+Telo includes a built-in **Qwen3-ASR** plugin for Telegram voice notes, audio
 messages and audio files sent as documents. It is disabled by default per workspace.
 An owning deployment operator enables it from **Plugins → Qwen3-ASR**. Enabling
 starts a background model download without holding an HTTP request open. The page
@@ -39,7 +39,7 @@ image without the Python runtime, **Plugins → Qwen3-ASR** reports `Runtime una
 without affecting ordinary chat.
 
 `compose.transcription.yaml` shares the `transcription_models` volume between app and worker at
-`/var/lib/repodesk-models`. Public weights can be reused across workspaces; audio,
+`/var/lib/telo-models`. Public weights can be reused across workspaces; audio,
 transcripts and Telegram identifiers are never stored in that cache. OS locks
 serialize downloads and inference across containers. Each process keeps at most one
 warm model; multiple processes may retain their own model during the idle window.
@@ -58,13 +58,13 @@ For a direct Node deployment, install Python 3.11+, the system `libsndfile1` lib
 and an isolated environment using the same dependencies as the Dockerfile:
 
 ```sh
-python3 -m venv /opt/repodesk-asr
-/opt/repodesk-asr/bin/pip install pip==25.3
-/opt/repodesk-asr/bin/pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
-/opt/repodesk-asr/bin/pip install -r src/transcription/requirements.txt
+python3 -m venv /opt/telo-asr
+/opt/telo-asr/bin/pip install pip==25.3
+/opt/telo-asr/bin/pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+/opt/telo-asr/bin/pip install -r src/transcription/requirements.txt
 ```
 
-Set `QWEN_ASR_PYTHON=/opt/repodesk-asr/bin/python` and an absolute writable
+Set `QWEN_ASR_PYTHON=/opt/telo-asr/bin/python` and an absolute writable
 `QWEN_ASR_DIRECTORY` shared by API and worker. Restart both processes after updating
 runtime dependencies. The build copies the Python bridge beside the bundled Node
 entry points. Enable the plugin in the panel to download weights.

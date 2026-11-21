@@ -2,9 +2,9 @@ import { z } from "zod";
 
 const absolute = z.string().startsWith("/").max(2048);
 export const browserHostSettings = z.object({
-  BROWSER_HOST_ROOT: absolute.default("/var/lib/repodesk-browser"),
-  BROWSER_HOST_SOCKET: absolute.default("/run/repodesk-browser/control.sock"),
-  BROWSER_HOST_TOKEN_FILE: absolute.default("/etc/repodesk/browser-token"),
+  BROWSER_HOST_ROOT: absolute.default("/var/lib/telo-browser"),
+  BROWSER_HOST_SOCKET: absolute.default("/run/telo-browser/control.sock"),
+  BROWSER_HOST_TOKEN_FILE: absolute.default("/etc/telo/browser-token"),
   BROWSER_EXECUTABLE: absolute.default("/usr/bin/google-chrome"),
   BROWSER_HOST_SOCKET_GID: z.coerce
     .number()

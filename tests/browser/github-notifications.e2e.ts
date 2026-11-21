@@ -154,7 +154,7 @@ for (const width of [1280, 390]) {
     await expect(region).toContainText("No subscriptions yet");
     await expect(region.locator("input,select,form")).toHaveCount(0);
     await page.screenshot({
-      path: `/tmp/repodesk-notifications-empty-${width}.png`,
+      path: `/tmp/telo-notifications-empty-${width}.png`,
       fullPage: true,
     });
     await page.getByRole("button", { name: "New subscription" }).click();
@@ -179,7 +179,7 @@ for (const width of [1280, 390]) {
       editor.getByRole("checkbox", { name: "New PRs" }),
     ).not.toBeChecked();
     await page.screenshot({
-      path: `/tmp/repodesk-notifications-error-${width}.png`,
+      path: `/tmp/telo-notifications-error-${width}.png`,
       fullPage: true,
     });
     f.controls.error = "";
@@ -194,7 +194,7 @@ for (const width of [1280, 390]) {
     await page.keyboard.press("Escape");
     await expect(editor).toBeVisible();
     await page.screenshot({
-      path: `/tmp/repodesk-notifications-pending-${width}.png`,
+      path: `/tmp/telo-notifications-pending-${width}.png`,
       fullPage: true,
     });
     release();
@@ -212,14 +212,14 @@ for (const width of [1280, 390]) {
     await expect(region).toContainText("Enabled");
     await expect(region.locator("input,select,form")).toHaveCount(0);
     await page.screenshot({
-      path: `/tmp/repodesk-notifications-${width}.png`,
+      path: `/tmp/telo-notifications-${width}.png`,
       fullPage: true,
     });
     await page.evaluate(() => {
       document.documentElement.dataset.theme = "dark";
     });
     await page.screenshot({
-      path: `/tmp/repodesk-notifications-dark-${width}.png`,
+      path: `/tmp/telo-notifications-dark-${width}.png`,
       fullPage: true,
     });
     await page.getByRole("button", { name: "Edit example/workspace" }).click();
@@ -229,7 +229,7 @@ for (const width of [1280, 390]) {
     );
     await edit.getByRole("checkbox", { name: "New PRs" }).check();
     await page.screenshot({
-      path: `/tmp/repodesk-notifications-editor-${width}.png`,
+      path: `/tmp/telo-notifications-editor-${width}.png`,
       fullPage: true,
     });
     await edit.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -278,7 +278,7 @@ test("notification loading, retry and missing identity remain truthful", async (
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.screenshot({
-      path: `/tmp/repodesk-notifications-loading-${width}.png`,
+      path: `/tmp/telo-notifications-loading-${width}.png`,
       fullPage: true,
     });
   }
@@ -289,7 +289,7 @@ test("notification loading, retry and missing identity remain truthful", async (
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.screenshot({
-      path: `/tmp/repodesk-notifications-load-error-${width}.png`,
+      path: `/tmp/telo-notifications-load-error-${width}.png`,
       fullPage: true,
     });
   }
@@ -352,7 +352,7 @@ for (const width of [1280, 390]) {
     await expect(subRegion).toContainText("Automatic (Maintainer)");
     await expect(subRegion).not.toContainText("No subscriptions yet");
     await page.screenshot({
-      path: `/tmp/repodesk-notifications-maintainer-${width}.png`,
+      path: `/tmp/telo-notifications-maintainer-${width}.png`,
       fullPage: true,
     });
     // Pause an auto-notified repository directly -> creates a paused personal override.
@@ -408,7 +408,7 @@ for (const width of [1280, 390]) {
     await expect(maintainerRegion).toContainText("Disabled");
     await expect(subRegion).toContainText("No subscriptions yet");
     await page.screenshot({
-      path: `/tmp/repodesk-notifications-maintainer-disabled-${width}.png`,
+      path: `/tmp/telo-notifications-maintainer-disabled-${width}.png`,
       fullPage: true,
     });
     expect(

@@ -47,7 +47,7 @@ export function Auth({
   return (
     <div className="auth-content">
       <p className="eyebrow">
-        {claim ? "FIRST RUN / ADMIN ACCOUNT" : "REPODESK / ADMIN ACCESS"}
+        {claim ? "FIRST RUN / ADMIN ACCOUNT" : "TELO / ADMIN ACCESS"}
       </p>
       <h1>{claim ? "Make this workspace yours" : "Welcome back"}</h1>
       <p className="auth-lede">

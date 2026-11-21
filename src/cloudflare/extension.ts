@@ -12,7 +12,7 @@ export function cloudflareExtension(
   workspaceId: string,
   revision: number,
 ): BuiltinExtension {
-  const skill = readFileSync("skills/repodesk-cloudflare/SKILL.md", "utf8");
+  const skill = readFileSync("skills/telo-cloudflare/SKILL.md", "utf8");
   const id = Type.String({ pattern: "^[a-fA-F0-9]{32}$" });
   return {
     id: "cloudflare",

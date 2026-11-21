@@ -1,7 +1,7 @@
-name: repodesk-actions-runner
+name: telo-actions-runner
 x-runner: &runner
   build: .
-  image: repodesk-actions-runner:local
+  image: telo-actions-runner:local
   # Docker-in-Docker requires privilege, but has its own socket, data and network.
   privileged: true
   init: true

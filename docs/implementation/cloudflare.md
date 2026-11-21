@@ -55,7 +55,7 @@ Account-only tokens can leave domains empty, including when Zone Read is unavail
 
 Use **API token → Edit** to replace or remove credentials. A blank replacement keeps
 the current token. Replacement clears cached resource names and pauses the plugin;
-removal disables it. Removing a token from RepoDesk does not revoke it at Cloudflare.
+removal disables it. Removing a token from Telo does not revoke it at Cloudflare.
 Revoke unused tokens in the Cloudflare dashboard.
 
 ## Existing OAuth connections

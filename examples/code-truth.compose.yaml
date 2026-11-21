@@ -22,7 +22,7 @@ services:
       - code_truth_token
   code-truth:
     build: ./services/code-truth
-    image: ${CODE_TRUTH_IMAGE:-deepx-code-truth:local}
+    image: ${CODE_TRUTH_IMAGE:-telo-code-truth:local}
     init: true
     environment:
       CODE_TRUTH_TOKEN_FILE: /run/secrets/code_truth_token

@@ -6,6 +6,6 @@ if [[ ! -f "$release_dir/initial-deploy.exit" && -f "$release_dir/deploy.exit" ]
   cp "$release_dir/deploy.exit" "$release_dir/initial-deploy.exit"
 fi
 trap 'result=$?; printf "%s\n" "$result" > "$release_dir/resume.exit"; printf "%s\n" "$result" > "$release_dir/deploy.exit"' EXIT
-exec 8>/opt/repodesk/.storage.lock
+exec 8>/opt/telo/.storage.lock
 flock -n 8 || { echo 'Deployment storage lock is busy.' >&2; exit 1; }
 python3 "$release_dir/resume-update.py" "$release_dir" --resume > "$release_dir/resume-driver.log" 2>&1

@@ -1,7 +1,7 @@
 ### Create a group-link command as an authorized panel administrator.
 ### A personal Telegram identity link is not required for the workspace operator.
 POST {{origin}}/api/admin/workspaces/{{workspaceId}}/chats/link-token
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
@@ -21,11 +21,11 @@ Content-Type: application/json
 
 ### Inspect the saved group after the bot confirms "Group linked".
 GET {{origin}}/api/admin/workspaces/{{workspaceId}}/chats
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Unlink only the selected group; other groups in this workspace stay connected.
 POST {{origin}}/api/admin/workspaces/{{workspaceId}}/chats/{{groupId}}/action
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json

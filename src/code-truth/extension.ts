@@ -22,7 +22,7 @@ export async function codeTruthExtension(
   ) => Promise<{ client: CodeTruthClient; targets: CodeTarget[] }>,
   reportFailure?: (runId: string, error: unknown) => void,
 ): Promise<BuiltinExtension> {
-  const skill = await readFile("skills/repodesk-code-truth/SKILL.md", "utf8");
+  const skill = await readFile("skills/telo-code-truth/SKILL.md", "utf8");
   return {
     id: "code-truth",
     version: "3",

@@ -44,7 +44,7 @@ import { decrypt } from "../../src/setup/credentials.ts";
 import { grantGitHubAccess, workspace } from "../fixtures.ts";
 
 test("AntigravityAuth starts Google OAuth, completes with pasted code, seals bundle, and isolates workspaces", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-agy-auth-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-agy-auth-"));
   try {
     const executable = join(dir, "fake-agy");
     await writeFile(
@@ -135,7 +135,7 @@ rl.once("line", (line) => {
 });
 
 test("AntigravityAuth generation fencing protects token refresh and invalidation across restarts", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-agy-fence-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-agy-fence-"));
   const settings = runnerSettings.parse({
     CODEX_RUNNER_STATE: dir,
     CODEX_RUNNER_TOKEN: "management-token".repeat(3),
@@ -144,7 +144,7 @@ test("AntigravityAuth generation fencing protects token refresh and invalidation
   const ws = randomUUID();
   const makeBundle = (token: string) =>
     JSON.stringify({
-      format: "repodesk-antigravity-files-v1",
+      format: "telo-antigravity-files-v1",
       files: {
         ".gemini/antigravity-cli/oauth_tokens.json":
           Buffer.from(token).toString("base64"),
@@ -183,7 +183,7 @@ test("AntigravityAuth generation fencing protects token refresh and invalidation
 });
 
 test("packAntigravityAuthBundle ignores logs, databases, and settings.json", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-agy-pack-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-agy-pack-"));
   try {
     const cliDir = join(dir, ".gemini", "antigravity-cli");
     await mkdir(join(cliDir, "log"), { recursive: true });
@@ -203,7 +203,7 @@ test("packAntigravityAuthBundle ignores logs, databases, and settings.json", asy
 });
 
 test("runAntigravityConversation parses stream-json, records usage and transcripts, and runs validation correction", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-agy-conv-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-agy-conv-"));
   try {
     const executable = join(dir, "fake-agy");
     await writeFile(
@@ -324,7 +324,7 @@ rl.on("line", (line) => {
 });
 
 test("runAntigravityConversation classifies auth failures as CodexAuthError", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-agy-autherr-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-agy-autherr-"));
   try {
     const executable = join(dir, "fake-agy");
     await writeFile(
@@ -492,7 +492,7 @@ test("saveAntigravity, codingDestination, checkCodingPayload, and AntigravityLoc
 });
 
 test("runnerApp & LocalRunnerClient proxy Gemini API keys and expose antigravity-auth endpoints", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-agy-runner-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-agy-runner-"));
   const token = "runner-secret-token-".repeat(2);
   try {
     const fakeEngine: TaskRuntime = {
@@ -518,7 +518,7 @@ test("runnerApp & LocalRunnerClient proxy Gemini API keys and expose antigravity
     await supervisor.initialize();
     const ws = randomUUID();
     const bundle = JSON.stringify({
-      format: "repodesk-antigravity-files-v1",
+      format: "telo-antigravity-files-v1",
       files: {
         ".gemini/antigravity-cli/oauth_tokens.json":
           Buffer.from('{"token":"ok"}').toString("base64"),

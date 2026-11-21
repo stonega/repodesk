@@ -24,7 +24,7 @@ import { githubFixtureConfig } from "../github-fixture.ts";
 const url = process.env.TEST_DATABASE_URL;
 (url ? describe : describe.skip)("GitHub repository metadata refresh", () => {
   const root = database(url ?? "postgres://unused@localhost/unused");
-  const name = `repodesk_repo_sync_${randomUUID().replaceAll("-", "")}`;
+  const name = `telo_repo_sync_${randomUUID().replaceAll("-", "")}`;
   let store: Store;
   let admin: Admin;
   let credentials: { raw: string; csrf: string };
@@ -329,7 +329,7 @@ const url = process.env.TEST_DATABASE_URL;
       new GitHubService(store, key, origin, provider),
     );
     const base = `/api/admin/workspaces/${id}`;
-    const headers = { cookie: `deepx_session=${credentials.raw}` };
+    const headers = { cookie: `telo_session=${credentials.raw}` };
     const coding = await app.request(`${base}/plugins/coding`, { headers });
     expect(coding.status).toBe(200);
     expect((await coding.json()).repositories).toEqual(state.repositories);
@@ -428,7 +428,7 @@ const url = process.env.TEST_DATABASE_URL;
     );
     const base = `/api/admin/workspaces/${id}/github`;
     const headers = {
-      cookie: `deepx_session=${credentials.raw}`,
+      cookie: `telo_session=${credentials.raw}`,
       origin,
       "x-csrf-token": credentials.csrf,
       "content-type": "application/json",
@@ -566,7 +566,7 @@ const url = process.env.TEST_DATABASE_URL;
     const setup = new SetupService(store, key, origin);
     await store.pool.query(
       "UPDATE deployment SET data=jsonb_set(data, '{bot}', $1::jsonb)",
-      [JSON.stringify({ id: "900", username: "repodesk_bot" })],
+      [JSON.stringify({ id: "900", username: "telo_bot" })],
     );
     await store.change(id, (w) => {
       w.members = [

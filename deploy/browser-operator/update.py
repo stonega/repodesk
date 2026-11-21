@@ -12,7 +12,7 @@ from update_runtime import command_json, start_unchanged_writers, preserve_host_
 
 os.umask(0o077)
 bundle = Path(sys.argv[1]).resolve()
-root = Path('/opt/repodesk')
+root = Path('/opt/telo')
 source = bundle / 'source'
 meta = json.loads((bundle / 'source-metadata.json').read_text())
 previous = root / 'releases' / meta['previous_release_id']
@@ -37,7 +37,7 @@ def run(args, log, **kwargs):
 
 
 def compose(directory):
-    return ['docker', 'compose', '--project-directory', str(root), '-p', 'repodesk',
+    return ['docker', 'compose', '--project-directory', str(root), '-p', 'telo',
             '--env-file', str(root / '.env'), '--env-file', str(directory / 'release.env'),
             '--env-file', str(directory / 'codex.env'), '-f', str(directory / 'compose.yaml'),
             '-f', str(directory / 'codex-compose.yaml')]
@@ -46,7 +46,7 @@ def compose(directory):
 def wait_socket():
     for _ in range(120):
         try:
-            value = Path('/run/repodesk-browser/control.sock').stat()
+            value = Path('/run/telo-browser/control.sock').stat()
             if stat.S_ISSOCK(value.st_mode) and stat.S_IMODE(value.st_mode) == 0o660 and value.st_gid == 1000:
                 return
         except FileNotFoundError:
@@ -57,7 +57,7 @@ def wait_socket():
 
 def browser_checkpoint():
     result = json.loads(subprocess.check_output(
-        ['docker', 'exec', '-i', 'repodesk-app-1', 'node', '--input-type=module'],
+        ['docker', 'exec', '-i', 'telo-app-1', 'node', '--input-type=module'],
         input=(bundle / 'browser-checkpoint.mjs').read_bytes()))
     return result
 
@@ -90,9 +90,9 @@ try:
         source.mkdir(mode=0o700)
         run(['tar', '-xzf', str(bundle / 'source.tar.gz'), '-C', str(source)], 'source-extract.log')
         images = {}
-        for name, repository, target in [('app', 'repodesk', 'app'),
-                                          ('job', 'repodesk-codex-job', 'codex-job'),
-                                          ('supervisor', 'repodesk-codex-supervisor', 'codex-supervisor')]:
+        for name, repository, target in [('app', 'telo', 'app'),
+                                          ('job', 'telo-codex-job', 'codex-job'),
+                                          ('supervisor', 'telo-codex-supervisor', 'codex-supervisor')]:
             stage('build_' + name)
             assert shutil.disk_usage(root).free > 6 * 1024**3, 'disk_headroom'
             tag = repository + ':release-' + meta['source_commit']
@@ -102,7 +102,7 @@ try:
         # Code Truth's source subtree is unchanged from the existing deployment.
         assert meta['code_truth_tree'] == meta['previous_code_truth_tree']
         old_truth = json.loads((previous / 'build-images.json').read_text())['code_truth']
-        truth_tag = 'repodesk-code-truth:release-' + meta['source_commit']
+        truth_tag = 'telo-code-truth:release-' + meta['source_commit']
         run(['docker', 'tag', old_truth['id'], truth_tag], 'code-truth-retag.log')
         images['code_truth'] = {'tag': truth_tag, 'id': old_truth['id']}
         (bundle / 'build-images.json').write_text(json.dumps(images, indent=2) + '\n')
@@ -115,7 +115,7 @@ try:
         assert {k.removeprefix('image-app/dist/'): v for k, v in actual.items()
                 if k.startswith('image-app/dist/')} == json.loads((bundle / 'expected-dist.json').read_text())
         stage('package_native_browser_host')
-        package_tag = 'repodesk-browser-package:release-' + meta['source_commit']
+        package_tag = 'telo-browser-package:release-' + meta['source_commit']
         run(['docker', 'build', '--platform', 'linux/amd64', '--target', 'build', '-f',
              str(source / 'deploy/browser/smoke.Dockerfile'), '-t', package_tag, str(source)], 'host-package-build.log')
         cid = output(['docker', 'create', package_tag, 'true'])
@@ -125,12 +125,12 @@ try:
             run(['docker', 'rm', cid], 'host-package-cleanup.log')
         assert json.loads((bundle / 'host-package/manifest.json').read_text()) == json.loads((bundle / 'expected-host-manifest.json').read_text())
         stage('native_codex_dynamic_tool_proof')
-        proof = 'repodesk-browser-native-proof-' + meta['release_id']
+        proof = 'telo-browser-native-proof-' + meta['release_id']
         run(['docker', 'create', '--name', proof, '--network', 'none', '-e', 'CODEX_BROWSER_PROOF=1',
              '-e', 'CODEX_PROTOCOL_BINARY=/usr/local/bin/codex', '--entrypoint', 'bun',
-             images['job']['id'], '/opt/deepx/browser-proof.js'], 'native-codex-create.log')
+             images['job']['id'], '/opt/telo/browser-proof.js'], 'native-codex-create.log')
         try:
-            run(['docker', 'cp', str(bundle / 'browser-codex-proof.mjs'), proof + ':/opt/deepx/browser-proof.js'], 'native-codex-copy.log')
+            run(['docker', 'cp', str(bundle / 'browser-codex-proof.mjs'), proof + ':/opt/telo/browser-proof.js'], 'native-codex-copy.log')
             run(['docker', 'start', '-a', proof], 'native-codex-proof.log')
             assert output(['docker', 'inspect', '--format', '{{.State.ExitCode}}', proof]) == '0'
         finally:
@@ -142,7 +142,7 @@ try:
          '--volume', str(root) + ':/deployment', '--volume', str(bundle) + ':/release',
          '--env', 'CODEX_SUPERVISOR_IMAGE=' + images['supervisor']['id'],
          '--env', 'CODEX_RUNNER_IMAGE=' + images['job']['id'], '--entrypoint', 'node',
-         images['app']['id'], '/release/codex-release-config.mjs', '/deployment', '/release', 'repodesk'], 'codex-config-preflight.log')
+         images['app']['id'], '/release/codex-release-config.mjs', '/deployment', '/release', 'telo'], 'codex-config-preflight.log')
     run(compose(bundle) + ['config', '--quiet'], 'production-compose-validation.log')
     for service in ['migrate', 'app', 'worker']:
         run(compose(bundle) + ['run', '--rm', '--no-deps', '--pull', 'never', '-T', '--entrypoint', 'node',
@@ -172,27 +172,27 @@ try:
     assert sum(checkpoint.values()) == 0, 'browser_checkpoint_changed'
     stage('install_native_browser_update')
     host_backup = bundle / 'previous-host-package'
-    preserve_host_backup(Path('/opt/repodesk-browser'), host_backup)
+    preserve_host_backup(Path('/opt/telo-browser'), host_backup)
     # Existing Node, Chrome, settings, host key, profiles and socket directory remain.
-    runtime = '/opt/repodesk-browser/runtime/bin'
+    runtime = '/opt/telo-browser/runtime/bin'
     env = os.environ.copy()
     env.update(PATH=runtime + ':' + env['PATH'], BROWSER_EXECUTABLE='/usr/bin/google-chrome')
     assert Path(runtime + '/node').is_file()
     run([runtime + '/node', '--version'], 'host-node-version.log')
     run(['/usr/bin/google-chrome', '--version'], 'chrome-version.log')
-    socket_inode = Path('/run/repodesk-browser').stat().st_ino
-    if json.loads(Path('/opt/repodesk-browser/manifest.json').read_text()) != json.loads((bundle / 'expected-host-manifest.json').read_text()):
+    socket_inode = Path('/run/telo-browser').stat().st_ino
+    if json.loads(Path('/opt/telo-browser/manifest.json').read_text()) != json.loads((bundle / 'expected-host-manifest.json').read_text()):
         run(['bash', str(bundle / 'host-package/install.sh'), str(bundle / 'host-package'), str(root / 'secrets')],
             'host-install.log', env=env)
     else:
         stage('reuse_verified_native_browser_host')
     wait_socket()
-    assert Path('/run/repodesk-browser').stat().st_ino == socket_inode
+    assert Path('/run/telo-browser').stat().st_ino == socket_inode
     stage('headed_browser_application_uid_probe')
     os.chmod(bundle / 'host-probe.mjs', 0o644)
     native = command_json(['docker', 'run', '--rm', '--network', 'host', '--group-add', '1000',
          '--env', 'BROWSER_PROBE_ROUTINE=true',
-         '--volume', '/run/repodesk-browser:/run/repodesk-browser:ro',
+         '--volume', '/run/telo-browser:/run/telo-browser:ro',
          '--volume', str(root / 'secrets/browser-token') + ':/run/secrets/browser_token:ro',
          '--volume', str(bundle / 'host-probe.mjs') + ':/app/host-probe.mjs:ro',
          '--entrypoint', 'node', images['app']['id'], '/app/host-probe.mjs'], bundle / 'native-host-verification.stderr')
@@ -211,10 +211,10 @@ try:
     shutil.copyfile(previous / 'compose.yaml', bundle / 'compose.yaml')
     stage('guarded_backup_migration_and_cutover')
     cutover = True
-    run(['bash', str(bundle / 'deploy-vps.sh'), str(root), meta['release_id'], 'repodesk', '--local-images'], 'cutover.log')
+    run(['bash', str(bundle / 'deploy-vps.sh'), str(root), meta['release_id'], 'telo', '--local-images'], 'cutover.log')
     stage('verify_live_images_assets_and_preserved_state')
     run(['python3', str(bundle / 'verify-deployment.py'), str(bundle)], 'production-verification.log')
-    for name in ['repodesk-app-1', 'repodesk-worker-1']:
+    for name in ['telo-app-1', 'telo-worker-1']:
         result = command_json(['docker', 'exec', '-i', name, 'node', '--input-type=module'], bundle / (name + '-browser-proof.stderr'),
                               input=(bundle / 'host-probe.mjs').read_bytes())
         (bundle / (name + '-browser-proof.json')).write_text(json.dumps(result) + '\n')

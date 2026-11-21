@@ -83,7 +83,7 @@ async function fixture(page: Page, empty = false) {
 async function screenshot(page: Page, width: number, state: string) {
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({
-    path: `/tmp/repodesk-code-truth-${width}-${state}.png`,
+    path: `/tmp/telo-code-truth-${width}-${state}.png`,
     fullPage: true,
   });
   expect(
@@ -99,7 +99,7 @@ for (const width of [1280, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.addInitScript(
-      (theme) => localStorage.setItem("repodesk.theme", theme),
+      (theme) => localStorage.setItem("telo.theme", theme),
       width === 390 ? "dark" : "light",
     );
     const state = await fixture(page);

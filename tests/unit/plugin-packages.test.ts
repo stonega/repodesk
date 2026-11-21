@@ -26,11 +26,11 @@ import {
 } from "../../src/plugins/manifest.ts";
 
 const raw = JSON.parse(
-  await readFile("examples/plugins/word-count/repodesk.plugin.json", "utf8"),
+  await readFile("examples/plugins/word-count/telo.plugin.json", "utf8"),
 );
 const githubRaw = JSON.parse(
   await readFile(
-    "examples/plugins/repository-insights/repodesk.plugin.json",
+    "examples/plugins/repository-insights/telo.plugin.json",
     "utf8",
   ),
 );

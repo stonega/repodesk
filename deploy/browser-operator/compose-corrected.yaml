@@ -1,12 +1,12 @@
 x-runtime:
   build: .
-  image: ${APP_IMAGE:-deepx-agent:local}
+  image: ${APP_IMAGE:-telo-agent:local}
   init: true
   environment:
     NODE_ENV: production
     PORT: "3000"
-    DATABASE_URL: postgres://deepx:${POSTGRES_PASSWORD:?Set
-      POSTGRES_PASSWORD}@postgres:5432/deepx
+    DATABASE_URL: postgres://telo:${POSTGRES_PASSWORD:?Set
+      POSTGRES_PASSWORD}@postgres:5432/telo
     TELEGRAM_TRANSPORT: ${TELEGRAM_TRANSPORT:-webhook}
     RUN_TIMEOUT_SECONDS: ${RUN_TIMEOUT_SECONDS:-300}
     PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:3000}
@@ -19,28 +19,28 @@ services:
   postgres:
     image: postgres:17-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
     environment:
-      POSTGRES_USER: deepx
-      POSTGRES_DB: deepx
+      POSTGRES_USER: telo
+      POSTGRES_DB: telo
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test:
         - CMD-SHELL
-        - pg_isready -U deepx -d deepx
+        - pg_isready -U telo -d telo
       interval: 5s
       timeout: 3s
       retries: 10
     restart: unless-stopped
   migrate:
     build: .
-    image: ${APP_IMAGE:-deepx-agent:local}
+    image: ${APP_IMAGE:-telo-agent:local}
     init: true
     environment:
       NODE_ENV: production
       PORT: "3000"
-      DATABASE_URL: postgres://deepx:${POSTGRES_PASSWORD:?Set
-        POSTGRES_PASSWORD}@postgres:5432/deepx
+      DATABASE_URL: postgres://telo:${POSTGRES_PASSWORD:?Set
+        POSTGRES_PASSWORD}@postgres:5432/telo
       TELEGRAM_TRANSPORT: ${TELEGRAM_TRANSPORT:-webhook}
       RUN_TIMEOUT_SECONDS: ${RUN_TIMEOUT_SECONDS:-300}
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:3000}
@@ -59,23 +59,23 @@ services:
         condition: service_healthy
   app:
     build: .
-    image: ${APP_IMAGE:-deepx-agent:local}
+    image: ${APP_IMAGE:-telo-agent:local}
     init: true
     environment:
       NODE_ENV: production
       PORT: "3000"
-      DATABASE_URL: postgres://deepx:${POSTGRES_PASSWORD:?Set
-        POSTGRES_PASSWORD}@postgres:5432/deepx
+      DATABASE_URL: postgres://telo:${POSTGRES_PASSWORD:?Set
+        POSTGRES_PASSWORD}@postgres:5432/telo
       TELEGRAM_TRANSPORT: ${TELEGRAM_TRANSPORT:-webhook}
       RUN_TIMEOUT_SECONDS: ${RUN_TIMEOUT_SECONDS:-300}
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:3000}
       ENCRYPTION_KEY_FILE: /run/secrets/encryption_key
-      UPDATES_GITHUB_REPOSITORY: ${UPDATES_GITHUB_REPOSITORY:-stonega/repodesk}
+      UPDATES_GITHUB_REPOSITORY: ${UPDATES_GITHUB_REPOSITORY:-stonega/telo}
       UPDATES_GITHUB_TOKEN: ${UPDATES_GITHUB_TOKEN:-}
-      UPDATES_DIRECTORY: ${UPDATES_DIRECTORY:-/var/lib/repodesk-updates}
+      UPDATES_DIRECTORY: ${UPDATES_DIRECTORY:-/var/lib/telo-updates}
       CODE_TRUTH_URL: http://code-truth:3010
       CODE_TRUTH_TOKEN_FILE: /run/code-truth/token
-      BROWSER_HOST_SOCKET: /run/repodesk-browser/control.sock
+      BROWSER_HOST_SOCKET: /run/telo-browser/control.sock
       BROWSER_HOST_TOKEN_FILE: /run/secrets/browser_token
       BROWSER_CODEX_ORIGIN: http://app:3000
     secrets:
@@ -84,10 +84,10 @@ services:
     restart: unless-stopped
     stop_grace_period: 30s
     volumes:
-      - transcription_models:/var/lib/repodesk-models
-      - ./updates:/var/lib/repodesk-updates
+      - transcription_models:/var/lib/telo-models
+      - ./updates:/var/lib/telo-updates
       - code_truth_auth:/run/code-truth:ro
-      - /run/repodesk-browser:/run/repodesk-browser:ro
+      - /run/telo-browser:/run/telo-browser:ro
     healthcheck:
       test:
         - CMD
@@ -109,20 +109,20 @@ services:
       - "1000"
   worker:
     build: .
-    image: ${APP_IMAGE:-deepx-agent:local}
+    image: ${APP_IMAGE:-telo-agent:local}
     init: true
     environment:
       NODE_ENV: production
       PORT: "3000"
-      DATABASE_URL: postgres://deepx:${POSTGRES_PASSWORD:?Set
-        POSTGRES_PASSWORD}@postgres:5432/deepx
+      DATABASE_URL: postgres://telo:${POSTGRES_PASSWORD:?Set
+        POSTGRES_PASSWORD}@postgres:5432/telo
       TELEGRAM_TRANSPORT: ${TELEGRAM_TRANSPORT:-webhook}
       RUN_TIMEOUT_SECONDS: ${RUN_TIMEOUT_SECONDS:-300}
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:3000}
       ENCRYPTION_KEY_FILE: /run/secrets/encryption_key
       CODE_TRUTH_URL: http://code-truth:3010
       CODE_TRUTH_TOKEN_FILE: /run/code-truth/token
-      BROWSER_HOST_SOCKET: /run/repodesk-browser/control.sock
+      BROWSER_HOST_SOCKET: /run/telo-browser/control.sock
       BROWSER_HOST_TOKEN_FILE: /run/secrets/browser_token
       BROWSER_CODEX_ORIGIN: http://app:3000
     secrets:
@@ -134,9 +134,9 @@ services:
       - node
       - dist/worker.js
     volumes:
-      - transcription_models:/var/lib/repodesk-models
+      - transcription_models:/var/lib/telo-models
       - code_truth_auth:/run/code-truth:ro
-      - /run/repodesk-browser:/run/repodesk-browser:ro
+      - /run/telo-browser:/run/telo-browser:ro
     healthcheck:
       test:
         - CMD
@@ -159,7 +159,7 @@ services:
       - "1000"
   code-truth-token:
     build: .
-    image: ${APP_IMAGE:-deepx-agent:local}
+    image: ${APP_IMAGE:-telo-agent:local}
     user: 0:0
     network_mode: none
     read_only: true
@@ -177,7 +177,7 @@ services:
       - code_truth_auth:/run/code-truth
   code-truth:
     build: ./services/code-truth
-    image: ${CODE_TRUTH_IMAGE:-deepx-code-truth:local}
+    image: ${CODE_TRUTH_IMAGE:-telo-code-truth:local}
     init: true
     environment:
       CODE_TRUTH_TOKEN_FILE: /run/code-truth/token

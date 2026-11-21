@@ -75,7 +75,7 @@ export class ReleaseUpdates {
   private checking?: Promise<void>;
   constructor(
     private store: Store,
-    private repository = "stonega/repodesk",
+    private repository = "stonega/telo",
     private token?: string,
     private currentVersion = installedVersion,
     private transport: ReleaseTransport = fetch,
@@ -92,7 +92,7 @@ export class ReleaseUpdates {
           headers: {
             accept: "application/vnd.github+json",
             "content-type": "application/json",
-            "user-agent": "RepoDesk-updates",
+            "user-agent": "Telo-updates",
             "x-github-api-version": "2026-03-10",
             ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
           },

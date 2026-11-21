@@ -1,6 +1,6 @@
 # Chat requests
 
-RepoDesk uses ordinary conversation. The bot does not publish a slash-command menu,
+Telo uses ordinary conversation. The bot does not publish a slash-command menu,
 and you do not need to memorize commands. Use your own wording and language; these
 are examples. In groups, mention the bot or reply to it.
 

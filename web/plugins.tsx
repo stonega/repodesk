@@ -41,7 +41,7 @@ type MarketEntry = {
 };
 
 // Selected from Pi's package catalog, ordered by monthly downloads on 2026-09-29.
-// These are discovery links, not RepoDesk compatibility or security endorsements.
+// These are discovery links, not Telo compatibility or security endorsements.
 const market: MarketEntry[] = [
   {
     id: "pi-mcp-adapter",
@@ -308,7 +308,7 @@ export function Plugins({
     <>
       {view === "catalog" ? (
         <header className="page-heading">
-          <p className="eyebrow">REPODESK / WORKSPACE</p>
+          <p className="eyebrow">TELO / WORKSPACE</p>
           <h1>{heading}</h1>
           <p className="muted">
             Manage installed extensions for this workspace.
@@ -757,7 +757,7 @@ export function Plugins({
                 >
                   <h2>Runtime compatibility</h2>
                   <p>
-                    RepoDesk’s headless worker supports registered tools and
+                    Telo’s headless worker supports registered tools and
                     selected lifecycle hooks. Terminal UI, commands and provider
                     changes are unavailable.
                   </p>
@@ -799,7 +799,7 @@ export function Plugins({
                 <dd>Pi package catalog</dd>
               </div>
               <div>
-                <dt>RepoDesk status</dt>
+                <dt>Telo status</dt>
                 <dd>Not installed or compatibility checked</dd>
               </div>
             </dl>
@@ -814,10 +814,10 @@ export function Plugins({
               <Link to={`${path()}&add=1`}>Register a reviewed local file</Link>
             </div>
             <p className="muted">
-              RepoDesk does not install Pi packages from this page. To use a
+              Telo does not install Pi packages from this page. To use a
               compatible extension, review its code, install its entry file on
               the API and worker, then register the local file in this
-              workspace. The worker supports only RepoDesk’s documented headless
+              workspace. The worker supports only Telo’s documented headless
               extension subset.
             </p>
           </section>

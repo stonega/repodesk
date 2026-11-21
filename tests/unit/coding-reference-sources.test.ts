@@ -24,7 +24,7 @@ afterEach(async () => {
 });
 const source: ReferenceSource = {
   repositoryId: 2,
-  repository: "stonega/repodesk",
+  repository: "stonega/telo",
   installationId: 501,
   connectionRevision: 1,
   repositoryRevision: 0,
@@ -40,13 +40,13 @@ function fixture() {
     repositories: [
       {
         id: 1,
-        full_name: "stonega/repodesk-landing",
+        full_name: "stonega/telo-landing",
         default_branch: "main",
         private: true,
       },
       {
         id: 2,
-        full_name: "stonega/repodesk",
+        full_name: "stonega/telo",
         default_branch: "main",
         private: true,
       },
@@ -63,7 +63,7 @@ function fixture() {
     sourceId: "original",
     payload: {
       repositoryId: 1,
-      repository: "stonega/repodesk-landing",
+      repository: "stonega/telo-landing",
       installationId: 501,
       githubRevision: 1,
       configRevision: 1,
@@ -111,22 +111,22 @@ test("the reported short source name resolves independently of the longer modifi
       f.w,
       f.task,
       f.inputs(
-        "Copy/refresh docs from another repo (like repodesk) into repodesk-landing? yes",
+        "Copy/refresh docs from another repo (like telo) into telo-landing? yes",
       ),
     ).map((r) => r.id),
   ).toEqual([2]);
   expect(
-    requestedReferences(f.w, f.task, f.inputs("Fix stonega/repodesk-landing")),
+    requestedReferences(f.w, f.task, f.inputs("Fix stonega/telo-landing")),
   ).toEqual([]);
   expect(
-    requestedReferences(f.w, f.task, f.inputs("Fix repodesk-landing")),
+    requestedReferences(f.w, f.task, f.inputs("Fix telo-landing")),
   ).toEqual([]);
   expect(
     requestedReferences(
       f.w,
       f.task,
       f.inputs(
-        "Use https://github.com/stonega/repodesk/blob/main/docs/user/README.md",
+        "Use https://github.com/stonega/telo/blob/main/docs/user/README.md",
       ),
     ),
   ).toHaveLength(1);
@@ -134,19 +134,17 @@ test("the reported short source name resolves independently of the longer modifi
     requestedReferences(
       f.w,
       f.task,
-      f.inputs("Use https://github.com.evil/stonega/repodesk"),
+      f.inputs("Use https://github.com.evil/stonega/telo"),
     ),
   ).toEqual([]);
   f.w.github?.repositories.push({
     id: 3,
-    full_name: "another/repodesk",
+    full_name: "another/telo",
     default_branch: "main",
   });
-  expect(requestedReferences(f.w, f.task, f.inputs("Read repodesk"))).toEqual(
-    [],
-  );
+  expect(requestedReferences(f.w, f.task, f.inputs("Read telo"))).toEqual([]);
   expect(
-    requestedReferences(f.w, f.task, f.inputs("Read stonega/repodesk")),
+    requestedReferences(f.w, f.task, f.inputs("Read stonega/telo")),
   ).toHaveLength(1);
 });
 
@@ -160,9 +158,9 @@ test("reference access requires workspace selection and current read access for 
   actor.github.repositories = actor.github.repositories.filter(
     (r) => r.id !== 2,
   );
-  expect(() =>
-    requestedReferences(f.w, f.task, f.inputs("Read repodesk")),
-  ).toThrow("github_user_access_denied");
+  expect(() => requestedReferences(f.w, f.task, f.inputs("Read telo"))).toThrow(
+    "github_user_access_denied",
+  );
   const g = fixture();
   g.task.referenceSources = [source];
   checkReferenceSources(g.w, g.task, ["101"]);
@@ -179,7 +177,7 @@ test("handoff exposes the actual pinned reference path and routes environment bl
     revision: 1,
     mode: "intake",
     context: "",
-    inputs: f.inputs("Copy repodesk docs"),
+    inputs: f.inputs("Copy telo docs"),
     referenceSources: [source],
   });
   expect(prompt).toContain('"path":"/task/references/2"');
@@ -191,7 +189,7 @@ test("handoff exposes the actual pinned reference path and routes environment bl
 });
 
 test("reference preparation checks out the exact pin despite a newer branch tip, and verification rejects changes", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "repodesk-reference-"));
+  const directory = await mkdtemp(join(tmpdir(), "telo-reference-"));
   directories.push(directory);
   const origin = join(directory, "origin"),
     root = join(directory, "references");
@@ -230,7 +228,7 @@ test("reference preparation checks out the exact pin despite a newer branch tip,
     return jobCommand(
       binary,
       args.map((arg) =>
-        arg === "https://github.com/stonega/repodesk.git" ? origin : arg,
+        arg === "https://github.com/stonega/telo.git" ? origin : arg,
       ),
       options,
     );

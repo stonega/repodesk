@@ -33,8 +33,8 @@ checked 2026-11-13.
 1. During first-run setup, click **Connect GitHub**. Setup creates a private,
    personally owned App automatically when needed. To choose an organization
    owner, select a workspace and use **Plugins → GitHub → Create GitHub App**.
-2. Setup suggests `repodesk` as the App name and uses personal ownership. In
-   Plugins, the editable App name also defaults to `repodesk`. GitHub lets you
+2. Setup suggests `telo` as the App name and uses personal ownership. In
+   Plugins, the editable App name also defaults to `telo`. GitHub lets you
    change the suggested name if it is already taken. **Personal account** is
    selected initially; choose
    **Organization** and enter its login when the organization should own the App.
@@ -230,9 +230,9 @@ No migration, new dependency or App permission change is required. See the
 ## Security and API
 
 POST `/api/admin/workspaces/:id/github/register` accepts
-`{owner: "organization", organization: "example", name: "repodesk", public: false}`
-or `{owner: "personal", name: "repodesk", public: false}`. Omitting `name` uses
-`repodesk`. It returns only the public manifest and a fixed GitHub form destination.
+`{owner: "organization", organization: "example", name: "telo", public: false}`
+or `{owner: "personal", name: "telo", public: false}`. Omitting `name` uses
+`telo`. It returns only the public manifest and a fixed GitHub form destination.
 The browser POSTs `manifest`
 as a JSON string. GET `/api/admin/github/app/callback` exchanges the temporary code
 server-side, then redirects to the originating workspace without secrets or codes.
@@ -279,7 +279,7 @@ The guided creation flow uses [GitHub App Manifests](https://docs.github.com/en/
 Reference inspected: Coolify commit `89e8506023af83016e3ccd64dc1327f51a7f8674`,
 [manifest form](https://github.com/coollabsio/coolify/blob/89e8506023af83016e3ccd64dc1327f51a7f8674/resources/views/livewire/source/github/change.blade.php#L345)
 and [server-side conversion](https://github.com/coollabsio/coolify/blob/89e8506023af83016e3ccd64dc1327f51a7f8674/app/Http/Controllers/Webhook/Github.php#L509).
-RepoDesk requests Contents, Issues and Pull requests write permissions plus Metadata
+Telo requests Contents, Issues and Pull requests write permissions plus Metadata
 and organization Members read, and keeps its own session/tenant checks. Installation tokens remain scoped to
 the selected repository and operation; Code Truth receives only source-read tokens.
 
@@ -292,20 +292,20 @@ the GitHub App administrator/installation. Registration accepts these optional
 read scopes without silently widening the default manifest. Existing PR grants
 do not authorize a release. See [repository-task effects](repository-tasks.md).
 
-Changing RepoDesk's new-App manifest does not update Apps already registered on
+Changing Telo's new-App manifest does not update Apps already registered on
 GitHub. For an existing App, open its **Permissions & events → Repository
 permissions** and set Contents and Pull requests to **Read and write**, retaining
 Issues **Read and write** and mandatory Metadata **Read-only**. Save changes.
 At [Installed GitHub Apps](https://github.com/settings/installations), open
 **Review request** for the matching installation and choose **Accept new
 permissions**. Organization owners may need to approve organization installations.
-The new permissions apply only after installation approval; reconnecting RepoDesk
+The new permissions apply only after installation approval; reconnecting Telo
 does not grant them. See [GitHub's permission-update guidance](https://docs.github.com/en/apps/maintaining-github-apps/modifying-a-github-app-registration#changing-the-permissions-of-a-github-app).
 
 Keep the existing repository selection unless intentionally changing it. An
 installation configured for **All repositories** receives the accepted write
 permissions for all repositories it can access; application task checks still
-restrict RepoDesk's operations to selected workspace repositories.
+restrict Telo's operations to selected workspace repositories.
 
 Validate both a Contents-read/Pull-requests-read token (Direct preparation) and a
 Contents-write/Pull-requests-write token (publication) scoped to the configured
@@ -386,7 +386,7 @@ Patch excerpts are limited to 12,000 characters per file, review/comment bodies
 and comment hunks to 4,000 each, and excerpt text to 40,000 per response.
 Missing patches, truncation and additional pages are explicit. Follow `nextPage`
 when present; report incomplete coverage when it is absent but `hasMore` remains
-true. GitHub returns at most 3,000 changed files; RepoDesk caps each resource at
+true. GitHub returns at most 3,000 changed files; Telo caps each resource at
 150 pages. `complete` means the end of that resource was reached without missing
 or locally truncated text on this page; it does not certify earlier pages or
 upstream patch completeness. No arbitrary URL, checkout, CI read or mutation is
@@ -399,7 +399,7 @@ and [inline comments](https://docs.github.com/en/rest/pulls/comments#list-review
 
 ## Merge or close a PR from Telegram
 
-The GitHub tools and bundled [`repodesk-github` skill](../../skills/repodesk-github/SKILL.md)
+The GitHub tools and bundled [`telo-github` skill](../../skills/telo-github/SKILL.md)
 load by default whenever the workspace has a connected installation and selected
 repositories. This covers existing workspaces as well as new ones; no custom plugin
 manifest, Code Truth service, coding enablement or manual skill activation is needed
@@ -476,7 +476,7 @@ while the directory is loading or unavailable. Saving resolves the username thro
 `GET /users/{username}`, storing GitHub's canonical login and stable numeric ID.
 Leading `@` and surrounding whitespace are accepted. Invalid or unavailable usernames
 and organization names leave the draft open. This public profile lookup requires a
-configured GitHub App in RepoDesk but no organization Members grant or connected
+configured GitHub App in Telo but no organization Members grant or connected
 workspace installation. It does not change verification or repository permissions.
 See GitHub's [user API](https://docs.github.com/en/rest/users/users#get-a-user).
 
@@ -513,13 +513,13 @@ An active workspace member asks “Connect my GitHub account” in the bot's pri
 App authorization link with PKCE. After GitHub returns, the member must confirm the
 identified GitHub account using a button in that same Telegram account's private
 chat. Browser authorization alone never links an account. Group commands cannot
-produce authorization links. With multiple workspaces, ask to switch to the intended workspace first. No panel login or extra RepoDesk account is needed.
+produce authorization links. With multiple workspaces, ask to switch to the intended workspace first. No panel login or extra Telo account is needed.
 
 The link records GitHub's stable numeric user ID, login and repository permission
 snapshot on the workspace member. Members & access displays these details.
 One GitHub identity can belong to only one Telegram member within a workspace;
 links and permissions are independent between workspaces. GitHub admin/maintain
-access never promotes a RepoDesk member to workspace administrator, bypasses the
+access never promotes a Telo member to workspace administrator, bypasses the
 membership or grants an admin role.
 
 Permission synchronization uses GitHub's
@@ -573,7 +573,7 @@ connect accounts, send live Telegram messages or deploy this change.
 GitHub's [manifest fields](https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest)
 do not include a logo. GitHub assigns a default badge, which the owner can
 [customize in GitHub settings](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/creating-a-custom-badge-for-your-github-app)
-after registration. This customization is optional. RepoDesk continues directly to
+after registration. This customization is optional. Telo continues directly to
 authorization without an icon download, upload instructions or acknowledgement.
 
 ## Personal event notifications

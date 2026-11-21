@@ -64,7 +64,7 @@ if (!frontend.success)
   throw new AggregateError(frontend.logs, "Frontend build failed");
 await mkdir("dist/web", { recursive: true });
 await cp("web/style.css", "dist/web/assets/style.css");
-await cp("web/assets/repodesk-mark.svg", "dist/web/assets/repodesk-mark.svg");
+await cp("web/assets/telo-mark.svg", "dist/web/assets/telo-mark.svg");
 let html = await readFile("web/index.html", "utf8");
 const { version: appVersion } = JSON.parse(
   await readFile("package.json", "utf8"),

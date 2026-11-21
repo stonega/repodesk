@@ -1,5 +1,5 @@
 ---
-name: repodesk-search-console
+name: telo-search-console
 description: Read personally selected Google Search Console properties, performance, sitemaps and indexed URL status.
 ---
 

@@ -21,7 +21,7 @@ export const registrationInput = z.discriminatedUnion("owner", [
   z
     .object({
       owner: z.literal("personal"),
-      name: z.string().trim().min(1).max(34).default("repodesk"),
+      name: z.string().trim().min(1).max(34).default("telo"),
       public: z.boolean(),
       source: z.literal("setup").optional(),
     })
@@ -30,7 +30,7 @@ export const registrationInput = z.discriminatedUnion("owner", [
     .object({
       owner: z.literal("organization"),
       organization: account,
-      name: z.string().trim().min(1).max(34).default("repodesk"),
+      name: z.string().trim().min(1).max(34).default("telo"),
       public: z.boolean(),
       source: z.literal("setup").optional(),
     })

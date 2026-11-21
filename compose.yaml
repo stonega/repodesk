@@ -1,11 +1,11 @@
 x-runtime: &runtime
   build: .
-  image: ${APP_IMAGE:-deepx-agent:local}
+  image: ${APP_IMAGE:-telo-agent:local}
   init: true
   environment: &environment
     NODE_ENV: production
     PORT: "3000"
-    DATABASE_URL: postgres://deepx:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/deepx
+    DATABASE_URL: postgres://telo:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/telo
     TELEGRAM_TRANSPORT: ${TELEGRAM_TRANSPORT:-webhook}
     PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:3000}
     ENCRYPTION_KEY_FILE: /run/secrets/encryption_key
@@ -17,13 +17,13 @@ services:
   postgres:
     image: postgres:17-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
     environment:
-      POSTGRES_USER: deepx
-      POSTGRES_DB: deepx
+      POSTGRES_USER: telo
+      POSTGRES_DB: telo
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [CMD-SHELL, "pg_isready -U deepx -d deepx"]
+      test: [CMD-SHELL, "pg_isready -U telo -d telo"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -41,13 +41,13 @@ services:
     <<: *runtime
     environment:
       <<: *environment
-      UPDATES_GITHUB_REPOSITORY: ${UPDATES_GITHUB_REPOSITORY:-stonega/repodesk}
+      UPDATES_GITHUB_REPOSITORY: ${UPDATES_GITHUB_REPOSITORY:-stonega/telo}
       UPDATES_GITHUB_TOKEN: ${UPDATES_GITHUB_TOKEN:-}
-      UPDATES_DIRECTORY: ${UPDATES_DIRECTORY:-/var/lib/repodesk-updates}
+      UPDATES_DIRECTORY: ${UPDATES_DIRECTORY:-/var/lib/telo-updates}
       CODE_TRUTH_URL: http://code-truth:3010
       CODE_TRUTH_TOKEN_FILE: /run/code-truth/token
     volumes:
-      - ./updates:/var/lib/repodesk-updates
+      - ./updates:/var/lib/telo-updates
       - code_truth_auth:/run/code-truth:ro
     healthcheck:
       test: [CMD, node, -e, "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
@@ -84,7 +84,7 @@ services:
         condition: service_healthy
   code-truth-token:
     build: .
-    image: ${APP_IMAGE:-deepx-agent:local}
+    image: ${APP_IMAGE:-telo-agent:local}
     user: "0:0"
     network_mode: none
     read_only: true
@@ -98,7 +98,7 @@ services:
       - code_truth_auth:/run/code-truth
   code-truth:
     build: ./services/code-truth
-    image: ${CODE_TRUTH_IMAGE:-deepx-code-truth:local}
+    image: ${CODE_TRUTH_IMAGE:-telo-code-truth:local}
     init: true
     environment:
       CODE_TRUTH_TOKEN_FILE: /run/code-truth/token

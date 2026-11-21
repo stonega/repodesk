@@ -11,7 +11,7 @@ Build a fresh package from the same source revision as the application:
 
 ```sh
 bun install --frozen-lockfile
-bun deploy/browser/package.ts /tmp/repodesk-browser-package
+bun deploy/browser/package.ts /tmp/telo-browser-package
 ```
 
 Transfer that directory to the VPS. Review its installer and systemd unit, then
@@ -19,13 +19,13 @@ install using the actual browser executable and application secrets directory:
 
 ```sh
 sudo BROWSER_EXECUTABLE=/usr/bin/google-chrome bash \
-  /tmp/repodesk-browser-package/install.sh \
-  /tmp/repodesk-browser-package /srv/repodesk/secrets
+  /tmp/telo-browser-package/install.sh \
+  /tmp/telo-browser-package /srv/telo/secrets
 ```
 
 Use `/usr/bin/chromium` when appropriate. Installation validates checksums,
 preserves an existing host token/settings/profiles, and enables/restarts
-`repodesk-browser.service`. It does not connect website accounts or register
+`telo-browser.service`. It does not connect website accounts or register
 Telegram webhooks. Update the application, Codex supervisor/job images and host
 package together when their browser protocol changes.
 
@@ -38,16 +38,16 @@ DNS, UDP or WebRTC.
 
 ## Connect Docker services
 
-Review `/etc/repodesk/browser.env` and retain the root-owned host token. Mount only
+Review `/etc/telo/browser.env` and retain the root-owned host token. Mount only
 the private socket directory and the application token copy into API/worker:
 
 ```sh
-export BROWSER_TOKEN_FILE=/srv/repodesk/secrets/browser-token
+export BROWSER_TOKEN_FILE=/srv/telo/secrets/browser-token
 docker compose -f compose.yaml -f compose.browser.yaml config --quiet
 ```
 
 Use that merged configuration for the normal deployment. It sets
-`BROWSER_HOST_SOCKET=/run/repodesk-browser/control.sock` and
+`BROWSER_HOST_SOCKET=/run/telo-browser/control.sock` and
 `BROWSER_HOST_TOKEN_FILE=/run/secrets/browser_token` in API/worker. The optional
 overlay also routes Codex's task-scoped broker requests to `http://app:3000`.
 Set `BROWSER_CODEX_ORIGIN` to another application origin if the supervisor cannot
@@ -70,16 +70,16 @@ identity comes from server-verified Telegram initialization data.
 ## Operation and recovery
 
 ```sh
-sudo systemctl status repodesk-browser
-sudo journalctl -u repodesk-browser
+sudo systemctl status telo-browser
+sudo journalctl -u telo-browser
 ```
 
 Logs contain fixed diagnostic codes rather than passwords, page bodies or raw
 browser output. An unavailable service affects Browser operations; ordinary
 greetings do not contact the service or read its optional token file.
 
-The default root is `/var/lib/repodesk-browser`; code is installed under
-`/opt/repodesk-browser`. The unit limits the cgroup to 2 GiB and 512 tasks.
+The default root is `/var/lib/telo-browser`; code is installed under
+`/opt/telo-browser`. The unit limits the cgroup to 2 GiB and 512 tasks.
 `BROWSER_HOST_MAX_PROCESSES` defaults to four and `BROWSER_HOST_IDLE_SECONDS` to
 300. Tune memory and concurrency together. Add a filesystem quota for a hard
 disk limit: website caches/storage can grow independently of download limits.
@@ -107,8 +107,8 @@ For a disposable Node/Ubuntu firewall compatibility check, build and run the
 isolated fixture without host networking:
 
 ```sh
-docker build --target nft-compatibility -f deploy/browser/smoke.Dockerfile -t repodesk-browser-nft-smoke .
-docker run --rm --network none --cap-add NET_ADMIN repodesk-browser-nft-smoke
+docker build --target nft-compatibility -f deploy/browser/smoke.Dockerfile -t telo-browser-nft-smoke .
+docker run --rm --network none --cap-add NET_ADMIN telo-browser-nft-smoke
 ```
 
 The fixture checks default denial, the selected proxy exception and restart

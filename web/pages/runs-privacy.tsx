@@ -268,7 +268,7 @@ function ThreadDetailPage({
                     </div>
                     <p className="prose">{turn.task}</p>
                     <div className="thread-reply">
-                      <strong>RepoDesk</strong>
+                      <strong>Telo</strong>
                       {turn.result ? (
                         <p className="prose">{turn.result}</p>
                       ) : (

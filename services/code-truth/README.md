@@ -1,6 +1,6 @@
 # Local Code Truth service
 
-Private, read-only MCP service for RepoDesk. Reuses the source-query core of
+Private, read-only MCP service for Telo. Reuses the source-query core of
 the earlier source-query project; see [source provenance](UPSTREAM.md). Runs separately with
 Bun because the upstream process adapter uses Bun. The bot remains a Node service.
 

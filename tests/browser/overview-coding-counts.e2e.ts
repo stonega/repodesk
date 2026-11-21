@@ -14,7 +14,7 @@ for (const width of [1280, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 900 });
     const fixture = JSON.parse(
-      await readFile(join(tmpdir(), "repodesk-browser-3107-db.json"), "utf8"),
+      await readFile(join(tmpdir(), "telo-browser-3107-db.json"), "utf8"),
     );
     const pool = database(fixture.url);
     const store = new Store(pool);
@@ -51,7 +51,7 @@ for (const width of [1280, 390]) {
       );
       await page.context().addCookies([
         {
-          name: "repodesk_session",
+          name: "telo_session",
           value: raw,
           url: "http://127.0.0.1:3107",
         },

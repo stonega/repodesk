@@ -34,7 +34,7 @@ const url = process.env.TEST_DATABASE_URL;
   "repository, skill and handoff integration",
   () => {
     const root = database(url ?? "postgres://unused@localhost/unused");
-    const name = `repodesk_team_${randomUUID().replaceAll("-", "")}`;
+    const name = `telo_team_${randomUUID().replaceAll("-", "")}`;
     const operatorId = randomUUID();
     let store: Store;
     beforeAll(async () => {

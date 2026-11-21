@@ -60,7 +60,7 @@ describeDb("agent orchestration, autonomy, triggers, and repo queues", () => {
   beforeAll(async () => {
     if (!baseUrl) return;
     const parsed = new URL(baseUrl);
-    dbName = `repodesk_orch_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    dbName = `telo_orch_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
     adminPool = database(baseUrl);
     await adminPool.query(`CREATE DATABASE ${dbName}`);
     parsed.pathname = `/${dbName}`;

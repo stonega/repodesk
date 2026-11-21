@@ -71,7 +71,7 @@ export class CodeTruthClient {
     const { namespace } = status;
     if (!/^[a-f0-9]{64}$/.test(namespace))
       throw new Fault("code_truth_unavailable", 503);
-    const client = new Client({ name: "repodesk", version: "1" });
+    const client = new Client({ name: "telo", version: "1" });
     const transport = new StreamableHTTPClientTransport(
       new URL(`/mcp/${namespace}`, this.url),
       {

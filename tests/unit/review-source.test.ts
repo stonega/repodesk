@@ -22,7 +22,7 @@ afterEach(async () => {
   );
 });
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "repodesk-review-source-"));
+  const root = await mkdtemp(join(tmpdir(), "telo-review-source-"));
   roots.push(root);
   const repo = join(root, "repo");
   await mkdir(repo);

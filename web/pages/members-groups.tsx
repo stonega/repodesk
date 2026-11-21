@@ -509,7 +509,7 @@ function GroupAccessRow({
             <p className="group-relink-guidance">
               This group is inactive. Choose New in Groups and send the new
               /link command in the group to relink it. Re-adding the bot in
-              Telegram does not restore the RepoDesk link.
+              Telegram does not restore the Telo link.
             </p>
           )}
         </td>

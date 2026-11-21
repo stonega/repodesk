@@ -109,7 +109,7 @@ changes apply without a process restart.
 
 1. Open **Workspace → Plugins → Code Truth**, then **Add repository**.
 2. Enter a canonical HTTPS GitHub repository URL, for example
-   `https://github.com/your-org/my-repository.git`. RepoDesk generates the internal
+   `https://github.com/your-org/my-repository.git`. Telo generates the internal
    ID and shows the GitHub repository name; no ID input is needed.
 3. Optionally describe the repository's purpose and when to use it (up to 2,000
    characters). The description is available to the assistant as repository

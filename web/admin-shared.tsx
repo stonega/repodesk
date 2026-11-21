@@ -61,9 +61,9 @@ export async function api<T>(
           : "Your session expired. Sign in again."
         : [502, 503, 504].includes(response.status)
           ? path === "/api/admin/operator/model-providers" && method === "PUT"
-            ? `Could not fetch models from this provider (HTTP ${response.status}). Check the API base URL and network access from the RepoDesk server, then try again.`
-            : `The RepoDesk server is temporarily unavailable (HTTP ${response.status}). Please try again shortly.`
-          : `The RepoDesk server returned an unexpected response (HTTP ${response.status}). Reload the page and try again.`,
+            ? `Could not fetch models from this provider (HTTP ${response.status}). Check the API base URL and network access from the Telo server, then try again.`
+            : `The Telo server is temporarily unavailable (HTTP ${response.status}). Please try again shortly.`
+          : `The Telo server returned an unexpected response (HTTP ${response.status}). Reload the page and try again.`,
       [],
       response.status,
     );
@@ -322,7 +322,7 @@ export function Page({
   return (
     <>
       <div className="page-heading">
-        <p className="eyebrow">REPODESK / TEAM OPERATIONS</p>
+        <p className="eyebrow">TELO / TEAM OPERATIONS</p>
         <div className="page-title-row">
           <div className="page-title">
             <h1>{title}</h1>

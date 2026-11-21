@@ -9,32 +9,32 @@
 ### List 25 conversation threads, newest activity first.
 # Each summary includes saved Telegram user/group identity and request count.
 GET {{origin}}/api/admin/workspaces/{{workspaceId}}/threads?offset=0&limit=25
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Next page of threads; pagination happens after requests are grouped.
 GET {{origin}}/api/admin/workspaces/{{workspaceId}}/threads?offset=25&limit=25
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Read the first 25 chronological request/reply pairs and whole-thread statistics.
 GET {{origin}}/api/admin/workspaces/{{workspaceId}}/threads/{{threadId}}?offset=0&limit=25
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Read later requests in the same conversation.
 GET {{origin}}/api/admin/workspaces/{{workspaceId}}/threads/{{threadId}}?offset=25&limit=25
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Open a thread; listOffset preserves the parent thread-list page.
 GET {{origin}}/admin/threads/{{threadId}}?workspace={{workspaceId}}&listOffset=25
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Fetch individual request summaries using the compatible run-history API.
 GET {{origin}}/api/admin/workspaces/{{workspaceId}}/runs?offset=0&limit=25
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Fetch one run's execution messages, model attempts and delivery details.
 GET {{origin}}/api/admin/workspaces/{{workspaceId}}/runs/{{runId}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Inspect a run and return to its conversation and original list/message pages.
 GET {{origin}}/admin/runs/{{runId}}?workspace={{workspaceId}}&thread={{threadId}}&threadOffset=25&listOffset=25
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}

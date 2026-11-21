@@ -50,7 +50,7 @@ const review = {
 
 (url ? describe : describe.skip)("PR code and review reads", () => {
   const root = database(url ?? "postgres://unused@localhost/unused");
-  const name = `repodesk_pr_details_${randomUUID().replaceAll("-", "")}`;
+  const name = `telo_pr_details_${randomUUID().replaceAll("-", "")}`;
   const operatorId = randomUUID();
   let store: Store;
   beforeAll(async () => {

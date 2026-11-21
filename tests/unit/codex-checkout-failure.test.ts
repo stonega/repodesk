@@ -9,7 +9,7 @@ import { checkoutFailureCode } from "../../src/coding/local/checkout-failure.ts"
 const exec = promisify(execFile);
 
 test("a real Git clone identifies a missing configured base branch", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-checkout-failure-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-checkout-failure-"));
   try {
     const source = join(dir, "source");
     const git = (args: string[]) =>

@@ -1,11 +1,11 @@
 [Unit]
-Description=Daily RepoDesk Docker storage cleanup
+Description=Daily Telo Docker storage cleanup
 
 [Timer]
 OnCalendar=daily
 RandomizedDelaySec=15m
 Persistent=true
-Unit=repodesk-cleanup.service
+Unit=telo-cleanup.service
 
 [Install]
 WantedBy=timers.target

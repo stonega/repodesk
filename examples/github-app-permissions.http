@@ -18,7 +18,7 @@ Content-Type: application/json
 
 {
   "owner": "personal",
-  "name": "RepoDesk",
+  "name": "Telo",
   "public": false
 }
 

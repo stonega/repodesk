@@ -1,25 +1,25 @@
 # GitHub-distributed plugin research
 
 Research date: **2026-11-13**. Status: research and recommendations, not shipped
-RepoDesk behavior. The [proposed contract](../design/github-plugins.md) and
+Telo behavior. The [proposed contract](../design/github-plugins.md) and
 [delivery plan](../implementation/github-plugins-plan.md) are separate from the
 [implemented Pi extension contract](../design/llm-extensions.md).
 
 ## Question and conclusion
 
-How can one GitHub repository become one RepoDesk plugin, with little integration
+How can one GitHub repository become one Telo plugin, with little integration
 work for its author and enforceable boundaries for a multi-tenant assistant?
 
 Recommend a repository-root manifest, a prebuilt JavaScript bundle, a small typed
-RepoDesk SDK and host-owned Pi adapters. Install an immutable repository snapshot;
+Telo SDK and host-owned Pi adapters. Install an immutable repository snapshot;
 run third-party code outside the application process with capability requests
 mediated by application services. Keep the first contract limited to read-only
 tools, declarative settings and optional instruction skills.
 
 This is an architectural recommendation. It is not a claim that Pi, MCP or a
-package manifest supplies isolation or RepoDesk authorization.
+package manifest supplies isolation or Telo authorization.
 
-## RepoDesk baseline
+## Telo baseline
 
 The inspected checkout is main `4bde2fc`, equal to fetched `origin/main`, with
 pre-existing uncommitted Pi 1.5.2 and composition cleanup changes. Findings below
@@ -41,18 +41,18 @@ them plugins in the product must not erase those differences in implementation.
 
 ## Primary-source comparisons
 
-| System | Verified pattern | Adopt for RepoDesk | Boundary of the comparison |
+| System | Verified pattern | Adopt for Telo | Boundary of the comparison |
 | --- | --- | --- | --- |
 | Pi 1.5.2 | Git/npm/local package sources and `package.json` resource declarations | Retain Pi as the agent runtime and internal tool adapter | Pi package installation does not add tenant policy or turn arbitrary extension code into a sandbox |
 | Obsidian | Root manifest, source repository, versioned GitHub release files and a developer template | One repository per plugin, explicit metadata, small release contents and an author quickstart | Desktop plugin behavior does not establish safe execution inside a shared backend |
 | VS Code | Manifest compatibility range and activation/deactivation lifecycle; activation can be demand-driven | Version the host API separately and load code on demand | Extension host APIs and UI contributions are much broader than this product needs |
-| MCP | Named tools, input/output schemas and structured results; annotations from untrusted servers are untrusted | Use compatible tool data shapes and leave room for an adapter | MCP is not an installer, execution sandbox or grant of RepoDesk write authority |
+| MCP | Named tools, input/output schemas and structured results; annotations from untrusted servers are untrusted | Use compatible tool data shapes and leave room for an adapter | MCP is not an installer, execution sandbox or grant of Telo write authority |
 | GitHub | Commit-addressed archives, installation-token Contents-read access and optional immutable releases | Pin repository ID, owner identity, full commit and content digest | A tag, a checksum or a public repository is not a safety endorsement |
 
 Sources retrieved on the research date:
 
 - [Pi packages, pinned v1.5.2](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/docs/packages.md): sources, resource declarations and dependency handling.
-- [Pi extensions, pinned v1.5.2](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/docs/extensions.md): upstream extension reference. RepoDesk's narrower compatibility table remains authoritative for this application.
+- [Pi extensions, pinned v1.5.2](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/docs/extensions.md): upstream extension reference. Telo's narrower compatibility table remains authoritative for this application.
 - [Obsidian manifest](https://docs.obsidian.md/Reference/Manifest): identity, version and minimum application version.
 - [Submit an Obsidian plugin](https://docs.obsidian.md/Plugins/Releasing/Submit%20your%20plugin): repository files, version matching and release assets. Its current community directory is a website; do not assume the older pull-request submission workflow.
 - [VS Code extension anatomy](https://code.visualstudio.com/api/get-started/extension-anatomy) and [activation events](https://code.visualstudio.com/api/references/activation-events): manifest, API compatibility and demand-driven activation.
@@ -88,7 +88,7 @@ release profile can remove that cost without weakening source lineage.
 
 1. One root manifest and one logical plugin per repository; multiple tools and
    skills are allowed inside it. No monorepo subpath discovery initially.
-2. A RepoDesk SDK for tool handlers; Pi is an internal adapter, avoiding a public
+2. A Telo SDK for tool handlers; Pi is an internal adapter, avoiding a public
    dependency on the complete upstream extension API.
 3. A sandbox runner with no direct network and a host capability broker. A child
    process, worker thread or Node VM alone does not meet this requirement.

@@ -10,7 +10,7 @@ export function searchConsoleExtension(
   workspaceId: string,
   revision: number,
 ): BuiltinExtension {
-  const skill = readFileSync("skills/repodesk-search-console/SKILL.md", "utf8");
+  const skill = readFileSync("skills/telo-search-console/SKILL.md", "utf8");
   return {
     id: "search-console",
     version: "1",

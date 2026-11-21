@@ -22,7 +22,7 @@ const browserRequestId = randomUUID();
 let browserInvocations = 0,
   browserPolls = 0,
   browserToolsSeen = false;
-const root = await mkdtemp(join(tmpdir(), "repodesk-channel-proof-"));
+const root = await mkdtemp(join(tmpdir(), "telo-channel-proof-"));
 const first = {
   id: randomUUID(),
   question: "Why was the page cursor changed?",
@@ -83,7 +83,7 @@ const server = Bun.serve({
     browserToolsSeen ||=
       names.includes("browser_action") && names.includes("browser_session");
     toolsSeen ||= names.some((name: string) =>
-      name.includes("repodesk_task_reply"),
+      name.includes("telo_task_reply"),
     );
     if (calls === 4) {
       enqueueMessage(mailbox, late);
@@ -93,10 +93,10 @@ const server = Bun.serve({
       liveInputSeen ||= JSON.stringify(body.input).includes(late.id);
     const originalSelected =
       calls === 1
-        ? { name: "repodesk_task_read", arguments: { messageId: first.id } }
+        ? { name: "telo_task_read", arguments: { messageId: first.id } }
         : calls === 2
           ? {
-              name: "repodesk_task_reply",
+              name: "telo_task_reply",
               arguments: {
                 messageId: first.id,
                 text: "It preserves the next-page cursor.",
@@ -104,17 +104,17 @@ const server = Bun.serve({
             }
           : calls === 3 || calls === 4 || calls === 8
             ? {
-                name: "repodesk_task_progress",
+                name: "telo_task_progress",
                 arguments: { text: "Verifying pagination ordering." },
               }
             : calls === 5
               ? {
-                  name: "repodesk_task_read",
+                  name: "telo_task_read",
                   arguments: { messageId: late.id },
                 }
               : calls === 6
                 ? {
-                    name: "repodesk_task_reply",
+                    name: "telo_task_reply",
                     arguments: {
                       messageId: late.id,
                       text: "The pagination ordering regression test.",
@@ -132,7 +132,7 @@ const server = Bun.serve({
             ? { name: "browser_action", arguments: { action: "read" } }
             : calls === 10
               ? {
-                  name: "repodesk_task_progress",
+                  name: "telo_task_progress",
                   arguments: { text: "Checking Browser tool restoration." },
                 }
               : undefined

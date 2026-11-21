@@ -25,18 +25,18 @@ async function call(owner, controller, generation, operation) {
       policy,
     });
   const signature = createHmac("sha256", key)
-    .update(`repodesk:browser:v1\n${body}`)
+    .update(`telo:browser:v1\n${body}`)
     .digest("hex");
   return new Promise((resolve, reject) => {
     const req = request(
       {
-        socketPath: "/run/repodesk-browser/control.sock",
+        socketPath: "/run/telo-browser/control.sock",
         path: "/v1/browser",
         method: "POST",
         headers: {
           "content-type": "application/json",
           "content-length": Buffer.byteLength(body),
-          "x-repodesk-browser-signature": signature,
+          "x-telo-browser-signature": signature,
         },
       },
       (res) => {

@@ -19,7 +19,7 @@ const raw = {
 const commit = "a".repeat(40);
 const request = {
   requestId: randomUUID(),
-  repository: "stonega/repodesk",
+  repository: "stonega/telo",
   releaseId: 42,
   tag: raw.tag_name,
   commit,
@@ -91,7 +91,7 @@ test("host refuses commits without passing verification", async () => {
     ).rejects.toThrow("verification_failed");
 });
 test("host daemon starts under Node and publishes heartbeat without Docker or network work", async () => {
-  const root = await mkdtemp(join(tmpdir(), "repodesk-node-updater-"));
+  const root = await mkdtemp(join(tmpdir(), "telo-node-updater-"));
   await writeFile(join(root, ".env"), "fixture\n");
   const process = Bun.spawn(
     [
@@ -133,7 +133,7 @@ test("host daemon starts under Node and publishes heartbeat without Docker or ne
   }
 });
 test("pinned local builds and runtime smoke precede protected host cutover", async () => {
-  const root = await mkdtemp(join(tmpdir(), "repodesk-host-build-"));
+  const root = await mkdtemp(join(tmpdir(), "telo-host-build-"));
   const commands: string[][] = [];
   const run = async (command: string, args: string[]) => {
     commands.push([command, ...args]);
@@ -163,7 +163,7 @@ test("pinned local builds and runtime smoke precede protected host cutover", asy
   try {
     await host.installRelease(
       request,
-      { root, project: "repodesk", repository: request.repository },
+      { root, project: "telo", repository: request.repository },
       run,
       transport,
     );
@@ -178,7 +178,7 @@ test("pinned local builds and runtime smoke precede protected host cutover", asy
     ).toHaveLength(4);
     const codeTruthBuild = commands.findIndex(
       (args) =>
-        args.includes(`repodesk-code-truth:release-${commit}`) &&
+        args.includes(`telo-code-truth:release-${commit}`) &&
         args[1] === "build",
     );
     const codeTruthSmoke = commands.findIndex((args) =>
@@ -190,10 +190,7 @@ test("pinned local builds and runtime smoke precede protected host cutover", asy
     expect(
       commands.some((args) => args.includes("fetch") && args.includes(commit)),
     ).toBe(true);
-    expect(commands[cutover]?.slice(-2)).toEqual([
-      "repodesk",
-      "--local-images",
-    ]);
+    expect(commands[cutover]?.slice(-2)).toEqual(["telo", "--local-images"]);
     expect(commands.some((args) => args.includes("archive"))).toBe(false);
     const bundle = commands[cutover]?.[1];
     expect(bundle).toBeDefined();
@@ -208,8 +205,8 @@ test("pinned local builds and runtime smoke precede protected host cutover", asy
   }
 });
 test("low disk space rejects installation before builds or cutover and exposes a safe failure", async () => {
-  const root = await mkdtemp(join(tmpdir(), "repodesk-host-space-"));
-  const config = { root, project: "repodesk", repository: request.repository };
+  const root = await mkdtemp(join(tmpdir(), "telo-host-space-"));
+  const config = { root, project: "telo", repository: request.repository };
   const commands: string[] = [];
   try {
     for (const child of ["results", "logs"])
@@ -240,7 +237,7 @@ test("low disk space rejects installation before builds or cutover and exposes a
   }
 });
 test("missing maintenance companion aborts before image builds or cutover", async () => {
-  const root = await mkdtemp(join(tmpdir(), "repodesk-host-companion-"));
+  const root = await mkdtemp(join(tmpdir(), "telo-host-companion-"));
   const commands: string[][] = [];
   const run = async (command: string, args: string[]) => {
     commands.push([command, ...args]);
@@ -255,7 +252,7 @@ test("missing maintenance companion aborts before image builds or cutover", asyn
     await expect(
       host.installRelease(
         request,
-        { root, project: "repodesk", repository: request.repository },
+        { root, project: "telo", repository: request.repository },
         run,
         transport,
       ),
@@ -268,8 +265,8 @@ test("missing maintenance companion aborts before image builds or cutover", asyn
   }
 });
 test("build failures never reach cutover and interrupted cutovers never replay", async () => {
-  const root = await mkdtemp(join(tmpdir(), "repodesk-host-job-"));
-  const config = { root, project: "repodesk", repository: request.repository };
+  const root = await mkdtemp(join(tmpdir(), "telo-host-job-"));
+  const config = { root, project: "telo", repository: request.repository };
   const statusPath = join(
     root,
     "updates",

@@ -31,7 +31,7 @@ const transport: PluginHttpTransport = (url, address, bearer, signal) =>
         headers: {
           accept: "application/json",
           "accept-encoding": "identity",
-          "user-agent": "RepoDesk plugin broker",
+          "user-agent": "Telo plugin broker",
           ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
         },
       },

@@ -3,11 +3,11 @@ import json, os, re, subprocess, sys
 from pathlib import Path
 os.umask(0o077)
 bundle=Path(sys.argv[1]).resolve()
-assert bundle==Path('/opt/repodesk/releases/41958024518-1')
-assert Path('/opt/repodesk/.current-release').read_text().strip()==bundle.name
+assert bundle==Path('/opt/telo/releases/41958024518-1')
+assert Path('/opt/telo/.current-release').read_text().strip()==bundle.name
 with (bundle/'production-verification.retry.log').open('wb') as log:
  subprocess.run(['python3',str(bundle/'verify-deployment.py'),str(bundle)],stdout=log,stderr=subprocess.STDOUT,check=True)
-for name in ['repodesk-app-1','repodesk-worker-1']:
+for name in ['telo-app-1','telo-worker-1']:
  with (bundle/(name+'-browser-proof.stderr')).open('wb') as errors:
   result=subprocess.run(['docker','exec','-i',name,'node','--input-type=module'],input=(bundle/'host-probe.mjs').read_bytes(),stdout=subprocess.PIPE,stderr=errors,check=True)
  proof=json.loads(result.stdout)

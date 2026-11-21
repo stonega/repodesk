@@ -127,7 +127,7 @@ async function fixture(
   concurrency = 4,
   readBootId?: () => Promise<string | undefined>,
 ) {
-  const dir = await mkdtemp(join(tmpdir(), "deepx-codex-test-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-codex-test-"));
   dirs.push(dir);
   const settings = runnerSettings.parse({
     CODEX_RUNNER_STATE: dir,
@@ -1778,7 +1778,7 @@ test("continuous questions checkpoint and release the runner; tenant-scoped answ
       pr: {
         number: 43,
         url: "https://github.com/example/repo/pull/43",
-        branch: `codex/repodesk-${taskId}`,
+        branch: `codex/telo-${taskId}`,
         headSha: "a".repeat(40),
       },
       revision: 1,

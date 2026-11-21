@@ -1,8 +1,8 @@
 # Repository investigations and releases
 
-RepoDesk can keep an investigation, code change or GitHub release in one durable
+Telo can keep an investigation, code change or GitHub release in one durable
 task. Pi handles the conversation and passes your original request to Codex.
-Codex reads the checkout, repository instructions and release procedure. RepoDesk
+Codex reads the checkout, repository instructions and release procedure. Telo
 checks access and performs supported GitHub writes.
 
 ## Default availability and overrides
@@ -41,7 +41,7 @@ Repository instructions and remembered preferences cannot provide publication
 permission.
 
 Codex can prepare changes and a review PR when the procedure requires them.
-RepoDesk waits for that exact PR to merge, then prepares again from the current
+Telo waits for that exact PR to merge, then prepares again from the current
 default branch before publishing. PR merging keeps its existing confirmation
 flow. If the guide requires CI, the task waits for checks at the exact target
 commit. No Codex process needs to remain running while it waits. Failed CI can
@@ -63,7 +63,7 @@ waiting for merge/CI, published, blocked and uncertain outcomes. A draft is
 reported as a draft.
 
 Stopping or losing access prevents future actions. Already confirmed tags,
-Releases and assets remain on GitHub. After a lost write response, RepoDesk reads
+Releases and assets remain on GitHub. After a lost write response, Telo reads
 the target to confirm what happened. If the outcome cannot be established, it
 leaves the task uncertain instead of repeating the write. Ask an administrator
 to inspect that target before starting another release for the same version.

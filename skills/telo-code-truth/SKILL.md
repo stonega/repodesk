@@ -1,9 +1,9 @@
 ---
-name: repodesk-code-truth
-description: Query indexed repository source through the RepoDesk Code Truth MCP server. Use for architecture, behavior, debugging, dependencies, symbol, or file-structure questions about repositories configured for this workspace. Uses each repository’s default GitHub branch automatically.
+name: telo-code-truth
+description: Query indexed repository source through the Telo Code Truth MCP server. Use for architecture, behavior, debugging, dependencies, symbol, or file-structure questions about repositories configured for this workspace. Uses each repository’s default GitHub branch automatically.
 ---
 
-# RepoDesk Code Truth
+# Telo Code Truth
 
 Use the MCP server as the source of truth for configured repository questions. Its results
 identify the configured branch and immutable commit that support the answer.

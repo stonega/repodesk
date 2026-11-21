@@ -39,7 +39,7 @@ describeDb(
     beforeAll(async () => {
       if (!baseUrl) return;
       const parsed = new URL(baseUrl);
-      dbName = `repodesk_usage_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+      dbName = `telo_usage_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
       adminPool = database(baseUrl);
       await adminPool.query(`CREATE DATABASE ${dbName}`);
       parsed.pathname = `/${dbName}`;
@@ -50,7 +50,7 @@ describeDb(
       await claim(pool, "usage-admin", "a long test password");
       adminId = (await pool.query("SELECT id FROM admins LIMIT 1")).rows[0].id;
       const session = await login(pool, "usage-admin", "a long test password");
-      cookie = `deepx_session=${session.raw}`;
+      cookie = `telo_session=${session.raw}`;
     });
 
     afterAll(async () => {

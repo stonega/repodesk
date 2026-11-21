@@ -36,7 +36,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
   "private conversation threads (isolated PostgreSQL)",
   () => {
     const root = database(rootUrl ?? "postgres://unused@localhost/unused");
-    const name = `deepx_threads_${randomUUID().replaceAll("-", "")}`;
+    const name = `telo_threads_${randomUUID().replaceAll("-", "")}`;
     const key = "af".repeat(32);
     const operatorId = randomUUID();
     let store: Store;

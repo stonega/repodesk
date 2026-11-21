@@ -64,7 +64,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
   "group conversations (isolated PostgreSQL)",
   () => {
     const root = database(rootUrl ?? "postgres://unused@localhost/unused");
-    const name = `deepx_group_${randomUUID().replaceAll("-", "")}`;
+    const name = `telo_group_${randomUUID().replaceAll("-", "")}`;
     const operatorId = randomUUID();
     const key = "af".repeat(32);
     let store: Store;

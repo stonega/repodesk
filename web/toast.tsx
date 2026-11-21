@@ -154,7 +154,7 @@ function Toast({
             "Load failed",
             "NetworkError when attempting to fetch resource.",
           ].includes(message)
-            ? "Couldn’t connect to RepoDesk."
+            ? "Couldn’t connect to Telo."
             : message}
         </p>
       </div>

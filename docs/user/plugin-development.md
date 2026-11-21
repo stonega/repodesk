@@ -1,6 +1,6 @@
 # Develop a GitHub plugin
 
-RepoDesk's repository plugin profile is a **read-only preview**. One GitHub
+Telo's repository plugin profile is a **read-only preview**. One GitHub
 repository contains one plugin. Authors supply a manifest, source and a committed
 Node ESM bundle. Operators review an immutable commit before installing the plugin
 into a workspace. Installation, updates and rollbacks leave it disabled until an
@@ -12,9 +12,9 @@ Public SDK publication and an official hosted GitHub template are release steps.
 
 ## Start from the supplied template
 
-Copy the complete `templates/plugin/` directory from your RepoDesk distribution to
+Copy the complete `templates/plugin/` directory from your Telo distribution to
 an empty repository, including hidden files. It is an independent author package;
-you can move it outside the RepoDesk checkout. Use Bun **1.3.14**:
+you can move it outside the Telo checkout. Use Bun **1.3.14**:
 
 ```sh
 bun install --frozen-lockfile
@@ -28,16 +28,16 @@ bun run example
 ```
 
 Set `repository`, `publisher`, `id`, `name` and `description` in
-`repodesk.plugin.json`. The repository field must be the HTTPS GitHub repository
+`telo.plugin.json`. The repository field must be the HTTPS GitHub repository
 root. Set the same SemVer version in the manifest and `package.json`.
 
 ```text
-repodesk.plugin.json          Manifest and schema authority
+telo.plugin.json          Manifest and schema authority
 package.json / bun.lock       Pinned author tooling
 src/index.ts                 Handler implementation
 src/generated/contract.ts    Generated input, output and settings types
 dist/plugin.mjs              Committed self-contained Node ESM executable
-.repodesk/                   Preview SDK, CLI, schema and third-party notices
+.telo/                   Preview SDK, CLI, schema and third-party notices
 input.json / fixtures.json   Trusted offline example inputs/responses
 README.md / LICENSE          Required review and license information
 tests/                       Offline deterministic author tests
@@ -59,7 +59,7 @@ production execution uses the restricted runner instead.
 The template contains a working word counter:
 
 ```ts
-import { definePlugin } from "@repodesk/plugin-sdk";
+import { definePlugin } from "@telo/plugin-sdk";
 import type { Contract, Settings } from "./generated/contract.ts";
 
 export default definePlugin<Contract, Settings>({
@@ -89,7 +89,7 @@ not copy its installation identity.
 
 ## Manifest contract
 
-The template includes `.repodesk/sdk/plugin/manifest.schema.json`. The CLI's
+The template includes `.telo/sdk/plugin/manifest.schema.json`. The CLI's
 semantic validator also checks schema limits, paths, capability relationships and
 linked guide files. Installing a plugin never imports its code or executes
 package scripts.

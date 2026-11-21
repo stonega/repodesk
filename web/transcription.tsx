@@ -125,7 +125,7 @@ export function Transcription({
       >
         <h2>Voice transcription</h2>
         <p>
-          Send a Telegram voice note or audio recording. RepoDesk transcribes it
+          Send a Telegram voice note or audio recording. Telo transcribes it
           locally and uses the text in your conversation.
         </p>
         <dl className="transcription-summary">
@@ -202,7 +202,7 @@ export function Transcription({
         )}
         {state === "unavailable" && (
           <p>
-            The local runtime could not start. Use the updated RepoDesk image or
+            The local runtime could not start. Use the updated Telo image or
             follow the local runtime setup guide.
           </p>
         )}

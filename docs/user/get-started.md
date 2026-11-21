@@ -1,6 +1,6 @@
 # Get started：快速开始
 
-这篇教程使用 Docker Compose 部署 RepoDesk，通过 Telegram polling 收取消息。完成后，你可以登录管理面板，并在 Telegram 私聊机器人。无需域名、HTTPS 或公开端口。
+这篇教程使用 Docker Compose 部署 Telo，通过 Telegram polling 收取消息。完成后，你可以登录管理面板，并在 Telegram 私聊机器人。无需域名、HTTPS 或公开端口。
 
 如果只是加入已有团队，阅读 [Telegram 使用指南](telegram-experience.md)。
 
@@ -19,8 +19,8 @@
 以下命令用于全新安装。如果目录已有数据，保留原 `.env` 和 `secrets/`，按 [维护指南](maintenance.md) 操作。
 
 ```sh
-git clone https://github.com/stonega/repodesk.git
-cd repodesk
+git clone https://github.com/stonega/telo.git
+cd telo
 cp .env.example .env
 chmod 600 .env
 mkdir -p secrets

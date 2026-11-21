@@ -1,6 +1,6 @@
 {
   "install.sh": "b66d9c0e1ee6638907e8a10a10d3a120155e78eff1e2dae1bd2b76551348628c",
-  "repodesk-browser.service": "7f240f18b559cd1bed42c5fa691328c34c2c8138df94cec3bff3d91b78b64554",
+  "telo-browser.service": "7f240f18b559cd1bed42c5fa691328c34c2c8138df94cec3bff3d91b78b64554",
   "package.json": "1239d4d885dcad42201a27ed9324f8f0f760b78700d8db9ced39a511cffe7eae",
   "browser-host-worker.js": "64116331b0fb41759bf2e43ebe3f79acdd434a6523f8f57b3b23adb34fefe350",
   "browser-host.js": "123f88fed0fb16f8adf2cb280f0ef64c65db1b118fe9d563beaba69ed11ce814",

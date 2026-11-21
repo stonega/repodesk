@@ -49,7 +49,7 @@ export async function deliverAccessHelp(store: Store, setup: SetupService) {
         : allowed
           ? deployment.active
             ? "You already have access. Tell me what you want to do, or ask for help."
-            : "RepoDesk setup is not complete yet. Ask a deployment admin to check the model settings and Telegram connection. The bot activates automatically when ready."
+            : "Telo setup is not complete yet. Ask a deployment admin to check the model settings and Telegram connection. The bot activates automatically when ready."
           : request?.status === "pending"
             ? "Your access request is pending. A workspace admin will review it."
             : rejected

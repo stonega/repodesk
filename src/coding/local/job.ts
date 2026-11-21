@@ -183,7 +183,7 @@ async function implement(job: Job) {
   if (channel)
     try {
       channelThread = (
-        await readFile(jobPath("/task/repodesk-channel-thread"), "utf8")
+        await readFile(jobPath("/task/telo-channel-thread"), "utf8")
       ).trim();
     } catch {
       /* Older work volumes reconstruct from durable task context. */
@@ -241,7 +241,7 @@ async function implement(job: Job) {
         turn = await runAntigravityConversation({
           channel,
           cwd: repo,
-          binary: process.env.REPODESK_AGY_BIN,
+          binary: process.env.TELO_AGY_BIN,
           env: agyEnv,
           schemaPath: jobPath("/task/antigravity-schema.json"),
           mediaDir: jobPath("/task/media"),
@@ -317,7 +317,7 @@ async function implement(job: Job) {
         channel,
         reviewSource,
         cwd: repo,
-        binary: process.env.REPODESK_CODEX_BIN,
+        binary: process.env.TELO_CODEX_BIN,
         env: {
           ...env,
           ...(job.payload.authMode === "provider_key"
@@ -326,7 +326,7 @@ async function implement(job: Job) {
         },
         prompt:
           (reviewSource
-            ? "Use only repodesk_review_source for repository investigation. Its plan action reads the prepared OCR plan; read and list accept head/base/merge_base revisions, and diff returns the pinned merge-base-to-head diff for a literal path. Follow nextOffset until null for complete content. Runtime filesystem paths and arbitrary shell commands are unavailable. Do not ask the user to restore shell access. Report unavailable committed source as a coverage gap.\n"
+            ? "Use only telo_review_source for repository investigation. Its plan action reads the prepared OCR plan; read and list accept head/base/merge_base revisions, and diff returns the pinned merge-base-to-head diff for a literal path. Follow nextOffset until null for complete content. Runtime filesystem paths and arbitrary shell commands are unavailable. Do not ask the user to restore shell access. Report unavailable committed source as a coverage gap.\n"
             : "") +
           (job.recoveryId
             ? "The previous execution was interrupted by an infrastructure shutdown. Continue from the retained checkout and inspect its existing changes before editing. Preserve authorized partial work. Reconstruct the conversation if its session is unavailable, and run the fixed verification plan in full.\n"
@@ -388,7 +388,7 @@ async function implement(job: Job) {
   }
   await writeFile(jobPath("/task/conversation.json"), JSON.stringify(turn));
   if (channel)
-    await writeFile(jobPath("/task/repodesk-channel-thread"), turn.threadId, {
+    await writeFile(jobPath("/task/telo-channel-thread"), turn.threadId, {
       mode: 0o600,
     });
   await writeFile(jobPath("/task/thread-id"), turn.threadId);
@@ -469,7 +469,7 @@ async function publish(job: Job) {
   const isAntigravity = job.payload.engine === "antigravity";
   const branch =
     job.development?.pr?.branch ??
-    `${isAntigravity ? "antigravity" : "codex"}/repodesk-${job.development?.taskId ?? job.taskId}`;
+    `${isAntigravity ? "antigravity" : "codex"}/telo-${job.development?.taskId ?? job.taskId}`;
   const diff = await git(["diff", "--cached", "--name-only"]);
   if (job.development?.pr) {
     const remote = (
@@ -488,14 +488,14 @@ async function publish(job: Job) {
   if (diff)
     await git([
       "-c",
-      `user.name=${isAntigravity ? "RepoDesk Antigravity" : "RepoDesk Codex"}`,
+      `user.name=${isAntigravity ? "Telo Antigravity" : "Telo Codex"}`,
       "-c",
       `user.email=${isAntigravity ? "antigravity@users.noreply.github.com" : "codex@users.noreply.github.com"}`,
       "-c",
       "commit.gpgSign=false",
       "commit",
       "-m",
-      "Implement maintainer-approved RepoDesk task",
+      "Implement maintainer-approved Telo task",
     ]);
   const publishedSha = (await git(["rev-parse", "HEAD"])).trim();
   if (job.development?.pr)

@@ -12,7 +12,7 @@
 
 ### List full workflows (100 per page) with current repository choices.
 GET {{origin}}/api/admin/workspaces/{{workspaceId}}/workflows?offset=0
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Fetch one workflow: { mode, workflow, repositorySources }.
 # Both modes include the spec, saved versions and ownerProfile (id/name/username).
@@ -21,12 +21,12 @@ Cookie: repodesk_session={{session}}
 # 404; foreign workspaces remain denied.
 # `next` contains recurrence previews, including when the workflow is not active.
 GET {{origin}}/api/admin/workspaces/{{workspaceId}}/workflows/{{workflowId}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Save an exact workflow version directly. No separate approval is needed.
 # Sign in as the linked owner; version conflicts return 409 without changing it.
 PUT {{origin}}/api/admin/workspaces/{{workspaceId}}/workflows/{{workflowId}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
@@ -46,7 +46,7 @@ Content-Type: application/json
 
 ### Control a workflow; pause/resume/delete/run retain its execution owner.
 POST {{origin}}/api/admin/workspaces/{{workspaceId}}/workflows/{{workflowId}}/action
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
@@ -55,4 +55,4 @@ Content-Type: application/json
 
 ### Open details; workspace and list offset survive refresh and the back link.
 GET {{origin}}/admin/workflows/{{workflowId}}?workspace={{workspaceId}}&offset=0
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}

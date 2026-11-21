@@ -31,14 +31,14 @@ CMD ["node", "dist/server.js"]
 FROM runtime-base AS transcription-runtime
 RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv libsndfile1 ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && python3 -m venv /opt/repodesk-asr
+    && python3 -m venv /opt/telo-asr
 COPY src/transcription/requirements.txt /tmp/transcription-requirements.txt
-RUN /opt/repodesk-asr/bin/pip install --no-cache-dir pip==25.3 \
-    && /opt/repodesk-asr/bin/pip install --no-cache-dir torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu \
-    && /opt/repodesk-asr/bin/pip install --no-cache-dir -r /tmp/transcription-requirements.txt \
+RUN /opt/telo-asr/bin/pip install --no-cache-dir pip==25.3 \
+    && /opt/telo-asr/bin/pip install --no-cache-dir torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu \
+    && /opt/telo-asr/bin/pip install --no-cache-dir -r /tmp/transcription-requirements.txt \
     && rm /tmp/transcription-requirements.txt \
-    && mkdir -p /var/lib/repodesk-models && chown node:node /var/lib/repodesk-models
-ENV QWEN_ASR_PYTHON=/opt/repodesk-asr/bin/python QWEN_ASR_DIRECTORY=/var/lib/repodesk-models
+    && mkdir -p /var/lib/telo-models && chown node:node /var/lib/telo-models
+ENV QWEN_ASR_PYTHON=/opt/telo-asr/bin/python QWEN_ASR_DIRECTORY=/var/lib/telo-models
 FROM transcription-runtime AS app-transcription
 COPY --from=runtime --chown=node:node /app /app
 USER node
@@ -80,7 +80,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=base /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=mise-bin /usr/local/bin/mise /usr/local/bin/mise
 COPY --from=uv-bin /uv /uvx /usr/local/bin/
-WORKDIR /opt/deepx
+WORKDIR /opt/telo
 COPY --from=build /app/dist/job.js ./job.js
 COPY --from=dependencies /app/node_modules/zod ./node_modules/zod
 # Browser dynamic-tool schemas share the application's explicit TypeBox dependency.
@@ -88,7 +88,7 @@ COPY --from=dependencies /app/node_modules/typebox ./node_modules/typebox
 RUN mkdir /task /input /auth /env && chown node:node /task /auth /env
 ENV HOME=/task/home
 USER node
-ENTRYPOINT ["node", "/opt/deepx/job.js"]
+ENTRYPOINT ["node", "/opt/telo/job.js"]
 
 # The trusted execd starts as root; the adapter launches every repository job as UID 1000.
 FROM codex-job AS codex-opensandbox-job
@@ -103,10 +103,10 @@ CMD ["node", "dist/plugin-supervisor.js"]
 
 # Job contains only the protocol runtime and validators.
 FROM runtime-base AS plugin-job
-WORKDIR /opt/repodesk-plugin
+WORKDIR /opt/telo-plugin
 COPY --from=build --chown=node:node /app/dist/plugin-job.mjs ./job.mjs
 USER node
-ENTRYPOINT ["node", "/opt/repodesk-plugin/job.mjs"]
+ENTRYPOINT ["node", "/opt/telo-plugin/job.mjs"]
 
 # Preserve the ordinary app as the default build target.
 FROM runtime AS app

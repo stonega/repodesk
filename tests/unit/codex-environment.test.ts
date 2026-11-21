@@ -51,7 +51,7 @@ test("environment volume keys are tenant-scoped, deterministic and parseable", (
 });
 
 test("persistentEnv configures standard cache and toolchain paths without touching HOME", async () => {
-  const envRoot = await tempDir("repodesk-env-root-");
+  const envRoot = await tempDir("telo-env-root-");
   await ensurePersistentEnvDirs(envRoot);
 
   const env = persistentEnv(envRoot, {
@@ -75,7 +75,7 @@ test("persistentEnv configures standard cache and toolchain paths without touchi
 });
 
 test("detectProjectTools extracts allowlisted versions and ignores hooks or unsafe specs", async () => {
-  const repo = await tempDir("repodesk-detect-repo-");
+  const repo = await tempDir("telo-detect-repo-");
   await writeFile(
     join(repo, ".tool-versions"),
     "# comment\nnodejs 22.14.0\nunknown-tool 1.0.0\n",
@@ -118,7 +118,7 @@ test("detectProjectTools extracts allowlisted versions and ignores hooks or unsa
 });
 
 test("detectProjectTools falls back to lockfile heuristics when explicit versions are absent", async () => {
-  const repo = await tempDir("repodesk-detect-fallback-");
+  const repo = await tempDir("telo-detect-fallback-");
   await writeFile(join(repo, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
   await writeFile(join(repo, "requirements.txt"), "pytest\n");
   await writeFile(join(repo, "Cargo.toml"), '[package]\nname = "demo"\n');
@@ -133,9 +133,9 @@ test("detectProjectTools falls back to lockfile heuristics when explicit version
 });
 
 test("preparePersistentEnvironment installs detected tools under a lock and tolerates partial failures", async () => {
-  const repo = await tempDir("repodesk-prep-repo-");
-  const envRoot = await tempDir("repodesk-prep-env-");
-  const binDir = await tempDir("repodesk-prep-bin-");
+  const repo = await tempDir("telo-prep-repo-");
+  const envRoot = await tempDir("telo-prep-env-");
+  const binDir = await tempDir("telo-prep-bin-");
   const logFile = join(envRoot, "mise.log");
 
   await writeFile(join(repo, ".python-version"), "3.12.5\n");
@@ -179,8 +179,8 @@ exit 0
 });
 
 test("preparePersistentEnvironment succeeds gracefully when mise is unavailable", async () => {
-  const repo = await tempDir("repodesk-nomise-repo-");
-  const envRoot = await tempDir("repodesk-nomise-env-");
+  const repo = await tempDir("telo-nomise-repo-");
+  const envRoot = await tempDir("telo-nomise-env-");
   await writeFile(join(repo, ".python-version"), "3.12.5\n");
 
   const env = persistentEnv(envRoot, {

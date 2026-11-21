@@ -1,6 +1,6 @@
 # Release deployment on a custom VPS
 
-RepoDesk now installs approved GitHub releases through a host-side updater.
+Telo now installs approved GitHub releases through a host-side updater.
 The previous `.github/workflows/deploy.yml` is removed. GitHub Actions verifies
 code; the standard release workflow does not transfer images or deploy to the VPS.
 Explicit operator-authorized exceptions are recorded below. Publishing a stable
@@ -26,7 +26,7 @@ repository reports now have the authenticated `query_github_metadata` repository
 query for current stars, forks and notification subscribers. Package version
 remains v0.1.49; no new stable release, dependency or SQL migration is added.
 
-The source's complete push-triggered [Verify run 43367444453](https://github.com/stonega/repodesk/actions/runs/43367444453)
+The source's complete push-triggered [Verify run 43367444453](https://github.com/stonega/telo/actions/runs/43367444453)
 passes **1,616 deterministic tests and 450 browser scenarios**, quality/types/build,
 runtime and container recovery checks. The four images are built on the VPS from
 the checksummed Git archive of that exact main-reachable source. Exact-image
@@ -60,10 +60,10 @@ are under the release directory. See [the statistics incident](../../postmortem/
 The failed v0.1.48 panel update was caused by disabled Verify and offline CI
 runners. Verify is enabled again and the three isolated permanent runners are
 healthy on the current VPS. The verified patch release
-[v0.1.49](https://github.com/stonega/repodesk/releases/tag/v0.1.49) installs
+[v0.1.49](https://github.com/stonega/telo/releases/tag/v0.1.49) installs
 immutable main-reachable source `5b77390cfa49232b926f633b939e7f0fb3722068`, tree
 `8a51bdea3c3763b555f54413cf134a86fccad162`. Later main changes are not included.
-Its complete [Verify run](https://github.com/stonega/repodesk/actions/runs/43365035671)
+Its complete [Verify run](https://github.com/stonega/telo/actions/runs/43365035671)
 passed **1,589 deterministic tests and 450 browser scenarios**, quality/build,
 exact-image runtime contract, Code Truth and Compose backup/restore checks.
 
@@ -299,7 +299,7 @@ The native host passes application-UID routine actions, blocked submission,
 partitioned-cookie checkpoint and denied HTTPS redirect tests. Its socket directory
 survives restart, and both existing API/worker mounts reconnect. PostgreSQL and all
 three CI runner identities are preserved. The verified protected backup is
-`/opt/repodesk/backups/pre-release-41406054824-1.dump` (**2,303,262 bytes**).
+`/opt/telo/backups/pre-release-41406054824-1.dump` (**2,303,262 bytes**).
 
 The original public YouTube URL now reports the missing
 `https://consent.youtube.com` origin and preserves its headed session. An explicit
@@ -309,9 +309,9 @@ A current-authority Code Truth probe reads `stonega/street-polls` source at
 `3a7cbe02e46b5a8b5329066b52d2953f64492309`; only provenance and byte counts are logged.
 No live account login, Telegram message or model call was used.
 
-See the [deployment and receipt](https://github.com/stonega/repodesk/actions/runs/41406054824),
-[public redirect proof](https://github.com/stonega/repodesk/actions/runs/41406866977),
-[current-scope source proof](https://github.com/stonega/repodesk/actions/runs/41404066398)
+See the [deployment and receipt](https://github.com/stonega/telo/actions/runs/41406054824),
+[public redirect proof](https://github.com/stonega/telo/actions/runs/41406866977),
+[current-scope source proof](https://github.com/stonega/telo/actions/runs/41404066398)
 and [incident record](../../postmortem/2026-11-02-browser-partitioned-cookie.md).
 
 ## Private-message input correction and live blockers (2026-11-10)
@@ -383,11 +383,11 @@ real-model widget quality remain staging checks.
 ## Operator-requested clean reset (2026-11-10)
 
 The operator requested removal of deployment data on `13.140.242.169`. The
-`repodesk` stack was stopped and all five project volumes were removed and
+`telo` stack was stopped and all five project volumes were removed and
 recreated: PostgreSQL, coding-runner state, Code Truth authentication/indexes and
 speech model storage. Saved Browser profiles and their generated system accounts,
 Browser runtime journals, update history, the prior database backup and
-`/root/repodesk-admin-login` were removed. Database, encryption, coding-runner and
+`/root/telo-admin-login` were removed. Database, encryption, coding-runner and
 Browser secrets were regenerated. No data backup was retained for this reset.
 SSH access, installed software, the verified release images and HTTPS certificates
 were preserved. No other VPS was changed.
@@ -404,7 +404,7 @@ installation receipt and its now-deleted administrator/backup references.
 
 An SSH-only proxy gate was initially added during the reset. The operator
 clarified that first-open administrator creation belongs in the web UI, so that
-gate and `/opt/repodesk/publish-after-setup` were removed on the same day.
+gate and `/opt/telo/publish-after-setup` were removed on the same day.
 `PUBLIC_ORIGIN=https://dev.stonegate.me` and Caddy's normal reverse proxy were
 restored, and app/worker were recreated with the configured public origin.
 
@@ -422,7 +422,7 @@ this reset.
 
 ## Fresh installation on the Seattle VPS (2026-11-09)
 
-At the operator's request, RepoDesk was installed fresh on `13.140.242.169`
+At the operator's request, Telo was installed fresh on `13.140.242.169`
 (Ubuntu 24.04, x86_64). No database, credentials, accounts or profiles were
 migrated from the previous VPS. SSH permits public-key authentication only.
 
@@ -431,7 +431,7 @@ The checksum-verified production source snapshot `44a76df8e8f6ee54a42bf7a83b1d9e
 The existing development working tree was not deployed. App, supervisor, task,
 Code Truth and native Browser packages were built from that snapshot. New database
 credentials, encryption key, runner token and Browser token remain protected on
-the host under `/opt/repodesk` and `/etc/repodesk`.
+the host under `/opt/telo` and `/etc/telo`.
 
 Lint, strict types, build and **1,432 deterministic tests across 154 files** pass.
 The exact app image passes all 16 integration-startup cases with zero external
@@ -450,11 +450,11 @@ package files verify. Only the app's loopback port is published by Compose.
 
 The fresh database contains 22 migrations, one deployment administrator and no
 workspaces. Administrator login/logout and unauthenticated access checks pass;
-the generated login is stored in root-only `/root/repodesk-admin-login` (mode 600).
+the generated login is stored in root-only `/root/telo-admin-login` (mode 600).
 Migration rerun and a disposable restore of
 `backups/fresh-install-1794210552528-53347667.dump` (**91,902 bytes**) pass.
 The protected bundle contains build/check logs and `deployment-receipt.json`.
-Use `/opt/repodesk/compose` for operations against its pinned release images.
+Use `/opt/telo/compose` for operations against its pinned release images.
 
 `PUBLIC_ORIGIN` and Caddy target `https://dev.stonegate.me`. **Public DNS cutover
 and HTTPS verification remain pending:** the available DNS credential cannot
@@ -521,7 +521,7 @@ Compose readiness, migration rerun and disposable backup/restore. All **51 build
 artifacts**, public/loopback pages and frontend assets match the verified images.
 
 Browser and coding checkpoints passed before cutover. The protected backup is
-`/opt/repodesk/backups/pre-release-1793614570991-61029298.dump`
+`/opt/telo/backups/pre-release-1793614570991-61029298.dump`
 (**2,870,142 bytes**), with its archive listing verified. Application, worker,
 runner, Code Truth and PostgreSQL are healthy. Configuration, credentials,
 persistent mounts, PostgreSQL and the three Actions runners are preserved.
@@ -615,18 +615,18 @@ private profile cleanup. Native restart preserves the socket directory; both
 existing API and worker mounts successfully invoke Browser afterward.
 
 The protected backup is
-`/opt/repodesk/backups/pre-release-1793583945996-1.dump` (**2,238,307 bytes**), with
+`/opt/telo/backups/pre-release-1793583945996-1.dump` (**2,238,307 bytes**), with
 its archive listing verified. Configuration, credentials, persistent mounts,
 PostgreSQL and CI runner identities are preserved. Protected source metadata,
 checksums, image checks, native proofs and `deployment-receipt.json` remain under
-`/opt/repodesk/releases/1793583945996-1`.
+`/opt/telo/releases/1793583945996-1`.
 
 The first attempt interrupted service when Compose progress contaminated checkpoint
 JSON and Compose dependency resolution blocked recovery. The original writers
 were restored before the corrected exact-image resume. See the
 [incident and regressions](../../postmortem/2026-11-02-browser-checkpoint-output.md),
-[successful status check](https://github.com/stonega/repodesk/actions/runs/41378162854)
-and [full receipt](https://github.com/stonega/repodesk/actions/runs/41378414076).
+[successful status check](https://github.com/stonega/telo/actions/runs/41378162854)
+and [full receipt](https://github.com/stonega/telo/actions/runs/41378414076).
 Real website accounts, native Telegram consent and live Pi/model interactions
 remain separate acceptance checks; none were used as deployment probes.
 
@@ -665,7 +665,7 @@ Unsigned member and Codex Browser requests return HTTP 401. The existing Telegra
 main Mini App is configured; no real site login or test Telegram/model call was used.
 
 The final protected backup is
-`/opt/repodesk/backups/pre-release-41170079370-1.dump` (**2,093,924 bytes**), and its
+`/opt/telo/backups/pre-release-41170079370-1.dump` (**2,093,924 bytes**), and its
 archive listing is verified. Migration `022_browser_profiles.sql` is applied.
 Configuration, credentials, existing volumes, PostgreSQL and all three CI runners
 are preserved. The original index and local main branch were not changed.
@@ -676,7 +676,7 @@ successful fresh cutover. The failed attempt's backup and logs remain available.
 The deployment script now probes migration, API and worker secret readability
 before stopping writers; regressions cover missing API and worker mounts. See the
 [incident and prevention record](../../postmortem/2026-10-31-browser-deployment-secret-mount.md)
-and [successful deployment run](https://github.com/stonega/repodesk/actions/runs/41170079370).
+and [successful deployment run](https://github.com/stonega/telo/actions/runs/41170079370).
 
 ## Private forwarded reference deployment (2026-10-29)
 
@@ -903,10 +903,10 @@ before stopping writers. Manual archives must include the Code Truth image and
 `code-truth-tag` artifact; local-image bundles also require `code-truth-id`.
 
 Keep the running deployment directory and Compose project stable. The default
-root is `/opt/repodesk`, and the default project is `repodesk`:
+root is `/opt/telo`, and the default project is `telo`:
 
 ```text
-/opt/repodesk/
+/opt/telo/
   .env
   secrets/encryption-key
   secrets/codex-runner-token
@@ -923,7 +923,7 @@ Provide dedicated runtime configuration in mode-600 `.env`:
 
 ```dotenv
 POSTGRES_PASSWORD=replace-with-a-long-random-URL-safe-password
-PUBLIC_ORIGIN=https://repodesk.example.com
+PUBLIC_ORIGIN=https://telo.example.com
 TELEGRAM_TRANSPORT=webhook
 APP_PORT=3000
 ```
@@ -1004,9 +1004,9 @@ Never remove volumes or restore/revert automatically. Use
 Only restart a previous image after confirming schema compatibility:
 
 ```sh
-cd /opt/repodesk
+cd /opt/telo
 release_id=$(cat .current-release)
-docker compose --project-directory "$PWD" -p repodesk \
+docker compose --project-directory "$PWD" -p telo \
   --env-file .env --env-file "releases/$release_id/release.env" \
   --env-file "releases/$release_id/codex.env" \
   -f "releases/$release_id/compose.yaml" \

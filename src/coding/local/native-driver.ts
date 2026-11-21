@@ -18,7 +18,7 @@ import type { RunnerSettings } from "./settings.ts";
 const nameSchema = z
   .string()
   .regex(
-    /^deepx-codex-[a-f0-9]{32}-(prepare|setup|implement|check|export|publish)$/,
+    /^telo-codex-[a-f0-9]{32}-(prepare|setup|implement|check|export|publish)$/,
   );
 const processSchema = z.object({
   pid: z.number().int().min(2),
@@ -96,7 +96,7 @@ export class NativeDriver implements SandboxDriver {
   async run(id: string, command: string[], attach: boolean) {
     const spec = this.pending.get(id);
     requireThat(
-      spec && command[1] === "/opt/deepx/job.js",
+      spec && command[1] === "/opt/telo/job.js",
       "coding_job_invalid",
       409,
     );
@@ -131,12 +131,12 @@ export class NativeDriver implements SandboxDriver {
           ...spec.env,
           HOME: home,
           TMPDIR: temp,
-          REPODESK_TASK_ROOT: work,
-          REPODESK_INPUT_ROOT: input,
-          REPODESK_AUTH_ROOT: mount("/auth") ?? join(work, "unused-auth"),
-          ...(envMount ? { REPODESK_ENV_ROOT: envMount } : {}),
-          REPODESK_CODEX_BIN: this.settings.CODEX_NATIVE_CODEX_BIN,
-          REPODESK_AGY_BIN: this.settings.CODEX_NATIVE_AGY_BIN,
+          TELO_TASK_ROOT: work,
+          TELO_INPUT_ROOT: input,
+          TELO_AUTH_ROOT: mount("/auth") ?? join(work, "unused-auth"),
+          ...(envMount ? { TELO_ENV_ROOT: envMount } : {}),
+          TELO_CODEX_BIN: this.settings.CODEX_NATIVE_CODEX_BIN,
+          TELO_AGY_BIN: this.settings.CODEX_NATIVE_AGY_BIN,
         },
       },
     );

@@ -22,7 +22,7 @@
 bash scripts/backup.sh
 ```
 
-脚本生成权限受限的 `backups/deepx-<UTC 时间>.dump`。安排定时执行、离机复制和备份保留策略，避免只在同一块磁盘保存副本。
+脚本生成权限受限的 `backups/telo-<UTC 时间>.dump`。安排定时执行、离机复制和备份保留策略，避免只在同一块磁盘保存副本。
 
 使用实际文件名验证恢复：
 
@@ -58,7 +58,7 @@ curl --fail http://localhost:3000/readyz
 启用 Codex 时，前述停止步骤另执行 `docker compose stop codex-runner`；切换版本后、启动前，另构建任务镜像：
 
 ```sh
-docker build --target codex-job -t localhost/deepx-codex-job:local .
+docker build --target codex-job -t localhost/telo-codex-job:local .
 ```
 
 如果使用自定义镜像名，构建对应配置的 tag。标准 Compose 已包含 Code Truth；旧部署若使用文件令牌叠加配置，应保留原叠加文件和令牌。数据库迁移由 Compose 的 `migrate` 服务执行；失败时保持写入服务停止，检查原因后处理。
@@ -75,35 +75,35 @@ docker build --target codex-job -t localhost/deepx-codex-job:local .
 
 仅在准备使用专用 VPS 更新方式时执行。它会管理基础应用、Code Truth 和 Docker Codex runner，不负责保留自定义 Compose 叠加服务。已有自定义部署先规划迁移，不要直接让更新器覆盖它。
 
-宿主机需要 Node 24、Git、Docker Engine、Compose v2（支持 `up --wait`）、Bash、gzip、sha256sum 和 flock。下面按部署目录 `/opt/repodesk`、Compose 项目名 `repodesk` 举例；实际值必须与已有运行栈一致，不能因安装更新器而随意改名。
+宿主机需要 Node 24、Git、Docker Engine、Compose v2（支持 `up --wait`）、Bash、gzip、sha256sum 和 flock。下面按部署目录 `/opt/telo`、Compose 项目名 `telo` 举例；实际值必须与已有运行栈一致，不能因安装更新器而随意改名。
 
 在匹配当前版本的源码目录执行：
 
 ```sh
-sudo install -d -m 700 /opt/repodesk/updater
-sudo install -m 700 scripts/update-host.mjs /opt/repodesk/updater/update-host.mjs
-sudo install -m 700 scripts/cleanup-host.mjs /opt/repodesk/updater/cleanup-host.mjs
-sudo install -d -o 1000 -g 1000 -m 700 /opt/repodesk/updates /opt/repodesk/updates/requests
-sudo install -m 644 deploy/updates/repodesk-updater.service /etc/systemd/system/repodesk-updater.service
+sudo install -d -m 700 /opt/telo/updater
+sudo install -m 700 scripts/update-host.mjs /opt/telo/updater/update-host.mjs
+sudo install -m 700 scripts/cleanup-host.mjs /opt/telo/updater/cleanup-host.mjs
+sudo install -d -o 1000 -g 1000 -m 700 /opt/telo/updates /opt/telo/updates/requests
+sudo install -m 644 deploy/updates/telo-updater.service /etc/systemd/system/telo-updater.service
 ```
 
-启用前编辑 `/etc/systemd/system/repodesk-updater.service`，核对 `WorkingDirectory`、`ExecStart` 中的 Node 路径、部署根目录、项目名和 GitHub 仓库。模板默认仓库为 `stonega/repodesk`，默认以 root 运行；使用其他服务账号时，确保它可访问 Docker、私有配置和更新队列。
+启用前编辑 `/etc/systemd/system/telo-updater.service`，核对 `WorkingDirectory`、`ExecStart` 中的 Node 路径、部署根目录、项目名和 GitHub 仓库。模板默认仓库为 `stonega/telo`，默认以 root 运行；使用其他服务账号时，确保它可访问 Docker、私有配置和更新队列。
 
 fork 在 `.env` 设置 `UPDATES_GITHUB_REPOSITORY=owner/repository`，并与服务参数一致。公共仓库无需 Token；私有源或 API 限额需要时，使用 Contents/Actions 只读凭据，按服务模板的文件配置保管，勿授予部署工作流写权限。
 
 ```sh
 sudo systemctl daemon-reload
-sudo systemctl enable --now repodesk-updater
+sudo systemctl enable --now telo-updater
 docker compose up -d
 ```
 
 基础 Compose 将部署目录的 `updates/` 挂载给 app，与宿主机更新器共享队列。确认面板检测到更新器就绪，再安装已审阅的稳定发布。更新器会校验所选 commit 的 Verify 结果，并在宿主机构建镜像后切换服务。
 
-首次升级到标准部署内置 Code Truth 的版本时，先用该版本源码中的 `scripts/update-host.mjs` 和 `scripts/cleanup-host.mjs` 更新宿主机的两个文件，再执行 `sudo systemctl restart repodesk-updater`。确认没有正在执行的安装后再替换。旧更新器只构建三个镜像；新版切换脚本会在停止服务之前拒绝缺少 Code Truth 镜像的旧更新包。
+首次升级到标准部署内置 Code Truth 的版本时，先用该版本源码中的 `scripts/update-host.mjs` 和 `scripts/cleanup-host.mjs` 更新宿主机的两个文件，再执行 `sudo systemctl restart telo-updater`。确认没有正在执行的安装后再替换。旧更新器只构建三个镜像；新版切换脚本会在停止服务之前拒绝缺少 Code Truth 镜像的旧更新包。
 
 面板显示 queued/running/completed/failed。更新会等待安全检查点、备份、迁移并检查就绪，可能短暂不可用。失败先读日志并修复原因，再使用 **Retry update**；不要在结果未知时重复切换或删除数据卷。
 
-更新器服务检查使用 `systemctl status repodesk-updater` 或 `journalctl -u repodesk-updater`；详细日志保存在部署目录的 `updates/logs/`。只在受保护环境中查看，分享前脱敏。
+更新器服务检查使用 `systemctl status telo-updater` 或 `journalctl -u telo-updater`；详细日志保存在部署目录的 `updates/logs/`。只在受保护环境中查看，分享前脱敏。
 
 ## 灾难恢复
 

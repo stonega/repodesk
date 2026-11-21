@@ -7,7 +7,7 @@
 ### Conversation history is optional and never grants permissions.
 POST {{baseUrl}}/api/admin/workspaces/{{workspace}}/self-check
 Origin: {{baseUrl}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
@@ -20,7 +20,7 @@ Content-Type: application/json
 ### Follow up using only the conversation from this workspace.
 POST {{baseUrl}}/api/admin/workspaces/{{workspace}}/self-check
 Origin: {{baseUrl}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 

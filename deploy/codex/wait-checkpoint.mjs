@@ -6,7 +6,7 @@ import { setTimeout } from "node:timers/promises";
 const seconds = Number(process.argv[2]);
 if (!Number.isInteger(seconds) || seconds < 1 || seconds > 1800)
   throw Error("Checkpoint wait must be 1–1800 seconds");
-const root = process.env.CODEX_RUNNER_STATE ?? "/var/lib/deepx-codex";
+const root = process.env.CODEX_RUNNER_STATE ?? "/var/lib/telo-codex";
 const deadline = Date.now() + seconds * 1000;
 const safe = new Set([
   "ready",
@@ -21,7 +21,7 @@ let lastNotice = 0;
 for (;;) {
   let active = 0;
   for (const name of await readdir(root)) {
-    if (!/^deepx-codex-[a-f0-9]{32}\.json$/.test(name)) continue;
+    if (!/^telo-codex-[a-f0-9]{32}\.json$/.test(name)) continue;
     let record;
     try {
       record = JSON.parse(await readFile(join(root, name), "utf8"));

@@ -34,7 +34,7 @@ for (const name of ["playwright-core", "zod"]) {
   });
 }
 await writeFile(join(destination, "package.json"), '{"type":"module"}\n');
-for (const name of ["repodesk-browser.service", "install.sh"])
+for (const name of ["telo-browser.service", "install.sh"])
   await cp(`deploy/browser/${name}`, join(destination, name));
 const manifest: Record<string, string> = {};
 for (const file of new Bun.Glob("**/*").scanSync({

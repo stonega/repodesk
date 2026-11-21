@@ -53,9 +53,9 @@ container smoke. This executes the real pinned sandbox probe and then fake
 Codex/GitHub fixtures; it makes no live model or GitHub request:
 
 ```sh
-docker build --target codex-job -t localhost/repodesk-repository-job:verify .
-docker build --target codex-supervisor -t localhost/repodesk-repository-supervisor:verify .
-CODEX_SMOKE_JOB_IMAGE=localhost/repodesk-repository-job:verify CODEX_SMOKE_SUPERVISOR_IMAGE=localhost/repodesk-repository-supervisor:verify bun scripts/codex-smoke.ts
+docker build --target codex-job -t localhost/telo-repository-job:verify .
+docker build --target codex-supervisor -t localhost/telo-repository-supervisor:verify .
+CODEX_SMOKE_JOB_IMAGE=localhost/telo-repository-job:verify CODEX_SMOKE_SUPERVISOR_IMAGE=localhost/telo-repository-supervisor:verify bun scripts/codex-smoke.ts
 ```
 
 The release case verifies an ignored built asset and committed guide through the

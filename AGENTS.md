@@ -2,7 +2,7 @@
 
 ## Product and scope
 
-RepoDesk is a Telegram assistant for GitHub organizations and personal repositories, inspired by Every Agent. Start with
+Telo is a Telegram assistant for GitHub organizations and personal repositories, inspired by Every Agent. Start with
 `docs/README.md`. Public competitor claims, design proposals, and implemented behavior
 must remain distinguishable. Check `docs/implementation/implementation-status.md`
 for implemented behavior and outstanding release gates; do not infer current behavior

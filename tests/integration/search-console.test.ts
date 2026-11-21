@@ -15,7 +15,7 @@ import { googleFixture } from "../google-fixture.ts";
 const rootUrl = process.env.TEST_DATABASE_URL;
 (rootUrl ? describe : describe.skip)("Personal Search Console", () => {
   const root = database(rootUrl ?? "postgres://unused@localhost/unused");
-  const name = `repodesk_gsc_${randomUUID().replaceAll("-", "")}`,
+  const name = `telo_gsc_${randomUUID().replaceAll("-", "")}`,
     key = "ab".repeat(32);
   const site = "sc-domain:example.test";
   let store: Store,
@@ -39,7 +39,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     };
     const d = await store.deployment();
     d.active = true;
-    d.bot = { id: "999", username: "repodesk", visibleAll: true };
+    d.bot = { id: "999", username: "telo", visibleAll: true };
     await store.saveDeployment(store.pool, d);
   });
   afterAll(async () => {

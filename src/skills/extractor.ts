@@ -580,7 +580,7 @@ export function saveDirectSkill(
 }
 
 export function buildExtractionSystemPrompt(): string {
-  return `You are RepoDesk's autonomous skill extraction engine.
+  return `You are Telo's autonomous skill extraction engine.
 Analyze the supplied work record (conversation, Mission, or Codex coding task) and decide whether it contains a genuinely reusable procedure, convention, checklist, or repository engineering lesson worth saving as a persistent Skill.
 
 Return ONLY valid JSON matching:

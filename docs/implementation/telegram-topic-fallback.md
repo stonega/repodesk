@@ -21,7 +21,7 @@ environment. Do not copy secrets into the bundle or print workspace data:
 bun build scripts/private-topic-fallback.ts --target=node --packages=external --outfile=/tmp/topic-fallback.mjs
 # Copy the bundle to the authorized host, then into /app/dist/topic-fallback.mjs.
 # Use explicit verified IDs, never usernames or IDs from an untrusted message.
-docker exec -w /app/dist repodesk-app-1 node topic-fallback.mjs enable WORKSPACE_ID TELEGRAM_ACTOR_ID BOT_ID
+docker exec -w /app/dist telo-app-1 node topic-fallback.mjs enable WORKSPACE_ID TELEGRAM_ACTOR_ID BOT_ID
 # The same command with disable revokes the preference.
 ```
 

@@ -108,7 +108,10 @@ export class DeviceAuth {
       sealed,
     );
     const value = JSON.parse(plain);
-    if (value.format === "repodesk-device-auth-v1") {
+    if (
+      value.format === "telo-device-auth-v1" ||
+      value.format === "repodesk-device-auth-v1"
+    ) {
       return z
         .object({
           generation: z.string().min(1),
@@ -158,7 +161,7 @@ export class DeviceAuth {
       encrypt(
         hash(this.settings.CODEX_RUNNER_TOKEN),
         this.aad(workspaceId),
-        JSON.stringify({ format: "repodesk-device-auth-v1", ...value }),
+        JSON.stringify({ format: "telo-device-auth-v1", ...value }),
       ),
       { mode: 0o600 },
     );

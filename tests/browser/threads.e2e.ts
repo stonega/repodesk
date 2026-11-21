@@ -25,7 +25,7 @@ const thread: ThreadSummary = {
   user: alice,
   group: {
     id: "-100100",
-    title: "RepoDesk Engineering — platform discussions",
+    title: "Telo Engineering — platform discussions",
   },
   topicId: 7,
   participants: [alice, bob],

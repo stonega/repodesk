@@ -24,7 +24,7 @@ produces a model-list error; check the endpoint and any proxy or sign-in page.
 
 An HTML 502/503/504 response while saving a model provider appears as a failed
 model-fetch error with its HTTP status and guidance to check the API base URL and
-network access from the RepoDesk server. Check the app, database and reverse
+network access from the Telo server. Check the app, database and reverse
 proxy using the health checks above. The dialog keeps its draft and unlocks its
 controls after failure. Check the saved provider before retrying if the request's
 outcome is uncertain. A browser JSON parser message alone does not establish that
@@ -34,7 +34,7 @@ If model discovery works on your workstation but fails from the VPS, test
 connectivity from both the VPS host and the running app container. Node
 `UND_ERR_CONNECT_TIMEOUT` means the server could not establish the provider
 connection before receiving an HTTP response. Compare DNS answers and reachability
-to other services. A healthy RepoDesk process does not prove provider connectivity.
+to other services. A healthy Telo process does not prove provider connectivity.
 Resolve routing or provider-side access restrictions, use a reachable API endpoint,
 or configure an approved outbound proxy before retrying. Workstation proxy settings
 are not automatically available to the VPS app.

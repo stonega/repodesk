@@ -20,8 +20,8 @@ controllers retries briefly to tolerate process-exit races and fails startup if
 the hierarchy cannot be prepared. The initialization follows
 [Moby's Docker-in-Docker wrapper](https://github.com/moby/moby/blob/master/hack/dind).
 
-The outer Compose project is `repodesk-actions-runner`, separate from production's
-`repodesk`. Each container is limited to two CPUs and 2 GiB of memory. The combined
+The outer Compose project is `telo-actions-runner`, separate from production's
+`telo`. Each container is limited to two CPUs and 2 GiB of memory. The combined
 memory ceiling is 6 GiB on the recorded four-CPU, 8-GiB VPS, leaving approximately
 2 GiB for production and the host. CPU limits are shared ceilings, not reserved
 cores; all three busy runners still compete with production for four host CPUs.
@@ -51,10 +51,10 @@ or production service restart is required. From the repository checkout:
 ```sh
 tar -C deploy/actions-runner -cf - Dockerfile entrypoint.sh daemon.json cleanup.sh compose.yaml |
   ssh root@13.140.242.169 \
-    'install -d -m 0755 /opt/repodesk-actions-runner && tar -C /opt/repodesk-actions-runner -xf -'
+    'install -d -m 0755 /opt/telo-actions-runner && tar -C /opt/telo-actions-runner -xf -'
 ssh root@13.140.242.169 \
-  'docker compose --file /opt/repodesk-actions-runner/compose.yaml build runner &&
-   docker compose --file /opt/repodesk-actions-runner/compose.yaml up --no-build --detach'
+  'docker compose --file /opt/telo-actions-runner/compose.yaml build runner &&
+   docker compose --file /opt/telo-actions-runner/compose.yaml up --no-build --detach'
 ```
 
 Each container waits for registration before starting the GitHub listener. Create
@@ -64,22 +64,22 @@ VPS or put the registration token in a Compose file:
 
 ```sh
 for runner_service in runner runner-2 runner-3; do
-  runner_name=repodesk-vps
+  runner_name=telo-vps
   if [ "$runner_service" != runner ]; then
-    runner_name="repodesk-vps-${runner_service#runner-}"
+    runner_name="telo-vps-${runner_service#runner-}"
   fi
   # Preserve any existing registration, especially the original runner.
   if ssh root@13.140.242.169 \
-    "docker compose --file /opt/repodesk-actions-runner/compose.yaml exec -T --user runner '$runner_service' test -f .runner"; then
+    "docker compose --file /opt/telo-actions-runner/compose.yaml exec -T --user runner '$runner_service' test -f .runner"; then
     continue
   fi
-  gh api --method POST repos/stonega/repodesk/actions/runners/registration-token --jq .token |
+  gh api --method POST repos/stonega/telo/actions/runners/registration-token --jq .token |
   ssh root@13.140.242.169 "
     set -eu
     IFS= read -r registration_token
-    docker compose --file /opt/repodesk-actions-runner/compose.yaml exec -T --user runner '$runner_service' \
-      ./config.sh --unattended --url https://github.com/stonega/repodesk \
-      --name '$runner_name' --work _work --labels repodesk --token \"\$registration_token\"
+    docker compose --file /opt/telo-actions-runner/compose.yaml exec -T --user runner '$runner_service' \
+      ./config.sh --unattended --url https://github.com/stonega/telo \
+      --name '$runner_name' --work _work --labels telo --token \"\$registration_token\"
   "
 done
 ```
@@ -100,8 +100,8 @@ before recreating them. Copy the updated Compose file, validate it, then run:
 
 ```sh
 ssh root@13.140.242.169 \
-  'docker compose --file /opt/repodesk-actions-runner/compose.yaml config --quiet &&
-   docker compose --file /opt/repodesk-actions-runner/compose.yaml up --no-build --detach'
+  'docker compose --file /opt/telo-actions-runner/compose.yaml config --quiet &&
+   docker compose --file /opt/telo-actions-runner/compose.yaml up --no-build --detach'
 ```
 
 The original `runner` keeps its registration and Docker cache. Run the registration
@@ -115,8 +115,8 @@ this change.
 Before installing a changed runner image, run the local resource-limit smoke:
 
 ```sh
-docker build --tag repodesk-actions-runner:test deploy/actions-runner
-bash scripts/actions-runner-smoke.sh repodesk-actions-runner:test
+docker build --tag telo-actions-runner:test deploy/actions-runner
+bash scripts/actions-runner-smoke.sh telo-actions-runner:test
 docker compose --file deploy/actions-runner/compose.yaml config --quiet
 ```
 
@@ -131,10 +131,10 @@ pushing the commit does
 not update the running runner container.
 
 ```sh
-gh api repos/stonega/repodesk/actions/runners \
+gh api repos/stonega/telo/actions/runners \
   --jq '.runners[] | {name,status,busy,labels:[.labels[].name]}'
 ssh root@13.140.242.169 \
-  'docker compose --file /opt/repodesk-actions-runner/compose.yaml ps'
+  'docker compose --file /opt/telo-actions-runner/compose.yaml ps'
 ```
 
 All three runners must appear online with all three required labels. Each container's
@@ -145,7 +145,7 @@ for that runner. Substitute `runner-2` or `runner-3` for the additional services
 
 ```sh
 ssh root@13.140.242.169 \
-  'docker compose --file /opt/repodesk-actions-runner/compose.yaml restart runner'
+  'docker compose --file /opt/telo-actions-runner/compose.yaml restart runner'
 ```
 
 The updated runner cleans unused inner Docker images, build cache and disposable
@@ -160,9 +160,9 @@ runner; registering it alone does not publish a release or deploy the applicatio
 
 ## VPS verification, 2026-10-08
 
-Installed in `/opt/repodesk-actions-runner` and registered `repodesk-vps` for the
-private `stonega/repodesk` repository. GitHub reported it online and idle with
-`self-hosted`, `Linux`, `X64` and `repodesk` labels. The container was healthy with
+Installed in `/opt/telo-actions-runner` and registered `telo-vps` for the
+private `stonega/telo` repository. GitHub reported it online and idle with
+`self-hosted`, `Linux`, `X64` and `telo` labels. The container was healthy with
 the configured two-CPU and 4-GiB limits; the host Docker service is enabled for boot.
 The runner used version 2.337.0, Node 24.21.0, Docker 29.8.2 and Compose 5.6.0.
 
@@ -181,13 +181,13 @@ edits before testing a complete Actions run on this runner.
 Expanded the recorded VPS to three runners using the existing runner image after
 its exact image passed the isolated smoke under the new 2-GiB memory limit.
 The original runner was idle before recreation. Its registration ID 21 and both
-named volumes remain; the new registrations are `repodesk-vps-2` (ID 22) and
-`repodesk-vps-3` (ID 23). GitHub reported all three online and idle with the required
+named volumes remain; the new registrations are `telo-vps-2` (ID 22) and
+`telo-vps-3` (ID 23). GitHub reported all three online and idle with the required
 labels, and all three Compose containers are healthy with two-CPU/2-GiB limits.
 The original listener briefly retried a stale GitHub session after restart and
 reconnected without re-registration.
 
-Each inner daemon reports `repodesk.ci=true`. Three simultaneous resource-limited
+Each inner daemon reports `telo.ci=true`. Three simultaneous resource-limited
 HTTP containers successfully bound the same internal port on their separate
 daemons and returned their own runner markers. Nested CPU, memory and PID limits
 passed on every runner. All temporary smoke containers/volumes were removed.

@@ -54,7 +54,7 @@ describe("private browser host transport", () => {
       signature: string,
     ) => { status?: number; body: unknown },
   ) {
-    const directory = await mkdtemp(join(tmpdir(), "repodesk-browser-socket-"));
+    const directory = await mkdtemp(join(tmpdir(), "telo-browser-socket-"));
     directories.push(directory);
     const socket = join(directory, "host.sock");
     const server = createServer(async (req, res) => {
@@ -62,7 +62,7 @@ describe("private browser host transport", () => {
       for await (const chunk of req) chunks.push(Buffer.from(chunk));
       const result = reply(
         Buffer.concat(chunks).toString(),
-        String(req.headers["x-repodesk-browser-signature"]),
+        String(req.headers["x-telo-browser-signature"]),
       );
       res.writeHead(result.status ?? 200, {
         "content-type": "application/json",

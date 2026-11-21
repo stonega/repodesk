@@ -170,7 +170,7 @@ const args = {
             "Proactively use send_telegram_widget",
           );
           expect(input.system).toContain(
-            "Local widget policy errors come from RepoDesk, not Telegram API rejections",
+            "Local widget policy errors come from Telo, not Telegram API rejections",
           );
           expect(input.system).toContain(
             "even if an older pinned skill says schedules use text",

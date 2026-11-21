@@ -10,7 +10,7 @@ assert.deepEqual(
   JSON.parse(await readFile("sdk/plugin/manifest.schema.json", "utf8")),
   z.toJSONSchema(manifestSchema, { target: "draft-2020-12" }),
 );
-const temporary = await mkdtemp(join(tmpdir(), "repodesk-author-template-"));
+const temporary = await mkdtemp(join(tmpdir(), "telo-author-template-"));
 const directory = join(temporary, "standalone");
 async function run(args: string[], cwd: string) {
   const child = Bun.spawn([process.execPath, ...args], {

@@ -175,7 +175,7 @@ when implementing or reviewing a change.
 
 - **Preference:** Run the proposed dedicated VPS browser in normal headed mode.
   Do not silently substitute a headless browser.
-- **Scope:** The persistent host browser discussed for RepoDesk automation,
+- **Scope:** The persistent host browser discussed for Telo automation,
   shared through a service by chat, Codex and other authorized plugins.
 - **Source:** 2026-10-30 — the user explicitly rejected headless mode for this
   workflow because they consider its limitations too restrictive.
@@ -224,7 +224,7 @@ when implementing or reviewing a change.
   reference. Check desktop/mobile, both themes, list wrapping and card spacing.
 - **Source update:** 2026-10-23 — disabling privacy and re-adding the bot still
   left the user's group inactive. Explain that re-adding in Telegram does not
-  restore the RepoDesk link; show a New → fresh /link command reminder on inactive
+  restore the Telo link; show a New → fresh /link command reminder on inactive
   saved groups and verify relinking removes it.
 - **Source update:** 2026-10-23 — the user requested receiving group messages by
   default and removing the `/capture on` instruction from the link confirmation.
@@ -432,7 +432,7 @@ when implementing or reviewing a change.
   client's back/close controls or adding an action button to a read-only page
   without a purpose. Reuse backend services and suitable web components while
   adapting the Mini App presentation to Telegram.
-- **Scope:** All RepoDesk Telegram Mini App pages, starting with the Codex
+- **Scope:** All Telo Telegram Mini App pages, starting with the Codex
   task conversation/history viewer. Native Topics remain the primary conversation
   interface; the task viewer supplements them. This does not restyle the admin SPA.
 - **Source:** 2026-10-18 — the user requested that our Mini App follow Telegram's
@@ -554,7 +554,7 @@ when implementing or reviewing a change.
 
 - **Preference:** Provider save errors identify the failed model fetch in plain
   language and suggest checking the API base URL and network access from the
-  RepoDesk server. Gateway responses retain their HTTP status without exposing
+  Telo server. Gateway responses retain their HTTP status without exposing
   HTML fragments or JSON parser exceptions.
 - **Scope:** Model provider New/Edit dialogs in setup and Model settings. Keep
   errors inside the open dialog and retain the draft for explicit retry.
@@ -627,7 +627,7 @@ when implementing or reviewing a change.
   icon automatically, the user requested removing the unnecessary download and
   manual upload step. This supersedes the earlier guided branding requirement.
 - **Exceptions:** Owners can customize their App directly in GitHub settings;
-  RepoDesk does not prompt for or require that customization.
+  Telo does not prompt for or require that customization.
 
 ### Telegram features use ordinary chat
 
@@ -635,7 +635,7 @@ when implementing or reviewing a change.
   in ordinary language, including repository selection, GitHub/Google connections,
   task status/cancellation, workflows, settings, usage, instructions and privacy.
   Help and recovery messages use conversational requests.
-- **Scope:** RepoDesk's Telegram experience in private chats, linked groups and
+- **Scope:** Telo's Telegram experience in private chats, linked groups and
   Topics. Account management stays private; group delivery still depends on
   Telegram privacy settings and mentions/replies.
 - **Source:** 2026-11-11 — the user showed the native command menu and requested
@@ -822,11 +822,11 @@ when implementing or reviewing a change.
 
 - **Preference:** Use the sidebar workspace selector's muted rounded trigger,
   chevron, bordered menu, blue hover state and SVG selection check for dropdown
-  inputs throughout RepoDesk. Share these styles across controls and themes.
+  inputs throughout Telo. Share these styles across controls and themes.
 - **Scope:** All web admin and setup dropdown inputs, including form dialogs,
   filters, timezone groups, model suggestions and searchable repository selectors,
   on desktop and mobile.
-- **Source:** 2026-10-06 — user requested “update all dropdown input in repodesk
+- **Source:** 2026-10-06 — user requested “update all dropdown input in telo
   to style like the workspace selector in left side bar.” and requested reimplementation.
 - **Exceptions:** Preserve repository search and existing field behavior, including
   validation, custom model IDs, disabled states and keyboard use. Workspace creation remains a
@@ -1203,17 +1203,17 @@ when implementing or reviewing a change.
 
 ### Admin UI follows TelegramUI's visual language
 
-- **Preference:** Use TelegramUI as a design reference for RepoDesk's own UI:
+- **Preference:** Use TelegramUI as a design reference for Telo's own UI:
   system typography, a soft gray canvas, white grouped sections, blue actions,
   quiet separators, rounded controls, compact status badges, and comfortable
   touch targets. Keep these patterns consistent across the admin panel and setup.
   Maintain the local CSS tokens and components rather than importing TelegramUI.
-- **Scope:** RepoDesk web admin and setup surfaces. This does not turn the site
+- **Scope:** Telo web admin and setup surfaces. This does not turn the site
   into a Telegram Mini App or imply that it reads Telegram client theme values.
 - **Source:** 2026-09-28 — user linked [TelegramUI](https://github.com/telegram-mini-apps-dev/TelegramUI)
   and asked to use its design as a reference without using the package directly.
   Reference revision: `00c87ea84f34f2869ce9d725c453349b0d1c91bc`.
-- **Exceptions:** Preserve the established minimal green RepoDesk mark and the
+- **Exceptions:** Preserve the established minimal green Telo mark and the
   existing green setup illustration; they provide product identity within the
   updated interface. Existing action labels, accessible icon controls and
   permission-sensitive flows remain governed by their specific rules below.
@@ -1222,20 +1222,20 @@ when implementing or reviewing a change.
 
 - **Preference:** Use one clear vector mark with simple geometry and the
   existing restrained green palette. Avoid gradients, shadows and extra symbols.
-- **Scope:** RepoDesk logo, favicon and product brand treatment.
+- **Scope:** Telo logo, favicon and product brand treatment.
 - **Source:** 2026-09-26 — user asked for a logo and specified a super clean design.
 - **Exceptions:** None recorded.
 
 ### Product branding is independent of connected GitHub accounts
 
-- **Preference:** Use RepoDesk as the product name in the admin panel and bot.
+- **Preference:** Use Telo as the product name in the admin panel and bot.
   Show organization and personal GitHub account names only as connected account
-  data or clearly labeled examples. Suggest lowercase `repodesk` as the default
+  data or clearly labeled examples. Suggest lowercase `telo` as the default
   GitHub App name in setup and the creation dialog, without a workspace suffix.
 - **Scope:** Product identity, setup, help text, default GitHub App name and examples.
 - **Source:** 2026-09-26 — user clarified that DeepX was only an example GitHub
-  organization and chose RepoDesk as the project name.
-  2026-10-08 — user requested `repodesk` as the default GitHub App name.
+  organization and chose Telo as the project name.
+  2026-10-08 — user requested `telo` as the default GitHub App name.
 - **Exceptions:** Historical deployment records and compatibility identifiers may
   retain their original values so existing installations continue to work.
   Custom App names remain editable; GitHub may require another name if the
@@ -1280,7 +1280,7 @@ when implementing or reviewing a change.
   policies in Workspace settings, and detailed model management in
   the admin panel.
 - **Scope:** Authenticated setup at `/setup`, including desktop and mobile.
-- **Source update:** 2026-10-18 — user requested removing the Welcome to RepoDesk
+- **Source update:** 2026-10-18 — user requested removing the Welcome to Telo
   modal. Successful GitHub repository connection now opens the workspace directly,
   superseding the earlier confetti and Get started requirement.
 - **Source update:** 2026-10-08 — user requested a model-provider step during first
@@ -1297,7 +1297,7 @@ when implementing or reviewing a change.
   On 2026-09-27, the user reported that choosing All repositories in GitHub
   stalled setup; the setup connection must accept all currently granted repos.
   On 2026-09-27, the user asked for the final dialog to say Welcome to
-  RepoDesk with a Get started action instead of GitHub connected.
+  Telo with a Get started action instead of GitHub connected.
   On 2026-09-27, the user asked where extension settings went after setup;
   keep Plugins visible to deployment administrators before Telegram account
   linking so those settings remain discoverable.
@@ -1618,7 +1618,7 @@ when implementing or reviewing a change.
   outside-click dismissal.
 - **Scope:** Signed-in admin sidebar workspace selector, on desktop and mobile.
 - **Source:** 2026-09-28 — user shared the native workspace select menu and asked
-  to use RepoDesk's own dropdown.
+  to use Telo's own dropdown.
 - **Exceptions:** The earlier allowance for native form selectors is superseded
   by the 2026-10-06 shared dropdown preference above.
 
@@ -2003,7 +2003,7 @@ when implementing or reviewing a change.
   Existing App settings are not rewritten. Local or non-HTTPS origins keep delivery
   inactive until a public HTTPS receiver is configured. Review Bot policies and
   verified member identities remain separate requirements.
-  The setup wizard uses personal ownership and the default `repodesk` name without a
+  The setup wizard uses personal ownership and the default `telo` name without a
   dialog; organization ownership and visibility choices remain in Plugins.
 
 ### Common action buttons use Reicon
@@ -2161,7 +2161,7 @@ Use this format for each preference:
 
 ### Telegram feels like a warm work buddy
 
-- **Preference:** RepoDesk speaks as a dependable, approachable work partner,
+- **Preference:** Telo speaks as a dependable, approachable work partner,
   with a little energy and personality. Match the person's language and formality;
   “小伙伴”, “buddy” or a supplied name may fit naturally, without becoming a
   mandatory greeting. Use occasional light humor or emoji when the mood fits.
@@ -2408,7 +2408,7 @@ Use this format for each preference:
   required. Select the page layout from the route and established permissions,
   independent of whether its data has arrived. Overview keeps its count cards,
   available connection cards and team configuration labels visible while loading.
-- **Exceptions:** App startup uses only the centered RepoDesk logo and brand text
+- **Exceptions:** App startup uses only the centered Telo logo and brand text
   while deployment status, session and workspaces are unknown; show setup or sign-in
   only after those checks finish. 2026-10-05 — user reported that a completed
   installation briefly shows the setup page when opening the app.

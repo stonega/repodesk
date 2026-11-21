@@ -1,6 +1,6 @@
 import sys, json, subprocess, hashlib, urllib.request, re, datetime, os
 from pathlib import Path
-root=Path('/opt/repodesk')
+root=Path('/opt/telo')
 release=Path(sys.argv[1])
 meta=json.loads((release/'source-metadata.json').read_text())
 assert (root/'.current-release').read_text().strip()==meta['release_id']
@@ -11,32 +11,32 @@ assert before['secret_hashes']==after['secret_hashes'],'Configuration or credent
 for name,value in before['containers'].items():
     new=after['containers'][name]
     assert sorted(value['mounts'],key=lambda m:m['Destination'])==sorted(new['mounts'],key=lambda m:m['Destination']),f'Persistent mounts changed for {name}'
-    if name=='repodesk-postgres-1' or name.startswith('repodesk-actions-runner-'):
+    if name=='telo-postgres-1' or name.startswith('telo-actions-runner-'):
         assert value['id']==new['id'],f'Unrelated container was replaced: {name}'
-for name in ['repodesk-app-1','repodesk-worker-1','repodesk-codex-runner-1','repodesk-code-truth-1']:
+for name in ['telo-app-1','telo-worker-1','telo-codex-runner-1','telo-code-truth-1']:
     assert after['containers'][name]['status']=='running' and after['containers'][name]['health']=='healthy',f'Service unhealthy: {name}'
 actual={}
-for key,name in [('app','repodesk-app-1'),('supervisor','repodesk-codex-runner-1'),('code_truth','repodesk-code-truth-1')]:
+for key,name in [('app','telo-app-1'),('supervisor','telo-codex-runner-1'),('code_truth','telo-code-truth-1')]:
     actual[key]=after['containers'][name]['image']
     tag=(release/{'app':'image-tag','supervisor':'codex-supervisor-tag','code_truth':'code-truth-tag'}[key]).read_text().strip()
     expected=subprocess.check_output(['docker','image','inspect','--format','{{.Id}}',tag],text=True).strip()
     assert actual[key]==expected,f'Image mismatch for {key}'
-assert after['containers']['repodesk-worker-1']['image']==actual['app']
+assert after['containers']['telo-worker-1']['image']==actual['app']
 hashes=json.loads((release/'artifact-hashes.json').read_text())
 verified=0
 for key,expected in hashes.items():
     part,path=key.split('/',1)
     if part=='image-app':
-        container='repodesk-app-1'; absolute='/app/'+path
+        container='telo-app-1'; absolute='/app/'+path
     elif part=='image-supervisor':
-        container='repodesk-codex-runner-1'; absolute='/app/'+path
+        container='telo-codex-runner-1'; absolute='/app/'+path
     elif part=='image-job':
         tag=(release/'codex-job-tag').read_text().strip()
         script="const fs=require('fs'),crypto=require('crypto');process.stdout.write(crypto.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))"
-        result=subprocess.check_output(['docker','run','--rm','--network','none','--entrypoint','node',tag,'-e',script,'/opt/deepx/'+path],text=True).strip()
+        result=subprocess.check_output(['docker','run','--rm','--network','none','--entrypoint','node',tag,'-e',script,'/opt/telo/'+path],text=True).strip()
         assert result==expected,'Task image artifact mismatch'
         image_id=subprocess.check_output(['docker','image','inspect','--format','{{.Id}}',tag],text=True).strip()
-        configured=subprocess.check_output(['docker','exec','repodesk-codex-runner-1','node','-e','process.stdout.write(process.env.CODEX_RUNNER_IMAGE)'],text=True).strip()
+        configured=subprocess.check_output(['docker','exec','telo-codex-runner-1','node','-e','process.stdout.write(process.env.CODEX_RUNNER_IMAGE)'],text=True).strip()
         assert configured==image_id,'Runner task image mismatch'
         verified+=1
         continue
@@ -51,7 +51,7 @@ assert archive_hash==meta['source_sha256']
 http={}
 html_verification={}
 def request_url(url):
-    return urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'RepoDesk-Deployment-Verification/1.0'}),timeout=20)
+    return urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'Telo-Deployment-Verification/1.0'}),timeout=20)
 for origin in ['http://127.0.0.1:3000','https://dev.stonegate.me']:
     paths={}
     for path in ['/healthz','/readyz','/admin','/mini']:
@@ -95,8 +95,8 @@ for origin in ['http://127.0.0.1:3000','https://dev.stonegate.me']:
 backup=root/'backups'/f"pre-release-{meta['release_id']}.dump"
 assert backup.stat().st_size>0
 with backup.open('rb') as data:
-    subprocess.run(['docker','exec','-i','repodesk-postgres-1','pg_restore','--list'],stdin=data,stdout=subprocess.DEVNULL,check=True)
-receipt={'release_id':meta['release_id'],'previous_release_id':before['release_id'],'source_commit':meta['source_commit'],'fix_commit':meta['source_commit'],'source_base_commit':meta['base_commit'],'source_tree':meta['source_tree'],'package_version':meta['package_version'],'verified_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'services':{name:{'image':after['containers'][name]['image'],'health':after['containers'][name]['health']} for name in ['repodesk-app-1','repodesk-worker-1','repodesk-codex-runner-1','repodesk-code-truth-1']},'verified_artifacts':verified,'source_archive_verified':True,'public_and_loopback_http':http,'html_verification':html_verification,'configuration_and_credentials_preserved':True,'persistent_volumes_preserved':True,'postgres_and_actions_runners_preserved':True,'browser_host':json.loads((release/'native-host-verification.json').read_text()),'backup':{'path':str(backup),'bytes':backup.stat().st_size,'archive_verified':True}}
+    subprocess.run(['docker','exec','-i','telo-postgres-1','pg_restore','--list'],stdin=data,stdout=subprocess.DEVNULL,check=True)
+receipt={'release_id':meta['release_id'],'previous_release_id':before['release_id'],'source_commit':meta['source_commit'],'fix_commit':meta['source_commit'],'source_base_commit':meta['base_commit'],'source_tree':meta['source_tree'],'package_version':meta['package_version'],'verified_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'services':{name:{'image':after['containers'][name]['image'],'health':after['containers'][name]['health']} for name in ['telo-app-1','telo-worker-1','telo-codex-runner-1','telo-code-truth-1']},'verified_artifacts':verified,'source_archive_verified':True,'public_and_loopback_http':http,'html_verification':html_verification,'configuration_and_credentials_preserved':True,'persistent_volumes_preserved':True,'postgres_and_actions_runners_preserved':True,'browser_host':json.loads((release/'native-host-verification.json').read_text()),'backup':{'path':str(backup),'bytes':backup.stat().st_size,'archive_verified':True}}
 output=release/'deployment-receipt.json'
 output.write_text(json.dumps(receipt,indent=2)+'\n')
 os.chmod(output,0o600)

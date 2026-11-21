@@ -40,8 +40,8 @@ export class OpenSandboxDriver implements SandboxDriver {
   }
   private metadata(name?: string) {
     return {
-      "repodesk-owner": this.owner,
-      ...(name ? { "repodesk-phase": name } : {}),
+      "telo-owner": this.owner,
+      ...(name ? { "telo-phase": name } : {}),
     };
   }
   async ready() {
@@ -161,8 +161,8 @@ export class OpenSandboxDriver implements SandboxDriver {
       for (const sandbox of active) {
         requireThat(
           (!id || id === sandbox.id) &&
-            sandbox.metadata?.["repodesk-owner"] === this.owner &&
-            sandbox.metadata?.["repodesk-phase"] === name,
+            sandbox.metadata?.["telo-owner"] === this.owner &&
+            sandbox.metadata?.["telo-phase"] === name,
           "coding_sandbox_identity_invalid",
           503,
         );

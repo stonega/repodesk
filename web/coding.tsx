@@ -85,7 +85,7 @@ function RunnerSetupNotice() {
       connect your account. If the runner is unavailable, check the deployment
       status and recheck the connection.{" "}
       <a
-        href="https://github.com/stonega/repodesk/blob/main/docs/implementation/codex-runner.md#configure-the-deployment"
+        href="https://github.com/stonega/telo/blob/main/docs/implementation/codex-runner.md#configure-the-deployment"
         target="_blank"
         rel="noopener noreferrer"
       >

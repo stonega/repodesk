@@ -43,7 +43,7 @@ export class Docker implements ContainerEngine {
           .split("\n"),
       );
       // Docker has no --ignore; successful discovery distinguishes absence from outages.
-      const targets = args.filter((arg) => arg.startsWith("deepx-codex-"));
+      const targets = args.filter((arg) => arg.startsWith("telo-codex-"));
       const present = targets.filter((name) => names.has(name));
       if (!present.length) return "";
       args = [
@@ -53,7 +53,7 @@ export class Docker implements ContainerEngine {
     }
     if (args[0] === "cp") {
       const target = args[2]?.match(
-        /^(deepx-codex-[a-f0-9]{32})-[a-z]+:(\/input\/[^/]+)$/,
+        /^(telo-codex-[a-f0-9]{32})-[a-z]+:(\/input\/[^/]+)$/,
       );
       if (target) {
         const copier = `${target[1]}-input`;
@@ -90,7 +90,7 @@ export class Docker implements ContainerEngine {
         }
       }
       if (
-        /^deepx-codex-[a-f0-9]{32}-implement:\/auth\/(?:auth|antigravity-auth)\.json$/.test(
+        /^telo-codex-[a-f0-9]{32}-implement:\/auth\/(?:auth|antigravity-auth)\.json$/.test(
           args[2] ?? "",
         )
       ) {

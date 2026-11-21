@@ -215,7 +215,7 @@ export class NativeBrowserHost {
       503,
     );
     const name = `browser-session:${identity.directory.split("/").at(-1)}`;
-    const encryptionKey = hash(`repodesk:browser-session:v1:${this.key}`);
+    const encryptionKey = hash(`telo:browser-session:v1:${this.key}`);
     const path = join(identity.directory, "session.json");
     if (value) {
       const raw = JSON.stringify(browserCheckpoint.parse(value));

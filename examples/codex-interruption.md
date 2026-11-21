@@ -5,10 +5,10 @@ implementations. It sends no Telegram messages, paid model requests or GitHub
 writes. Run it against a local Docker daemon with the source's matching images:
 
 ```sh
-docker build --target codex-job -t repodesk-codex-job:interruption-verify .
-docker build --target codex-supervisor -t repodesk-codex-supervisor:interruption-verify .
-CODEX_SMOKE_JOB_IMAGE=repodesk-codex-job:interruption-verify \
-CODEX_SMOKE_SUPERVISOR_IMAGE=repodesk-codex-supervisor:interruption-verify \
+docker build --target codex-job -t telo-codex-job:interruption-verify .
+docker build --target codex-supervisor -t telo-codex-supervisor:interruption-verify .
+CODEX_SMOKE_JOB_IMAGE=telo-codex-job:interruption-verify \
+CODEX_SMOKE_SUPERVISOR_IMAGE=telo-codex-supervisor:interruption-verify \
 NO_PROXY=localhost,127.0.0.1 bun scripts/codex-smoke.ts
 ```
 

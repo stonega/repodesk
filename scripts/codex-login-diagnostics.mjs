@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const root = process.env.CODEX_RUNNER_STATE ?? "/var/lib/deepx-codex";
+const root = process.env.CODEX_RUNNER_STATE ?? "/var/lib/telo-codex";
 const home = await mkdtemp(join(root, "login-probe-"));
 const started = Date.now();
 let child;

@@ -21,10 +21,9 @@ if (!rootUrl) throw Error("TEST_DATABASE_URL required");
 const browserPort = Number(process.env.BROWSER_PORT ?? 3107);
 const browserOrigin = `http://127.0.0.1:${browserPort}`;
 const browserDbPath =
-  process.env.BROWSER_DB_PATH ??
-  join(tmpdir(), "repodesk-browser-3107-db.json");
+  process.env.BROWSER_DB_PATH ?? join(tmpdir(), "telo-browser-3107-db.json");
 const root = database(rootUrl);
-const name = `deepx_browser_${randomUUID().replaceAll("-", "")}`;
+const name = `telo_browser_${randomUUID().replaceAll("-", "")}`;
 await root.query(`CREATE DATABASE ${name}`);
 const parsed = new URL(rootUrl);
 parsed.pathname = `/${name}`;

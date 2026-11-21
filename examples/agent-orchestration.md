@@ -1,6 +1,6 @@
 # Agent Orchestration & Autonomy Examples
 
-Runnable HTTP requests and natural-language Telegram examples for RepoDesk's
+Runnable HTTP requests and natural-language Telegram examples for Telo's
 orchestration, autonomy presets, proactive automations, and per-repository queues.
 
 ## 1. Configure Workspace and Repository Autonomy (Admin API)

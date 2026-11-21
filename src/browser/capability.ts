@@ -22,7 +22,7 @@ const capability = browserOwner
 export type BrowserCapability = z.infer<typeof capability>;
 const sign = (key: string, value: string) =>
   createHmac("sha256", key)
-    .update(`repodesk:browser:codex:v1\n${value}`)
+    .update(`telo:browser:codex:v1\n${value}`)
     .digest("hex");
 export function signBrowserCapability(key: string, input: BrowserCapability) {
   const body = Buffer.from(JSON.stringify(capability.parse(input))).toString(

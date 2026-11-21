@@ -94,13 +94,13 @@ export const runnerSettings = z.object({
   CODEX_RUNNER_IMAGE: z
     .string()
     .min(1)
-    .default("localhost/deepx-codex-job:local"),
+    .default("localhost/telo-codex-job:local"),
   CODEX_RUNNER_NETWORK: z
     .string()
     .regex(/^[A-Za-z0-9_-]+$/)
-    .default("deepx_codex_tasks"),
+    .default("telo_codex_tasks"),
   CODEX_RUNNER_PROXY_URL: z.string().url().default("http://codex-runner:3020"),
-  CODEX_RUNNER_STATE: z.string().default("/var/lib/deepx-codex"),
+  CODEX_RUNNER_STATE: z.string().default("/var/lib/telo-codex"),
   CODEX_RUNNER_CONCURRENCY: z.coerce.number().int().min(1).max(32).default(4),
   CODEX_RUNNER_RETENTION_HOURS: z.coerce
     .number()

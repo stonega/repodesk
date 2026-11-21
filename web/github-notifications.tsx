@@ -368,10 +368,9 @@ export function GitHubNotificationSettings({
           </p>
         )}
         <p>
-          In your GitHub App settings, enable webhook delivery to RepoDesk’s
-          public HTTPS address and subscribe to Issues and Pull requests.
-          Existing Apps need Issues added. A saved secret does not verify GitHub
-          delivery.
+          In your GitHub App settings, enable webhook delivery to Telo’s public
+          HTTPS address and subscribe to Issues and Pull requests. Existing Apps
+          need Issues added. A saved secret does not verify GitHub delivery.
         </p>
       </section>
       {settingsDraft && (

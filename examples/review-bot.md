@@ -7,7 +7,7 @@ manages repository access; there is no additional repository list or maintainer 
 Cancel leaves saved settings unchanged.
 
 For a new GitHub App, start **Connect GitHub** in setup or **New** in Manage
-GitHub. The suggested name is `repodesk`; choose another available name on GitHub
+GitHub. The suggested name is `telo`; choose another available name on GitHub
 if needed. On a public HTTPS deployment, confirm that GitHub has an active webhook
 at the operator-specific URL and subscriptions to Pull request, Issue comment and
 Pull request review comment. After the callback, Review Bot should show its secret
@@ -67,8 +67,8 @@ For a repeatable offline runner smoke check, build the `codex-job` target and ru
 its credential-free preparation with disposable Docker volumes:
 
 ```sh
-docker build --target codex-job -t repodesk-ocr-job:test .
-bun scripts/open-code-review-smoke.ts repodesk-ocr-job:test
+docker build --target codex-job -t telo-ocr-job:test .
+bun scripts/open-code-review-smoke.ts telo-ocr-job:test
 ```
 
 This covers actual OCR JSON/rules, excluded files, failed preparation and answer/fix

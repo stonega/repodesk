@@ -7,7 +7,7 @@ await access("/.dockerenv");
 assert.equal(process.getuid?.(), 0);
 const uid = 10001;
 const rules = () =>
-  hostCommand("nft", ["list", "chain", "inet", "repodesk_browser", `u${uid}`]);
+  hostCommand("nft", ["list", "chain", "inet", "telo_browser", `u${uid}`]);
 try {
   const firewall = new BrowserFirewall();
   await firewall.set(uid);
@@ -27,5 +27,5 @@ try {
     JSON.stringify({ nodeUbuntuFirewall: true, restartRevokes: true }),
   );
 } finally {
-  await hostCommand("nft", ["delete", "table", "inet", "repodesk_browser"]);
+  await hostCommand("nft", ["delete", "table", "inet", "telo_browser"]);
 }

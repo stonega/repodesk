@@ -88,7 +88,7 @@ describeDb("autonomous skill extraction end-to-end integration", () => {
   beforeAll(async () => {
     if (!baseUrl) return;
     const parsed = new URL(baseUrl);
-    dbName = `repodesk_skills_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    dbName = `telo_skills_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
     adminPool = database(baseUrl);
     await adminPool.query(`CREATE DATABASE ${dbName}`);
     parsed.pathname = `/${dbName}`;
@@ -103,7 +103,7 @@ describeDb("autonomous skill extraction end-to-end integration", () => {
       active: true,
       paused: false,
       model: "gpt-4.1-mini",
-      bot: { id: "bot-1", username: "repodesk_bot", visibleAll: true },
+      bot: { id: "bot-1", username: "telo_bot", visibleAll: true },
       credentials: {
         bot: encrypt(encryptionKey, "bot", "bot-1:fake"),
         model: encrypt(encryptionKey, "model", "sk-test-autonomous-skills-key"),

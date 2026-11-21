@@ -1,6 +1,6 @@
 # Alternative Codex sandboxes and benchmarks
 
-RepoDesk supports deployment-selected `docker`, `opensandbox` and `native`
+Telo supports deployment-selected `docker`, `opensandbox` and `native`
 execution through the same task supervisor. Operators can also choose a runtime
 in **Plugins → Codex → Runtime → Edit**. This is a deployment-wide setting, separate
 from workspace workflow settings. Workspace settings and
@@ -43,8 +43,8 @@ to prepare multiple backends:
 
 ```dotenv
 CODEX_CONTAINER_ENGINE=docker
-CODEX_DOCKER_IMAGE=localhost/deepx-codex-job:local
-CODEX_OPENSANDBOX_IMAGE=localhost/repodesk-codex-opensandbox:local
+CODEX_DOCKER_IMAGE=localhost/telo-codex-job:local
+CODEX_OPENSANDBOX_IMAGE=localhost/telo-codex-opensandbox:local
 CODEX_DOCKER_HOST=unix:///var/run/docker.sock
 ```
 
@@ -92,7 +92,7 @@ its state directory first, replace the example API key, keep the configuration
 mode 600 and permit only the dedicated sandbox storage prefix. The server and
 Docker daemon must see that storage at the configured host path.
 
-Build `docker build --target codex-opensandbox-job -t localhost/repodesk-codex-opensandbox:local .`
+Build `docker build --target codex-opensandbox-job -t localhost/telo-codex-opensandbox:local .`
 for this backend. Its trusted execd starts as root so Linux can switch command
 identity; every repository command explicitly runs as UID/GID 1000. Using the
 ordinary `USER node` image makes execd's UID transition fail with `EPERM`.
@@ -107,9 +107,9 @@ On Kubernetes, set `OPENSANDBOX_SECURE_ACCESS=true` when using secured endpoints
 ```dotenv
 CODEX_CONTAINER_ENGINE=opensandbox
 CODEX_RUNNER_TOKEN=the-existing-private-runner-management-token
-CODEX_RUNNER_IMAGE=localhost/repodesk-codex-opensandbox:local
-CODEX_RUNNER_STATE=/var/lib/repodesk-codex-opensandbox
-CODEX_SANDBOX_ROOT=/var/lib/repodesk-sandboxes/opensandbox
+CODEX_RUNNER_IMAGE=localhost/telo-codex-opensandbox:local
+CODEX_RUNNER_STATE=/var/lib/telo-codex-opensandbox
+CODEX_SANDBOX_ROOT=/var/lib/telo-sandboxes/opensandbox
 OPENSANDBOX_URL=http://127.0.0.1:3021
 OPENSANDBOX_API_KEY=the-private-server-key
 OPENSANDBOX_SECURE_ACCESS=false
@@ -123,7 +123,7 @@ task image; it does not transfer checkouts between unrelated hosts.
 
 On SELinux hosts, give a fresh dedicated storage root the shared container file
 label before creating tasks, for example `chcon -t container_file_t
-/var/lib/repodesk-sandboxes`. Newly created descendants inherit it. Do the same
+/var/lib/telo-sandboxes`. Newly created descendants inherit it. Do the same
 for a fresh `SANDBOX_BENCHMARK_ROOT`. An unlabeled home-directory bind mount can
 return `EACCES` despite matching UID 1000 permissions. Keep SELinux enabled; do
 not relabel the workspace, server configuration or unrelated host directories.
@@ -160,9 +160,9 @@ wrong engine. Drain/erase old tasks before a production migration.
 Build the dedicated fixture from the same trusted task image used by all engines:
 
 ```sh
-docker build --target codex-job -t localhost/deepx-codex-job:local .
+docker build --target codex-job -t localhost/telo-codex-job:local .
 docker build -f deploy/codex/benchmark.Dockerfile \
-  -t localhost/repodesk-sandbox-benchmark:local .
+  -t localhost/telo-sandbox-benchmark:local .
 ```
 
 The fixture executes local Git operations, writes 100 source files and a roughly
@@ -176,11 +176,11 @@ absolute benchmark root. Its helper images must also be preloaded to measure war
 image behavior fairly. Then run:
 
 ```sh
-docker network create repodesk_sandbox_benchmark
+docker network create telo_sandbox_benchmark
 SANDBOX_BENCHMARK_ENGINES=docker,opensandbox \
 SANDBOX_BENCHMARK_ITERATIONS=10 \
 SANDBOX_BENCHMARK_CONCURRENCY=1 \
-CODEX_RUNNER_NETWORK=repodesk_sandbox_benchmark \
+CODEX_RUNNER_NETWORK=telo_sandbox_benchmark \
 bun run benchmark:sandboxes
 ```
 

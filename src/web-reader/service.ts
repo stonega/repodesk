@@ -111,7 +111,7 @@ export const requestPage: WebTransport = (url, address, signal) =>
           else callback(null, address.address, address.family);
         },
         headers: {
-          "User-Agent": "RepoDesk/1.0 (web reader)",
+          "User-Agent": "Telo/1.0 (web reader)",
           Accept: "text/html, application/xhtml+xml",
           "Accept-Encoding": "gzip, deflate, br",
         },

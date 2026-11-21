@@ -91,7 +91,7 @@ test("moved tags, ownership changes and repository recreation invalidate a revie
 });
 test("bounded ZIP extraction rejects traversal, multiple roots, links and expansion bombs", async () => {
   const repo = await pluginRepository();
-  expect(unpackGitHubZip(repo.zip())["repodesk.plugin.json"]).toBeDefined();
+  expect(unpackGitHubZip(repo.zip())["telo.plugin.json"]).toBeDefined();
   for (const files of [
     { "root/../outside": Buffer.from("bad") },
     { "/root/file": Buffer.from("bad") },

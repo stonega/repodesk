@@ -34,7 +34,7 @@ afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
 });
 async function fixture() {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-sandbox-test-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-sandbox-test-"));
   dirs.push(dir);
   const settings = runnerSettings.parse({
     CODEX_CONTAINER_ENGINE: "opensandbox",

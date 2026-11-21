@@ -859,7 +859,7 @@ export class DevelopmentExecutor {
         const pr = await app.codingPublishedPull(
           token,
           task.payload.repository,
-          task.pr?.branch ?? `${branchPrefix}/repodesk-${task.id}`,
+          task.pr?.branch ?? `${branchPrefix}/telo-${task.id}`,
           status.publishedSha,
           task.payload.baseBranch,
         );
@@ -932,7 +932,7 @@ export class DevelopmentExecutor {
           t.pr = {
             number,
             url: status.prUrl,
-            branch: t.pr?.branch ?? `${branchPrefix}/repodesk-${t.id}`,
+            branch: t.pr?.branch ?? `${branchPrefix}/telo-${t.id}`,
             headSha: status.publishedSha,
           };
           if (t.release?.state === "waiting_merge" && t.pr)

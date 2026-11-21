@@ -21,7 +21,7 @@ import { githubFixtureConfig, githubTransport } from "../github-fixture.ts";
 const url = process.env.TEST_DATABASE_URL;
 (url ? describe : describe.skip)("GitHub PR actions", () => {
   const root = database(url ?? "postgres://unused@localhost/unused");
-  const name = `repodesk_pulls_${randomUUID().replaceAll("-", "")}`;
+  const name = `telo_pulls_${randomUUID().replaceAll("-", "")}`;
   const operatorId = randomUUID();
   let store: Store;
   beforeAll(async () => {
@@ -297,8 +297,8 @@ const url = process.env.TEST_DATABASE_URL;
       );
       const messages = JSON.stringify(requests[0]?.messages);
       expect(messages).toContain("Original policy.");
-      expect(messages).toContain("# RepoDesk GitHub");
-      expect(messages).toContain("GitHub work is RepoDesk's primary workflow");
+      expect(messages).toContain("# Telo GitHub");
+      expect(messages).toContain("GitHub work is Telo's primary workflow");
       expect(messages).toContain("older replies saying a tool was unavailable");
       expect((await store.read(f.w.id)).skills).toEqual(originalSkills);
       expect((await store.read(f.w.id)).plugins).toBeUndefined();
@@ -315,7 +315,7 @@ const url = process.env.TEST_DATABASE_URL;
         "propose_github_pull_request_action",
       );
       expect(JSON.stringify(requests[1]?.messages)).not.toContain(
-        "# RepoDesk GitHub",
+        "# Telo GitHub",
       );
     } finally {
       await server.stop(true);

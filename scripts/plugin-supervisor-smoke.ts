@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 const execute = promisify(execFile);
 const [supervisor, job] = process.argv.slice(2);
 assert.ok(supervisor && job, "Supply supervisor image and immutable job image");
-const name = `repodesk-plugin-smoke-${randomUUID()}`;
+const name = `telo-plugin-smoke-${randomUUID()}`;
 try {
   await execute("docker", [
     "run",
@@ -14,7 +14,7 @@ try {
     "--name",
     name,
     "--label",
-    "repodesk.plugin-test=true",
+    "telo.plugin-test=true",
     "--network",
     "none",
     "--read-only",

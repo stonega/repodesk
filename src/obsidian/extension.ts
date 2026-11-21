@@ -11,7 +11,7 @@ export function obsidianExtension(
   workspaceId: string,
   generation: number,
 ): BuiltinExtension {
-  const skill = readFileSync("skills/repodesk-obsidian/SKILL.md", "utf8");
+  const skill = readFileSync("skills/telo-obsidian/SKILL.md", "utf8");
   return {
     id: "obsidian",
     version: "1",

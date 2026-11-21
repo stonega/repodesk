@@ -121,7 +121,7 @@ export type AntigravityAuthStatus = z.infer<typeof antigravityAuthStatus>;
 export const codingEnvironment = z
   .object({
     repositoryId: z.number().int().positive(),
-    volume: z.string().regex(/^deepx-codex-env-[a-f0-9]{24}-[1-9]\d{0,18}$/),
+    volume: z.string().regex(/^telo-codex-env-[a-f0-9]{24}-[1-9]\d{0,18}$/),
   })
   .strict();
 export type CodingEnvironment = z.infer<typeof codingEnvironment>;

@@ -8,7 +8,7 @@ import { Fault } from "../../src/domain.ts";
 
 // Separate native supervisor, profile root, Unix identity and control journal.
 // It reuses production classes, never a real member's browser or authorization.
-const root = `/var/lib/repodesk-browser-incident-${randomUUID()}`;
+const root = `/var/lib/telo-browser-incident-${randomUUID()}`;
 const host = new NativeBrowserHost(
   browserHostSettings.parse({
     BROWSER_HOST_ROOT: root,

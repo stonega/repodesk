@@ -109,7 +109,7 @@ export function selectPackageFiles(
 ): PackageFiles {
   const selected: PackageFiles = Object.create(null);
   for (const path of [
-    "repodesk.plugin.json",
+    "telo.plugin.json",
     "package.json",
     "README.md",
     "LICENSE",

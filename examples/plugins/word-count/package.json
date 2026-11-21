@@ -1,9 +1,9 @@
 {
-  "name": "repodesk-word-count",
+  "name": "telo-word-count",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "devDependencies": {
-    "@repodesk/plugin-sdk": "file:../../../sdk/plugin"
+    "@telo/plugin-sdk": "file:../../../sdk/plugin"
   }
 }

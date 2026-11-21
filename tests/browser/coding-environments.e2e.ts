@@ -6,9 +6,9 @@ import type { CodingEnvironment } from "../../src/coding/local/protocol.ts";
 const workspaceId = "d2ce2eab-3b09-4e8e-858e-75c20d832517";
 const codingEndpoint = `/api/admin/workspaces/${workspaceId}/plugins/coding`;
 const envEndpoint = `${codingEndpoint}/environments`;
-const volActive = "deepx-codex-env-a1b2c3d4e5f60718293a4b5c-7001";
-const volIdle = "deepx-codex-env-a1b2c3d4e5f60718293a4b5c-7002";
-const volDisconnected = "deepx-codex-env-a1b2c3d4e5f60718293a4b5c-9002";
+const volActive = "telo-codex-env-a1b2c3d4e5f60718293a4b5c-7001";
+const volIdle = "telo-codex-env-a1b2c3d4e5f60718293a4b5c-7002";
+const volDisconnected = "telo-codex-env-a1b2c3d4e5f60718293a4b5c-9002";
 
 async function fixture(
   page: Page,

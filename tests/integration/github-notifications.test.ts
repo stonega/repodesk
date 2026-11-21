@@ -439,7 +439,7 @@ const url = process.env.TEST_DATABASE_URL;
       f.app.request(endpoint, {
         method: input ? "POST" : "GET",
         headers: {
-          cookie: `repodesk_session=${auth.raw}`,
+          cookie: `telo_session=${auth.raw}`,
           origin,
           "x-csrf-token": csrf,
           "content-type": "application/json",
@@ -733,7 +733,7 @@ const url = process.env.TEST_DATABASE_URL;
       f.app.request(settingsEndpoint, {
         method: "PUT",
         headers: {
-          cookie: `repodesk_session=${auth.raw}`,
+          cookie: `telo_session=${auth.raw}`,
           origin,
           "x-csrf-token": csrf,
           "content-type": "application/json",

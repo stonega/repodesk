@@ -112,7 +112,7 @@ const url = process.env.TEST_DATABASE_URL;
       );
       const d = await store.deployment();
       d.active = true;
-      d.bot = { id: "999", username: "repodesk", visibleAll: true };
+      d.bot = { id: "999", username: "telo", visibleAll: true };
       await store.saveDeployment(pool, d);
       setup = new SetupService(store, key, origin);
       service = new GitHubService(

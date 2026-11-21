@@ -11,7 +11,7 @@
 # and error before selecting. Missing/oversized guides make a candidate unavailable.
 POST {{origin}}/api/admin/workspaces/{{workspace}}/skills/github/discover
 Origin: {{origin}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
@@ -20,7 +20,7 @@ Content-Type: application/json
 ### Copy commit and paths from discovery; imports create saved skills, disabled until explicitly enabled.
 POST {{origin}}/api/admin/workspaces/{{workspace}}/skills/github/import
 Origin: {{origin}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
@@ -30,7 +30,7 @@ Content-Type: application/json
 @skill = replace-with-skill-uuid
 POST {{origin}}/api/admin/workspaces/{{workspace}}/skills/{{skill}}/github/check
 Origin: {{origin}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
@@ -39,7 +39,7 @@ Content-Type: application/json
 ### Apply a reviewed update for future runs; existing run/schedule pins stay intact. Set replaceLocal true only after reviewing local edits.
 POST {{origin}}/api/admin/workspaces/{{workspace}}/skills/{{skill}}/github/update
 Origin: {{origin}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 

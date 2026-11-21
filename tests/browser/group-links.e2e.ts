@@ -212,7 +212,7 @@ for (const width of [1280, 390]) {
     }) => {
       await page.setViewportSize({ width, height: 850 });
       await page.addInitScript(
-        (value) => localStorage.setItem("repodesk.theme", value),
+        (value) => localStorage.setItem("telo.theme", value),
         theme,
       );
       const state = await fixture(page);
@@ -396,7 +396,7 @@ for (const width of [1280, 390]) {
     }) => {
       await page.setViewportSize({ width, height: 850 });
       await page.addInitScript(
-        (value) => localStorage.setItem("repodesk.theme", value),
+        (value) => localStorage.setItem("telo.theme", value),
         theme,
       );
       const state = await fixture(page);
@@ -465,7 +465,7 @@ for (const width of [1280, 390]) {
     }) => {
       await page.setViewportSize({ width, height: 850 });
       await page.addInitScript(
-        (value) => localStorage.setItem("repodesk.theme", value),
+        (value) => localStorage.setItem("telo.theme", value),
         theme,
       );
       await page.addInitScript(() => {
@@ -557,7 +557,7 @@ for (const width of [1280, 390]) {
     }) => {
       await page.setViewportSize({ width, height: 850 });
       await page.addInitScript(
-        (value) => localStorage.setItem("repodesk.theme", value),
+        (value) => localStorage.setItem("telo.theme", value),
         theme,
       );
       const state = await fixture(page);
@@ -568,7 +568,7 @@ for (const width of [1280, 390]) {
       const card = page.locator(".group-row");
       await expect(card).toContainText("Inactive");
       await expect(card).toContainText(
-        "Re-adding the bot in Telegram does not restore the RepoDesk link.",
+        "Re-adding the bot in Telegram does not restore the Telo link.",
       );
       await shot(page, "inactive");
       await page
@@ -591,7 +591,7 @@ for (const width of [1280, 390]) {
     }) => {
       await page.setViewportSize({ width, height: 850 });
       await page.addInitScript(
-        (value) => localStorage.setItem("repodesk.theme", value),
+        (value) => localStorage.setItem("telo.theme", value),
         theme,
       );
       const state = await fixture(page);

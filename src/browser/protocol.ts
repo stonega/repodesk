@@ -142,7 +142,7 @@ export const hostResult = z
   .strict();
 export type HostResult = z.infer<typeof hostResult>;
 const signature = (key: string, raw: string) =>
-  createHmac("sha256", key).update(`repodesk:browser:v1\n${raw}`).digest("hex");
+  createHmac("sha256", key).update(`telo:browser:v1\n${raw}`).digest("hex");
 export function signBrowserRequest(
   key: string,
   input: Omit<HostRequest, "id" | "issuedAt" | "expiresAt">,

@@ -1,5 +1,5 @@
 {
-  "labels": ["repodesk.ci=true"],
+  "labels": ["telo.ci=true"],
   "builder": {
     "gc": {
       "enabled": true,

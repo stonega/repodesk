@@ -45,7 +45,7 @@ export function browserHostHandler(
       input = verifyBrowserRequest(
         key,
         Buffer.concat(chunks).toString("utf8"),
-        String(req.headers["x-repodesk-browser-signature"] ?? ""),
+        String(req.headers["x-telo-browser-signature"] ?? ""),
       );
       res.end(JSON.stringify(await host.invoke(input)));
     } catch (error) {
@@ -138,5 +138,5 @@ export async function startBrowserHost() {
   process.once("SIGINT", () => {
     void stop();
   });
-  process.stdout.write("RepoDesk browser host ready.\n");
+  process.stdout.write("Telo browser host ready.\n");
 }

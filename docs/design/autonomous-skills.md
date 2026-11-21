@@ -9,7 +9,7 @@ scope and test results.
 1. **Minimal review, AI-first autonomy:** Instruction skills are procedural memory
    and never grant tools, credentials, or external write authority. Rather than
    gating every extracted skill behind manual drafts and multi-step approval queues,
-   RepoDesk runs deterministic server-side safety rails and activates extracted
+   Telo runs deterministic server-side safety rails and activates extracted
    skills automatically (`enabled: true`), relying on post-hoc exception management
    (edit, reclassify, disable, archive) when an admin wants to intervene.
 2. **Two-tier classification (`Global` vs `Project`):**
@@ -73,7 +73,7 @@ returns strict JSON choosing:
   `[source:...]` citations and redacts sensitive patterns.
 - **Deterministic scope guard:** If a coding task or repository-bound source
   references repository-specific paths, build/test commands, or the repository name,
-  RepoDesk deterministically keeps it `project`-scoped even if the model proposed
+  Telo deterministically keeps it `project`-scoped even if the model proposed
   `global`.
 - **Protected skill preservation:** Automatic updates never overwrite `preset` or
   `githubSource`-managed skills.

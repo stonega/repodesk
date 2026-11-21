@@ -250,7 +250,7 @@ export async function runConversation(options: {
             !p.namespace
           ) {
             const result =
-              p.tool === "repodesk_review_source" && options.reviewSource
+              p.tool === "telo_review_source" && options.reviewSource
                 ? options.reviewSource.handle(p.arguments)
                 : options.channel?.handle(p.callId, p.tool, p.arguments);
             void Promise.resolve(
@@ -411,7 +411,7 @@ export async function runConversation(options: {
   try {
     if (options.signal?.aborted) throw new Fault("coding_cancelled", 409);
     await request("initialize", {
-      clientInfo: { name: "repodesk", version: "1" },
+      clientInfo: { name: "telo", version: "1" },
       capabilities: {
         experimentalApi: !!(options.channel || options.reviewSource),
       },

@@ -5,15 +5,15 @@ services:
     build:
       context: .
       target: app-transcription
-    image: ${APP_TRANSCRIPTION_IMAGE:-deepx-agent-transcription:local}
+    image: ${APP_TRANSCRIPTION_IMAGE:-telo-agent-transcription:local}
     volumes:
-      - transcription_models:/var/lib/repodesk-models
+      - transcription_models:/var/lib/telo-models
   worker:
     build:
       context: .
       target: app-transcription
-    image: ${APP_TRANSCRIPTION_IMAGE:-deepx-agent-transcription:local}
+    image: ${APP_TRANSCRIPTION_IMAGE:-telo-agent-transcription:local}
     volumes:
-      - transcription_models:/var/lib/repodesk-models
+      - transcription_models:/var/lib/telo-models
 volumes:
   transcription_models:

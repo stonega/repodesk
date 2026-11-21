@@ -10,9 +10,9 @@ afterEach(async () => {
     await rm(root, { recursive: true, force: true });
 });
 async function fixture(state: string) {
-  const root = await mkdtemp(join(tmpdir(), "repodesk-checkpoint-"));
+  const root = await mkdtemp(join(tmpdir(), "telo-checkpoint-"));
   roots.push(root);
-  const path = join(root, `deepx-codex-${"a".repeat(32)}.json`);
+  const path = join(root, `telo-codex-${"a".repeat(32)}.json`);
   const record = JSON.stringify({ state, input: "private-fixture-content" });
   await writeFile(path, record);
   return { root, path, record };

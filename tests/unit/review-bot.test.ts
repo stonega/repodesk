@@ -14,7 +14,7 @@ import {
 import { reviewMention } from "../../src/review-bot/mentions.ts";
 import { verifyReviewSignature } from "../../src/review-bot/service.ts";
 
-const handle = "repodesk[bot]";
+const handle = "telo[bot]";
 test("only directly addressed human instructions can request fixes", () => {
   expect(
     reviewMention(`@${handle} fix this\nKeep the API compatible.`, handle),
@@ -37,8 +37,8 @@ test("only directly addressed human instructions can request fixes", () => {
     expect(reviewMention(body, handle)).toBeUndefined();
 });
 test("GitHub App short mentions are accepted without accepting lookalikes", () => {
-  expect(reviewMention("@repodesk fix this", handle)?.mode).toBe("fix");
-  expect(reviewMention("@repodesk-fake fix this", handle)).toBeUndefined();
+  expect(reviewMention("@telo fix this", handle)?.mode).toBe("fix");
+  expect(reviewMention("@telo-fake fix this", handle)).toBeUndefined();
 });
 test("webhook HMAC covers the original bytes and rejects malformed or changed signatures", () => {
   const body = Buffer.from('{"message":"你好"}');
@@ -95,7 +95,7 @@ test("review turns are read-only, pinned to exact commits, with strict structure
     },
   });
   const prompt = developmentPrompt(run);
-  expect(prompt).toContain("repodesk_review_source with action plan");
+  expect(prompt).toContain("telo_review_source with action plan");
   expect(prompt).toContain(
     "diff action compares preview.merge_base against preview.to",
   );

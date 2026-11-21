@@ -116,8 +116,8 @@ const address = site.address();
 assert.ok(address && typeof address !== "string");
 const origin = `http://127.0.0.1:${address.port}`;
 const key = "synthetic-browser-smoke-service-key-32-characters";
-const socket = "/run/repodesk-browser-smoke/control.sock";
-await mkdir("/run/repodesk-browser-smoke", { recursive: true });
+const socket = "/run/telo-browser-smoke/control.sock";
+await mkdir("/run/telo-browser-smoke", { recursive: true });
 let host = new NativeBrowserHost(settings, undefined, key);
 await host.initialize();
 const server = createServer(
@@ -470,7 +470,7 @@ try {
   );
   const checkpoint = JSON.parse(
     decrypt(
-      hash(`repodesk:browser-session:v1:${key}`),
+      hash(`telo:browser-session:v1:${key}`),
       `browser-session:${profileKey(ownerA)}`,
       session.sealed,
     ),
@@ -556,7 +556,7 @@ try {
   await host.close();
   server.closeAllConnections();
   await new Promise<void>((resolve) => server.close(() => resolve()));
-  const token = "/run/repodesk-browser-smoke/token";
+  const token = "/run/telo-browser-smoke/token";
   await writeFile(token, key, { mode: 0o600 });
   const cli = spawn(
     process.execPath,
@@ -582,7 +582,7 @@ try {
       cli.once("error", reject);
       cli.once("exit", () => reject(Error("CLI exited before readiness")));
       cli.stdout.on("data", (chunk) => {
-        if (chunk.toString().includes("RepoDesk browser host ready.")) {
+        if (chunk.toString().includes("Telo browser host ready.")) {
           clearTimeout(timer);
           resolve();
         }

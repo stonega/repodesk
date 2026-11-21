@@ -28,7 +28,7 @@ describe("private persistent browser artifacts", () => {
     );
   });
   async function fixture() {
-    const home = await mkdtemp(join(tmpdir(), "repodesk-browser-artifacts-"));
+    const home = await mkdtemp(join(tmpdir(), "telo-browser-artifacts-"));
     roots.push(home);
     await mkdir(join(home, "artifacts"), { mode: 0o700 });
     const item = {

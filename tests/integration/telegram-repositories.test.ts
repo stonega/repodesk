@@ -17,7 +17,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
   "Telegram repository picker (isolated PostgreSQL)",
   () => {
     const root = database(rootUrl ?? "postgres://unused@localhost/unused");
-    const name = `repodesk_repos_${randomUUID().replaceAll("-", "")}`;
+    const name = `telo_repos_${randomUUID().replaceAll("-", "")}`;
     const operatorId = randomUUID(),
       key = "ad".repeat(32);
     let store: Store, ingress: Ingress, worker: DeliveryWorker;

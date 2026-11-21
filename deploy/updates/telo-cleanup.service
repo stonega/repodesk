@@ -1,0 +1,11 @@
+[Unit]
+Description=Telo unused release images and build cache cleanup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/telo
+ExecStart=/usr/bin/node /opt/telo/updater/cleanup-host.mjs /opt/telo --apply
+TimeoutStartSec=15m
+UMask=0077

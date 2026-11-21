@@ -12,8 +12,7 @@ import { chooseOption } from "./dropdown-helpers.ts";
 
 function browserDbPath() {
   return (
-    process.env.BROWSER_DB_PATH ??
-    join(tmpdir(), "repodesk-browser-3107-db.json")
+    process.env.BROWSER_DB_PATH ?? join(tmpdir(), "telo-browser-3107-db.json")
   );
 }
 
@@ -21,7 +20,7 @@ async function fixture(page: Page) {
   const db = JSON.parse(
     await readFile(
       process.env.BROWSER_DB_PATH ??
-        join(tmpdir(), "repodesk-browser-3107-db.json"),
+        join(tmpdir(), "telo-browser-3107-db.json"),
       "utf8",
     ),
   );
@@ -234,7 +233,7 @@ for (const width of [1280, 390]) {
       await expect(editor.getByRole("alert")).toContainText(
         editing
           ? "unexpected response (HTTP 200)"
-          : "Could not fetch models from this provider (HTTP 502). Check the API base URL and network access from the RepoDesk server, then try again.",
+          : "Could not fetch models from this provider (HTTP 502). Check the API base URL and network access from the Telo server, then try again.",
       );
       await expect(editor.getByRole("alert")).not.toContainText(
         /Unexpected token|private-gateway-fixture|DOCTYPE/,
@@ -274,7 +273,7 @@ for (const width of [1280, 390]) {
         [
           "model_discovery_failed",
           502,
-          "Could not fetch models from this provider. Check the API base URL and network access from the RepoDesk server, then try again.",
+          "Could not fetch models from this provider. Check the API base URL and network access from the Telo server, then try again.",
         ],
         [
           "model_provider_auth_failed",
@@ -447,7 +446,7 @@ for (const width of [1280, 390]) {
     });
     await page.evaluate(() => {
       document.documentElement.dataset.theme = "dark";
-      localStorage.setItem("repodesk-theme", "dark");
+      localStorage.setItem("telo-theme", "dark");
     });
     await page.screenshot({
       path: test.info().outputPath("metadata-summary-dark.png"),
@@ -948,7 +947,7 @@ for (const width of [1280, 390]) {
       path: test.info().outputPath("currency-summary.png"),
       fullPage: true,
     });
-    await page.evaluate(() => localStorage.setItem("repodesk.theme", "dark"));
+    await page.evaluate(() => localStorage.setItem("telo.theme", "dark"));
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await expect(chat).toContainText("10 CNY / million tokens");
@@ -1228,7 +1227,7 @@ for (const width of [1280, 390]) {
       0,
     );
     await expect(
-      page.getByLabel("I uploaded the RepoDesk icon in GitHub"),
+      page.getByLabel("I uploaded the Telo icon in GitHub"),
     ).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: "Connecting GitHub…", exact: true }),
@@ -1384,7 +1383,7 @@ for (const width of [1280, 390]) {
       page.getByRole("heading", { name: "Your team, in view", exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole("dialog", { name: "Welcome to RepoDesk" }),
+      page.getByRole("dialog", { name: "Welcome to Telo" }),
     ).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: "Get started", exact: true }),
@@ -1427,7 +1426,7 @@ for (const width of [1280, 390]) {
       exact: true,
     });
     await expect(editor.getByLabel("App name", { exact: true })).toHaveValue(
-      "repodesk",
+      "telo",
     );
     await expect(
       editor.getByRole("button", { name: "Continue to GitHub", exact: true }),
@@ -1436,7 +1435,7 @@ for (const width of [1280, 390]) {
       /Download icon|Upload a logo|Set new avatar/,
     );
     await expect(
-      editor.getByRole("img", { name: "RepoDesk GitHub App icon" }),
+      editor.getByRole("img", { name: "Telo GitHub App icon" }),
     ).toHaveCount(0);
     await page.screenshot({
       path: `${process.env.BROWSER_SCREENSHOT_DIR ?? "test-results"}/github-app-create-${width}.png`,

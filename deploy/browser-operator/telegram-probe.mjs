@@ -178,7 +178,10 @@ var _derive = promisify(scrypt);
 function decrypt(key, name, value) {
   const [version, iv, tag, data] = value.split(".");
   requireThat(
-    (version === "v1" || version === "v2") && iv && tag && data,
+    (version === "v1" || version === "v2" || version === "v3") &&
+      iv &&
+      tag &&
+      data,
     "invalid_ciphertext",
   );
   const cipher = createDecipheriv(
@@ -187,7 +190,9 @@ function decrypt(key, name, value) {
     Buffer.from(iv, "base64"),
   );
   cipher.setAAD(
-    Buffer.from(`${version === "v1" ? "deepx:v1" : "repodesk:v2"}:${name}`),
+    Buffer.from(
+      `${version === "v1" ? "deepx:v1" : version === "v2" ? "repodesk:v2" : "telo:v3"}:${name}`,
+    ),
   );
   cipher.setAuthTag(Buffer.from(tag, "base64"));
   return Buffer.concat([

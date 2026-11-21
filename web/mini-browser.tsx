@@ -227,7 +227,7 @@ export function BrowserMini() {
   useEffect(() => {
     mounted.current = true;
     abort.current = new AbortController();
-    document.title = "RepoDesk · My browser";
+    document.title = "Telo · My browser";
     const theme = () => {
       document.documentElement.dataset.theme = app?.colorScheme ?? "light";
       for (const [key, value] of Object.entries(app?.themeParams ?? {}))
@@ -370,7 +370,7 @@ export function BrowserMini() {
   return (
     <main className="mini-shell mini-browser-shell">
       <header className="mini-heading">
-        <span className="mini-eyebrow">REPODESK · PERSONAL</span>
+        <span className="mini-eyebrow">TELO · PERSONAL</span>
         <h1>My browser</h1>
         <p className="mini-repository">
           {data?.workspace ?? "Your private workspace browser"}

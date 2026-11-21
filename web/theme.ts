@@ -2,7 +2,7 @@ export type Theme = "light" | "dark";
 
 export function readTheme(): Theme {
   try {
-    const saved = localStorage.getItem("repodesk.theme");
+    const saved = localStorage.getItem("telo.theme");
     if (saved === "light" || saved === "dark") return saved;
   } catch {
     // The switch still works when browser storage is unavailable.
@@ -20,7 +20,7 @@ export function applyTheme(theme: Theme) {
 export function saveTheme(theme: Theme) {
   applyTheme(theme);
   try {
-    localStorage.setItem("repodesk.theme", theme);
+    localStorage.setItem("telo.theme", theme);
   } catch {
     // Keep the selected theme for this page even without persistence.
   }

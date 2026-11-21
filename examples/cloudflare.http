@@ -13,7 +13,7 @@
 # Other products need their Read permissions. Reviewed writes need DNS Edit,
 # Cache Purge, Zone Settings Edit or Workers Routes Edit as appropriate.
 PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/cloudflare
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
@@ -26,7 +26,7 @@ Content-Type: application/json
 
 ### Discover accounts; follow page/hasMore if needed
 POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/cloudflare/resources
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
@@ -35,7 +35,7 @@ Content-Type: application/json
 
 ### Discover domains in an account returned above; grants no tool scope
 POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/cloudflare/resources
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
@@ -46,7 +46,7 @@ Content-Type: application/json
 # If the token cannot discover accounts, manually supply IDs and omit verifyResources.
 # Manual saves do not verify provider permissions; tools still enforce their scope.
 PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/cloudflare
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
@@ -64,7 +64,7 @@ Content-Type: application/json
 
 ### Read the saved summary (no token or ciphertext)
 GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/cloudflare
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 # Private Telegram journey after configuration:
 # 1. "Show the Cloudflare domains available in this workspace."
@@ -90,7 +90,7 @@ Cookie: repodesk_session={{session}}
 ### Remove the token locally and disable; use current revision from GET
 # Revoke the token separately in Cloudflare if it is no longer needed.
 PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/cloudflare
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json

@@ -28,7 +28,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
   "native Telegram Stop (isolated PostgreSQL)",
   () => {
     const root = database(rootUrl ?? "postgres://unused@localhost/unused");
-    const name = `deepx_stop_${randomUUID().replaceAll("-", "")}`;
+    const name = `telo_stop_${randomUUID().replaceAll("-", "")}`;
     const key = "af".repeat(32);
     const operatorId = randomUUID();
     let store: Store;

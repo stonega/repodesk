@@ -29,7 +29,7 @@ const messages: Record<string, string> = {
   coding_github_source_changed:
     "A GitHub instruction was edited, deleted, became inaccessible or no longer belongs to this PR. Further execution and publication have stopped; inspect the task before making a new request.",
   coding_github_source_unavailable:
-    "A GitHub instruction could not be verified. RepoDesk will retry automatically; execution and PR publication wait until its source is verified.",
+    "A GitHub instruction could not be verified. Telo will retry automatically; execution and PR publication wait until its source is verified.",
   coding_reference_source_unavailable:
     "A required reference repository snapshot is unavailable. Ask the workspace administrator to check the selected source repository and its read permissions before a new request. Repeating your confirmation cannot prepare the missing source.",
   coding_reference_source_changed:
@@ -39,7 +39,7 @@ const messages: Record<string, string> = {
   coding_environment_blocked:
     "A required execution environment prerequisite is unavailable. Ask the workspace administrator to resolve the recorded blocker before a new request. Repeating your confirmation cannot repair the environment.",
   github_user_access_unavailable:
-    "GitHub access could not be verified. RepoDesk will retry automatically; new execution and PR publication wait until access is verified.",
+    "GitHub access could not be verified. Telo will retry automatically; new execution and PR publication wait until access is verified.",
   github_user_connection_required:
     "Ask me to connect your GitHub account in this bot's private chat. Follow the authorization link, then return to the bot and confirm your account. Start again by resending your request after connecting.",
   github_default_branch_unavailable:

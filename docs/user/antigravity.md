@@ -37,7 +37,7 @@ API key requests are proxied through the runner supervisor so task containers ne
 
 After linking your GitHub account with `/github` in private chat, ask the bot in ordinary language to implement a change, investigate a repository, or prepare a release:
 
-- When **Antigravity CLI** is the only enabled coding plugin, RepoDesk routes coding tasks to it automatically.
+- When **Antigravity CLI** is the only enabled coding plugin, Telo routes coding tasks to it automatically.
 - When both **Codex** and **Antigravity CLI** are enabled, ask explicitly to use Antigravity CLI (or `agy`) to select it.
 
-Antigravity CLI tasks support the same workflow as [Codex coding tasks](codex.md): read-only intake, implementation, automated verification checks, repair loops, ready-for-review pull requests (`antigravity/repodesk-*` branches), follow-up replies, task Q&A, repository investigations/releases, Telegram task history Mini App, and Model usage analytics.
+Antigravity CLI tasks support the same workflow as [Codex coding tasks](codex.md): read-only intake, implementation, automated verification checks, repair loops, ready-for-review pull requests (`antigravity/telo-*` branches), follow-up replies, task Q&A, repository investigations/releases, Telegram task history Mini App, and Model usage analytics.

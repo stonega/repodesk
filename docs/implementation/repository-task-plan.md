@@ -5,7 +5,7 @@ P0–P4 are implemented; P5 retains controlled live model/Telegram/GitHub accept
 and staged production rollout. See [current implementation](repository-tasks.md)
 and [verification evidence](implementation-status.md#repository-tasks-release-effects-and-preference-memory-2026-11-12).
 
-An authorized user should be able to ask RepoDesk to investigate a repository,
+An authorized user should be able to ask Telo to investigate a repository,
 change it or release a version, then continue that work in the same Telegram
 conversation. Pi coordinates the conversation. Codex reads the repository and
 advances its engineering workflow. Application services preserve task state,

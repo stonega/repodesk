@@ -5,7 +5,7 @@
 
 ### Read the latest version and settings. Currency defaults to USD.
 GET {{baseUrl}}/api/admin/workspaces/{{workspaceId}}/settings
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Copy the complete settings and version from the GET, changing currency only.
 ### These example values must be replaced with the workspace's saved values.
@@ -14,7 +14,7 @@ Cookie: repodesk_session={{session}}
 ### A stale version returns 409; unsupported currency returns 400 with settings.currency.
 PUT {{baseUrl}}/api/admin/workspaces/{{workspaceId}}/settings
 Origin: {{baseUrl}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 

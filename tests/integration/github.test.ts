@@ -17,7 +17,7 @@ import { githubFixture, githubPublicKey } from "../github-fixture.ts";
 const url = process.env.TEST_DATABASE_URL;
 (url ? describe : describe.skip)("GitHub App workspace connection", () => {
   const root = database(url ?? "postgres://unused@localhost/unused");
-  const name = `deepx_github_${randomUUID().replaceAll("-", "")}`;
+  const name = `telo_github_${randomUUID().replaceAll("-", "")}`;
   const origin = "http://localhost:3000",
     key = "ab".repeat(32);
   let store: Store,
@@ -96,7 +96,7 @@ const url = process.env.TEST_DATABASE_URL;
     app.request(path, {
       method,
       headers: {
-        cookie: `deepx_session=${credentials.raw}`,
+        cookie: `telo_session=${credentials.raw}`,
         origin,
         "x-csrf-token": credentials.csrf,
         "content-type": "application/json",

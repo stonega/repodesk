@@ -11,7 +11,7 @@ export const githubFixtureConfig = {
   clientId: "Iv1.fixture",
   clientSecret: "fixture-client-secret",
   privateKey: keys.privateKey,
-  slug: "deepx-fixture",
+  slug: "telo-fixture",
 };
 export const githubPublicKey = keys.publicKey;
 export const githubFixtureWebhookSecret =

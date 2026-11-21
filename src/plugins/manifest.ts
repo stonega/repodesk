@@ -216,5 +216,5 @@ export function generateContract(manifest: PluginManifest): string {
   const notificationTypes = manifest.notifications
     ? `export type NotificationEvent = ${manifest.notifications.map((n) => JSON.stringify(n.name)).join(" | ")};\n`
     : "";
-  return `// Generated from repodesk.plugin.json. Do not edit.\nexport type Settings = ${schemaType(manifest.settingsSchema)};\nexport type Contract = {\n  ${tools}\n};\n${notificationTypes}`;
+  return `// Generated from telo.plugin.json. Do not edit.\nexport type Settings = ${schemaType(manifest.settingsSchema)};\nexport type Contract = {\n  ${tools}\n};\n${notificationTypes}`;
 }

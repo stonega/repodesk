@@ -10,7 +10,7 @@ import type { CodeGraphRunner } from "../../services/code-truth/src/upstream/cod
 import { CodeTruthClient } from "../../src/code-truth/client.ts";
 
 async function fixture(indexWaitMs?: number) {
-  const root = await mkdtemp(join(tmpdir(), "repodesk-code-readiness-"));
+  const root = await mkdtemp(join(tmpdir(), "telo-code-readiness-"));
   await mkdir(join(root, "archive"));
   await writeFile(
     join(root, "archive", "source.ts"),

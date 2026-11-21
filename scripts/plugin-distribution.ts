@@ -1,7 +1,7 @@
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 
 // Rebuild the portable author tool; no application server or Pi is bundled.
-const destination = "templates/plugin/.repodesk";
+const destination = "templates/plugin/.telo";
 await mkdir(`${destination}/scripts`, { recursive: true });
 await mkdir(`${destination}/sdk`, { recursive: true });
 const cli = await Bun.build({

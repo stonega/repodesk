@@ -43,7 +43,7 @@ exec 9> "$deploy_root/.deploy.lock"
 flock -n 9 || { echo 'Another deployment is running.' >&2; exit 1; }
 
 image_tag="$(cat "$release_dir/image-tag")"
-[[ "$image_tag" =~ ^repodesk:release-[a-f0-9]{40}$ ]] || fail 'Invalid release image tag.'
+[[ "$image_tag" =~ ^telo:release-[a-f0-9]{40}$ ]] || fail 'Invalid release image tag.'
 if [[ "$image_source" = --archive ]]; then
   expected_hash="$(cat "$release_dir/image-sha256")"
   [[ "$expected_hash" =~ ^[a-f0-9]{64}$ ]] || fail 'Invalid image archive checksum.'
@@ -67,7 +67,7 @@ fi
 printf 'APP_IMAGE=%s\n' "$image_id" > "$release_dir/release.env"
 export APP_IMAGE="$image_id"
 code_truth_tag="$(cat "$release_dir/code-truth-tag")"
-[[ "$code_truth_tag" =~ ^repodesk-code-truth:release-[a-f0-9]{40}$ ]] || fail 'Invalid Code Truth image tag.'
+[[ "$code_truth_tag" =~ ^telo-code-truth:release-[a-f0-9]{40}$ ]] || fail 'Invalid Code Truth image tag.'
 code_truth_id="$(docker image inspect --format '{{.Id}}' "$code_truth_tag")"
 [[ "$code_truth_id" =~ ^sha256:[a-f0-9]{64}$ ]] || fail 'Invalid imported Code Truth image ID.'
 if [[ "$image_source" = --local-images ]]; then
@@ -87,8 +87,8 @@ if [[ -f "$release_dir/codex-compose.yaml" ]]; then
   done
   supervisor_tag="$(cat "$release_dir/codex-supervisor-tag")"
   job_tag="$(cat "$release_dir/codex-job-tag")"
-  [[ "$supervisor_tag" =~ ^repodesk-codex-supervisor:release-[a-f0-9]{40}$ ]] || fail 'Invalid Codex supervisor image tag.'
-  [[ "$job_tag" =~ ^repodesk-codex-job:release-[a-f0-9]{40}$ ]] || fail 'Invalid Codex job image tag.'
+  [[ "$supervisor_tag" =~ ^telo-codex-supervisor:release-[a-f0-9]{40}$ ]] || fail 'Invalid Codex supervisor image tag.'
+  [[ "$job_tag" =~ ^telo-codex-job:release-[a-f0-9]{40}$ ]] || fail 'Invalid Codex job image tag.'
   supervisor_id="$(docker image inspect --format '{{.Id}}' "$supervisor_tag")"
   job_id="$(docker image inspect --format '{{.Id}}' "$job_tag")"
   [[ "$supervisor_id" =~ ^sha256:[a-f0-9]{64}$ && "$job_id" =~ ^sha256:[a-f0-9]{64}$ ]] || fail 'Invalid imported Codex image ID.'
@@ -172,7 +172,7 @@ fi
 mkdir -p "$deploy_root/backups"
 # A rerun has a new release ID, so an earlier backup is never overwritten.
 [[ ! -e "$backup_path" ]]
-"${compose[@]}" exec -T postgres pg_dump -U deepx -d deepx --format=custom > "$backup_path"
+"${compose[@]}" exec -T postgres pg_dump -U telo -d telo --format=custom > "$backup_path"
 [[ -s "$backup_path" ]]
 "${compose[@]}" exec -T postgres pg_restore --list < "$backup_path" > /dev/null
 

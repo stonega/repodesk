@@ -75,7 +75,7 @@ background callbacks remain outside both milestones.
 ## Source preparation
 
 At planning time, fetched `origin/main` was `4bde2fc`; implementation was isolated
-in `/home/stone/Web/repodesk-plugin-system` and rebased onto `44f32bd`.
+in `/home/stone/Web/telo-plugin-system` and rebased onto `44f32bd`.
 At that point the shared worktree also contained unrelated uncommitted Pi/runtime
 changes and the plugin documentation work. Do not treat that combined dirty tree as a tested
 source baseline for new runtime changes.

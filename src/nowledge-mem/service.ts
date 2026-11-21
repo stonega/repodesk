@@ -258,7 +258,7 @@ export class NowledgeService {
         403,
       );
       const content = authoredMemory(source.text);
-      const memoryId = `repodesk-${hash(JSON.stringify([id, actor, source.id]))}`;
+      const memoryId = `telo-${hash(JSON.stringify([id, actor, source.id]))}`;
       const prior = initial.run.nowledgeSaves?.[source.id];
       if (prior) {
         requireThat(
@@ -292,8 +292,8 @@ export class NowledgeService {
             id: memoryId,
             content,
             space_id: space,
-            source: "repodesk",
-            source_app: "repodesk",
+            source: "telo",
+            source_app: "telo",
           },
           signal,
         ),

@@ -41,7 +41,7 @@ export function Sidebar({
           aria-expanded={open}
           onClick={() => setOpen(true)}
         />
-        <span className="mobile-brand">RepoDesk</span>
+        <span className="mobile-brand">Telo</span>
       </header>
       {open && (
         <Modal

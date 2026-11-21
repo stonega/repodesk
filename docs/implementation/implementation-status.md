@@ -5,6 +5,25 @@ Historical verification logs are archived by month to keep this active status le
 - [October 2026 archive](archive/implementation-status-2026-10.md) (125 entries)
 - [September 2026 baseline archive](archive/implementation-status-2026-09.md) (32 entries)
 
+## Full rename to Telo and sunny Telegram-style logo (2026-11-21)
+
+Completed a full clean rename from **RepoDesk** (and legacy `deepx` Docker/PostgreSQL/coding-runner defaults) to **Telo** (`stonega/telo`), preserving historical incident records (`postmortem/`, `docs/implementation/archive/`) and upstream Code Truth attribution (`services/code-truth/UPSTREAM.md`):
+
+1. **Application, packages, skills, plugin SDK & deployment rename**:
+   - Renamed package identifiers (`telo`, `telo-code-truth`, `@telo/plugin-sdk`, `my-telo-plugin`), plugin manifest filename (`telo.plugin.json`), portable author directory (`templates/plugin/.telo`), bundled skill folders (`skills/telo-*`), systemd unit files (`deploy/browser/telo-browser.service`, `deploy/updates/telo-*.service`/`.timer`), Compose/Dockerfile/CI defaults (`telo-agent:local`, `telo-code-truth:local`, PostgreSQL user/DB `telo`, `/opt/telo`, `/var/lib/telo-*`), and GitHub repository references (`stonega/telo`).
+   - Kept backward-compatible decryption and session/auth transitions: `src/setup/credentials.ts` encrypts new secrets with `v3` (`telo:v3:<name>`) while continuing to decrypt legacy `v1` (`deepx:v1`) and `v2` (`repodesk:v2`) ciphertexts; `src/admin/routes/shared.ts` issues `telo_session` while reading/clearing legacy `repodesk_session` and `deepx_session` cookies; `device-auth.ts` and `antigravity-auth.ts` write `telo-*` formats while still reading legacy `repodesk-*` sealed bundles.
+   - Rebuilt `templates/plugin/.telo` (`bun run plugin:distribution`), `templates/plugin` (`generate`/`build`/`validate`/`check`/`typecheck`/`test`), and all three example plugins (`word-count`, `repository-insights`, `repository-alerts`).
+2. **New Telo logo (`web/assets/telo-mark.svg`, `web/assets/telo-mark.png`)**:
+   - Replaced the old `R` square icon with a circular sunny golden-honey → apricot-coral badge featuring a sculpted white origami paper boat with multi-facet warm paper lighting and soft floating shadow in Telegram's folded-paper style, rendered at 512×512 PNG and verified across light/dark surfaces at 180px, 42px, 32px, and 16px.
+
+Local verification on Bun 1.4.4, Node 22.22.3, and disposable PostgreSQL 17:
+
+- `bun install --frozen-lockfile` (root, `services/code-truth`, `templates/plugin`), `bun run check` (only the nine pre-existing incident-script warnings), `bun run typecheck`, `bun run build`, `bun run test:runtime` (16 ordinary + 16 configured startup cases, **zero external startup calls**), and `docker compose config --quiet` (standard, transcription, and browser overlays) pass.
+- Full unit suite (`bun test tests/unit`): **1,005 passed, 9 Docker-gated skips, 0 failures** across 131 files (6,019 assertions); Code Truth service suite: **33 passed, 0 failures** across 5 files; portable plugin template suite: **1 passed, 0 failures**.
+- Full PostgreSQL integration suite (`bun test --timeout 30000 tests/integration`): initial run passed **818/821** (exposing two `v2.` ciphertext assertions and one 15-char `@telo_test_bot` mention length); after fixing those three tests, `browser-repository.test.ts`, `nowledge-mem.test.ts`, and `system.test.ts` all passed (**69/69**, 0 failures).
+- Selected Playwright browser suites (`loading`, `application-update`, `group-links`, `model-providers`, `plugin-packages`, `antigravity`): **91 passed, 0 failures** across desktop 1280px and mobile 390px in light and dark themes. This is bounded local selection covering branding, theme, loading, updates, group linking, providers, plugins, and Antigravity, not a full browser suite run.
+- Live GitHub repository rename, Docker image builds, live VPS migration/deployment, and Telegram bot avatar/username updates remain outside local verification.
+
 ## Antigravity CLI built-in coding plugin (2026-11-21)
 
 Added **Antigravity CLI** (`agy`) as a built-in coding plugin alongside Codex, sharing the existing coding runner (`Docker`, `OpenSandbox`, or `Native VPS`), per-repository `/env` volumes, continuous development workflow, and Model usage analytics with zero new runtime dependencies:

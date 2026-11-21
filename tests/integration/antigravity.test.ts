@@ -31,7 +31,7 @@ function present<T>(value: T | undefined): T {
 const url = process.env.TEST_DATABASE_URL;
 (url ? describe : describe.skip)("Antigravity CLI plugin integration", () => {
   const root = database(url ?? "postgres://unused@localhost/unused");
-  const name = `deepx_antigravity_${randomUUID().replaceAll("-", "")}`;
+  const name = `telo_antigravity_${randomUUID().replaceAll("-", "")}`;
   const operatorId = randomUUID();
   const encryptionKey = "ab".repeat(32);
   let store: Store;
@@ -58,7 +58,7 @@ const url = process.env.TEST_DATABASE_URL;
       "INSERT INTO sessions(token_hash,admin_id,csrf,expires_at) VALUES($1,$2,$3,now()+interval '1 hour')",
       [hash(token), operatorId, csrf],
     );
-    sessionCookie = `repodesk_session=${token}`;
+    sessionCookie = `telo_session=${token}`;
   });
 
   afterAll(async () => {

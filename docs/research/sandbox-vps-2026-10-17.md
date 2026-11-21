@@ -2,7 +2,7 @@
 
 ## Host and reproducible workload
 
-Operator-authorized tests ran on the existing RepoDesk VPS (Ubuntu 24.04, Linux
+Operator-authorized tests ran on the existing Telo VPS (Ubuntu 24.04, Linux
 6.8.0-146-generic, x86-64, four visible CPUs, approximately 8 GiB RAM). The
 production runner remained Docker; OpenSandbox used a separate private test server,
 private management key, storage prefix and controller. Application credentials
@@ -41,7 +41,7 @@ Measure a pool of unused prepared environments without reusing repository
 processes or credentials across isolation boundaries before changing production.
 
 Raw receipts are retained privately on the VPS under
-`/opt/repodesk/acceptance/sandbox-comparison-20261017/`: `comparison.json` and
+`/opt/telo/acceptance/sandbox-comparison-20261017/`: `comparison.json` and
 `comparison-idle.json`, together with scripts/configuration and bounded logs.
 The final report was also copied into the ignored local
 `node_modules/.cache/vps-sandboxes/comparison-idle.json`. No management key is
@@ -100,12 +100,12 @@ same original VPS job plus the root-USER OpenSandbox adaptation. The image is
 To reproduce the browser layer on a prepared compatible base:
 
 ```dockerfile
-FROM localhost/repodesk-opensandbox-job:vps-20261017
+FROM localhost/telo-opensandbox-job:vps-20261017
 USER root
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
-RUN BUN_INSTALL_CACHE_DIR=/tmp/repodesk-playwright-cache bun x --yes playwright@1.64.1 install --with-deps chromium \
+RUN BUN_INSTALL_CACHE_DIR=/tmp/telo-playwright-cache bun x --yes playwright@1.64.1 install --with-deps chromium \
     && chmod -R 777 /opt/playwright-browsers \
-    && rm -rf /tmp/repodesk-playwright-cache /var/lib/apt/lists/*
+    && rm -rf /tmp/telo-playwright-cache /var/lib/apt/lists/*
 ```
 
 The writable browser cache is in each fresh sandbox's image layer, not shared

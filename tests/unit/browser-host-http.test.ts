@@ -27,7 +27,7 @@ describe("browser host production HTTP composition", () => {
   async function setup(
     invoke: Parameters<typeof browserHostHandler>[1]["invoke"],
   ) {
-    directory = await mkdtemp(join(tmpdir(), "repodesk-browser-host-http-"));
+    directory = await mkdtemp(join(tmpdir(), "telo-browser-host-http-"));
     const socket = join(directory, "host.sock");
     server = createServer(browserHostHandler(key, { invoke }));
     await new Promise<void>((resolve) => server?.listen(socket, resolve));

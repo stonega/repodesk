@@ -14,7 +14,7 @@ async function fixture(page: Page, legacy = false) {
   const db = JSON.parse(
     await readFile(
       process.env.BROWSER_DB_PATH ??
-        join(tmpdir(), "repodesk-browser-3107-db.json"),
+        join(tmpdir(), "telo-browser-3107-db.json"),
       "utf8",
     ),
   );

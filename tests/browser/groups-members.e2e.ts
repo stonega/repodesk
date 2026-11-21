@@ -168,7 +168,7 @@ for (const width of [1280, 390]) {
     }) => {
       await page.setViewportSize({ width, height: 900 });
       await page.addInitScript(
-        (value) => localStorage.setItem("repodesk.theme", value),
+        (value) => localStorage.setItem("telo.theme", value),
         theme,
       );
       const state = await fixture(page);
@@ -390,7 +390,7 @@ for (const width of [1280, 390]) {
     }) => {
       await page.setViewportSize({ width, height: 900 });
       await page.addInitScript(
-        (value) => localStorage.setItem("repodesk.theme", value),
+        (value) => localStorage.setItem("telo.theme", value),
         theme,
       );
       const state = await fixture(page);

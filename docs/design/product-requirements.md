@@ -1,4 +1,4 @@
-# RepoDesk: Telegram product requirements
+# Telo: Telegram product requirements
 
 Status: **product contract**, updated 2026-09-27. The original P0 has a local implementation; live release
 gates and deliberate limits are recorded in [implementation evidence](../implementation/implementation-status.md).
@@ -8,7 +8,7 @@ Research baseline: [Every feature inventory](../research/every-agent-features.md
 
 ## Product intent
 
-RepoDesk is a Telegram bot that helps people work with selected GitHub repositories.
+Telo is a Telegram bot that helps people work with selected GitHub repositories.
 A person asks about code or describes a desired change in chat. The AI interprets
 the request, retrieves authorized repository context or drafts a bounded GitHub
 action, and returns a useful answer or a proposal for human review. The first useful

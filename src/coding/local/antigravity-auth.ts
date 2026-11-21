@@ -33,7 +33,10 @@ const MAX_SINGLE_FILE_BYTES = 128 * 1024;
 
 const authBundleSchema = z
   .object({
-    format: z.literal("repodesk-antigravity-files-v1"),
+    format: z.enum([
+      "telo-antigravity-files-v1",
+      "repodesk-antigravity-files-v1",
+    ]),
     files: z.record(z.string().min(1).max(240), z.string().max(256 * 1024)),
   })
   .strict();
@@ -123,7 +126,7 @@ export async function packAntigravityAuthBundle(
   }
   if (Object.keys(files).length === 0) return undefined;
   return JSON.stringify({
-    format: "repodesk-antigravity-files-v1",
+    format: "telo-antigravity-files-v1",
     files,
   } satisfies AntigravityAuthBundle);
 }
@@ -253,7 +256,10 @@ export class AntigravityAuth {
     const value = JSON.parse(plain);
     return z
       .object({
-        format: z.literal("repodesk-antigravity-auth-v1"),
+        format: z.enum([
+          "telo-antigravity-auth-v1",
+          "repodesk-antigravity-auth-v1",
+        ]),
         generation: z.string().min(1),
         state: z.enum(["connected", "auth_required"]),
         credential: z.string().optional(),
@@ -292,7 +298,7 @@ export class AntigravityAuth {
       encrypt(
         hash(this.settings.CODEX_RUNNER_TOKEN),
         this.aad(workspaceId),
-        JSON.stringify({ format: "repodesk-antigravity-auth-v1", ...value }),
+        JSON.stringify({ format: "telo-antigravity-auth-v1", ...value }),
       ),
       { mode: 0o600 },
     );

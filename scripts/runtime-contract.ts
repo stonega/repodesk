@@ -207,7 +207,7 @@ const bounded = await new PiRunner(() =>
   ),
 ).run({ ...input, maxTurns: 1 });
 assert.equal(bounded.status, "partial");
-const extensionDir = await mkdtemp(join(tmpdir(), "deepx-extension-contract-"));
+const extensionDir = await mkdtemp(join(tmpdir(), "telo-extension-contract-"));
 try {
   await writeFile(
     join(extensionDir, "plugin.ts"),
@@ -298,7 +298,7 @@ try {
   );
   const runner = new PiRunner((_model, context) => {
     assert.ok(
-      getCurrentSystemPrompt(context.messages)?.includes("# RepoDesk GitHub"),
+      getCurrentSystemPrompt(context.messages)?.includes("# Telo GitHub"),
     );
     for (const name of [
       "find_connected_repository",
@@ -326,9 +326,7 @@ try {
   const notesRunner = new PiRunner(
     (_model, context) => {
       assert.ok(
-        getCurrentSystemPrompt(context.messages)?.includes(
-          "# RepoDesk Obsidian",
-        ),
+        getCurrentSystemPrompt(context.messages)?.includes("# Telo Obsidian"),
       );
       for (const name of ["obsidian_query", "obsidian_read", "obsidian_write"])
         assert.ok(

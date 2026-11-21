@@ -57,7 +57,7 @@ const url = process.env.TEST_DATABASE_URL;
   const service = (shared = directory) =>
     new ReleaseUpdates(
       store,
-      "stonega/repodesk",
+      "stonega/telo",
       "fixture-read-token",
       "0.1.32",
       transport,
@@ -85,7 +85,7 @@ const url = process.env.TEST_DATABASE_URL;
       [randomUUID(), await passwordHash("member password")],
     );
     member = await login(store.pool, "updatemember", "member password");
-    directory = await mkdtemp(join(tmpdir(), "repodesk-updates-"));
+    directory = await mkdtemp(join(tmpdir(), "telo-updates-"));
   });
   beforeEach(async () => {
     await store.pool.query("DELETE FROM deployment_updates");
@@ -101,7 +101,7 @@ const url = process.env.TEST_DATABASE_URL;
     release = {
       id: 42,
       tag_name: "v0.1.33",
-      name: "RepoDesk 0.1.33",
+      name: "Telo 0.1.33",
       body: "Changes and update notes",
       published_at: "2026-10-09T00:00:00Z",
       draft: false,
@@ -110,7 +110,7 @@ const url = process.env.TEST_DATABASE_URL;
     await writeFile(
       join(directory, "heartbeat.json"),
       JSON.stringify({
-        repository: "stonega/repodesk",
+        repository: "stonega/telo",
         at: new Date(time).toISOString(),
       }),
     );
@@ -206,7 +206,7 @@ const url = process.env.TEST_DATABASE_URL;
     expect(await readdir(join(directory, "requests"))).toHaveLength(1);
     const job = await queued();
     expect(job).toMatchObject({
-      repository: "stonega/repodesk",
+      repository: "stonega/telo",
       releaseId: 42,
       commit,
     });
@@ -252,7 +252,7 @@ const url = process.env.TEST_DATABASE_URL;
   test("uncertain queue publication never creates a second job", async () => {
     const selected = await input();
     await store.pool.query(
-      "INSERT INTO deployment_updates(repository,release_id,actor,fingerprint,state,request_id) VALUES('stonega/repodesk',42,$1,$2,'dispatching',$3)",
+      "INSERT INTO deployment_updates(repository,release_id,actor,fingerprint,state,request_id) VALUES('stonega/telo',42,$1,$2,'dispatching',$3)",
       [admin.id, selected.fingerprint, randomUUID()],
     );
     expect((await updates.view(admin)).attempt?.state).toBe("unknown");
@@ -299,7 +299,7 @@ const url = process.env.TEST_DATABASE_URL;
     const selected = await input();
     calls = [];
     const headers = {
-      cookie: `repodesk_session=${auth.raw}`,
+      cookie: `telo_session=${auth.raw}`,
       origin,
       "x-csrf-token": auth.csrf,
       "content-type": "application/json",
@@ -309,7 +309,7 @@ const url = process.env.TEST_DATABASE_URL;
       { cookie: "" },
       { origin: "https://evil.example" },
       { "x-csrf-token": "bad" },
-      { cookie: `repodesk_session=${member.raw}`, "x-csrf-token": member.csrf },
+      { cookie: `telo_session=${member.raw}`, "x-csrf-token": member.csrf },
     ])
       expect([401, 403]).toContain(
         (
@@ -322,7 +322,7 @@ const url = process.env.TEST_DATABASE_URL;
       );
     expect(calls).toHaveLength(0);
     const view = await app.request("/api/admin/updates", {
-      headers: { cookie: `repodesk_session=${member.raw}` },
+      headers: { cookie: `telo_session=${member.raw}` },
     });
     expect(view.status).toBe(200);
     expect((await view.json()).configured).toBe(false);

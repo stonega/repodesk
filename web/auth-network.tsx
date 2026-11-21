@@ -18,8 +18,8 @@ export function AuthNetwork() {
           Your repositories, in the conversation
         </title>
         <desc id="auth-network-description">
-          Example GitHub repositories connect through RepoDesk to a Telegram
-          topic, where your team asks about changes and receives a summary.
+          Example GitHub repositories connect through Telo to a Telegram topic,
+          where your team asks about changes and receives a summary.
         </desc>
         <g className="network-connections" fill="none">
           {connections.map((d, index) => (
@@ -88,7 +88,7 @@ export function AuthNetwork() {
           />
           <rect className="network-hub" width="48" height="48" rx="14" />
           <image
-            href="/assets/repodesk-mark.svg"
+            href="/assets/telo-mark.svg"
             x="8"
             y="8"
             width="32"
@@ -96,7 +96,7 @@ export function AuthNetwork() {
           />
         </g>
         <text className="network-hub-label" x="254" y="186" textAnchor="middle">
-          RepoDesk
+          Telo
         </text>
         <g transform="translate(344 15)">
           <rect

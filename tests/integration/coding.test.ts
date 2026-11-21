@@ -25,7 +25,7 @@ function present<T>(value: T | undefined): T {
 const url = process.env.TEST_DATABASE_URL;
 (url ? describe : describe.skip)("Codex task durability", () => {
   const root = database(url ?? "postgres://unused@localhost/unused");
-  const name = `deepx_coding_${randomUUID().replaceAll("-", "")}`;
+  const name = `telo_coding_${randomUUID().replaceAll("-", "")}`;
   const operatorId = randomUUID();
   let store: Store;
   beforeAll(async () => {

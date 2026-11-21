@@ -1,6 +1,6 @@
 # Interactive Telegram widgets
 
-In a private conversation, RepoDesk can automatically choose a chart, comparison,
+In a private conversation, Telo can automatically choose a chart, comparison,
 diagram or calculator when it makes the answer easier to understand. You do not
 need to ask for a widget. The **Telegram widgets** preset is enabled by default in
 **Skills**; admins can inspect its instructions or disable it.

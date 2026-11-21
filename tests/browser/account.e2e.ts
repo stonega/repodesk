@@ -98,9 +98,7 @@ test("saved theme applies before the application bundle loads", async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
-  await page.addInitScript(() =>
-    localStorage.setItem("repodesk.theme", "dark"),
-  );
+  await page.addInitScript(() => localStorage.setItem("telo.theme", "dark"));
   await page.route("**/assets/app.js?*", (route) => route.abort());
   await page.goto("/admin");
   await expect(page.locator("#root")).toBeEmpty();

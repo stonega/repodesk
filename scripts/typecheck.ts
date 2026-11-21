@@ -47,7 +47,7 @@ if (extraTestDirs.length > 0) {
   slices.push({ name: "tests-extra", include: extraTestDirs });
 }
 
-const tempDir = mkdtempSync(join(tmpdir(), "repodesk-typecheck-"));
+const tempDir = mkdtempSync(join(tmpdir(), "telo-typecheck-"));
 let failed = false;
 
 try {
@@ -61,7 +61,7 @@ try {
           compilerOptions: {
             typeRoots: [resolve(root, "node_modules/@types")],
             paths: {
-              "@repodesk/plugin-sdk": [resolve(root, "sdk/plugin/index.ts")],
+              "@telo/plugin-sdk": [resolve(root, "sdk/plugin/index.ts")],
             },
           },
           include: slice.include,

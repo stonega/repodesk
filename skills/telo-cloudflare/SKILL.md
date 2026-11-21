@@ -1,5 +1,5 @@
 ---
-name: repodesk-cloudflare
+name: telo-cloudflare
 description: Inspect Cloudflare traffic, DNS, security, Workers, storage and account metadata; propose exact reviewed changes.
 ---
 

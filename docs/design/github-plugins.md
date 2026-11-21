@@ -51,7 +51,7 @@ proxy. See [implementation](../implementation/plugin-notifications.md) and the
 
 One GitHub repository is one installable plugin. A plugin can contribute several
 read-only tools, settings and optional Markdown skills. An author implements tool
-handlers; RepoDesk supplies installation, configuration UI, identity, connection
+handlers; Telo supplies installation, configuration UI, identity, connection
 management, Pi registration, authorization, cancellation and durable results.
 
 The first public profile supports pure computation, approved read-only HTTP
@@ -68,8 +68,8 @@ when a sandbox is missing or a package is incompatible.
 ## Repository template
 
 ```text
-repodesk-plugin-example/
-├── repodesk.plugin.json       # Sole authority for metadata and contributions
+telo-plugin-example/
+├── telo.plugin.json       # Sole authority for metadata and contributions
 ├── package.json              # Private build package; matching version
 ├── bun.lock                  # Exact author build dependencies
 ├── tsconfig.json             # Strict TypeScript
@@ -115,7 +115,7 @@ Illustrative complete minimal manifest for a repository-summary plugin:
   "version": "0.1.0",
   "apiVersion": "1",
   "license": "MIT",
-  "repository": "https://github.com/example/repodesk-repository-insights",
+  "repository": "https://github.com/example/telo-repository-insights",
   "publisher": { "name": "Example" },
   "runtime": { "type": "node-sandbox", "entry": "dist/plugin.mjs" },
   "capabilities": ["github.metadata.read"],
@@ -212,8 +212,8 @@ to the plugin. A source-repository grant and a data-repository grant are separat
 
 ## Author SDK
 
-Proposed package: `@repodesk/plugin-sdk`; proposed command package:
-`@repodesk/plugin-cli`. Neither is published or implemented by this RFC. Authors
+Proposed package: `@telo/plugin-sdk`; proposed command package:
+`@telo/plugin-cli`. Neither is published or implemented by this RFC. Authors
 should not attempt these imports/commands against today's platform.
 
 The public SDK has one definition function and a per-call context. It does not
@@ -279,7 +279,7 @@ runtime boundary.
 Illustrative `src/index.ts`, using the proposed generated contract:
 
 ```typescript
-import { definePlugin } from "@repodesk/plugin-sdk";
+import { definePlugin } from "@telo/plugin-sdk";
 import type { Contract, Settings } from "./generated/contract.js";
 
 export default definePlugin<Contract, Settings>({
@@ -314,7 +314,7 @@ bun test
 bun run build
 bun run validate
 Commit the manifest, source, lockfile and generated dist/plugin.mjs
-Tag v0.1.0 at that commit → paste the repository URL into RepoDesk
+Tag v0.1.0 at that commit → paste the repository URL into Telo
 ```
 
 Template scripts will pin the CLI/toolchain and invoke it locally; installation
@@ -475,7 +475,7 @@ residual risk before public release. A deployment that requires a stronger
 boundary can use a microVM-backed runner without changing author tool handlers.
 
 Protocol `1` uses bounded JSON-RPC 2.0 frames over a dedicated local channel;
-method names are RepoDesk-specific, so this is not an MCP server claim. Require
+method names are Telo-specific, so this is not an MCP server claim. Require
 `initialize`/version negotiation, one `tool.invoke`, broker requests, bounded
 progress codes, `cancel` and a terminal result. Host-owned framing/request IDs,
 deadlines and session bindings reject cross-call, late, duplicate, oversized and

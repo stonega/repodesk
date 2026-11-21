@@ -7,12 +7,12 @@
 
 ### Redacted settings (secret/tokens are never returned)
 GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/google
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Save a Web application OAuth client, disabled until explicitly enabled later
 PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/google
 Origin: {{origin}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
@@ -21,7 +21,7 @@ Content-Type: application/json
 ### Enable the application; individual accounts connect in Telegram
 PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/google
 Origin: {{origin}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 

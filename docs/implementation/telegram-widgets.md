@@ -1,6 +1,6 @@
 # Telegram widgets
 
-RepoDesk supports Bot API 10.4's `sendWidget` for self-contained interactive
+Telo supports Bot API 10.4's `sendWidget` for self-contained interactive
 HTML in private assistant conversations and scheduled private answers, including
 private Topics. The default-enabled **Telegram widgets** preset supplies
 instructions and a rendering guide through `load_skill`. Existing workspaces
@@ -45,7 +45,7 @@ workflow version, owner and exact saved private chat/Topic; they do not create
 or join conversation threads. Their first staged widget binds the current
 deployment bot, which is rechecked on replay, revision, publication and
 delivery. Groups cannot use widgets. Local audience, thread and workflow
-failures use distinct RepoDesk policy codes; they are not evidence of a Telegram
+failures use distinct Telo policy codes; they are not evidence of a Telegram
 API rejection. The application validates UTF-8 HTML bytes (32,768), zlib level-9
 bytes (4,096), NUL exclusion, caption length (1,024) and dimensions. Telegram's
 compressor may differ at the boundary; a server rejection still follows the safe

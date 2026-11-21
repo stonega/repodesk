@@ -85,7 +85,7 @@ and after linking. The bot can remain a regular group member:
    **Recheck bot visibility** and test
    `@your_bot hi` with your actual bot username.
 
-Removing the bot marks the saved RepoDesk group link inactive. Re-adding it in
+Removing the bot marks the saved Telo group link inactive. Re-adding it in
 Telegram does not restore that link; relinking is required even if privacy mode
 is already disabled. Inactive group rows show this reminder.
 
@@ -126,7 +126,7 @@ Saving still follows your workspace permissions and any required approvals.
 ## Manage group message collection
 
 Linking or relinking a group enables received-message collection by default.
-The link dialog explains this before you send the command, and RepoDesk records
+The link dialog explains this before you send the command, and Telo records
 the verified group administrator and time. Collected messages can include people
 who are not workspace members and can be used for group context and recaps.
 Let group members know the purpose and retention period.
@@ -134,7 +134,7 @@ Let group members know the purpose and retention period.
 Telegram must deliver the messages first. Disable privacy mode and re-add the bot,
 or make it a group administrator, then relink and open the group row's **Edit**
 dialog to choose **Recheck bot visibility**.
-This refreshes visibility without changing your collection choice. RepoDesk cannot
+This refreshes visibility without changing your collection choice. Telo cannot
 read messages from before the bot joined or messages Telegram never delivered.
 
 In **Groups & Members**, open the group row's pencil icon (**Edit**) and choose

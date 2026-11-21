@@ -9,11 +9,11 @@
 
 ### The built-in vault is enabled even without saved plugin settings.
 GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/obsidian
-Cookie: repodesk_session={{cookie}}
+Cookie: telo_session={{cookie}}
 
 ### Save against the vaultRevision returned above (initially 0).
 POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/obsidian/files
-Cookie: repodesk_session={{cookie}}
+Cookie: telo_session={{cookie}}
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
@@ -22,15 +22,15 @@ Content-Type: application/json
 
 ### Search shared notes and open tasks. Follow nextOffset for more results.
 GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/obsidian?tag=project&tasks=open&limit=25&offset=0
-Cookie: repodesk_session={{cookie}}
+Cookie: telo_session={{cookie}}
 
 ### Read source and metadata.
 GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/obsidian/file?path=Projects%2FLaunch.md
-Cookie: repodesk_session={{cookie}}
+Cookie: telo_session={{cookie}}
 
 ### Native daily-note append. Replace revision with the latest vaultRevision.
 POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/obsidian/files
-Cookie: repodesk_session={{cookie}}
+Cookie: telo_session={{cookie}}
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
@@ -39,11 +39,11 @@ Content-Type: application/json
 
 ### Export a ZIP snapshot; extract and open the folder as a vault in Obsidian.
 GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/obsidian/export
-Cookie: repodesk_session={{cookie}}
+Cookie: telo_session={{cookie}}
 
 ### Atomic merge import; overwrite requires deliberate opt-in.
 POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/obsidian/files
-Cookie: repodesk_session={{cookie}}
+Cookie: telo_session={{cookie}}
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
@@ -52,7 +52,7 @@ Content-Type: application/json
 
 ### Disable bot tools without deleting notes. Use the common plugin revision.
 PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/obsidian
-Cookie: repodesk_session={{cookie}}
+Cookie: telo_session={{cookie}}
 Origin: {{origin}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json

@@ -13,7 +13,7 @@ import { join } from "node:path";
 
 const script = join(import.meta.dir, "../../scripts/deploy-vps.sh");
 const imageId = `sha256:${"a".repeat(64)}`;
-const imageTag = `repodesk:release-${"b".repeat(40)}`;
+const imageTag = `telo:release-${"b".repeat(40)}`;
 const importedImageId = `sha256:${"c".repeat(64)}`;
 
 // No daemon, SSH connection, production database or outbound calls are involved.
@@ -24,9 +24,9 @@ case "$*" in
   "info "*) echo "$DEPLOY_TEST_ARCH" ;;
   "image inspect "*)
     case "$*" in
-      *repodesk-codex-supervisor:*) echo "sha256:${"d".repeat(64)}" ;;
-      *repodesk-codex-job:*) echo "sha256:${"e".repeat(64)}" ;;
-      *repodesk-code-truth:*) echo "sha256:${"f".repeat(64)}" ;;
+      *telo-codex-supervisor:*) echo "sha256:${"d".repeat(64)}" ;;
+      *telo-codex-job:*) echo "sha256:${"e".repeat(64)}" ;;
+      *telo-code-truth:*) echo "sha256:${"f".repeat(64)}" ;;
       *) [[ "$*" = "image inspect --format {{.Id}} $DEPLOY_TEST_TAG" ]] || exit 43
          echo "$DEPLOY_TEST_IMAGE" ;;
     esac ;;
@@ -86,7 +86,7 @@ function deploy(
   codex = false,
   local = false,
 ) {
-  const root = mkdtempSync(join(tmpdir(), "repodesk-deploy-test-"));
+  const root = mkdtempSync(join(tmpdir(), "telo-deploy-test-"));
   try {
     const release = join(root, "releases/123-1");
     const bin = join(root, "bin");
@@ -104,7 +104,7 @@ function deploy(
     if (failure !== "code-truth-artifact")
       writeFileSync(
         join(release, "code-truth-tag"),
-        `repodesk-code-truth:release-${"b".repeat(40)}\n`,
+        `telo-code-truth:release-${"b".repeat(40)}\n`,
       );
     if (local)
       writeFileSync(
@@ -125,12 +125,12 @@ function deploy(
       writeFileSync(join(release, "codex-compose.yaml"), "services: {}\n");
       writeFileSync(
         join(release, "codex-supervisor-tag"),
-        `repodesk-codex-supervisor:release-${"b".repeat(40)}\n`,
+        `telo-codex-supervisor:release-${"b".repeat(40)}\n`,
       );
       if (failure !== "runner-artifact")
         writeFileSync(
           join(release, "codex-job-tag"),
-          `repodesk-codex-job:release-${"b".repeat(40)}\n`,
+          `telo-codex-job:release-${"b".repeat(40)}\n`,
         );
       if (local) {
         writeFileSync(

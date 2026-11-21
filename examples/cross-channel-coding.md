@@ -20,7 +20,7 @@ pilot; these instructions do not register a webhook or send a message themselves
    “In example/app, fix pagination when the final page is empty and add checks.”
 2. Wait for a confirmed ready-for-review PR. Keep its original task message.
 3. On that PR, use the same verified GitHub account and the actual bot handle:
-   `@repodesk[bot] fix the next-page button when that final page is empty.`
+   `@telo[bot] fix the next-page button when that final page is empty.`
    A reply to an inline finding also supplies its parent as reference evidence.
 4. Check that the original task receives one new input revision. Its task ID and
    PR number remain unchanged and no second Review Bot fix task is created.

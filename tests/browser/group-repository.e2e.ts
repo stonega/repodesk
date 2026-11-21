@@ -118,7 +118,7 @@ for (const width of [1280, 390]) {
     }) => {
       await page.setViewportSize({ width, height: 1000 });
       await page.addInitScript(
-        (theme) => localStorage.setItem("repodesk.theme", theme),
+        (theme) => localStorage.setItem("telo.theme", theme),
         theme,
       );
       const { state, save } = await fixture(page);

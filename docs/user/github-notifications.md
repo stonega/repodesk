@@ -1,6 +1,6 @@
 # GitHub notifications
 
-RepoDesk can send a private Telegram notification when a selected repository
+Telo can send a private Telegram notification when a selected repository
 receives a new pull request or issue. By default, active workspace members with
 verified GitHub **Maintain** or **Admin** access on a connected repository
 automatically receive these private alerts (skipping PRs and issues they opened
@@ -15,7 +15,7 @@ natural-language subscription request uses the normal chat assistant.
 ## Automatic maintainer notifications
 
 When **Plugins → GitHub notifications → Repository maintainers** is enabled (the
-default), RepoDesk automatically alerts active workspace members whose verified
+default), Telo automatically alerts active workspace members whose verified
 GitHub account currently has **Maintain** or **Admin** permission on that
 connected repository:
 
@@ -33,16 +33,16 @@ connected repository:
 
 ## Set up GitHub delivery
 
-Connect the [GitHub App and repositories](github.md). Give RepoDesk a public HTTPS
+Connect the [GitHub App and repositories](github.md). Give Telo a public HTTPS
 address. In **Plugins → GitHub notifications**, the owning deployment operator can
 inspect the Webhook URL and edit or generate its shared secret under **Delivery**.
 Save the same URL and secret in the GitHub App settings, enable webhook delivery,
 and subscribe to `issues` and `pull_request`. The App needs at least read access to
 Issues and Pull requests for these events.
 
-New Apps created through RepoDesk include these event subscriptions. Existing Apps
+New Apps created through Telo include these event subscriptions. Existing Apps
 need `issues` added manually. Local registrations retain an inactive placeholder
-until a public HTTPS address is configured. Saving a secret in RepoDesk does not
+until a public HTTPS address is configured. Saving a secret in Telo does not
 update GitHub or prove that events can arrive. The secret is shared with Review
 Bot and the operator's other workspaces; replacing it requires updating GitHub too.
 

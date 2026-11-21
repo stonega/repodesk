@@ -222,7 +222,7 @@ export function CodingRuntime({ request }: { request: Request }) {
             </p>
             <p className="muted">
               <a
-                href="https://github.com/stonega/repodesk/blob/main/docs/implementation/codex-sandboxes.md"
+                href="https://github.com/stonega/telo/blob/main/docs/implementation/codex-sandboxes.md"
                 target="_blank"
                 rel="noopener noreferrer"
               >

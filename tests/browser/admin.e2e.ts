@@ -14,8 +14,7 @@ import { chooseOption } from "./dropdown-helpers.ts";
 let workspaceId = "";
 let modelProviderId = "";
 const browserDbPath =
-  process.env.BROWSER_DB_PATH ??
-  join(tmpdir(), "repodesk-browser-3107-db.json");
+  process.env.BROWSER_DB_PATH ?? join(tmpdir(), "telo-browser-3107-db.json");
 async function chooseWorkspace(page: Page, id: string) {
   await page.getByRole("button", { name: "Workspace", exact: true }).click();
   await page
@@ -183,7 +182,7 @@ test.describe
       await page.route(registrationRoute, async (route) => {
         expect(route.request().postDataJSON()).toEqual({
           owner: "personal",
-          name: "repodesk",
+          name: "telo",
           public: false,
           source: "setup",
         });
@@ -1145,7 +1144,7 @@ test.describe
       await page
         .getByRole("dialog", { name: "Add repository", exact: true })
         .getByLabel("GitHub repository URL")
-        .fill("https://github.com/deepxfinance/web.git");
+        .fill("https://github.com/telofinance/web.git");
       const repositoryDialog = page.getByRole("dialog", {
         name: "Add repository",
         exact: true,
@@ -1175,14 +1174,14 @@ test.describe
         (await savedRepositories.json()).settings.repositories,
       ).toHaveLength(1);
       await expect(
-        card.getByRole("heading", { name: "deepxfinance/web", exact: true }),
+        card.getByRole("heading", { name: "telofinance/web", exact: true }),
       ).toBeVisible();
       await expect(page.locator(".toast").getByRole("status")).toContainText(
         "Code Truth saved",
       );
       await page.reload();
       await expect(
-        card.getByRole("heading", { name: "deepxfinance/web", exact: true }),
+        card.getByRole("heading", { name: "telofinance/web", exact: true }),
       ).toBeVisible();
       await expect(
         card.getByText("Web application source and shared components.", {
@@ -1207,7 +1206,7 @@ test.describe
               syncing: false,
               targets: [
                 {
-                  target: "deepx-web",
+                  target: "telo-web",
                   networks: [
                     {
                       network: "default",
@@ -1491,7 +1490,7 @@ test.describe
         page
           .getByRole("dialog", { name: "Create GitHub App", exact: true })
           .getByLabel("App name", { exact: true }),
-      ).toHaveValue("repodesk");
+      ).toHaveValue("telo");
       await expect(
         page
           .getByRole("dialog", { name: "Create GitHub App", exact: true })
@@ -1538,7 +1537,7 @@ test.describe
               "manifest",
             ) ?? "{}",
           );
-          expect(manifest.name).toBe("repodesk");
+          expect(manifest.name).toBe("telo");
           expect(manifest.public).toBe(false);
           expect(manifest.default_permissions).toEqual({
             contents: "write",
@@ -1584,13 +1583,13 @@ test.describe
         manage.getByRole("button", { name: "Connect GitHub", exact: true }),
       ).toBeEnabled();
       await expect(
-        manage.getByText("deepx-fixture", { exact: true }),
+        manage.getByText("telo-fixture", { exact: true }),
       ).toBeVisible();
       await expect(
         manage.getByRole("link", { name: "Install or update the GitHub App" }),
       ).toHaveAttribute(
         "href",
-        "https://github.com/apps/deepx-fixture/installations/new",
+        "https://github.com/apps/telo-fixture/installations/new",
       );
       await expect(
         manage.getByRole("button", { name: "Create GitHub App", exact: true }),
@@ -1936,7 +1935,7 @@ test.describe
       await page.getByRole("button", { name: "Connect GitHub" }).click();
       await expect(page).toHaveURL(new RegExp(`/admin\\?workspace=${other}$`));
       await expect(
-        page.getByRole("dialog", { name: "Welcome to RepoDesk" }),
+        page.getByRole("dialog", { name: "Welcome to Telo" }),
       ).toHaveCount(0);
       await expect(
         page.getByRole("button", { name: "Get started" }),
@@ -2000,7 +1999,7 @@ test.describe
               configured: true,
               canRegister: false,
               installUrl:
-                "https://github.com/apps/deepx-fixture/installations/new",
+                "https://github.com/apps/telo-fixture/installations/new",
               revision: 0,
               pending: true,
               installations: [],
@@ -2021,7 +2020,7 @@ test.describe
       ).toBeEnabled();
       await page.waitForTimeout(1900);
       await expect(
-        page.getByRole("dialog", { name: "Welcome to RepoDesk" }),
+        page.getByRole("dialog", { name: "Welcome to Telo" }),
       ).toHaveCount(0);
       await expect(page).toHaveURL(/\/setup\?/);
     });

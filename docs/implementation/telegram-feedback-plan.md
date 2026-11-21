@@ -2,7 +2,7 @@
 
 Date: 2026-10-06. Status: **implemented locally; live beta acceptance pending**.
 
-Friends and colleagues should be able to tell whether RepoDesk has accepted their
+Friends and colleagues should be able to tell whether Telo has accepted their
 request, is working, needs their input, has stopped, or has finished. When something
 fails, the reply should explain what happened and what the user or administrator
 can do next. This plan covers that feedback for ordinary assistant requests and

@@ -25,11 +25,11 @@ const engine = async (args: string[]) => {
   return (result.stdout + (args[0] === "logs" ? result.stderr : "")).trim();
 };
 const suffix = randomUUID().slice(0, 8);
-const name = `deepx-codex-smoke-${suffix}`;
+const name = `telo-codex-smoke-${suffix}`;
 const dir = await mkdtemp(join(tmpdir(), `${name}-`));
 const image = `localhost/${name}:local`;
 const jobImage =
-  process.env.CODEX_SMOKE_JOB_IMAGE ?? "localhost/deepx-codex-job:verify";
+  process.env.CODEX_SMOKE_JOB_IMAGE ?? "localhost/telo-codex-job:verify";
 const workspaceId = randomUUID();
 const taskId = randomUUID();
 const key = taskKey(workspaceId, taskId);
@@ -111,7 +111,7 @@ setTimeout(() => { throw Error('Sandbox network probe timed out'); }, 3000).unre
   if (!proof.success) throw Error("Review source proof build failed");
   await writeFile(
     join(dir, "Dockerfile.review-proof"),
-    `FROM ${jobImage}\nCOPY --chown=node:node review-source-proof.mjs /opt/deepx/review-source-proof.mjs\nENTRYPOINT ["node", "/opt/deepx/review-source-proof.mjs"]\n`,
+    `FROM ${jobImage}\nCOPY --chown=node:node review-source-proof.mjs /opt/telo/review-source-proof.mjs\nENTRYPOINT ["node", "/opt/telo/review-source-proof.mjs"]\n`,
   );
   await engine([
     "build",
@@ -138,11 +138,11 @@ setTimeout(() => { throw Error('Sandbox network probe timed out'); }, 3000).unre
   );
   await writeFile(
     join(dir, "Dockerfile"),
-    `FROM ${jobImage}\nUSER root\nRUN rm /usr/local/bin/codex\nCOPY --chmod=755 codex /usr/local/bin/codex\nCOPY --chmod=755 git /usr/local/bin/git\nCOPY fake-github.cjs /opt/deepx/fake-github.cjs\nENV NODE_OPTIONS=--require=/opt/deepx/fake-github.cjs\nUSER node\n`,
+    `FROM ${jobImage}\nUSER root\nRUN rm /usr/local/bin/codex\nCOPY --chmod=755 codex /usr/local/bin/codex\nCOPY --chmod=755 git /usr/local/bin/git\nCOPY fake-github.cjs /opt/telo/fake-github.cjs\nENV NODE_OPTIONS=--require=/opt/telo/fake-github.cjs\nUSER node\n`,
   );
   await writeFile(
     join(dir, "Dockerfile.supervisor"),
-    `FROM ${process.env.CODEX_SMOKE_SUPERVISOR_IMAGE ?? "localhost/deepx-codex-supervisor:verify"}\nUSER root\nRUN rm /usr/local/bin/codex\nCOPY --chmod=755 codex /usr/local/bin/codex\n`,
+    `FROM ${process.env.CODEX_SMOKE_SUPERVISOR_IMAGE ?? "localhost/telo-codex-supervisor:verify"}\nUSER root\nRUN rm /usr/local/bin/codex\nCOPY --chmod=755 codex /usr/local/bin/codex\n`,
   );
   await writeFile(
     join(dir, "fake-github.cjs"),
@@ -162,7 +162,7 @@ global.fetch=async(url,options)=>{
  }
  if(url!=='https://api.github.com/repos/example/smoke/pulls'||options.method!=='POST')throw Error('Unexpected network call');
  const body=JSON.parse(options.body);
- if(body.draft!==false||!body.head.startsWith('codex/repodesk-'))throw Error('Invalid publication');
+ if(body.draft!==false||!body.head.startsWith('codex/telo-'))throw Error('Invalid publication');
  return Response.json({number:43,draft:false},{status:201});
 };`,
   );
@@ -201,7 +201,7 @@ if(args.includes('clone')) {
  if(job.development?.pr) {
    writeFileSync('/task/repo/README.md','fixed\\n');
    git(['-C','/task/repo','add','--all']);
-   git(['-C','/task/repo','-c','user.name=RepoDesk Codex','-c','user.email=codex@users.noreply.github.com','-c','commit.gpgSign=false','commit','-m','Implement maintainer-approved RepoDesk task']);
+   git(['-C','/task/repo','-c','user.name=Telo Codex','-c','user.email=codex@users.noreply.github.com','-c','commit.gpgSign=false','commit','-m','Implement maintainer-approved Telo task']);
  }
 
 } else if(args.includes('ls-remote')) {
@@ -235,9 +235,9 @@ if(process.argv[2]==='app-server') {
  const finishConversation=()=>{send({method:'item/completed',params:{threadId:'smoke-thread',turnId:'smoke-turn',item:{id:'smoke-final',type:'agentMessage',phase:'final_answer',text:JSON.stringify(conversationResult)}}});send({method:'turn/completed',params:{threadId:'smoke-thread',turn:{id:'smoke-turn',status:'completed'}}});};
  rl.on('line',line=>{
   const r=JSON.parse(line); if(r.id===undefined)return;
-  if(!r.method&&r.id===501){if(!r.result?.success)process.exit(12);send({id:502,method:'item/tool/call',params:{threadId:'smoke-thread',turnId:'smoke-turn',callId:'conversation-answer',tool:'repodesk_task_reply',arguments:{messageId:conversationMessage.id,text:'The current checkout preserves pagination ordering.'}}});return;}
+  if(!r.method&&r.id===501){if(!r.result?.success)process.exit(12);send({id:502,method:'item/tool/call',params:{threadId:'smoke-thread',turnId:'smoke-turn',callId:'conversation-answer',tool:'telo_task_reply',arguments:{messageId:conversationMessage.id,text:'The current checkout preserves pagination ordering.'}}});return;}
   if(!r.method&&r.id===502){if(!r.result?.success)process.exit(13);finishConversation();return;}
-  if(r.method==='turn/steer'&&conversationResult){conversationMessage=JSON.parse(r.params.input[0].text.split('Task conversation questions: ')[1])[0];if(r.params.expectedTurnId!=='smoke-turn')process.exit(14);send({id:r.id,result:{turnId:'smoke-turn'}});send({id:501,method:'item/tool/call',params:{threadId:'smoke-thread',turnId:'smoke-turn',callId:'conversation-read',tool:'repodesk_task_read',arguments:{messageId:conversationMessage.id}}});return;}
+  if(r.method==='turn/steer'&&conversationResult){conversationMessage=JSON.parse(r.params.input[0].text.split('Task conversation questions: ')[1])[0];if(r.params.expectedTurnId!=='smoke-turn')process.exit(14);send({id:r.id,result:{turnId:'smoke-turn'}});send({id:501,method:'item/tool/call',params:{threadId:'smoke-thread',turnId:'smoke-turn',callId:'conversation-read',tool:'telo_task_read',arguments:{messageId:conversationMessage.id}}});return;}
   if(r.method==='initialize'){if(fs.readFileSync('/input/job.json','utf8').includes('Conversation channel fixture')&&!r.params.capabilities.experimentalApi)process.exit(15);return send({id:r.id,result:{}});}
   if(r.method==='thread/resume'&&!fs.existsSync(process.env.CODEX_HOME+'/session'))return send({id:r.id,error:{code:-32600,message:'no rollout found for thread id'}});
   if(r.method==='thread/start'||r.method==='thread/resume') {fs.writeFileSync(process.env.CODEX_HOME+'/session','smoke-thread');return send({id:r.id,result:{thread:{id:'smoke-thread'}}});}
@@ -292,7 +292,7 @@ if(JSON.parse(fs.readFileSync('/input/job.json','utf8')).payload.body==='Paralle
 
    send({method:'item/completed',params:{threadId:'smoke-thread',turnId:'smoke-turn',item:{id:'smoke-commentary',type:'agentMessage',phase:'commentary',text:'I am checking the repository.'}}});
    send({method:'thread/tokenUsage/updated',params:{threadId:'smoke-thread',turnId:'smoke-turn',tokenUsage:{total:{totalTokens:20},last:{totalTokens:20}}}});
-   if(text.includes('Conversation channel fixture')){conversationResult=result;fs.writeFileSync('/task/conversation-ready','ready');if(text.includes('Task conversation questions: ')){conversationMessage=JSON.parse(text.split('Task conversation questions: ')[1])[0];send({id:501,method:'item/tool/call',params:{threadId:'smoke-thread',turnId:'smoke-turn',callId:'conversation-read',tool:'repodesk_task_read',arguments:{messageId:conversationMessage.id}}});}return;}
+   if(text.includes('Conversation channel fixture')){conversationResult=result;fs.writeFileSync('/task/conversation-ready','ready');if(text.includes('Task conversation questions: ')){conversationMessage=JSON.parse(text.split('Task conversation questions: ')[1])[0];send({id:501,method:'item/tool/call',params:{threadId:'smoke-thread',turnId:'smoke-turn',callId:'conversation-read',tool:'telo_task_read',arguments:{messageId:conversationMessage.id}}});}return;}
    send({method:'item/completed',params:{threadId:'smoke-thread',turnId:'smoke-turn',item:{type:'agentMessage',phase:'final_answer',text:JSON.stringify(result)}}});
    send({method:'turn/completed',params:{threadId:'smoke-thread',turn:{id:'smoke-turn',status:'completed'}}});return;
   }
@@ -335,7 +335,7 @@ process.exit(16);
     "-v",
     `${socket}:/var/run/docker.sock`,
     "-v",
-    `${name}-state:/var/lib/deepx-codex`,
+    `${name}-state:/var/lib/telo-codex`,
     "-e",
     `CODEX_RUNNER_TOKEN=${token}`,
     "-e",
@@ -1044,7 +1044,7 @@ process.exit(16);
   const pr = {
     number: 43,
     url: published.prUrl,
-    branch: `codex/repodesk-${logicalTaskId}`,
+    branch: `codex/telo-${logicalTaskId}`,
     headSha: published.publishedSha,
   };
   await request("/tasks", {

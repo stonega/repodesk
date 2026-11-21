@@ -106,12 +106,12 @@ check(
 check(
   "plugin cannot see host credentials, mounts, write package/root or use network",
   async () => {
-    process.env.REPODESK_PLUGIN_TEST_SECRET = "host-only-fixture";
+    process.env.TELO_PLUGIN_TEST_SECRET = "host-only-fixture";
     try {
       const bundle =
         Buffer.from(`import {readFile,writeFile} from 'node:fs/promises';
 export default {tools:{async count_words(){let count=0;
-if(!process.env.REPODESK_PLUGIN_TEST_SECRET&&!process.env.DATABASE_URL&&!process.env.ENCRYPTION_KEY)count++;
+if(!process.env.TELO_PLUGIN_TEST_SECRET&&!process.env.DATABASE_URL&&!process.env.ENCRYPTION_KEY)count++;
 for(const p of ['/var/run/docker.sock','/app/package.json'])try{await readFile(p)}catch{count++}
 for(const p of ['/package/plugin.mjs','/root-write'])try{await writeFile(p,'x')}catch{count++}
 try{await fetch('https://example.com',{signal:AbortSignal.timeout(500)})}catch{count++}
@@ -121,7 +121,7 @@ return {content:[{type:'text',text:String(count)}],structuredContent:{count}}}}}
       );
       expect(result.structuredContent.count).toBe(6);
     } finally {
-      delete process.env.REPODESK_PLUGIN_TEST_SECRET;
+      delete process.env.TELO_PLUGIN_TEST_SECRET;
     }
   },
   15000,
@@ -192,7 +192,7 @@ check(
         "ps",
         "-aq",
         "--filter",
-        "label=repodesk.plugin-sandbox=true",
+        "label=telo.plugin-sandbox=true",
       ])
     ).stdout
       .trim()
@@ -217,7 +217,7 @@ check(
             "ps",
             "-q",
             "--filter",
-            "label=repodesk.plugin-sandbox=true",
+            "label=telo.plugin-sandbox=true",
           ])
         ).stdout
           .trim()
@@ -249,7 +249,7 @@ check(
         "ps",
         "-aq",
         "--filter",
-        "label=repodesk.plugin-sandbox=true",
+        "label=telo.plugin-sandbox=true",
       ])
     ).stdout;
     expect(after).not.toContain(id);
@@ -281,9 +281,9 @@ check(
           "--cap-drop",
           "ALL",
           "--label",
-          "repodesk.plugin-sandbox=true",
+          "telo.plugin-sandbox=true",
           "--label",
-          `repodesk.plugin-deadline=${deadline}`,
+          `telo.plugin-deadline=${deadline}`,
           "--entrypoint",
           "node",
           image as string,
@@ -299,7 +299,7 @@ check(
           "-aq",
           "--no-trunc",
           "--filter",
-          "label=repodesk.plugin-sandbox=true",
+          "label=telo.plugin-sandbox=true",
         ])
       ).stdout;
       expect(remaining).not.toContain(ids[0] ?? "missing");

@@ -27,7 +27,7 @@ afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
 });
 async function fixture() {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-runtime-control-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-runtime-control-"));
   dirs.push(dir);
   const env = runnerSettings.parse({
     CODEX_CONTAINER_ENGINE: "docker",

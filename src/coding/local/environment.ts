@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { z } from "zod";
 import { jobCommand } from "./job-command.ts";
 
-export const envVolumePattern = /^deepx-codex-env-[a-f0-9]{24}-[1-9]\d{0,18}$/;
+export const envVolumePattern = /^telo-codex-env-[a-f0-9]{24}-[1-9]\d{0,18}$/;
 export const envVolumePrefixPattern =
-  /^deepx-codex-env-[a-f0-9]{24}-(?:[1-9]\d{0,18})?$/;
+  /^telo-codex-env-[a-f0-9]{24}-(?:[1-9]\d{0,18})?$/;
 export const envMountModes = ["setup", "implement", "check"] as const;
 
 const allowedTools = new Set([
@@ -30,7 +30,7 @@ const packageManagerSpec =
 
 export function workspaceEnvPrefix(workspaceId: string) {
   z.uuid().parse(workspaceId);
-  return `deepx-codex-env-${createHash("sha256").update(workspaceId).digest("hex").slice(0, 24)}-`;
+  return `telo-codex-env-${createHash("sha256").update(workspaceId).digest("hex").slice(0, 24)}-`;
 }
 
 export function environmentVolumeKey(
@@ -93,7 +93,7 @@ export function persistentEnv(
   return {
     ...baseEnv,
     PATH: `${pathEntries.join(":")}:${basePath}`,
-    REPODESK_ENV_DIR: envRoot,
+    TELO_ENV_DIR: envRoot,
     MISE_DATA_DIR: join(envRoot, "mise"),
     MISE_CACHE_DIR: join(envRoot, "cache", "mise"),
     MISE_CONFIG_DIR: join(envRoot, "mise-config"),

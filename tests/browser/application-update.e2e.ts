@@ -13,26 +13,26 @@ import {
 const nextTag = `v${installedVersion.split(".").slice(0, 2).join(".")}.${Number(installedVersion.split(".")[2]) + 1}`;
 const available: UpdateView = {
   currentVersion: installedVersion,
-  repository: "stonega/repodesk",
+  repository: "stonega/telo",
   available: true,
   configured: true,
   updaterReady: true,
   release: {
     id: 42,
     tag: nextTag,
-    name: `RepoDesk ${nextTag}`,
+    name: `Telo ${nextTag}`,
     notes:
       "## Improvements\n- Check GitHub releases automatically.\n- Show changelogs before updating.\n\n## Upgrade notes\nDatabase migrations run after a backup.\n\n<img src=x onerror=alert(1)>\n" +
       "A long release-note line ".repeat(20),
     publishedAt: "2026-10-09T00:00:00Z",
-    url: `https://github.com/stonega/repodesk/releases/tag/${nextTag}`,
+    url: `https://github.com/stonega/telo/releases/tag/${nextTag}`,
     commit: "a".repeat(40),
     fingerprint: "b".repeat(64),
   },
 };
 async function signIn(page: Page, port: string, operator = true) {
   const fixture = JSON.parse(
-    await readFile(join(tmpdir(), `repodesk-browser-${port}-db.json`), "utf8"),
+    await readFile(join(tmpdir(), `telo-browser-${port}-db.json`), "utf8"),
   );
   const pool = database(fixture.url);
   const username = `updates_${randomUUID().slice(0, 8)}`,
@@ -65,7 +65,7 @@ test("compact update indicator keeps its tap target and keyboard access in both 
   const indicator = page.getByRole("button", {
     name: `Update available: ${nextTag}`,
   });
-  const modal = page.getByRole("dialog", { name: "Update RepoDesk" });
+  const modal = page.getByRole("dialog", { name: "Update Telo" });
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     for (const theme of ["light", "dark"]) {
@@ -169,7 +169,7 @@ test("version indicator opens release notes; pending update is locked and queues
   await expect(footer).toContainText(`v${installedVersion}`);
   await expect(footer.locator("#app-update button")).toHaveCount(1);
   await indicator.click();
-  const modal = page.getByRole("dialog", { name: "Update RepoDesk" });
+  const modal = page.getByRole("dialog", { name: "Update Telo" });
   await expect(
     modal.getByRole("region", { name: "Changelog", exact: true }),
   ).toContainText("Show changelogs");

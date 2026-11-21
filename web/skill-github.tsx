@@ -50,7 +50,7 @@ const messages: Record<string, string> = {
   skill_description_too_long:
     "The skill description must be at most 1,024 characters.",
   unsupported_skill_tools:
-    "This skill requests tools that RepoDesk does not provide. Adapt allowed-tools to the available application tools.",
+    "This skill requests tools that Telo does not provide. Adapt allowed-tools to the available application tools.",
   invalid_skill_resources:
     "Supporting files must be UTF-8 text: at most 32 files, 64 KB each and 256 KB combined.",
   skill_reference_unavailable:

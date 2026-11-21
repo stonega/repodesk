@@ -11,11 +11,11 @@ type = "docker"
 execd_image = "opensandbox/execd:release-1.1.1"
 
 [storage]
-allowed_host_paths = ["/var/lib/repodesk-sandboxes"]
+allowed_host_paths = ["/var/lib/telo-sandboxes"]
 
 [store]
 type = "sqlite"
-path = "/var/lib/repodesk-opensandbox/server.db"
+path = "/var/lib/telo-opensandbox/server.db"
 
 [docker]
 network_mode = "bridge"

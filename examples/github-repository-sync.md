@@ -5,7 +5,7 @@ repository. Automated tests use fake GitHub responses and disposable databases.
 
 1. Connect a test repository to a workspace. Open **Overview → Manage GitHub**.
    If there are more than five repositories, expand the remaining-count tag.
-2. Rename the repository in GitHub, then return to RepoDesk. Its name and external
+2. Rename the repository in GitHub, then return to Telo. Its name and external
    link update on focus or the next five-second refresh without closing the
    dialog or collapsing the expanded list.
 3. Open **Plugins → Codex**. The configured repository name and the Add/Edit

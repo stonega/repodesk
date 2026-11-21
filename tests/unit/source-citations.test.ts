@@ -123,7 +123,7 @@ test("verified Telegram links from authorized sources or tool results are permit
   if (!firstSource) throw new Error("missing source fixture");
   run.sources[0] = {
     ...firstSource,
-    text: "Please check https://t.me/repodesk_news/42 and tell me what it says.",
+    text: "Please check https://t.me/telo_news/42 and tell me what it says.",
   };
   run.tools.web = {
     name: "read_web",
@@ -138,11 +138,11 @@ test("verified Telegram links from authorized sources or tool results are permit
     },
   };
   const valid =
-    "Summary of https://t.me/repodesk_news/42. Community link: https://telegram.me/example_dev.";
+    "Summary of https://t.me/telo_news/42. Community link: https://telegram.me/example_dev.";
   expect(validateSources(valid, run)).toBe(valid);
   // Prefix/modified paths remain unverified.
   expect(() =>
-    validateSources("See https://t.me/repodesk_news/42/extra", run),
+    validateSources("See https://t.me/telo_news/42/extra", run),
   ).toThrow("use_source_ids_not_unverified_links");
   expect(() => validateSources("See https://t.me/fabricated/999", run)).toThrow(
     "use_source_ids_not_unverified_links",

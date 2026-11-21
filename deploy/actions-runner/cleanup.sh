@@ -4,8 +4,8 @@ set -euo pipefail
 ci_docker=(docker --host unix:///var/run/docker.sock)
 # Never allow this disposable-volume policy to target the production daemon.
 labels=$(timeout 15 "${ci_docker[@]}" info --format '{{json .Labels}}')
-if [[ "$labels" != *'"repodesk.ci=true"'* ]]; then
-  echo 'CI cleanup refused: Docker daemon is not labeled repodesk.ci=true.' >&2
+if [[ "$labels" != *'"telo.ci=true"'* ]]; then
+  echo 'CI cleanup refused: Docker daemon is not labeled telo.ci=true.' >&2
   exit 1
 fi
 prune() {

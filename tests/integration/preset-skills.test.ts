@@ -11,7 +11,7 @@ import { workspace } from "../fixtures.ts";
 const url = process.env.TEST_DATABASE_URL;
 (url ? describe : describe.skip)("preset skill admin API", () => {
   const root = database(url ?? "postgres://unused@localhost/unused");
-  const name = `repodesk_presets_${randomUUID().replaceAll("-", "")}`;
+  const name = `telo_presets_${randomUUID().replaceAll("-", "")}`;
   let store: Store;
   let credentials: { raw: string; csrf: string };
   let operatorId: string;
@@ -56,7 +56,7 @@ const url = process.env.TEST_DATABASE_URL;
         method,
         headers: {
           origin: "http://localhost:3000",
-          cookie: `repodesk_session=${credentials.raw}`,
+          cookie: `telo_session=${credentials.raw}`,
           "x-csrf-token": credentials.csrf,
           "content-type": "application/json",
         },

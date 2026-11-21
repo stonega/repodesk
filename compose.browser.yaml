@@ -3,21 +3,21 @@
 services:
   app:
     environment:
-      BROWSER_HOST_SOCKET: /run/repodesk-browser/control.sock
+      BROWSER_HOST_SOCKET: /run/telo-browser/control.sock
       BROWSER_HOST_TOKEN_FILE: /run/secrets/browser_token
       BROWSER_CODEX_ORIGIN: http://app:3000
     volumes:
-      - /run/repodesk-browser:/run/repodesk-browser:ro
+      - /run/telo-browser:/run/telo-browser:ro
     secrets:
       - browser_token
     group_add: ["1000"]
   worker:
     environment:
-      BROWSER_HOST_SOCKET: /run/repodesk-browser/control.sock
+      BROWSER_HOST_SOCKET: /run/telo-browser/control.sock
       BROWSER_HOST_TOKEN_FILE: /run/secrets/browser_token
       BROWSER_CODEX_ORIGIN: http://app:3000
     volumes:
-      - /run/repodesk-browser:/run/repodesk-browser:ro
+      - /run/telo-browser:/run/telo-browser:ro
     secrets:
       - browser_token
     group_add: ["1000"]

@@ -138,7 +138,7 @@ export async function searchWeb(
         signal: bounded,
         headers:
           type === "duckduckgo"
-            ? { "user-agent": "RepoDesk/1.0", accept: "text/html" }
+            ? { "user-agent": "Telo/1.0", accept: "text/html" }
             : {
                 "content-type": "application/json",
                 ...(type === "deepseek"

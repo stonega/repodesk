@@ -122,7 +122,7 @@ test("an approved control that changes to a denied website returns its origin an
 test("download completion is reported only after the approved download is saved and verified", async ({
   page,
 }) => {
-  const home = await mkdtemp(join(tmpdir(), "repodesk-native-download-"));
+  const home = await mkdtemp(join(tmpdir(), "telo-native-download-"));
   await mkdir(join(home, "artifacts"));
   const payload = "verified-download-fixture";
   const server = createServer((req, res) => {

@@ -30,7 +30,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
   "Telegram polling (isolated PostgreSQL)",
   () => {
     const root = database(rootUrl ?? "postgres://unused@localhost/unused");
-    const name = `deepx_polling_${randomUUID().replaceAll("-", "")}`;
+    const name = `telo_polling_${randomUUID().replaceAll("-", "")}`;
     const key = "ac".repeat(32);
     const admin: Admin = {
       id: randomUUID(),
@@ -296,7 +296,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         {
           params: {
             chat_id: "101",
-            text: "RepoDesk setup is not complete yet. Ask a deployment admin to check the model settings and Telegram connection. The bot activates automatically when ready.",
+            text: "Telo setup is not complete yet. Ask a deployment admin to check the model settings and Telegram connection. The bot activates automatically when ready.",
           },
         },
       ]);

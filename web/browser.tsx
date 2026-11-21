@@ -177,7 +177,7 @@ export function BrowserPlugin({
         </div>
         <p>
           Allow specific local development servers. Members approve each website
-          for their own private tasks, and RepoDesk remembers that choice.
+          for their own private tasks, and Telo remembers that choice.
         </p>
         {!data ? (
           <Skeleton width="14rem" />

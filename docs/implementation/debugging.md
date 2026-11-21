@@ -1,4 +1,4 @@
-# Debugging RepoDesk
+# Debugging Telo
 
 ## VPS access
 
@@ -8,10 +8,10 @@ Operator-provided SSH destination, updated at the user's request on 2026-11-09:
 ssh root@13.140.242.169
 ```
 
-Admin site: `https://dev.stonegate.me`. Deployment directory: `/opt/repodesk`.
-Compose project: `repodesk`. Observed containers: `repodesk-app-1`,
-`repodesk-worker-1`, `repodesk-postgres-1`, `repodesk-codex-runner-1` and
-`repodesk-code-truth-1`. Use `/opt/repodesk/compose` for the pinned release's
+Admin site: `https://dev.stonegate.me`. Deployment directory: `/opt/telo`.
+Compose project: `telo`. Observed containers: `telo-app-1`,
+`telo-worker-1`, `telo-postgres-1`, `telo-codex-runner-1` and
+`telo-code-truth-1`. Use `/opt/telo/compose` for the pinned release's
 Compose commands. The operator requested a clean reset on 2026-11-10: no
 administrator, workspace, session, saved profile or previous backup remains.
 First-run setup is available directly at `https://dev.stonegate.me/setup`.
@@ -34,7 +34,7 @@ Wait for **Group linked** before testing `/ask@your_bot hi`. See
 
 If `/ask@your_bot hi` works but plain `@your_bot hi` does not, check Telegram
 privacy mode and the saved group's active state separately. Disabling privacy
-requires removing and re-adding the bot. Removal marks the RepoDesk group inactive;
+requires removing and re-adding the bot. Removal marks the Telo group inactive;
 re-adding it in Telegram does not reactivate that link. Generate and send a fresh
 **Group access → New** command, wait for **Group linked**, then recheck visibility
 and retry the mention. Bot administrator access and message collection are not
@@ -55,7 +55,7 @@ See the [workflow feedback incident](../../postmortem/2026-11-11-workflow-approv
 
 ```sh
 ssh root@13.140.242.169 'docker ps --format "{{.Names}} {{.Status}}"'
-ssh root@13.140.242.169 'docker logs --since 30m --tail 200 repodesk-worker-1'
+ssh root@13.140.242.169 'docker logs --since 30m --tail 200 telo-worker-1'
 ```
 
 Interpret the states separately:

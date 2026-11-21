@@ -12,7 +12,7 @@ admin with incomplete configuration sees a resumable setup checklist after login
 Other visitors see login, never another create-admin form.
 
 While the initial deployment, session and workspace checks are pending, show a
-neutral RepoDesk brand with skeletons. Render setup, sign-in or the admin panel
+neutral Telo brand with skeletons. Render setup, sign-in or the admin panel
 only after the checks finish so initialized deployments do not flash onboarding.
 
 The setup page is visible before login and asks only for a username and password.
@@ -30,7 +30,7 @@ Clarified 2026-11-10: the operator creates the first administrator directly in t
 web UI when opening a clean deployment; host-side setup gates are not part of
 this flow.
 
-New GitHub App registrations suggest `repodesk`, preselect Review Bot's PR/comment
+New GitHub App registrations suggest `telo`, preselect Review Bot's PR/comment
 events and enable the operator-specific webhook on public HTTPS deployments.
 GitHub's generated secret is saved automatically. Local origins retain inactive
 delivery; Review Bot repository policies and member verification remain separate.

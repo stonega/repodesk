@@ -11,7 +11,7 @@ const modulePath = fileURLToPath(
 const load = `import importlib.util,json,sys,tempfile\nfrom pathlib import Path\nspec=importlib.util.spec_from_file_location('update_runtime',sys.argv[1]);runtime=importlib.util.module_from_spec(spec);spec.loader.exec_module(runtime)\n`;
 
 test("Browser update packaging rejects source that omits the deployed production commit", () => {
-  const root = mkdtempSync(join(tmpdir(), "repodesk-release-ancestry-"));
+  const root = mkdtempSync(join(tmpdir(), "telo-release-ancestry-"));
   const git = (...args: string[]) =>
     execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
   const prepare = fileURLToPath(
@@ -92,11 +92,11 @@ test("Browser release recovery starts only the original writer identities", () =
 with tempfile.TemporaryDirectory() as root:
  root=Path(root);calls=root/'calls';fake=root/'engine.py'
  fake.write_text("import json,sys\\nfrom pathlib import Path\\ncalls=Path(sys.argv[1]);args=sys.argv[2:];calls.open('a').write(json.dumps(args)+'\\\\n')\\nif args[0]=='inspect':print(json.dumps([{'Id':'original','Image':'old-image','State':{'Status':'exited'}}]))\\n")
- baseline={'containers':{'repodesk-app-1':{'id':'original','image':'old-image'}}}
+ baseline={'containers':{'telo-app-1':{'id':'original','image':'old-image'}}}
  runtime.start_unchanged_writers(baseline,['app'],engine=[sys.executable,str(fake),str(calls)])
  assert json.loads(calls.read_text().splitlines()[-1])==['start','original']
- calls.write_text('');baseline['containers']['repodesk-app-1']['id']='replacement'
- try:runtime.start_unchanged_writers(baseline,['repodesk-app-1'],engine=[sys.executable,str(fake),str(calls)])
+ calls.write_text('');baseline['containers']['telo-app-1']['id']='replacement'
+ try:runtime.start_unchanged_writers(baseline,['telo-app-1'],engine=[sys.executable,str(fake),str(calls)])
  except AssertionError:pass
  else:raise AssertionError('A changed writer was restarted')
  assert len(calls.read_text().splitlines())==1

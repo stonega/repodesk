@@ -1,6 +1,6 @@
 # Repository alerts example
 
-An opt-in event producer for the RepoDesk preview SDK. The check_stars tool reads
+An opt-in event producer for the Telo preview SDK. The check_stars tool reads
 current GitHub repository metadata and returns a star_threshold candidate when
 the requested count is observed. It cannot establish the historical crossing time.
 

@@ -61,7 +61,7 @@ From the repository, create a fresh package directory:
 
 ```sh
 bun install --frozen-lockfile
-bun deploy/browser/package.ts /tmp/repodesk-browser-package
+bun deploy/browser/package.ts /tmp/telo-browser-package
 ```
 
 The package contains the two Node entry points, only their runtime dependencies,
@@ -70,24 +70,24 @@ the installer and service. On the VPS, installation is an explicit operator acti
 
 ```sh
 sudo BROWSER_EXECUTABLE=/usr/bin/google-chrome bash \
-  /tmp/repodesk-browser-package/install.sh \
-  /tmp/repodesk-browser-package /srv/repodesk/secrets
+  /tmp/telo-browser-package/install.sh \
+  /tmp/telo-browser-package /srv/telo/secrets
 ```
 
 Use `/usr/bin/chromium` for a compatible system Chromium installation. The installer
 checks prerequisites and package checksums, places root-owned code under
-`/opt/repodesk-browser`, creates a root-only `/etc/repodesk/browser-token`, and writes
+`/opt/telo-browser`, creates a root-only `/etc/telo/browser-token`, and writes
 an application-readable copy to the requested secrets directory. Existing host
 tokens, settings and profile data are preserved. It enables and restarts only the
 Browser host service. It does not configure accounts, Telegram or webhooks.
 
-Review `/etc/repodesk/browser.env` before production use:
+Review `/etc/telo/browser.env` before production use:
 
 | Setting | Default |
 | --- | --- |
-| `BROWSER_HOST_ROOT` | `/var/lib/repodesk-browser` |
-| `BROWSER_HOST_SOCKET` | `/run/repodesk-browser/control.sock` |
-| `BROWSER_HOST_TOKEN_FILE` | `/etc/repodesk/browser-token` |
+| `BROWSER_HOST_ROOT` | `/var/lib/telo-browser` |
+| `BROWSER_HOST_SOCKET` | `/run/telo-browser/control.sock` |
+| `BROWSER_HOST_TOKEN_FILE` | `/etc/telo/browser-token` |
 | `BROWSER_HOST_SOCKET_GID` | `1000` |
 | `BROWSER_EXECUTABLE` | `/usr/bin/google-chrome` |
 | `BROWSER_HOST_MAX_PROCESSES` | `4` |
@@ -129,7 +129,7 @@ deletion, so reference expiry is not immediate physical erasure from an idle dis
 The service revokes the proxy before process cleanup, attempts all cleanup steps
 even if one fails, and records fixed diagnostic codes with verified workspace,
 controller and request IDs. It excludes input values, URLs, browser stdout/stderr
-and raw upstream errors. `journalctl -u repodesk-browser` contains service readiness
+and raw upstream errors. `journalctl -u telo-browser` contains service readiness
 and these sanitized failures. A systemd stop kills remaining child processes.
 
 Back up the private state and the root-only host key together if login recovery is
@@ -146,12 +146,12 @@ Chrome sandbox and nftables inside that test namespace, without changing the
 developer host's users or firewall:
 
 ```sh
-docker build -f deploy/browser/smoke.Dockerfile -t repodesk-browser-host:smoke .
+docker build -f deploy/browser/smoke.Dockerfile -t telo-browser-host:smoke .
 docker run --rm --init --cap-add NET_ADMIN --cap-add SYS_ADMIN \
   --security-opt seccomp=unconfined --memory 2g --cpus 2 \
-  --pids-limit 512 --shm-size 512m repodesk-browser-host:smoke
+  --pids-limit 512 --shm-size 512m telo-browser-host:smoke
 docker run --rm --network none --env BROWSER_EXECUTABLE=/usr/bin/chromium \
-  --entrypoint bash repodesk-browser-host:smoke /opt/repodesk/install-smoke.sh
+  --entrypoint bash telo-browser-host:smoke /opt/telo/install-smoke.sh
 ```
 
 The smoke contract checks actual process arguments, separate UIDs/homes/displays,

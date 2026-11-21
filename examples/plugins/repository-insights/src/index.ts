@@ -1,4 +1,4 @@
-import { definePlugin } from "@repodesk/plugin-sdk";
+import { definePlugin } from "@telo/plugin-sdk";
 import type { Contract, Settings } from "./generated/contract.ts";
 
 export default definePlugin<Contract, Settings>({

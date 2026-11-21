@@ -2,9 +2,9 @@
 # Verify resource-limited Docker-in-Docker without registering a GitHub runner.
 set -euo pipefail
 
-runner_image="${1:-repodesk-actions-runner:test}"
+runner_image="${1:-telo-actions-runner:test}"
 smoke_root=$(mktemp -d)
-smoke_name="repodesk-actions-smoke-${smoke_root##*/}"
+smoke_name="telo-actions-smoke-${smoke_root##*/}"
 cleanup() {
   docker rm --force "$smoke_name" >/dev/null 2>&1 || true
   docker volume rm "$smoke_name-runner" "$smoke_name-docker" >/dev/null 2>&1 || true

@@ -123,7 +123,7 @@ const implementationFailures = new Set([
 export const taskKey = (workspaceId: string, taskId: string) => {
   z.uuid().parse(workspaceId);
   z.uuid().parse(taskId);
-  return `deepx-codex-${createHash("sha256").update(`${workspaceId}:${taskId}`).digest("hex").slice(0, 32)}`;
+  return `telo-codex-${createHash("sha256").update(`${workspaceId}:${taskId}`).digest("hex").slice(0, 32)}`;
 };
 
 export class RunnerSupervisor
@@ -171,15 +171,15 @@ export class RunnerSupervisor
     await this.device.initialize();
     await this.antigravity.initialize();
     for (const name of await readdir(this.settings.CODEX_RUNNER_STATE)) {
-      if (/^deepx-codex-[a-f0-9]{32}\.erased$/.test(name)) {
+      if (/^telo-codex-[a-f0-9]{32}\.erased$/.test(name)) {
         this.erased.add(name.slice(0, -7));
         continue;
       }
-      if (/^deepx-codex-[a-f0-9]{32}\.auth$/.test(name)) {
+      if (/^telo-codex-[a-f0-9]{32}\.auth$/.test(name)) {
         await rm(join(this.settings.CODEX_RUNNER_STATE, name), { force: true });
         continue;
       }
-      if (!/^deepx-codex-[a-f0-9]{32}\.json$/.test(name)) continue;
+      if (!/^telo-codex-[a-f0-9]{32}\.json$/.test(name)) continue;
       const r = JSON.parse(
         await readFile(join(this.settings.CODEX_RUNNER_STATE, name), "utf8"),
       ) as Record;

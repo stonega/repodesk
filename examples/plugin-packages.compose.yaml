@@ -3,28 +3,28 @@
 services:
   app:
     environment:
-      PLUGIN_PACKAGES_DIRECTORY: /var/lib/repodesk-plugins
+      PLUGIN_PACKAGES_DIRECTORY: /var/lib/telo-plugins
       PLUGIN_RUNNER_URL: http://plugin-runner:3030
       PLUGIN_RUNNER_TOKEN_FILE: /run/plugin-runner/token
     volumes:
-      - plugin_packages:/var/lib/repodesk-plugins
+      - plugin_packages:/var/lib/telo-plugins
       - plugin_runner_auth:/run/plugin-runner:ro
     depends_on:
       plugin-runner-token:
         condition: service_completed_successfully
   worker:
     environment:
-      PLUGIN_PACKAGES_DIRECTORY: /var/lib/repodesk-plugins
+      PLUGIN_PACKAGES_DIRECTORY: /var/lib/telo-plugins
       PLUGIN_RUNNER_URL: http://plugin-runner:3030
       PLUGIN_RUNNER_TOKEN_FILE: /run/plugin-runner/token
     volumes:
-      - plugin_packages:/var/lib/repodesk-plugins
+      - plugin_packages:/var/lib/telo-plugins
       - plugin_runner_auth:/run/plugin-runner:ro
     depends_on:
       plugin-runner-token:
         condition: service_completed_successfully
   plugin-runner-token:
-    image: ${APP_IMAGE:-deepx-agent:local}
+    image: ${APP_IMAGE:-telo-agent:local}
     user: "0:0"
     network_mode: none
     read_only: true
@@ -37,12 +37,12 @@ services:
     restart: "no"
     volumes:
       - plugin_runner_auth:/run/plugin-runner
-      - plugin_packages:/var/lib/repodesk-plugins
+      - plugin_packages:/var/lib/telo-plugins
   plugin-runner:
     build:
       context: .
       target: plugin-supervisor
-    image: ${PLUGIN_SUPERVISOR_IMAGE:-repodesk-plugin-supervisor:local}
+    image: ${PLUGIN_SUPERVISOR_IMAGE:-telo-plugin-supervisor:local}
     init: true
     environment:
       PORT: "3030"

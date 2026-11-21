@@ -107,7 +107,7 @@ the panel updater's independent GitHub check. See
 The Bun, Node and PostgreSQL base images are pinned by digest in Docker/Compose.
 Publish the resulting application image to your registry and deploy its immutable
 `@sha256:` digest through `APP_IMAGE`, then use `docker compose up --no-build -d`.
-`deepx-agent:local` is only the local build tag.
+`telo-agent:local` is only the local build tag.
 
 On the host, provision an HTTPS reverse proxy, private PostgreSQL storage, separate
 secret/backup storage and a responsible operator. Set explicit retention and budgets.

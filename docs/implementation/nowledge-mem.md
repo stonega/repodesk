@@ -1,6 +1,6 @@
 # Nowledge Mem plugin
 
-RepoDesk includes an optional built-in Nowledge Mem adapter for private Telegram
+Telo includes an optional built-in Nowledge Mem adapter for private Telegram
 knowledge recall and explicitly authored memory saves. It is disabled initially;
 configure **Plugins → Nowledge Mem** in each workspace. No dependency was added.
 
@@ -14,7 +14,7 @@ Reviewed on 2026-11-12:
 - [Pi connector](https://mem.nowledge.co/docs/integrations/pi): the standard
   `nowledge-mem-pi` package loads startup context and synchronizes local Pi session
   branches. Its CLI/session-file discovery and automatic transcript export do not
-  fit RepoDesk's headless, multi-user extension contract.
+  fit Telo's headless, multi-user extension contract.
 - [Remote access](https://mem.nowledge.co/docs/remote-access): use the Mem server
   base URL and an API key in the Authorization Bearer header. `/mcp/` is the MCP
   endpoint, not the REST base. A running local or remote Mem is required.
@@ -25,7 +25,7 @@ Reviewed on 2026-11-12:
   [create/upsert](https://mem.nowledge.co/docs/api/memories/post) define the REST
   operations implemented by this adapter.
 
-RepoDesk uses application-owned services around Pi rather than installing the
+Telo uses application-owned services around Pi rather than installing the
 terminal connector. It does not read `~/.nowledge-mem`, `~/.pi`, ambient `NMEM_*`
 variables or local transcripts. It does not automatically inject Mem Rules,
 identities or Working Memory into the system prompt. Upstream content is historical
@@ -65,7 +65,7 @@ Private read dependencies are retained on the run. Current authorization is
 rechecked for source-derived answers, handoffs and delivery, including bot changes,
 member revocation, plugin disablement and configuration changes. This does not
 query Mem again to discover remote edits or deletions of already returned content.
-Normal RepoDesk message retention still applies. Disconnecting does not delete
+Normal Telo message retention still applies. Disconnecting does not delete
 records already saved in Mem; use Mem to manage its own retention and deletion.
 
 ## Chat operations and durable writes
@@ -87,7 +87,7 @@ Concurrent reservations serialize under the workspace transaction. A started sav
 without a confirmed completion remains uncertain and is not sent again; inspect
 Mem manually before issuing a new save request. A later model failure does not
 undo a successful save. No update/delete, automatic extraction, session sync or
-scheduled export is implemented by this plugin. RepoDesk's internal memory is
+scheduled export is implemented by this plugin. Telo's internal memory is
 unchanged.
 
 Requests have a 15-second deadline, cancellation, redirect rejection, a 512 KiB

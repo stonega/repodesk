@@ -8,7 +8,7 @@ filesystem mounts. Defaults are deterministic; the first mutation materializes t
 
 `src/obsidian/` separates schemas, native-format indexing/validation, archive export,
 bounded browser import, tenant services and the trusted Pi extension. The bundled
-`repodesk-obsidian` skill describes tool use and sharing boundaries. `fflate` is the
+`telo-obsidian` skill describes tool use and sharing boundaries. `fflate` is the
 single added dependency, providing portable ZIP export and bounded browser-side
 extraction without shell commands, temporary server files or a desktop API.
 
@@ -55,7 +55,7 @@ requires YAML with named typed views while preserving extensible view/formula da
 Export writes native files and application-owned `.obsidian` core-plugin settings.
 Import is UTF-8 text only and skips settings/plugins/binaries; it does not delete
 missing files. The managed vault has no background desktop sync, Obsidian Sync,
-Publish, binary attachments or graphical rendering in RepoDesk.
+Publish, binary attachments or graphical rendering in Telo.
 
 The aggregate remains capped at 500 files, 100 KB per file and 5 MB total including
 Trash. Search defaults to 25 results with at most 50 per page. This is a small-team

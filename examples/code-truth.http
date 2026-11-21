@@ -5,13 +5,13 @@
 
 ### Read saved configuration and current revision
 GET {{origin}}/api/admin/workspaces/{{workspace}}/plugins/code-truth
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Replace revision 0 with the revision returned above
 # The repository dialog's Confirm action sends this PUT directly. Enablement
 # and repository removal also save immediately using the current revision.
 PUT {{origin}}/api/admin/workspaces/{{workspace}}/plugins/code-truth
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 Origin: {{origin}}
 x-csrf-token: {{csrf}}
 Content-Type: application/json
@@ -34,7 +34,7 @@ Content-Type: application/json
 # current permissions and service compatibility only when invoked. Restore access
 # or service availability, then retry the source question.
 POST {{origin}}/api/admin/workspaces/{{workspace}}/plugins/code-truth/status
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 Origin: {{origin}}
 x-csrf-token: {{csrf}}
 Content-Type: application/json

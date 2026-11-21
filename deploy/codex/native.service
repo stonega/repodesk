@@ -1,17 +1,17 @@
 [Unit]
-Description=RepoDesk native Codex runner
+Description=Telo native Codex runner
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=repodesk-codex
-Group=repodesk-codex
-WorkingDirectory=/opt/repodesk
-EnvironmentFile=/etc/repodesk/codex-native.env
+User=telo-codex
+Group=telo-codex
+WorkingDirectory=/opt/telo
+EnvironmentFile=/etc/telo/codex-native.env
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
-ExecStart=/usr/bin/node /opt/repodesk/dist/runner-server.js
-StateDirectory=repodesk-codex
+ExecStart=/usr/bin/node /opt/telo/dist/runner-server.js
+StateDirectory=telo-codex
 StateDirectoryMode=0700
 UMask=0077
 NoNewPrivileges=true

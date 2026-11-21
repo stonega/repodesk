@@ -29,7 +29,7 @@ const resultSummary = value => {
 const unseal = (key,aad,ciphertext) => {
   const [version,iv,tag,data]=ciphertext.split('.');
   const cipher=createDecipheriv('aes-256-gcm',Buffer.from(key,'hex'),Buffer.from(iv,'base64'));
-  cipher.setAAD(Buffer.from(`${version==='v1'?'deepx:v1':'repodesk:v2'}:${aad}`));
+  cipher.setAAD(Buffer.from(`${version==='v1'?'deepx:v1':version==='v2'?'repodesk:v2':'telo:v3'}:${aad}`));
   cipher.setAuthTag(Buffer.from(tag,'base64'));
   return JSON.parse(Buffer.concat([cipher.update(Buffer.from(data,'base64')),cipher.final()]));
 };
@@ -80,7 +80,7 @@ try {
 '''
 
 result = subprocess.run(
-    ["docker", "exec", "-i", "repodesk-app-1", "node", "--input-type=module"],
+    ["docker", "exec", "-i", "telo-app-1", "node", "--input-type=module"],
     input=script,
     text=True,
     capture_output=True,

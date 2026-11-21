@@ -1,9 +1,9 @@
 {
-  "name": "repodesk-repository-insights",
+  "name": "telo-repository-insights",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "devDependencies": {
-    "@repodesk/plugin-sdk": "file:../../../sdk/plugin"
+    "@telo/plugin-sdk": "file:../../../sdk/plugin"
   }
 }

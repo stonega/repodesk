@@ -106,7 +106,7 @@ export function SiteDomain({ request }: { request: Request }) {
           {!site
             ? !error && <Skeleton width="24rem" />
             : site.domain
-              ? "Custom domain configured. DNS and HTTPS availability are not verified by RepoDesk."
+              ? "Custom domain configured. DNS and HTTPS availability are not verified by Telo."
               : "Using the deployment’s default address."}
         </p>
         <p>
@@ -137,9 +137,9 @@ export function SiteDomain({ request }: { request: Request }) {
           </li>
           <li>
             Configure your server’s HTTPS reverse proxy to serve the domain and
-            forward requests to RepoDesk. With host-installed Caddy and the
-            default app port, use the configuration below. Adjust the port if
-            you changed APP_PORT.
+            forward requests to Telo. With host-installed Caddy and the default
+            app port, use the configuration below. Adjust the port if you
+            changed APP_PORT.
           </li>
           <li>
             Allow ports 80 and 443 to reach the proxy, then open the HTTPS
@@ -159,7 +159,7 @@ export function SiteDomain({ request }: { request: Request }) {
           </a>
         </p>
         <p className="muted">
-          Saving a domain updates RepoDesk’s address immediately. DNS records,
+          Saving a domain updates Telo’s address immediately. DNS records,
           certificates and proxy configuration must be set up with your hosting
           provider or on your server.
         </p>

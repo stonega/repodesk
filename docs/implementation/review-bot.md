@@ -19,20 +19,20 @@ custom runner images must include this JSON-capable OCR version.
 1. Connect the GitHub App to the workspace and enable Codex with model credentials.
    Repository access comes from the GitHub connection; neither plugin has a separate
    repository allowlist or maintainer grant.
-2. Open Review Bot. New Apps created through RepoDesk retain GitHub's generated
+2. Open Review Bot. New Apps created through Telo retain GitHub's generated
    webhook secret automatically. If **Webhook secret** shows **Not configured**,
    configure an existing secret or generate one; generated secrets appear once in
    that dialog. The encrypted secret belongs to the operator's App and is shared
    across that operator's workspaces. Replacing a secret also requires updating it
    in GitHub.
-3. New Apps created through RepoDesk with a public HTTPS domain already have the
+3. New Apps created through Telo with a public HTTPS domain already have the
    webhook URL, delivery and required event subscriptions configured. For an
    existing or manually registered App, set the displayed webhook URL, paste the
    secret, enable delivery and subscribe to `pull_request`, `issue_comment`,
    `pull_request_review_comment`. The receiver also handles `installation` and
    `installation_repositories` lifecycle events.
    A publicly reachable HTTPS origin is required for live delivery. Saving a secret
-   in RepoDesk does not update or verify GitHub's webhook configuration. Local
+   in Telo does not update or verify GitHub's webhook configuration. Local
    registrations retain an inactive placeholder until a public HTTPS receiver is
    configured.
 4. Open **Configuration → Edit** to configure automatic reviews, tagged requests,
@@ -77,7 +77,7 @@ Missing OCR, incompatible/malformed output or incomplete rules fail the task wit
 `coding_review_preparation_failed`; there is no alternate review engine.
 
 Codex reads the OCR plan and committed source through the application-owned
-`repodesk_review_source` tool. It exposes only paginated plan, file-list, blob-read,
+`telo_review_source` tool. It exposes only paginated plan, file-list, blob-read,
 per-file diff and PR commit-message operations, pinned to the task's
 base/head/merge-base commits. Commit messages come only from merge-base..head,
 without configurable Git commands or arbitrary revisions.
@@ -127,7 +127,7 @@ cannot publish against a newer head.
 
 Review criteria are adapted from Matt Pocock's
 [code-review skill](https://github.com/mattpocock/skills/blob/5beb35b040e3de97e54fa9e386d7e42d15c295c2/skills/engineering/code-review/SKILL.md),
-inspected on 2026-10-22. RepoDesk uses two passes in the existing read-only model
+inspected on 2026-10-22. Telo uses two passes in the existing read-only model
 session. These are not the source skill's isolated parallel subagents; native
 subagents remain disabled. OCR still supplies the validated file/rule plan.
 
@@ -158,17 +158,17 @@ their existing labels. Criteria discovery, axis conclusions and coverage remain
 model-generated; deterministic checks do not establish their semantic accuracy.
 
 The page displays the existing App's actual bot handle, for example
-`@repodesk[bot]`; Review Bot does not register a second GitHub App.
+`@telo[bot]`; Review Bot does not register a second GitHub App.
 
 | GitHub comment | Result |
 | --- | --- |
-| `@repodesk[bot] review` | Review the current PR |
-| `@repodesk[bot] explain this finding` | Read and answer in the PR |
-| `@repodesk[bot] fix this` | Implement the referenced change, verify and update the same PR |
-| `@repodesk[bot] status` | Report confirmed task state |
-| `@repodesk[bot] cancel` | Request cancellation of the active PR task |
+| `@telo[bot] review` | Review the current PR |
+| `@telo[bot] explain this finding` | Read and answer in the PR |
+| `@telo[bot] fix this` | Implement the referenced change, verify and update the same PR |
+| `@telo[bot] status` | Report confirmed task state |
+| `@telo[bot] cancel` | Request cancellation of the active PR task |
 
-Both the displayed `@repodesk[bot]` handle and GitHub’s usual `@repodesk` short
+Both the displayed `@telo[bot]` handle and GitHub’s usual `@telo` short
 mention are accepted. The bot must be addressed at the beginning of a comment line. Mentions inside
 quotes, fenced code, inline code or indented code cannot authorize work. Multiline
 instructions retain their original text. Inline replies include their parent review

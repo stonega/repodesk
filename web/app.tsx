@@ -328,18 +328,18 @@ function Shell() {
         <div
           className="brand"
           role="status"
-          aria-label={loading ? "Opening RepoDesk" : "RepoDesk"}
+          aria-label={loading ? "Opening Telo" : "Telo"}
           aria-busy={loading}
         >
           <img
             className="brand-mark"
-            src="/assets/repodesk-mark.svg"
+            src="/assets/telo-mark.svg"
             width="42"
             height="42"
             alt=""
           />
           <div>
-            RepoDesk<span>GITHUB ASSISTANT</span>
+            Telo<span>GITHUB ASSISTANT</span>
           </div>
         </div>
         {error && (
@@ -365,13 +365,13 @@ function Shell() {
         <div className="brand">
           <img
             className="brand-mark"
-            src="/assets/repodesk-mark.svg"
+            src="/assets/telo-mark.svg"
             width="42"
             height="42"
             alt=""
           />
           <div>
-            RepoDesk<span>GITHUB ASSISTANT</span>
+            Telo<span>GITHUB ASSISTANT</span>
           </div>
         </div>
         {current && !setupLayout ? (
@@ -452,7 +452,7 @@ function Shell() {
               </p>
               <AuthNetwork />
             </div>
-            <p className="auth-hero-footer">RepoDesk / Your deployment</p>
+            <p className="auth-hero-footer">Telo / Your deployment</p>
             {current && (
               <div className="account setup-account">
                 <div className="account-identity">

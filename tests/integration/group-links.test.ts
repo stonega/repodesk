@@ -25,7 +25,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
   "panel group linking (isolated PostgreSQL)",
   () => {
     const root = database(rootUrl ?? "postgres://unused@localhost/unused");
-    const dbName = `repodesk_group_links_${randomUUID().replaceAll("-", "")}`;
+    const dbName = `telo_group_links_${randomUUID().replaceAll("-", "")}`;
     const operatorId = randomUUID();
     const adminId = randomUUID();
     const memberId = randomUUID();
@@ -132,7 +132,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       return app.request(path, {
         method: "POST",
         headers: {
-          cookie: `repodesk_session=${session.raw}`,
+          cookie: `telo_session=${session.raw}`,
           origin,
           "x-csrf-token": session.csrf,
           "content-type": "application/json",
@@ -194,7 +194,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         app.request(path, {
           method: "PUT",
           headers: {
-            cookie: `repodesk_session=${session.raw}`,
+            cookie: `telo_session=${session.raw}`,
             origin,
             "x-csrf-token": session.csrf,
             "content-type": "application/json",
@@ -204,7 +204,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         });
       const read = () =>
         app.request(path, {
-          headers: { cookie: `repodesk_session=${credentials.raw}` },
+          headers: { cookie: `telo_session=${credentials.raw}` },
         });
       const initial = await (await read()).json();
       expect(initial.repositories).toEqual([

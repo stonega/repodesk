@@ -7,7 +7,7 @@ runner registration, credentials, backups or release metadata.
 ## Host: daily release image and build cache retention
 
 `scripts/cleanup-host.mjs` defaults to a dry run. In apply mode it removes only
-RepoDesk release tags older than 24 hours. It retains the current release plus
+Telo release tags older than 24 hours. It retains the current release plus
 the two newest complete image sets for the current deployment topology as rollback
 candidates, including Code Truth when its image belongs to the current release.
 These candidates are complete local builds, not evidence that a previous
@@ -31,33 +31,33 @@ On a provisioned, idle installation, copy both scripts together and restart only
 the host updater. This does not restart app/worker or the Codex runner:
 
 ```sh
-sudo install -m 700 scripts/cleanup-host.mjs /opt/repodesk/updater/cleanup-host.mjs
-sudo install -m 700 scripts/update-host.mjs /opt/repodesk/updater/update-host.mjs
-sudo systemctl restart repodesk-updater
-sudo node /opt/repodesk/updater/cleanup-host.mjs /opt/repodesk --dry-run
+sudo install -m 700 scripts/cleanup-host.mjs /opt/telo/updater/cleanup-host.mjs
+sudo install -m 700 scripts/update-host.mjs /opt/telo/updater/update-host.mjs
+sudo systemctl restart telo-updater
+sudo node /opt/telo/updater/cleanup-host.mjs /opt/telo --dry-run
 ```
 
 Review the dry run before activating permanent deletion. Adjust the deployment
 root and Node path in the service template for a different installation:
 
-The recorded VPS uses `/opt/repodesk/updater/node` rather than a Node executable
+The recorded VPS uses `/opt/telo/updater/node` rather than a Node executable
 on the SSH PATH. Use that executable for the preview and in the cleanup service's
 `ExecStart` on this host. Confirm it against
-`systemctl show repodesk-updater --property=ExecStart` before installation.
+`systemctl show telo-updater --property=ExecStart` before installation.
 
 ```sh
-sudo install -m 644 deploy/updates/repodesk-cleanup.service /etc/systemd/system/
-sudo install -m 644 deploy/updates/repodesk-cleanup.timer /etc/systemd/system/
+sudo install -m 644 deploy/updates/telo-cleanup.service /etc/systemd/system/
+sudo install -m 644 deploy/updates/telo-cleanup.timer /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now repodesk-cleanup.timer
-systemctl list-timers repodesk-cleanup.timer
+sudo systemctl enable --now telo-cleanup.timer
+systemctl list-timers telo-cleanup.timer
 ```
 
 The timer runs daily with up to fifteen minutes of jitter and catches up after
 host downtime. A busy deployment skips that day's run. For an immediate cleanup
-after reviewing the plan, use `sudo systemctl start repodesk-cleanup.service`.
-Inspect failures using `journalctl -u repodesk-cleanup.service`. Disable future
-runs using `sudo systemctl disable --now repodesk-cleanup.timer`. Later host
+after reviewing the plan, use `sudo systemctl start telo-cleanup.service`.
+Inspect failures using `journalctl -u telo-cleanup.service`. Disable future
+runs using `sudo systemctl disable --now telo-cleanup.timer`. Later host
 updates copy both maintenance/updater scripts atomically per file; the separate
 timer is installed once by an operator, not by a release check or local setup.
 
@@ -70,7 +70,7 @@ has a timeout; prune failures are visible in job logs and retried after subseque
 jobs without changing a completed job into a failure.
 
 The hook explicitly targets the inner Unix socket and refuses a daemon without
-the `repodesk.ci=true` label. Only that isolated CI daemon removes unused images
+the `telo.ci=true` label. Only that isolated CI daemon removes unused images
 older than 24 hours, prunes unused build cache to a 2GB retention target, and
 removes unreferenced disposable test volumes, including named volumes. Existing
 containers and their volume references remain. Docker-driver cache GC is also
@@ -88,11 +88,11 @@ post-job cleanup hook.
 ## Recorded VPS activation, 2026-10-10
 
 After operator approval, the matching host scripts and daily timer were installed
-on the recorded VPS. The service uses `/opt/repodesk/updater/node`. Immediate host
+on the recorded VPS. The service uses `/opt/telo/updater/node`. Immediate host
 cleanup completed successfully, removing 50 eligible release tags. The updated
 runner passed an isolated smoke on the VPS and was replaced while idle, keeping
 GitHub runner ID 21 and both outer volumes. Its inner daemon reports Docker
-29.9.0 with `repodesk.ci=true`; the post-job hook path is configured and executable.
+29.9.0 with `telo.ci=true`; the post-job hook path is configured and executable.
 Immediate CI cleanup completed without prune failures. Final disk usage is 39%
 with 60GB available. Production containers, volume identities and current release
 are preserved; public readiness returns HTTP 200. The timer/updater remain active

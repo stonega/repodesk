@@ -3,7 +3,7 @@
 For revisioned reference preferences, optional Pi/Codex recall, corrections and
 candidate learning, see [source-grounded preferences](preference-memory.md).
 
-RepoDesk 使用对话上下文、历史记忆和经过确认的指令帮助持续协作。它们的用途与删除方式不同。
+Telo 使用对话上下文、历史记忆和经过确认的指令帮助持续协作。它们的用途与删除方式不同。
 
 | 类型 | 用途 | 管理方式 |
 | --- | --- | --- |
@@ -64,7 +64,7 @@ member's private chat and Space. Searches send the query to that Mem server;
 returned memories can enter the model's authorized context. A direct
 `Save to Nowledge Mem: text` request sends the exact text after the colon to Mem.
 Chat transcripts are not automatically exported. Disabling internal recall,
-forgetting a local memory, disconnecting the plugin or deleting the RepoDesk
+forgetting a local memory, disconnecting the plugin or deleting the Telo
 workspace does not delete records already saved in Mem. Manage external records
 and retention in Mem itself.
 

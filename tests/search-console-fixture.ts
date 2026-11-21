@@ -4,7 +4,7 @@ export const { privateKey, publicKey } = generateKeyPairSync("rsa", {
 });
 export const account = {
   type: "service_account" as const,
-  client_email: "repodesk@fixture.iam.gserviceaccount.com",
+  client_email: "telo@fixture.iam.gserviceaccount.com",
   private_key: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
 };
 export const siteUrl = "sc-domain:example.com";

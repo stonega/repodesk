@@ -41,12 +41,12 @@ are not provided; manage those in Mem itself. Search excerpts and full reads are
 bounded, so ask for the exact memory when a search result is truncated.
 
 If a save's outcome is uncertain, inspect Mem before sending a new save request.
-RepoDesk does not automatically resend it. A confirmed save stays in Mem even if
-the bot's later answer fails. Disconnecting RepoDesk does not delete saved Mem
-records. Mem's own retention/deletion controls remain separate from RepoDesk's
+Telo does not automatically resend it. A confirmed save stays in Mem even if
+the bot's later answer fails. Disconnecting Telo does not delete saved Mem
+records. Mem's own retention/deletion controls remain separate from Telo's
 [conversation memory and privacy](memory-and-privacy.md).
 
-If recall fails, check that Mem is running, the server is reachable from RepoDesk,
+If recall fails, check that Mem is running, the server is reachable from Telo,
 the API key is current, the selected member is active, and the correct Space is
 configured. Missing Mem access does not prevent ordinary chat. Historical memories
 may be outdated and never grant permission for other actions.

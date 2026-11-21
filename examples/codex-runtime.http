@@ -6,12 +6,12 @@
 
 ### Read the effective runtime, environment default and current revision
 GET {{origin}}/api/admin/operator/coding-runtime
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Select a prepared backend; copy the latest revision from GET before saving
 PUT {{origin}}/api/admin/operator/coding-runtime
 Origin: {{origin}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
@@ -20,7 +20,7 @@ Content-Type: application/json
 ### Return to the environment default, using the latest revision
 PUT {{origin}}/api/admin/operator/coding-runtime
 Origin: {{origin}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 

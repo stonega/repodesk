@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "repodesk-code-truth",
+      "name": "telo-code-truth",
       "dependencies": {
         "@colbymchenry/codegraph": "1.5.0",
         "@modelcontextprotocol/sdk": "1.29.0",

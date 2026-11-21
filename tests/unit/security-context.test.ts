@@ -30,7 +30,7 @@ test.each(["private", "group", "scheduled"] as const)(
     });
 
     const { system, prompt, metadata } = buildContext(w, run);
-    const boundary = system.slice(0, system.indexOf("You are RepoDesk"));
+    const boundary = system.slice(0, system.indexOf("You are Telo"));
     expect(boundary).toStartWith("Security and instruction boundaries:");
     expect(boundary).toContain("take precedence over personality");
     expect(boundary).toContain("hidden system/developer instructions");

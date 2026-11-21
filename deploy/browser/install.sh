@@ -29,45 +29,45 @@ for (const [name, digest] of Object.entries(files)) {
   if (crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') !== digest) throw Error('Package checksum mismatch');
 }
 NODE
-install -d -m 0755 /opt/repodesk-browser
-if [[ ! -d /etc/repodesk ]]; then
-  install -d -m 0700 /etc/repodesk
+install -d -m 0755 /opt/telo-browser
+if [[ ! -d /etc/telo ]]; then
+  install -d -m 0700 /etc/telo
 fi
-[[ ! -L /etc/repodesk && $(stat -c %u /etc/repodesk) == 0 ]]
-directory_mode=$(stat -c %a /etc/repodesk)
+[[ ! -L /etc/telo && $(stat -c %u /etc/telo) == 0 ]]
+directory_mode=$(stat -c %a /etc/telo)
 (( (8#$directory_mode & 8#022) == 0 ))
-[[ ! -L /etc/repodesk/browser-token && ! -L /etc/repodesk/browser.env ]]
-cp -R -- "$package_dir/." /opt/repodesk-browser/
-chown -R root:root /opt/repodesk-browser
+[[ ! -L /etc/telo/browser-token && ! -L /etc/telo/browser.env ]]
+cp -R -- "$package_dir/." /opt/telo-browser/
+chown -R root:root /opt/telo-browser
 # Locked profile UIDs execute this public code. Secrets and profiles live elsewhere.
-chmod -R a+rX,go-w /opt/repodesk-browser
-if [[ ! -f /etc/repodesk/browser-token ]]; then
-  node -e 'process.stdout.write(require("node:crypto").randomBytes(48).toString("hex"))' > /etc/repodesk/browser-token
+chmod -R a+rX,go-w /opt/telo-browser
+if [[ ! -f /etc/telo/browser-token ]]; then
+  node -e 'process.stdout.write(require("node:crypto").randomBytes(48).toString("hex"))' > /etc/telo/browser-token
 fi
-[[ ! -L /etc/repodesk/browser-token ]]
-chown root:root /etc/repodesk/browser-token
-chmod 0600 /etc/repodesk/browser-token
-if [[ ! -f /etc/repodesk/browser.env ]]; then
+[[ ! -L /etc/telo/browser-token ]]
+chown root:root /etc/telo/browser-token
+chmod 0600 /etc/telo/browser-token
+if [[ ! -f /etc/telo/browser.env ]]; then
   # Container application runs as UID/GID 1000. Change both the service setting
   # and Compose group_add when deploying with another GID.
   printf '%s\n' \
-    'BROWSER_HOST_ROOT=/var/lib/repodesk-browser' \
-    'BROWSER_HOST_SOCKET=/run/repodesk-browser/control.sock' \
+    'BROWSER_HOST_ROOT=/var/lib/telo-browser' \
+    'BROWSER_HOST_SOCKET=/run/telo-browser/control.sock' \
     'BROWSER_HOST_SOCKET_GID=1000' \
-    'BROWSER_HOST_TOKEN_FILE=/etc/repodesk/browser-token' \
+    'BROWSER_HOST_TOKEN_FILE=/etc/telo/browser-token' \
     "BROWSER_EXECUTABLE=$browser_executable" \
     'BROWSER_HOST_MAX_PROCESSES=4' \
-    'BROWSER_HOST_IDLE_SECONDS=300' > /etc/repodesk/browser.env
+    'BROWSER_HOST_IDLE_SECONDS=300' > /etc/telo/browser.env
 fi
-[[ ! -L /etc/repodesk/browser.env ]]
-chown root:root /etc/repodesk/browser.env
-chmod 0600 /etc/repodesk/browser.env
+[[ ! -L /etc/telo/browser.env ]]
+chown root:root /etc/telo/browser.env
+chmod 0600 /etc/telo/browser.env
 if [[ ! -d $secret_dir ]]; then
   install -d -o 1000 -g 1000 -m 0700 "$secret_dir"
 fi
-install -o 1000 -g 1000 -m 0600 /etc/repodesk/browser-token "$secret_dir/browser-token"
-install -o root -g root -m 0644 /opt/repodesk-browser/repodesk-browser.service /etc/systemd/system/repodesk-browser.service
+install -o 1000 -g 1000 -m 0600 /etc/telo/browser-token "$secret_dir/browser-token"
+install -o root -g root -m 0644 /opt/telo-browser/telo-browser.service /etc/systemd/system/telo-browser.service
 systemctl daemon-reload
-systemctl enable repodesk-browser.service
-systemctl restart repodesk-browser.service
+systemctl enable telo-browser.service
+systemctl restart telo-browser.service
 echo 'Browser host installed. Existing token and profiles were preserved.'

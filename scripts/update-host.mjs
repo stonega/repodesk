@@ -55,7 +55,7 @@ async function github(repository, path, token, transport) {
       signal: AbortSignal.timeout(10000),
       headers: {
         accept: "application/vnd.github+json",
-        "user-agent": "RepoDesk-host-updater",
+        "user-agent": "Telo-host-updater",
         "x-github-api-version": "2026-03-10",
         ...(token ? { authorization: `Bearer ${token}` } : {}),
       },
@@ -205,10 +205,10 @@ export async function installRelease(
     // A daemon that imports the shared maintenance lock needs its companion
     // module. Reject incompatible source before building or stopping writers.
     await readFile(join(source, "scripts/cleanup-host.mjs"));
-    const image = `repodesk:release-${request.commit}`;
-    const supervisor = `repodesk-codex-supervisor:release-${request.commit}`;
-    const job = `repodesk-codex-job:release-${request.commit}`;
-    const codeTruth = `repodesk-code-truth:release-${request.commit}`;
+    const image = `telo:release-${request.commit}`;
+    const supervisor = `telo-codex-supervisor:release-${request.commit}`;
+    const job = `telo-codex-job:release-${request.commit}`;
+    const codeTruth = `telo-code-truth:release-${request.commit}`;
     for (const [target, tag] of [
       ["app", image],
       ["codex-job", job],
@@ -399,8 +399,7 @@ export async function processRequest(
   }
 }
 async function main() {
-  const [rootArg, project, repository = "stonega/repodesk"] =
-    process.argv.slice(2);
+  const [rootArg, project, repository = "stonega/telo"] = process.argv.slice(2);
   const root = resolve(rootArg ?? "");
   if (
     !rootArg ||

@@ -24,7 +24,7 @@ async function fixture(
     revision: 1,
     settings: { ...emptyReview, enabled: true },
     tasks: [],
-    botHandle: "repodesk[bot]",
+    botHandle: "telo[bot]",
     webhookConfigured: true,
     webhookUrl: "https://example.com/github/webhook/operator",
   };
@@ -108,7 +108,7 @@ for (const plugin of ["codex", "review-bot"] as const) {
       }) => {
         await page.setViewportSize({ width, height: 900 });
         await page.addInitScript(
-          (value) => localStorage.setItem("repodesk.theme", value),
+          (value) => localStorage.setItem("telo.theme", value),
           theme,
         );
         const f = await fixture(page, plugin);

@@ -15,7 +15,7 @@ Use the existing docs sync script and update its provenance manifest.
 Expected behavior:
 
 1. The modification task remains bound to `example/product-site`.
-2. RepoDesk resolves the selected `example/product` default branch to one commit
+2. Telo resolves the selected `example/product` default branch to one commit
    and prepares its source checkout before intake. Codex receives its path and SHA.
 3. Codex uses the existing synchronization workflow with that local path, implements
    the authorized target changes and runs the required checks.

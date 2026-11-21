@@ -112,7 +112,7 @@ export function ApplicationUpdate({
         )}
       {selected?.release && (
         <Modal
-          title="Update RepoDesk"
+          title="Update Telo"
           onClose={() => setSelected(undefined)}
           busy={busy}
         >
@@ -150,7 +150,7 @@ export function ApplicationUpdate({
             <h3>Update notes</h3>
             <p>
               The deployment checks this release, backs up the database, and
-              applies migrations before restarting RepoDesk. Expect a brief
+              applies migrations before restarting Telo. Expect a brief
               interruption. Active coding work waits for a safe checkpoint.
             </p>
           </section>
@@ -235,7 +235,7 @@ export function ApplicationUpdate({
               )}
             {attempt?.state === "succeeded" && (
               <button type="button" onClick={() => window.location.reload()}>
-                Reload RepoDesk
+                Reload Telo
               </button>
             )}
           </ModalActions>

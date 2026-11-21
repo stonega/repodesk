@@ -198,7 +198,7 @@ export class GitHubPluginSource {
               .parse(
                 await this.api(
                   repository,
-                  `/contents/repodesk.plugin.json?ref=${commit}`,
+                  `/contents/telo.plugin.json?ref=${commit}`,
                   token,
                   signal,
                   110000,
@@ -257,7 +257,7 @@ export class GitHubPluginSource {
       const rawFiles: PackageFiles = unpackGitHubZip(
         await boundedBody(archive, limits.archive),
       );
-      const rawManifest = rawFiles["repodesk.plugin.json"];
+      const rawManifest = rawFiles["telo.plugin.json"];
       if (!rawManifest || rawManifest.length > limits.manifest)
         throw new PluginError("plugin_manifest_invalid");
       const files = selectPackageFiles(

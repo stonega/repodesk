@@ -78,7 +78,7 @@ export class BrowserHostClient implements BrowserHost {
           headers: {
             "content-type": "application/json",
             "content-length": Buffer.byteLength(signed.body),
-            "x-repodesk-browser-signature": signed.signature,
+            "x-telo-browser-signature": signed.signature,
           },
           signal,
         },

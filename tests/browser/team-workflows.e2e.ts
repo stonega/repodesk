@@ -200,7 +200,7 @@ for (const width of [1280, 390]) {
     }) => {
       await page.setViewportSize({ width, height: 900 });
       await page.addInitScript(
-        (value) => localStorage.setItem("repodesk.theme", value),
+        (value) => localStorage.setItem("telo.theme", value),
         theme,
       );
       const f = await fixture(page, true, true);
@@ -475,7 +475,7 @@ test("conversation skill provenance and direct enablement remain usable on deskt
   ).toHaveCount(0);
   await expect(card.locator("input, textarea, select")).toHaveCount(0);
   await page.screenshot({
-    path: "/tmp/repodesk-team-workflows-desktop.png",
+    path: "/tmp/telo-team-workflows-desktop.png",
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -488,7 +488,7 @@ test("conversation skill provenance and direct enablement remain usable on deskt
     ),
   ).toBe(true);
   await page.screenshot({
-    path: "/tmp/repodesk-team-workflows-mobile.png",
+    path: "/tmp/telo-team-workflows-mobile.png",
     fullPage: true,
   });
   await card.getByRole("button", { name: "enable", exact: true }).click();
@@ -590,7 +590,7 @@ for (const width of [1280, 390]) {
       for (const theme of ["light", "dark"]) {
         await page.goto(`/admin/workflows?workspace=${f.w.id}`);
         await page.evaluate(
-          (theme) => localStorage.setItem("repodesk.theme", theme),
+          (theme) => localStorage.setItem("telo.theme", theme),
           theme,
         );
         await page.reload();
@@ -675,7 +675,7 @@ test("unlinked admins inspect workflow details without an editor and recover fro
   page,
 }) => {
   const f = await fixture(page, false, true);
-  f.workflow.spec.name = "Daily GitHub development report — stonega/repodesk";
+  f.workflow.spec.name = "Daily GitHub development report — stonega/telo";
   f.workflow.status = "paused";
   f.workflow.spec.recurrence.frequency = "daily";
   f.workflow.spec.recurrence.hour = 9;

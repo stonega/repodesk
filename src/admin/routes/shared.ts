@@ -38,9 +38,11 @@ export interface AdminRouteDeps {
   site: SiteService;
 }
 
-export const sessionCookie = "repodesk_session";
+export const sessionCookie = "telo_session";
 export const sessionCookieValue = (c: Context<AdminEnv>) =>
-  getCookie(c, sessionCookie) ?? getCookie(c, "deepx_session");
+  getCookie(c, sessionCookie) ??
+  getCookie(c, "repodesk_session") ??
+  getCookie(c, "deepx_session");
 export const version = z.number().int().positive();
 export const authInput = z.object({
   username: z.string().regex(/^[a-zA-Z0-9_.-]{3,64}$/),

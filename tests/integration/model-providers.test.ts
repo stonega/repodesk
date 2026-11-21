@@ -117,7 +117,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     app.request(path, {
       method,
       headers: {
-        cookie: `repodesk_session=${auth.raw}`,
+        cookie: `telo_session=${auth.raw}`,
         origin,
         "x-csrf-token": auth.csrf,
         "content-type": "application/json",
@@ -161,7 +161,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     const catalog = await setup.models.catalog(admin);
     for (const headers of [
       { cookie: "" },
-      { cookie: `repodesk_session=${member.raw}` },
+      { cookie: `telo_session=${member.raw}` },
     ]) {
       expect((await request(endpoint, "GET", undefined, headers)).status).toBe(
         headers.cookie ? 403 : 401,
@@ -269,7 +269,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         const response = await htmlApp.request(endpoint, {
           method: "PUT",
           headers: {
-            cookie: `repodesk_session=${auth.raw}`,
+            cookie: `telo_session=${auth.raw}`,
             origin,
             "x-csrf-token": auth.csrf,
             "content-type": "application/json",

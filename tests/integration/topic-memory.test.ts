@@ -66,7 +66,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
   "Topic memory and compaction (isolated PostgreSQL)",
   () => {
     const root = database(rootUrl ?? "postgres://unused@localhost/unused");
-    const name = `deepx_memory_${randomUUID().replaceAll("-", "")}`;
+    const name = `telo_memory_${randomUUID().replaceAll("-", "")}`;
     const operatorId = randomUUID();
     const key = "af".repeat(32);
     let store: Store;

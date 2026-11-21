@@ -1,6 +1,6 @@
-# RepoDesk 用户文档
+# Telo 用户文档
 
-RepoDesk 是一个自托管的 Telegram AI 助手，让你在聊天中查询 GitHub 仓库、了解 Issue 和 PR、提交经过确认的操作，以及交给 Codex 实现修改。
+Telo 是一个自托管的 Telegram AI 助手，让你在聊天中查询 GitHub 仓库、了解 Issue 和 PR、提交经过确认的操作，以及交给 Codex 实现修改。
 
 第一次部署，从 [Get started：快速开始](get-started.md) 阅读。已经加入团队，直接看 [Telegram 使用指南](telegram-experience.md)。
 
@@ -58,6 +58,6 @@ RepoDesk 是一个自托管的 Telegram AI 助手，让你在聊天中查询 Git
 
 ## 使用范围
 
-当前版本面向自托管试用；首次使用请先用测试机器人和测试仓库验证自己的模型、权限和交付流程。可用功能取决于部署版本、已连接的服务和工作区设置。RepoDesk 不提供预先连接的公共机器人。
+当前版本面向自托管试用；首次使用请先用测试机器人和测试仓库验证自己的模型、权限和交付流程。可用功能取决于部署版本、已连接的服务和工作区设置。Telo 不提供预先连接的公共机器人。
 
 仓库查询受工作区和 GitHub 权限约束；Code Truth、Codex 和 Review Bot 需要额外配置。Telegram 只能提供机器人实际收到的消息，不能导入任意聊天或加入前的历史。AI 回答和代码审查需要结合引用、检查结果和人工判断使用。

@@ -5,12 +5,12 @@
 
 ### Read current settings and revision
 GET {{origin}}/api/admin/operator/site
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Save a hostname (use the current revision returned above)
 PUT {{origin}}/api/admin/operator/site
 Origin: {{origin}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
@@ -19,7 +19,7 @@ Content-Type: application/json
 ### Restore PUBLIC_ORIGIN (use the current revision)
 PUT {{origin}}/api/admin/operator/site
 Origin: {{origin}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 

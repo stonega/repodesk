@@ -6,7 +6,7 @@ import { managePluginNotifications } from "../../src/plugins/notifications.ts";
 import { workspace } from "../fixtures.ts";
 
 const raw = JSON.parse(
-  await readFile("examples/plugins/word-count/repodesk.plugin.json", "utf8"),
+  await readFile("examples/plugins/word-count/telo.plugin.json", "utf8"),
 );
 function manifest() {
   const m = structuredClone(raw);

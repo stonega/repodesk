@@ -38,7 +38,7 @@ test("Codex authentication classification excludes quota, network and generic sc
 });
 
 test("failed auth turns retain safe usage; transient auth events allow Codex refresh to finish", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "deepx-auth-protocol-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-auth-protocol-"));
   try {
     const script = join(dir, "server.cjs");
     await writeFile(

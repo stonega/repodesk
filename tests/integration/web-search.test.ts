@@ -126,7 +126,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     app.request(path, {
       method,
       headers: {
-        cookie: `repodesk_session=${auth.raw}`,
+        cookie: `telo_session=${auth.raw}`,
         origin,
         "x-csrf-token": auth.csrf,
         "content-type": "application/json",
@@ -349,7 +349,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     expect(
       (
         await request(endpoint, "GET", undefined, {
-          cookie: `repodesk_session=${member.raw}`,
+          cookie: `telo_session=${member.raw}`,
         })
       ).status,
     ).toBe(403);

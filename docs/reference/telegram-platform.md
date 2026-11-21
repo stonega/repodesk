@@ -34,7 +34,7 @@ See [manual example](../../examples/telegram-streaming.md).
 
 ## Private Topic rejection (2026-11-10)
 
-A live private Topic request reached RepoDesk, but sending the saved answer with
+A live private Topic request reached Telo, but sending the saved answer with
 its original Topic ID repeatedly returned a confirmed 400 `message thread not found`.
 This matches current [upstream reports](https://github.com/tdlib/telegram-bot-api/issues/905);
 the internal Telegram cause is unconfirmed. Draft/action success does not prove a
@@ -42,7 +42,7 @@ final send destination is writable. Some Topic-opening service updates contain n
 user text; do not interpret those as a rich-input parsing failure.
 
 [sendMessage](https://core.telegram.org/bots/api#sendmessage) supports omitting the
-optional Topic ID. RepoDesk's explicitly opted-in private recovery also removes
+optional Topic ID. Telo's explicitly opted-in private recovery also removes
 `reply_parameters` to prevent a reply reference from routing back to the rejected
 Topic. It preserves logical context and records the actual destination; this is a
 scoped transport workaround, not evidence Telegram repaired the Topic or delivered

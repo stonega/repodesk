@@ -43,7 +43,7 @@ test("safe failure classification distinguishes provider limits, network, schema
 });
 
 test("failed turns retain safe identities and reported usage; invalid completed output is distinguished", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-failure-protocol-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-failure-protocol-"));
   try {
     const script = join(dir, "server.cjs");
     await writeFile(

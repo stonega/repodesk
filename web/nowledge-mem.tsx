@@ -236,8 +236,8 @@ export function NowledgeMem({
         <p className="muted">
           Saves use only that message’s exact text. Chat transcripts are not
           captured automatically. Group chats and scheduled workflows cannot
-          access this connection. RepoDesk’s existing conversation memory is
-          managed separately.
+          access this connection. Telo’s existing conversation memory is managed
+          separately.
         </p>
         <a
           href="https://mem.nowledge.co/docs/installation"

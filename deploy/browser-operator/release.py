@@ -2,7 +2,7 @@ import datetime,hashlib,json,os,shutil,subprocess,sys
 from pathlib import Path
 os.umask(0o077)
 bundle=Path(__file__).resolve().parent
-root=Path('/opt/repodesk')
+root=Path('/opt/telo')
 source=bundle/'source'
 meta=json.loads((bundle/'source-metadata.json').read_text())
 def run(args,log,**kw):
@@ -23,7 +23,7 @@ try:
  source.mkdir(mode=0o700)
  run(['tar','-xzf',str(bundle/'source.tar.gz'),'-C',str(source)],'source-extract.log')
  images={}
- for name,repository,target,context in [('app','repodesk','app',source),('job','repodesk-codex-job','codex-job',source),('supervisor','repodesk-codex-supervisor','codex-supervisor',source),('code_truth','repodesk-code-truth',None,source/'services/code-truth')]:
+ for name,repository,target,context in [('app','telo','app',source),('job','telo-codex-job','codex-job',source),('supervisor','telo-codex-supervisor','codex-supervisor',source),('code_truth','telo-code-truth',None,source/'services/code-truth')]:
   stage('build_'+name)
   assert shutil.disk_usage(root).free>3*1024**3,'Disk headroom too low'
   tag=repository+':release-'+meta['source_commit']; args=['docker','build','--platform','linux/amd64']
@@ -38,7 +38,7 @@ try:
  actual=json.loads((bundle/'artifact-hashes.json').read_text())
  assert {k.removeprefix('image-app/dist/'):v for k,v in actual.items() if k.startswith('image-app/dist/')}==json.loads((bundle/'expected-dist.json').read_text()),'VPS dist differs from the tested local image'
  stage('package_native_browser_host')
- package_tag='repodesk-browser-package:release-'+meta['source_commit']
+ package_tag='telo-browser-package:release-'+meta['source_commit']
  run(['docker','build','--platform','linux/amd64','--target','build','-f',str(source/'deploy/browser/smoke.Dockerfile'),'-t',package_tag,str(source)],'host-package-build.log')
  cid=output(['docker','create',package_tag,'bun','build','--target=bun','--packages=external','scripts/codex-conversation-proof.ts','--outfile','/tmp/browser-codex-proof.js'])
  try:
@@ -50,10 +50,10 @@ try:
  finally:run(['docker','rm',cid],'host-package-cleanup.log')
  assert json.loads((bundle/'host-package/manifest.json').read_text())==json.loads((bundle/'expected-host-manifest.json').read_text()),'Host package differs from the locally tested package'
  stage('native_codex_dynamic_tool_proof')
- proof='repodesk-browser-native-proof-'+meta['release_id']
- run(['docker','create','--name',proof,'--network','none','-e','CODEX_BROWSER_PROOF=1','-e','CODEX_PROTOCOL_BINARY=/usr/local/bin/codex','--entrypoint','bun',images['job']['id'],'/opt/deepx/browser-proof.js'],'native-codex-create.log')
+ proof='telo-browser-native-proof-'+meta['release_id']
+ run(['docker','create','--name',proof,'--network','none','-e','CODEX_BROWSER_PROOF=1','-e','CODEX_PROTOCOL_BINARY=/usr/local/bin/codex','--entrypoint','bun',images['job']['id'],'/opt/telo/browser-proof.js'],'native-codex-create.log')
  try:
-  run(['docker','cp',str(bundle/'browser-codex-proof.js'),proof+':/opt/deepx/browser-proof.js'],'native-codex-copy.log')
+  run(['docker','cp',str(bundle/'browser-codex-proof.js'),proof+':/opt/telo/browser-proof.js'],'native-codex-copy.log')
   run(['docker','start','-a',proof],'native-codex-proof.log')
   assert output(['docker','inspect','--format','{{.State.ExitCode}}',proof])=='0'
  finally: run(['docker','rm','-f',proof],'native-codex-cleanup.log')
@@ -70,21 +70,21 @@ try:
  assert browser
  run([browser,'--version'],'chrome-version.log')
  # Keep the host's global Node/tool configuration unchanged. Reuse the exact tested image's Node binary.
- node_dir=Path('/opt/repodesk-browser/runtime/bin');node_dir.mkdir(parents=True,exist_ok=True,mode=0o755)
+ node_dir=Path('/opt/telo-browser/runtime/bin');node_dir.mkdir(parents=True,exist_ok=True,mode=0o755)
  cid=output(['docker','create',images['app']['id']])
  try:run(['docker','cp',cid+':/usr/local/bin/node',str(node_dir/'node')],'host-node-copy.log')
  finally:run(['docker','rm',cid],'host-node-copy-cleanup.log')
  os.chown(node_dir/'node',0,0);os.chmod(node_dir/'node',0o755)
  run([str(node_dir/'node'),'--version'],'host-node-version.log')
- dropin=Path('/etc/systemd/system/repodesk-browser.service.d');dropin.mkdir(parents=True,exist_ok=True,mode=0o755)
+ dropin=Path('/etc/systemd/system/telo-browser.service.d');dropin.mkdir(parents=True,exist_ok=True,mode=0o755)
  runtime_path=str(node_dir)+':/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
  (dropin/'runtime.conf').write_text('[Service]\nEnvironment="PATH='+runtime_path+'"\n');os.chmod(dropin/'runtime.conf',0o644)
  stage('install_native_browser_service')
  env.update(PATH=runtime_path,BROWSER_EXECUTABLE=browser)
  run(['bash',str(bundle/'host-package/install.sh'),str(bundle/'host-package'),str(root/'secrets')],'host-install.log',env=env)
- run(['systemctl','is-active','--quiet','repodesk-browser'],'host-active.log')
+ run(['systemctl','is-active','--quiet','telo-browser'],'host-active.log')
  stage('headed_browser_application_uid_probe')
- probe_cmd=['docker','run','--rm','--network','host','--group-add','1000','--volume','/run/repodesk-browser:/run/repodesk-browser:ro','--volume',str(root/'secrets/browser-token')+':/run/secrets/browser_token:ro','--volume',str(bundle/'host-probe.mjs')+':/app/host-probe.mjs:ro','--entrypoint','node',images['app']['id'],'/app/host-probe.mjs']
+ probe_cmd=['docker','run','--rm','--network','host','--group-add','1000','--volume','/run/telo-browser:/run/telo-browser:ro','--volume',str(root/'secrets/browser-token')+':/run/secrets/browser_token:ro','--volume',str(bundle/'host-probe.mjs')+':/app/host-probe.mjs:ro','--entrypoint','node',images['app']['id'],'/app/host-probe.mjs']
  # The script is public operational code, readable by the application's UID 1000.
  os.chmod(bundle/'host-probe.mjs',0o644)
  run(probe_cmd,'native-host-verification.json')
@@ -96,7 +96,7 @@ try:
  assert (root/'.current-release').read_text().strip()==meta['previous_release_id']
  assert json.loads((bundle/'baseline.json').read_text())['secret_hashes']==json.loads((bundle/'pre-cutover-state.json').read_text())['secret_hashes']
  stage('guarded_backup_migration_and_cutover')
- run(['bash',str(bundle/'deploy-vps.sh'),str(root),meta['release_id'],'repodesk','--local-images'],'cutover.log')
+ run(['bash',str(bundle/'deploy-vps.sh'),str(root),meta['release_id'],'telo','--local-images'],'cutover.log')
  stage('verify_live_images_assets_and_preserved_state')
  run(['python3',str(bundle/'verify-deployment.py'),str(bundle)],'production-verification.log')
  stage('deployment_verified')

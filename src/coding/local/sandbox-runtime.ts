@@ -57,11 +57,11 @@ export interface SandboxDriver {
 const nameSchema = z
   .string()
   .regex(
-    /^deepx-codex-[a-f0-9]{32}-(prepare|setup|implement|check|export|publish)$/,
+    /^telo-codex-[a-f0-9]{32}-(prepare|setup|implement|check|export|publish)$/,
   );
 const volumeSchema = z
   .string()
-  .regex(/^deepx-codex-[a-f0-9]{32}-(work|publish|auth|input)$/);
+  .regex(/^telo-codex-[a-f0-9]{32}-(work|publish|auth|input)$/);
 const envVolumeSchema = z.string().regex(envVolumePattern);
 const anyVolumeSchema = z.union([volumeSchema, envVolumeSchema]);
 const recordSchema = z.object({
@@ -282,7 +282,7 @@ export class SandboxTaskRuntime implements TaskRuntime {
     await this.save(r);
     const result = await this.driver.run(
       r.sandboxId,
-      ["node", "/opt/deepx/job.js", r.mode],
+      ["node", "/opt/telo/job.js", r.mode],
       attach,
     );
     if (attach) {
@@ -366,7 +366,7 @@ export class SandboxTaskRuntime implements TaskRuntime {
   }
   async listVolumes(prefix: string) {
     requireThat(
-      /^deepx-codex-[a-f0-9]{32}(?:-(?:work|publish|auth|input))?$/.test(
+      /^telo-codex-[a-f0-9]{32}(?:-(?:work|publish|auth|input))?$/.test(
         prefix,
       ) || envVolumePrefixPattern.test(prefix),
       "coding_job_invalid",

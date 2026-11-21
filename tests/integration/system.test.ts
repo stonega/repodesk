@@ -40,7 +40,7 @@ const url = process.env.TEST_DATABASE_URL;
 const suite = url ? describe : describe.skip;
 suite("PostgreSQL integration (isolated database)", () => {
   const root = database(url ?? "postgres://unused@localhost/unused");
-  const dbName = `deepx_test_${randomUUID().replaceAll("-", "")}`;
+  const dbName = `telo_test_${randomUUID().replaceAll("-", "")}`;
   let store: Store;
   let setup: SetupService;
   let app: ReturnType<typeof createApp>;
@@ -60,7 +60,7 @@ suite("PostgreSQL integration (isolated database)", () => {
       if (method === "getChat") {
         if (chatLookupFailure)
           throw new TelegramError("telegram_destination_rejected", "permanent");
-        return { title: "DeepX team" } as T;
+        return { title: "Telo team" } as T;
       }
       if (
         telegramFailure &&
@@ -76,7 +76,7 @@ suite("PostgreSQL integration (isolated database)", () => {
             ? {
                 id: 999,
                 is_bot: true,
-                username: "deepx_test_bot",
+                username: "telo_test_bot",
                 can_read_all_group_messages: true,
               }
             : { message_id: 123 };
@@ -179,7 +179,7 @@ suite("PostgreSQL integration (isolated database)", () => {
     if (!fulfilled) throw Error("No initial administrator created");
     cookie = fulfilled.headers.get("set-cookie")?.split(";")[0] ?? "";
     csrf = (await fulfilled.json()).csrf;
-    expect(cookie).toStartWith("repodesk_session=");
+    expect(cookie).toStartWith("telo_session=");
     expect(fulfilled.headers.get("set-cookie")).toContain("HttpOnly");
     const account = await session(store.pool, cookie.split("=")[1]);
     operatorId = account?.admin.id ?? "";
@@ -199,7 +199,7 @@ suite("PostgreSQL integration (isolated database)", () => {
     await transaction(store.pool, async (sql) => {
       const d = await store.deployment(sql, true);
       d.active = true;
-      d.bot = { id: "999", username: "deepx_test_bot", visibleAll: true };
+      d.bot = { id: "999", username: "telo_test_bot", visibleAll: true };
       d.credentials = {
         bot: encrypt(key, "bot", "999:fake-bot-token-for-tests"),
         model: encrypt(key, "model", "fake-provider-key"),
@@ -228,7 +228,7 @@ suite("PostgreSQL integration (isolated database)", () => {
     const overview = await request(overviewPath);
     expect(overview.status).toBe(200);
     expect((await overview.json()).connections).toEqual({
-      bot: { configured: true, username: "deepx_test_bot" },
+      bot: { configured: true, username: "telo_test_bot" },
       github: {
         connected: true,
         account: "repo-team",
@@ -247,7 +247,7 @@ suite("PostgreSQL integration (isolated database)", () => {
       "a long test password",
     );
     const memberOverview = await request(overviewPath, "GET", undefined, {
-      cookie: `repodesk_session=${memberSession.raw}`,
+      cookie: `telo_session=${memberSession.raw}`,
     });
     expect(memberOverview.status).toBe(200);
     expect((await memberOverview.json()).connections).toBeUndefined();
@@ -364,14 +364,14 @@ suite("PostgreSQL integration (isolated database)", () => {
         "a long test password",
       );
       const response = await request(`${base}/overview`, "GET", undefined, {
-        cookie: `repodesk_session=${member.raw}`,
+        cookie: `telo_session=${member.raw}`,
       });
       expect(response.status).toBe(200);
       expect((await response.json()).counts.codingTasks).toBeUndefined();
       expect(
         (
           await request(`${base}/plugins/coding`, "GET", undefined, {
-            cookie: `repodesk_session=${member.raw}`,
+            cookie: `telo_session=${member.raw}`,
           })
         ).status,
       ).toBe(403);
@@ -779,7 +779,7 @@ suite("PostgreSQL integration (isolated database)", () => {
     );
     const admin = await login(store.pool, username, "a long workflow password");
     const headers = {
-      cookie: `repodesk_session=${admin.raw}`,
+      cookie: `telo_session=${admin.raw}`,
       "x-csrf-token": admin.csrf,
     };
     expect(
@@ -836,7 +836,7 @@ suite("PostgreSQL integration (isolated database)", () => {
     );
     const viewer = await login(store.pool, username, password);
     const headers = {
-      cookie: `repodesk_session=${viewer.raw}`,
+      cookie: `telo_session=${viewer.raw}`,
       "x-csrf-token": viewer.csrf,
     };
     const base = `/api/admin/workspaces/${w.id}`;
@@ -1125,7 +1125,7 @@ suite("PostgreSQL integration (isolated database)", () => {
       [memberId, username, await passwordHash(password)],
     );
     const memberSession = await login(store.pool, username, password);
-    const memberHeaders = { cookie: `repodesk_session=${memberSession.raw}` };
+    const memberHeaders = { cookie: `telo_session=${memberSession.raw}` };
     for (const path of [`${base}/threads`, detailPath])
       expect(
         (await request(path, "GET", undefined, memberHeaders)).status,
@@ -1483,7 +1483,7 @@ suite("PostgreSQL integration (isolated database)", () => {
           "PUT",
           { ...input, version: w.version + 1 },
           {
-            cookie: `repodesk_session=${member.raw}`,
+            cookie: `telo_session=${member.raw}`,
             "x-csrf-token": member.csrf,
           },
         )
@@ -2280,8 +2280,8 @@ suite("PostgreSQL integration (isolated database)", () => {
         chat: { id: chatId, type: "supergroup" as const },
         message_thread_id: 42,
         from: { id: 101, is_bot: false },
-        text: "@deepx_test_bot hi",
-        entities: [{ type: "mention", offset: 0, length: 15 }],
+        text: "@telo_test_bot hi",
+        entities: [{ type: "mention", offset: 0, length: 14 }],
       },
     };
     // A mention cannot select an unlinked group or grant the sender access.
@@ -3489,16 +3489,16 @@ suite("PostgreSQL integration (isolated database)", () => {
     const endpoint = `/api/admin/workspaces/${w.id}/chats`;
     const response = await request(`${endpoint}/-100100/visibility`, "POST");
     expect(response.status).toBe(200);
-    expect((await store.read(w.id)).chats[0]?.title).toBe("DeepX team");
+    expect((await store.read(w.id)).chats[0]?.title).toBe("Telo team");
     expect((await (await request(endpoint)).json()).items[0].title).toBe(
-      "DeepX team",
+      "Telo team",
     );
     chatLookupFailure = true;
     try {
       expect(
         (await request(`${endpoint}/-100100/visibility`, "POST")).status,
       ).toBe(200);
-      expect((await store.read(w.id)).chats[0]?.title).toBe("DeepX team");
+      expect((await store.read(w.id)).chats[0]?.title).toBe("Telo team");
     } finally {
       chatLookupFailure = false;
     }

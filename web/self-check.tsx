@@ -203,7 +203,7 @@ export function SelfCheck({
                 aria-label={message.role === "user" ? "You" : "Assistant"}
               >
                 <small className="self-check-speaker">
-                  {message.role === "user" ? "You" : "RepoDesk"}
+                  {message.role === "user" ? "You" : "Telo"}
                 </small>
                 <p>{message.content}</p>
                 {message.result && (

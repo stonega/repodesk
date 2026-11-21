@@ -16,8 +16,8 @@ def command_json(args, log, input=None):
 def start_unchanged_writers(baseline, names, engine=None):
     engine = ['docker'] if engine is None else list(engine)
     for name in names:
-        name = {'app': 'repodesk-app-1', 'worker': 'repodesk-worker-1'}.get(name, name)
-        assert name in ['repodesk-app-1', 'repodesk-worker-1']
+        name = {'app': 'telo-app-1', 'worker': 'telo-worker-1'}.get(name, name)
+        assert name in ['telo-app-1', 'telo-worker-1']
         expected = baseline['containers'][name]
         current = json.loads(subprocess.check_output(engine + ['inspect', name]))[0]
         assert current['Id'] == expected['id'] and current['Image'] == expected['image']

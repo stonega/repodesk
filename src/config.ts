@@ -30,7 +30,7 @@ const schema = z.object({
   UPDATES_GITHUB_REPOSITORY: z
     .string()
     .regex(/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/)
-    .default("stonega/repodesk"),
+    .default("stonega/telo"),
   UPDATES_GITHUB_TOKEN: z.string().trim().min(1).optional(),
   UPDATES_DIRECTORY: z.string().startsWith("/").optional(),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),

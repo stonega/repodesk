@@ -13,7 +13,7 @@ test("custom domain setup preserves failed edits and fits desktop/mobile", async
     await readFile(
       join(
         tmpdir(),
-        `repodesk-browser-${new URL(String(testInfo.project.use.baseURL)).port}-db.json`,
+        `telo-browser-${new URL(String(testInfo.project.use.baseURL)).port}-db.json`,
       ),
       "utf8",
     ),

@@ -4,12 +4,12 @@
 
 ### Read the current provider catalog and deployment version
 GET {{baseUrl}}/api/admin/operator/model-providers
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Save OpenRouter and fetch its model IDs, capacity and token/cache prices
 PUT {{baseUrl}}/api/admin/operator/model-providers
 Origin: {{baseUrl}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
@@ -28,7 +28,7 @@ Content-Type: application/json
 ### If that endpoint is unavailable, the model list still saves with unknown prices.
 PUT {{baseUrl}}/api/admin/operator/model-providers
 Origin: {{baseUrl}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
@@ -44,7 +44,7 @@ Content-Type: application/json
 ### Select a chat model; blank overrides use saved metadata and provider context handling
 PUT {{baseUrl}}/api/admin/workspaces/REPLACE_WORKSPACE_ID/models
 Origin: {{baseUrl}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 

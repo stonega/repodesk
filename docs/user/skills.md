@@ -20,12 +20,12 @@ Closing the details keeps your selection. Choose **Import skills**, then enable
 saved skills when you are ready to use them. There is no separate publish step.
 
 Imported cards include a **Source** link. Make changes in GitHub, then
-choose **Check for updates** in RepoDesk. Review the saved and incoming instructions
+choose **Check for updates** in Telo. Review the saved and incoming instructions
 and choose **Apply update**. If the skill has local edits, explicitly confirm their
 replacement. Applying an update preserves whether the skill is enabled.
 
 To restore earlier instructions, restore them in GitHub, then review and apply that
-source update here. RepoDesk does not offer version selectors or rollback controls
+source update here. Telo does not offer version selectors or rollback controls
 in the panel. Updates are manual; changes in GitHub do not sync automatically.
 
 ## Preset and custom skills
@@ -53,7 +53,7 @@ A `SKILL.md` must be UTF-8 Markdown, at most 16 KB. YAML frontmatter supports
 `name`, `description`, `allowed-tools`, `license`, `compatibility` and `metadata`,
 including comments, quotes and multiline descriptions. Names allow 64 characters
 and descriptions allow 1,024 characters. Metadata values must be strings.
-Requested tools must already exist in RepoDesk.
+Requested tools must already exist in Telo.
 
 GitHub imports include linked `.md` and `.txt` guides inside the skill directory,
 including guides referenced by other included guides. Limits are 32 supporting
@@ -86,7 +86,7 @@ between Global and Project-specific anytime from its **Edit** dialog.
 
 ## Autonomous skill extraction
 
-RepoDesk automatically extracts reusable workflows and repository engineering
+Telo automatically extracts reusable workflows and repository engineering
 lessons in the background from completed Codex tasks, multi-step Missions, and
 high-signal conversations:
 
@@ -94,10 +94,10 @@ high-signal conversations:
   against secret, prompt-injection, and safe-tool guards, and enabled automatically
   without requiring manual approval steps.
 - When follow-up conversations or tasks refine an existing auto-extracted skill,
-  RepoDesk updates it in place while preserving snapshots for existing schedules.
+  Telo updates it in place while preserving snapshots for existing schedules.
   Built-in presets and GitHub-imported skills are never overwritten automatically.
 - Cards for auto-extracted skills display an **Auto** badge along with their source
-  and usage count. If you disable or archive an auto-extracted skill, RepoDesk
+  and usage count. If you disable or archive an auto-extracted skill, Telo
   remembers that choice and avoids recreating the same skill automatically.
 - You can also ask the assistant in Telegram to save or update a procedure directly
   (for example, "Save this release checklist for acme/api").

@@ -8,7 +8,7 @@ See [current implementation](repository-tasks.md#memory-and-erasure) and
 are enabled by default and independently configurable. The design below records the accepted contract rather
 than evidence of a live deployment.
 
-Extend RepoDesk's existing historical memory so that a user's decisions and
+Extend Telo's existing historical memory so that a user's decisions and
 corrections can improve later coding work. Every recalled preference must have
 retained evidence, a specific visibility and applicability scope, and a supported
 way to correct or forget it. Memory remains reference data and never grants
@@ -53,17 +53,17 @@ save and external retention boundaries; it is not a prerequisite for this work.
 
 The inspected noop revision is
 [`e8dfb434720db09b48b0ae22fa62a59e7afe8662`](https://github.com/huacnlee/noop/commit/e8dfb434720db09b48b0ae22fa62a59e7afe8662).
-The following observations inform the proposal rather than describe RepoDesk
+The following observations inform the proposal rather than describe Telo
 features:
 
-| Observed mechanism | Application to RepoDesk |
+| Observed mechanism | Application to Telo |
 | --- | --- |
 | [Closed decisions and correction feedback](https://github.com/huacnlee/noop/blob/e8dfb434720db09b48b0ae22fa62a59e7afe8662/src/decisions.ts#L65-L104) | Keep exact source references and distinguish a specific choice from a general preference. |
 | [Shared and role-specific memory in execution prompts](https://github.com/huacnlee/noop/blob/e8dfb434720db09b48b0ae22fa62a59e7afe8662/src/runner.ts#L49-L69) | Supply a bounded, authorized memory snapshot to each coding attempt. |
 | [Periodic learning and consolidation](https://github.com/huacnlee/noop/blob/e8dfb434720db09b48b0ae22fa62a59e7afe8662/src/sessions.ts#L166-L185) | Reuse Pi memory jobs to propose evidence-backed preferences, with application validation. |
 | [Maintenance of principles and dated evidence](https://github.com/huacnlee/noop/blob/e8dfb434720db09b48b0ae22fa62a59e7afe8662/templates/agents/architect/profile.md#L8-L35) | Track revisions, exceptions, review dates and supersession explicitly. |
 
-RepoDesk will retain application-owned PostgreSQL state. The first release needs
+Telo will retain application-owned PostgreSQL state. The first release needs
 no filesystem memory mirror, vector database, additional service or dependency.
 It will not import host Claude/Codex transcripts. Only received and currently
 authorized application sources may contribute evidence.

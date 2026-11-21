@@ -71,7 +71,7 @@ export function ensureTelegramWidgetSkill(w: Workspace) {
   if (w.skills.length >= 100) return;
   const spec = telegramWidgetSpec();
   const hash = createHash("sha256")
-    .update(`repodesk:telegram-widgets:${w.id}`)
+    .update(`telo:telegram-widgets:${w.id}`)
     .digest("hex");
   const id = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-8${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
   w.skills.push({

@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 
 const exec = promisify(execFile);
 const releaseTag =
-  /^(repodesk|repodesk-codex-job|repodesk-codex-supervisor|repodesk-code-truth):release-([a-f0-9]{40})$/;
+  /^(telo|telo-codex-job|telo-codex-supervisor|telo-code-truth):release-([a-f0-9]{40})$/;
 const imageId = /^sha256:[a-f0-9]{64}$/;
 const imageFormat =
   '{"id":{{json .Id}},"created":{{json .Created}},"tags":{{json .RepoTags}}}';
@@ -74,9 +74,9 @@ export function planReleaseCleanup(
   // Keep two complete rollback sets in addition to the current release. Failed
   // partial builds cannot displace a complete set for the current topology.
   const required = new Set([
-    "repodesk",
-    "repodesk-codex-job",
-    "repodesk-codex-supervisor",
+    "telo",
+    "telo-codex-job",
+    "telo-codex-supervisor",
     ...currentTags.map((tag) => releaseTag.exec(tag)[1]),
   ]);
   const rollbacks = [...groups.values()]

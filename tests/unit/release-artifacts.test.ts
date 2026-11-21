@@ -20,9 +20,7 @@ const proposal = (): ReleaseProposal => ({
   unsupported: [],
 });
 test("trusted export computes procedure and asset hashes from actual retained files", async () => {
-  const directory = await mkdtemp(
-    join(tmpdir(), "repodesk-release-artifacts-"),
-  );
+  const directory = await mkdtemp(join(tmpdir(), "telo-release-artifacts-"));
   try {
     await mkdir(join(directory, "docs"));
     await mkdir(join(directory, "build"));
@@ -58,7 +56,7 @@ test("trusted export computes procedure and asset hashes from actual retained fi
   }
 });
 test("export rejects path traversal, symlinks outside the checkout, duplicate names and oversized assets", async () => {
-  const root = await mkdtemp(join(tmpdir(), "repodesk-release-paths-"));
+  const root = await mkdtemp(join(tmpdir(), "telo-release-paths-"));
   const repo = join(root, "repo");
   await mkdir(repo);
   await writeFile(join(root, "secret"), "private");

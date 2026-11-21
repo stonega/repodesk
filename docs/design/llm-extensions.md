@@ -95,7 +95,7 @@ built-in Codex, built-in Review Bot, built-in Cloudflare and workspace-registere
 its detail route, where the existing configuration and controls live. The
 Markets discovery section is hidden from the landing page. Existing direct
 market detail routes still link to upstream packages as external discovery
-entries, not installed plugins or compatibility endorsements. RepoDesk still requires
+entries, not installed plugins or compatibility endorsements. Telo still requires
 operator review and a local entry file registered through the panel.
 
 The built-in Qwen3-ASR plugin provides optional local audio preprocessing rather
@@ -289,7 +289,7 @@ Revisions, run/call deduplication, membership, execution fences and plugin gener
 protect persistence and delivery. Disabling retains files while revoking bot tools.
 
 Native Markdown, Canvas and Bases remain portable through ZIP snapshots. Obsidian
-renders their desktop features; RepoDesk does not run community plugins, evaluate
+renders their desktop features; Telo does not run community plugins, evaluate
 Bases expressions or provide live synchronization. See the
 [user guide](../user/obsidian.md) and [runnable requests](../../examples/obsidian.http).
 

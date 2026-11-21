@@ -24,7 +24,7 @@ const url = process.env.TEST_DATABASE_URL;
   "Obsidian organization vault (isolated PostgreSQL)",
   () => {
     const root = database(url ?? "postgres://unused@localhost/unused");
-    const name = `repodesk_obsidian_${randomUUID().replaceAll("-", "")}`;
+    const name = `telo_obsidian_${randomUUID().replaceAll("-", "")}`;
     const origin = "http://localhost:3000";
     let store: Store;
     let service: ObsidianService;
@@ -93,7 +93,7 @@ const url = process.env.TEST_DATABASE_URL;
       app.request(`/api/admin/workspaces/${id}/plugins/obsidian${suffix}`, {
         method,
         headers: {
-          cookie: `deepx_session=${auth.raw}`,
+          cookie: `telo_session=${auth.raw}`,
           origin,
           "content-type": "application/json",
           "x-csrf-token": auth.csrf,
@@ -516,7 +516,7 @@ const url = process.env.TEST_DATABASE_URL;
       ).open(input);
       if (!host) throw Error("missing host");
       try {
-        expect(await host.start()).toContain("# RepoDesk Obsidian");
+        expect(await host.start()).toContain("# Telo Obsidian");
         expect(host.tools.map((t) => t.name)).toEqual([
           "obsidian_query",
           "obsidian_read",

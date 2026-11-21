@@ -15,7 +15,7 @@ async function captureConversation(options: {
     }>;
   };
 }) {
-  const root = await mkdtemp(join(tmpdir(), "repodesk-review-sandbox-"));
+  const root = await mkdtemp(join(tmpdir(), "telo-review-sandbox-"));
   const binary = join(root, "codex.mjs"),
     capture = join(root, "requests.jsonl");
   const result = {
@@ -131,7 +131,7 @@ test("review source tools disable native shell access and preserve credential-de
     if (!threadId)
       expect(
         start.params.dynamicTools.map((tool: { name: string }) => tool.name),
-      ).toEqual(["repodesk_review_source"]);
+      ).toEqual(["telo_review_source"]);
     expect(
       requests.find((r) => r.method === "initialize").params.capabilities
         .experimentalApi,

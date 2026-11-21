@@ -5,9 +5,9 @@ not require commands, new accounts or changes to Telegram collection settings.
 
 ## Private recall
 
-1. In a private Topic, ask: `记住：在 RepoDesk 项目里，我希望回答简短，涉及设计权衡时再展开。`
+1. In a private Topic, ask: `记住：在 Telo 项目里，我希望回答简短，涉及设计权衡时再展开。`
 2. In another private Topic for the same workspace and bot, ask:
-   `我之前对 RepoDesk 的回答风格有什么要求？`
+   `我之前对 Telo 的回答风格有什么要求？`
 3. Ask `列出你为我保存的记忆。`, then `忘记刚才那条回答风格的记忆。`
    The model selects the exact visible memory ID before requesting deletion.
 4. `关闭记忆` disables personal recall and background generation; `开启记忆`

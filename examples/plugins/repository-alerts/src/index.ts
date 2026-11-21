@@ -1,4 +1,4 @@
-import { definePlugin } from "@repodesk/plugin-sdk";
+import { definePlugin } from "@telo/plugin-sdk";
 import type {
   Contract,
   NotificationEvent,

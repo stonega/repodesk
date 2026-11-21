@@ -1,7 +1,7 @@
 {
   "version": 1,
   "createdAt": "2026-10-17T06:25:56.743Z",
-  "image": "localhost/repodesk-sandbox-benchmark:vps-20261017",
+  "image": "localhost/telo-sandbox-benchmark:vps-20261017",
   "environment": {
     "node": "v24.21.0",
     "platform": "linux",

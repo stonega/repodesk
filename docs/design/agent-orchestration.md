@@ -1,13 +1,13 @@
 # Agent Orchestration, Autonomy, and Proactive Scheduling
 
 Status: **Implemented locally (Phases 1–4, 2026-11-20)**. This document specifies the architecture
-and product contracts for RepoDesk's stateful, multi-step orchestration control plane.
+and product contracts for Telo's stateful, multi-step orchestration control plane.
 Check [implementation evidence](../implementation/implementation-status.md) for
 verified behavior and remaining live acceptance gates.
 
 ## 1. Product goals and interaction principles
 
-RepoDesk already provides scoped integrations across GitHub, Code Truth, Codex
+Telo already provides scoped integrations across GitHub, Code Truth, Codex
 coding/investigation/release tasks, Shared Host Browser, Web Reader, Search,
 Cloudflare, Google Workspace, Obsidian, Nowledge Mem, and GitHub plugins, backed by
 PostgreSQL, transactional `outbox`, `pg-boss`, execution fences, and human approvals.
@@ -40,7 +40,7 @@ into end-to-end problem solving.
 ## 2. Unified architecture
 
 All five capability pillars share one relational state and event-driven execution
-model layered directly over existing RepoDesk infrastructure:
+model layered directly over existing Telo infrastructure:
 
 ```mermaid
 flowchart TB
@@ -254,7 +254,7 @@ Every mutating tool or side effect maps deterministically on the server to an
 
 ## 6. Pillar 4: Upgraded Proactive Scheduling & Event-Driven Automations
 
-RepoDesk's `workflows` subsystem expands from `daily`/`weekly` text reports into a
+Telo's `workflows` subsystem expands from `daily`/`weekly` text reports into a
 unified **Automations** engine while keeping full backward compatibility with all
 existing saved schedules.
 
@@ -329,7 +329,7 @@ A single Mission can orchestrate work across multiple connected repositories:
 - **Dependent chain:** When Repo B depends on Repo A's change (e.g., API repo →
   docs/landing repo), the Mission enqueues Repo A first; upon Repo A completion, the
   Continuation Run binds Repo A's resulting commit/PR as a commit-pinned read-only
-  `reference-source` (reusing RepoDesk's existing verified reference-source pipeline)
+  `reference-source` (reusing Telo's existing verified reference-source pipeline)
   and dispatches Repo B.
 - **Coding Worker Adapter seam:** Queue scheduling and Mission coordination interact
   with coding execution through an abstract `CodingWorkerAdapter` interface (initially

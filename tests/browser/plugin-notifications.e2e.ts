@@ -25,7 +25,7 @@ async function fixture(page: Page) {
     events,
   };
   const manifest = JSON.parse(
-    readFileSync("examples/plugins/word-count/repodesk.plugin.json", "utf8"),
+    readFileSync("examples/plugins/word-count/telo.plugin.json", "utf8"),
   );
   const catalog: PackageCatalog = {
     revision: 1,
@@ -43,7 +43,7 @@ async function fixture(page: Page) {
         source: {
           repositoryId: 777,
           ownerId: 42,
-          repository: "example/repodesk-word-count",
+          repository: "example/telo-word-count",
           ref: "v0.1.0",
           commit: "a".repeat(40),
           private: false,
@@ -151,7 +151,7 @@ for (const width of [1280, 390]) {
       dialog.getByRole("checkbox", { name: /Threshold alert/ }),
     ).not.toBeChecked();
     await page.screenshot({
-      path: `/tmp/repodesk-plugin-notifications-error-${width}.png`,
+      path: `/tmp/telo-plugin-notifications-error-${width}.png`,
       fullPage: true,
     });
     f.controls.error = "";
@@ -170,7 +170,7 @@ for (const width of [1280, 390]) {
     await expect(region).toContainText("Enabled");
     await expect(region.locator("input,select,form")).toHaveCount(0);
     await region.screenshot({
-      path: `/tmp/repodesk-plugin-notifications-saved-${width}.png`,
+      path: `/tmp/telo-plugin-notifications-saved-${width}.png`,
     });
     await region
       .getByRole("button", { name: "Edit plugin notification subscription" })

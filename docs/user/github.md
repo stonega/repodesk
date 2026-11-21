@@ -11,7 +11,7 @@
 5. 在 GitHub 选择目标仓库并返回。首次设置会尝试连接唯一可用的 installation；存在多个时，到 Plugins 明确选择 installation 和仓库，再点击 **Connect selected repositories**。
 6. 确认面板列出正确仓库。
 
-新建 App 的凭据由 RepoDesk 加密保存，无需下载图标、手工粘贴私钥或创建个人访问令牌。授权流程十分钟有效，保持同一个登录浏览器和站点地址；过期后从面板重新开始。
+新建 App 的凭据由 Telo 加密保存，无需下载图标、手工粘贴私钥或创建个人访问令牌。授权流程十分钟有效，保持同一个登录浏览器和站点地址；过期后从面板重新开始。
 
 GitHub 的 **Authorized GitHub Apps** 仅表示身份授权；**Installed GitHub Apps** 才表示 App 已安装。两个步骤均完成后才有仓库访问。
 
@@ -19,7 +19,7 @@ GitHub 的 **Authorized GitHub Apps** 仅表示身份授权；**Installed GitHub
 
 完整工作流使用 Contents、Issues、Pull requests 的读写权限和 Metadata 只读权限；成员目录还使用组织 Members 只读权限。新 App 会预填这些权限。
 
-已有 App 增加权限后，需要在 GitHub installation 接受新权限，组织可能需要 owner 批准。仅在 RepoDesk 重新连接不能授予缺失权限。
+已有 App 增加权限后，需要在 GitHub installation 接受新权限，组织可能需要 owner 批准。仅在 Telo 重新连接不能授予缺失权限。
 
 仓库重命名会按已选仓库的数字身份更新。开启 **All repositories (auto-sync)** 模式的工作区会自动同步 GitHub App 可访问的新建或新增仓库（通过后台定期同步、GitHub Webhook、以及打开面板刷新），并触发已绑定成员的权限刷新；仅选择指定仓库的工作区仍保持已选范围，不会自动加入其他仓库。
 

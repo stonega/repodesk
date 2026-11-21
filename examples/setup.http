@@ -29,7 +29,7 @@ Content-Type: application/json
 ### The issue explains @BotFather and the expected format; no Telegram call or save occurs.
 PUT {{baseUrl}}/api/admin/operator/credentials
 Origin: {{baseUrl}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
@@ -40,13 +40,13 @@ Content-Type: application/json
 
 ### Get the request link, pending requests, active members, and membership version.
 GET {{baseUrl}}/api/setup/workspaces/{{workspaceId}}/access
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Enroll a known numeric Telegram user ID as an active member.
 ### Replace version with the value from the preceding GET response.
 POST {{baseUrl}}/api/setup/workspaces/{{workspaceId}}/access
 Origin: {{baseUrl}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
@@ -58,7 +58,7 @@ Content-Type: application/json
 ### Or approve a pending request using its ID and the latest membership version.
 POST {{baseUrl}}/api/setup/workspaces/{{workspaceId}}/access-requests/{{requestId}}/decision
 Origin: {{baseUrl}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
@@ -70,7 +70,7 @@ Content-Type: application/json
 ### Revoke that member using the latest membership version.
 DELETE {{baseUrl}}/api/setup/workspaces/{{workspaceId}}/access/{{telegramUserId}}
 Origin: {{baseUrl}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
@@ -80,13 +80,13 @@ Content-Type: application/json
 
 ### Shared provider catalog (operator-owned; API keys are never returned).
 GET {{baseUrl}}/api/admin/operator/model-providers
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Register a provider and fetch its models. Use the latest catalog version.
 ### API base URLs without a path use /v1. Saving makes only a /models GET.
 PUT {{baseUrl}}/api/admin/operator/model-providers
 Origin: {{baseUrl}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 
@@ -99,14 +99,14 @@ Content-Type: application/json
 
 ### Read this workspace's bot model and the shared provider choices.
 GET {{baseUrl}}/api/admin/workspaces/{{workspaceId}}/models
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 
 ### Select a model ID returned by the provider, using the current workspace revision.
 @providerId = REPLACE_PROVIDER_UUID
 @modelId = REPLACE_DISCOVERED_MODEL_ID
 PUT {{baseUrl}}/api/admin/workspaces/{{workspaceId}}/models
 Origin: {{baseUrl}}
-Cookie: repodesk_session={{session}}
+Cookie: telo_session={{session}}
 X-CSRF-Token: {{csrf}}
 Content-Type: application/json
 

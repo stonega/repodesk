@@ -23,7 +23,7 @@ import { githubFixtureConfig, githubTransport } from "../github-fixture.ts";
 const url = process.env.TEST_DATABASE_URL;
 (url ? describe : describe.skip)("GitHub issue approval and delivery", () => {
   const root = database(url ?? "postgres://unused@localhost/unused");
-  const name = `deepx_issues_${randomUUID().replaceAll("-", "")}`;
+  const name = `telo_issues_${randomUUID().replaceAll("-", "")}`;
   let store: Store;
   beforeAll(async () => {
     await root.query(`CREATE DATABASE ${name}`);

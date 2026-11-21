@@ -19,8 +19,8 @@ export function GroupMentionGuide() {
         </li>
         <li>
           Remove the bot from the Telegram group, then add it again. This makes
-          the saved RepoDesk group link inactive; re-adding the bot alone does
-          not restore it.
+          the saved Telo group link inactive; re-adding the bot alone does not
+          restore it.
         </li>
         <li>
           Choose <strong>New</strong> in Groups and send the new{" "}

@@ -9,7 +9,7 @@ required.
 
 - Connect the [GitHub App and target repositories](github.md).
 - Enable [Codex](codex.md) with a working runner, task image and model credentials.
-- Give RepoDesk a public HTTPS address so GitHub can deliver webhooks.
+- Give Telo a public HTTPS address so GitHub can deliver webhooks.
 
 The default task image includes Open Code Review. Custom task images must retain
 this tool; reviews fail explicitly when it is missing.
@@ -17,7 +17,7 @@ this tool; reviews fail explicitly when it is missing.
 ## Enable reviews as an administrator
 
 1. Open **Plugins → Review Bot**.
-2. Check **Webhook secret**. Apps created through current RepoDesk versions usually
+2. Check **Webhook secret**. Apps created through current Telo versions usually
    have it saved. If an older App has no secret, configure or generate one and set
    the same value in GitHub.
 3. In the GitHub App webhook settings, verify the displayed URL, secret and enabled
@@ -28,7 +28,7 @@ this tool; reviews fail explicitly when it is missing.
 
 New Apps created on a public HTTPS site have their webhook settings prefilled. If
 the App was created using localhost, replace the inactive placeholder with the
-public address when going live. Saving a secret in RepoDesk does not update GitHub.
+public address when going live. Saving a secret in Telo does not update GitHub.
 
 Configuration applies to the whole plugin, with no additional repository list.
 Avoid enabling Review Bot for the same App and repository in multiple workspaces
@@ -72,18 +72,18 @@ history remain in the original Telegram conversation. Other collaborators and
 PRs without a confirmed binding retain the separate Review Bot workflow. See
 [continuing a task from GitHub](codex.md#continue-a-task-from-github).
 
-Use the actual App bot name displayed on the plugin page. Here, `repodesk` is only
+Use the actual App bot name displayed on the plugin page. Here, `telo` is only
 an example:
 
 | Comment | Result |
 | --- | --- |
-| `@repodesk[bot] review` | Review the current PR |
-| `@repodesk[bot] explain this finding` | Explain a finding |
-| `@repodesk[bot] fix this` | Implement the explicit request, run checks and update the same PR |
-| `@repodesk[bot] status` | Show confirmed status |
-| `@repodesk[bot] cancel` | Request cancellation of active work |
+| `@telo[bot] review` | Review the current PR |
+| `@telo[bot] explain this finding` | Explain a finding |
+| `@telo[bot] fix this` | Implement the explicit request, run checks and update the same PR |
+| `@telo[bot] status` | Show confirmed status |
+| `@telo[bot] cancel` | Request cancellation of active work |
 
-The short form `@repodesk` is also supported. Put the mention at the start of a
+The short form `@telo` is also supported. Put the mention at the start of a
 line. Mentions inside code blocks or quotes cannot authorize work. Replies to
 inline findings can use the original review comment as reference context.
 

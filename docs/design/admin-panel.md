@@ -220,7 +220,7 @@ the fallback while privacy mode is enabled. The guide links to Telegram's offici
 privacy documentation and remains available before group data loads or after a
 load failure. Inactive saved groups explicitly direct the user to New and a fresh
 `/link` command: removing the bot deactivates its binding, and re-adding it in
-Telegram does not restore the RepoDesk link automatically.
+Telegram does not restore the Telo link automatically.
 
 One collection action follows the saved state: **Enable message collection** when
 collection is off, **Disable message collection** when on. The saved access summary
@@ -264,7 +264,7 @@ Sign-in keeps its form and entered values visible while authenticating and loadi
 the session and authorized workspaces. Its disabled submit button shows a spinner
 and **Signing in…** until home opens. Errors preserve the form and allow retry.
 First-account creation uses the same transition before opening setup.
-Opening or refreshing the app shows only the centered RepoDesk logo and brand text
+Opening or refreshing the app shows only the centered Telo logo and brand text
 until deployment, session and workspace checks finish. Startup failures stay on
 that screen with **Try again**; only an unauthorized session opens sign-in.
 After sign-in, a protected API request returning HTTP 401 clears the session and
@@ -404,7 +404,7 @@ with a short visible label and descriptive accessible name; retry and dismissal
 retain 44px touch targets. Long messages wrap within the viewport in both themes,
 and toasts stay clear of the version/update control in the desktop footer or
 mobile admin header. Browser connection
-failures read “Couldn’t connect to RepoDesk.” Form validation and errors in open
+failures read “Couldn’t connect to Telo.” Form validation and errors in open
 dialogs remain beside their controls.
 The compact account footer groups the username and sign-out icon, with a light/dark
 theme button at the right. Themes apply across the panel, sign-in and setup pages.

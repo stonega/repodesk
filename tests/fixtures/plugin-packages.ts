@@ -34,7 +34,7 @@ export async function pluginRepository(name = "word-count") {
     };
     const files: PackageFiles = {
       ...pkg.files,
-      "repodesk.plugin.json": Buffer.from(JSON.stringify(manifest)),
+      "telo.plugin.json": Buffer.from(JSON.stringify(manifest)),
       "package.json": Buffer.from(
         JSON.stringify({ name, version, type: "module" }),
       ),
@@ -86,9 +86,9 @@ export async function pluginRepository(name = "word-count") {
       const sha = tags.get(ref) ?? (versions.has(ref) ? ref : undefined);
       return sha ? Response.json({ sha }) : new Response(null, { status: 404 });
     }
-    if (url.pathname === `${prefix}/contents/repodesk.plugin.json`) {
+    if (url.pathname === `${prefix}/contents/telo.plugin.json`) {
       const file = versions.get(url.searchParams.get("ref") ?? "")?.[
-        "repodesk.plugin.json"
+        "telo.plugin.json"
       ];
       return file
         ? Response.json({

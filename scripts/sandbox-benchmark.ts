@@ -57,7 +57,7 @@ export async function benchmark() {
     timeoutMs: process.env.SANDBOX_BENCHMARK_TIMEOUT_MS ?? 180000,
     image:
       process.env.SANDBOX_BENCHMARK_IMAGE ??
-      "localhost/repodesk-sandbox-benchmark:local",
+      "localhost/telo-sandbox-benchmark:local",
     root: resolve(
       process.env.SANDBOX_BENCHMARK_ROOT ??
         "node_modules/.cache/sandbox-benchmark",

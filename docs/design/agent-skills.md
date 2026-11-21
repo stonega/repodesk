@@ -12,7 +12,7 @@ manage their registry through **Workspace → Plugins**.
 
 ## Conversation-created and autonomous skills (2026-10-07, updated 2026-11-21)
 
-RepoDesk supports both direct autonomous skill extraction and legacy approval-gated
+Telo supports both direct autonomous skill extraction and legacy approval-gated
 draft proposals:
 
 - **Autonomous extraction & classification:** See
@@ -36,7 +36,7 @@ See [implementation plan](../implementation/team-workflows-plan.md) and
 ## Pi integration boundary
 
 GitHub is the core workflow. Connected workspaces automatically load the bundled
-[`repodesk-github` skill](../../skills/repodesk-github/SKILL.md) and app-owned repository
+[`telo-github` skill](../../skills/telo-github/SKILL.md) and app-owned repository
 lookup, metadata reads, issue proposals and PR merge/close proposals. This applies
 to existing workspaces without a custom plugin manifest or catalog migration.
 The skill is appended to the ordinary agent system instructions on every interactive

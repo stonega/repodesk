@@ -9,7 +9,7 @@
     "allowImportingTsExtensions": true,
     "types": ["bun"],
     "paths": {
-      "@repodesk/plugin-sdk": ["../../../sdk/plugin/index.ts"]
+      "@telo/plugin-sdk": ["../../../sdk/plugin/index.ts"]
     }
   },
   "include": ["src/**/*.ts"]

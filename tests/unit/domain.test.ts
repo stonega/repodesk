@@ -468,24 +468,27 @@ describe("transport and credentials", () => {
     expect(decrypt(key, "bot", ciphertext)).toBe("secret-value");
     expect(() => decrypt(key, "model", ciphertext)).toThrow();
   });
-  test("existing v1 credentials remain readable after the RepoDesk rename", () => {
+  test("existing v1 and v2 credentials remain readable after the Telo rename", () => {
     const key = "ab".repeat(32);
     const iv = Buffer.alloc(12, 1);
-    const cipher = createCipheriv("aes-256-gcm", Buffer.from(key, "hex"), iv);
-    cipher.setAAD(Buffer.from("deepx:v1:bot"));
-    const payload = Buffer.concat([
-      cipher.update("existing-token"),
-      cipher.final(),
-    ]);
-    const existing = [
-      "v1",
-      iv.toString("base64"),
-      cipher.getAuthTag().toString("base64"),
-      payload.toString("base64"),
-    ].join(".");
-    expect(decrypt(key, "bot", existing)).toBe("existing-token");
-    expect(() => decrypt(key, "model", existing)).toThrow();
-    expect(encrypt(key, "bot", "new-token").startsWith("v2.")).toBe(true);
+    const sealLegacy = (version: "v1" | "v2", aad: string, text: string) => {
+      const cipher = createCipheriv("aes-256-gcm", Buffer.from(key, "hex"), iv);
+      cipher.setAAD(Buffer.from(aad));
+      const payload = Buffer.concat([cipher.update(text), cipher.final()]);
+      return [
+        version,
+        iv.toString("base64"),
+        cipher.getAuthTag().toString("base64"),
+        payload.toString("base64"),
+      ].join(".");
+    };
+    const existingV1 = sealLegacy("v1", "deepx:v1:bot", "existing-v1-token");
+    const existingV2 = sealLegacy("v2", "repodesk:v2:bot", "existing-v2-token");
+    expect(decrypt(key, "bot", existingV1)).toBe("existing-v1-token");
+    expect(decrypt(key, "bot", existingV2)).toBe("existing-v2-token");
+    expect(() => decrypt(key, "model", existingV1)).toThrow();
+    expect(() => decrypt(key, "model", existingV2)).toThrow();
+    expect(encrypt(key, "bot", "new-token").startsWith("v3.")).toBe(true);
   });
   test("passwords use salted hashes", async () => {
     const a = await passwordHash("long test password");

@@ -10,7 +10,7 @@ import { CodexAuthError } from "../src/coding/local/auth-failure.ts";
 import { runConversation } from "../src/coding/local/conversation.ts";
 
 const exec = promisify(execFile);
-const root = await mkdtemp(join(tmpdir(), "repodesk-protocol-"));
+const root = await mkdtemp(join(tmpdir(), "telo-protocol-"));
 let calls = 0;
 let rejectAuth = false;
 let intakeSchemaReceived = false;

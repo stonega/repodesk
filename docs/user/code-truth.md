@@ -18,7 +18,7 @@ Code Truth 为指定 GitHub 仓库建立源码索引，让机器人回答“代�
 
 已经使用 `examples/code-truth.compose.yaml` 和 `secrets/code-truth-token` 的部署可以保留原有叠加文件与令牌；它们会覆盖标准部署的自动令牌配置。不要为升级重新生成已有令牌。
 
-自定义部署需要主机令牌文件时，在现有 RepoDesk 仓库根目录仅首次执行：
+自定义部署需要主机令牌文件时，在现有 Telo 仓库根目录仅首次执行：
 
 ```sh
 mkdir -p secrets
@@ -78,7 +78,7 @@ Compose 会把该文件提供给 app/worker 和 Code Truth；这套手动配置�
 ## Temporary access failures
 
 Ordinary chat starts without contacting GitHub or Code Truth. When source is
-requested, RepoDesk verifies current GitHub permissions and connects to Code Truth.
+requested, Telo verifies current GitHub permissions and connects to Code Truth.
 If either is unavailable, that source request reports missing access; unrelated chat
 and tools remain available. It does not reuse an old permission grant or claim to
 have inspected unavailable code. Retry after access or the service recovers;

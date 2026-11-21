@@ -7,7 +7,7 @@ what was verified and which live gates remain.
 
 ## Product promise
 
-RepoDesk lets an authorized person work with a selected GitHub repository from a
+Telo lets an authorized person work with a selected GitHub repository from a
 Telegram conversation. The person states an intent in ordinary language; the AI
 helps find relevant repository context, explains it, or drafts a concrete action.
 Application policy decides which repositories and tools are available. In the
@@ -75,7 +75,7 @@ connection scope and active membership remain tenant boundaries.
 - Every read and write is scoped to an active workspace, eligible actor and
   selected repository. A private answer cannot be reposted into a group merely
   because the same user belongs to both.
-- The GitHub App is installed and granted permissions in GitHub. RepoDesk can use
+- The GitHub App is installed and granted permissions in GitHub. Telo can use
   only the selected installation repositories and the permissions available to
   each operation. Connection loss or a changed selection blocks new work.
 - Answers should distinguish source facts, AI inference and missing coverage.
@@ -88,7 +88,7 @@ connection scope and active membership remain tenant boundaries.
 - Repository files, issue text and tool output are untrusted input. They cannot
   override application policy or supply credentials. Secrets stay out of Telegram
   previews, model context, ordinary logs and repository artifacts.
-- Telegram exposes only delivered messages in authorized chats; RepoDesk does not
+- Telegram exposes only delivered messages in authorized chats; Telo does not
   gain arbitrary chat access or old history. Group context collection has its own
   consent and never grants GitHub access.
 

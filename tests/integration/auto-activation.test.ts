@@ -113,7 +113,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
       {
         method: "PUT",
         headers: {
-          cookie: `repodesk_session=${auth.raw}`,
+          cookie: `telo_session=${auth.raw}`,
           origin,
           "x-csrf-token": auth.csrf,
           "content-type": "application/json",

@@ -1,6 +1,6 @@
 # Agent Orchestration, Autonomy, and Automations
 
-RepoDesk can coordinate multi-step work across read-only tools, isolated research
+Telo can coordinate multi-step work across read-only tools, isolated research
 subagents, durable background missions, per-repository task queues, and proactive
 time or event automations—while preserving workspace isolation and mandatory human
 approval for high-impact actions.
@@ -18,13 +18,13 @@ approval for high-impact actions.
 ## Background missions and automatic continuation
 
 - For multi-step goals (for example: gather evidence, run a coding task, record
-  notes, and verify CI), RepoDesk tracks progress in a durable background **Mission**
+  notes, and verify CI), Telo tracks progress in a durable background **Mission**
   and resumes automatically when awaited coding tasks, approvals, timers, or GitHub
   events complete.
 - Routine intermediate steps stay quiet in Telegram so you receive the final
   synthesized outcome, or an explicit prompt only when human input or approval is
   needed.
-- Within an active mission, RepoDesk can schedule up to 3 bounded one-shot delayed
+- Within an active mission, Telo can schedule up to 3 bounded one-shot delayed
   follow-up checks (1 minute to 72 hours) automatically without extra confirmation.
 - Inspect active missions, pending waits, verified artifacts, and cancel actions
   anytime from **Missions** in the Admin Panel or by asking in chat.

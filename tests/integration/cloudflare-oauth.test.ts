@@ -20,7 +20,7 @@ const url = process.env.TEST_DATABASE_URL;
   "Cloudflare browser OAuth and durable refresh",
   () => {
     const root = database(url ?? "postgres://unused@localhost/unused");
-    const name = `repodesk_cf_oauth_${randomUUID().replaceAll("-", "")}`;
+    const name = `telo_cf_oauth_${randomUUID().replaceAll("-", "")}`;
     const key = "ab".repeat(32),
       accountId = "a".repeat(32),
       zoneId = "b".repeat(32);
@@ -500,7 +500,7 @@ const url = process.env.TEST_DATABASE_URL;
       const f = await connected();
       const path = `/api/admin/workspaces/${f.w.id}/plugins/cloudflare/oauth/resources`;
       const headers = {
-        cookie: `deepx_session=${auth.raw}`,
+        cookie: `telo_session=${auth.raw}`,
         origin: "http://localhost:3000",
         "x-csrf-token": auth.csrf,
         "content-type": "application/json",
@@ -819,7 +819,7 @@ const url = process.env.TEST_DATABASE_URL;
       const f = await fixture();
       const path = `/api/admin/workspaces/${f.w.id}/plugins/cloudflare/oauth`;
       const headers = {
-        cookie: `deepx_session=${auth.raw}`,
+        cookie: `telo_session=${auth.raw}`,
         origin: "http://localhost:3000",
         "x-csrf-token": auth.csrf,
         "content-type": "application/json",

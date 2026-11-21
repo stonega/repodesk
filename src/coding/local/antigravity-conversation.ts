@@ -37,7 +37,7 @@ export function antigravityAuthFailure(message?: string): boolean {
   );
 }
 
-/** Maps Antigravity CLI headless error strings into safe RepoDesk failure codes. */
+/** Maps Antigravity CLI headless error strings into safe Telo failure codes. */
 export function antigravityFailureCode(message?: string): FailureCode {
   if (!message) return "coding_conversation_failed";
   if (
@@ -296,7 +296,7 @@ export async function runAntigravityConversation(options: {
     }
 
     const child = spawn(
-      options.binary ?? process.env.REPODESK_AGY_BIN ?? "agy",
+      options.binary ?? process.env.TELO_AGY_BIN ?? "agy",
       args,
       {
         cwd: options.cwd,

@@ -1,6 +1,6 @@
 # Native Telegram reactions
 
-RepoDesk's interactive assistant can use `react_to_message` to choose an occasional
+Telo's interactive assistant can use `react_to_message` to choose an occasional
 native emoji reaction to the current requester's message in private conversations
 and linked groups/Topics. The model chooses whether to react and which supported
 emoji fits; reactions are not automatic acknowledgements or task-status signals.

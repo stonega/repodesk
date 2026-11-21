@@ -30,7 +30,7 @@ function required<T>(value: T | undefined | null): T {
 const url = process.env.TEST_DATABASE_URL;
 (url ? describe : describe.skip)("Telegram access requests", () => {
   const root = database(url ?? "postgres://unused@localhost/unused");
-  const name = `deepx_access_${randomUUID().replaceAll("-", "")}`;
+  const name = `telo_access_${randomUUID().replaceAll("-", "")}`;
   const key = "ab".repeat(32);
   const origin = "http://localhost:3000";
   let store: Store;
@@ -55,7 +55,7 @@ const url = process.env.TEST_DATABASE_URL;
       "accessadmin",
       "a long test password",
     );
-    cookie = `deepx_session=${auth.raw}`;
+    cookie = `telo_session=${auth.raw}`;
     csrf = auth.csrf;
     adminId = required(await session(store.pool, auth.raw)).admin.id;
     await store.pool.query("UPDATE admins SET telegram_id='101' WHERE id=$1", [

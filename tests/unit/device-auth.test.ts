@@ -7,7 +7,7 @@ import { DeviceAuth } from "../../src/coding/local/device-auth.ts";
 import { runnerSettings } from "../../src/coding/local/settings.ts";
 
 test("device login returns a one-time code and seals workspace credentials", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "deepx-device-auth-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-device-auth-"));
   try {
     const executable = join(dir, "fake-codex");
     await writeFile(
@@ -57,7 +57,7 @@ printf '{"tokens":{"access_token":"workspace-secret"}}' > "$CODEX_HOME/auth.json
 });
 
 test("disconnect stops a pending device login and clears its workspace cache", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "deepx-device-logout-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-device-logout-"));
   try {
     const executable = join(dir, "fake-codex");
     await writeFile(
@@ -86,7 +86,7 @@ setInterval(() => {}, 1000);
 });
 
 test("refresh survives restart; old task credentials cannot replace a new login or undo disconnect", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "deepx-device-fence-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-device-fence-"));
   const settings = runnerSettings.parse({
     CODEX_RUNNER_STATE: dir,
     CODEX_RUNNER_TOKEN: "management-token".repeat(3),

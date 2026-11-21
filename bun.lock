@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "repodesk",
+      "name": "telo",
       "dependencies": {
         "@alibaba-group/opensandbox": "1.1.1",
         "@earendil-works/pi-agent-core": "1.5.2",

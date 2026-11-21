@@ -2,7 +2,7 @@
 
 Baseline reviewed **2026-09-18**; public launch follow-up reviewed **2026-10-07**.
 Read the [launch follow-up](#launch-follow-up-2026-10-07) for current findings and
-RepoDesk recommendations. The original inventory below preserves the September
+Telo recommendations. The original inventory below preserves the September
 snapshot. See the [source register](../reference/sources.md) for methods and
 limitations. “Documented” means publicly claimed, not tested by us. Telegram
 equivalents are proposals, not implementation claims.
@@ -187,7 +187,7 @@ colleagues. That is our interpretation of the launch materials, not a claim that
 the earlier product lacked team reuse. The September inventory already recorded
 scheduling, corrections, shared learning, approvals and connector sharing.
 
-### RepoDesk already has much of the foundation
+### Telo already has much of the foundation
 
 The comparison uses the current working tree and
 [implementation evidence](../implementation/implementation-status.md), including
@@ -195,7 +195,7 @@ October 5–6 entries. Some older design/roadmap passages still describe continu
 coding as planned; the newer implementation evidence takes precedence for this
 research. Local implementation does not establish live pilot acceptance.
 
-| Capability | Current RepoDesk evidence | Actual remaining opportunity |
+| Capability | Current Telo evidence | Actual remaining opportunity |
 | --- | --- | --- |
 | Recurring work | Approved daily/weekly schedules, timezone handling, unique occurrences and lifecycle controls in [workflow services](../../src/workflows/service.ts) | Add useful repository inputs and templates; weekdays-only recurrence would need an extension beyond the current schema |
 | Corrections and memory | Approved personal/workspace/workflow instructions; retained discussion summaries, decisions and todos | Connect feedback to skill drafts and evaluation examples; avoid describing basic memory as a missing feature |
@@ -275,7 +275,7 @@ and scheduling failures when these proposals become implementation work.
 
 ### Other ideas and tradeoffs
 
-- Resource-specific access requests could improve denial handling later. RepoDesk
+- Resource-specific access requests could improve denial handling later. Telo
   already has workspace enrollment requests; the addition would be a repository/tool
   request with scope, expiry and an auditable decision. An app-level grant cannot
   bypass the person's GitHub permissions. This is separate from R01–R08.
@@ -306,5 +306,5 @@ markup. The [pricing page](https://agent.every.to/pricing) now includes membersh
 initial credits and workspace balance/refill rules. The September membership-versus-
 usage-only conflict is therefore no longer the current finding.
 
-This is a product-pricing observation, not a proposal for RepoDesk billing or a
+This is a product-pricing observation, not a proposal for Telo billing or a
 vendor quote. We have not tested purchase flows or measured all-in cost.

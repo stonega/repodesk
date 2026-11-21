@@ -1,5 +1,5 @@
 {
-  "name": "@repodesk/plugin-sdk",
+  "name": "@telo/plugin-sdk",
   "version": "0.1.0-preview.1",
   "type": "module",
   "exports": "./index.ts",

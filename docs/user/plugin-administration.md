@@ -8,14 +8,14 @@ An ordinary workspace member's service connection never authorizes code installa
 ## Configure the private runner
 
 Build the application, restricted job and private supervisor from the same reviewed
-RepoDesk commit. Use the normal release procedure before a production rollout.
+Telo commit. Use the normal release procedure before a production rollout.
 The following commands prepare local images; they do not connect services:
 
 ```sh
-docker build --target app -t repodesk:plugins .
-docker build --target plugin-job -t repodesk-plugin-job:plugins .
-docker build --target plugin-supervisor -t repodesk-plugin-supervisor:plugins .
-docker image inspect --format '{{.Id}}' repodesk-plugin-job:plugins
+docker build --target app -t telo:plugins .
+docker build --target plugin-job -t telo-plugin-job:plugins .
+docker build --target plugin-supervisor -t telo-plugin-supervisor:plugins .
+docker image inspect --format '{{.Id}}' telo-plugin-job:plugins
 ```
 
 Set `PLUGIN_RUNNER_IMAGE` to the reported immutable `sha256:...` ID or a repository

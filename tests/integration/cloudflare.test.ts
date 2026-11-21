@@ -32,7 +32,7 @@ const url = process.env.TEST_DATABASE_URL;
   "Cloudflare scoped plugin and approved writes",
   () => {
     const root = database(url ?? "postgres://unused@localhost/unused");
-    const name = `repodesk_cf_${randomUUID().replaceAll("-", "")}`;
+    const name = `telo_cf_${randomUUID().replaceAll("-", "")}`;
     const key = "ab".repeat(32);
     const apiToken = "fixture-cloudflare-token-12345";
     const accountId = "a".repeat(32);
@@ -538,7 +538,7 @@ const url = process.env.TEST_DATABASE_URL;
       );
       const endpoint = `/api/admin/workspaces/${f.w.id}/plugins/cloudflare`;
       const headers = {
-        cookie: `deepx_session=${auth.raw}`,
+        cookie: `telo_session=${auth.raw}`,
         origin: "http://localhost:3000",
         "x-csrf-token": auth.csrf,
         "content-type": "application/json",
@@ -869,7 +869,7 @@ const url = process.env.TEST_DATABASE_URL;
       await store.change(f.w.id, (w) => {
         delete w.plugins;
       });
-      const dir = await mkdtemp(join(tmpdir(), "repodesk-cf-manifest-"));
+      const dir = await mkdtemp(join(tmpdir(), "telo-cf-manifest-"));
       try {
         const path = join(dir, "plugins.json");
         await writeFile(

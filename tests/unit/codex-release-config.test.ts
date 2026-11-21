@@ -23,13 +23,13 @@ function fixture(
   ) => void,
   configured = "",
 ) {
-  const root = mkdtempSync(join(tmpdir(), "repodesk-codex-release-"));
+  const root = mkdtempSync(join(tmpdir(), "telo-codex-release-"));
   const release = join(root, "release");
   mkdirSync(release);
   writeFileSync(join(root, ".env"), configured);
   try {
     check(root, release, () =>
-      Bun.spawnSync(["node", script, root, release, "repodesk"], {
+      Bun.spawnSync(["node", script, root, release, "telo"], {
         env: { ...process.env, ...images },
       }),
     );
@@ -54,7 +54,7 @@ test("release generates a private token once, preserving account state and token
       "sealed account",
     );
     expect(readFileSync(join(release, "codex.env"), "utf8")).toBe(
-      `CODEX_RUNNER_TOKEN=${token}\nCODEX_SUPERVISOR_IMAGE=${images.CODEX_SUPERVISOR_IMAGE}\nCODEX_RUNNER_IMAGE=${images.CODEX_RUNNER_IMAGE}\nCODEX_RUNNER_NETWORK=repodesk_codex_tasks\n`,
+      `CODEX_RUNNER_TOKEN=${token}\nCODEX_SUPERVISOR_IMAGE=${images.CODEX_SUPERVISOR_IMAGE}\nCODEX_RUNNER_IMAGE=${images.CODEX_RUNNER_IMAGE}\nCODEX_RUNNER_NETWORK=telo_codex_tasks\n`,
     );
   });
 });

@@ -9,14 +9,14 @@ see [repository investigations and releases](repository-tasks.md).
 
 ## 管理员：准备执行环境
 
-下面适用于 [快速开始](get-started.md) 的源码 Compose 部署，使用 Docker runner。如果已经使用 RepoDesk 的专用 VPS 更新器部署了 runner，先检查现有服务，不要再启动一套。
+下面适用于 [快速开始](get-started.md) 的源码 Compose 部署，使用 Docker runner。如果已经使用 Telo 的专用 VPS 更新器部署了 runner，先检查现有服务，不要再启动一套。
 
 runner 的可信管理容器需要 Docker socket，可以控制宿主机 Docker。使用可信、专用的部署主机；任务容器不获得该 socket，也不接入应用数据库网络。
 
 在仓库根目录构建任务镜像：
 
 ```sh
-docker build --target codex-job -t localhost/deepx-codex-job:local .
+docker build --target codex-job -t localhost/telo-codex-job:local .
 ```
 
 生成管理令牌并填入私有 `.env`：
@@ -76,7 +76,7 @@ modification target in your request. For example: “Copy `docs/user` from
 modification target.” Both repositories must be selected in the workspace. Every
 contributor needs verified read access to the source and write access to the target.
 
-RepoDesk prepares the named source's default branch at a recorded commit before
+Telo prepares the named source's default branch at a recorded commit before
 Codex starts. Full repository names avoid ambiguity. Reference repositories do not
 receive code changes or PRs. If source access or another required environment
 condition is unavailable, the task reports the blocker for an administrator to
@@ -99,7 +99,7 @@ resolve. Repeating “continue” does not repair a missing environment prerequi
 When Review Bot requests and fixes are enabled, use the same verified GitHub
 account that started the Telegram task to post a clear fix request on its PR:
 
-> @repodesk[bot] fix the pagination edge case described above.
+> @telo[bot] fix the pagination edge case described above.
 
 Use your installation's actual bot handle. PRs confirmed as published by this
 version continue the original task and PR. Return to the original Telegram

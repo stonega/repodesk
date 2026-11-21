@@ -15,7 +15,7 @@ import { workspace } from "../fixtures.ts";
 const url = process.env.TEST_DATABASE_URL;
 (url ? describe : describe.skip)("Cloudflare direct token discovery", () => {
   const root = database(url ?? "postgres://unused@localhost/unused");
-  const name = `repodesk_cftoken_${randomUUID().replaceAll("-", "")}`;
+  const name = `telo_cftoken_${randomUUID().replaceAll("-", "")}`;
   const key = "ab".repeat(32),
     apiToken = "cfat_fixture-token-for-cloudflare-12345",
     accountId = "a".repeat(32),
@@ -112,7 +112,7 @@ const url = process.env.TEST_DATABASE_URL;
       app.request(`http://localhost:3000${endpoint}${path}`, {
         method: "POST",
         headers: {
-          cookie: `repodesk_session=${auth.raw}`,
+          cookie: `telo_session=${auth.raw}`,
           origin: "http://localhost:3000",
           "x-csrf-token": auth.csrf,
           "content-type": "application/json",

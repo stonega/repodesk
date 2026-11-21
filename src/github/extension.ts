@@ -24,7 +24,7 @@ export function githubExtension(
   metadata?: GitHubMetadata,
   pullRequests?: GitHubPullRequests,
 ): BuiltinExtension {
-  const skill = readFileSync("skills/repodesk-github/SKILL.md", "utf8");
+  const skill = readFileSync("skills/telo-github/SKILL.md", "utf8");
   return {
     id: "github",
     version: "6",
@@ -201,7 +201,7 @@ export function githubExtension(
             } catch (error) {
               const guidance: Readonly<Record<string, string>> = {
                 github_app_permissions_missing:
-                  "Ask the GitHub App owner to grant Pull requests: Read-only (or Read and write), then accept the updated permissions for the matching installation. Reconnecting RepoDesk alone does not grant permissions.",
+                  "Ask the GitHub App owner to grant Pull requests: Read-only (or Read and write), then accept the updated permissions for the matching installation. Reconnecting Telo alone does not grant permissions.",
                 github_access_denied:
                   "GitHub denied this read. Check that the repository remains selected in the App installation and that the installation has Pull requests read access; also verify the requester's repository access. This does not establish which grant is missing.",
                 github_pr_changed:

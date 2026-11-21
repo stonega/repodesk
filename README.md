@@ -1,4 +1,4 @@
-# RepoDesk
+# Telo
 
 A Telegram bot for working with selected GitHub repositories through AI. Ask about
 code, review an issue draft, or delegate a maintainer-approved coding task from a

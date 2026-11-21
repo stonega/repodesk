@@ -7,12 +7,12 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 const exec = promisify(execFile);
-const image = process.argv[2] ?? "repodesk-ocr-job:test";
-const root = await mkdtemp(join(tmpdir(), "repodesk-ocr-smoke-"));
+const image = process.argv[2] ?? "telo-ocr-job:test";
+const root = await mkdtemp(join(tmpdir(), "telo-ocr-smoke-"));
 const repo = join(root, "task", "repo");
 const input = join(root, "input");
 const binaries = join(root, "binaries");
-const prefix = `repodesk-ocr-smoke-${randomUUID()}`;
+const prefix = `telo-ocr-smoke-${randomUUID()}`;
 const copier = `${prefix}-copy`;
 const taskVolume = `${prefix}-task`;
 const inputVolume = `${prefix}-input`;

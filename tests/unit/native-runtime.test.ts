@@ -43,7 +43,7 @@ afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
 });
 async function fixture(hang = false) {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-native-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-native-"));
   dirs.push(dir);
   const phase = join(dir, "phase.mjs"),
     job = join(dir, "job.mjs"),
@@ -62,21 +62,21 @@ async function fixture(hang = false) {
     `
 import { readFile, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
-const e=process.env, root=e.REPODESK_TASK_ROOT, mode=process.argv[2];
+const e=process.env, root=e.TELO_TASK_ROOT, mode=process.argv[2];
 if(e.DATABASE_URL || e.CODEX_RUNNER_TOKEN || e.OPENAI_API_KEY) process.exit(9);
 if(mode !== 'prepare' && mode !== 'publish' && e.GITHUB_TOKEN) process.exit(10);
 if(mode !== 'implement' && e.CODEX_TASK_TOKEN) process.exit(11);
 if(mode==='export') { process.stdout.write(JSON.stringify({patch:'diff --git a/a b/a\\n'})); }
 else {
- const job=JSON.parse(await readFile(e.REPODESK_INPUT_ROOT+'/job.json','utf8'));
- await writeFile(root+'/phase-'+mode,JSON.stringify({home:e.HOME,mode,binary:e.REPODESK_CODEX_BIN}));
+ const job=JSON.parse(await readFile(e.TELO_INPUT_ROOT+'/job.json','utf8'));
+ await writeFile(root+'/phase-'+mode,JSON.stringify({home:e.HOME,mode,binary:e.TELO_CODEX_BIN}));
  if(mode==='prepare') {
    await writeFile(root+'/base-sha','a'.repeat(40));
    ${hang ? "const c=spawn(process.execPath,['-e','setInterval(()=>{},1000)']); await writeFile(root+'/child-pid',String(c.pid)); setInterval(()=>{},1000);" : ""}
  }
  if(mode==='implement') {
    await writeFile(root+'/conversation.json',JSON.stringify({threadId:'thread-native',tokens:10,result:{status:'completed',intent:'implement',evidenceRevision:1,evidence:'Fix bug',publishRequested:true,summary:'Fixed',question:null,title:'Fix',body:'Checked',verificationCommands:['bun test']}}));
-   if(job.payload.authMode==='device_code') await writeFile(e.REPODESK_AUTH_ROOT+'/auth.json','{"tokens":{"access_token":"rotated-account"}}');
+   if(job.payload.authMode==='device_code') await writeFile(e.TELO_AUTH_ROOT+'/auth.json','{"tokens":{"access_token":"rotated-account"}}');
  }
  if(mode==='publish') await writeFile(root+'/publication.json','{"prUrl":"https://github.com/example/repo/pull/1"}');
 }

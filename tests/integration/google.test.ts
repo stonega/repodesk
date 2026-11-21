@@ -33,7 +33,7 @@ import { googleFixture } from "../google-fixture.ts";
 const rootUrl = process.env.TEST_DATABASE_URL;
 (rootUrl ? describe : describe.skip)("Personal Google accounts", () => {
   const root = database(rootUrl ?? "postgres://unused@localhost/unused");
-  const name = `repodesk_google_${randomUUID().replaceAll("-", "")}`;
+  const name = `telo_google_${randomUUID().replaceAll("-", "")}`;
   const key = "ab".repeat(32),
     origin = "http://localhost:3000";
   let store: Store, admin: Admin, auth: { raw: string; csrf: string };
@@ -57,7 +57,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     const d = await store.deployment();
     d.credentials.bot = encrypt(key, "bot", "fixture-bot");
     d.active = true;
-    d.bot = { id: "999", username: "repodesk", visibleAll: true };
+    d.bot = { id: "999", username: "telo", visibleAll: true };
     await store.saveDeployment(store.pool, d);
   });
   afterAll(async () => {
@@ -526,7 +526,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
     );
     const endpoint = `/api/admin/workspaces/${f.w.id}/plugins/google`;
     const headers = {
-      cookie: `repodesk_session=${auth.raw}`,
+      cookie: `telo_session=${auth.raw}`,
       origin,
       "x-csrf-token": auth.csrf,
       "content-type": "application/json",

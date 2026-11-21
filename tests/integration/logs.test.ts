@@ -16,7 +16,7 @@ import { workspace } from "../fixtures.ts";
 const url = process.env.TEST_DATABASE_URL;
 (url ? describe : describe.skip)("runtime logs (isolated PostgreSQL)", () => {
   const root = database(url ?? "postgres://unused@localhost/unused");
-  const name = `deepx_logs_${randomUUID().replaceAll("-", "")}`;
+  const name = `telo_logs_${randomUUID().replaceAll("-", "")}`;
   let store: Store;
   let log: RuntimeLogger;
   let app: ReturnType<typeof createApp>;
@@ -42,7 +42,7 @@ const url = process.env.TEST_DATABASE_URL;
       "logoperator",
       "test password long enough",
     );
-    cookie = `deepx_session=${claimed.raw}`;
+    cookie = `telo_session=${claimed.raw}`;
     adminId = (
       await pool.query("SELECT id FROM admins WHERE username='logoperator'")
     ).rows[0].id;
@@ -122,7 +122,7 @@ const url = process.env.TEST_DATABASE_URL;
       "test password long enough",
     );
     const result = await (
-      await request("", `deepx_session=${other.raw}`)
+      await request("", `telo_session=${other.raw}`)
     ).json();
     expect(
       result.items.some(
@@ -138,12 +138,12 @@ const url = process.env.TEST_DATABASE_URL;
     await store.pool.query("UPDATE admins SET operator=false WHERE id=$1", [
       otherId,
     ]);
-    expect((await request("", `deepx_session=${other.raw}`)).status).toBe(403);
+    expect((await request("", `telo_session=${other.raw}`)).status).toBe(403);
     await store.pool.query(
       "UPDATE sessions SET expires_at=now()-interval '1 second' WHERE admin_id=$1",
       [otherId],
     );
-    expect((await request("", `deepx_session=${other.raw}`)).status).toBe(401);
+    expect((await request("", `telo_session=${other.raw}`)).status).toBe(401);
   });
   test("deleted workspace logs are hidden and cannot be recreated by a late event", async () => {
     await store.pool.query(

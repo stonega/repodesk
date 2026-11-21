@@ -138,9 +138,9 @@ import { promisify } from "node:util";
 var derive = promisify(scrypt);
 function decrypt(key, name, value) {
   const [version, iv, tag, data] = value.split(".");
-  requireThat((version === "v1" || version === "v2") && iv && tag && data, "invalid_ciphertext");
+  requireThat((version === "v1" || version === "v2" || version === "v3") && iv && tag && data, "invalid_ciphertext");
   const cipher = createDecipheriv("aes-256-gcm", Buffer.from(key, "hex"), Buffer.from(iv, "base64"));
-  cipher.setAAD(Buffer.from(`${version === "v1" ? "deepx:v1" : "repodesk:v2"}:${name}`));
+  cipher.setAAD(Buffer.from(`${version === "v1" ? "deepx:v1" : version === "v2" ? "repodesk:v2" : "telo:v3"}:${name}`));
   cipher.setAuthTag(Buffer.from(tag, "base64"));
   return Buffer.concat([
     cipher.update(Buffer.from(data, "base64")),
@@ -380,4 +380,4 @@ try {
 }
 
 '''
-subprocess.run(['docker','exec','-i','repodesk-app-1','node','--input-type=module'],input=script,text=True,check=True,timeout=60)
+subprocess.run(['docker','exec','-i','telo-app-1','node','--input-type=module'],input=script,text=True,check=True,timeout=60)

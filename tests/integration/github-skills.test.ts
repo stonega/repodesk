@@ -24,7 +24,7 @@ import {
 const url = process.env.TEST_DATABASE_URL;
 (url ? describe : describe.skip)("GitHub skill imports and updates", () => {
   const root = database(url ?? "postgres://unused@localhost/unused");
-  const name = `repodesk_skills_${randomUUID().replaceAll("-", "")}`;
+  const name = `telo_skills_${randomUUID().replaceAll("-", "")}`;
   let store: Store;
   let operatorId: string;
   let credentials: { raw: string; csrf: string };
@@ -384,7 +384,7 @@ const url = process.env.TEST_DATABASE_URL;
         method: "POST",
         headers: {
           origin: "http://localhost:3000",
-          cookie: `repodesk_session=${credentials.raw}`,
+          cookie: `telo_session=${credentials.raw}`,
           "x-csrf-token": csrf,
           "content-type": "application/json",
         },

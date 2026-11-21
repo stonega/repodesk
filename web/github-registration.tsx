@@ -36,12 +36,12 @@ export function GitHubRegistration({
   const [busy, setBusy] = useState(false);
   const [owner, setOwner] = useState("personal");
   const [organization, setOrganization] = useState("");
-  const [name, setName] = useState("repodesk");
+  const [name, setName] = useState("telo");
   const [isPublic, setPublic] = useState(false);
   const openCreation = () => {
     setOwner("personal");
     setOrganization("");
-    setName("repodesk");
+    setName("telo");
     setPublic(false);
     setError("");
     setOpen(true);

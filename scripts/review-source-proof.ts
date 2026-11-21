@@ -16,7 +16,7 @@ import { runConversation } from "../src/coding/local/conversation.ts";
 import { ReviewSource } from "../src/coding/local/review-source.ts";
 
 const exec = promisify(execFile);
-const root = await mkdtemp(join(tmpdir(), "repodesk-review-proof-"));
+const root = await mkdtemp(join(tmpdir(), "telo-review-proof-"));
 const repo = join(root, "repo"),
   home = "/task/codex";
 const env = {
@@ -53,7 +53,7 @@ const server = createServer(async (request, responseStream) => {
         ...(tool.tools ?? []).map((t) => t.name),
       ])
       .filter(Boolean);
-    assert.ok(names.includes("repodesk_review_source"), JSON.stringify(names));
+    assert.ok(names.includes("telo_review_source"), JSON.stringify(names));
     assert.ok(
       !names.some((name: string) =>
         [
@@ -106,7 +106,7 @@ const server = createServer(async (request, responseStream) => {
             type: "function_call",
             id: `fc_${calls}`,
             call_id: `call_${calls}`,
-            name: "repodesk_review_source",
+            name: "telo_review_source",
             arguments: JSON.stringify(action),
             status: "completed",
           };

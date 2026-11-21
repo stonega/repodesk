@@ -11,17 +11,17 @@ design proposals, research and implementation evidence remain in the sections be
 ## Product and engineering documentation
 
 Research baseline: **2026-09-18**; Every Agent public launch follow-up: **2026-10-07**.
-Product name: **RepoDesk**.
+Product name: **Telo**.
 
-RepoDesk's main journey is working with selected GitHub repositories from Telegram,
+Telo's main journey is working with selected GitHub repositories from Telegram,
 with AI helping interpret questions and draft scoped actions. Start with
 [GitHub work through Telegram](design/github-workflows.md). The earlier team-workflow
-research was inspired by Every Agent; RepoDesk is not affiliated with Every.
+research was inspired by Every Agent; Telo is not affiliated with Every.
 Competitor feature parity is neither a goal nor an implementation claim.
 
 | Document | Purpose |
 | --- | --- |
-| [Every Agent feature inventory](research/every-agent-features.md) | September baseline, October launch update, RepoDesk feature recommendations, evidence strength and unknowns |
+| [Every Agent feature inventory](research/every-agent-features.md) | September baseline, October launch update, Telo feature recommendations, evidence strength and unknowns |
 | [Source register](reference/sources.md) | URLs, retrieval method, scope, and research limitations |
 | [Product requirements](design/product-requirements.md) | Proposed features, priorities, acceptance criteria, permissions, and success measures |
 | [GitHub work through Telegram](design/github-workflows.md) | Main user journey, current GitHub capabilities, boundaries and next decisions |

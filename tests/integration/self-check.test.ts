@@ -85,7 +85,7 @@ const url = process.env.TEST_DATABASE_URL;
     app.request(`/api/admin/workspaces/${id}/self-check`, {
       method: "POST",
       headers: {
-        cookie: `repodesk_session=${auth.raw}`,
+        cookie: `telo_session=${auth.raw}`,
         origin,
         "x-csrf-token": auth.csrf,
         "content-type": "application/json",
@@ -181,7 +181,7 @@ const url = process.env.TEST_DATABASE_URL;
       "self check member password",
     );
     const headers = {
-      cookie: `repodesk_session=${linked.raw}`,
+      cookie: `telo_session=${linked.raw}`,
       "x-csrf-token": linked.csrf,
     };
     expect((await request(input(), headers)).status).toBe(200);

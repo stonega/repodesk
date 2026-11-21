@@ -34,7 +34,7 @@ for (const width of [1280, 390]) {
       const username = dialog.getByLabel("Custom GitHub username");
       await username.fill("outside-user");
       await page.screenshot({
-        path: `/tmp/repodesk-member-custom-loading-${width}.png`,
+        path: `/tmp/telo-member-custom-loading-${width}.png`,
         fullPage: true,
       });
       release.resolve();
@@ -43,7 +43,7 @@ for (const width of [1280, 390]) {
       ).not.toBeVisible();
       await expect(username).toHaveValue("outside-user");
       await page.screenshot({
-        path: `/tmp/repodesk-member-custom-empty-${width}.png`,
+        path: `/tmp/telo-member-custom-empty-${width}.png`,
         fullPage: true,
       });
       await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -80,7 +80,7 @@ for (const width of [1280, 390]) {
       .click();
     await dialog.getByLabel("Custom GitHub username").fill(" @Outside-User ");
     await page.screenshot({
-      path: `/tmp/repodesk-member-custom-editor-${width}.png`,
+      path: `/tmp/telo-member-custom-editor-${width}.png`,
       fullPage: true,
     });
     expect(
@@ -108,7 +108,7 @@ for (const width of [1280, 390]) {
     ).toHaveAttribute("href", "https://github.com/outside-user");
     await expect(details.getByRole("textbox")).toHaveCount(0);
     await page.screenshot({
-      path: `/tmp/repodesk-member-custom-saved-${width}.png`,
+      path: `/tmp/telo-member-custom-saved-${width}.png`,
       fullPage: true,
     });
     await page.keyboard.press("Escape");
@@ -174,7 +174,7 @@ for (const width of [1280, 390]) {
       .boundingBox();
     expect(saveBox?.y).toBe(cancelBox?.y);
     await page.screenshot({
-      path: `/tmp/repodesk-member-custom-error-${width}.png`,
+      path: `/tmp/telo-member-custom-error-${width}.png`,
       fullPage: true,
     });
     await username.fill("outside-user");
@@ -223,7 +223,7 @@ for (const width of [1280, 390]) {
       await page.keyboard.press("Escape");
       await expect(dialog).toBeVisible();
       await page.screenshot({
-        path: `/tmp/repodesk-member-custom-pending-${width}.png`,
+        path: `/tmp/telo-member-custom-pending-${width}.png`,
         fullPage: true,
       });
       release.resolve();
@@ -415,7 +415,7 @@ for (const width of [1280, 390]) {
     await expect(view).toHaveCSS("border-top-width", "0px");
     expect((await view.boundingBox())?.height).toBeGreaterThanOrEqual(44);
     await page.screenshot({
-      path: `/tmp/repodesk-member-github-view-${width}.png`,
+      path: `/tmp/telo-member-github-view-${width}.png`,
       fullPage: true,
     });
     await view.focus();
@@ -472,7 +472,7 @@ for (const width of [1280, 390]) {
       }),
     ).toBe(true);
     await page.screenshot({
-      path: `/tmp/repodesk-member-repository-modal-${width}.png`,
+      path: `/tmp/telo-member-repository-modal-${width}.png`,
       fullPage: true,
     });
     await items.last().scrollIntoViewIfNeeded();
@@ -483,7 +483,7 @@ for (const width of [1280, 390]) {
       ),
     ).toBe(true);
     await page.screenshot({
-      path: `/tmp/repodesk-member-repository-modal-last-${width}.png`,
+      path: `/tmp/telo-member-repository-modal-last-${width}.png`,
       fullPage: true,
     });
     await page.keyboard.press("Escape");
@@ -532,7 +532,7 @@ for (const width of [1280, 390]) {
         ),
       ).toBe(true);
       await page.screenshot({
-        path: `/tmp/repodesk-member-github-${count}-${width}.png`,
+        path: `/tmp/telo-member-github-${count}-${width}.png`,
         fullPage: true,
       });
       await page.keyboard.press("Escape");
@@ -566,7 +566,7 @@ for (const width of [1280, 390]) {
       await expect(dialog.getByRole("button", { name: /Save/ })).toHaveCount(0);
       await expect(dialog.getByRole("link")).toHaveCount(pending ? 1 : 0);
       await page.screenshot({
-        path: `/tmp/repodesk-member-github-${pending ? "pending" : "unlinked"}-${width}.png`,
+        path: `/tmp/telo-member-github-${pending ? "pending" : "unlinked"}-${width}.png`,
         fullPage: true,
       });
       await page.keyboard.press("Escape");
@@ -608,7 +608,7 @@ for (const width of [1280, 390]) {
     ).toHaveCount(0);
     await expect(page.getByText("Not linked", { exact: true })).toHaveCount(0);
     await page.screenshot({
-      path: `/tmp/repodesk-member-github-loading-${width}.png`,
+      path: `/tmp/telo-member-github-loading-${width}.png`,
       fullPage: true,
     });
     release.resolve();
@@ -617,7 +617,7 @@ for (const width of [1280, 390]) {
       "Members unavailable",
     );
     await page.screenshot({
-      path: `/tmp/repodesk-member-github-error-${width}.png`,
+      path: `/tmp/telo-member-github-error-${width}.png`,
       fullPage: true,
     });
     fail = false;
@@ -645,7 +645,7 @@ for (const width of [1280, 390]) {
       table.getByRole("columnheader", { name: "GitHub" }),
     ).toBeVisible();
     await page.screenshot({
-      path: `/tmp/repodesk-member-github-empty-${width}.png`,
+      path: `/tmp/telo-member-github-empty-${width}.png`,
       fullPage: true,
     });
   });
@@ -668,7 +668,7 @@ for (const width of [1280, 390]) {
       dialog.getByRole("link", { name: "View stonega on GitHub" }),
     ).toHaveAttribute("href", "https://github.com/stonega");
     await page.screenshot({
-      path: `/tmp/repodesk-github-member-${width}.png`,
+      path: `/tmp/telo-github-member-${width}.png`,
       fullPage: true,
     });
     expect(

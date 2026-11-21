@@ -194,7 +194,7 @@ for (const width of [1280, 390]) {
     await expect(recovering).toContainText(
       "Waiting for GitHub access verification",
     );
-    await expect(recovering).toContainText("RepoDesk will retry automatically");
+    await expect(recovering).toContainText("Telo will retry automatically");
     await expect(recovering).not.toContainText("Stopped");
     await expect(recovering).not.toContainText("administrator");
     await expect(

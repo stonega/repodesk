@@ -176,7 +176,7 @@ test("captionless media answers pin preceding text evidence; empty follow-ups do
 });
 
 test("Codex receives image data URLs and handles echoed media larger than the former protocol buffer", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-image-protocol-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-image-protocol-"));
   try {
     const script = join(dir, "server.cjs");
     await writeFile(
@@ -251,7 +251,7 @@ rl.on('line',line=>{
 });
 
 test("the Codex turn receives the intake schema and returns current retry evidence", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-intent-protocol-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-intent-protocol-"));
   try {
     const script = join(dir, "server.cjs");
     await writeFile(

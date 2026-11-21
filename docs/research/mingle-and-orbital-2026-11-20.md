@@ -1,13 +1,13 @@
 # Mingle and Orbital feature research
 
 Research date: **2026-11-20**. Status: **research and proposed feature recommendations**,
-not implemented RepoDesk behavior or committed roadmap scope. Check
+not implemented Telo behavior or committed roadmap scope. Check
 [implementation evidence](../implementation/implementation-status.md) for verified
-RepoDesk capabilities.
+Telo capabilities.
 
 ## Scope and evidence boundaries
 
-This note reviews two public projects against RepoDesk's current architecture and
+This note reviews two public projects against Telo's current architecture and
 product boundaries:
 
 - **Mingle** — [github.com/earayu/Mingle](https://github.com/earayu/Mingle) and
@@ -19,19 +19,19 @@ Findings about Mingle and Orbital are **Documented** from public GitHub pages an
 product documentation retrieved via web search on **2026-11-20**. Neither project
 was installed, executed, or audited at source-code depth; runtime reliability,
 security posture, and connector completeness are unverified. Feature ideas for
-RepoDesk below are **Proposed**.
+Telo below are **Proposed**.
 
 ## Positioning comparison
 
-| Project | Documented positioning | Core design center | Key contrast with RepoDesk |
+| Project | Documented positioning | Core design center | Key contrast with Telo |
 | --- | --- | --- | --- |
 | **Mingle** | Local-first, zero-server companion that bridges existing subscribed coding harnesses (Claude Code, Codex, Cursor, OpenCode, Kimi Code, Qwen Code, DeepSeek) into everyday chat apps (WeChat, WeCom, Feishu, DingTalk, QQ, Slack, Discord, Telegram, iMessage) and GitHub `@`-mentions. | Personal local runtime, multi-harness reuse, multi-channel presence, unified personal memory. | Built for a single local user without a central multi-tenant server, workspace roles, or strict per-scope isolation. |
 | **Orbital** | Local-first project control plane (*"Context is yours. Agents are replaceable."*), binding durable state, task queues, skills, memory files, budgets, and approvals to a project folder while delegating execution to interchangeable workers (Claude Code, Codex, Gemini CLI). | Project-bound control plane, interchangeable workers, structured file memory, task queue, unified Workbench inbox. | Built around local workspace directories, OS keychain credentials, and file-system watchers rather than a multi-member self-hosted server with tenant/actor authorization. |
-| **RepoDesk** | Self-hosted, multi-member Telegram assistant for GitHub organizations and personal repositories, backed by Pi, PostgreSQL, durable Codex tasks, Code Truth, Review Bot, scoped memory, and an authenticated web admin panel. | Multi-tenant server, strict actor/repository/destination authorization, durable execution and publication boundaries. | Already separates application control from Codex sessions, but currently binds coding execution to Codex CLI and lacks a cross-repo Workbench inbox, repo task queue, and automatic post-task engineering capture. |
+| **Telo** | Self-hosted, multi-member Telegram assistant for GitHub organizations and personal repositories, backed by Pi, PostgreSQL, durable Codex tasks, Code Truth, Review Bot, scoped memory, and an authenticated web admin panel. | Multi-tenant server, strict actor/repository/destination authorization, durable execution and publication boundaries. | Already separates application control from Codex sessions, but currently binds coding execution to Codex CLI and lacks a cross-repo Workbench inbox, repo task queue, and automatic post-task engineering capture. |
 
-## High-priority features to adapt for RepoDesk
+## High-priority features to adapt for Telo
 
-These proposals align closely with RepoDesk's existing durable task, memory, and
+These proposals align closely with Telo's existing durable task, memory, and
 authorization architecture.
 
 ### 1. Interchangeable coding workers and multi-harness failover (Orbital + Mingle)
@@ -43,11 +43,11 @@ authorization architecture.
   - Orbital decouples project state from worker sessions so that if one worker (e.g.,
     Codex) hits a usage limit or stalls, another worker (e.g., Claude Code or Gemini CLI)
     can continue the same task from compiled project context.
-- **RepoDesk baseline:** [Continuous Codex collaboration](../design/codex-collaboration.md)
+- **Telo baseline:** [Continuous Codex collaboration](../design/codex-collaboration.md)
   already stores task identity, grants, input revisions, verification plans, and
   publication state in application services, while execution is currently bound to
   Codex CLI (`app-server`).
-- **Proposed RepoDesk adaptation:**
+- **Proposed Telo adaptation:**
   - Introduce a pluggable **Coding Worker Adapter** interface behind the existing
     durable task engine, starting with **Claude Code** alongside **Codex**.
   - Reuse the existing credential-free verification plan, patch-integrity checks,
@@ -63,10 +63,10 @@ authorization architecture.
   queue (`queue.json`) supporting sequential execution, pinning urgent items to the
   front, pausing mid-item to chat and steer the agent, and carrying completed task
   artifacts forward to subsequent queued items.
-- **RepoDesk baseline:** RepoDesk supports follow-up inputs on an active task/PR,
+- **Telo baseline:** Telo supports follow-up inputs on an active task/PR,
   but separate coding goals are launched individually without a repository-level
   ordered queue.
-- **Proposed RepoDesk adaptation:**
+- **Proposed Telo adaptation:**
   - Add a **per-repository task queue** manageable from Telegram and the Admin Panel
     (enqueue, pin/reorder, pause queue, resume, cancel).
   - Pass verified summaries and branch/PR references from completed queue items as
@@ -79,10 +79,10 @@ authorization architecture.
   cross-project feed of active tasks, finished replies, pending agent questions,
   and approval cards—plus a single quick-dispatch input box and mobile remote
   supervision with inline guidance on approval/rejection.
-- **RepoDesk baseline:** The Admin Panel focuses on configuration, logs, and audits,
+- **Telo baseline:** The Admin Panel focuses on configuration, logs, and audits,
   while the [Telegram task history Mini App](../implementation/telegram-mini-app.md)
   is currently read-only.
-- **Proposed RepoDesk adaptation:**
+- **Proposed Telo adaptation:**
   - Add a permission-scoped **Workbench / Action Inbox** view in the Web Panel
     (and optionally evolve the Telegram Mini App) aggregating the current member's
     active tasks, pending Codex product questions, pending write approvals (issues,
@@ -99,12 +99,12 @@ authorization architecture.
   project state, architectural rationale, and execution lessons in structured files
   (`PROJECT_STATE.md`, `DECISIONS.md`, `LESSONS.md`, plus per-worker memory files)
   compiled into fresh worker briefings on cold start (**Learning Capture**).
-- **RepoDesk baseline:** RepoDesk implements
+- **Telo baseline:** Telo implements
   [long-term conversation memory](../design/long-term-memory.md), source-grounded
   decision/preference memory, web-managed skills, and [Obsidian notes](../implementation/obsidian.md),
   but does not automatically distill build/test quirks or multi-step repair runs
   from completed Codex tasks into repository engineering memory or skill drafts.
-- **Proposed RepoDesk adaptation:**
+- **Proposed Telo adaptation:**
   - **Learning Capture:** After a coding, investigation, or release task succeeds
     (especially after a verification failure and repair), propose candidate
     **repository lessons** (build/test quirks, environment prerequisites, module
@@ -122,14 +122,14 @@ authorization architecture.
   (`Supervised`, `Check-in`, `Hands-off`) paired with tool/action interceptors that
   render structured approval cards displaying the exact tool name, arguments, and
   triggering context.
-- **RepoDesk baseline:** Governance and approval rules are strictly enforced in
+- **Telo baseline:** Governance and approval rules are strictly enforced in
   application services, but policy knobs are spread across separate plugin and
   workflow screens.
-- **Proposed RepoDesk adaptation:**
+- **Proposed Telo adaptation:**
   - Provide intuitive per-repository **governance presets** (for example:
     `Supervised` for production repositories requiring confirmation before PR/issue
     writes, `Check-in` allowing autonomous PR creation while gating releases and
-    external infrastructure edits) that map deterministically onto RepoDesk's
+    external infrastructure edits) that map deterministically onto Telo's
     existing server-side policy checks without weakening authorization boundaries.
 
 ## Medium-priority extensions and ecosystem ideas
@@ -139,9 +139,9 @@ authorization architecture.
 - **Documented upstream pattern:** Mingle's Handoff panel packages ongoing local
   CLI session context (progress, preferences, decisions) into a handoff prompt so
   the chat agent can take over seamlessly.
-- **Proposed RepoDesk adaptation:** Provide an authenticated CLI or one-time
+- **Proposed Telo adaptation:** Provide an authenticated CLI or one-time
   handoff token flow that lets a verified workspace member transfer an active local
-  branch goal, open questions, and confirmed decisions into a RepoDesk private
+  branch goal, open questions, and confirmed decisions into a Telo private
   Topic or coding task (still bounded by the member's current GitHub write access
   and repository selection).
 
@@ -149,10 +149,10 @@ authorization architecture.
 
 - **Documented upstream pattern:** Mingle bots respond to `@`-mentions directly
   inside both GitHub issues and pull requests.
-- **RepoDesk baseline:** [Review Bot](../implementation/review-bot.md) handles
+- **Telo baseline:** [Review Bot](../implementation/review-bot.md) handles
   automatic PR reviews and explicitly addressed PR comments/fixes, but not
   general issue-comment `@`-mentions.
-- **Proposed RepoDesk adaptation:** Extend the existing verified-GitHub-identity
+- **Proposed Telo adaptation:** Extend the existing verified-GitHub-identity
   webhook pipeline to handle `@bot` mentions in GitHub Issues for Code Truth
   investigation, reproduction analysis, and—for verified maintainers with write
   access—starting a linked coding task that reports back with a PR.
@@ -163,10 +163,10 @@ authorization architecture.
   configurable threshold behavior—either pausing execution and automatically
   resuming when the budget cycle resets, or hard-stopping—alongside model-level
   cost breakdowns.
-- **RepoDesk baseline:** RepoDesk enforces per-run and workspace dollar budgets
+- **Telo baseline:** Telo enforces per-run and workspace dollar budgets
   ([product requirements](../design/product-requirements.md#f11--usage-cost-controls-and-billing-p0-metering-p2-payments)),
   blocking new runs when exhausted.
-- **Proposed RepoDesk adaptation:** Add a configurable **pause-until-reset** mode
+- **Proposed Telo adaptation:** Add a configurable **pause-until-reset** mode
   for queued tasks and recurring workflows, with owner notification on pause and
   automatic resumption (after rechecking permissions) at the next daily/monthly
   budget window, plus per-repository and per-worker cost breakdowns.
@@ -176,10 +176,10 @@ authorization architecture.
 - **Documented upstream pattern:** Orbital surfaces time-based schedules and
   event-based triggers (file watchers) together in an Automations section beside
   the task queue.
-- **RepoDesk baseline:** RepoDesk has cron-based workflows and GitHub webhook
+- **Telo baseline:** Telo has cron-based workflows and GitHub webhook
   ingestion for notifications and Review Bot, but no general user-defined
   event-triggered workflow rules.
-- **Proposed RepoDesk adaptation:** Add declarative **GitHub event triggers**
+- **Proposed Telo adaptation:** Add declarative **GitHub event triggers**
   (e.g., CI failure on default branch -> read-only root-cause investigation;
   changes under `docs/` -> doc-drift check; specific issue label -> triage summary)
   managed alongside cron workflows under the same ownership, version pinning,
@@ -190,13 +190,13 @@ authorization architecture.
 - **Documented upstream pattern:** Mingle maintains a cross-platform address book
   linking a person's identities across chat apps, and exposes one agent across
   Slack, Discord, Feishu, WeCom, WeChat, Telegram, and iMessage.
-- **Proposed RepoDesk adaptation:**
+- **Proposed Telo adaptation:**
   - Near term: enrich the Workspace Members view into a clearer **member identity
     directory** linking Telegram, verified GitHub, and Google identities with owned
     repositories/workflows for group handoffs and attribution.
-  - Longer term (only if RepoDesk expands beyond Telegram): abstract the Telegram
+  - Longer term (only if Telo expands beyond Telegram): abstract the Telegram
     ingress/delivery layer into a pluggable **Channel Adapter** interface (Slack,
-    Discord, Feishu) while keeping RepoDesk's multi-tenant PostgreSQL state and
+    Discord, Feishu) while keeping Telo's multi-tenant PostgreSQL state and
     authorization services unchanged.
 
 ### 11. Remote POSIX SSH runner option (Mingle)
@@ -204,9 +204,9 @@ authorization architecture.
 - **Documented upstream pattern:** Mingle can bootstrap a portable runtime on a
   remote POSIX host over the system SSH client / `ssh-agent` without requiring
   root privileges or storing raw SSH keys in app config.
-- **RepoDesk baseline:** RepoDesk supports Docker, OpenSandbox, and Native VPS
+- **Telo baseline:** Telo supports Docker, OpenSandbox, and Native VPS
   Codex runners.
-- **Proposed RepoDesk adaptation:** Low-priority optional runner target for teams
+- **Proposed Telo adaptation:** Low-priority optional runner target for teams
   with a dedicated remote build or GPU host, subject to the same process-group
   tracking, isolation caveats, and clean-environment rules as Native VPS.
 
@@ -214,9 +214,9 @@ authorization architecture.
 
 1. **Unscoped cross-platform / cross-group global memory (Mingle):** Sharing
    context freely from a work group into a separate chat or platform violates
-   RepoDesk's tenant isolation, private-vs-group visibility separation, and
+   Telo's tenant isolation, private-vs-group visibility separation, and
    per-repository read-grant enforcement.
-2. **Direct host directory and OS keychain access (Orbital):** RepoDesk is a
+2. **Direct host directory and OS keychain access (Orbital):** Telo is a
    shared self-hosted server; encrypted server-side credential storage,
    per-actor authorization, container isolation, and durable publication
    reservations must remain mandatory rather than delegating trust to local host

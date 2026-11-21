@@ -15,7 +15,7 @@ const url = process.env.TEST_DATABASE_URL;
   "private Browser repository (isolated PostgreSQL)",
   () => {
     const root = database(url ?? "postgres://unused@localhost/unused");
-    const name = `repodesk_browser_${randomUUID().replaceAll("-", "")}`;
+    const name = `telo_browser_${randomUUID().replaceAll("-", "")}`;
     const key = "ab".repeat(32);
     let pool: ReturnType<typeof database>;
     let repository: PostgresBrowserRepository;
@@ -66,7 +66,7 @@ const url = process.env.TEST_DATABASE_URL;
           [workspaceId, "101"],
         )
       ).rows[0]?.data;
-      expect(data).toStartWith("v2.");
+      expect(data).toStartWith("v3.");
       expect(data).not.toContain("private.example");
       expect(data).not.toContain("Private account");
       const restored = await new PostgresBrowserRepository(pool, key).read(

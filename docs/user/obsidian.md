@@ -1,6 +1,6 @@
 # Organization notes with Obsidian
 
-RepoDesk includes an **Obsidian** plugin, enabled by default for existing and new
+Telo includes an **Obsidian** plugin, enabled by default for existing and new
 organizations. Open **Plugins → Obsidian** to manage your organization's vault.
 It starts with a home note, meeting and daily templates, an organization Base and
 a Canvas. No account, API key, desktop session or additional service is required.
@@ -54,7 +54,7 @@ Related: [[Decisions/Release#Scope|release scope]]
 ```
 
 Callouts, tables, code, math, Mermaid, block references and embeds remain intact
-for Obsidian. RepoDesk displays file source in the panel. Its link index covers
+for Obsidian. Telo displays file source in the panel. Its link index covers
 wikilinks, basic Markdown links and Canvas file nodes; links inside code and HTML
 comments are ignored. Rename updates resolved links, preserving headings, block
 references and display labels. Review unresolved links and references inside Bases
@@ -67,7 +67,7 @@ expressions are unsupported. Ask for explicit dates in your organization's timez
 
 Native `.canvas` JSON files and `.base` YAML files can be created, read, edited,
 imported and exported. Obsidian renders their maps, database views, formulas and
-filters. RepoDesk validates and stores them without evaluating their expressions.
+filters. Telo validates and stores them without evaluating their expressions.
 Community plugins such as Dataview and Templater do not run on the server.
 
 ## Use the desktop app
@@ -88,7 +88,7 @@ updating existing notes. Import merges files atomically and never removes notes
 because they are absent from the ZIP. It ignores settings, hidden files, binaries
 and executable plugins. Restore a trashed path before replacing it.
 
-Export/import is a snapshot workflow. Desktop edits and RepoDesk edits do not sync
+Export/import is a snapshot workflow. Desktop edits and Telo edits do not sync
 automatically. ZIPs with a wrapper folder import that folder as part of each path.
 
 ## Limits and controls

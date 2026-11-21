@@ -1,4 +1,4 @@
-# RepoDesk plugin SDK preview
+# Telo plugin SDK preview
 
 This source-only authoring package provides `definePlugin` and TypeScript types.
 Bundle it into a Node-targeted ESM plugin before execution. It has no runtime
@@ -15,4 +15,4 @@ return `ToolResult.notifications` candidates with stable IDs and event timestamp
 The host checks subscriptions and source grants and delivers only to the current
 private actor. The plugin receives no messaging credentials or destination IDs.
 This does not create a background poller. See the repository-alerts example and
-the plugin development guide in the RepoDesk distribution.
+the plugin development guide in the Telo distribution.

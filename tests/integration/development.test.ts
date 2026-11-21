@@ -1145,7 +1145,7 @@ const url = process.env.TEST_DATABASE_URL;
                   state: "open",
                   draft: publicationDraft,
                   head: {
-                    ref: `codex/repodesk-${task.id}`,
+                    ref: `codex/telo-${task.id}`,
                     sha: "b".repeat(40),
                     repo: { full_name: "example/workspace" },
                   },
@@ -1160,7 +1160,7 @@ const url = process.env.TEST_DATABASE_URL;
           state: closed ? "closed" : "open",
           merged: false,
           head: {
-            ref: `codex/repodesk-${task.id}`,
+            ref: `codex/telo-${task.id}`,
             sha: remoteHead,
             repo: { full_name: "example/workspace" },
           },
@@ -3390,7 +3390,7 @@ const url = process.env.TEST_DATABASE_URL;
       t.pr = {
         number: 43,
         url: "https://github.com/example/workspace/pull/43",
-        branch: `codex/repodesk-${t.id}`,
+        branch: `codex/telo-${t.id}`,
         headSha: "a".repeat(40),
       };
       await taskSave(sql, t);
@@ -3404,7 +3404,7 @@ const url = process.env.TEST_DATABASE_URL;
       t.pr = {
         number: 43,
         url: "https://github.com/example/workspace/pull/43",
-        branch: `codex/repodesk-${t.id}`,
+        branch: `codex/telo-${t.id}`,
         headSha: "a".repeat(40),
       };
       await taskSave(sql, t);
@@ -3627,7 +3627,7 @@ const url = process.env.TEST_DATABASE_URL;
     const pr = {
       number: 43,
       url: "https://github.com/example/workspace/pull/43",
-      branch: `codex/repodesk-${f.task.id}`,
+      branch: `codex/telo-${f.task.id}`,
       headSha: "a".repeat(40),
     };
     await store.change(f.w.id, async (_w, sql) => {
@@ -4894,7 +4894,7 @@ const url = process.env.TEST_DATABASE_URL;
         t.pr = {
           number: 43,
           url,
-          branch: `codex/repodesk-${t.id}`,
+          branch: `codex/telo-${t.id}`,
           headSha: "b".repeat(40),
         };
         t.state = state;

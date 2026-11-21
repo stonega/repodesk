@@ -332,7 +332,7 @@ function MiniApp() {
   return (
     <main className="mini-shell">
       <header className="mini-heading">
-        <span className="mini-eyebrow">RepoDesk · Codex</span>
+        <span className="mini-eyebrow">Telo · Codex</span>
         <h1>{history?.task.title || "Task conversation"}</h1>
         {history && (
           <>

@@ -1,7 +1,7 @@
 # Model metadata module
 
 This standalone module discovers model IDs, context/output limits and token prices
-without depending on RepoDesk's database, admin services, credentials or UI. Its
+without depending on Telo's database, admin services, credentials or UI. Its
 transport is injectable; deterministic tests supply HTTP fixtures. The bundled Pi
 catalogs are the only library dependency. `index.ts` exports its public API.
 
@@ -25,7 +25,7 @@ identify their source: `api`, `catalog` or `reference`. Missing prices remain
 omitted in discovery metadata. Application accounting defaults missing rates to
 zero, including with finite dollar budgets. APIs may return only some limits or prices.
 Callers store snapshots and choose refresh policy; there is no background poller
-or inference call. RepoDesk refreshes when saving a provider and pins the cached
+or inference call. Telo refreshes when saving a provider and pins the cached
 metadata with each chat run. Later edits never revalue historical runs.
 
 | Adapter | Live API data | Fallback / limits |
@@ -48,7 +48,7 @@ DeepSeek metadata keeps **Peak** and **Off-peak** prices, each with separate
 cache-hit input, cache-miss input and output rates. The reference was checked
 2026-10-14. Default accounting uses Peak conservatively. A caller can use
 `withPriceTier(metadata, "off_peak")` for an explicitly selected discounted estimate.
-RepoDesk's advanced chat model settings retain that choice. Holidays and requests
+Telo's advanced chat model settings retain that choice. Holidays and requests
 crossing rate boundaries make clock-only billing unreliable; verified-charge
 reconciliation remains the source for actual discounted billing.
 

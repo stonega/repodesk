@@ -68,9 +68,7 @@ const url = process.env.TEST_DATABASE_URL;
         username: "packageoperator",
         operator: true,
       };
-      directory = await mkdtemp(
-        join(tmpdir(), "repodesk-package-integration-"),
-      );
+      directory = await mkdtemp(join(tmpdir(), "telo-package-integration-"));
     });
     afterAll(async () => {
       await store?.pool.end();
@@ -173,7 +171,7 @@ const url = process.env.TEST_DATABASE_URL;
           method,
           headers: {
             origin,
-            cookie: `repodesk_session=${credentials.raw}`,
+            cookie: `telo_session=${credentials.raw}`,
             "x-csrf-token": credentials.csrf,
             "content-type": "application/json",
             ...headers,

@@ -24,7 +24,7 @@ const url = process.env.TEST_DATABASE_URL;
   "Qwen3-ASR plugin (isolated PostgreSQL)",
   () => {
     const root = database(url ?? "postgres://unused@localhost/unused");
-    const name = `repodesk_audio_${randomUUID().replaceAll("-", "")}`;
+    const name = `telo_audio_${randomUUID().replaceAll("-", "")}`;
     const origin = "http://localhost:3000";
     let store: Store;
     let service: TranscriptionService;
@@ -97,7 +97,7 @@ const url = process.env.TEST_DATABASE_URL;
         {
           method,
           headers: {
-            cookie: `deepx_session=${auth.raw}`,
+            cookie: `telo_session=${auth.raw}`,
             origin,
             "x-csrf-token": auth.csrf,
             "content-type": "application/json",

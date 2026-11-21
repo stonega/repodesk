@@ -129,7 +129,7 @@ export class BrowserEgress {
     const server = createServer(async (req, res) => {
       if (!this.authorized(req)) {
         res.writeHead(407, {
-          "proxy-authenticate": 'Basic realm="RepoDesk Browser"',
+          "proxy-authenticate": 'Basic realm="Telo Browser"',
         });
         res.end();
         return;
@@ -192,7 +192,7 @@ export class BrowserEgress {
       client.on("error", () => {});
       if (!this.authorized(req)) {
         client.end(
-          'HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm="RepoDesk Browser"\r\n\r\n',
+          'HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm="Telo Browser"\r\n\r\n',
         );
         return;
       }
@@ -246,7 +246,7 @@ export class BrowserEgress {
       client.on("error", () => {});
       if (!this.authorized(req)) {
         client.end(
-          'HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm="RepoDesk Browser"\r\n\r\n',
+          'HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm="Telo Browser"\r\n\r\n',
         );
         return;
       }

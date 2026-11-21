@@ -40,7 +40,7 @@ const url = process.env.TEST_DATABASE_URL,
   "Browser production plugin and private continuations",
   () => {
     const root = database(url ?? "postgres://unused@localhost/unused"),
-      name = `repodesk_browser_plugin_${randomUUID().replaceAll("-", "")}`;
+      name = `telo_browser_plugin_${randomUUID().replaceAll("-", "")}`;
     let store: Store,
       setup: SetupService,
       browser: BrowserService,
@@ -909,7 +909,7 @@ const url = process.env.TEST_DATABASE_URL,
       const app = createApp(store, setup, origin, plugins, undefined, key);
       const response = await app.request(
         `/api/admin/workspaces/${w.id}/runs/${run.id}`,
-        { headers: { cookie: `repodesk_session=${auth.raw}` } },
+        { headers: { cookie: `telo_session=${auth.raw}` } },
       );
       expect(response.status).toBe(200);
       expect(await response.text()).not.toContain(
@@ -1268,7 +1268,7 @@ const url = process.env.TEST_DATABASE_URL,
         headers: {
           origin,
           "content-type": "application/json",
-          cookie: `repodesk_session=${auth.raw}`,
+          cookie: `telo_session=${auth.raw}`,
         },
         body: JSON.stringify({ initData: "", reference }),
       });
@@ -1555,9 +1555,7 @@ const url = process.env.TEST_DATABASE_URL,
     });
     test("a granted file plugin uses the same broker and resumes its original tool; revocation removes access", async () => {
       const { w, run } = await seed("Use my plugin browser");
-      const directory = await mkdtemp(
-          join(tmpdir(), "repodesk-browser-plugin-"),
-        ),
+      const directory = await mkdtemp(join(tmpdir(), "telo-browser-plugin-")),
         path = join(directory, "browser-helper.mjs");
       try {
         await writeFile(

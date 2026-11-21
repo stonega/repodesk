@@ -10,16 +10,12 @@ const host = await import(
   new URL("../../scripts/update-host.mjs", import.meta.url).href
 );
 const now = Date.parse("2026-10-10T12:00:00Z");
-const repositories = [
-  "repodesk",
-  "repodesk-codex-job",
-  "repodesk-codex-supervisor",
-];
+const repositories = ["telo", "telo-codex-job", "telo-codex-supervisor"];
 const commit = (n: number) => n.toString(16).padStart(40, "0");
-const tag = (n: number, repository = "repodesk") =>
+const tag = (n: number, repository = "telo") =>
   `${repository}:release-${commit(n)}`;
 type Image = { id: string; created: string; tags: string[] };
-const image = (n: number, repository = "repodesk", age = n): Image => ({
+const image = (n: number, repository = "telo", age = n): Image => ({
   id: `sha256:${(n * 10 + repositories.indexOf(repository)).toString(16).padStart(64, "0")}`,
   created: new Date(now - age * 86400000).toISOString(),
   tags: [tag(n, repository)],
@@ -33,16 +29,16 @@ test("Code Truth release images remain part of complete rollback sets", () => {
   const codeTruth = [1, 2, 3, 4, 5, 6].map((n) => ({
     ...image(n),
     id: `sha256:${(n * 10 + 3).toString(16).padStart(64, "0")}`,
-    tags: [tag(n, "repodesk-code-truth")],
+    tags: [tag(n, "telo-code-truth")],
   }));
   const plan = cleanup.planReleaseCleanup(
     [
       ...releases,
       ...codeTruth.filter(
-        (value) => !value.tags.includes(tag(1, "repodesk-code-truth")),
+        (value) => !value.tags.includes(tag(1, "telo-code-truth")),
       ),
     ],
-    [...current, tag(5, "repodesk-code-truth")],
+    [...current, tag(5, "telo-code-truth")],
     [],
     now,
   );
@@ -50,13 +46,13 @@ test("Code Truth release images remain part of complete rollback sets", () => {
   // Release 1 lacks its service image and cannot displace a complete rollback.
   for (const n of [2, 3, 5]) {
     expect(removed).not.toContain(tag(n));
-    expect(removed).not.toContain(tag(n, "repodesk-code-truth"));
+    expect(removed).not.toContain(tag(n, "telo-code-truth"));
   }
-  expect(removed).toContain(tag(4, "repodesk-code-truth"));
+  expect(removed).toContain(tag(4, "telo-code-truth"));
 });
 
 test("cleanup retains current release even when older, two complete sets and every container reference", () => {
-  const referenced = image(6, "repodesk-codex-job");
+  const referenced = image(6, "telo-codex-job");
   const plan = cleanup.planReleaseCleanup(
     releases,
     current,
@@ -68,17 +64,17 @@ test("cleanup retains current release even when older, two complete sets and eve
       ...repositories.map((repository) => tag(3, repository)),
       ...repositories.map((repository) => tag(4, repository)),
       tag(6),
-      tag(6, "repodesk-codex-supervisor"),
+      tag(6, "telo-codex-supervisor"),
     ].sort(),
   );
 });
 
 test("fresh and partial builds cannot evict complete rollback sets or delete an aliased retained image", () => {
-  const partial = image(7, "repodesk", 0.1);
+  const partial = image(7, "telo", 0.1);
   const retainedAlias = { ...image(2), tags: [tag(2), tag(9)] };
   const unrelated = {
     ...image(10),
-    tags: ["other-app:release", "repodesk:local"],
+    tags: ["other-app:release", "telo:local"],
   };
   const images = [
     ...releases.filter((value) => value.id !== retainedAlias.id),
@@ -99,7 +95,7 @@ test("fresh and partial builds cannot evict complete rollback sets or delete an 
 
 test("cleanup rejects missing current images and malformed metadata before proposing deletion", () => {
   expect(() =>
-    cleanup.planReleaseCleanup(releases, ["repodesk:latest"], [], now),
+    cleanup.planReleaseCleanup(releases, ["telo:latest"], [], now),
   ).toThrow();
   expect(() =>
     cleanup.planReleaseCleanup(releases, [tag(99)], [], now),
@@ -107,7 +103,7 @@ test("cleanup rejects missing current images and malformed metadata before propo
   expect(() =>
     cleanup.planReleaseCleanup(
       releases,
-      [tag(1), tag(2, "repodesk-codex-job")],
+      [tag(1), tag(2, "telo-codex-job")],
       [],
       now,
     ),
@@ -123,14 +119,14 @@ test("cleanup rejects missing current images and malformed metadata before propo
 });
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "repodesk-cleanup-"));
+  const root = await mkdtemp(join(tmpdir(), "telo-cleanup-"));
   const directory = join(root, "releases", "123-1");
   await mkdir(directory, { recursive: true });
   await writeFile(join(root, ".current-release"), "123-1\n");
   for (const [name, repository] of [
-    ["image-tag", "repodesk"],
-    ["codex-job-tag", "repodesk-codex-job"],
-    ["codex-supervisor-tag", "repodesk-codex-supervisor"],
+    ["image-tag", "telo"],
+    ["codex-job-tag", "telo-codex-job"],
+    ["codex-supervisor-tag", "telo-codex-supervisor"],
   ])
     await writeFile(join(directory, name ?? ""), tag(5, repository));
   return root;
@@ -209,7 +205,7 @@ test("apply rechecks changed tags and new container references, and only prunes 
 });
 
 test("storage lock excludes overlapping maintenance, releases on errors, and fences updater execution", async () => {
-  const root = await mkdtemp(join(tmpdir(), "repodesk-cleanup-lock-"));
+  const root = await mkdtemp(join(tmpdir(), "telo-cleanup-lock-"));
   try {
     await cleanup.withStorageLock(root, async () => {
       expect(
@@ -230,13 +226,13 @@ test("storage lock excludes overlapping maintenance, releases on errors, and fen
     await host.processRequest(
       {
         requestId: crypto.randomUUID(),
-        repository: "stonega/repodesk",
+        repository: "stonega/telo",
         releaseId: 42,
         tag: "v0.1.34",
         commit: commit(5),
         fingerprint: "a".repeat(64),
       },
-      { root, project: "repodesk", repository: "stonega/repodesk" },
+      { root, project: "telo", repository: "stonega/telo" },
       async () => {
         ran = true;
         expect(
@@ -253,7 +249,7 @@ test("storage lock excludes overlapping maintenance, releases on errors, and fen
 });
 
 test("an updater waiting for cleanup enters only after maintenance releases its lock", async () => {
-  const root = await mkdtemp(join(tmpdir(), "repodesk-cleanup-wait-"));
+  const root = await mkdtemp(join(tmpdir(), "telo-cleanup-wait-"));
   let release: () => void = () => {};
   let entered: () => void = () => {};
   const gate = new Promise<void>((accept) => {
@@ -290,7 +286,7 @@ test("an updater waiting for cleanup enters only after maintenance releases its 
 });
 
 async function ciFixture(labels: string, failPrune = false) {
-  const root = await mkdtemp(join(tmpdir(), "repodesk-ci-cleanup-"));
+  const root = await mkdtemp(join(tmpdir(), "telo-ci-cleanup-"));
   await writeFile(
     join(root, "docker"),
     `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> "$CLEANUP_COMMAND_LOG"\nif [[ "$*" == *' info '* ]]; then\n  printf '%s\\n' '${labels}'\nelse\n  exit ${failPrune ? 1 : 0}\nfi\n`,
@@ -323,7 +319,7 @@ test("CI hook refuses production daemon; isolated cleanup uses only its own sock
   const rejected = await ciFixture("[]");
   expect(rejected.code).toBe(1);
   expect(rejected.commands).not.toContain("prune");
-  const accepted = await ciFixture('["repodesk.ci=true"]');
+  const accepted = await ciFixture('["telo.ci=true"]');
   expect(accepted.code).toBe(0);
   expect(accepted.commands.trim().split("\n")).toEqual([
     "--host unix:///var/run/docker.sock info --format {{json .Labels}}",
@@ -334,7 +330,7 @@ test("CI hook refuses production daemon; isolated cleanup uses only its own sock
 });
 
 test("CI prune failures are visible, retryable, and do not turn completed jobs into failures", async () => {
-  const result = await ciFixture('["repodesk.ci=true"]', true);
+  const result = await ciFixture('["telo.ci=true"]', true);
   expect(result.code).toBe(0);
   expect(result.output).toContain("failed or timed out");
   expect(result.commands).toContain("volume prune");

@@ -24,7 +24,7 @@ const failures = [
 ] as const;
 for (const [output, code] of failures) {
   test(`device login reports ${code} without raw output or cross-workspace state`, async () => {
-    const dir = await mkdtemp(join(tmpdir(), "repodesk-device-error-"));
+    const dir = await mkdtemp(join(tmpdir(), "telo-device-error-"));
     const workspace = randomUUID();
     try {
       const executable = join(dir, "codex");
@@ -71,7 +71,7 @@ for (const [output, code] of failures) {
   });
 }
 test("failed sign-in preserves the sealed auth-required generation for paused tasks", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-device-preserve-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-device-preserve-"));
   try {
     const executable = join(dir, "codex");
     await writeFile(
@@ -108,7 +108,7 @@ test("failed sign-in preserves the sealed auth-required generation for paused ta
 });
 
 test("disconnect terminates the launcher and its native child without affecting another workspace", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-device-process-group-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-device-process-group-"));
   const executable = join(dir, "codex");
   const auth = new DeviceAuth(
     runnerSettings.parse({

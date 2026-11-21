@@ -160,7 +160,7 @@ export function GitHubSetup({
           "POST",
           {
             owner: "personal",
-            name: "repodesk",
+            name: "telo",
             public: false,
             source: "setup",
           },

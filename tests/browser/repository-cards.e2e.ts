@@ -14,7 +14,7 @@ const repositories = Array.from({ length: 7 }, (_, index) => ({
 
 async function fixture(page: Page, theme: "light" | "dark") {
   await page.addInitScript((value) => {
-    localStorage.setItem("repodesk.theme", value);
+    localStorage.setItem("telo.theme", value);
   }, theme);
   const coding: CodingPage = {
     revision: 1,
@@ -180,7 +180,7 @@ for (const width of [1280, 390]) {
       await expect(view).toHaveCSS("border-top-width", "0px");
       await expect(page.getByRole("article")).toHaveCount(0);
       await page.screenshot({
-        path: `/tmp/repodesk-repository-cards-members-${width}-${theme}.png`,
+        path: `/tmp/telo-repository-cards-members-${width}-${theme}.png`,
         fullPage: true,
       });
       await view.click();
@@ -192,7 +192,7 @@ for (const width of [1280, 390]) {
         memberDialog.getByRole("article").first(),
       );
       await page.screenshot({
-        path: `/tmp/repodesk-repository-cards-member-modal-${width}-${theme}.png`,
+        path: `/tmp/telo-repository-cards-member-modal-${width}-${theme}.png`,
       });
       await page.keyboard.press("Escape");
       await page.goto(`/admin/overview?workspace=${workspaceId}`);
@@ -205,7 +205,7 @@ for (const width of [1280, 390]) {
       await github.getByRole("button", { name: "2 more" }).click();
       await expect(github.getByRole("article")).toHaveCount(7);
       await page.screenshot({
-        path: `/tmp/repodesk-repository-cards-github-${width}-${theme}.png`,
+        path: `/tmp/telo-repository-cards-github-${width}-${theme}.png`,
       });
       await page.keyboard.press("Escape");
 
@@ -245,7 +245,7 @@ for (const width of [1280, 390]) {
           ),
         ).toBe(true);
         await page.screenshot({
-          path: `/tmp/repodesk-repository-cards-${route}-${width}-${theme}.png`,
+          path: `/tmp/telo-repository-cards-${route}-${width}-${theme}.png`,
           fullPage: true,
         });
         await card.getByRole("button", { name: edit, exact: true }).click();

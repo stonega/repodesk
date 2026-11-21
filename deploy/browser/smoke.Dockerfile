@@ -14,10 +14,10 @@ FROM node:24-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d4
 FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852 AS nft-compatibility
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 RUN apt-get update && apt-get install -y --no-install-recommends nftables ca-certificates libatomic1 libstdc++6 && rm -rf /var/lib/apt/lists/*
-COPY --from=build /package/ /opt/repodesk-browser/
-COPY --from=build /build/browser-firewall-smoke.js /opt/repodesk-browser/
+COPY --from=build /package/ /opt/telo-browser/
+COPY --from=build /build/browser-firewall-smoke.js /opt/telo-browser/
 # Ubuntu 24.04 nft rejects Node socket stdin. Run the real production firewall.
-CMD ["node", "/opt/repodesk-browser/browser-firewall-smoke.js"]
+CMD ["node", "/opt/telo-browser/browser-firewall-smoke.js"]
 FROM node-runtime AS headed-smoke
 # Bootstrap apt HTTPS from Node's bundled public roots; ca-certificates maintains
 # the system trust store after installation.
@@ -26,9 +26,9 @@ RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.l
     && apt-get -o APT::Update::Error-Mode=any -o Acquire::Retries=2 -o Acquire::https::Timeout=30 update && apt-get install -y --no-install-recommends \
     ca-certificates chromium chromium-sandbox xvfb xauth dbus-daemon dbus-x11 nftables passwd procps fonts-liberation x11-utils \
     && rm -rf /var/lib/apt/lists/*
-WORKDIR /opt/repodesk
+WORKDIR /opt/telo
 COPY --from=build /package/ ./
 COPY --from=build /build/dist/browser-host-smoke.js ./
 COPY --from=build /build/deploy/browser/install-smoke.sh ./
-ENV BROWSER_EXECUTABLE=/usr/bin/chromium BROWSER_HOST_ROOT=/var/lib/repodesk-browser
+ENV BROWSER_EXECUTABLE=/usr/bin/chromium BROWSER_HOST_ROOT=/var/lib/telo-browser
 CMD ["node", "browser-host-smoke.js"]

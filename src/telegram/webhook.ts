@@ -1191,7 +1191,7 @@ export class Ingress {
       case "start":
       case "help":
         reply(
-          `RepoDesk · ${w.settings.name}\nTimezone: ${w.settings.timezone}\nTell me what you want to do in your own words. Ask me to choose a repository, connect your GitHub or Google account, check or stop a task, manage schedules, remember an instruction, show usage, change settings or explain privacy. Account connections are private; sign-in and approval buttons appear when needed.\nIn groups, mention me or reply to me. In private Topics, send messages directly to continue; use separate Telegram Topics for separate conversations. Outside Topics, reply to a previous message to continue it. You can send additional details while I work, or use Telegram Stop. Send supported photos, recordings, text/code files or PDFs with your request. Access and shared integrations are managed in the admin panel.`,
+          `Telo · ${w.settings.name}\nTimezone: ${w.settings.timezone}\nTell me what you want to do in your own words. Ask me to choose a repository, connect your GitHub or Google account, check or stop a task, manage schedules, remember an instruction, show usage, change settings or explain privacy. Account connections are private; sign-in and approval buttons appear when needed.\nIn groups, mention me or reply to me. In private Topics, send messages directly to continue; use separate Telegram Topics for separate conversations. Outside Topics, reply to a previous message to continue it. You can send additional details while I work, or use Telegram Stop. Send supported photos, recordings, text/code files or PDFs with your request. Access and shared integrations are managed in the admin panel.`,
         );
         break;
       case "workspace":

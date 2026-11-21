@@ -76,7 +76,7 @@ function fixture() {
   } as unknown as typeof import("@alibaba-group/opensandbox");
   const driver = new OpenSandboxDriver(settings, async () => sdk);
   const spec: SandboxLaunch = {
-    name: `deepx-codex-${"a".repeat(32)}-implement`,
+    name: `telo-codex-${"a".repeat(32)}-implement`,
     image: "trusted:local",
     cpus: 2,
     memoryMb: 4096,
@@ -181,7 +181,7 @@ test("cleanup verifies ownership even when a remote metadata filter returns anot
   f.entries([
     {
       id: "sandbox-id",
-      metadata: { ...f.metadata(), "repodesk-owner": "another-tenant" },
+      metadata: { ...f.metadata(), "telo-owner": "another-tenant" },
       status: { state: "Running" },
     },
   ]);

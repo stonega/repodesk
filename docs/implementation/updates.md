@@ -35,19 +35,19 @@ Compose topology or local build overlay. See the VPS guide first.
 On the provisioned host, copy the checked-in daemon and service template:
 
 ```sh
-sudo install -d -m 700 /opt/repodesk/updater
-sudo install -m 700 scripts/update-host.mjs /opt/repodesk/updater/update-host.mjs
-sudo install -m 700 scripts/cleanup-host.mjs /opt/repodesk/updater/cleanup-host.mjs
+sudo install -d -m 700 /opt/telo/updater
+sudo install -m 700 scripts/update-host.mjs /opt/telo/updater/update-host.mjs
+sudo install -m 700 scripts/cleanup-host.mjs /opt/telo/updater/cleanup-host.mjs
 # The app image's node user is UID/GID 1000. Root daemon can read its private queue.
-sudo install -d -o 1000 -g 1000 -m 700 /opt/repodesk/updates /opt/repodesk/updates/requests
-sudo install -m 644 deploy/updates/repodesk-updater.service /etc/systemd/system/repodesk-updater.service
+sudo install -d -o 1000 -g 1000 -m 700 /opt/telo/updates /opt/telo/updates/requests
+sudo install -m 644 deploy/updates/telo-updater.service /etc/systemd/system/telo-updater.service
 # Edit root, project, repository, Node path and service user for this installation.
 sudo systemctl daemon-reload
-sudo systemctl enable --now repodesk-updater
+sudo systemctl enable --now telo-updater
 ```
 
 When upgrading an installation whose updater predates bundled Code Truth, copy
-both current `.mjs` files as above and restart `repodesk-updater` before requesting
+both current `.mjs` files as above and restart `telo-updater` before requesting
 the release. The older daemon builds only three images, and the new cutover
 rejects its missing `code-truth-tag` before stopping existing services. Do not
 replace an updater during an active installation.
@@ -60,14 +60,14 @@ app's UID-1000 queue and write the host releases/backups. Do not grant Docker
 socket access to the web app. Only the existing trusted Codex supervisor keeps it.
 
 The base Compose app mounts `<deployment root>/updates` at
-`/var/lib/repodesk-updates`. This contains requests, results and an updater
+`/var/lib/telo-updates`. This contains requests, results and an updater
 heartbeat. Keep the deployment root and Compose project identical to the running
 stack so its database and Codex volumes are preserved. Restart the app once with
 the new Compose configuration after provisioning. For a direct Node app set
-`UPDATES_DIRECTORY=/opt/repodesk/updates`; it must reach this same queue.
+`UPDATES_DIRECTORY=/opt/telo/updates`; it must reach this same queue.
 
 Set `UPDATES_GITHUB_REPOSITORY=owner/repository` for a fork; the service's last
-argument must match. Default: `stonega/repodesk`. Public repositories work without
+argument must match. Default: `stonega/telo`. Public repositories work without
 a token. An optional fine-grained **Contents: read / Actions: read** token can
 increase API limits or read private source/CI. Store it in the host's protected
 `.env` for the app (`UPDATES_GITHUB_TOKEN`), or use a private mounted file for a
@@ -113,7 +113,7 @@ before publishing the release or retrying installation:
 node --input-type=module -e '
   import { requireVerifiedCommit } from "./scripts/update-host.mjs";
   await requireVerifiedCommit({
-    repository: "stonega/repodesk", commit: process.argv[1],
+    repository: "stonega/telo", commit: process.argv[1],
   }, process.env.UPDATES_GITHUB_TOKEN);
   console.log("Release verification passed.");
 ' "$release_commit"
@@ -163,7 +163,7 @@ the direct local-image path takes effect in a release containing this correction
 The modal polls queued/running/completed/failed status and offers Reload after
 success. Installed version is checked after reload, separately from daemon
 completion. Host logs are at `updates/logs/<request UUID>.log` (private); service
-health is available through `systemctl status repodesk-updater` and `journalctl`.
+health is available through `systemctl status telo-updater` and `journalctl`.
 Queue/result files contain release metadata, not secrets or conversation contents.
 
 A failed job shows an explicit **Retry update** action after the operator reviews
@@ -180,7 +180,7 @@ images through an operator policy; successful source checkouts are removed.
 GitHub, host commands and queue fixtures. Host provisioning and a direct VPS
 cutover were verified on 2026-10-09 for `cfffdfc` (v0.1.32), including public
 readiness and queue access from the app. This host uses
-`/opt/repodesk/updater/node` (v24.21.0, extracted from the verified app image) in
+`/opt/telo/updater/node` (v24.21.0, extracted from the verified app image) in
 its installed service instead of a global Node installation. The in-app v0.1.34
 retry succeeded on 2026-10-10 after recovering disk capacity, and the reloaded
 browser showed v0.1.34. That release used the original archive path; installing

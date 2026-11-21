@@ -108,7 +108,7 @@ test("diagnostics keep bounded field paths and codes without private names or va
 });
 
 async function fixture(scenario: string) {
-  const dir = await mkdtemp(join(tmpdir(), "repodesk-result-correction-"));
+  const dir = await mkdtemp(join(tmpdir(), "telo-result-correction-"));
   dirs.push(dir);
   const script = join(dir, "server.cjs"),
     requests = join(dir, "requests.json");

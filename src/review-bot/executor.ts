@@ -684,8 +684,7 @@ export class ReviewExecutor {
         task.mode === "fix"
           ? "Working on the requested changes and checks…"
           : "Reviewing the PR…",
-      auth_required:
-        "This task is paused until Codex is reconnected in RepoDesk.",
+      auth_required: "This task is paused until Codex is reconnected in Telo.",
       waiting: `I need your input: ${task.result?.question ?? "Please clarify the requested change."}\nReply here and mention the bot to continue.`,
       ready:
         task.mode === "fix"
@@ -693,7 +692,7 @@ export class ReviewExecutor {
           : "Preparing the review result…",
       publishing: "Publishing the result…",
       completed: task.result?.summary ?? "Your request is complete.",
-      failed: `I couldn’t finish this request (${task.error ?? "review_failed"}). Check the task in RepoDesk before retrying.`,
+      failed: `I couldn’t finish this request (${task.error ?? "review_failed"}). Check the task in Telo before retrying.`,
       cancelled: "This task has stopped.",
       unknown: task.publicationReserved
         ? "The publication outcome needs an operator’s check. I will not repeat the write automatically."

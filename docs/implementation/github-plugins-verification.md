@@ -7,7 +7,7 @@ See [delivery ledger](github-plugins-plan.md) and [design decisions](../design/g
 ## Source and toolchain
 
 Implementation started from `4bde2fc` in the separate
-`/home/stone/Web/repodesk-plugin-system` worktree to preserve concurrent changes.
+`/home/stone/Web/telo-plugin-system` worktree to preserve concurrent changes.
 It was rebased onto fetched `origin/main` `44f32bd`, retaining the unified
 `pluginRuntime` composition and Pi **1.5.2**. Application/worker share that factory;
 the worker receives an HTTP runner client, never Docker access.

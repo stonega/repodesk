@@ -1,9 +1,9 @@
 ---
-name: repodesk-obsidian
+name: telo-obsidian
 description: Manage shared organization knowledge in the default Obsidian vault.
 ---
 
-# RepoDesk Obsidian
+# Telo Obsidian
 
 Use obsidian_query and obsidian_read for organization notes and their link graph.
 Follow nextOffset for complete searches. Cite the note path and heading in answers;

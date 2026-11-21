@@ -3,7 +3,7 @@
 @workspace = REPLACE_WORKSPACE_UUID
 @request = REPLACE_REQUEST_UUID
 @member = REPLACE_TELEGRAM_USER_ID
-@cookie = repodesk_session=REPLACE_SESSION
+@cookie = telo_session=REPLACE_SESSION
 @csrf = REPLACE_CSRF
 
 ### Member API returns membership version and paginated Telegram profiles

@@ -23,7 +23,7 @@ const url = process.env.TEST_DATABASE_URL;
   "GitHub member directory and admin associations",
   () => {
     const root = database(url ?? "postgres://unused@localhost/unused");
-    const name = `repodesk_members_${randomUUID().replaceAll("-", "")}`;
+    const name = `telo_members_${randomUUID().replaceAll("-", "")}`;
     const origin = "http://localhost:3000";
     let store: Store;
     let app: ReturnType<typeof createApp>;
@@ -138,7 +138,7 @@ const url = process.env.TEST_DATABASE_URL;
       app.request(`/api/admin/workspaces/${w.id}/${path}`, {
         method,
         headers: {
-          cookie: `repodesk_session=${auth.raw}`,
+          cookie: `telo_session=${auth.raw}`,
           origin,
           "x-csrf-token": auth.csrf,
           "content-type": "application/json",

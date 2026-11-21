@@ -14,7 +14,7 @@
     "noFallthroughCasesInSwitch": true,
     "allowImportingTsExtensions": true,
     "paths": {
-      "@repodesk/plugin-sdk": ["./sdk/plugin/index.ts"]
+      "@telo/plugin-sdk": ["./sdk/plugin/index.ts"]
     }
   },
   "include": [

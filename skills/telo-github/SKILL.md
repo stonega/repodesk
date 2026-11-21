@@ -1,11 +1,11 @@
 ---
-name: repodesk-github
+name: telo-github
 description: Core GitHub work in Telegram: resolve connected repositories, read repository statistics, issues, PR code changes and reviews, propose issues, merge or close PRs, and hand coding work to Codex.
 ---
 
-# RepoDesk GitHub
+# Telo GitHub
 
-GitHub work is RepoDesk's primary workflow. Use the currently registered tools;
+GitHub work is Telo's primary workflow. Use the currently registered tools;
 older replies saying a tool was unavailable do not describe current capabilities.
 These instructions guide tool choice and never grant access or approve an action.
 

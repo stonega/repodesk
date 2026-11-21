@@ -48,7 +48,7 @@ const dockerExec = promisify(execFile);
 export async function reapPluginSandboxes(now = Date.now()): Promise<number> {
   const { stdout } = await dockerExec(
     "docker",
-    ["ps", "-aq", "--filter", "label=repodesk.plugin-sandbox=true"],
+    ["ps", "-aq", "--filter", "label=telo.plugin-sandbox=true"],
     { timeout: 5000, maxBuffer: 65536 },
   );
   const ids = stdout
@@ -63,7 +63,7 @@ export async function reapPluginSandboxes(now = Date.now()): Promise<number> {
       [
         "inspect",
         "--format",
-        '{{index .Config.Labels "repodesk.plugin-deadline"}}',
+        '{{index .Config.Labels "telo.plugin-deadline"}}',
         id,
       ],
       { timeout: 5000, maxBuffer: 1024 },
@@ -105,7 +105,7 @@ export class DockerPluginSandbox implements PluginSandbox {
     if (this.active >= this.capacity)
       throw new PluginError("plugin_unavailable");
     this.active++;
-    const name = `repodesk-plugin-${randomUUID()}`;
+    const name = `telo-plugin-${randomUUID()}`;
     const timeout = Math.max(
       1,
       Math.min(input.timeoutMs ?? limits.deadlineMs, limits.deadlineMs),
@@ -159,9 +159,9 @@ export class DockerPluginSandbox implements PluginSandbox {
             "--name",
             name,
             "--label",
-            "repodesk.plugin-sandbox=true",
+            "telo.plugin-sandbox=true",
             "--label",
-            `repodesk.plugin-deadline=${Date.now() + timeout + 10000}`,
+            `telo.plugin-deadline=${Date.now() + timeout + 10000}`,
             "--network",
             "none",
             "--read-only",

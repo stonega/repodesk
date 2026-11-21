@@ -2,13 +2,13 @@
 # Trusted local Pi extensions
 
 Build a custom tool as a Pi extension file, keep its source in a GitHub repository,
-and give a reviewed version to a RepoDesk deployment operator for installation.
+and give a reviewed version to a Telo deployment operator for installation.
 One repository can contain one plugin with several tools and optional instruction
 skills. This guide walks through a small word-count plugin.
 
 This guide covers trusted local-file registration. The local-file path does not
 clone repositories or run npm installation/build scripts. For the separately
-configured isolated package profile and its `repodesk.plugin.json` manifest, see
+configured isolated package profile and its `telo.plugin.json` manifest, see
 [GitHub plugin development](plugin-development.md).
 
 File plugins run inside the worker process with its operating-system permissions.
@@ -19,14 +19,14 @@ application services that enforce actor, scope, destination, approval and recove
 
 ## Before you start
 
-You need Bun for authoring and a test RepoDesk deployment whose operator can mount
+You need Bun for authoring and a test Telo deployment whose operator can mount
 files and manage **Workspace → Plugins**. Workspace administrators and ordinary
 members cannot register executable plugins.
 
 The example uses Bun **1.3.14**, Pi **1.5.2** and TypeBox **1.3.7**. Match the Pi
 types to the version used by your target deployment. Upstream Pi supports features
-outside RepoDesk's headless subset; use the compatibility section below when
-choosing APIs. Bun builds and tests the plugin; Node runs it in RepoDesk.
+outside Telo's headless subset; use the compatibility section below when
+choosing APIs. Bun builds and tests the plugin; Node runs it in Telo.
 
 For reusable instructions without executable code, use a [skill](skills.md).
 Skills can request existing tools but cannot install or authorize a new tool.
@@ -36,7 +36,7 @@ Skills can request existing tools but cannot install or authorize a new tool.
 Use a small layout:
 
 ```text
-repodesk-word-count/
+telo-word-count/
 ├── src/index.ts
 ├── tests/word-count.test.ts
 ├── package.json
@@ -53,7 +53,7 @@ Create `package.json`:
 
 ```json
 {
-  "name": "repodesk-word-count",
+  "name": "telo-word-count",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -198,17 +198,17 @@ node --check dist/plugin.mjs
 The build targets Node and bundles dependencies into `dist/plugin.mjs`. Keep the
 output readable for operator review. Do not use Bun-only runtime APIs in handlers.
 These unit tests check counting behavior; installation and a test bot run still
-need verification against the target RepoDesk version.
+need verification against the target Telo version.
 
 Commit the source and lockfile, tag the reviewed version and provide the generated
 bundle through the repository or a GitHub release. In the README record:
 
 - Purpose, exact registered tool names and input/output limits.
-- Compatible RepoDesk/Pi versions and the required Bun version.
+- Compatible Telo/Pi versions and the required Bun version.
 - Build/test commands, runtime dependencies and any data sent to external services.
 - Source commit, package version and how the operator can obtain the reviewed bundle.
 
-The package version helps release tracking. RepoDesk uses the version entered in
+The package version helps release tracking. Telo uses the version entered in
 the plugin registration and does not read it automatically from `package.json`.
 
 ## 4. Install in a test workspace
@@ -280,7 +280,7 @@ disablement before sharing it more widely. Avoid logging private test messages.
 
 ## Compatibility and access
 
-RepoDesk supports a headless subset of Pi's extension API:
+Telo supports a headless subset of Pi's extension API:
 
 | API | Supported behavior |
 | --- | --- |
@@ -300,7 +300,7 @@ execution through `context.tools` or `context.executeTool` are unsupported. Do n
 use `pi.exec`, ambient credentials, direct Telegram sends or filesystem side effects.
 An upstream Pi extension must be reviewed against these limits before installation.
 
-Keep workspace-specific state inside the factory. RepoDesk creates it for each
+Keep workspace-specific state inside the factory. Telo creates it for each
 invocation, but Node and imported modules can cache module globals. A module global
 must never hold tenant data, conversation contents or another member's credentials.
 Do not treat model-supplied workspace/user IDs as authorization.
@@ -322,7 +322,7 @@ services or fail because an optional connection is unavailable.
 To update, build and review a new version, place it at a new versioned path, and
 save the new path/version in the panel. Keep the previous artifact until the
 operator no longer needs it for diagnosis or a reviewed replacement. Do not
-overwrite enabled code and expect RepoDesk to accept changed bytes automatically.
+overwrite enabled code and expect Telo to accept changed bytes automatically.
 
 Entry-file hashes are checked before loading. Imported dependencies are not
 recursively hashed; bundling keeps this example's executable dependencies in the
@@ -347,7 +347,7 @@ retry loops, and inspect the original run before starting replacement work.
 | File changed | Review the new bytes, update the plugin version and save the reviewed registration |
 | Tool absent | Check the selected workspace, enablement, declared names and factory registration |
 | Tool collision | Choose a name distinct from built-ins and every other enabled plugin |
-| Plugin loads in Pi but fails in RepoDesk | Remove unsupported APIs, dynamic registration or top-level service checks |
+| Plugin loads in Pi but fails in Telo | Remove unsupported APIs, dynamic registration or top-level service checks |
 | Tool execution fails | Inspect the run's fixed diagnostic code and reproduce with synthetic input in tests |
 | Old run stops after an update | Review its state; new configuration does not replace its pinned catalog |
 
@@ -360,6 +360,6 @@ For upstream API and build details, consult the
 [Pi extension reference for 1.5.2](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/docs/extensions.md),
 [Bun bundler reference](https://bun.sh/docs/bundler) and
 [Docker Compose multiple-file reference](https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/).
-RepoDesk's supported subset above governs compatibility with this application.
+Telo's supported subset above governs compatibility with this application.
 
 For the separate repository-package preview, see [GitHub plugin development](plugin-development.md).

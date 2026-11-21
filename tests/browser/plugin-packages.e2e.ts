@@ -9,7 +9,7 @@ import type {
 const workspaceId = "d2ce2eab-3b09-4e8e-858e-75c20d832517";
 const base = `/api/admin/workspaces/${workspaceId}/plugin-packages`;
 const manifest = JSON.parse(
-  readFileSync("examples/plugins/word-count/repodesk.plugin.json", "utf8"),
+  readFileSync("examples/plugins/word-count/telo.plugin.json", "utf8"),
 );
 function entry(): PublicPackageInstallation {
   return {
@@ -42,7 +42,7 @@ function entry(): PublicPackageInstallation {
     source: {
       repositoryId: 777,
       ownerId: 42,
-      repository: "example/repodesk-word-count",
+      repository: "example/telo-word-count",
       ref: "v0.1.0",
       commit: "a".repeat(40),
       private: false,
@@ -168,7 +168,7 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     if (width === 390)
       await page.addInitScript(() =>
-        localStorage.setItem("repodesk.theme", "dark"),
+        localStorage.setItem("telo.theme", "dark"),
       );
     const state = await fixture(page);
     await page.goto(`/admin/plugins?workspace=${workspaceId}`);

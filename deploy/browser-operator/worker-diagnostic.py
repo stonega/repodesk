@@ -1,7 +1,7 @@
 import json,re,sys
 from pathlib import Path
 root=Path(sys.argv[1])
-for name in ['repodesk-app-1','repodesk-worker-1']:
+for name in ['telo-app-1','telo-worker-1']:
  p=root/(name+'-failed-startup.log')
  if not p.exists():continue
  raw=p.read_text()

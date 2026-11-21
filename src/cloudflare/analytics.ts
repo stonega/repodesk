@@ -47,7 +47,7 @@ export function analyticsRequest(
     400,
   );
   return {
-    query: `query RepoDeskTraffic($zoneTag: string, $start: Date, $end: Date) { viewer { zones(filter: {zoneTag: $zoneTag}) { zoneTag httpRequests1dGroups(limit: 31, orderBy: [date_ASC], filter: {date_geq: $start, date_leq: $end}) { dimensions { date } sum { requests bytes cachedRequests cachedBytes threats pageViews encryptedRequests encryptedBytes ${breakdowns[dimension]} } uniq { uniques } } } } }`,
+    query: `query TeloTraffic($zoneTag: string, $start: Date, $end: Date) { viewer { zones(filter: {zoneTag: $zoneTag}) { zoneTag httpRequests1dGroups(limit: 31, orderBy: [date_ASC], filter: {date_geq: $start, date_leq: $end}) { dimensions { date } sum { requests bytes cachedRequests cachedBytes threats pageViews encryptedRequests encryptedBytes ${breakdowns[dimension]} } uniq { uniques } } } } }`,
     variables: { zoneTag: zoneId, start, end },
   };
 }

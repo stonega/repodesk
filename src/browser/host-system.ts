@@ -143,21 +143,21 @@ export class BrowserFirewall {
   }
   private async setup() {
     try {
-      await hostCommand("nft", ["list", "table", "inet", "repodesk_browser"]);
+      await hostCommand("nft", ["list", "table", "inet", "telo_browser"]);
     } catch {
-      await this.apply("add table inet repodesk_browser\n");
+      await this.apply("add table inet telo_browser\n");
     }
     try {
       await hostCommand("nft", [
         "list",
         "chain",
         "inet",
-        "repodesk_browser",
+        "telo_browser",
         "output",
       ]);
     } catch {
       await this.apply(
-        "add chain inet repodesk_browser output { type filter hook output priority -10; policy accept; }\n",
+        "add chain inet telo_browser output { type filter hook output priority -10; policy accept; }\n",
       );
     }
   }
@@ -179,18 +179,18 @@ export class BrowserFirewall {
           "list",
           "chain",
           "inet",
-          "repodesk_browser",
+          "telo_browser",
           chain,
         ]);
       } catch {
         await this.apply(
-          `add chain inet repodesk_browser ${chain}\nadd rule inet repodesk_browser output meta skuid ${uid} jump ${chain}\n`,
+          `add chain inet telo_browser ${chain}\nadd rule inet telo_browser output meta skuid ${uid} jump ${chain}\n`,
         );
       }
       this.users.add(uid);
     }
     await this.apply(
-      `flush chain inet repodesk_browser ${chain}\n${proxyPort ? `add rule inet repodesk_browser ${chain} ip daddr 127.0.0.1 tcp dport ${proxyPort} accept\n` : ""}add rule inet repodesk_browser ${chain} reject\n`,
+      `flush chain inet telo_browser ${chain}\n${proxyPort ? `add rule inet telo_browser ${chain} ip daddr 127.0.0.1 tcp dport ${proxyPort} accept\n` : ""}add rule inet telo_browser ${chain} reject\n`,
     );
   }
 }

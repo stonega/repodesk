@@ -50,9 +50,9 @@ try {
       naming: output.split("/").at(-1),
       plugins: [
         {
-          name: "repodesk-preview-sdk",
+          name: "telo-preview-sdk",
           setup(build) {
-            build.onResolve({ filter: /^@repodesk\/plugin-sdk$/ }, () => ({
+            build.onResolve({ filter: /^@telo\/plugin-sdk$/ }, () => ({
               path: resolve(
                 dirname(resolve(process.argv[1] ?? "scripts/plugin-cli.ts")),
                 "../sdk/plugin/index.ts",

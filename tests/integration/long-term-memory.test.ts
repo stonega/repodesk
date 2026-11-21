@@ -71,7 +71,7 @@ const rootUrl = process.env.TEST_DATABASE_URL;
   "Long-term memory (isolated PostgreSQL)",
   () => {
     const root = database(rootUrl ?? "postgres://unused@localhost/unused");
-    const dbName = `repodesk_ltm_${randomUUID().replaceAll("-", "")}`;
+    const dbName = `telo_ltm_${randomUUID().replaceAll("-", "")}`;
     const operator = randomUUID(),
       key = "cf".repeat(32);
     let store: Store, setup: SetupService;
