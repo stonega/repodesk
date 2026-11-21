@@ -1552,6 +1552,7 @@ test.describe
             active: false,
           });
           expect(manifest.default_events).toEqual([
+            "issues",
             "pull_request",
             "issue_comment",
             "pull_request_review_comment",

@@ -46,7 +46,7 @@
     "build": "bun scripts/build.ts",
     "check": "biome check .",
     "format": "biome check --write .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "bun scripts/typecheck.ts",
     "test": "bun test",
     "start": "node dist/server.js",
     "worker": "node dist/worker.js",

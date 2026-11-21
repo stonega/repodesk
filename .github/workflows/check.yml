@@ -52,7 +52,7 @@ jobs:
       - run: bun run check
       - name: Type check within runner memory budget
         env:
-          NODE_OPTIONS: --max-old-space-size=1536
+          NODE_OPTIONS: --max-old-space-size=1280
         run: |
           node -e 'console.log(JSON.stringify({code:"ci_typecheck_memory",node:process.version,constrainedBytes:process.constrainedMemory(),availableBytes:process.availableMemory()}))'
           bun run typecheck
