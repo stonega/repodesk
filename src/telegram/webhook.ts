@@ -46,6 +46,7 @@ import {
   enrollOwner,
   visibleRuns,
 } from "../workspaces/service.ts";
+import { retainWorkspaceMessages } from "../workspaces/threads.ts";
 import {
   audioMessageRequest,
   isAudioAttachment,
@@ -173,10 +174,35 @@ export class Ingress {
       !(await this.handleControl(sql, w, update, d, false, undefined, run.id))
     )
       await this.handleMessage(sql, w, update, d, true);
+    const created = w.deliveries.filter((d) => !before.has(d.id));
+    // Keep interactive controls (buttons/menus/OAuth/invite links) in Telegram's
+    // direct outbox, while returning pure plain-text status/confirmation replies to
+    // the model so the user receives one cohesive answer instead of duplicate messages.
+    const needsDirectDelivery = (
+      item: Workspace["deliveries"][number],
+    ): boolean =>
+      Boolean(
+        item.buttons?.length ||
+          item.repositoryMenu ||
+          item.googleControl ||
+          item.browserRequest ||
+          item.browserTaskState ||
+          /https?:\/\//i.test(item.text),
+      );
+    const suppressIds = new Set(
+      created
+        .filter((item) => !needsDirectDelivery(item))
+        .map((item) => item.id),
+    );
+    if (suppressIds.size > 0) {
+      w.deliveries = w.deliveries.filter((item) => !suppressIds.has(item.id));
+    }
     return {
-      delivered: w.deliveries
-        .filter((d) => !before.has(d.id))
-        .map((d) => ({ text: d.text, interactive: !!d.buttons?.length })),
+      delivered: created.map((item) => ({
+        text: item.text,
+        interactive: !!item.buttons?.length,
+        deliveredDirectly: !suppressIds.has(item.id),
+      })),
     };
   }
   async accept(update: Update) {
@@ -1073,7 +1099,7 @@ export class Ingress {
           ).toISOString(),
           directed: !!cmd && !followup,
         });
-      w.messages = w.messages.slice(-2000);
+      w.messages = retainWorkspaceMessages(w.messages);
     }
     if (!cmd || !eligible(w, actor)) return;
     const reply = (

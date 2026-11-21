@@ -9,6 +9,16 @@ import {
 import { audit, runAllowed } from "../workspaces/policy.ts";
 import type { AgentInput, AgentRunner } from "./runtime.ts";
 
+/**
+ * Accepts "REPLY" case-insensitively with optional surrounding markdown or
+ * trailing punctuation, while staying fail-closed on IGNORE or explanations.
+ */
+export function parseFollowupDecision(raw: string): "reply" | "ignore" {
+  return /^[*_`"'(\s]*REPLY[\s.!?:*`'")\]]*$/i.test(raw.trim())
+    ? "reply"
+    : "ignore";
+}
+
 export async function classifyFollowup(
   store: Store,
   workspaceId: string,
@@ -105,7 +115,10 @@ export async function classifyFollowup(
       "followup_sources_changed",
       409,
     );
-    if (result.status === "succeeded" && result.text.trim() === "REPLY") {
+    if (
+      result.status === "succeeded" &&
+      parseFollowupDecision(result.text) === "reply"
+    ) {
       r.followup.decision = "reply";
       r.followup.transcript = [];
       for (const source of w.messages)

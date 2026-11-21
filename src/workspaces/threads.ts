@@ -198,6 +198,60 @@ export function refreshThreadContext(w: Workspace, run: Run) {
   attachMemoryContext(w, run);
 }
 
+export const MAX_WORKSPACE_MESSAGES = 2000;
+export const MAX_MESSAGES_PER_SCOPE = 600;
+
+/**
+ * Retains up to `maxTotal` messages while preventing a single high-volume
+ * chat/topic (e.g. a noisy group with collection enabled) from evicting private
+ * conversations or quieter groups. Preserves original message ordering.
+ */
+export function retainWorkspaceMessages(
+  messages: Source[],
+  maxTotal = MAX_WORKSPACE_MESSAGES,
+  maxPerScope = MAX_MESSAGES_PER_SCOPE,
+): Source[] {
+  if (messages.length <= maxTotal) return messages;
+  const perScopeLimit = Math.max(1, Math.min(maxPerScope, maxTotal));
+  const byScope = new Map<string, number[]>();
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (!m) continue;
+    const key = `${m.chatId}:${m.topicId}`;
+    const list = byScope.get(key);
+    if (list) list.push(i);
+    else byScope.set(key, [i]);
+  }
+  const dropped = new Set<number>();
+  for (const indices of byScope.values()) {
+    let excess = indices.length - perScopeLimit;
+    if (excess <= 0) continue;
+    // Drop oldest ambient (non-directed) messages in the noisy scope first.
+    for (const idx of indices) {
+      if (excess <= 0) break;
+      const m = messages[idx];
+      if (m && !m.directed && m.role !== "assistant") {
+        dropped.add(idx);
+        excess--;
+      }
+    }
+    // If still above per-scope cap, drop oldest remaining messages in that scope.
+    for (const idx of indices) {
+      if (excess <= 0) break;
+      if (!dropped.has(idx)) {
+        dropped.add(idx);
+        excess--;
+      }
+    }
+  }
+  const kept: Source[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (m && !dropped.has(i)) kept.push(m);
+  }
+  return kept.length <= maxTotal ? kept : kept.slice(-maxTotal);
+}
+
 export function recordThreadAnswer(w: Workspace, run: Run) {
   if (!run.threadId || !run.result) return;
   const id = `answer:${run.id}`;
@@ -231,7 +285,7 @@ export function recordThreadAnswer(w: Workspace, run: Run) {
     ).toISOString(),
     directed: true,
   });
-  w.messages = w.messages.slice(-2000);
+  w.messages = retainWorkspaceMessages(w.messages);
 }
 
 export function threadMatchesRun(thread: ConversationThread, run: Run) {

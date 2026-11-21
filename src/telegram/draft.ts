@@ -21,6 +21,7 @@ export class TelegramDraft {
       event: "telegram_draft_started" | "telegram_draft_failed",
       error?: unknown,
     ) => void = () => {},
+    private onDisabled: () => void = () => {},
   ) {}
 
   /** Show Telegram's native thinking indicator before the first model token. */
@@ -83,7 +84,10 @@ export class TelegramDraft {
       )
         // Ephemeral updates replace the same draft; retrying cannot duplicate a saved reply.
         this.nextAt = this.now() + 1000;
-      else this.disabled = true;
+      else {
+        this.disabled = true;
+        this.onDisabled();
+      }
       // A preview failure must not lose usage settlement or prevent the final reply.
     }
   }

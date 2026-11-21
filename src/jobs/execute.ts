@@ -48,6 +48,7 @@ import {
 } from "../telegram/feedback.ts";
 import { discardFollowup } from "../telegram/followup.ts";
 import { splitTelegramMarkdown } from "../telegram/format.ts";
+import { TelegramTyping } from "../telegram/typing.ts";
 import { Ingress } from "../telegram/webhook.ts";
 import { publishWidget } from "../telegram/widgets.ts";
 import { TranscriptionService } from "../transcription/service.ts";
@@ -343,19 +344,32 @@ export class Executor {
       });
     };
     this.store.log.write("run_started", { workspaceId, runId });
+    const typingGuard = async () => {
+      await guard();
+      requireThat(
+        !handedOff &&
+          (await this.store.deployment()).credentials.bot ===
+            deployment.credentials.bot,
+        "run_revoked",
+        409,
+      );
+    };
+    const typing =
+      !claimed.workflowId &&
+      claimed.triggerKind !== "mission_wakeup" &&
+      deployment.bot
+        ? new TelegramTyping(
+            { chatId: claimed.chatId, topicId: claimed.topicId },
+            () => this.setup.client(deployment),
+            typingGuard,
+            signal,
+          )
+        : undefined;
     const draft = claimed.telegramDraft
       ? new TelegramDraft(
           { ...claimed, draftId: claimed.telegramDraft.id },
           () => this.setup.client(deployment),
-          async () => {
-            await guard();
-            requireThat(
-              (await this.store.deployment()).credentials.bot ===
-                deployment.credentials.bot,
-              "run_revoked",
-              409,
-            );
-          },
+          typingGuard,
           (text) =>
             validateSources(text, claimed, {
               allowMissingRecapCitations: true,
@@ -364,6 +378,9 @@ export class Executor {
           Date.now,
           (event, error) =>
             this.store.log.write(event, { error, workspaceId, runId }),
+          () => {
+            if (!handedOff) typing?.start();
+          },
         )
       : undefined;
     try {
@@ -433,7 +450,11 @@ export class Executor {
         tail?.role === "assistant" &&
         tail.stopReason === "stop" &&
         !claimed.pendingInputs?.length;
-      if (!completed && !claimed.workflowActivation) await draft?.start();
+      if (!completed && !claimed.workflowActivation) {
+        if (draft) await draft.start();
+        else if (!claimed.followup || claimed.followup.decision === "reply")
+          typing?.start();
+      }
       const buildSubagentContext = (
         meta: typeof context.metadata,
       ): SubagentContext => ({
@@ -658,6 +679,8 @@ export class Executor {
           );
           Object.assign(claimed, checked);
           if (checked.followup?.decision !== "reply") return;
+          if (!draft && !completed && !claimed.workflowActivation)
+            typing?.start();
         } finally {
           classifying = false;
         }
@@ -1022,6 +1045,7 @@ export class Executor {
         audit(w, r.actor, `run.${r.status}`, r.id);
       });
     } finally {
+      typing?.stop();
       clearInterval(poll);
     }
   }

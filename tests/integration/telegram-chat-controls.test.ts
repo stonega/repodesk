@@ -456,5 +456,48 @@ const rootUrl = process.env.TEST_DATABASE_URL;
         true,
       );
     });
+    test("plain-text manage_telegram info actions avoid duplicate Telegram deliveries while interactive/link actions deliver directly", async () => {
+      const r = await request("Show my workspace settings and usage");
+      const control = await tool(r);
+      const beforeCount = (await store.read(w.id)).deliveries.length;
+
+      const settingsOut = await control.execute("settings-1", {
+        action: "settings",
+        requestQuote: r.task,
+      });
+      const settingsPayload = JSON.parse(
+        (settingsOut.content[0] as { text: string }).text,
+      );
+      expect(settingsPayload.delivered).toEqual([
+        expect.objectContaining({
+          interactive: false,
+          deliveredDirectly: false,
+        }),
+      ]);
+      expect(settingsPayload.delivered[0]?.text).toContain("Timezone:");
+
+      const usageOut = await control.execute("usage-1", {
+        action: "usage",
+        requestQuote: r.task,
+      });
+      const usagePayload = JSON.parse(
+        (usageOut.content[0] as { text: string }).text,
+      );
+      expect(usagePayload.delivered[0]?.deliveredDirectly).toBe(false);
+      // No duplicate plain-text deliveries queued for the outbox.
+      expect((await store.read(w.id)).deliveries.length).toBe(beforeCount);
+
+      // Interactive action (repos) still queues a direct delivery with buttons.
+      const reposOut = await control.execute("repos-1", {
+        action: "repos",
+        requestQuote: r.task,
+      });
+      const reposPayload = JSON.parse(
+        (reposOut.content[0] as { text: string }).text,
+      );
+      expect(reposPayload.delivered[0]?.deliveredDirectly).toBe(true);
+      expect(reposPayload.delivered[0]?.interactive).toBe(true);
+      expect((await store.read(w.id)).deliveries.length).toBe(beforeCount + 1);
+    });
   },
 );
