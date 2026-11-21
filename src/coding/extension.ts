@@ -6,6 +6,7 @@ import { requireThat, type Workspace } from "../domain.ts";
 import { verifiedRepositoryAccess } from "../github/user-access.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import { authorize, runAllowed } from "../workspaces/policy.ts";
+import { type CodingEngine, codingEngineLabel } from "./config.ts";
 import { conversationPage } from "./conversation.ts";
 import {
   askTask,
@@ -34,8 +35,22 @@ export function codingExtension(
   store: Store,
   workspace: Workspace,
 ): BuiltinExtension {
-  const pinned = { coding: workspace.coding, github: workspace.github };
+  const pinned = {
+    coding: workspace.coding,
+    antigravity: workspace.antigravity,
+    github: workspace.github,
+  };
   const hash = fingerprint(pinned);
+  const enabledEngines: CodingEngine[] = [
+    ...(workspace.coding?.settings.enabled ? (["codex"] as const) : []),
+    ...(workspace.antigravity?.settings.enabled
+      ? (["antigravity"] as const)
+      : []),
+  ];
+  const defaultEngineLabel =
+    enabledEngines.length === 1 && enabledEngines[0] === "antigravity"
+      ? "Antigravity CLI"
+      : "Codex";
   const targets = (workspace.github?.repositories ?? []).map((r) => ({
     repositoryId: r.id,
     repository: r.full_name,
@@ -111,7 +126,11 @@ export function codingExtension(
             409,
           );
           requireThat(
-            fingerprint({ coding: w.coding, github: w.github }) === hash,
+            fingerprint({
+              coding: w.coding,
+              antigravity: w.antigravity,
+              github: w.github,
+            }) === hash,
             "extension_configuration_changed",
             409,
           );
@@ -159,9 +178,12 @@ export function codingExtension(
       if (targets.length)
         pi.registerTool({
           name: "start_development_task",
-          label: "Start continuous Codex task",
-          description: `Start a repository task for implementation, an explicit Codex investigation, or an engineering release/prepare-release request. Use objective.kind=release for repository release procedures and objective.kind=investigation for read-only technical work; these objectives are available by default for selected repositories unless explicitly disabled. Codex reads project release instructions itself; Pi does not invent the procedure. Website browsing, sign-in and browser automation belong to the current Pi conversation using Browser tools; they do not by themselves require a separate Codex task. Handle ordinary conversation, explanations, status and PR review with the assistant's available read tools. An existing task in this topic does not authorize another Codex turn. Use query_work_handoff to resolve an existing task before starting new work; send_development_input continues changes to that task/PR and can correct an unchanged task's repository. Relay the authenticated GitHub collaborator's ORIGINAL received message. Codex owns technical decisions and necessary product questions within the coding task. Do not write a technical plan or issue body. Distinguish the repository to MODIFY from repositories supplying documentation, examples or other reference material. The application can prepare commit-pinned references from other workspace-selected repositories named in authenticated task inputs when every contributor has verified read access. Do not claim pinning is unavailable or propose an unpinned fallback without checking the actual task state. Missing source/environment prerequisites are application blockers, not requests for another user confirmation. For 'add docs to product-land using https://github.com/acme/product/blob/main/docs/README.md', resolve product-land to the connected landing repository; the linked product docs are a reference source. Quote the target name in targetRepository and match its repositoryId. Resolve an unambiguous abbreviation against accessible repositories; ask one plain-language target question only if it remains ambiguous. A target validation failure creates no task: correct the selection rather than retrying the same wrong ID. Source IDs must include this run's request. If github_user_connection_required is returned, use manage_telegram to start their GitHub connection in this bot's private chat when they request it. They follow the authorization link, return to confirm the account, then resend their coding request. For a group request, ask them to connect GitHub in private using ordinary language. Accessible repositories: ${JSON.stringify(accessibleTargets)}.`,
+          label: `Start continuous ${defaultEngineLabel} task`,
+          description: `Start a repository task for implementation, an explicit coding investigation, or an engineering release/prepare-release request. Enabled coding engines: ${JSON.stringify(enabledEngines)}. Pass engine="antigravity" when the user asks to use Antigravity CLI (agy) or when Antigravity CLI is the enabled coding plugin, and engine="codex" for Codex; if omitted, the sole enabled engine is selected (defaulting to codex when both are enabled). Use objective.kind=release for repository release procedures and objective.kind=investigation for read-only technical work; these objectives are available by default for selected repositories unless explicitly disabled. The coding agent reads project release instructions itself; Pi does not invent the procedure. Website browsing, sign-in and browser automation belong to the current Pi conversation using Browser tools; they do not by themselves require a separate coding task. Handle ordinary conversation, explanations, status and PR review with the assistant's available read tools. An existing task in this topic does not authorize another coding turn. Use query_work_handoff to resolve an existing task before starting new work; send_development_input continues changes to that task/PR and can correct an unchanged task's repository. Relay the authenticated GitHub collaborator's ORIGINAL received message. The coding agent owns technical decisions and necessary product questions within the coding task. Do not write a technical plan or issue body. Distinguish the repository to MODIFY from repositories supplying documentation, examples or other reference material. The application can prepare commit-pinned references from other workspace-selected repositories named in authenticated task inputs when every contributor has verified read access. Do not claim pinning is unavailable or propose an unpinned fallback without checking the actual task state. Missing source/environment prerequisites are application blockers, not requests for another user confirmation. For 'add docs to product-land using https://github.com/acme/product/blob/main/docs/README.md', resolve product-land to the connected landing repository; the linked product docs are a reference source. Quote the target name in targetRepository and match its repositoryId. Resolve an unambiguous abbreviation against accessible repositories; ask one plain-language target question only if it remains ambiguous. A target validation failure creates no task: correct the selection rather than retrying the same wrong ID. Source IDs must include this run's request. If github_user_connection_required is returned, use manage_telegram to start their GitHub connection in this bot's private chat when they request it. They follow the authorization link, return to confirm the account, then resend their coding request. For a group request, ask them to connect GitHub in private using ordinary language. Accessible repositories: ${JSON.stringify(accessibleTargets)}.`,
           parameters: Type.Object({
+            engine: Type.Optional(
+              Type.Union([Type.Literal("codex"), Type.Literal("antigravity")]),
+            ),
             objective: Type.Optional(
               Type.Union([
                 Type.Object(
@@ -204,15 +226,18 @@ export function codingExtension(
                 deployment.bot.id,
                 String(args.targetRepository ?? ""),
                 args.objective as RepositoryObjective | undefined,
+                args.engine as CodingEngine | undefined,
               );
+              const label = codingEngineLabel(task.payload);
               return {
                 taskId: task.id,
+                engine: task.payload.engine ?? "codex",
                 state: task.state,
                 repository: task.payload.repository,
                 baseBranch: task.payload.baseBranch,
                 message:
                   task.state === "queued" && !task.cancelRequested
-                    ? "Original request queued for Codex. Do not add technical decisions or invent completion."
+                    ? `Original request queued for ${label}. Do not add technical decisions or invent completion.`
                     : developmentStatus(task),
               };
             }),

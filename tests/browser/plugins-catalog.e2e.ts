@@ -54,6 +54,9 @@ for (const width of [1280, 390]) {
         catalog.getByRole("link", { name: "Open Codex" }),
       ).toBeVisible();
       await expect(
+        catalog.getByRole("link", { name: "Open Antigravity CLI" }),
+      ).toBeVisible();
+      await expect(
         catalog.getByRole("link", { name: "Open Browser" }),
       ).toBeVisible();
       await expect(catalog).toHaveCSS("margin-bottom", "0px");
@@ -87,7 +90,7 @@ for (const width of [1280, 390]) {
     await expect(
       page.getByRole("button", { name: "Add plugin" }),
     ).toBeEnabled();
-    await expect(catalog.getByRole("link")).toHaveCount(10);
+    await expect(catalog.getByRole("link")).toHaveCount(11);
     await expect(
       catalog.getByRole("link", { name: "Open GitHub notifications" }),
     ).toBeVisible();

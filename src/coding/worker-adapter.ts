@@ -1,6 +1,10 @@
 import type { LocalRunner } from "./local/protocol.ts";
 
-export type CodingWorkerKind = "codex" | "claude_code" | "gemini_cli";
+export type CodingWorkerKind =
+  | "codex"
+  | "antigravity"
+  | "claude_code"
+  | "gemini_cli";
 
 export interface CodingWorkerCapabilities {
   kind: CodingWorkerKind;
@@ -25,6 +29,27 @@ export interface CodingWorkerAdapter {
 export class CodexLocalWorkerAdapter implements CodingWorkerAdapter {
   readonly kind = "codex" as const;
   readonly label = "Codex CLI Runner";
+  constructor(private local?: LocalRunner) {}
+
+  capabilities(): CodingWorkerCapabilities {
+    return {
+      kind: this.kind,
+      label: this.label,
+      available: !!this.local,
+      supportsInvestigation: true,
+      supportsRelease: true,
+      supportsResume: true,
+    };
+  }
+
+  runner(): LocalRunner | undefined {
+    return this.local;
+  }
+}
+
+export class AntigravityLocalWorkerAdapter implements CodingWorkerAdapter {
+  readonly kind = "antigravity" as const;
+  readonly label = "Antigravity CLI Runner";
   constructor(private local?: LocalRunner) {}
 
   capabilities(): CodingWorkerCapabilities {

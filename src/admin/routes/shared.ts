@@ -3,6 +3,7 @@ import { getCookie } from "hono/cookie";
 import { z } from "zod";
 import type { PluginService } from "../../agent/plugin-service.ts";
 import type {
+  LocalAntigravityAuth,
   LocalDeviceAuth,
   LocalEnvironmentControl,
 } from "../../coding/local/protocol.ts";
@@ -28,6 +29,7 @@ export interface AdminRouteDeps {
   github: GitHubService;
   encryptionKey?: string;
   deviceAuth?: LocalDeviceAuth &
+    Partial<LocalAntigravityAuth> &
     Partial<LocalRuntimeControl> &
     Partial<LocalEnvironmentControl>;
   review?: ReviewService;

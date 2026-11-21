@@ -2,6 +2,7 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, UserMessage } from "@earendil-works/pi-ai";
 import { effectiveAutonomyMode } from "../autonomy/policy.ts";
 import { browserEnabled } from "../browser/config.ts";
+import { codingEnabled } from "../coding/config.ts";
 import type { CodingTaskContext } from "../coding/task-context.ts";
 import {
   type Run,
@@ -489,7 +490,7 @@ export function buildContext(
         ),
         hasThreadMemory: !!run.threadId,
         hasGitHub,
-        hasCoding: !!w.coding?.settings.enabled && hasGitHub,
+        hasCoding: codingEnabled(w) && hasGitHub,
         hasBrowser,
         autonomyMode: effectiveAutonomyMode(w, repository?.id),
         isMissionWakeup: run.triggerKind === "mission_wakeup",

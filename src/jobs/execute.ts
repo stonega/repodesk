@@ -76,6 +76,7 @@ export class Executor {
     const extensionWorkspace = await this.store.read(workspaceId);
     const pluginRevision = extensionWorkspace.plugins?.revision ?? 0;
     const codingRevision = extensionWorkspace.coding?.revision ?? 0;
+    const antigravityRevision = extensionWorkspace.antigravity?.revision ?? 0;
     let runner: AgentRunner;
     let chatModel: Awaited<ReturnType<SetupService["models"]["chat"]>>;
     let searchProvider: SearchPin | undefined;
@@ -243,7 +244,8 @@ export class Executor {
         );
       requireThat(
         (w.plugins?.revision ?? 0) === pluginRevision &&
-          (w.coding?.revision ?? 0) === codingRevision,
+          (w.coding?.revision ?? 0) === codingRevision &&
+          (w.antigravity?.revision ?? 0) === antigravityRevision,
         "extension_configuration_changed",
         409,
       );

@@ -12,7 +12,7 @@ import { emptyCloudflare } from "../../src/cloudflare/config.ts";
 import { CloudflareService } from "../../src/cloudflare/service.ts";
 import { CodeTruthClient } from "../../src/code-truth/client.ts";
 import { codeTruthTools } from "../../src/code-truth/config.ts";
-import { emptyCoding } from "../../src/coding/config.ts";
+import { emptyAntigravity, emptyCoding } from "../../src/coding/config.ts";
 import { config } from "../../src/config.ts";
 import { database } from "../../src/db/pool.ts";
 import { Store } from "../../src/db/repositories.ts";
@@ -221,6 +221,16 @@ export async function verifyPluginStartup(
         },
       ];
       w.coding = { revision: 1, settings: { ...emptyCoding, enabled: true } };
+      w.antigravity = {
+        revision: 1,
+        settings: {
+          ...emptyAntigravity,
+          enabled: mode !== "denied",
+          authMode:
+            mode === "missing_service" ? "gemini_api_key" : "google_oauth",
+        },
+        apiKey: mode === "missing_service" ? "synthetic-unreadable" : undefined,
+      };
       if (mode === "denied")
         w.plugins.browser = { enabled: false, generation: 1 };
       if (mode === "stale_revision")

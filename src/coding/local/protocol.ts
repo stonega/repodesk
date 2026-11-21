@@ -107,6 +107,17 @@ export const deviceAuthStatus = z.object({
     .optional(),
 });
 export type DeviceAuthStatus = z.infer<typeof deviceAuthStatus>;
+export const antigravityAuthStatus = z.object({
+  state: z.enum([
+    "disconnected",
+    "pending",
+    "connected",
+    "auth_required",
+    "failed",
+  ]),
+  verificationUrl: z.string().url().optional(),
+});
+export type AntigravityAuthStatus = z.infer<typeof antigravityAuthStatus>;
 export const codingEnvironment = z
   .object({
     repositoryId: z.number().int().positive(),
@@ -126,6 +137,15 @@ export interface LocalDeviceAuth {
   deviceStatus(workspaceId: string): Promise<DeviceAuthStatus>;
   deviceStart(workspaceId: string): Promise<DeviceAuthStatus>;
   deviceLogout(workspaceId: string): Promise<DeviceAuthStatus>;
+}
+export interface LocalAntigravityAuth {
+  antigravityStatus(workspaceId: string): Promise<AntigravityAuthStatus>;
+  antigravityStart(workspaceId: string): Promise<AntigravityAuthStatus>;
+  antigravityComplete(
+    workspaceId: string,
+    code: string,
+  ): Promise<AntigravityAuthStatus>;
+  antigravityLogout(workspaceId: string): Promise<AntigravityAuthStatus>;
 }
 export interface LocalRunner {
   capabilities?(): Promise<{ repositoryTasks: number }>;

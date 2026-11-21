@@ -8,6 +8,7 @@ import {
   deriveCodingUsageEvent,
   upsertModelUsageEvents,
 } from "../usage/model-usage.ts";
+import { codingEngineLabel } from "./config.ts";
 import type { TaskExchange } from "./conversation.ts";
 import {
   exchangeSourcesPresent,
@@ -162,11 +163,12 @@ export class TaskConversationExecutor {
         if (answer) m.answeredAt ??= new Date().toISOString();
         m.error = error;
         m.cleanup = m.route === "readonly";
+        const label = codingEngineLabel(t.payload);
         if (answer && !t.cancelRequested)
           notifyDevelopment(
             w,
             t,
-            `Codex: ${answer}`,
+            `${label}: ${answer}`,
             `conversation:${m.id}:answer`,
             m.actor,
           );
@@ -174,7 +176,7 @@ export class TaskConversationExecutor {
           notifyDevelopment(
             w,
             t,
-            "Codex could not confirm an answer to your task question. The implementation task keeps its own status; no question was automatically replayed.",
+            `${label} could not confirm an answer to your task question. The implementation task keeps its own status; no question was automatically replayed.`,
             `conversation:${m.id}:unknown`,
             m.actor,
           );
@@ -255,10 +257,13 @@ export class TaskConversationExecutor {
         if (status.state === "auth_required") {
           const device = this.runner as LocalRunner & {
             deviceStatus?: (id: string) => Promise<{ state: string }>;
+            antigravityStatus?: (id: string) => Promise<{ state: string }>;
           };
-          if (
-            (await device.deviceStatus?.(workspaceId))?.state === "connected"
-          ) {
+          const authState =
+            task.payload.authMode === "google_oauth"
+              ? (await device.antigravityStatus?.(workspaceId))?.state
+              : (await device.deviceStatus?.(workspaceId))?.state;
+          if (authState === "connected") {
             await this.allowed(
               await this.store.read(workspaceId),
               await taskGet(this.store.pool, workspaceId, taskId),
@@ -464,14 +469,22 @@ export class TaskConversationExecutor {
           ...(referenceToken ? { referenceToken } : {}),
           ...shared,
           providerApiKey:
-            shared.providerApiKey ??
-            (current.coding?.providerApiKey
-              ? decrypt(
-                  this.key,
-                  `coding-provider:${current.id}`,
-                  current.coding.providerApiKey,
-                )
-              : undefined),
+            t.payload.authMode === "gemini_api_key"
+              ? current.antigravity?.apiKey
+                ? decrypt(
+                    this.key,
+                    `antigravity-api-key:${current.id}`,
+                    current.antigravity.apiKey,
+                  )
+                : undefined
+              : (shared.providerApiKey ??
+                (current.coding?.providerApiKey
+                  ? decrypt(
+                      this.key,
+                      `coding-provider:${current.id}`,
+                      current.coding.providerApiKey,
+                    )
+                  : undefined)),
           messages: [{ id: m.id, question: m.question }],
           development: {
             taskId: t.id,
@@ -591,14 +604,22 @@ export class TaskConversationExecutor {
       readToken: token,
       ...(referenceToken ? { referenceToken } : {}),
       providerApiKey:
-        shared.providerApiKey ??
-        (w.coding?.providerApiKey
-          ? decrypt(
-              this.key,
-              `coding-provider:${w.id}`,
-              w.coding.providerApiKey,
-            )
-          : undefined),
+        task.payload.authMode === "gemini_api_key"
+          ? w.antigravity?.apiKey
+            ? decrypt(
+                this.key,
+                `antigravity-api-key:${w.id}`,
+                w.antigravity.apiKey,
+              )
+            : undefined
+          : (shared.providerApiKey ??
+            (w.coding?.providerApiKey
+              ? decrypt(
+                  this.key,
+                  `coding-provider:${w.id}`,
+                  w.coding.providerApiKey,
+                )
+              : undefined)),
     });
   }
   private async settle(

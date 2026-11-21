@@ -82,6 +82,49 @@ export function runnerApp(
       },
     });
   });
+  app.all("/gemini/*", async (c) => {
+    const reqUrl = new URL(c.req.url);
+    const headerKey = c.req.header("x-goog-api-key") ?? "";
+    const queryKey = reqUrl.searchParams.get("key") ?? "";
+    const bearerKey = (c.req.header("authorization") ?? "").replace(
+      /^Bearer /,
+      "",
+    );
+    const proxyToken = headerKey || queryKey || bearerKey;
+    const provider = supervisor.antigravityProviderConnection(proxyToken);
+    const upstreamPath = reqUrl.pathname.slice("/gemini".length) || "/";
+    const upstreamParams = new URLSearchParams(reqUrl.searchParams);
+    upstreamParams.delete("key");
+    const qs = upstreamParams.toString();
+    const targetUrl = `${provider.baseUrl.replace(/\/$/, "")}${upstreamPath}${qs ? `?${qs}` : ""}`;
+    const headers: Record<string, string> = {
+      "x-goog-api-key": provider.apiKey,
+    };
+    const contentType = c.req.header("content-type");
+    if (contentType) headers["content-type"] = contentType;
+    const accept = c.req.header("accept");
+    if (accept) headers.accept = accept;
+    const hasBody = !["GET", "HEAD"].includes(c.req.method);
+    const response = await transport(targetUrl, {
+      method: c.req.method,
+      redirect: "error",
+      signal: c.req.raw.signal,
+      headers,
+      body: hasBody ? await c.req.arrayBuffer() : undefined,
+    });
+    if (!response.ok)
+      return c.json(
+        { error: "coding_provider_failed" },
+        response.status === 401 || response.status === 403 ? 401 : 502,
+      );
+    return new Response(response.body, {
+      headers: {
+        "content-type":
+          response.headers.get("content-type") ?? "application/json",
+        "cache-control": "no-store",
+      },
+    });
+  });
   app.use("/tasks*", async (c, next) => {
     requireThat(
       equal(
@@ -170,6 +213,51 @@ export function runnerApp(
   app.post("/device-auth/:workspace/start", async (c) =>
     c.json(
       await supervisor.device.start(z.uuid().parse(c.req.param("workspace"))),
+    ),
+  );
+  app.use("/antigravity-auth/*", async (c, next) => {
+    requireThat(
+      equal(
+        c.req.header("authorization") ?? "",
+        `Bearer ${supervisor.settings.CODEX_RUNNER_TOKEN}`,
+      ),
+      "coding_runner_denied",
+      401,
+    );
+    c.header("Cache-Control", "no-store");
+    await next();
+  });
+  app.get("/antigravity-auth/:workspace", async (c) =>
+    c.json(
+      await supervisor.antigravity.status(
+        z.uuid().parse(c.req.param("workspace")),
+      ),
+    ),
+  );
+  app.post("/antigravity-auth/:workspace/start", async (c) =>
+    c.json(
+      await supervisor.antigravity.start(
+        z.uuid().parse(c.req.param("workspace")),
+      ),
+    ),
+  );
+  app.post("/antigravity-auth/:workspace/complete", async (c) => {
+    const { code } = z
+      .object({ code: z.string().trim().min(1).max(4096) })
+      .strict()
+      .parse(await c.req.json());
+    return c.json(
+      await supervisor.antigravity.complete(
+        z.uuid().parse(c.req.param("workspace")),
+        code,
+      ),
+    );
+  });
+  app.post("/antigravity-auth/:workspace/logout", async (c) =>
+    c.json(
+      await supervisor.logoutAntigravity(
+        z.uuid().parse(c.req.param("workspace")),
+      ),
     ),
   );
   app.post("/device-auth/:workspace/logout", async (c) =>

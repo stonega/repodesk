@@ -3,14 +3,61 @@ import { githubConnectionRevision } from "../github/config.ts";
 import { authorizeVerifiedRepository } from "../github/user-access.ts";
 import { fingerprint } from "../setup/credentials.ts";
 import { authorize } from "../workspaces/policy.ts";
-import { type CodingPayload, codingInput, codingPayload } from "./config.ts";
+import {
+  type CodingEngine,
+  type CodingPayload,
+  codingEngineOf,
+  codingInput,
+  codingPayload,
+} from "./config.ts";
 
 export function codingDestination(
   w: Workspace,
   actor: string,
   value: unknown,
+  engine: CodingEngine = "codex",
 ): CodingPayload {
   authorize(w, actor);
+  if (engine === "antigravity") {
+    requireThat(
+      !w.settings.paused && w.antigravity?.settings.enabled,
+      "coding_disabled",
+      409,
+    );
+    const input = codingInput.parse(value);
+    const repo = w.github?.repositories.find(
+      (r) => r.id === input.repositoryId,
+    );
+    requireThat(
+      repo && w.github?.installationId,
+      "github_repository_not_connected",
+      409,
+    );
+    authorizeVerifiedRepository(w, actor, input.repositoryId, true);
+    requireThat(repo.default_branch, "github_default_branch_unavailable", 409);
+    const settings = w.antigravity.settings;
+    return codingPayload.parse({
+      ...input,
+      repository: repo.full_name,
+      installationId: w.github.installationId,
+      githubRevision: w.github.revision,
+      githubScope: {
+        connectionRevision: githubConnectionRevision(w.github),
+        repositoryRevision: w.github.repositoryRevisions?.[repo.id] ?? 0,
+        private: repo.private ?? null,
+      },
+      configRevision: w.antigravity.revision,
+      baseBranch: repo.default_branch,
+      backend: "podman",
+      engine: "antigravity",
+      authMode: settings.authMode ?? "google_oauth",
+      ...(settings.model ? { model: settings.model } : {}),
+      ...(settings.effort ? { effort: settings.effort } : {}),
+      ...(settings.authMode === "gemini_api_key" && settings.baseUrl
+        ? { baseUrl: settings.baseUrl }
+        : {}),
+    });
+  }
   requireThat(
     !w.settings.paused && w.coding?.settings.enabled,
     "coding_disabled",
@@ -51,6 +98,7 @@ export function checkCodingPayload(
   actor: string,
   payload: CodingPayload,
 ) {
+  const engine = codingEngineOf(payload);
   const connection = w.github;
   const scope = payload.githubScope;
   const githubUnchanged = scope
@@ -59,13 +107,20 @@ export function checkCodingPayload(
       (connection.repositoryRevisions?.[payload.repositoryId] ?? 0) ===
         scope.repositoryRevision
     : connection?.revision === payload.githubRevision;
+  const configRevision =
+    engine === "antigravity" ? w.antigravity?.revision : w.coding?.revision;
   requireThat(
-    w.coding?.revision === payload.configRevision && githubUnchanged,
+    configRevision === payload.configRevision && githubUnchanged,
     "coding_configuration_changed",
     409,
   );
   const { repositoryId, title, body } = payload;
-  const current = codingDestination(w, actor, { repositoryId, title, body });
+  const current = codingDestination(
+    w,
+    actor,
+    { repositoryId, title, body },
+    engine,
+  );
   if (payload.githubScope) {
     // The current access check above still requires a fresh workspace-wide sync.
     // Only this task's connection and repository generations govern its grant.

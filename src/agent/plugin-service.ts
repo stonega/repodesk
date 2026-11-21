@@ -21,6 +21,7 @@ import {
   targetsFor,
 } from "../code-truth/config.ts";
 import { codeTruthExtension } from "../code-truth/extension.ts";
+import { codingEnabled } from "../coding/config.ts";
 import { codingExtension } from "../coding/extension.ts";
 import type { Store } from "../db/repositories.ts";
 import {
@@ -521,7 +522,7 @@ export class PluginService {
         ),
       );
     }
-    if (workspace.coding?.settings.enabled && workspace.github?.installationId)
+    if (codingEnabled(workspace) && workspace.github?.installationId)
       builtins.push(codingExtension(this.store, workspace));
     if (
       workspace.github?.installationId &&

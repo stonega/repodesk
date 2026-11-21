@@ -39,6 +39,7 @@ import {
   runtimeSave,
 } from "../runtime-config.ts";
 import { transcriptEntry, transcriptText } from "../transcript.ts";
+import { AntigravityAuth } from "./antigravity-auth.ts";
 import { checkoutFailureCodes } from "./checkout-failure.ts";
 import type { ContainerEngine } from "./container.ts";
 import { conversationFailureCodes } from "./conversation-failure.ts";
@@ -132,6 +133,7 @@ export class RunnerSupervisor
     return { repositoryTasks: 1 };
   }
   readonly device: DeviceAuth;
+  readonly antigravity: AntigravityAuth;
   private records = new Map<string, Record>();
   private erased = new Set<string>();
   private tail: Promise<unknown> = Promise.resolve();
@@ -149,6 +151,7 @@ export class RunnerSupervisor
         "create" in engine ? engine : new OciTaskRuntime(settings, engine);
     this.selection = new RuntimeSelection(settings);
     this.device = new DeviceAuth(settings);
+    this.antigravity = new AntigravityAuth(settings);
   }
   async initialize() {
     this.bootId = await this.readBootId();
@@ -166,6 +169,7 @@ export class RunnerSupervisor
     )
       this.engine = this.factory(selected);
     await this.device.initialize();
+    await this.antigravity.initialize();
     for (const name of await readdir(this.settings.CODEX_RUNNER_STATE)) {
       if (/^deepx-codex-[a-f0-9]{32}\.erased$/.test(name)) {
         this.erased.add(name.slice(0, -7));
@@ -286,17 +290,33 @@ export class RunnerSupervisor
         r.input.development?.taskId === input.development.taskId,
     );
   }
+  private isOAuth(r: Record) {
+    return (
+      r.input.payload.authMode === "device_code" ||
+      r.input.payload.authMode === "google_oauth"
+    );
+  }
+  private implementEnv(r: Record): { [key: string]: string } {
+    if (r.input.payload.authMode === "provider_key")
+      return { CODEX_TASK_TOKEN: r.proxyToken };
+    if (r.input.payload.authMode === "gemini_api_key")
+      return {
+        GEMINI_API_KEY: r.proxyToken,
+        GOOGLE_GEMINI_BASE_URL: `${this.settings.CODEX_RUNNER_PROXY_URL.replace(/\/$/, "")}/gemini`,
+      };
+    return {};
+  }
   private canImplement(r: Record) {
-    // Codex rotates managed account credentials. Each workspace cache needs one
+    // Managed OAuth accounts rotate credentials. Each workspace/authMode cache needs one
     // implementation stream; preparation, checks and publication can overlap.
     return (
-      r.input.payload.authMode !== "device_code" ||
+      !this.isOAuth(r) ||
       ![...this.records.values()].some(
         (other) =>
           other !== r &&
           !terminal(other.state) &&
           other.phase === "implement" &&
-          other.input.payload.authMode === "device_code" &&
+          other.input.payload.authMode === r.input.payload.authMode &&
           other.input.workspaceId === r.input.workspaceId,
       )
     );
@@ -338,22 +358,37 @@ export class RunnerSupervisor
       : undefined;
   }
   private async captureAuth(r: Record) {
-    if (r.input.payload.authMode !== "device_code") return;
-    const credential = await this.engine.readText(
-      `${r.key}-implement`,
-      "/auth/auth.json",
-      128 * 1024,
-    );
-    // A legacy in-flight record can finish, but cannot overwrite a newer login.
-    if (r.authGeneration)
-      await this.device.capture(
-        r.input.workspaceId,
-        r.authGeneration,
-        credential,
+    if (r.input.payload.authMode === "device_code") {
+      const credential = await this.engine.readText(
+        `${r.key}-implement`,
+        "/auth/auth.json",
+        128 * 1024,
       );
+      // A legacy in-flight record can finish, but cannot overwrite a newer login.
+      if (r.authGeneration)
+        await this.device.capture(
+          r.input.workspaceId,
+          r.authGeneration,
+          credential,
+        );
+      return;
+    }
+    if (r.input.payload.authMode === "google_oauth") {
+      const credential = await this.engine.readText(
+        `${r.key}-implement`,
+        "/auth/antigravity-auth.json",
+        1024 * 1024,
+      );
+      if (r.authGeneration)
+        await this.antigravity.capture(
+          r.input.workspaceId,
+          r.authGeneration,
+          credential,
+        );
+    }
   }
   private async removeAuthVolume(r: Record) {
-    if (r.input.payload.authMode !== "device_code") return;
+    if (!this.isOAuth(r)) return;
     await this.engine.remove([`${r.key}-implement`]);
     const name = this.authVolume(r);
     if ((await this.engine.listVolumes(name)).includes(name))
@@ -393,8 +428,7 @@ export class RunnerSupervisor
       };
     }
     const name = `${r.key}-${mode}`;
-    const deviceRun =
-      mode === "implement" && r.input.payload.authMode === "device_code";
+    const deviceRun = mode === "implement" && this.isOAuth(r);
     const envVolume = this.envVolume(r, mode);
     await this.engine.create({
       name,
@@ -406,18 +440,25 @@ export class RunnerSupervisor
     });
     if (deviceRun) {
       const credential = this.path(r, "auth");
+      const isGoogle = r.input.payload.authMode === "google_oauth";
       try {
         await writeFile(
           credential,
           await (async () => {
-            const auth = await this.device.snapshot(r.input.workspaceId);
+            const auth = isGoogle
+              ? await this.antigravity.snapshot(r.input.workspaceId)
+              : await this.device.snapshot(r.input.workspaceId);
             r.authGeneration = auth.generation;
             await this.save(r);
             return auth.credential;
           })(),
           { mode: 0o600 },
         );
-        await this.engine.copyFile(credential, name, "/auth/auth.json");
+        await this.engine.copyFile(
+          credential,
+          name,
+          isGoogle ? "/auth/antigravity-auth.json" : "/auth/auth.json",
+        );
       } finally {
         await rm(credential, { force: true });
       }
@@ -448,11 +489,17 @@ export class RunnerSupervisor
           executionId: r.executionId,
           recoveryId: r.recoveryPending ? r.recoveryId : undefined,
           persistentEnv: Boolean(envVolume) || undefined,
-          config: codexConfig(
-            this.settings,
-            r.input.payload.authMode,
-            r.input.modelProvider,
-          ),
+          ...(r.input.payload.engine === "antigravity"
+            ? {}
+            : {
+                config: codexConfig(
+                  this.settings,
+                  r.input.payload.authMode === "device_code"
+                    ? "device_code"
+                    : "provider_key",
+                  r.input.modelProvider,
+                ),
+              }),
         }),
         { mode: 0o644 },
       );
@@ -518,6 +565,14 @@ export class RunnerSupervisor
       );
       if (safe.payload.authMode === "device_code")
         await this.device.read(safe.workspaceId);
+      else if (safe.payload.authMode === "google_oauth")
+        await this.antigravity.read(safe.workspaceId);
+      else if (safe.payload.authMode === "gemini_api_key")
+        requireThat(
+          providerApiKey || this.settings.ANTIGRAVITY_API_KEY,
+          "coding_provider_not_configured",
+          409,
+        );
       else
         requireThat(
           providerApiKey || this.settings.CODEX_PROVIDER_API_KEY,
@@ -536,7 +591,9 @@ export class RunnerSupervisor
           : undefined,
         runtime: this.settings.CODEX_CONTAINER_ENGINE,
         providerApiKey:
-          safe.payload.authMode === "provider_key" && providerApiKey
+          (safe.payload.authMode === "provider_key" ||
+            safe.payload.authMode === "gemini_api_key") &&
+          providerApiKey
             ? encrypt(
                 hash(this.settings.CODEX_RUNNER_TOKEN),
                 `coding-provider:${key}`,
@@ -788,10 +845,7 @@ export class RunnerSupervisor
         if (r.phase === "implement") await this.removeAuthVolume(r);
         return;
       }
-      if (
-        r.phase === "implement" &&
-        r.input.payload.authMode === "device_code"
-      ) {
+      if (r.phase === "implement" && this.isOAuth(r)) {
         if (
           state.ExitCode !== 0 &&
           (await this.copyResult(r, "failure-code").catch(() => "")).trim() ===
@@ -828,8 +882,18 @@ export class RunnerSupervisor
               usage.data.tokens === undefined ||
               !!usage.data.usageUnknown;
           }
-          if (r.authGeneration)
-            await this.device.invalidate(r.input.workspaceId, r.authGeneration);
+          if (r.authGeneration) {
+            if (r.input.payload.authMode === "google_oauth")
+              await this.antigravity.invalidate(
+                r.input.workspaceId,
+                r.authGeneration,
+              );
+            else
+              await this.device.invalidate(
+                r.input.workspaceId,
+                r.authGeneration,
+              );
+          }
           r.state = "auth_required";
           r.error = "coding_device_auth_required";
           r.authPausedAt = Date.now();
@@ -845,13 +909,7 @@ export class RunnerSupervisor
         await this.engine.remove([`${r.key}-implement`, `${r.key}-check`]);
         r.phase = "implement";
         await this.save(r);
-        await this.launch(
-          r,
-          "implement",
-          r.input.payload.authMode === "provider_key"
-            ? { CODEX_TASK_TOKEN: r.proxyToken }
-            : {},
-        );
+        await this.launch(r, "implement", this.implementEnv(r));
         return;
       }
       if (state.ExitCode !== 0) {
@@ -943,13 +1001,7 @@ export class RunnerSupervisor
         if (!this.canImplement(r)) return;
         r.phase = "implement";
         await this.save(r);
-        await this.launch(
-          r,
-          "implement",
-          r.input.payload.authMode === "provider_key"
-            ? { CODEX_TASK_TOKEN: r.proxyToken }
-            : {},
-        );
+        await this.launch(r, "implement", this.implementEnv(r));
       } else if (r.phase === "implement") {
         const conversation = r.input.development
           ? await this.engine.readText(
@@ -1121,11 +1173,7 @@ export class RunnerSupervisor
     return this.serial(async () => {
       const r = this.get(workspaceId, taskId);
       requireThat(!r.cleaned, "coding_checkpoint_expired", 409);
-      requireThat(
-        r.input.payload.authMode === "device_code",
-        "coding_device_mode_required",
-        409,
-      );
+      requireThat(this.isOAuth(r), "coding_device_mode_required", 409);
       if (r.state !== "auth_required") {
         requireThat(
           r.phase === "implement" && r.state === "running",
@@ -1139,7 +1187,9 @@ export class RunnerSupervisor
         "coding_runner_busy",
         429,
       );
-      await this.device.read(workspaceId);
+      if (r.input.payload.authMode === "google_oauth")
+        await this.antigravity.read(workspaceId);
+      else await this.device.read(workspaceId);
       await this.removeAuthVolume(r);
       r.authPausedAt = undefined;
       r.finishedAt = undefined;
@@ -1216,6 +1266,14 @@ export class RunnerSupervisor
       );
       if (r.input.payload.authMode === "device_code") {
         await this.device.read(workspaceId);
+      } else if (r.input.payload.authMode === "google_oauth") {
+        await this.antigravity.read(workspaceId);
+      } else if (r.input.payload.authMode === "gemini_api_key") {
+        requireThat(
+          request.providerApiKey || this.settings.ANTIGRAVITY_API_KEY,
+          "coding_provider_not_configured",
+          409,
+        );
       } else {
         requireThat(
           request.providerApiKey || this.settings.CODEX_PROVIDER_API_KEY,
@@ -1231,7 +1289,9 @@ export class RunnerSupervisor
       r.recoveryPending = true;
       r.proxyToken = randomBytes(32).toString("hex");
       r.providerApiKey =
-        r.input.payload.authMode === "provider_key" && request.providerApiKey
+        (r.input.payload.authMode === "provider_key" ||
+          r.input.payload.authMode === "gemini_api_key") &&
+        request.providerApiKey
           ? encrypt(
               hash(this.settings.CODEX_RUNNER_TOKEN),
               `coding-provider:${r.key}`,
@@ -1252,9 +1312,8 @@ export class RunnerSupervisor
                   ? { GITHUB_REFERENCE_TOKEN: request.referenceToken }
                   : {}),
               }
-            : r.phase === "implement" &&
-                r.input.payload.authMode === "provider_key"
-              ? { CODEX_TASK_TOKEN: r.proxyToken }
+            : r.phase === "implement"
+              ? this.implementEnv(r)
               : {},
         );
         r.recoveryPending = false;
@@ -1276,7 +1335,7 @@ export class RunnerSupervisor
     if (
       r.state !== "auth_required" &&
       r.phase === "implement" &&
-      r.input.payload.authMode === "device_code"
+      this.isOAuth(r)
     ) {
       // Stop token rotation before reading the final cache; keep the container for cp.
       await this.engine.stop(`${r.key}-implement`);
@@ -1372,6 +1431,24 @@ export class RunnerSupervisor
       return this.device.logout(workspaceId);
     });
   }
+  async logoutAntigravity(workspaceId: string) {
+    return this.serial(async () => {
+      for (const r of this.records.values())
+        if (
+          r.input.workspaceId === workspaceId &&
+          r.input.payload.authMode === "google_oauth" &&
+          [
+            "preparing",
+            "running",
+            "ready",
+            "auth_required",
+            "interrupted",
+          ].includes(r.state)
+        )
+          await this.stop(r);
+      return this.antigravity.logout(workspaceId);
+    });
+  }
   async listEnvironments(workspaceId: string) {
     return this.serial(async () => {
       const prefix = workspaceEnvPrefix(workspaceId);
@@ -1443,6 +1520,30 @@ export class RunnerSupervisor
   }
   providerKey(token: string): string {
     return this.providerConnection(token).apiKey;
+  }
+  antigravityProviderConnection(token: string) {
+    const record = [...this.records.values()].find(
+      (r) =>
+        r.state === "running" &&
+        r.phase === "implement" &&
+        r.input.payload.authMode === "gemini_api_key" &&
+        equal(token, r.proxyToken),
+    );
+    requireThat(record, "coding_proxy_denied", 401);
+    const key = record.providerApiKey
+      ? decrypt(
+          hash(this.settings.CODEX_RUNNER_TOKEN),
+          `coding-provider:${record.key}`,
+          record.providerApiKey,
+        )
+      : this.settings.ANTIGRAVITY_API_KEY;
+    requireThat(key, "coding_provider_not_configured", 409);
+    return {
+      apiKey: key,
+      baseUrl:
+        record.input.payload.baseUrl ??
+        this.settings.ANTIGRAVITY_GEMINI_BASE_URL,
+    };
   }
   async sweep() {
     return this.serial(async () => {

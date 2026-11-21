@@ -90,7 +90,7 @@ export class Docker implements ContainerEngine {
         }
       }
       if (
-        /^deepx-codex-[a-f0-9]{32}-implement:\/auth\/auth\.json$/.test(
+        /^deepx-codex-[a-f0-9]{32}-implement:\/auth\/(?:auth|antigravity-auth)\.json$/.test(
           args[2] ?? "",
         )
       ) {

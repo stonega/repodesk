@@ -229,7 +229,12 @@ suite("PostgreSQL integration (isolated database)", () => {
     expect(overview.status).toBe(200);
     expect((await overview.json()).connections).toEqual({
       bot: { configured: true, username: "deepx_test_bot" },
-      github: { connected: true, account: "repo-team", repositories: 1 },
+      github: {
+        connected: true,
+        account: "repo-team",
+        repositories: 1,
+        allRepositories: false,
+      },
     });
     const memberName = `member_${randomUUID().slice(0, 8)}`;
     await store.pool.query(

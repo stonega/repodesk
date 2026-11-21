@@ -21,6 +21,11 @@ import {
 } from "../workspaces/policy.ts";
 import { cancellableRun, cancelRun, deliver } from "../workspaces/service.ts";
 import {
+  type CodingEngine,
+  codingEngineLabel,
+  codingEngineOf,
+} from "./config.ts";
+import {
   type DevelopmentInput,
   type DevelopmentTask,
   developmentPolicy,
@@ -82,10 +87,14 @@ export function checkDevelopment(
     task,
     actor === task.actor ? [actor] : [task.actor, actor],
   );
+  const engine = codingEngineOf(task.payload);
+  const currentDevPolicy =
+    engine === "antigravity"
+      ? w.antigravity?.settings.development
+      : w.coding?.settings.development;
   requireThat(
-    fingerprint(
-      developmentPolicy.parse(w.coding?.settings.development ?? {}),
-    ) === fingerprint(task.policy),
+    fingerprint(developmentPolicy.parse(currentDevPolicy ?? {})) ===
+      fingerprint(task.policy),
     "coding_configuration_changed",
     409,
   );
@@ -147,9 +156,10 @@ export function notifyDevelopment(
       id: `development:${task.id}:${eventId}`,
       buttons: prButtons ?? taskButtons("development", task.id),
     });
+  const label = codingEngineLabel(task.payload);
   const outcome: Partial<Record<DevelopmentTask["state"], string>> = {
     waiting: "I need your input before we can continue.",
-    auth_required: "Your task is paused until Codex is reconnected.",
+    auth_required: `Your task is paused until ${label} is reconnected.`,
     review: "Ready for you to take a look.",
     failed: "I couldn’t finish this task.",
     cancelled: "Your task has stopped.",
@@ -185,6 +195,16 @@ export function notifyDevelopment(
   return deliveryId;
 }
 
+export function resolveCodingEngine(
+  w: Workspace,
+  requested?: CodingEngine,
+): CodingEngine {
+  if (requested) return requested;
+  if (w.antigravity?.settings.enabled && !w.coding?.settings.enabled)
+    return "antigravity";
+  return "codex";
+}
+
 export async function startDevelopment(
   sql: Sql,
   w: Workspace,
@@ -195,6 +215,7 @@ export async function startDevelopment(
   botId: string,
   targetRepository = "",
   objective?: RepositoryObjective,
+  requestedEngine?: CodingEngine,
 ) {
   const run = w.runs.find((r) => r.id === runId);
   requireThat(run, "not_found", 404);
@@ -207,7 +228,12 @@ export async function startDevelopment(
     run.groupRepository,
     run.groupRepositoryVersion,
   );
-  const policy = developmentPolicy.parse(w.coding?.settings.development ?? {});
+  const engine = resolveCodingEngine(w, requestedEngine);
+  const policy = developmentPolicy.parse(
+    (engine === "antigravity"
+      ? w.antigravity?.settings.development
+      : w.coding?.settings.development) ?? {},
+  );
   const source = sources.find(
     (s) =>
       s.author === actor &&
@@ -279,11 +305,16 @@ export async function startDevelopment(
     "coding_capacity_reached",
     429,
   );
-  const payload = codingDestination(w, actor, {
-    repositoryId,
-    title: source.text.slice(0, 200),
-    body: source.text.slice(0, 2500),
-  });
+  const payload = codingDestination(
+    w,
+    actor,
+    {
+      repositoryId,
+      title: source.text.slice(0, 200),
+      body: source.text.slice(0, 2500),
+    },
+    engine,
+  );
   const at = new Date().toISOString();
   const task: DevelopmentTask = {
     groupRepository: run.groupRepository
@@ -511,6 +542,8 @@ export async function correctDevelopmentRepository(
     [source.id],
     botId,
     targetRepository,
+    undefined,
+    codingEngineOf(task.payload),
   );
   requireThat(
     replacement.id !== task.id && !replacement.replacesTaskId,

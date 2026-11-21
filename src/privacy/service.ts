@@ -50,6 +50,7 @@ export function sweep(w: Workspace, now = new Date()) {
     delete w.pluginNotifications;
     delete w.repositorySelections;
     delete w.coding;
+    delete w.antigravity;
     delete w.repositoryTasks;
     delete w.chatModel;
     delete w.memory;

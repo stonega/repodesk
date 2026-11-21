@@ -6,6 +6,7 @@ import { ZodError } from "zod";
 import { adminRoutes } from "./admin/routes.ts";
 import { PluginService } from "./agent/plugin-service.ts";
 import type {
+  LocalAntigravityAuth,
   LocalDeviceAuth,
   LocalEnvironmentControl,
 } from "./coding/local/protocol.ts";
@@ -29,6 +30,7 @@ export interface AppDependencies {
   github?: GitHubService;
   encryptionKey?: string;
   deviceAuth?: LocalDeviceAuth &
+    Partial<LocalAntigravityAuth> &
     Partial<LocalRuntimeControl> &
     Partial<LocalEnvironmentControl>;
   review?: ReviewService;

@@ -6,6 +6,7 @@ import {
   browserStampAllowed,
 } from "../browser/privacy.ts";
 import { cloudflareReadAllowed } from "../cloudflare/policy.ts";
+import { codingRevisionStamp } from "../coding/config.ts";
 import type {
   DevelopmentInput,
   DevelopmentTask,
@@ -379,7 +380,7 @@ export function workHandoff(
         ]),
       ],
       codingRevision: selected.some((e) => e.repositoryId)
-        ? w.coding?.revision
+        ? codingRevisionStamp(w)
         : previous?.codingRevision,
     };
     for (const source of sources)

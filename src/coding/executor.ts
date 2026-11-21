@@ -27,6 +27,7 @@ import {
   deriveCodingUsageEvent,
   upsertModelUsageEvents,
 } from "../usage/model-usage.ts";
+import { codingEngineLabel, codingEngineOf } from "./config.ts";
 import { TaskConversationExecutor } from "./conversation-executor.ts";
 import {
   type DevelopmentRun,
@@ -49,6 +50,7 @@ import {
   verifyDevelopmentGitHubInputs,
 } from "./input-sources.ts";
 import type {
+  LocalAntigravityAuth,
   LocalDeviceAuth,
   LocalRunner,
   LocalStatus,
@@ -446,7 +448,7 @@ export class DevelopmentExecutor {
         return;
       }
       if (task.state === "auth_required" && !task.attemptId) {
-        if (await this.deviceConnected(workspaceId))
+        if (await this.oauthConnected(workspaceId, task.payload.authMode))
           await this.update(task, lease, async (w, sql, t) => {
             await this.allowed(w, sql, t);
             t.state = "queued";
@@ -454,7 +456,7 @@ export class DevelopmentExecutor {
             await this.notice(
               w,
               t,
-              "Codex account connected. Your task will continue automatically.",
+              `${codingEngineLabel(t.payload)} account connected. Your task will continue automatically.`,
               `auth-resumed:${t.authPauses}`,
             );
           });
@@ -469,11 +471,12 @@ export class DevelopmentExecutor {
             "coding_runner_protocol_required",
             409,
           );
-        if (task.payload.authMode === "device_code") {
-          const device = this.runner as LocalRunner & Partial<LocalDeviceAuth>;
+        if (
+          task.payload.authMode === "device_code" ||
+          task.payload.authMode === "google_oauth"
+        ) {
           requireThat(
-            device.deviceStatus &&
-              (await device.deviceStatus(workspaceId)).state === "connected",
+            await this.oauthConnected(workspaceId, task.payload.authMode),
             "coding_device_auth_required",
             409,
           );
@@ -494,13 +497,22 @@ export class DevelopmentExecutor {
             409,
           );
         const snapshot = await this.store.read(workspaceId);
-        const providerApiKey = snapshot.coding?.providerApiKey
-          ? decrypt(
-              this.key ?? "",
-              `coding-provider:${workspaceId}`,
-              snapshot.coding.providerApiKey,
-            )
-          : undefined;
+        const providerApiKey =
+          task.payload.authMode === "gemini_api_key"
+            ? snapshot.antigravity?.apiKey
+              ? decrypt(
+                  this.key ?? "",
+                  `antigravity-api-key:${workspaceId}`,
+                  snapshot.antigravity.apiKey,
+                )
+              : undefined
+            : snapshot.coding?.providerApiKey
+              ? decrypt(
+                  this.key ?? "",
+                  `coding-provider:${workspaceId}`,
+                  snapshot.coding.providerApiKey,
+                )
+              : undefined;
         const sharedProvider =
           task.payload.authMode === "provider_key"
             ? await new ModelProviders(this.store, this.key ?? "").runner(
@@ -773,7 +785,7 @@ export class DevelopmentExecutor {
               notifyDevelopment(
                 w,
                 t,
-                `Codex: ${progress.text}`,
+                `${codingEngineLabel(t.payload)}: ${progress.text}`,
                 `conversation:progress:${progress.id}`,
               );
           },
@@ -781,14 +793,17 @@ export class DevelopmentExecutor {
         );
       if (status.state === "auth_required") {
         requireThat(
-          task.payload.authMode === "device_code" &&
+          (task.payload.authMode === "device_code" ||
+            task.payload.authMode === "google_oauth") &&
             task.state !== "publishing",
           "coding_result_invalid",
           409,
         );
         if (task.state !== "auth_required") {
           await this.pauseAuth(task, lease);
-        } else if (await this.deviceConnected(workspaceId)) {
+        } else if (
+          await this.oauthConnected(workspaceId, task.payload.authMode)
+        ) {
           requireThat(
             this.runner.resumeAuth,
             "coding_runner_not_configured",
@@ -837,10 +852,14 @@ export class DevelopmentExecutor {
         status.publishedSha
       ) {
         const { token, app } = await this.token(task, "contents");
+        const branchPrefix =
+          codingEngineOf(task.payload) === "antigravity"
+            ? "antigravity"
+            : "codex";
         const pr = await app.codingPublishedPull(
           token,
           task.payload.repository,
-          task.pr?.branch ?? `codex/repodesk-${task.id}`,
+          task.pr?.branch ?? `${branchPrefix}/repodesk-${task.id}`,
           status.publishedSha,
           task.payload.baseBranch,
         );
@@ -906,10 +925,14 @@ export class DevelopmentExecutor {
             "coding_pr_target_changed",
             409,
           );
+          const branchPrefix =
+            codingEngineOf(t.payload) === "antigravity"
+              ? "antigravity"
+              : "codex";
           t.pr = {
             number,
             url: status.prUrl,
-            branch: t.pr?.branch ?? `codex/repodesk-${t.id}`,
+            branch: t.pr?.branch ?? `${branchPrefix}/repodesk-${t.id}`,
             headSha: status.publishedSha,
           };
           if (t.release?.state === "waiting_merge" && t.pr)
@@ -1213,7 +1236,8 @@ export class DevelopmentExecutor {
       }
       if (
         code === "coding_device_auth_required" &&
-        task.payload.authMode === "device_code" &&
+        (task.payload.authMode === "device_code" ||
+          task.payload.authMode === "google_oauth") &&
         task.state !== "publishing"
       ) {
         await this.pauseAuth(task, lease, dispatched);
@@ -1326,9 +1350,19 @@ export class DevelopmentExecutor {
     );
     await taskSave(sql, task);
   }
-  private async deviceConnected(workspaceId: string) {
+  private async oauthConnected(
+    workspaceId: string,
+    authMode: DevelopmentTask["payload"]["authMode"],
+  ) {
+    if (authMode === "google_oauth") {
+      const runner = this.runner as LocalRunner & Partial<LocalAntigravityAuth>;
+      if (!runner.antigravityStatus) return false;
+      return (
+        (await runner.antigravityStatus(workspaceId)).state === "connected"
+      );
+    }
     const device = this.runner as LocalRunner & Partial<LocalDeviceAuth>;
-    requireThat(device.deviceStatus, "coding_runner_not_configured", 409);
+    if (!device.deviceStatus) return false;
     return (await device.deviceStatus(workspaceId)).state === "connected";
   }
   private async pauseAuth(
@@ -1348,7 +1382,7 @@ export class DevelopmentExecutor {
         await this.notice(
           w,
           t,
-          codingFailureMessage("coding_device_auth_required"),
+          codingFailureMessage("coding_device_auth_required", t.payload),
           `auth-required:${t.authPauses}`,
         );
       }
@@ -1380,7 +1414,7 @@ export class DevelopmentExecutor {
           await this.notice(
             w,
             t,
-            "Codex account connected. Continuing your task from its saved checkout.",
+            `${codingEngineLabel(t.payload)} account connected. Continuing your task from its saved checkout.`,
             `auth-resumed:${t.authPauses}`,
           );
       },
@@ -1412,17 +1446,28 @@ export class DevelopmentExecutor {
           )
         : {};
     const providerApiKey =
-      provider.providerApiKey ??
-      (snapshot.coding?.providerApiKey
-        ? decrypt(
-            this.key ?? "",
-            `coding-provider:${task.workspaceId}`,
-            snapshot.coding.providerApiKey,
-          )
-        : undefined);
-    if (task.payload.authMode === "device_code")
+      task.payload.authMode === "gemini_api_key"
+        ? snapshot.antigravity?.apiKey
+          ? decrypt(
+              this.key ?? "",
+              `antigravity-api-key:${task.workspaceId}`,
+              snapshot.antigravity.apiKey,
+            )
+          : undefined
+        : (provider.providerApiKey ??
+          (snapshot.coding?.providerApiKey
+            ? decrypt(
+                this.key ?? "",
+                `coding-provider:${task.workspaceId}`,
+                snapshot.coding.providerApiKey,
+              )
+            : undefined));
+    if (
+      task.payload.authMode === "device_code" ||
+      task.payload.authMode === "google_oauth"
+    )
       requireThat(
-        await this.deviceConnected(task.workspaceId),
+        await this.oauthConnected(task.workspaceId, task.payload.authMode),
         "coding_device_auth_required",
         409,
       );
@@ -1467,7 +1512,10 @@ export class DevelopmentExecutor {
     await this.runner.resumeInterrupted(task.workspaceId, task.attemptId, {
       recoveryId: status.recoveryId,
       providerApiKey:
-        task.payload.authMode === "provider_key" ? providerApiKey : undefined,
+        task.payload.authMode === "provider_key" ||
+        task.payload.authMode === "gemini_api_key"
+          ? providerApiKey
+          : undefined,
       readToken: status.phase === "prepare" ? token : undefined,
       ...(referenceToken ? { referenceToken } : {}),
     });

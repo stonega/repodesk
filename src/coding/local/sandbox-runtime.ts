@@ -215,7 +215,9 @@ export class SandboxTaskRuntime implements TaskRuntime {
     const r = await this.record(name);
     requireThat(
       r.state === "created" &&
-        (/^\/input\//.test(path) || path === "/auth/auth.json"),
+        (/^\/input\//.test(path) ||
+          path === "/auth/auth.json" ||
+          path === "/auth/antigravity-auth.json"),
       "coding_input_denied",
       409,
     );

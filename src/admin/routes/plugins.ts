@@ -2,7 +2,12 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { browserPanelTask } from "../../browser/privacy.ts";
 import { cloudflareStateWorkspace } from "../../cloudflare/oauth.ts";
-import { codingView, saveCoding } from "../../coding/service.ts";
+import {
+  antigravityView,
+  codingView,
+  saveAntigravity,
+  saveCoding,
+} from "../../coding/service.ts";
 import { taskGet, taskList, taskSave } from "../../coding/task-store.ts";
 import { requireThat } from "../../domain.ts";
 import { ObsidianService } from "../../obsidian/service.ts";
@@ -72,7 +77,9 @@ export function pluginRoutes(deps: AdminRouteDeps) {
     );
     const page = codingView(workspace, c.get("session").admin);
     page.repositoryRefreshError = refreshError;
-    page.tasks = (await taskList(store.pool, id)).map(browserPanelTask);
+    page.tasks = (await taskList(store.pool, id))
+      .filter((t) => !t.payload.engine || t.payload.engine === "codex")
+      .map(browserPanelTask);
     if (deviceAuth)
       try {
         page.deviceAuth = await deviceAuth.deviceStatus(id);
@@ -91,7 +98,9 @@ export function pluginRoutes(deps: AdminRouteDeps) {
         await setup.models.selected(w, page.settings.model);
       return page;
     });
-    page.tasks = (await taskList(store.pool, id)).map(browserPanelTask);
+    page.tasks = (await taskList(store.pool, id))
+      .filter((t) => !t.payload.engine || t.payload.engine === "codex")
+      .map(browserPanelTask);
     if (deviceAuth)
       try {
         page.deviceAuth = await deviceAuth.deviceStatus(id);
@@ -101,6 +110,162 @@ export function pluginRoutes(deps: AdminRouteDeps) {
     else page.deviceAuth = { state: "unavailable" };
     return c.json(page);
   });
+  app.get("/api/admin/workspaces/:id/plugins/antigravity", async (c) => {
+    const id = validId(c.req.param("id"));
+    const { workspace, refreshError } = await github.repositorySync.refresh(
+      c.get("session").admin,
+      id,
+    );
+    const page = antigravityView(workspace, c.get("session").admin);
+    page.repositoryRefreshError = refreshError;
+    page.tasks = (await taskList(store.pool, id))
+      .filter((t) => t.payload.engine === "antigravity")
+      .map(browserPanelTask);
+    if (deviceAuth?.antigravityStatus)
+      try {
+        page.oauthAuth = await deviceAuth.antigravityStatus(id);
+      } catch {
+        page.oauthAuth = { state: "unavailable" };
+      }
+    else page.oauthAuth = { state: "unavailable" };
+    return c.json(page);
+  });
+  app.put("/api/admin/workspaces/:id/plugins/antigravity", async (c) => {
+    const input = await c.req.json();
+    const id = validId(c.req.param("id"));
+    const page = await store.change(id, async (w) =>
+      saveAntigravity(w, c.get("session").admin, input, encryptionKey),
+    );
+    page.tasks = (await taskList(store.pool, id))
+      .filter((t) => t.payload.engine === "antigravity")
+      .map(browserPanelTask);
+    if (deviceAuth?.antigravityStatus)
+      try {
+        page.oauthAuth = await deviceAuth.antigravityStatus(id);
+      } catch {
+        page.oauthAuth = { state: "unavailable" };
+      }
+    else page.oauthAuth = { state: "unavailable" };
+    return c.json(page);
+  });
+  app.post(
+    "/api/admin/workspaces/:id/plugins/antigravity/auth/start",
+    async (c) => {
+      const id = validId(c.req.param("id"));
+      const page = antigravityView(
+        await store.read(id),
+        c.get("session").admin,
+      );
+      requireThat(
+        page.settings.authMode === "google_oauth",
+        "coding_device_mode_required",
+        409,
+      );
+      requireThat(
+        deviceAuth?.antigravityStart && deviceAuth.antigravityLogout,
+        "coding_runner_not_configured",
+        409,
+      );
+      const status = await deviceAuth.antigravityStart(id);
+      const current = await store.read(id);
+      if (
+        current.deletion ||
+        current.antigravity?.settings.authMode !== "google_oauth"
+      ) {
+        await deviceAuth.antigravityLogout(id);
+        requireThat(false, "coding_device_mode_required", 409);
+      }
+      return c.json(status);
+    },
+  );
+  app.post(
+    "/api/admin/workspaces/:id/plugins/antigravity/auth/complete",
+    async (c) => {
+      const id = validId(c.req.param("id"));
+      const page = antigravityView(
+        await store.read(id),
+        c.get("session").admin,
+      );
+      requireThat(
+        page.settings.authMode === "google_oauth",
+        "coding_device_mode_required",
+        409,
+      );
+      requireThat(
+        deviceAuth?.antigravityComplete,
+        "coding_runner_not_configured",
+        409,
+      );
+      const { code } = z
+        .object({ code: z.string().trim().min(1).max(4096) })
+        .strict()
+        .parse(await c.req.json());
+      const status = await deviceAuth.antigravityComplete(id, code);
+      const updated = await store.change(id, (w) => {
+        antigravityView(w, c.get("session").admin);
+        audit(w, c.get("session").admin.id, "antigravity.oauth_connected", id);
+        return antigravityView(w, c.get("session").admin);
+      });
+      updated.oauthAuth = status;
+      updated.tasks = (await taskList(store.pool, id))
+        .filter((t) => t.payload.engine === "antigravity")
+        .map(browserPanelTask);
+      return c.json(updated);
+    },
+  );
+  app.post(
+    "/api/admin/workspaces/:id/plugins/antigravity/auth/logout",
+    async (c) => {
+      const id = validId(c.req.param("id"));
+      antigravityView(await store.read(id), c.get("session").admin);
+      requireThat(
+        deviceAuth?.antigravityLogout,
+        "coding_runner_not_configured",
+        409,
+      );
+      const status = await deviceAuth.antigravityLogout(id);
+      const page = await store.change(id, (w) => {
+        antigravityView(w, c.get("session").admin);
+        if (w.antigravity) w.antigravity.revision++;
+        audit(w, c.get("session").admin.id, "antigravity.oauth_logged_out", id);
+        return antigravityView(w, c.get("session").admin);
+      });
+      page.oauthAuth = status;
+      page.tasks = (await taskList(store.pool, id))
+        .filter((t) => t.payload.engine === "antigravity")
+        .map(browserPanelTask);
+      return c.json(page);
+    },
+  );
+  app.post(
+    "/api/admin/workspaces/:id/plugins/antigravity/:task/cancel",
+    async (c) =>
+      c.json(
+        await store.change(validId(c.req.param("id")), async (w, sql) => {
+          antigravityView(w, c.get("session").admin);
+          const task = await taskGet(sql, w.id, validId(c.req.param("task")));
+          if (
+            !task.cancelRequested &&
+            !["failed", "cancelled", "unknown"].includes(task.state)
+          ) {
+            task.cancelRequested = true;
+            if (
+              ["queued", "waiting", "review"].includes(task.state) ||
+              (task.state === "auth_required" && !task.attemptId)
+            )
+              task.state = "cancelled";
+            await taskSave(sql, task);
+            audit(
+              w,
+              c.get("session").admin.id,
+              "antigravity.cancel_requested",
+              task.id,
+            );
+          }
+          return { ok: true };
+        }),
+      ),
+  );
   app.post(
     "/api/admin/workspaces/:id/plugins/coding/device/start",
     async (c) => {

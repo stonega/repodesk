@@ -4,12 +4,13 @@ import type { PluginPage, PluginSpec } from "../src/agent/plugin-config.ts";
 import type { BrowserPluginPage } from "../src/browser/config.ts";
 import type { CloudflarePage } from "../src/cloudflare/config.ts";
 import type { CodeTruthPage } from "../src/code-truth/config.ts";
-import type { CodingPage } from "../src/coding/config.ts";
+import type { AntigravityPage, CodingPage } from "../src/coding/config.ts";
 import { type GooglePage, googlePlugins } from "../src/google/config.ts";
 import type { NowledgePage } from "../src/nowledge-mem/config.ts";
 import type { ObsidianPage } from "../src/obsidian/config.ts";
 import type { ReviewPage } from "../src/review-bot/config.ts";
 import type { TranscriptionPage } from "../src/transcription/config.ts";
+import { Antigravity } from "./antigravity.tsx";
 import { BrowserPlugin } from "./browser.tsx";
 import { Cloudflare } from "./cloudflare.tsx";
 import { CodeTruth } from "./code-truth.tsx";
@@ -122,6 +123,7 @@ export function Plugins({
   const [builtIns, setBuiltIns] = useState<{
     codeTruth?: boolean;
     codex?: boolean;
+    antigravity?: boolean;
     reviewBot?: boolean;
     cloudflare?: boolean;
     google?: boolean;
@@ -171,6 +173,7 @@ export function Plugins({
         pluginId !== "cloudflare" &&
         pluginId !== "search-console" &&
         pluginId !== "codex" &&
+        pluginId !== "antigravity" &&
         pluginId !== "github-notifications" &&
         pluginId !== "review-bot")
     )
@@ -184,6 +187,7 @@ export function Plugins({
       request<GooglePage>(`${endpoint}/google`),
       request<CodeTruthPage>(`${endpoint}/code-truth`),
       request<CodingPage>(`${endpoint}/coding`),
+      request<AntigravityPage>(`${endpoint}/antigravity`),
       request<ReviewPage>(`${endpoint}/review-bot`),
       request<CloudflarePage>(`${endpoint}/cloudflare`),
       request<ObsidianPage>(`${endpoint}/obsidian`),
@@ -195,6 +199,7 @@ export function Plugins({
         google,
         truth,
         coding,
+        antigravity,
         review,
         cloudflare,
         obsidian,
@@ -238,6 +243,10 @@ export function Plugins({
           codex:
             coding.status === "fulfilled"
               ? coding.value.settings.enabled
+              : undefined,
+          antigravity:
+            antigravity.status === "fulfilled"
+              ? antigravity.value.settings?.enabled
               : undefined,
         });
       },
@@ -288,10 +297,12 @@ export function Plugins({
           ? "Code Truth"
           : pluginId === "codex"
             ? "Codex"
-            : pluginId === "review-bot"
-              ? "Review Bot"
-              : (selected?.id ??
-                (loading ? (pluginId ?? "Plugin") : "Plugin not found"));
+            : pluginId === "antigravity"
+              ? "Antigravity CLI"
+              : pluginId === "review-bot"
+                ? "Review Bot"
+                : (selected?.id ??
+                  (loading ? (pluginId ?? "Plugin") : "Plugin not found"));
 
   return (
     <>
@@ -313,6 +324,7 @@ export function Plugins({
           pluginId !== "cloudflare" &&
           pluginId !== "search-console" &&
           pluginId !== "codex" &&
+          pluginId !== "antigravity" &&
           pluginId !== "github-notifications" &&
           pluginId !== "review-bot") ||
         view === "market" ? (
@@ -458,6 +470,18 @@ export function Plugins({
               }
             />
             <PluginCard
+              to={path("/antigravity")}
+              name="Antigravity CLI"
+              summary="Isolated coding tasks and PRs powered by Antigravity CLI."
+              status={
+                builtIns.antigravity === undefined
+                  ? "Built in"
+                  : builtIns.antigravity
+                    ? "Enabled"
+                    : "Disabled"
+              }
+            />
+            <PluginCard
               to={path("/github-notifications")}
               name="GitHub notifications"
               summary="Automatic maintainer and personal Telegram alerts for new PRs and issues."
@@ -586,6 +610,14 @@ export function Plugins({
       {view === "installed" && pluginId === "codex" && (
         <Coding request={request} workspaceId={workspaceId} backTo={path()} />
       )}
+      {view === "installed" && pluginId === "antigravity" && (
+        <Antigravity
+          key={workspaceId}
+          request={request}
+          workspaceId={workspaceId}
+          backTo={path()}
+        />
+      )}
       {view === "installed" &&
         pluginId !== "nowledge-mem" &&
         pluginId !== "browser" &&
@@ -597,6 +629,7 @@ export function Plugins({
         pluginId !== "cloudflare" &&
         pluginId !== "search-console" &&
         pluginId !== "codex" &&
+        pluginId !== "antigravity" &&
         pluginId !== "github-notifications" &&
         pluginId !== "review-bot" && (
           <>

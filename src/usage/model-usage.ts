@@ -108,7 +108,10 @@ export function resolveProviderLabel(
 ): string {
   if (providerName?.trim()) return providerName.trim();
   if (baseUrl?.trim()) return safeHost(baseUrl.trim());
-  if (authMode === "chatgpt") return "Codex ChatGPT";
+  if (authMode === "chatgpt" || authMode === "device_code")
+    return "Codex ChatGPT";
+  if (authMode === "google_oauth") return "Antigravity Google";
+  if (authMode === "gemini_api_key") return "Gemini API";
   return "Deployment default";
 }
 
@@ -299,10 +302,13 @@ export function deriveCodingUsageEvent(params: {
 }): ModelUsageEvent {
   const { task, attemptId, kind, status, tokens, tokenUsage, usageUnknown } =
     params;
-  const model = task.runnerModel?.model || "codex";
+  const isAntigravity = task.payload.engine === "antigravity";
+  const model = isAntigravity
+    ? task.payload.model || "antigravity"
+    : task.runnerModel?.model || "codex";
   const providerName = resolveProviderLabel(
-    task.runnerModel?.name,
-    task.runnerModel?.baseUrl,
+    isAntigravity ? undefined : task.runnerModel?.name,
+    isAntigravity ? task.payload.baseUrl : task.runnerModel?.baseUrl,
     task.payload.authMode,
   );
   const breakdownKnown = tokenUsage !== undefined;
@@ -330,8 +336,18 @@ export function deriveCodingUsageEvent(params: {
     recordedAt: params.recordedAt ?? new Date().toISOString(),
     sourceKind: kind,
     sourceId: task.id,
-    sourceLabel: `${kind === "coding_conversation" ? "Codex Q&A" : "Codex"} · ${task.payload.repository}`,
-    sourcePath: "/admin/plugins/codex",
+    sourceLabel: `${
+      isAntigravity
+        ? kind === "coding_conversation"
+          ? "Antigravity Q&A"
+          : "Antigravity CLI"
+        : kind === "coding_conversation"
+          ? "Codex Q&A"
+          : "Codex"
+    } · ${task.payload.repository}`,
+    sourcePath: isAntigravity
+      ? "/admin/plugins/antigravity"
+      : "/admin/plugins/codex",
     actor: task.actor ?? "",
     providerId: task.runnerModel?.id,
     providerName,

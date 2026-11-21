@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ModelOptions } from "./agent/model-settings.ts";
 import type { PluginSettings } from "./agent/plugin-config.ts";
 import type { WorkspaceAutonomyConfig } from "./autonomy/policy.ts";
-import type { CodingConfig } from "./coding/config.ts";
+import type { AntigravityConfig, CodingConfig } from "./coding/config.ts";
 import { currencies } from "./currency.ts";
 import type { GitHubConnection } from "./github/config.ts";
 import type {
@@ -812,6 +812,7 @@ export interface Workspace {
   reviewTasks?: ReviewTask[];
   reviewCleanup?: string[];
   coding?: CodingConfig;
+  antigravity?: AntigravityConfig;
   autonomy?: WorkspaceAutonomyConfig;
   github?: GitHubConnection;
   githubNotificationSettings?: GitHubNotificationSettings;

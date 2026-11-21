@@ -101,12 +101,18 @@ const messages: Record<string, string> = {
 
 export function codingFailureMessage(
   code: string,
-  payload?: Pick<CodingPayload, "repository" | "baseBranch">,
+  payload?: Pick<CodingPayload, "repository" | "baseBranch" | "engine">,
 ) {
+  const label = payload?.engine === "antigravity" ? "Antigravity CLI" : "Codex";
+  if (
+    code === "coding_device_auth_required" &&
+    payload?.engine === "antigravity"
+  )
+    return "Your task is paused because Antigravity CLI needs sign-in. Ask the workspace operator to reconnect Google in Plugins → Antigravity CLI → Configuration.";
   if (payload && code === "coding_base_branch_missing")
-    return `The configured base branch “${payload.baseBranch}” does not exist in ${payload.repository}, so Codex did not start. Ask the workspace administrator to update the base branch in GitHub repository settings, then start a new request.`;
+    return `The configured base branch “${payload.baseBranch}” does not exist in ${payload.repository}, so ${label} did not start. Ask the workspace administrator to update the base branch in GitHub repository settings, then start a new request.`;
   if (payload && code === "coding_checkout_failed")
-    return `Could not check out ${payload.repository}, so Codex did not start. Ask the workspace administrator to check the GitHub connection and repository branch settings, then start a new request.`;
+    return `Could not check out ${payload.repository}, so ${label} did not start. Ask the workspace administrator to check the GitHub connection and repository branch settings, then start a new request.`;
   const text = messages[code] ?? attachmentErrors[code];
   if (!text)
     return "I hit a snag and couldn’t finish this task. Your workspace administrator can check the details in the panel.";

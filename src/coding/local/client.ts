@@ -7,8 +7,10 @@ import {
   runtimeView,
 } from "../runtime-config.ts";
 import {
+  antigravityAuthStatus,
   codingEnvironment,
   deviceAuthStatus,
+  type LocalAntigravityAuth,
   type LocalDeviceAuth,
   type LocalEnvironmentControl,
   type LocalRecovery,
@@ -21,6 +23,7 @@ export class LocalRunnerClient
   implements
     LocalRunner,
     LocalDeviceAuth,
+    LocalAntigravityAuth,
     LocalRuntimeControl,
     LocalEnvironmentControl
 {
@@ -68,15 +71,23 @@ export class LocalRunnerClient
         throw new Fault(
           path.includes("/device-auth/")
             ? "coding_device_login_busy"
-            : "coding_runner_busy",
+            : path.includes("/antigravity-auth/")
+              ? "coding_antigravity_login_busy"
+              : "coding_runner_busy",
           429,
         );
+      if (response.status === 400 && path.includes("/antigravity-auth/")) {
+        const error = (await response.json()) as { error?: string };
+        if (error.error === "coding_antigravity_login_rejected")
+          throw new Fault(error.error, 400);
+      }
       if (response.status === 409) {
         const error = (await response.json()) as { error?: string };
         if (
           error.error === "coding_provider_not_configured" ||
           error.error === "coding_device_auth_required" ||
           error.error === "coding_device_mode_required" ||
+          error.error === "coding_antigravity_login_not_pending" ||
           error.error === "coding_checkpoint_expired" ||
           error.error === "coding_recovery_conflict" ||
           error.error === "coding_task_not_ready" ||
@@ -87,7 +98,10 @@ export class LocalRunnerClient
         )
           throw new Fault(error.error, 409);
       }
-      if (response.status === 503 && path.includes("/device-auth/")) {
+      if (
+        response.status === 503 &&
+        (path.includes("/device-auth/") || path.includes("/antigravity-auth/"))
+      ) {
         const error = (await response.json()) as { error?: string };
         if (
           error.error &&
@@ -96,6 +110,9 @@ export class LocalRunnerClient
             "coding_device_login_network_failed",
             "coding_device_login_rejected",
             "coding_device_login_disabled",
+            "coding_antigravity_login_unavailable",
+            "coding_antigravity_login_network_failed",
+            "coding_antigravity_login_failed",
           ].includes(error.error)
         )
           throw new Fault(error.error, 503);
@@ -176,6 +193,31 @@ export class LocalRunnerClient
   async deviceLogout(workspaceId: string) {
     return deviceAuthStatus.parse(
       await this.request(`${this.devicePath(workspaceId)}/logout`, {}),
+    );
+  }
+  private antigravityPath(workspaceId: string) {
+    return `/antigravity-auth/${encodeURIComponent(workspaceId)}`;
+  }
+  async antigravityStatus(workspaceId: string) {
+    return antigravityAuthStatus.parse(
+      await this.request(this.antigravityPath(workspaceId)),
+    );
+  }
+  async antigravityStart(workspaceId: string) {
+    return antigravityAuthStatus.parse(
+      await this.request(`${this.antigravityPath(workspaceId)}/start`, {}),
+    );
+  }
+  async antigravityComplete(workspaceId: string, code: string) {
+    return antigravityAuthStatus.parse(
+      await this.request(`${this.antigravityPath(workspaceId)}/complete`, {
+        code,
+      }),
+    );
+  }
+  async antigravityLogout(workspaceId: string) {
+    return antigravityAuthStatus.parse(
+      await this.request(`${this.antigravityPath(workspaceId)}/logout`, {}),
     );
   }
   async runtimeStatus() {

@@ -1,6 +1,7 @@
 import type { Sql } from "../db/pool.ts";
 import type { Run, Workspace } from "../domain.ts";
 import { memoryReferences } from "../workspaces/conversation-memory.ts";
+import { codingEnabled, codingRevisionStamp } from "./config.ts";
 import type { DevelopmentInput } from "./development.ts";
 import { developmentInputPresent } from "./input-sources.ts";
 import { trackTaskMemory } from "./memory.ts";
@@ -17,7 +18,7 @@ export async function codingTaskContext(
   if (
     !botId ||
     run.workflowId ||
-    !w.coding?.settings.enabled ||
+    !codingEnabled(w) ||
     !w.github?.installationId
   )
     return [];
@@ -154,7 +155,7 @@ export async function codingTaskContext(
       ),
       chatIds: [...new Set([...(run.handoffRead?.chatIds ?? []), run.chatId])],
       repositoryIds: [...repositoryIds],
-      codingRevision: w.coding?.revision,
+      codingRevision: codingRevisionStamp(w),
     };
   }
   return snapshots;

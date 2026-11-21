@@ -1,6 +1,7 @@
 // Fixed entrypoint for task phases. Never imported by the bot worker.
 import { constants } from "node:fs";
 import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { z } from "zod";
 import { exportRelease } from "../../releases/prepare.ts";
 import {
@@ -8,6 +9,11 @@ import {
   developmentSchema,
   verificationCommands,
 } from "../development.ts";
+import {
+  packAntigravityAuthBundle,
+  unpackAntigravityAuthBundle,
+} from "./antigravity-auth.ts";
+import { runAntigravityConversation } from "./antigravity-conversation.ts";
 import { CodexAuthError } from "./auth-failure.ts";
 import { checkoutFailureCode } from "./checkout-failure.ts";
 import { runConversation } from "./conversation.ts";
@@ -29,6 +35,7 @@ import { prepareOpenCodeReview } from "./open-code-review.ts";
 import { localStart } from "./protocol.ts";
 import { markPullRequestReady, publicationPushArgs } from "./publication.ts";
 import { ReviewSource } from "./review-source.ts";
+import { antigravitySettingsJson } from "./settings.ts";
 
 const jobSchema = localStart
   .omit({ readToken: true, referenceToken: true, providerApiKey: true })
@@ -151,16 +158,11 @@ async function setup(job: Job) {
   }
 }
 async function implement(job: Job) {
-  if (!job.baseSha || !job.config) throw new Error("coding_job_invalid");
-  const codexHome =
-    job.payload.authMode === "device_code"
-      ? jobPath("/auth")
-      : jobPath("/task/codex");
-  await mkdir(codexHome, { recursive: true });
-  await writeFile(`${codexHome}/config.toml`, job.config, { mode: 0o600 });
+  const isAntigravity = job.payload.engine === "antigravity";
+  if (!job.baseSha || (!isAntigravity && !job.config))
+    throw new Error("coding_job_invalid");
   const { home, envRoot, env: toolEnv } = taskToolEnv(job);
   if (envRoot) await ensurePersistentEnvDirs(envRoot);
-  const env: NodeJS.ProcessEnv = { ...toolEnv, CODEX_HOME: codexHome };
   await mkdir(home, { recursive: true });
   // A resumed execution must not reuse the prior failure marker.
   await rm(jobPath("/task/failure-code"), { force: true });
@@ -193,70 +195,169 @@ async function implement(job: Job) {
     ).slice(0, 12000);
   } catch {}
   let turn: Awaited<ReturnType<typeof runConversation>>;
+  const isOAuth =
+    job.payload.authMode === "device_code" ||
+    job.payload.authMode === "google_oauth";
   try {
-    let reviewSource: ReviewSource | undefined;
-    if (job.development.review && job.development.mode !== "work") {
-      try {
-        reviewSource = await ReviewSource.create(
-          repo,
-          job.development.review,
-          jobPath("/task/open-code-review.json"),
+    if (isAntigravity) {
+      const authMode =
+        job.payload.authMode === "gemini_api_key"
+          ? "gemini_api_key"
+          : "google_oauth";
+      if (authMode === "google_oauth") {
+        const bundle = await readFile(
+          jobPath("/auth/antigravity-auth.json"),
+          "utf8",
         );
-      } catch {
-        await writeFile(
-          jobPath("/task/failure-code"),
-          "coding_review_preparation_failed",
-        );
-        throw Error("coding_review_preparation_failed");
+        await unpackAntigravityAuthBundle(bundle, home);
       }
-    }
-    turn = await runConversation({
-      channel,
-      reviewSource,
-      cwd: repo,
-      binary: process.env.REPODESK_CODEX_BIN,
-      env: {
-        ...env,
-        ...(job.payload.authMode === "provider_key"
-          ? { CODEX_TASK_TOKEN: process.env.CODEX_TASK_TOKEN }
+      const agyDir = join(home, ".gemini", "antigravity-cli");
+      await mkdir(agyDir, { recursive: true, mode: 0o700 });
+      await writeFile(
+        join(agyDir, "settings.json"),
+        antigravitySettingsJson({
+          authMode,
+          repoPath: repo,
+          readOnly: job.development.mode !== "work",
+        }),
+        { mode: 0o600 },
+      );
+      const agyEnv: NodeJS.ProcessEnv = {
+        ...toolEnv,
+        HOME: home,
+        SSH_CONNECTION: "127.0.0.1 1 127.0.0.1 22",
+        XDG_CONFIG_HOME: join(home, ".config"),
+        XDG_DATA_HOME: join(home, ".local", "share"),
+        ...(authMode === "gemini_api_key"
+          ? {
+              GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+              ...(process.env.GOOGLE_GEMINI_BASE_URL
+                ? { GOOGLE_GEMINI_BASE_URL: process.env.GOOGLE_GEMINI_BASE_URL }
+                : {}),
+            }
           : {}),
-      },
-      prompt:
-        (reviewSource
-          ? "Use only repodesk_review_source for repository investigation. Its plan action reads the prepared OCR plan; read and list accept head/base/merge_base revisions, and diff returns the pinned merge-base-to-head diff for a literal path. Follow nextOffset until null for complete content. Runtime filesystem paths and arbitrary shell commands are unavailable. Do not ask the user to restore shell access. Report unavailable committed source as a coverage gap.\n"
-          : "") +
-        (job.recoveryId
-          ? "The previous execution was interrupted by an infrastructure shutdown. Continue from the retained checkout and inspect its existing changes before editing. Preserve authorized partial work. Reconstruct the conversation if its session is unavailable, and run the fixed verification plan in full.\n"
-          : "") +
-        developmentPrompt(
-          job.development,
-          diagnostics,
-          job.verificationCommands,
-          {
-            repository: job.payload.repository,
-            baseSha: job.baseSha,
-            taskRoot: jobPath("/task"),
-            persistentEnv: Boolean(envRoot),
-          },
-        ) +
-        (job.development.media?.prompt ?? ""),
-      images: job.development.media?.images,
-      outputSchema: developmentSchema(job.development),
-      threadId:
+      };
+      try {
+        turn = await runAntigravityConversation({
+          channel,
+          cwd: repo,
+          binary: process.env.REPODESK_AGY_BIN,
+          env: agyEnv,
+          schemaPath: jobPath("/task/antigravity-schema.json"),
+          mediaDir: jobPath("/task/media"),
+          model: job.payload.model,
+          effort: job.payload.effort,
+          prompt:
+            (job.recoveryId
+              ? "The previous execution was interrupted by an infrastructure shutdown. Continue from the retained checkout and inspect its existing changes before editing. Preserve authorized partial work. Reconstruct the conversation if its session is unavailable, and run the fixed verification plan in full.\n"
+              : "") +
+            developmentPrompt(
+              job.development,
+              diagnostics,
+              job.verificationCommands,
+              {
+                repository: job.payload.repository,
+                baseSha: job.baseSha,
+                taskRoot: jobPath("/task"),
+                persistentEnv: Boolean(envRoot),
+              },
+            ) +
+            (job.development.media?.prompt ?? ""),
+          images: job.development.media?.images,
+          outputSchema: developmentSchema(job.development),
+          threadId:
+            authMode === "google_oauth"
+              ? undefined
+              : !channel || channelThread === job.development.threadId
+                ? job.development.threadId
+                : undefined,
+          readOnly: job.development.mode !== "work",
+          protectCredentials:
+            !!job.development.review && job.development.mode !== "work",
+        });
+      } finally {
+        if (authMode === "google_oauth") {
+          const refreshed = await packAntigravityAuthBundle(home).catch(
+            () => undefined,
+          );
+          if (refreshed) {
+            await writeFile(jobPath("/auth/antigravity-auth.json"), refreshed, {
+              mode: 0o600,
+            }).catch(() => {});
+          }
+        }
+      }
+    } else {
+      const codexHome =
         job.payload.authMode === "device_code"
-          ? undefined
-          : !channel || channelThread === job.development.threadId
-            ? job.development.threadId
-            : undefined,
-      readOnly: job.development.mode !== "work",
-      protectCredentials:
-        !!job.development.review && job.development.mode !== "work",
-    });
+          ? jobPath("/auth")
+          : jobPath("/task/codex");
+      await mkdir(codexHome, { recursive: true });
+      await writeFile(`${codexHome}/config.toml`, job.config ?? "", {
+        mode: 0o600,
+      });
+      const env: NodeJS.ProcessEnv = { ...toolEnv, CODEX_HOME: codexHome };
+      let reviewSource: ReviewSource | undefined;
+      if (job.development.review && job.development.mode !== "work") {
+        try {
+          reviewSource = await ReviewSource.create(
+            repo,
+            job.development.review,
+            jobPath("/task/open-code-review.json"),
+          );
+        } catch {
+          await writeFile(
+            jobPath("/task/failure-code"),
+            "coding_review_preparation_failed",
+          );
+          throw Error("coding_review_preparation_failed");
+        }
+      }
+      turn = await runConversation({
+        channel,
+        reviewSource,
+        cwd: repo,
+        binary: process.env.REPODESK_CODEX_BIN,
+        env: {
+          ...env,
+          ...(job.payload.authMode === "provider_key"
+            ? { CODEX_TASK_TOKEN: process.env.CODEX_TASK_TOKEN }
+            : {}),
+        },
+        prompt:
+          (reviewSource
+            ? "Use only repodesk_review_source for repository investigation. Its plan action reads the prepared OCR plan; read and list accept head/base/merge_base revisions, and diff returns the pinned merge-base-to-head diff for a literal path. Follow nextOffset until null for complete content. Runtime filesystem paths and arbitrary shell commands are unavailable. Do not ask the user to restore shell access. Report unavailable committed source as a coverage gap.\n"
+            : "") +
+          (job.recoveryId
+            ? "The previous execution was interrupted by an infrastructure shutdown. Continue from the retained checkout and inspect its existing changes before editing. Preserve authorized partial work. Reconstruct the conversation if its session is unavailable, and run the fixed verification plan in full.\n"
+            : "") +
+          developmentPrompt(
+            job.development,
+            diagnostics,
+            job.verificationCommands,
+            {
+              repository: job.payload.repository,
+              baseSha: job.baseSha,
+              taskRoot: jobPath("/task"),
+              persistentEnv: Boolean(envRoot),
+            },
+          ) +
+          (job.development.media?.prompt ?? ""),
+        images: job.development.media?.images,
+        outputSchema: developmentSchema(job.development),
+        threadId:
+          job.payload.authMode === "device_code"
+            ? undefined
+            : !channel || channelThread === job.development.threadId
+              ? job.development.threadId
+              : undefined,
+        readOnly: job.development.mode !== "work",
+        protectCredentials:
+          !!job.development.review && job.development.mode !== "work",
+      });
+    }
   } catch (error) {
-    if (
-      job.payload.authMode === "device_code" &&
-      error instanceof CodexAuthError
-    ) {
+    if (isOAuth && error instanceof CodexAuthError) {
       await writeFile(
         jobPath("/task/auth-failure.json"),
         JSON.stringify({
@@ -365,9 +466,10 @@ async function publish(job: Job) {
     await git(["apply", "--index", jobPath("/input/patch")]);
   if (await git(["diff", "--cached", "--name-only", "--", ".github"]))
     throw new Error("coding_workflow_change_denied");
+  const isAntigravity = job.payload.engine === "antigravity";
   const branch =
     job.development?.pr?.branch ??
-    `codex/repodesk-${job.development?.taskId ?? job.taskId}`;
+    `${isAntigravity ? "antigravity" : "codex"}/repodesk-${job.development?.taskId ?? job.taskId}`;
   const diff = await git(["diff", "--cached", "--name-only"]);
   if (job.development?.pr) {
     const remote = (
@@ -386,9 +488,9 @@ async function publish(job: Job) {
   if (diff)
     await git([
       "-c",
-      "user.name=RepoDesk Codex",
+      `user.name=${isAntigravity ? "RepoDesk Antigravity" : "RepoDesk Codex"}`,
       "-c",
-      "user.email=codex@users.noreply.github.com",
+      `user.email=${isAntigravity ? "antigravity@users.noreply.github.com" : "codex@users.noreply.github.com"}`,
       "-c",
       "commit.gpgSign=false",
       "commit",

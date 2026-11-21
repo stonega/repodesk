@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { browserReadAllowed } from "../browser/privacy.ts";
 import { cloudflareReadAllowed } from "../cloudflare/policy.ts";
+import { codingEnabled, codingRevisionStamp } from "../coding/config.ts";
 import {
   type Audit,
   type Run,
@@ -131,11 +132,11 @@ function allowedRun(
           (id) =>
             repositoryAccess(w, run.actor, id) &&
             w.github?.repositories.some((repo) => repo.id === id) &&
-            w.coding?.settings.enabled &&
+            codingEnabled(w) &&
             !!w.members.find((m) => m.id === run.actor)?.github,
         ) &&
         (run.handoffRead.codingRevision === undefined ||
-          run.handoffRead.codingRevision === w.coding?.revision))) &&
+          run.handoffRead.codingRevision === codingRevisionStamp(w)))) &&
     (!run.followup ||
       run.followup.decision === "reply" ||
       (Date.parse(run.followup.expiresAt) > Date.now() &&

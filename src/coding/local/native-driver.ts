@@ -136,6 +136,7 @@ export class NativeDriver implements SandboxDriver {
           REPODESK_AUTH_ROOT: mount("/auth") ?? join(work, "unused-auth"),
           ...(envMount ? { REPODESK_ENV_ROOT: envMount } : {}),
           REPODESK_CODEX_BIN: this.settings.CODEX_NATIVE_CODEX_BIN,
+          REPODESK_AGY_BIN: this.settings.CODEX_NATIVE_AGY_BIN,
         },
       },
     );

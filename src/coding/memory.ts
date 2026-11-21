@@ -16,6 +16,7 @@ import {
   memoryReferences,
   validMemory,
 } from "../workspaces/conversation-memory.ts";
+import { codingRevisionStamp } from "./config.ts";
 import type { DevelopmentTask } from "./development.ts";
 
 export function taskMemory(w: Workspace, task: DevelopmentTask) {
@@ -129,6 +130,6 @@ export function trackTaskMemory(w: Workspace, run: Run, task: DevelopmentTask) {
         task.payload.repositoryId,
       ]),
     ],
-    codingRevision: w.coding?.revision,
+    codingRevision: codingRevisionStamp(w),
   };
 }

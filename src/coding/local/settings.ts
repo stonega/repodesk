@@ -21,6 +21,29 @@ export const runnerSettings = z.object({
       "Use an absolute executable path or a command name",
     )
     .default("codex"),
+  CODEX_NATIVE_AGY_BIN: z
+    .string()
+    .min(1)
+    .refine(
+      (value) => isAbsolute(value) || /^[A-Za-z0-9._-]+$/.test(value),
+      "Use an absolute executable path or a command name",
+    )
+    .default("agy"),
+  ANTIGRAVITY_API_KEY: z.string().optional(),
+  ANTIGRAVITY_GEMINI_BASE_URL: z
+    .string()
+    .url()
+    .refine((value) => {
+      const u = new URL(value);
+      return (
+        u.protocol === "https:" &&
+        !u.username &&
+        !u.password &&
+        !u.search &&
+        !u.hash
+      );
+    }, "Use an HTTPS Gemini API URL without credentials or query parameters")
+    .default("https://generativelanguage.googleapis.com"),
   CODEX_DOCKER_IMAGE: optionalSetting(z.string().min(1)),
   CODEX_OPENSANDBOX_IMAGE: optionalSetting(z.string().min(1)),
   CODEX_DOCKER_HOST: optionalSetting(z.string().startsWith("unix://")),
@@ -42,7 +65,7 @@ export const runnerSettings = z.object({
   OPENSANDBOX_ALLOWED_DOMAINS: z
     .string()
     .default(
-      "github.com,api.github.com,*.githubusercontent.com,registry.npmjs.org,*.npmjs.org,deb.debian.org,security.debian.org,auth.openai.com,api.openai.com,chatgpt.com,*.openai.com,*.chatgpt.com",
+      "github.com,api.github.com,*.githubusercontent.com,registry.npmjs.org,*.npmjs.org,deb.debian.org,security.debian.org,auth.openai.com,api.openai.com,chatgpt.com,*.openai.com,*.chatgpt.com,accounts.google.com,oauth2.googleapis.com,generativelanguage.googleapis.com,*.googleapis.com,antigravity.google",
     ),
   CODEX_RUNNER_TOKEN: z.string().min(32),
   CODEX_PROVIDER_API_KEY: z.string().optional(),
@@ -134,4 +157,24 @@ export function codexConfig(
     'wire_api = "responses"',
     "",
   ].join("\n");
+}
+
+export function antigravitySettingsJson(options: {
+  authMode: "google_oauth" | "gemini_api_key";
+  repoPath: string;
+  readOnly?: boolean;
+}) {
+  const settings: Record<string, unknown> = {
+    disableSlashCommands: true,
+    trustedWorkspaces: [options.repoPath],
+  };
+  if (options.authMode === "gemini_api_key") {
+    settings.modelProvider = "gemini";
+  }
+  if (options.readOnly) {
+    settings.permissions = {
+      deny: ["write_file(*)", "edit_file(*)"],
+    };
+  }
+  return `${JSON.stringify(settings, null, 2)}\n`;
 }

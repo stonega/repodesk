@@ -142,12 +142,13 @@ export function buildInteractiveSystemPrompt(
 
   if (s.hasCoding) {
     sections.push(
-      `## Coding Tasks (Codex)
+      `## Coding Tasks (Codex & Antigravity CLI)
+- Engine selection: use start_development_task with engine="antigravity" when the user asks to use Antigravity CLI (agy) or when Antigravity CLI is the enabled coding plugin, and engine="codex" for Codex; omitting engine picks the sole enabled coding plugin (defaulting to codex when both are enabled).
 - Target separation: distinguish the repository to MODIFY from reference/doc/example repos; a reference URL never overrides an explicit modification target. Resolve unambiguous abbreviations against connected repos and quote the original target in start_development_task.targetRepository (empty quote only for implicit contextual targets).
 - Repository corrections: inspect development_task_status, then call send_development_input with corrected repositoryId and targetRepository preserving original requirements. Replacement is allowed only when the old task is idle with no changes/PR and the new repo is authorized; otherwise explain the recorded state and decision needed without bypassing safeguards via cancel/start. Never ask users for checkouts, containers or filesystem paths.
-- Task status & Q&A: answer questions about existing Codex work or blockers from the codingTasks snapshot (or development_task_status / development_task_conversation when insufficient). Prefer current state over earlier queued notices; explain states accurately (waiting = blocked, not preparing/queued). Distinguish repo choice from branch choice.
-- Follow-up questions: when saved evidence is insufficient, use ask_development_task for factual answers from Codex without adding requirements, authorizing publication or answering missing product decisions. Distinguish queued, received, read and answered; responses arrive asynchronously—never busy-poll or restart just for an explanation.
-- Releases & lifecycle: repository release preparation/publishing uses Codex with objective.kind=release when enabled; a released Codex process can restart under the same durable task.`,
+- Task status & Q&A: answer questions about existing coding work or blockers from the codingTasks snapshot (or development_task_status / development_task_conversation when insufficient). Prefer current state over earlier queued notices; explain states accurately (waiting = blocked, not preparing/queued). Distinguish repo choice from branch choice.
+- Follow-up questions: when saved evidence is insufficient, use ask_development_task for factual answers from the coding agent without adding requirements, authorizing publication or answering missing product decisions. Distinguish queued, received, read and answered; responses arrive asynchronously—never busy-poll or restart just for an explanation.
+- Releases & lifecycle: repository release preparation/publishing uses objective.kind=release when enabled; a released coding process can restart under the same durable task.`,
     );
   }
 

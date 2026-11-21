@@ -5,6 +5,25 @@ Historical verification logs are archived by month to keep this active status le
 - [October 2026 archive](archive/implementation-status-2026-10.md) (125 entries)
 - [September 2026 baseline archive](archive/implementation-status-2026-09.md) (32 entries)
 
+## Antigravity CLI built-in coding plugin (2026-11-21)
+
+Added **Antigravity CLI** (`agy`) as a built-in coding plugin alongside Codex, sharing the existing coding runner (`Docker`, `OpenSandbox`, or `Native VPS`), per-repository `/env` volumes, continuous development workflow, and Model usage analytics with zero new runtime dependencies:
+
+1. **Configuration, dual authentication & supervisor proxy (`src/coding/config.ts`, `src/coding/local/antigravity-auth.ts`, `src/coding/local/runner-server.ts`, `src/coding/local/supervisor.ts`, `src/coding/local/client.ts`, `src/admin/routes/plugins.ts`)**:
+   - Added workspace-scoped `antigravity` configuration supporting **Google account (OAuth)** (sealed per-workspace credential bundles with generation fencing and automatic token-refresh persistence) and **Gemini API key** (encrypted write-only server storage proxied through the runner supervisor so task containers never see the raw key), plus optional model slug, reasoning effort (`low`/`medium`/`high`/`xhigh`/`max`), and custom HTTPS Gemini base URL.
+   - Added `scripts/fixtures/plugin-startup.ts` coverage for ordinary and configured members across all startup modes with zero external startup calls.
+2. **Headless `agy` conversation runtime & engine routing (`src/coding/local/antigravity-conversation.ts`, `src/coding/local/job.ts`, `src/coding/extension.ts`, `src/coding/executor.ts`, `src/coding/conversation-executor.ts`, `src/coding/worker-adapter.ts`, `src/usage/model-usage.ts`)**:
+   - Implemented headless `agy` stream-JSON execution, transcript mapping, auth/rate-limit/usage-limit/context failure classification, `antigravity/repodesk-*` PR branches, automatic routing when Antigravity CLI is the sole enabled coding plugin (or explicit selection when both Codex and Antigravity CLI are enabled), and `model_usage_events` attribution.
+3. **Admin Panel UI & user documentation (`web/antigravity.tsx`, `web/plugins.tsx`, `docs/user/antigravity.md`, `docs/user/README.md`)**:
+   - Added **Plugins → Antigravity CLI** with read-only Configuration summary separate from its modal editor, Google OAuth sign-in/code-completion/disconnect flow, Gemini API key editor, coding task table with stop confirmation, shared Runtime/Cached environments cards, and [Antigravity CLI user guide](../user/antigravity.md).
+
+Local verification on Bun 1.4.4, Node 22.22.3, and disposable PostgreSQL 17:
+
+- `bun run check` (only the nine pre-existing incident-script warnings), `bun run typecheck`, `bun run build`, and `bun run test:runtime` (16 ordinary + 16 configured startup cases, **zero external startup calls**) pass.
+- Full unit + PostgreSQL integration suite (`bun test --timeout 30000 ./tests`): **1,829 passed, 9 Docker-gated skips, 0 failures** across 194 files (13,410 assertions), including `tests/unit/antigravity.test.ts`, `tests/integration/antigravity.test.ts`, and the updated `/overview` `allRepositories` assertion in `tests/integration/system.test.ts`.
+- Selected Playwright browser suites (`antigravity.e2e.ts`, `plugins-catalog.e2e.ts`, `github-repository-sync.e2e.ts`, `application-update.e2e.ts`): **14 passed, 0 failures**; desktop 1280px light, mobile 390px dark, and mobile OAuth modal screenshots were visually inspected. This is bounded local selection; full CI Verify (including both browser shards and container jobs) runs on push to `origin/main`.
+- Live Google OAuth / Gemini API calls, live `agy` CLI execution, and production cutover remain outside local verification.
+
 ## Autonomous skill extraction, Global/Project classification, progressive loading and coding cold-start injection (2026-11-21)
 
 Implemented AI-autonomous skill extraction and Global vs. Project-specific skill classification with zero new runtime dependencies and minimal review friction:

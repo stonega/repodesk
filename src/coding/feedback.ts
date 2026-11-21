@@ -126,7 +126,10 @@ export function developmentStatus(task: DevelopmentTask) {
     queued: stageMessage("queued"),
     working: active(task),
     waiting: `I need your input before we can continue.\n${task.question?.text ?? "What outcome would you like?"}`,
-    auth_required: codingFailureMessage("coding_device_auth_required"),
+    auth_required: codingFailureMessage(
+      "coding_device_auth_required",
+      task.payload,
+    ),
     publishing:
       task.progress?.unavailable || task.cancelRequested
         ? active(task)
